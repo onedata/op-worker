@@ -27,10 +27,17 @@
 -endif.
 
 -type relation() :: subpath | ancestor.
--type children() :: gb_sets:set(file_meta:name()).
+-type children_set() :: gb_sets:set(file_meta:name()).
+-type children_list() :: [file_meta:name()].
+-type relation_ctx() ::
+    {subpath, file_ctx:ctx()} |
+    {ancestor, file_ctx:ctx(), children_list()}.
 -type data_location_caveat() :: #cv_data_objectid{} | #cv_data_path{}.
 
--export_type([relation/0, children/0, data_location_caveat/0]).
+-export_type([
+    relation/0, children_list/0, relation_ctx/0,
+    data_location_caveat/0
+]).
 
 
 -define(DATA_CAVEATS, [cv_data_path, cv_data_objectid]).
@@ -65,8 +72,7 @@ assert_no_data_caveats(Caveats) when is_list(Caveats) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_data_caveats(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
-    {subpath, file_ctx:ctx()} |
-    {ancestor, file_ctx:ctx(), [file_meta:name()]}.
+    relation_ctx().
 verify_data_caveats(UserCtx, FileCtx, AllowAncestorsOfLocationCaveats) ->
     case user_ctx:get_caveats(UserCtx) of
         [] ->
@@ -92,11 +98,8 @@ verify_data_caveats(UserCtx, FileCtx, AllowAncestorsOfLocationCaveats) ->
 
 
 %% @private
--spec verify_data_location_caveats(
-    binary(), file_ctx:ctx(), [caveats:caveat()], boolean()
-) ->
-    {subpath, file_ctx:ctx()} |
-    {ancestor, file_ctx:ctx(), [file_meta:name()]}.
+-spec verify_data_location_caveats(binary(), file_ctx:ctx(),
+    [caveats:caveat()], boolean()) -> relation_ctx().
 verify_data_location_caveats(_SerializedToken, FileCtx, [], _) ->
     FileCtx;
 verify_data_location_caveats(
@@ -143,8 +146,7 @@ verify_data_location_caveats(
     LooseCacheKey :: term(),
     EaccesCacheKey :: term()
 ) ->
-    {subpath, file_ctx:ctx()} |
-    {ancestor, file_ctx:ctx(), [file_meta:name()]}.
+    relation_ctx().
 verify_and_cache_data_location_caveats(
     FileCtx0, Caveats, AllowAncestorsOfLocationCaveats,
     StrictCacheKey, LooseCacheKey, EaccesCacheKey
@@ -172,7 +174,7 @@ verify_and_cache_data_location_caveats(
 -spec verify_data_location_caveats(file_ctx:ctx(), [data_location_caveat()],
     AllowAncestors :: boolean()
 ) ->
-    {relation(), file_ctx:ctx(), undefined | children()} | no_return().
+    {relation(), file_ctx:ctx(), undefined | children_set()} | no_return().
 verify_data_location_caveats(FileCtx0, Caveats, AllowAncestors) ->
     lists:foldl(fun(Caveat, {CurrRelation, FileCtx1, NamesAcc}) ->
         {CaveatRelation, FileCtx2, Names} = verify_data_location_caveat(
@@ -195,7 +197,7 @@ verify_data_location_caveats(FileCtx0, Caveats, AllowAncestors) ->
 -spec verify_data_location_caveat(file_ctx:ctx(), data_location_caveat(),
     AllowAncestors :: boolean()
 ) ->
-    {relation(), file_ctx:ctx(), undefined | children()} | no_return().
+    {relation(), file_ctx:ctx(), undefined | children_set()} | no_return().
 verify_data_location_caveat(FileCtx0, ?CV_PATH(AllowedPaths), false) ->
     {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
 
@@ -250,7 +252,7 @@ verify_data_location_caveat(FileCtx0, ?CV_OBJECTID(ObjectIds), true) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_data_path_relation(file_meta:path(), [file_meta:path()]) ->
-    {undefined | relation(), undefined | children()}.
+    {undefined | relation(), undefined | children_set()}.
 check_data_path_relation(FilePath, AllowedPaths) ->
     FilePathLen = size(FilePath),
 
@@ -280,7 +282,6 @@ check_data_path_relation(FilePath, AllowedPaths) ->
                     end
             end
     end, {undefined, undefined}, AllowedPaths).
-
 
 
 %% @private

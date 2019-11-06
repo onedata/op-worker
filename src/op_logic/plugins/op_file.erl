@@ -418,8 +418,8 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}},
         {ok, #file_attr{type = ?DIRECTORY_TYPE, guid = Guid}} ->
             {ok, Children} = ?check(lfm:ls(SessionId, {guid, Guid}, Offset, Limit)),
             {ok, lists:map(fun({ChildGuid, ChildPath}) ->
-                    {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
-                    #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
+                {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
+                #{<<"id">> => ObjectId, <<"path">> => filename:join(Path, ChildPath)}
             end, Children)};
         {ok, #file_attr{guid = Guid}} ->
             {ok, ObjectId} = file_id:guid_to_objectid(Guid),

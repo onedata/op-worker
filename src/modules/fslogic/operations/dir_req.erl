@@ -66,12 +66,12 @@ read_dir(UserCtx, FileCtx, Offset, Limit, Token) ->
     StartId :: undefined | file_meta:name()
 ) ->
     fslogic_worker:fuse_response().
-read_dir(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
+read_dir(UserCtx, FileCtx, Offset, Limit, Token, StartId) ->
+    RelationCtx = fslogic_authz:ensure_authorized_readdir(
+        UserCtx, FileCtx,
         [traverse_ancestors, ?list_container]
     ),
-    read_dir_insecure(UserCtx, FileCtx1, Offset, Limit, Token, StartId).
+    read_dir_insecure(UserCtx, RelationCtx, Offset, Limit, Token, StartId).
 
 
 %%--------------------------------------------------------------------
@@ -81,12 +81,12 @@ read_dir(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
 -spec read_dir_plus(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer(),
     Token :: undefined | binary()) -> fslogic_worker:fuse_response().
-read_dir_plus(UserCtx, FileCtx0, Offset, Limit, Token) ->
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
+read_dir_plus(UserCtx, FileCtx, Offset, Limit, Token) ->
+    RelationCtx = fslogic_authz:ensure_authorized_readdir(
+        UserCtx, FileCtx,
         [traverse_ancestors, ?traverse_container, ?list_container]
     ),
-    read_dir_plus_insecure(UserCtx, FileCtx1, Offset, Limit, Token).
+    read_dir_plus_insecure(UserCtx, RelationCtx, Offset, Limit, Token).
 
 
 %%%===================================================================
@@ -131,28 +131,16 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% Lists directory. Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_insecure(user_ctx:ctx(), file_ctx:ctx(),
+-spec read_dir_insecure(user_ctx:ctx(), fslogic_caveats:relation_ctx(),
     Offset :: integer(), Limit :: non_neg_integer(),
     Token :: undefined | binary(),
     StartId :: undefined | file_meta:name()
 ) ->
     fslogic_worker:fuse_response().
-read_dir_insecure(UserCtx, FileCtx, Offset, Limit, Token, StartId) ->
-    {Token2, CachePid} = get_cached_token(Token),
-
-    {Children, NewToken, IsLast, FileCtx2} = case file_ctx:get_file_children(
-        FileCtx, UserCtx, Offset, Limit, Token2, StartId
-    ) of
-        {C, FC}  ->
-            {C, <<"">>, length(C) < Limit, FC};
-        {C, NT, FC} ->
-            IL = NT#link_token.is_last,
-            NT2 = case IL of
-                true -> <<"">>;
-                _ -> cache_token(NT, CachePid)
-            end,
-            {C, NT2, IL, FC}
-    end,
+read_dir_insecure(UserCtx, RelationCtx, Offset, Limit, Token, StartId) ->
+    {Children, NewToken, IsLast, FileCtx} = get_file_children(
+        RelationCtx, UserCtx, Offset, Limit, Token, StartId
+    ),
 
     ChildrenLinks = lists:map(fun(ChildFile) ->
         ChildGuid = file_ctx:get_guid_const(ChildFile),
@@ -160,7 +148,7 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit, Token, StartId) ->
         #child_link{name = ChildName, guid = ChildGuid}
     end, Children),
 
-    fslogic_times:update_atime(FileCtx2),
+    fslogic_times:update_atime(FileCtx),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
             child_links = ChildrenLinks,
@@ -177,23 +165,13 @@ read_dir_insecure(UserCtx, FileCtx, Offset, Limit, Token, StartId) ->
 %% Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_plus_insecure(user_ctx:ctx(), file_ctx:ctx(),
+-spec read_dir_plus_insecure(user_ctx:ctx(), fslogic_caveats:relation_ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer(),
     Token :: undefined | binary()) -> fslogic_worker:fuse_response().
-read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
-    {Token2, CachePid} = get_cached_token(Token),
-
-    {Children, NewToken, IsLast, FileCtx2} = case
-        file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit, Token2) of
-        {C, FC}  -> {C, <<"">>, length(C) < Limit, FC};
-        {C, NT, FC} ->
-            IL = NT#link_token.is_last,
-            NT2 = case IL of
-                true -> <<"">>;
-                _ -> cache_token(NT, CachePid)
-            end,
-            {C, NT2, IL, FC}
-    end,
+read_dir_plus_insecure(UserCtx, RelationCtx, Offset, Limit, Token) ->
+    {Children, NewToken, IsLast, FileCtx} = get_file_children(
+        RelationCtx, UserCtx, Offset, Limit, Token, undefined
+    ),
 
     MapFun = fun(ChildCtx) ->
         try
@@ -202,10 +180,9 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
                 fuse_response = Attrs
             } = attr_req:get_file_attr_insecure(UserCtx, ChildCtx),
             Attrs
-        catch
-            _:_ ->
-                % File can be not synchronized with other provider
-                error
+        catch _:_ ->
+            % File can be not synchronized with other provider
+            error
         end
     end,
     FilterFun = fun
@@ -215,7 +192,7 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
     MaxProcs = application:get_env(?APP_NAME, max_read_dir_plus_procs, 10),
     ChildrenAttrs = filtermap(MapFun, FilterFun, Children, MaxProcs, length(Children)),
 
-    fslogic_times:update_atime(FileCtx2),
+    fslogic_times:update_atime(FileCtx),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
             child_attrs = ChildrenAttrs,
@@ -223,6 +200,40 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
             is_last = IsLast
         }
     }.
+
+
+%% @private
+-spec get_file_children(fslogic_caveats:relation_ctx(), user_ctx:ctx(),
+    Offset :: integer(),
+    Limit :: non_neg_integer(),
+    Token :: undefined | datastore_links_iter:token(),
+    StartId :: undefined | file_meta:name()
+) ->
+    {
+        Children :: [file_ctx:ctx()],
+        NewToken :: binary(),
+        IsLast :: boolean(),
+        NewFileCtx :: file_ctx:ctx()
+    }.
+get_file_children({subpath, FileCtx}, UserCtx, Offset, Limit, Token, StartId) ->
+    {Token2, CachePid} = get_cached_token(Token),
+
+    case file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit, Token2, StartId) of
+        {C, FC}  ->
+            {C, <<"">>, length(C) < Limit, FC};
+        {C, NT, FC} ->
+            IL = NT#link_token.is_last,
+            NT2 = case IL of
+                true -> <<"">>;
+                _ -> cache_token(NT, CachePid)
+            end,
+            {C, NT2, IL, FC}
+    end;
+get_file_children({ancestor, FileCtx, AllowedChildren},
+    UserCtx, Offset, Limit, Token, StartId
+) ->
+    % TODO VFS-5719 use AllowedChildren to filter ls results
+    {[], <<"">>, true, FileCtx}.
 
 
 %%--------------------------------------------------------------------
