@@ -74,7 +74,7 @@
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3,
-    get_file_children/4, get_file_children/5, get_file_children/6,
+    get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_bounded/5,
     get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2, fill_location_gaps/4,
@@ -765,7 +765,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
 get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            {list_user_spaces(UserCtx, Offset, Limit), FileCtx};
+            {list_user_spaces(UserCtx, Offset, Limit, all), FileCtx};
         false ->
             {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
             SpaceId = get_space_id_const(FileCtx2),
@@ -780,6 +780,35 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
                 {ok, ChildrenLinks, _} ->
                     {lists:map(MapFun, ChildrenLinks), FileCtx2}
             end
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of directory children bounded by specified AllowedChildren.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_children_bounded(ctx(), user_ctx:ctx(),
+    Offset :: integer(),
+    Limit :: non_neg_integer(),
+    AllowedChildren :: [file_meta:name()]
+) ->
+    {Children :: [ctx()], NewFileCtx :: ctx()}.
+get_file_children_bounded(FileCtx, UserCtx, Offset, Limit, AllowedChildren) ->
+    case is_user_root_dir_const(FileCtx, UserCtx) of
+        true ->
+            {list_user_spaces(UserCtx, Offset, Limit, AllowedChildren), FileCtx};
+        false ->
+            {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
+            SpaceId = get_space_id_const(FileCtx2),
+            ShareId = get_share_id_const(FileCtx2),
+
+            {ok, ChildrenLinks, _} = file_meta:list_children_bounded(
+                FileDoc, Offset, Limit, AllowedChildren
+            ),
+            ChildrenCtxs = lists:map(fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
+                new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
+            end, ChildrenLinks),
+            {ChildrenCtxs, FileCtx2}
     end.
 
 %%--------------------------------------------------------------------
@@ -1407,13 +1436,22 @@ get_file_size_from_remote_locations(FileCtx) ->
 
 %% @private
 -spec list_user_spaces(user_ctx:ctx(), Offset :: non_neg_integer(),
-    Limit :: non_neg_integer()) -> Children :: [ctx()].
-list_user_spaces(UserCtx, Offset, Limit) ->
+    Limit :: non_neg_integer(), AllowedSpaces :: all | [binary()]) ->
+    Children :: [ctx()].
+list_user_spaces(UserCtx, Offset, Limit, AllowedSpaces) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
-    case Offset < length(Spaces) of
+    #document{value = #od_user{eff_spaces = AllSpaces}} = user_ctx:get_user(UserCtx),
+    FilteredSpaces = case AllowedSpaces of
+        all ->
+            AllSpaces;
+        _ ->
+            lists:filter(fun(Space) ->
+                lists:member(Space, AllowedSpaces)
+            end, AllSpaces)
+    end,
+    case Offset < length(FilteredSpaces) of
         true ->
-            SpacesChunk = lists:sublist(Spaces, Offset + 1, Limit),
+            SpacesChunk = lists:sublist(FilteredSpaces, Offset + 1, Limit),
             Children = lists:map(fun(SpaceId) ->
                 {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
                 SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),

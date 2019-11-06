@@ -229,11 +229,19 @@ get_file_children({subpath, FileCtx}, UserCtx, Offset, Limit, Token, StartId) ->
             end,
             {C, NT2, IL, FC}
     end;
-get_file_children({ancestor, FileCtx, AllowedChildren},
-    UserCtx, Offset, Limit, Token, StartId
+get_file_children({ancestor, FileCtx0, AllowedChildren0},
+    UserCtx, Offset, Limit, _Token, StartId
 ) ->
-    % TODO VFS-5719 use AllowedChildren to filter ls results
-    {[], <<"">>, true, FileCtx}.
+    AllowedChildren1 = case StartId of
+        undefined ->
+            AllowedChildren0;
+        _ ->
+            lists:dropwhile(fun(Name) -> Name < StartId end, AllowedChildren0)
+    end,
+    {Children, FileCtx1} = file_ctx:get_file_children_bounded(
+        FileCtx0, UserCtx, Offset, Limit, AllowedChildren1
+    ),
+    {Children, <<>>, length(Children) < Limit, FileCtx1}.
 
 
 %%--------------------------------------------------------------------

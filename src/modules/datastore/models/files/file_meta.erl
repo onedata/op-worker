@@ -36,7 +36,8 @@
 -export([
     get_child/2, get_child_uuid/2,
     list_children/2, list_children/3, list_children/4,
-    list_children/5, list_children/6
+    list_children/5, list_children/6,
+    list_children_bounded/4
 ]).
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
@@ -519,6 +520,34 @@ list_children(Entry, Offset, Size, Token, PrevLinkKey, PrevTeeID) ->
     end,
 
     list_children_internal(Entry, Opts4).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists children of given #file_meta bounded by specified AllowedChildren
+%% and given options (Offset and Size).
+%% @end
+%%--------------------------------------------------------------------
+-spec list_children_bounded(
+    Entry :: entry(),
+    Offset :: integer(),
+    Size :: non_neg_integer(),
+    AllowedChildren :: [file_meta:name()]
+) ->
+    {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
+list_children_bounded(Entry, Offset, Size, AllowedChildren) ->
+    Names = lists:filter(fun(ChildName) ->
+        not (is_hidden(ChildName) orelse is_deletion_link(ChildName))
+    end, AllowedChildren),
+
+    ?run(begin
+        {ok, FileUuid} = get_uuid(Entry),
+        case datastore_model:get_links(?CTX, FileUuid, all, Names) of
+            {ok, Links} ->
+                prepare_list_ans(lists:sublist(Links, Offset + 1, Size), #{});
+            {error, Reason} ->
+                {error, Reason}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
