@@ -23,7 +23,7 @@
 ]).
 
 -ifdef(TEST).
--export([check_data_path_relation/2]).
+-export([check_data_path_relation/2, is_subpath/2]).
 -endif.
 
 -type relation() :: subpath | ancestor.
@@ -200,12 +200,7 @@ verify_data_location_caveat(FileCtx0, ?CV_PATH(AllowedPaths), false) ->
     {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
 
     IsFileInAllowedSubPath = lists:any(fun(AllowedPath) ->
-        AllowedPathLen = size(AllowedPath),
-        case FilePath of
-            AllowedPath -> true;
-            <<AllowedPath:AllowedPathLen/binary, "/", _/binary>> -> true;
-            _ -> false
-        end
+        is_subpath(FilePath, AllowedPath)
     end, AllowedPaths),
 
     case IsFileInAllowedSubPath of
@@ -268,13 +263,9 @@ check_data_path_relation(FilePath, AllowedPaths) ->
                 true ->
                     % Check if FilePath is allowed by caveats
                     % (AllowedPath is ancestor to FilePath or FilePath itself)
-                    case FilePath of
-                        AllowedPath ->
-                            {subpath, undefined};
-                        <<AllowedPath:AllowedPathLen/binary, "/", _/binary>> ->
-                            {subpath, undefined};
-                        _ ->
-                            Acc
+                    case is_subpath(FilePath, AllowedPath, AllowedPathLen) of
+                        true -> {subpath, undefined};
+                        false -> Acc
                     end;
                 false ->
                     % Check if FilePath is ancestor to AllowedPath
@@ -289,6 +280,27 @@ check_data_path_relation(FilePath, AllowedPaths) ->
                     end
             end
     end, {undefined, undefined}, AllowedPaths).
+
+
+
+%% @private
+-spec is_subpath(file_meta:path(), file_meta:path()) -> boolean().
+is_subpath(PossibleSubPath, Path) ->
+    is_subpath(PossibleSubPath, Path, size(Path)).
+
+
+%% @private
+-spec is_subpath(file_meta:path(), file_meta:path(), pos_integer()) ->
+    boolean().
+is_subpath(PossibleSubPath, Path, PathLen) ->
+    case PossibleSubPath of
+        Path ->
+            true;
+        <<Path:PathLen/binary, "/", _/binary>> ->
+            true;
+        _ ->
+            false
+    end.
 
 
 %% @private

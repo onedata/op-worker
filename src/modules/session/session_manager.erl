@@ -31,10 +31,8 @@
 ]).
 -export([remove_session/1]).
 
-%% Test API
--export([reuse_or_create_session/4]).
-
 -type error() :: {error, Reason :: term()}.
+
 
 %%%===================================================================
 %%% API
@@ -190,7 +188,7 @@ remove_session(SessId) ->
 
 
 %%%===================================================================
-%%% Internal functions exported for tests
+%%% Internal functions
 %%%===================================================================
 
 
@@ -232,13 +230,9 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
     end).
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
 %%--------------------------------------------------------------------
-%% @doc @private
+%% @private
+%% @doc
 %% Creates session or if session exists reuses it.
 %% NOTE !!!
 %% To avoid races during session creation this function should be run in

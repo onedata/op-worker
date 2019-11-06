@@ -56,4 +56,24 @@ check_data_path_relation_test_() -> [
 ].
 
 
+is_subpath_test_() -> [
+    ?_assertEqual(
+        false,
+        fslogic_caveats:is_subpath(<<"/c/b/a">>, <<"/a/b/c">>)
+    ),
+    ?_assertEqual(
+        false,
+        fslogic_caveats:is_subpath(<<"/a/b/c">>, <<"/a/b/c/">>)
+    ),
+    ?_assertEqual(
+        true,
+        fslogic_caveats:is_subpath(<<"/a/b/c">>, <<"/a/b/c">>)
+    ),
+    ?_assertEqual(
+        true,
+        fslogic_caveats:is_subpath(<<"/a/b/c/d">>, <<"/a/b/c">>)
+    )
+].
+
+
 -endif.
