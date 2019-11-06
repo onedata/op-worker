@@ -64,10 +64,17 @@ handle_qos_entry_change(SpaceId, #document{
 -spec reconcile_qos_on_storage(file_ctx:ctx(), storage:id()) -> ok.
 reconcile_qos_on_storage(FileCtx, StorageId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+
     case file_qos:get_effective(FileUuid) of
         {error, {file_meta_missing, MissingUuid}} ->
-            file_meta_posthooks:add_hook(MissingUuid, <<"check_qos_", FileUuid/binary>>,
-                ?MODULE, ?FUNCTION_NAME, [file_ctx:get_space_id_const(FileCtx), FileUuid, StorageId]);
+            % Generate new file_ctx as it can change before posthook
+            % will be executed
+            file_meta_posthooks:add_hook(
+                MissingUuid, <<"check_qos_", FileUuid/binary>>,
+                ?MODULE, ?FUNCTION_NAME, [file_ctx:new_by_guid(FileGuid), StorageId]
+            ),
+            ok;
         {ok, EffFileQos} ->
             QosToUpdate = file_qos:get_qos_to_update(StorageId, EffFileQos),
             lists:foreach(fun(QosEntryId) ->

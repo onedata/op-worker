@@ -287,7 +287,7 @@
     expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
     is_possible = false :: boolean(),
-    % These are requests to remote providers to start QoS traverse.
+    % These are requests to providers to start QoS traverse.
     traverse_reqs = #{} :: qos_entry:traverse_map()
 }).
 

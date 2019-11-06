@@ -61,7 +61,7 @@
 %%% Main API
 %%%===================================================================
 
--spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok.
+-spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok | no_return().
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) when is_atom(Pool) ->
     init(atom_to_binary(Pool, utf8), MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit);
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) ->
@@ -69,7 +69,7 @@ init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) ->
         #{executor => oneprovider:get_id_or_undefined()}).
 
 -spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer(),
-    [traverse:callback_module()]) -> ok.
+    [traverse:callback_module()]) -> ok  | no_return().
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules) when is_atom(Pool) ->
     init(atom_to_binary(Pool, utf8), MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules);
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules) ->

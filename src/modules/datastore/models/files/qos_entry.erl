@@ -48,7 +48,7 @@
 
 %% functions operating on document using datastore model API
 -export([
-    get/1, delete/1, create/6, create/7,
+    get/1, delete/1, create/5, create/7,
     add_links/4, delete_links/4, fold_links/4
 ]).
 
@@ -98,9 +98,9 @@
 %%%===================================================================
 
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
-    replicas_num(), boolean()) -> {ok, doc()} | {error, term()}.
-create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible) ->
-    create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible, #{}).
+    replicas_num()) -> {ok, doc()} | {error, term()}.
+create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum) ->
+    create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, false, #{}).
 
 
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
@@ -163,7 +163,7 @@ get_file_guid(#document{scope = SpaceId, value = #qos_entry{file_uuid = FileUuid
 get_file_guid(QosEntryId) ->
     case qos_entry:get(QosEntryId) of
         {ok, Doc} ->
-            {ok, get_file_guid(Doc)};
+            get_file_guid(Doc);
         {error, _} = Error ->
             Error
     end.
@@ -253,7 +253,7 @@ are_all_traverses_finished(#document{value = QosEntry}) ->
     are_all_traverses_finished(QosEntry);
 
 are_all_traverses_finished(QosEntry) ->
-    maps:size(QosEntry#qos_entry.traverse_reqs) == 0.
+    QosEntry#qos_entry.traverse_reqs == #{}.
 
 
 %%%===================================================================

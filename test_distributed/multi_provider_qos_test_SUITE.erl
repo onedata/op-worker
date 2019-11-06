@@ -56,7 +56,9 @@
 
     qos_restoration_file_test/1,
     qos_restoration_dir_test/1,
-    qos_status_test/1
+    qos_status_test/1,
+
+    reconcile_qos_using_file_meta_posthooks_test/1
 ]).
 
 all() -> [
@@ -86,7 +88,9 @@ all() -> [
 
     qos_restoration_file_test,
     qos_restoration_dir_test,
-    qos_status_test
+    qos_status_test,
+
+    reconcile_qos_using_file_meta_posthooks_test
 ].
 
 
@@ -675,6 +679,54 @@ qos_status_test(Config) ->
     end, maps:get(files, GuidsAndPaths)).
 
 
+reconcile_qos_using_file_meta_posthooks_test(Config) ->
+    [Worker1, Worker2 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    DirName = <<"dir1">>,
+    DirPath = filename:join(?SPACE1, DirName),
+    FilePath = filename:join(DirPath, <<"file1">>),
+
+    QosSpec = #fulfill_qos_test_spec{
+        initial_dir_structure = #test_dir_structure{
+            worker = Worker1,
+            dir_structure = {?SPACE1, [
+                {DirName, []}
+            ]}
+        },
+        qos_to_add = [
+            #qos_to_add{
+                worker = Worker1,
+                qos_name = ?QOS1,
+                path = DirPath,
+                expression = <<"country=FR">>
+            }
+        ]
+    },
+
+    {_, _} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
+
+    mock_dbsync_changes(Config),
+    mock_file_meta_posthooks(Config),
+
+    Guid = qos_tests_utils:create_file(Worker1, SessId, FilePath, <<"test_data">>),
+
+    DirStructureBefore = get_expected_structure_for_single_dir([?PROVIDER_ID(Worker1)]),
+    DirStructureBefore2 = DirStructureBefore#test_dir_structure{assertion_workers = [Worker1]},
+    qos_tests_utils:assert_distribution_in_dir_structure(
+        Config, DirStructureBefore2, #{files => [{Guid, FilePath}], dirs => []}
+    ),
+
+    receive
+        post_hook_created ->
+            unmock_file_meta_posthooks(Config),
+            unmock_dbsync_changes(Config)
+    end,
+
+    save_file_meta_docs(Config),
+
+    DirStructureAfter = get_expected_structure_for_single_dir([?PROVIDER_ID(Worker1), ?PROVIDER_ID(Worker2)]),
+    qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructureAfter,  #{files => [{Guid, FilePath}], dirs => []}).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -933,3 +985,51 @@ get_providers_mapping(Config) ->
         ?P2 => ?PROVIDER_ID(WorkerP2),
         ?P3 => ?PROVIDER_ID(WorkerP3)
     }.
+
+
+mock_dbsync_changes(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker1, dbsync_changes, [passthrough]),
+    TestPid = self(),
+
+    ok = test_utils:mock_expect(Worker1, dbsync_changes, apply,
+        fun
+            (Doc = #document{value = #file_meta{}}) ->
+                TestPid ! {file_meta, Doc},
+                ok;
+            (Doc) ->
+                meck:passthrough([Doc])
+        end).
+
+
+mock_file_meta_posthooks(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, file_meta_posthooks, [passthrough]),
+    TestPid = self(),
+    ok = test_utils:mock_expect(Workers, file_meta_posthooks, add_hook,
+        fun(FileUuid, Identifier, Module, Function, Args) ->
+            Res = meck:passthrough([FileUuid, Identifier, Module, Function, Args]),
+            TestPid ! post_hook_created,
+            Res
+        end).
+
+
+unmock_dbsync_changes(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker1, dbsync_changes).
+
+
+unmock_file_meta_posthooks(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, file_meta_posthooks).
+
+
+save_file_meta_docs(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    receive
+        {file_meta, Doc} ->
+            ?assertMatch(ok, rpc:call(Worker1, dbsync_changes, apply, [Doc])),
+            save_file_meta_docs(Config)
+    after 0 ->
+        ok
+    end.

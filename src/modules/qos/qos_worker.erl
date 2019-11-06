@@ -38,9 +38,13 @@
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    qos_traverse:init_pool(),
+    try
+        qos_traverse:init_pool()
+    catch
+        throw:{error, already_exists} -> ok
+    end,
     qos_bounded_cache:init_group(),
-    qos_bounded_cache:ensure_exists_for_all_spaces(),
+    qos_bounded_cache:init_qos_cache_for_all_spaces(),
     {ok, #{}}.
 
 

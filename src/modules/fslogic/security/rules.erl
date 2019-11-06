@@ -343,10 +343,8 @@ validate_posix_access(AccessType, FileCtx, UserCtx, _ShareId) ->
     end,
 
     case ?has_flag(Mode, ReqBit1) of
-        true ->
-            {ok, FileCtx2};
-        false ->
-            throw(?EACCES)
+        true -> {ok, FileCtx2};
+        false -> throw(?EACCES)
     end.
 
 

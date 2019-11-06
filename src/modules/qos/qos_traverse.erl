@@ -90,7 +90,7 @@ reconcile_qos_for_entry(FileCtx, QosEntryId) ->
 %% Initializes pool for traverse tasks concerning QoS management.
 %% @end
 %%--------------------------------------------------------------------
--spec init_pool() -> ok.
+-spec init_pool() -> ok  | no_return().
 init_pool() ->
     % Get pool limits from app.config
     MasterJobsLimit = application:get_env(?APP_NAME, qos_traverse_master_jobs_limit, 10),
@@ -152,7 +152,6 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskI
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     % TODO: add space check and optionally choose other storage
 
-    % call using ?MODULE macro for mocking in tests
     ok = synchronize_file(UserCtx, FileCtx).
 
 %%%===================================================================

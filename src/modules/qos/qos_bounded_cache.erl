@@ -25,7 +25,7 @@
     ensure_exists_for_all_spaces/0,
     ensure_exists_on_all_nodes/1,
     ensure_exists/1, invalidate_on_all_nodes/1,
-    init_qos_cache_for_space/1
+    init_qos_cache_for_space/1, init_qos_cache_for_all_spaces/0
 ]).
 
 
@@ -60,18 +60,11 @@ init_group() ->
 ensure_exists_for_all_spaces() ->
     % TODO: VFS-5744 potential race condition:
     % user may perform operations associated with QoS before cache initialization
-    try provider_logic:get_spaces() of
-        {ok, SpaceIds} ->
-            lists:foreach(fun(SpaceId) -> ensure_exists_on_all_nodes(SpaceId) end, SpaceIds);
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug("Unable to initialize QoS bounded cache due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize QoS bounded cache due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
-        Error = {error, _} ->
-            ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
-    catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+    case get_space_list() of
+        ok ->
+            ok;
+        SpaceIds ->
+            lists:foreach(fun(SpaceId) -> ensure_exists_on_all_nodes(SpaceId) end, SpaceIds)
     end.
 
 
@@ -121,6 +114,22 @@ ensure_exists(SpaceId) ->
             qos_worker:init_qos_cache_for_space(SpaceId);
         _ ->
             ok
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Initializes caches for all spaces. This function should be called be
+%% some long living process as it will hold ets tables.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_qos_cache_for_all_spaces() -> ok.
+init_qos_cache_for_all_spaces() ->
+    case get_space_list() of
+        ok ->
+            ok;
+        SpaceIds ->
+            lists:foreach(fun(SpaceId) -> init_qos_cache_for_space(SpaceId) end, SpaceIds)
     end.
 
 
@@ -176,6 +185,24 @@ invalidate_on_all_nodes(SpaceId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec get_space_list() -> [od_space:id()] | ok.
+get_space_list() ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            SpaceIds;
+        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+            ?debug("Unable to initialize QoS bounded cache due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+            ?debug("Unable to initialize QoS bounded cache due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
+        Error = {error, _} ->
+            ?error("Unable to initialize QoS bounded cache due to: ~p", [Error])
+    catch
+        Error2:Reason ->
+            ?error_stacktrace("Unable to initialize qos bounded cache due to: ~p", [{Error2, Reason}])
+    end.
+
 
 %% @private
 -spec get_param(atom(), non_neg_integer()) -> non_neg_integer().

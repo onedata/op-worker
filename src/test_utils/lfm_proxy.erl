@@ -516,12 +516,12 @@ remove_qos_entry(Worker, SessId, QosEntryId) ->
     ?EXEC(Worker, lfm:remove_qos_entry(SessId, QosEntryId)).
 
 -spec check_qos_fulfilled(node(), session:id(), qos_entry:id()) ->
-    boolean() | lfm:error_reply().
+    {ok, boolean()} | lfm:error_reply().
 check_qos_fulfilled(Worker, SessId, QosEntryId) ->
     ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosEntryId)).
 
 -spec check_qos_fulfilled(node(), session:id(), qos_entry:id(), lfm:file_key()) ->
-    boolean() | lfm:error_reply().
+    {ok, boolean()} | lfm:error_reply().
 check_qos_fulfilled(Worker, SessId, QosEntryId, FileKey) ->
     ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosEntryId, FileKey)).
 
