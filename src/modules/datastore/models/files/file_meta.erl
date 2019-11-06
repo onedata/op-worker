@@ -542,10 +542,13 @@ list_children_bounded(Entry, Offset, Size, AllowedChildren) ->
     ?run(begin
         {ok, FileUuid} = get_uuid(Entry),
         case datastore_model:get_links(?CTX, FileUuid, all, Names) of
-            {ok, Links} ->
-                prepare_list_ans(lists:sublist(Links, Offset + 1, Size), #{});
-            {error, Reason} ->
-                {error, Reason}
+            {error, _Reason} = Error ->
+                Error;
+            LinksList ->
+                Links = lists:foldl(fun({ok, L}, Acc) ->
+                    L ++ Acc
+                end, [], LinksList),
+                prepare_list_ans(lists:sublist(Links, Offset + 1, Size), #{})
         end
     end).
 

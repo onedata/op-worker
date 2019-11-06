@@ -15,7 +15,10 @@
 
 -include("lfm_permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/aai/caveats.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -29,6 +32,7 @@
 -export([
     mkdir_test/1,
     ls_test/1,
+    ls_caveat_test/1,
     readdir_plus_test/1,
     get_child_attr_test/1,
     mv_dir_test/1,
@@ -84,6 +88,7 @@ all() ->
     ?ALL([
         mkdir_test,
         ls_test,
+        ls_caveat_test,
         readdir_plus_test,
         get_child_attr_test,
         mv_dir_test,
@@ -180,6 +185,53 @@ ls_test(Config) ->
             lfm_proxy:ls(W, SessId, {guid, DirGuid}, 0, 100)
         end
     }, Config).
+
+
+ls_caveat_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    Owner = <<"user1">>,
+    UserId = <<"user2">>,
+    Identity = #user_identity{user_id = UserId},
+
+    OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(W)}}, Config),
+
+    DirPath = <<"/space1/dir1">>,
+    {ok, DirGuid} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:mkdir(W, OwnerUserSessId, DirPath)
+    ),
+
+    [{Path1, F1}, {Path2, F2}, {Path3, F3}, {Path4, F4}, {Path5, F5}] = lists:map(fun(Num) ->
+        FileName = <<"file", ($0 + Num)>>,
+        FilePath = <<DirPath/binary, "/", FileName/binary>>,
+        {ok, FileGuid} = ?assertMatch(
+            {ok, _},
+            lfm_proxy:create(W, OwnerUserSessId, FilePath, 8#777)
+        ),
+        {FilePath, {FileGuid, FileName}}
+    end, lists:seq(1, 5)),
+
+    {ok, MainToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
+        onezone_domain = <<"zone">>,
+        subject = ?SUB(user, UserId),
+        nonce = UserId,
+        type = ?ACCESS_TOKEN,
+        persistent = false
+    }, UserId, []))),
+
+    Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [DirPath]}),
+    SessId1 = create_session(W, Identity, Token1),
+    ?assertMatch(
+        {ok, [F1, F2, F3, F4, F5]},
+        lfm_proxy:ls(W, SessId1, {guid, DirGuid}, 0, 100)
+    ),
+
+    Token2 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1, Path3, Path5]}),
+    SessId2 = create_session(W, Identity, Token2),
+    ?assertMatch(
+        {ok, [F1, F3, F5]},
+        lfm_proxy:ls(W, SessId2, {guid, DirGuid}, 0, 100)
+    ).
 
 
 readdir_plus_test(Config) ->
@@ -1243,3 +1295,15 @@ fill_file_with_dummy_data(Node, SessId, Guid) ->
     ?assertMatch({ok, 4}, lfm_proxy:write(Node, FileHandle, 0, <<"DATA">>)),
     ?assertMatch(ok, lfm_proxy:fsync(Node, FileHandle)),
     ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
+
+
+-spec create_session(node(), #user_identity{}, tokens:serialized()) ->
+    session:id().
+create_session(Node, Identity, Token) ->
+    {ok, SessionId} = ?assertMatch({ok, _}, rpc:call(
+        Node,
+        session_manager,
+        reuse_or_create_gui_session,
+        [Identity, #token_auth{token = Token}])
+    ),
+    SessionId.
