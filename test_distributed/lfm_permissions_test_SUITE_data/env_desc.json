@@ -110,6 +110,18 @@
                         "supported_size": 1000000000
                     }
                 }
+            },
+            "space3": {
+                "displayed_name": "space3",
+                "users": [
+                    "user2"
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st",
+                        "supported_size": 1000000000
+                    }
+                }
             }
         }
     }

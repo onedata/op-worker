@@ -199,10 +199,11 @@ verify_data_location_caveats(FileCtx0, Caveats, AllowAncestors) ->
 ) ->
     {relation(), file_ctx:ctx(), undefined | children_set()} | no_return().
 verify_data_location_caveat(FileCtx0, ?CV_PATH(AllowedPaths), false) ->
-    {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
+    {FilePath0, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
+    FilePath1 = string:trim(FilePath0, trailing, "/"),
 
     IsFileInAllowedSubPath = lists:any(fun(AllowedPath) ->
-        is_subpath(FilePath, AllowedPath)
+        is_subpath(FilePath1, AllowedPath)
     end, AllowedPaths),
 
     case IsFileInAllowedSubPath of
@@ -212,8 +213,9 @@ verify_data_location_caveat(FileCtx0, ?CV_PATH(AllowedPaths), false) ->
             throw(?EACCES)
     end;
 verify_data_location_caveat(FileCtx0, ?CV_PATH(AllowedPaths), true) ->
-    {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
-    case check_data_path_relation(FilePath, AllowedPaths) of
+    {FilePath0, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
+    FilePath1 = string:trim(FilePath0, trailing, "/"),
+    case check_data_path_relation(FilePath1, AllowedPaths) of
         {undefined, _} -> throw(?EACCES);
         {Relation, Names} -> {Relation, FileCtx1, Names}
     end;
@@ -234,8 +236,9 @@ verify_data_location_caveat(FileCtx0, ?CV_OBJECTID(ObjectIds), false) ->
     end;
 verify_data_location_caveat(FileCtx0, ?CV_OBJECTID(ObjectIds), true) ->
     AllowedPaths = objectids_to_paths(ObjectIds),
-    {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
-    case check_data_path_relation(FilePath, AllowedPaths) of
+    {FilePath0, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
+    FilePath1 = string:trim(FilePath0, trailing, "/"),
+    case check_data_path_relation(FilePath1, AllowedPaths) of
         {undefined, _} -> throw(?EACCES);
         {Relation, Names} -> {Relation, FileCtx1, Names}
     end.
@@ -325,7 +328,7 @@ objectids_to_paths(ObjectIds) ->
             {ok, Guid} = file_id:objectid_to_guid(ObjectId),
             FileCtx = file_ctx:new_by_guid(Guid),
             {Path, _} = file_ctx:get_canonical_path(FileCtx),
-            {true, Path}
+            {true, string:trim(Path, trailing, "/")}
         catch _:_ ->
             % File may have been deleted so it is not possible to resolve
             % it's path so skip it (it does not make token invalid)

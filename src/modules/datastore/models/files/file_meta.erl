@@ -529,12 +529,12 @@ list_children(Entry, Offset, Size, Token, PrevLinkKey, PrevTeeID) ->
 %%--------------------------------------------------------------------
 -spec list_children_bounded(
     Entry :: entry(),
-    Offset :: integer(),
-    Size :: non_neg_integer(),
+    Offset :: non_neg_integer(),
+    Limit :: non_neg_integer(),
     AllowedChildren :: [file_meta:name()]
 ) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children_bounded(Entry, Offset, Size, AllowedChildren) ->
+list_children_bounded(Entry, Offset, Limit, AllowedChildren) ->
     Names = lists:filter(fun(ChildName) ->
         not (is_hidden(ChildName) orelse is_deletion_link(ChildName))
     end, AllowedChildren),
@@ -548,7 +548,13 @@ list_children_bounded(Entry, Offset, Size, AllowedChildren) ->
                 Links = lists:foldl(fun({ok, L}, Acc) ->
                     L ++ Acc
                 end, [], LinksList),
-                prepare_list_ans(lists:sublist(Links, Offset + 1, Size), #{})
+                % Above foldl reversed list so it is necessary to calculate
+                % appropriate indexes to get Links[-Offset-Size:-Offset]
+                LinksNum = length(Links),
+                EndIdx = max(1, LinksNum - Offset + 1),
+                StartIdx = max(1, EndIdx - Limit),
+                Size = EndIdx - StartIdx,
+                prepare_list_ans(lists:sublist(Links, StartIdx, Size), #{})
         end
     end).
 

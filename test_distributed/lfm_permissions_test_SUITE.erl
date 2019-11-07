@@ -189,26 +189,46 @@ ls_test(Config) ->
 
 ls_caveat_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    Owner = <<"user1">>,
-    UserId = <<"user2">>,
-    Identity = #user_identity{user_id = UserId},
 
+    Owner = <<"user1">>,
     OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(W)}}, Config),
 
-    DirPath = <<"/space1/dir1">>,
+    UserId = <<"user2">>,
+    Identity = #user_identity{user_id = UserId},
+    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
+    Space1RootDir = fslogic_uuid:spaceid_to_space_dir_guid(<<"space1">>),
+    Space3RootDir = fslogic_uuid:spaceid_to_space_dir_guid(<<"space3">>),
+
+    DirName = atom_to_binary(?FUNCTION_NAME, utf8),
+    DirPath = <<"/space1/", DirName/binary>>,
     {ok, DirGuid} = ?assertMatch(
         {ok, _},
         lfm_proxy:mkdir(W, OwnerUserSessId, DirPath)
     ),
+    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
-    [{Path1, F1}, {Path2, F2}, {Path3, F3}, {Path4, F4}, {Path5, F5}] = lists:map(fun(Num) ->
+    DirName2 = <<(atom_to_binary(?FUNCTION_NAME, utf8))/binary, "2">>,
+    DirPath2 = <<"/space1/", DirName2/binary>>,
+    {ok, DirGuid2} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:mkdir(W, OwnerUserSessId, DirPath2)
+    ),
+
+    [
+        {Path1, ObjectId1, F1},
+        {Path2, ObjectId2, F2},
+        {Path3, ObjectId3, F3},
+        {Path4, ObjectId4, F4},
+        {Path5, ObjectId5, F5}
+    ] = lists:map(fun(Num) ->
         FileName = <<"file", ($0 + Num)>>,
         FilePath = <<DirPath/binary, "/", FileName/binary>>,
         {ok, FileGuid} = ?assertMatch(
             {ok, _},
             lfm_proxy:create(W, OwnerUserSessId, FilePath, 8#777)
         ),
-        {FilePath, {FileGuid, FileName}}
+        {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+        {FilePath, FileObjectId, {FileGuid, FileName}}
     end, lists:seq(1, 5)),
 
     {ok, MainToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
@@ -219,18 +239,125 @@ ls_caveat_test(Config) ->
         persistent = false
     }, UserId, []))),
 
+    % Whitelisting Dir should result in listing all it's files
     Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [DirPath]}),
     SessId1 = create_session(W, Identity, Token1),
     ?assertMatch(
         {ok, [F1, F2, F3, F4, F5]},
         lfm_proxy:ls(W, SessId1, {guid, DirGuid}, 0, 100)
     ),
-
-    Token2 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1, Path3, Path5]}),
+    Token2 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [DirObjectId]}),
     SessId2 = create_session(W, Identity, Token2),
     ?assertMatch(
-        {ok, [F1, F3, F5]},
+        {ok, [F1, F2, F3, F4, F5]},
         lfm_proxy:ls(W, SessId2, {guid, DirGuid}, 0, 100)
+    ),
+
+    % Whitelisting concrete files should result in listing only them
+    Token3 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1, Path3, Path5]}),
+    SessId3 = create_session(W, Identity, Token3),
+    ?assertMatch(
+        {ok, [F1, F3, F5]},
+        lfm_proxy:ls(W, SessId3, {guid, DirGuid}, 0, 100)
+    ),
+    Token4 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId5]}),
+    SessId4 = create_session(W, Identity, Token4),
+    ?assertMatch(
+        {ok, [F1, F3, F5]},
+        lfm_proxy:ls(W, SessId4, {guid, DirGuid}, 0, 100)
+    ),
+
+    % Using several caveats should result in listing only their intersection
+    Token5 = tokens:confine(MainToken, [
+        #cv_data_path{whitelist = [Path1, Path3, Path4, Path5]},
+        #cv_data_path{whitelist = [Path1, Path2, Path5]},
+        #cv_data_path{whitelist = [Path1, Path5]}
+    ]),
+    SessId5 = create_session(W, Identity, Token5),
+    ?assertMatch(
+        {ok, [F1, F5]},
+        lfm_proxy:ls(W, SessId5, {guid, DirGuid}, 0, 100)
+    ),
+    Token6 = tokens:confine(MainToken, [
+        #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId4, ObjectId5]},
+        #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
+        #cv_data_objectid{whitelist = [ObjectId1, ObjectId5]}
+    ]),
+    SessId6 = create_session(W, Identity, Token6),
+    ?assertMatch(
+        {ok, [F1, F5]},
+        lfm_proxy:ls(W, SessId6, {guid, DirGuid}, 0, 100)
+    ),
+    Token7 = tokens:confine(MainToken, [
+        #cv_data_path{whitelist = [Path1, Path3, Path4, Path5]},
+        #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
+        #cv_data_path{whitelist = [Path1, Path5]}
+    ]),
+    SessId7 = create_session(W, Identity, Token7),
+    ?assertMatch(
+        {ok, [F1, F5]},
+        lfm_proxy:ls(W, SessId7, {guid, DirGuid}, 0, 100)
+    ),
+    Token8 = tokens:confine(MainToken, [
+        #cv_data_objectid{whitelist = [ObjectId3, ObjectId4]},
+        #cv_data_path{whitelist = [Path1, Path5]}
+    ]),
+    SessId8 = create_session(W, Identity, Token8),
+    ?assertMatch(
+        {ok, []},
+        lfm_proxy:ls(W, SessId8, {guid, DirGuid}, 0, 100)
+    ),
+
+    % Using caveat for different directory should result in {error, eacces}
+    Token9 = tokens:confine(MainToken, #cv_data_path{whitelist = [<<"/space1/qwe">>]}),
+    SessId9 = create_session(W, Identity, Token9),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:ls(W, SessId9, {guid, DirGuid}, 0, 100)
+    ),
+
+    % With no caveats listing user root dir should list all user spaces
+    SessId10 = create_session(W, Identity, MainToken),
+    ?assertMatch(
+        {ok, [{Space1RootDir, <<"space1">>}, {Space3RootDir, <<"space3">>}]},
+        lfm_proxy:ls(W, SessId10, {guid, UserRootDir}, 0, 100)
+    ),
+    % But with caveats user root dir ls should show only spaces leading to allowed files
+    Token11 = tokens:confine(MainToken, #cv_data_path{whitelist = [DirPath]}),
+    SessId11 = create_session(W, Identity, Token11),
+    ?assertMatch(
+        {ok, [{Space1RootDir, <<"space1">>}]},
+        lfm_proxy:ls(W, SessId11, {guid, UserRootDir}, 0, 100)
+    ),
+
+    % With no caveats listing space dir should list all space directories
+    SessId12 = create_session(W, Identity, MainToken),
+    ?assertMatch(
+        {ok, [_ | _]},
+        lfm_proxy:ls(W, SessId12, {guid, Space1RootDir}, 0, 100)
+    ),
+    % But with caveats space ls should show only dirs leading to allowed files
+    Token13 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1]}),
+    SessId13 = create_session(W, Identity, Token13),
+    ?assertMatch(
+        {ok, [{DirGuid, DirName}]},
+        lfm_proxy:ls(W, SessId13, {guid, Space1RootDir}, 0, 100)
+    ),
+
+    % Test listing with caveats and options (offset, limit)
+    Token14 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1, Path2, Path4, Path5]}),
+    SessId14 = create_session(W, Identity, Token14),
+    ?assertMatch(
+        {ok, [F1, F2, F4]},
+        lfm_proxy:ls(W, SessId14, {guid, DirGuid}, 0, 3)
+    ),
+    ?assertMatch(
+        {ok, [F4, F5]},
+        lfm_proxy:ls(W, SessId14, {guid, DirGuid}, 2, 3)
+    ),
+    ?assertMatch(
+        {ok, [F4]},
+        lfm_proxy:ls(W, SessId14, {guid, DirGuid}, 2, 1)
     ).
 
 
