@@ -209,7 +209,7 @@ ls_caveat_test(Config) ->
 
     DirName2 = <<(atom_to_binary(?FUNCTION_NAME, utf8))/binary, "2">>,
     DirPath2 = <<"/space1/", DirName2/binary>>,
-    {ok, DirGuid2} = ?assertMatch(
+    {ok, _DirGuid2} = ?assertMatch(
         {ok, _},
         lfm_proxy:mkdir(W, OwnerUserSessId, DirPath2)
     ),

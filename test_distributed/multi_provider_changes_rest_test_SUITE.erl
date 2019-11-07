@@ -13,7 +13,10 @@
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("rest_test_utils.hrl").
+-include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -29,6 +32,7 @@
 ]).
 
 -export([
+    token_test/1,
     invalid_request_should_fail/1,
     unauthorized_request_should_fail/1,
     changes_stream_file_meta_create_test/1,
@@ -44,6 +48,7 @@
 
 all() ->
     ?ALL([
+        token_test,
         invalid_request_should_fail,
         unauthorized_request_should_fail,
         changes_stream_file_meta_create_test,
@@ -57,14 +62,51 @@ all() ->
         changes_stream_closed_on_disconnection
     ]).
 
+-define(USER_1, <<"user1">>).
 -define(USER_1_AUTH_HEADERS(Config), ?USER_1_AUTH_HEADERS(Config, [])).
 -define(USER_1_AUTH_HEADERS(Config, OtherHeaders),
-    ?USER_AUTH_HEADERS(Config, <<"user1">>, OtherHeaders)).
+    ?USER_AUTH_HEADERS(Config, ?USER_1, OtherHeaders)).
 
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+
+token_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    Json = #{<<"fileMeta">> => #{
+        <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
+    }},
+    #token_auth{token = Token} = ?config({auth, ?USER_1}, Config),
+
+    % Request containing data caveats should be rejected
+    DataCaveat = #cv_data_path{whitelist = [<<"/">>]},
+    TokenWithDataCaveat = tokens:confine(Token, DataCaveat),
+    ExpRestError1 = rest_test_utils:get_rest_error(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat)),
+    ?assertMatch(ExpRestError1, get_changes(
+        [{{auth, ?USER_1}, #token_auth{token = TokenWithDataCaveat}} | Config],
+        WorkerP1, SpaceId, Json
+    )),
+
+    % Request containing invalid api caveat should be rejected
+    GRI = #gri{type = op_metrics, id = SpaceId, aspect = changes},
+    InvalidApiCaveat = #cv_api{whitelist = [{all, all, GRI#gri{id = <<"ASD">>}}]},
+    TokenWithInvalidApiCaveat = tokens:confine(Token, InvalidApiCaveat),
+    ExpRestError2 = rest_test_utils:get_rest_error(?ERROR_TOKEN_CAVEAT_UNVERIFIED(InvalidApiCaveat)),
+    ?assertMatch(ExpRestError2, get_changes(
+        [{{auth, ?USER_1}, #token_auth{token = TokenWithInvalidApiCaveat}} | Config],
+        WorkerP1, SpaceId, Json
+    )),
+
+    % Request containing valid api caveat should succeed
+    ValidApiCaveat = #cv_api{whitelist = [{all, all, GRI}]},
+    TokenWithValidApiCaveat = tokens:confine(Token, ValidApiCaveat),
+    ?assertMatch({ok, _}, get_changes(
+        [{{auth, ?USER_1}, #token_auth{token = TokenWithValidApiCaveat}} | Config],
+        WorkerP1, SpaceId, Json
+    )).
 
 
 invalid_request_should_fail(Config) ->
@@ -499,6 +541,20 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 
+init_per_testcase(token_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, user_identity),
+    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
+        fun(#token_auth{token = SerializedToken}) ->
+            {ok, #token{
+                subject = ?SUB(user, UserId)
+            }} = tokens:deserialize(SerializedToken),
+
+            {ok, #document{value = #user_identity{user_id = UserId}}}
+        end
+    ),
+    init_per_testcase(all, Config);
+
 init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     ct:timetrap(timer:minutes(3)),
     Workers = ?config(op_worker_nodes, Config),
@@ -530,6 +586,11 @@ init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config).
 
+
+end_per_testcase(token_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [user_identity]),
+    end_per_testcase(all, Config);
 
 end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     Workers = ?config(op_worker_nodes, Config),
