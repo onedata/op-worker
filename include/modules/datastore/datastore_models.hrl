@@ -187,10 +187,6 @@
     cached_identity_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()}
 }).
 
--record(authorization_nonce, {
-    timestamp :: integer()
-}).
-
 -record(file_download_code, {
     session_id :: session:id(),
     file_guid :: fslogic_worker:file_guid()
