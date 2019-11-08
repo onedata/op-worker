@@ -141,9 +141,9 @@ task_finished(TaskId) ->
 update_job_progress(Id, Job, Pool, TaskId, Status) ->
     tree_traverse:update_job_progress(Id, Job, Pool, TaskId, Status, ?MODULE).
 
--spec do_master_job(tree_traverse:master_job(), traverse:id()) -> {ok, traverse:master_job_map()}.
-do_master_job(Job, TaskId) ->
-    tree_traverse:do_master_job(Job, TaskId).
+-spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
+do_master_job(Job, MasterJobArgs) ->
+    tree_traverse:do_master_job(Job, maps:get(task_id, MasterJobArgs)).
 
 %%--------------------------------------------------------------------
 %% @doc
