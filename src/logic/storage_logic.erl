@@ -41,7 +41,7 @@
 %%% API
 %%%===================================================================
 
--spec create(storage:doc()) -> {ok, od_storage:id()} | errors:error().
+-spec create(storage_config:doc()) -> {ok, od_storage:id()} | errors:error().
 create(StorageConfig) ->
     StorageName = storage_config:get_name(StorageConfig),
     case create_in_zone(StorageName, undefined) of
@@ -64,7 +64,7 @@ create(StorageConfig) ->
 
 
 %% @private
--spec create_in_zone(storage:name(), od_storage:id() | undefined) ->
+-spec create_in_zone(storage_config:name(), od_storage:id() | undefined) ->
     {ok, od_storage:id()} | errors:error().
 create_in_zone(StorageName, StorageId) ->
     ?CREATE_RETURN_ID(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
@@ -130,9 +130,8 @@ support_space_insecure(StorageId, SerializedToken, SupportSize) ->
 %% @TODO VFS-5497 This check will not be needed when multisupport is implemented (will be checked in zone)
     case check_support_token(SerializedToken) of
         {ok, SpaceId} ->
-            case storage_config:is_mounted_in_root(StorageId) andalso supports_any_space(StorageId) of
-                true ->
-                    {error, storage_in_use};
+            case storage_config:is_mount_in_root(StorageId) andalso supports_any_space(StorageId) of
+                true -> ?ERROR_STORAGE_IN_USE;
                 false ->
                     Data = #{<<"token">> => SerializedToken, <<"size">> => SupportSize},
                     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
@@ -258,12 +257,12 @@ get_qos_parameters(StorageId, SpaceId) ->
 %% any space.
 %% @end
 %%--------------------------------------------------------------------
--spec safe_delete(od_storage:id()) -> ok | {error, storage_in_use | term()}.
+-spec safe_delete(od_storage:id()) -> ok | errors:error().
 safe_delete(StorageId) ->
     critical_section:run({storage_support, StorageId}, fun() ->
         case supports_any_space(StorageId) of
             true ->
-                {error, storage_in_use};
+                ?ERROR_STORAGE_IN_USE;
             false ->
                 % TODO VFS-5124 Remove from rtransfer
                 delete(StorageId)
@@ -317,8 +316,7 @@ on_space_unsupported(SpaceId, StorageId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Migrates storages and spaces support data to Onezone.
-%% When successful removes obsolete space_storage documents.
-%%
+%% Removes obsolete space_storage and storage documents.
 %% Dedicated for upgrading Oneprovider from 19.02.* to the next major release.
 %% @end
 %%--------------------------------------------------------------------
@@ -337,13 +335,13 @@ migrate_to_zone(false, Retries) ->
     migrate_to_zone(oneprovider:is_connected_to_oz(), Retries-1);
 migrate_to_zone(true, _) ->
     ?info("Starting storage migration procedure..."),
-    {ok, StorageDocs} = storage:list(),
+    {ok, StorageDocs} = storage_config:list(),
     lists:foreach(fun revamp_storage_docs/1, StorageDocs),
 
     {ok, Spaces} = provider_logic:get_spaces(),
     lists:foreach(fun migrate_space_support/1, Spaces),
 
-    % Remove virtual storage in Onezone
+    % Remove virtual storage (with id equal to that of provider) in Onezone
     case delete_in_zone(oneprovider:get_id()) of
         ok -> ok;
         ?ERROR_NOT_FOUND -> ok;
@@ -352,7 +350,7 @@ migrate_to_zone(true, _) ->
 
 
 %% @private
--spec revamp_storage_docs(storage:doc()) -> ok.
+-spec revamp_storage_docs(storage_config:doc()) -> ok.
 revamp_storage_docs(#document{key = StorageId, value = Storage}) ->
     #storage{
         name = Name,
@@ -377,7 +375,7 @@ revamp_storage_docs(#document{key = StorageId, value = Storage}) ->
             ?notice("Creating storage ~p in Onezone", [StorageId]),
             {ok, StorageId} = create_in_zone(Name, StorageId)
     end,
-    ok = storage:delete(StorageId).
+    ok = storage_config:delete(StorageId).
 
 
 %% @private
@@ -413,7 +411,6 @@ migrate_space_support(SpaceId) ->
 %% @doc
 %% @private
 %% Revamps space support in Onezone to model with new storages.
-%%
 %% Dedicated for upgrading Oneprovider from 19.02.* to the next major release.
 %% @end
 %%--------------------------------------------------------------------

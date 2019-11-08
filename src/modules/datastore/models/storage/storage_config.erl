@@ -21,7 +21,7 @@
 
 %% API
 -export([new/2, new/5]).
--export([get_id/1, get_name/1, is_readonly/1, is_mounted_in_root/1,
+-export([get_id/1, get_name/1, is_readonly/1, is_mount_in_root/1,
     get_helpers/1, get_luma_config_map/1, get_helper/1, get_type/1]).
 -export([select_helper/2, select/1]).
 -export([get/1, exists/1, delete/1, update/2, save_doc/1, list/0]).
@@ -182,14 +182,14 @@ is_readonly(#document{value = #storage_config{} = Value}) ->
 %% Checks whether storage is mounted in root.
 %% @end
 %%--------------------------------------------------------------------
--spec is_mounted_in_root(record() | doc() | od_storage:id()) -> boolean().
-is_mounted_in_root(#storage_config{mount_in_root = MiR}) ->
+-spec is_mount_in_root(record() | doc() | od_storage:id()) -> boolean().
+is_mount_in_root(#storage_config{mount_in_root = MiR}) ->
     MiR;
-is_mounted_in_root(#document{value = #storage_config{} = Value}) ->
-    is_mounted_in_root(Value);
-is_mounted_in_root(StorageId) ->
+is_mount_in_root(#document{value = #storage_config{} = Value}) ->
+    is_mount_in_root(Value);
+is_mount_in_root(StorageId) ->
     {ok, #document{value = Value}} = ?MODULE:get(StorageId),
-    is_mounted_in_root(Value).
+    is_mount_in_root(Value).
 
 -spec get_helper(record() | doc() | od_storage:id()) -> helper().
 get_helper(Storage) ->
@@ -361,7 +361,7 @@ set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
 set_mount_in_root(StorageId, Value) when is_boolean(Value)->
     case storage_logic:supports_any_space(StorageId) of
         true ->
-            {error, storage_in_use};
+            ?ERROR_STORAGE_IN_USE;
         false ->
             set_mount_in_root_insecure(StorageId, Value)
     end.
@@ -449,7 +449,7 @@ describe(StorageId) ->
                 <<"storagePathType">> => helper:get_storage_path_type(Helper),
                 <<"lumaEnabled">> => maps:get(enabled, LumaConfigMap, false),
                 <<"lumaUrl">> => maps:get(url, LumaConfigMap, undefined),
-                <<"mountInRoot">> => is_mounted_in_root(Storage)
+                <<"mountInRoot">> => is_mount_in_root(Storage)
             }};
         {error, _} = Error -> Error
     end.
