@@ -402,7 +402,7 @@ is_subdomain_delegated() ->
 
 
 -spec set_delegated_subdomain(binary()) ->
-    ok | {error, subdomain_exists} | errors:error().
+    ok | errors:error().
 set_delegated_subdomain(Subdomain) ->
     provider_logic:set_delegated_subdomain(Subdomain).
 
