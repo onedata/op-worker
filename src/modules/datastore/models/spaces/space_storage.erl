@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Model that stores list of storage IDs attached to the space.
+%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_storage).

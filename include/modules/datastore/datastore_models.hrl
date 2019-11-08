@@ -334,6 +334,15 @@
     mount_in_root = false :: boolean()
 }).
 
+
+%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
+-record(storage, {
+    name = <<>> :: storage_config:name(),
+    helpers = [] :: [storage_config:helper()],
+    readonly = false :: boolean(),
+    luma_config = undefined :: undefined | luma_config:config()
+}).
+
 -record(luma_config, {
     url :: luma_config:url(),
     api_key :: luma_config:api_key()

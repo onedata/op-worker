@@ -41,7 +41,7 @@
 %%% API
 %%%===================================================================
 
--spec create(storage_config:doc()) -> {ok, od_storage:id()} | errors:error().
+-spec create(storage:doc()) -> {ok, od_storage:id()} | errors:error().
 create(StorageConfig) ->
     StorageName = storage_config:get_name(StorageConfig),
     case create_in_zone(StorageName, undefined) of
@@ -64,7 +64,7 @@ create(StorageConfig) ->
 
 
 %% @private
--spec create_in_zone(storage_config:name(), od_storage:id() | undefined) ->
+-spec create_in_zone(storage:name(), od_storage:id() | undefined) ->
     {ok, od_storage:id()} | errors:error().
 create_in_zone(StorageName, StorageId) ->
     ?CREATE_RETURN_ID(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
@@ -130,18 +130,23 @@ support_space_insecure(StorageId, SerializedToken, SupportSize) ->
 %% @TODO VFS-5497 This check will not be needed when multisupport is implemented (will be checked in zone)
     case check_support_token(SerializedToken) of
         {ok, SpaceId} ->
-            Data = #{<<"token">> => SerializedToken, <<"size">> => SupportSize},
-            Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-                operation = create,
-                gri = #gri{type = od_storage, id = StorageId, aspect = support},
-                data = Data
-            }),
+            case storage_config:is_mounted_in_root(StorageId) andalso supports_any_space(StorageId) of
+                true ->
+                    {error, storage_in_use};
+                false ->
+                    Data = #{<<"token">> => SerializedToken, <<"size">> => SupportSize},
+                    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+                        operation = create,
+                        gri = #gri{type = od_storage, id = StorageId, aspect = support},
+                        data = Data
+                    }),
 
-            ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
-                gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id()),
-                gs_client_worker:invalidate_cache(od_space, SpaceId),
-                gs_client_worker:invalidate_cache(od_storage, StorageId)
-            end));
+                    ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
+                        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id()),
+                        gs_client_worker:invalidate_cache(od_space, SpaceId),
+                        gs_client_worker:invalidate_cache(od_storage, StorageId)
+                    end))
+            end;
         Error ->
             Error
     end.
@@ -332,13 +337,47 @@ migrate_to_zone(false, Retries) ->
     migrate_to_zone(oneprovider:is_connected_to_oz(), Retries-1);
 migrate_to_zone(true, _) ->
     ?info("Starting storage migration procedure..."),
+    {ok, StorageDocs} = storage:list(),
+    lists:foreach(fun revamp_storage_docs/1, StorageDocs),
+
     {ok, Spaces} = provider_logic:get_spaces(),
     lists:foreach(fun migrate_space_support/1, Spaces),
+
+    % Remove virtual storage in Onezone
     case delete_in_zone(oneprovider:get_id()) of
         ok -> ok;
         ?ERROR_NOT_FOUND -> ok;
         Error -> throw(Error)
     end.
+
+
+%% @private
+-spec revamp_storage_docs(storage:doc()) -> ok.
+revamp_storage_docs(#document{key = StorageId, value = Storage}) ->
+    #storage{
+        name = Name,
+        helpers = Helpers,
+        readonly = Readonly,
+        luma_config = LumaConfig
+    } = Storage,
+    StorageConfig = #storage_config{
+        name = Name,
+        helpers = Helpers,
+        readonly = Readonly,
+        luma_config = LumaConfig
+    },
+    case storage_config:save_doc( #document{key = StorageId, value = StorageConfig}) of
+        ok -> ok;
+        {error, already_exists} -> ok;
+        Error -> throw(Error)
+    end,
+    case provider_logic:has_storage(StorageId) of
+        true -> ok;
+        false ->
+            ?notice("Creating storage ~p in Onezone", [StorageId]),
+            {ok, StorageId} = create_in_zone(Name, StorageId)
+    end,
+    ok = storage:delete(StorageId).
 
 
 %% @private
@@ -353,18 +392,11 @@ migrate_space_support(SpaceId) ->
             {[], []}
     end,
     lists:foreach(fun(StorageId) ->
-        {ok, StorageConfig} = storage_config:get(StorageId),
-        case provider_logic:has_storage(StorageId) of
-            true -> ok;
-            false ->
-                ?notice("Creating storage ~p in Onezone", [StorageId]),
-                {ok, StorageId} = create_in_zone(storage_config:get_name(StorageConfig), StorageId)
-        end,
         case space_logic:is_supported_by_storage(SpaceId, StorageId) of
             true -> ok;
             false ->
                 case revamp_space_support(StorageId, SpaceId) of
-                    ok -> ?notice("Support of space: ~p by storage: ~p revamped in Onezone", [SpaceId]);
+                    ok -> ?notice("Support of space ~p by storage ~p revamped in Onezone", [SpaceId]);
                     Error -> throw(Error)
                 end
         end

@@ -79,7 +79,8 @@ get_models() -> [
     storage_traverse_job,
 
     %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
-    space_storage
+    space_storage,
+    storage
 ].
 
 %%--------------------------------------------------------------------

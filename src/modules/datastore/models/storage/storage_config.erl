@@ -21,7 +21,7 @@
 
 %% API
 -export([new/2, new/5]).
--export([get_id/1, get_name/1, is_readonly/1, is_mount_in_root/1,
+-export([get_id/1, get_name/1, is_readonly/1, is_mounted_in_root/1,
     get_helpers/1, get_luma_config_map/1, get_helper/1, get_type/1]).
 -export([select_helper/2, select/1]).
 -export([get/1, exists/1, delete/1, update/2, save_doc/1, list/0]).
@@ -36,7 +36,7 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_record_version/0, get_record_struct/1]).
 
 -type record() :: #storage_config{}.
 -type doc() :: datastore_doc:doc(record()).
@@ -182,14 +182,14 @@ is_readonly(#document{value = #storage_config{} = Value}) ->
 %% Checks whether storage is mounted in root.
 %% @end
 %%--------------------------------------------------------------------
--spec is_mount_in_root(record() | doc() | od_storage:id()) -> boolean().
-is_mount_in_root(#storage_config{mount_in_root = MiR}) ->
+-spec is_mounted_in_root(record() | doc() | od_storage:id()) -> boolean().
+is_mounted_in_root(#storage_config{mount_in_root = MiR}) ->
     MiR;
-is_mount_in_root(#document{value = #storage_config{} = Value}) ->
-    is_mount_in_root(Value);
-is_mount_in_root(StorageId) ->
+is_mounted_in_root(#document{value = #storage_config{} = Value}) ->
+    is_mounted_in_root(Value);
+is_mounted_in_root(StorageId) ->
     {ok, #document{value = Value}} = ?MODULE:get(StorageId),
-    is_mount_in_root(Value).
+    is_mounted_in_root(Value).
 
 -spec get_helper(record() | doc() | od_storage:id()) -> helper().
 get_helper(Storage) ->
@@ -386,7 +386,7 @@ set_mount_in_root_insecure(StorageId, Value) ->
 %%--------------------------------------------------------------------
 -spec select(name()) -> {ok, doc()} | {error, term()}.
 select(Name) ->
-    case storage_config:list() of
+    case list() of
         {ok, Docs} ->
             Docs2 = lists:filter(fun(Doc) ->
                 get_name(Doc) =:= Name
@@ -449,7 +449,7 @@ describe(StorageId) ->
                 <<"storagePathType">> => helper:get_storage_path_type(Helper),
                 <<"lumaEnabled">> => maps:get(enabled, LumaConfigMap, false),
                 <<"lumaUrl">> => maps:get(url, LumaConfigMap, undefined),
-                <<"mountInRoot">> => is_mount_in_root(Storage)
+                <<"mountInRoot">> => is_mounted_in_root(Storage)
             }};
         {error, _} = Error -> Error
     end.
@@ -486,7 +486,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    6.
+    1.
 
 
 %%--------------------------------------------------------------------
@@ -497,75 +497,6 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(1) ->
-    {record, [
-        {name, binary},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}}
-        ]}]}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean}
-        ]}]},
-        {readonly, boolean}
-    ]};
-get_record_struct(3) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean}
-        ]}]},
-        {readonly, boolean},
-        {luma_config, {record, [
-            {url, string},
-            {cache_timeout, integer},
-            {api_key, string}
-        ]}}
-    ]};
-get_record_struct(4) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean},
-            {extended_direct_io, boolean}
-        ]}]},
-        {readonly, boolean},
-        {luma_config, {record, [
-            {url, string},
-            {cache_timeout, integer},
-            {api_key, string}
-        ]}}
-    ]};
-get_record_struct(5) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean},
-            {extended_direct_io, boolean},
-            {storage_path_type, string}
-        ]}]},
-        {readonly, boolean},
-        {luma_config, {record, [
-            {url, string},
-            {api_key, string}
-        ]}}
-    ]};
-get_record_struct(6) ->
     {record, [
         {name, string},
         {helpers, [{record, [
@@ -581,76 +512,8 @@ get_record_struct(6) ->
             {url, string},
             {api_key, string}
         ]}},
-        {mount_in_root, boolean} % new field
+        {mount_in_root, boolean}
     ]}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades model's record from provided version to the next one.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {storage, Name, Helpers}) ->
-    {2, {storage_config,
-        Name,
-        [{
-            helper,
-            helper:translate_name(HelperName),
-            maps:fold(fun(K, V, Args) ->
-                maps:put(helper:translate_arg_name(K), V, Args)
-            end, #{}, HelperArgs),
-            #{},
-            false
-        } || {_, HelperName, HelperArgs} <- Helpers],
-        false
-    }};
-upgrade_record(2, {_, Name, Helpers, Readonly}) ->
-    {3, {storage_config,
-        Name,
-        Helpers,
-        Readonly,
-        undefined
-    }};
-upgrade_record(3, {_, Name, Helpers, Readonly, LumaConfig}) ->
-    {4, {storage_config,
-        Name,
-        [{
-            helper,
-            HelperName,
-            HelperArgs,
-            AdminCtx,
-            Insecure,
-            false
-        } || {_, HelperName, HelperArgs, AdminCtx, Insecure} <- Helpers],
-        Readonly,
-        LumaConfig
-    }};
-upgrade_record(4, {_, Name, Helpers, Readonly, LumaConfig}) ->
-    {5, {storage_config,
-        Name,
-        [
-            #helper{
-                name = HelperName,
-                args = HelperArgs,
-                admin_ctx = AdminCtx,
-                insecure = Insecure,
-                extended_direct_io = ExtendedDirectIO,
-                storage_path_type = ?CANONICAL_STORAGE_PATH
-            } || {_, HelperName, HelperArgs, AdminCtx, Insecure,
-                ExtendedDirectIO} <- Helpers
-        ],
-        Readonly,
-        LumaConfig
-    }};
-upgrade_record(5, {_, Name, Helpers, Readonly, LumaConfig}) ->
-    {6, #storage_config{
-        name = Name,
-        helpers = Helpers,
-        readonly = Readonly,
-        luma_config = LumaConfig,
-        mount_in_root = false
-    }}.
 
 
 %%%===================================================================
