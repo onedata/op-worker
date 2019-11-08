@@ -190,7 +190,7 @@ get_sync_info() ->
 %% returns jobs for listed children and next batch if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec do_master_job(master_job(), traverse:id()) -> {ok, traverse:master_job_map()}.
+-spec do_master_job(master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
 do_master_job(#tree_traverse{
     doc = #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
     token = Token,
@@ -199,7 +199,7 @@ do_master_job(#tree_traverse{
     execute_slave_on_dir = OnDir,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
-} = TT, _TaskID) ->
+} = TT, _MasterJobArgs) ->
     {ok, Children, ExtendedInfo} = case {Token, LN} of
         {undefined, <<>>} ->
             file_meta:list_children(Doc, BatchSize);
@@ -234,7 +234,7 @@ do_master_job(#tree_traverse{
 do_master_job(#tree_traverse{
     doc = Doc,
     traverse_info = TraverseInfo
-}, _TaskID) ->
+}, _MasterJobArgs) ->
     {ok, #{slave_jobs => [{Doc, TraverseInfo}], master_jobs => []}}.
 
 %%--------------------------------------------------------------------
