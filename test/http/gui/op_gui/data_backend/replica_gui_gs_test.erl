@@ -21,7 +21,7 @@
 
 
 interpolate_chunks_test() ->
-    run_test_cases(1).
+    {timeout, 15, ?_test(run_test_cases(1))}.
 
 
 run_test_cases(CaseNum) ->
