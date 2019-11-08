@@ -20,6 +20,7 @@
 -export([
     handle_qos_entry_change/2,
     reconcile_qos_on_storage/2,
+    reconcile_qos_on_storage/3,
     maybe_start_traverse/4
 ]).
 
@@ -57,6 +58,18 @@ handle_qos_entry_change(SpaceId, #document{
 
 %%--------------------------------------------------------------------
 %% @doc
+%% This function is used to create new file_ctx when file_meta_posthook
+%% is executed.
+%% @end
+%%--------------------------------------------------------------------
+-spec reconcile_qos_on_storage(file_meta:uuid(), od_space:id(), storage:id()) -> ok.
+reconcile_qos_on_storage(FileUuid, SpaceId, StorageId) ->
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
+    reconcile_qos_on_storage(FileCtx, StorageId).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Schedules file replication to given storage if it is required by
 %% effective_file_qos. Uses QoS traverse pool.
 %% @end
@@ -64,15 +77,15 @@ handle_qos_entry_change(SpaceId, #document{
 -spec reconcile_qos_on_storage(file_ctx:ctx(), storage:id()) -> ok.
 reconcile_qos_on_storage(FileCtx, StorageId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     case file_qos:get_effective(FileUuid) of
         {error, {file_meta_missing, MissingUuid}} ->
-            % Generate new file_ctx as it can change before posthook
-            % will be executed
+            % new file_ctx will be generated when file_meta_posthook
+            % will be executed (see function above).
             file_meta_posthooks:add_hook(
                 MissingUuid, <<"check_qos_", FileUuid/binary>>,
-                ?MODULE, ?FUNCTION_NAME, [file_ctx:new_by_guid(FileGuid), StorageId]
+                ?MODULE, ?FUNCTION_NAME, [FileUuid, SpaceId, StorageId]
             ),
             ok;
         {ok, EffFileQos} ->
