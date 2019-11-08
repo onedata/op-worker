@@ -25,7 +25,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([reconcile_qos_for_entry/2, start_initial_traverse/3, init_pool/0]).
+-export([reconcile_qos_for_entry/2, start_initial_traverse/3, init_pool/0,
+    stop_pool/0]).
 
 %% Traverse behaviour callbacks
 -export([do_master_job/2, do_slave_job/2,
@@ -98,6 +99,11 @@ init_pool() ->
     ParallelismLimit = application:get_env(?APP_NAME, qos_traverse_parallelism_limit, 20),
 
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
+
+
+-spec stop_pool() -> ok.
+stop_pool() ->
+    traverse:stop_pool(?POOL_NAME).
 
 %%%===================================================================
 %%% Traverse callbacks

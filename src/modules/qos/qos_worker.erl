@@ -83,6 +83,7 @@ handle(_Request) ->
     Result :: ok | {error, Error},
     Error :: timeout | term().
 cleanup() ->
+    qos_traverse:stop_pool(),
     ok.
 
 
