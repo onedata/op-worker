@@ -14,9 +14,12 @@
 
 -include("lfm_permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
+    create_session/3,
+
     all_perms/2, complementary_perms/3,
     perms_to_bitmask/1, perm_to_bitmask/1,
     perm_to_posix_perms/1,
@@ -29,6 +32,18 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec create_session(node(), #user_identity{}, tokens:serialized()) ->
+    session:id().
+create_session(Node, Identity, Token) ->
+    {ok, SessionId} = ?assertMatch({ok, _}, rpc:call(
+        Node,
+        session_manager,
+        reuse_or_create_gui_session,
+        [Identity, #token_auth{token = Token}])
+    ),
+    SessionId.
 
 
 -spec all_perms(node(), file_id:file_guid()) -> Perms :: [binary()].

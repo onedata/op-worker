@@ -241,13 +241,13 @@ ls_caveat_test(Config) ->
 
     % Whitelisting Dir should result in listing all it's files
     Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [DirPath]}),
-    SessId1 = create_session(W, Identity, Token1),
+    SessId1 = lfm_permissions_test_utils:create_session(W, Identity, Token1),
     ?assertMatch(
         {ok, [F1, F2, F3, F4, F5]},
         lfm_proxy:ls(W, SessId1, {guid, DirGuid}, 0, 100)
     ),
     Token2 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [DirObjectId]}),
-    SessId2 = create_session(W, Identity, Token2),
+    SessId2 = lfm_permissions_test_utils:create_session(W, Identity, Token2),
     ?assertMatch(
         {ok, [F1, F2, F3, F4, F5]},
         lfm_proxy:ls(W, SessId2, {guid, DirGuid}, 0, 100)
@@ -255,13 +255,13 @@ ls_caveat_test(Config) ->
 
     % Whitelisting concrete files should result in listing only them
     Token3 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1, Path3, Path5]}),
-    SessId3 = create_session(W, Identity, Token3),
+    SessId3 = lfm_permissions_test_utils:create_session(W, Identity, Token3),
     ?assertMatch(
         {ok, [F1, F3, F5]},
         lfm_proxy:ls(W, SessId3, {guid, DirGuid}, 0, 100)
     ),
     Token4 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId5]}),
-    SessId4 = create_session(W, Identity, Token4),
+    SessId4 = lfm_permissions_test_utils:create_session(W, Identity, Token4),
     ?assertMatch(
         {ok, [F1, F3, F5]},
         lfm_proxy:ls(W, SessId4, {guid, DirGuid}, 0, 100)
@@ -273,7 +273,7 @@ ls_caveat_test(Config) ->
         #cv_data_path{whitelist = [Path1, Path2, Path5]},
         #cv_data_path{whitelist = [Path1, Path5]}
     ]),
-    SessId5 = create_session(W, Identity, Token5),
+    SessId5 = lfm_permissions_test_utils:create_session(W, Identity, Token5),
     ?assertMatch(
         {ok, [F1, F5]},
         lfm_proxy:ls(W, SessId5, {guid, DirGuid}, 0, 100)
@@ -283,7 +283,7 @@ ls_caveat_test(Config) ->
         #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
         #cv_data_objectid{whitelist = [ObjectId1, ObjectId5]}
     ]),
-    SessId6 = create_session(W, Identity, Token6),
+    SessId6 = lfm_permissions_test_utils:create_session(W, Identity, Token6),
     ?assertMatch(
         {ok, [F1, F5]},
         lfm_proxy:ls(W, SessId6, {guid, DirGuid}, 0, 100)
@@ -293,7 +293,7 @@ ls_caveat_test(Config) ->
         #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
         #cv_data_path{whitelist = [Path1, Path5]}
     ]),
-    SessId7 = create_session(W, Identity, Token7),
+    SessId7 = lfm_permissions_test_utils:create_session(W, Identity, Token7),
     ?assertMatch(
         {ok, [F1, F5]},
         lfm_proxy:ls(W, SessId7, {guid, DirGuid}, 0, 100)
@@ -302,7 +302,7 @@ ls_caveat_test(Config) ->
         #cv_data_objectid{whitelist = [ObjectId3, ObjectId4]},
         #cv_data_path{whitelist = [Path1, Path5]}
     ]),
-    SessId8 = create_session(W, Identity, Token8),
+    SessId8 = lfm_permissions_test_utils:create_session(W, Identity, Token8),
     ?assertMatch(
         {ok, []},
         lfm_proxy:ls(W, SessId8, {guid, DirGuid}, 0, 100)
@@ -310,35 +310,35 @@ ls_caveat_test(Config) ->
 
     % Using caveat for different directory should result in {error, eacces}
     Token9 = tokens:confine(MainToken, #cv_data_path{whitelist = [<<"/space1/qwe">>]}),
-    SessId9 = create_session(W, Identity, Token9),
+    SessId9 = lfm_permissions_test_utils:create_session(W, Identity, Token9),
     ?assertMatch(
         {error, ?EACCES},
         lfm_proxy:ls(W, SessId9, {guid, DirGuid}, 0, 100)
     ),
 
     % With no caveats listing user root dir should list all user spaces
-    SessId10 = create_session(W, Identity, MainToken),
+    SessId10 = lfm_permissions_test_utils:create_session(W, Identity, MainToken),
     ?assertMatch(
         {ok, [{Space1RootDir, <<"space1">>}, {Space3RootDir, <<"space3">>}]},
         lfm_proxy:ls(W, SessId10, {guid, UserRootDir}, 0, 100)
     ),
     % But with caveats user root dir ls should show only spaces leading to allowed files
     Token11 = tokens:confine(MainToken, #cv_data_path{whitelist = [DirPath]}),
-    SessId11 = create_session(W, Identity, Token11),
+    SessId11 = lfm_permissions_test_utils:create_session(W, Identity, Token11),
     ?assertMatch(
         {ok, [{Space1RootDir, <<"space1">>}]},
         lfm_proxy:ls(W, SessId11, {guid, UserRootDir}, 0, 100)
     ),
 
     % With no caveats listing space dir should list all space directories
-    SessId12 = create_session(W, Identity, MainToken),
+    SessId12 = lfm_permissions_test_utils:create_session(W, Identity, MainToken),
     ?assertMatch(
         {ok, [_ | _]},
         lfm_proxy:ls(W, SessId12, {guid, Space1RootDir}, 0, 100)
     ),
     % But with caveats space ls should show only dirs leading to allowed files
     Token13 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1]}),
-    SessId13 = create_session(W, Identity, Token13),
+    SessId13 = lfm_permissions_test_utils:create_session(W, Identity, Token13),
     ?assertMatch(
         {ok, [{DirGuid, DirName}]},
         lfm_proxy:ls(W, SessId13, {guid, Space1RootDir}, 0, 100)
@@ -346,7 +346,7 @@ ls_caveat_test(Config) ->
 
     % Test listing with caveats and options (offset, limit)
     Token14 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1, Path2, Path4, Path5]}),
-    SessId14 = create_session(W, Identity, Token14),
+    SessId14 = lfm_permissions_test_utils:create_session(W, Identity, Token14),
     ?assertMatch(
         {ok, [F1, F2, F4]},
         lfm_proxy:ls(W, SessId14, {guid, DirGuid}, 0, 3)
@@ -1422,15 +1422,3 @@ fill_file_with_dummy_data(Node, SessId, Guid) ->
     ?assertMatch({ok, 4}, lfm_proxy:write(Node, FileHandle, 0, <<"DATA">>)),
     ?assertMatch(ok, lfm_proxy:fsync(Node, FileHandle)),
     ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
-
-
--spec create_session(node(), #user_identity{}, tokens:serialized()) ->
-    session:id().
-create_session(Node, Identity, Token) ->
-    {ok, SessionId} = ?assertMatch({ok, _}, rpc:call(
-        Node,
-        session_manager,
-        reuse_or_create_gui_session,
-        [Identity, #token_auth{token = Token}])
-    ),
-    SessionId.

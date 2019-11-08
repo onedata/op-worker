@@ -18,6 +18,7 @@
 
 -include("lfm_permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -89,6 +90,7 @@ run_scenarios(#perms_test_spec{
     ),
 
     run_space_privs_scenarios(ScenariosRootDirPath, Spec, Config),
+    run_data_caveats_scenarios(ScenariosRootDirPath, Spec, Config),
     run_posix_perms_scenarios(ScenariosRootDirPath, Spec, Config),
     run_acl_perms_scenarios(ScenariosRootDirPath, Spec, Config).
 
@@ -262,6 +264,118 @@ space_privs_test(
     ?assertNotMatch(
         {error, _},
         Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
+    ).
+
+
+%%%===================================================================
+%%% CAVEATS TESTS SCENARIOS MECHANISM
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Tests data caveats. For that it will setup environment,
+%% add acl permissions and assert that caveats with invalid entries
+%% will not allow to perform operation and valid ones will.
+%% @end
+%%--------------------------------------------------------------------
+run_data_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
+    test_node = Node,
+    space_id = SpaceId,
+    owner_user = Owner,
+    space_user = User,
+    requires_traverse_ancestors = RequiresTraverseAncestors,
+    files = Files,
+    operation = Operation
+}, Config) ->
+    OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
+    {ok, MainToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
+        onezone_domain = <<"zone">>,
+        subject = ?SUB(user, User),
+        nonce = User,
+        type = ?ACCESS_TOKEN,
+        persistent = false
+    }, User, []))),
+    initializer:testmaster_mock_space_user_privileges(
+        [Node], SpaceId, User, privileges:space_privileges()
+    ),
+
+    lists:foreach(fun(ScenarioType) ->
+        ScenarioName = ?SCENARIO_NAME("cv_", ScenarioType),
+        ScenarioRootDirPath = <<
+            ScenariosRootDirPath/binary,
+            "/",
+            ScenarioName/binary
+        >>,
+
+        % Create necessary file hierarchy
+        {PermsPerFile, ExtraData} = create_files(
+            Node, OwnerUserSessId, ScenariosRootDirPath, #dir{
+                name = ScenarioName,
+                perms = case RequiresTraverseAncestors of
+                    true -> [?traverse_container];
+                    false -> []
+                end,
+                children = Files
+            }
+        ),
+
+        % Set all posix or acl (depending on scenario) perms to files
+        set_all_perms(acl, Node, maps:keys(PermsPerFile)),
+
+        % Assert that even with all perms set operation cannot be performed
+        % when caveats forbids
+        run_caveats_scenario(
+            Node, MainToken, OwnerUserSessId, User, Operation, ScenarioType,
+            ScenarioRootDirPath, ExtraData
+        )
+    end, [data_path, data_objectid]).
+
+
+run_caveats_scenario(
+    Node, MainToken, OwnerUserSessId, User, Operation, data_path,
+    ScenarioRootDirPath, ExtraData
+) ->
+    Identity = #user_identity{user_id = User},
+
+    Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [<<"i_am_nowhere">>]}),
+    SessId1 = lfm_permissions_test_utils:create_session(Node, Identity, Token1),
+    ?assertMatch(
+        {error, ?EACCES},
+        Operation(OwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
+    ),
+
+    Token2 = tokens:confine(MainToken, #cv_data_path{
+        whitelist = [ScenarioRootDirPath]
+    }),
+    SessId2 = lfm_permissions_test_utils:create_session(Node, Identity, Token2),
+    ?assertNotMatch(
+        {error, ?EACCES},
+        Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData)
+    );
+run_caveats_scenario(
+    Node, MainToken, OwnerUserSessId, User, Operation, data_objectid,
+    ScenarioRootDirPath, ExtraData
+) ->
+    Identity = #user_identity{user_id = User},
+    ScenarioRootDirGuid = maps:get(ScenarioRootDirPath, ExtraData),
+    {ok, ScenarioRootDirObjectId} = file_id:guid_to_objectid(ScenarioRootDirGuid),
+
+    Token1 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [<<"i_do_not_exist">>]}),
+    SessId1 = lfm_permissions_test_utils:create_session(Node, Identity, Token1),
+    ?assertMatch(
+        {error, ?EACCES},
+        Operation(OwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
+    ),
+
+    Token2 = tokens:confine(MainToken, #cv_data_objectid{
+        whitelist = [ScenarioRootDirObjectId]
+    }),
+    SessId2 = lfm_permissions_test_utils:create_session(Node, Identity, Token2),
+    timer:sleep(timer:seconds(10)),
+    ?assertNotMatch(
+        {error, ?EACCES},
+        Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData), 100
     ).
 
 
