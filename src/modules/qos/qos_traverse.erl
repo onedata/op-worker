@@ -143,7 +143,7 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
-    tree_traverse:do_master_job(Job, maps:get(task_id, MasterJobArgs)).
+    tree_traverse:do_master_job(Job, MasterJobArgs).
 
 %%--------------------------------------------------------------------
 %% @doc
