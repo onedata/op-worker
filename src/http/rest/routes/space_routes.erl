@@ -39,31 +39,31 @@ routes() -> [
         produces = [<<"application/json">>],
         b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = instance}
     }},
-    %% Get all space indexes
+    %% Get all space indexes (deprecated)
     {<<"/spaces/:sid/indexes">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = views}
     }},
-    %% Create index
+    %% Create index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = as_is,
         consumes = [<<"application/javascript">>],
         b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view, ?BINDING(index_name)}}
     }},
-    %% Get index
+    %% Get index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view, ?BINDING(index_name)}}
     }},
-    %% Remove index
+    %% Remove index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view, ?BINDING(index_name)}}
     }},
-    %% Update index
+    %% Update index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
         method = 'PATCH',
         parse_body = as_is,
@@ -75,14 +75,14 @@ routes() -> [
         method = 'DELETE',
         b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view_reduce_function, ?BINDING(index_name)}}
     }},
-    %% Update index reduce function
+    %% Update index reduce function (deprecated)
     {<<"/spaces/:sid/indexes/:index_name/reduce">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = as_is,
         consumes = [<<"application/javascript">>],
         b_gri = #b_gri{type = op_space, id = ?BINDING(sid), aspect = {view_reduce_function, ?BINDING(index_name)}}
     }},
-    %% Query index
+    %% Query index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name/query">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
