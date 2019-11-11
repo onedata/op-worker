@@ -18,7 +18,10 @@
 %% API
 -export([
     assert_interface_allowed/2,
-    verify_api_caveats/3
+    verify_api_caveats/3,
+
+    get_data_constraints/1,
+    sanitize_cv_data_path/1
 ]).
 
 -ifdef(TEST).
@@ -65,21 +68,61 @@ verify_api_caveats(Caveats, Operation, GRI) ->
     end, Caveats).
 
 
--spec get_allowed_paths([#cv_data_path{}]) -> all | [file_meta:path()].
-get_allowed_paths([]) ->
-    all;
-get_allowed_paths([?CV_PATH(Paths) | Rest]) ->
-    lists:foldl(fun(?CV_PATH(AllowedPaths), Intersection) ->
-        converge_paths(
-            consolidate_paths(AllowedPaths),
-            Intersection
-        )
-    end, consolidate_paths(Paths), Rest).
+-spec get_data_constraints([caveats:caveat()]) ->
+    {
+        AllowedPaths :: all | [file_meta:path()],
+        AllowedGuidSets :: all | [[file_id:file_guid()]]
+    }.
+get_data_constraints(Caveats) ->
+    #{paths := Paths, guids := Guids} = lists:foldl(fun
+        (#cv_data_path{} = PathCaveat, #{paths := all} = Acc) ->
+            ?CV_PATH(AllowedPaths) = sanitize_cv_data_path(PathCaveat),
+            Acc#{paths => AllowedPaths};
+        (#cv_data_path{}, #{paths := []} = Acc) ->
+            Acc;
+        (#cv_data_path{} = PathCaveat, #{paths := Intersection} = Acc) ->
+            ?CV_PATH(AllowedPaths) = sanitize_cv_data_path(PathCaveat),
+            Acc#{paths => converge_paths(AllowedPaths, Intersection)};
+        (?CV_OBJECTID(ObjectIds), #{guids := Guids} = Acc) ->
+            Acc#{guids => [objectids_to_guids(ObjectIds) | Guids]};
+        (_, Acc) ->
+            Acc
+    end, #{paths => all, guids => []}, Caveats),
+
+    case Guids of
+        [] -> {Paths, all};
+        _ -> {Paths, Guids}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sanitizes paths by removing their trailing slashes and consolidates
+%% them by removing ones that are subpaths of others (e.g consolidation
+%% of [/a/b/, /a/b/c, /q/w/e] results in [/a/b, /q/w/e]).
+%% @end
+%%--------------------------------------------------------------------
+sanitize_cv_data_path(#cv_data_path{whitelist = Paths}) ->
+    TrimmedPaths = [string:trim(Path, trailing, "/") || Path <- Paths],
+    #cv_data_path{whitelist = consolidate_paths(TrimmedPaths)}.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec objectids_to_guids([file_id:objectid()]) -> [file_id:file_guid()].
+objectids_to_guids(Objectids) ->
+    lists:filtermap(fun(ObjectId) ->
+        try
+            {true, element(2, {ok, _} = file_id:objectid_to_guid(ObjectId))}
+        catch _:_ ->
+            % Invalid objectid does not make entire caveat/token invalid
+            false
+        end
+    end, Objectids).
 
 
 %%--------------------------------------------------------------------
@@ -128,14 +171,13 @@ converge_paths([PathA | RestA] = A, [PathB | RestB] = B, Intersection) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Sanitizes paths by removing their trailing slashes and consolidates
-%% them by removing ones that are subpaths of others (e.g consolidation
-%% of [/a/b/, /a/b/c, /q/w/e] results in [/a/b, /q/w/e]).
+%% Consolidates paths by removing ones that are subpaths of others (e.g
+%% consolidation of [/a/b/, /a/b/c, /q/w/e] results in [/a/b, /q/w/e]).
 %% @end
 %%--------------------------------------------------------------------
+-spec consolidate_paths([file_meta:path()]) -> [file_meta:path()].
 consolidate_paths(Paths) ->
-    SanitizedPaths = [string:trim(Path, trailing, "/") || Path <- Paths],
-    lists:reverse(consolidate_paths(lists:usort(SanitizedPaths), [])).
+    lists:reverse(consolidate_paths(lists:usort(Paths), [])).
 
 
 %% @private
