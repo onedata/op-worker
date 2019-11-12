@@ -17,10 +17,7 @@
 -include_lib("ctool/include/aai/caveats.hrl").
 
 %% API
--export([
-    assert_no_data_caveats/1,
-    verify_data_caveats/3
-]).
+-export([assert_no_data_caveats/1]).
 
 -ifdef(TEST).
 -export([check_data_path_relation/2, is_subpath/2]).
@@ -59,36 +56,6 @@ assert_no_data_caveats(Caveats) when is_list(Caveats) ->
             ok;
         [DataCaveat | _] ->
             throw(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat))
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Verifies whether FileCtx:
-%% - lies in path allowed by location caveats or is ancestor to path
-%%   allowed by location caveats (only if AllowAncestors flag is
-%%   set to true).
-%% If above condition doesn't hold then ?EACCES is thrown.
-%% @end
-%%--------------------------------------------------------------------
--spec verify_data_caveats(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
-    relation_ctx().
-verify_data_caveats(UserCtx, FileCtx, AllowAncestorsOfLocationCaveats) ->
-    case user_ctx:get_caveats(UserCtx) of
-        [] ->
-            {subpath, FileCtx};
-        Caveats ->
-            SessionDiscriminator = case user_ctx:get_auth(UserCtx) of
-                #token_auth{token = SerializedToken} ->
-                    SerializedToken;
-                SessionAuth ->
-                    SessionAuth
-            end,
-            verify_data_location_caveats(
-                SessionDiscriminator, FileCtx,
-                caveats:filter(?DATA_LOCATION_CAVEATS, Caveats),
-                AllowAncestorsOfLocationCaveats
-            )
     end.
 
 

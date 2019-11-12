@@ -134,7 +134,8 @@ create_root_session() ->
             status = active,
             identity = #user_identity{user_id = ?ROOT_USER_ID},
             auth = ?ROOT_AUTH,
-            caveats = []
+            allowed_paths = all,
+            allowed_guids = all
         }
     }).
 
@@ -153,7 +154,8 @@ create_guest_session() ->
             status = active,
             identity = #user_identity{user_id = ?GUEST_USER_ID},
             auth = ?GUEST_AUTH,
-            caveats = []
+            allowed_paths = all,
+            allowed_guids = all
         }
     }).
 
@@ -223,9 +225,10 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
         _ ->
             []
     end,
+    {AllowedPaths, AllowedGuids} = token_utils:get_data_constraints(Caveats),
     critical_section:run([?MODULE, SessId], fun() ->
         reuse_or_create_session(
-            SessId, SessType, Iden, Auth, Caveats, ProxyVia
+            SessId, SessType, Iden, Auth, AllowedPaths, AllowedGuids, ProxyVia
         )
     end).
 
@@ -241,16 +244,21 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
     Iden :: session:identity(), Auth :: session:auth() | undefined,
-    Caveats :: [caveats:caveat()], ProxyVia :: oneprovider:id() | undefined
+    AllowedPaths :: all | [file_meta:path()],
+    AllowedGuids :: all | [[file_id:file_guid()]],
+    ProxyVia :: undefined | oneprovider:id()
 ) ->
     {ok, SessId :: session:id()} | error().
-reuse_or_create_session(SessId, SessType, Iden, Auth, Caveats, ProxyVia) ->
+reuse_or_create_session(SessId, SessType, Iden, Auth,
+    AllowedPaths, AllowedGuids, ProxyVia
+) ->
     Sess = #session{
         type = SessType,
         status = initializing,
         identity = Iden,
         auth = Auth,
-        caveats = Caveats,
+        allowed_paths = AllowedPaths,
+        allowed_guids = AllowedGuids,
         proxy_via = ProxyVia
     },
     Diff = fun
@@ -273,7 +281,8 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, Caveats, ProxyVia) ->
             case start_session(#document{key = SessId, value = Sess}) of
                 {error, already_exists} ->
                     reuse_or_create_session(
-                        SessId, SessType, Iden, Auth, Caveats, ProxyVia
+                        SessId, SessType, Iden, Auth,
+                        AllowedPaths, AllowedGuids, ProxyVia
                     );
                 Other ->
                     Other

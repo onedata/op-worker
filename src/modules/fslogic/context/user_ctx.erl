@@ -31,7 +31,7 @@
 -export([
     get_user/1, get_user_id/1,
     get_session_id/1,
-    get_auth/1, get_caveats/1
+    get_auth/1, get_data_constraints/1
 ]).
 -export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/1]).
 
@@ -102,9 +102,13 @@ get_auth(#user_ctx{session = Session}) ->
 %% Gets session's auth caveats from user context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_caveats(ctx()) -> [caveats:caveat()].
-get_caveats(#user_ctx{session = Session}) ->
-    session:get_caveats(Session).
+-spec get_data_constraints(ctx()) ->
+    {
+        AllowedPaths :: all | [file_meta:path()],
+        AllowedGuids :: all | [[file_id:file_guid()]]
+    }.
+get_data_constraints(#user_ctx{session = Session}) ->
+    session:get_data_constraints(Session).
 
 %%--------------------------------------------------------------------
 %% @doc
