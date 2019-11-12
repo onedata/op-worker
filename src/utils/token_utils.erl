@@ -18,6 +18,7 @@
 %% API
 -export([
     assert_interface_allowed/2,
+    assert_no_data_caveats/1,
     verify_api_caveats/3,
 
     get_data_constraints/1,
@@ -32,6 +33,8 @@
 -endif.
 
 -type interface() :: gui | rest | oneclient.
+
+-define(DATA_CAVEATS, [cv_data_path, cv_data_objectid]).
 
 -define(CV_PATH(__PATHS), #cv_data_path{whitelist = __PATHS}).
 -define(CV_OBJECTID(__OBJECTIDS), #cv_data_objectid{whitelist = __OBJECTIDS}).
@@ -54,6 +57,16 @@ assert_interface_allowed(SerializedToken, Interface) ->
             assert_interface_allowed(Caveats, Interface);
         {error, _} = Error ->
             throw(Error)
+    end.
+
+
+-spec assert_no_data_caveats([caveats:caveat()]) -> ok | no_return().
+assert_no_data_caveats(Caveats) when is_list(Caveats) ->
+    case caveats:filter(?DATA_CAVEATS, Caveats) of
+        [] ->
+            ok;
+        [DataCaveat | _] ->
+            throw(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat))
     end.
 
 

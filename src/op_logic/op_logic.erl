@@ -301,7 +301,7 @@ ensure_authorized(#req_ctx{
             % Only op_file endpoints allow data caveats
             ok;
         _ ->
-            fslogic_caveats:assert_no_data_caveats(Caveats)
+            token_utils:assert_no_data_caveats(Caveats)
     end,
     token_utils:verify_api_caveats(Caveats, Operation, GRI),
 

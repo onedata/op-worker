@@ -103,7 +103,7 @@ get_caveats(SerializedToken) ->
     ok | no_return().
 ensure_valid_caveats(Caveats, Interface, AcceptDataCaveats) ->
     token_utils:assert_interface_allowed(Caveats, Interface),
-    AcceptDataCaveats orelse fslogic_caveats:assert_no_data_caveats(Caveats).
+    AcceptDataCaveats orelse token_utils:assert_no_data_caveats(Caveats).
 
 
 %% @private
