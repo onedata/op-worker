@@ -12,6 +12,15 @@ LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L $(HELPERS_DIR)/priv/l
 	-lboost_context -liberty -levent -ldouble-conversion -lboost_iostreams -lboost_regex \
 	-lacl -lgfapi -lglusterfs -lgfrpc -lgfxdr
 
+
+# Add ceph-common library, if X_SCLS is defined, the library is installed
+# as Software Collection on CentOS
+ifndef ONEDATA_SCL
+	LDFLAGS += -Wl,-rpath,/usr/lib/ceph/ /usr/lib/ceph/libceph-common.so.0
+else
+	LDFLAGS += -Wl,-rpath,/opt/onedata/$(ONEDATA_SCL)/root/usr/lib64/ceph/ /opt/onedata/$(ONEDATA_SCL)/root/usr/lib64/ceph/libceph-common.so.0
+endif
+
 CXXFLAGS += -fPIC -std=c++14 -O3 -Wall -D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE \
     -DWITH_CEPH=1 -DWITH_S3=1 -DWITH_SWIFT=1 -DWITH_GLUSTERFS=1 -DWITH_WEBDAV=1 \
     $(shell pkg-config --cflags botan-1.10 tbb fuse) \

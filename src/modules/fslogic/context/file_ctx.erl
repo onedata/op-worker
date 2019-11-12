@@ -576,15 +576,13 @@ is_import_on(FileCtx = #file_ctx{is_import_on = IsOn}) ->
 -spec get_space_name(ctx(), user_ctx:ctx()) ->
     {od_space:name(), ctx()} | no_return().
 get_space_name(FileCtx = #file_ctx{space_name = undefined}, UserCtx) ->
-    UserDoc = user_ctx:get_user(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
     SpaceId = get_space_id_const(FileCtx),
-    case user_logic:has_eff_space(UserDoc, SpaceId) of
-        false ->
-            throw(?ENOENT);
-        true ->
-            {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
-            {SpaceName, FileCtx#file_ctx{space_name = SpaceName}}
+    case space_logic:get_name(SessionId, SpaceId) of
+        {ok, SpaceName} ->
+            {SpaceName, FileCtx#file_ctx{space_name = SpaceName}};
+        {error, _} ->
+            throw(?ENOENT)
     end;
 get_space_name(FileCtx = #file_ctx{space_name = SpaceName}, _Ctx) ->
     {SpaceName, FileCtx}.
