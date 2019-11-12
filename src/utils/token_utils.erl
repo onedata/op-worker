@@ -33,6 +33,15 @@
 -endif.
 
 -type interface() :: gui | rest | oneclient.
+-type allowed_paths() :: any | [file_meta:path()].
+-type guid_constraints() :: any | [[file_id:file_guid()]].
+-type data_constraints() :: {allowed_paths(), guid_constraints()}.
+
+-export_type([
+    interface/0,
+    allowed_paths/0, guid_constraints/0, data_constraints/0
+]).
+
 
 -define(DATA_CAVEATS, [cv_data_path, cv_data_objectid]).
 
@@ -81,14 +90,10 @@ verify_api_caveats(Caveats, Operation, GRI) ->
     end, Caveats).
 
 
--spec get_data_constraints([caveats:caveat()]) ->
-    {
-        AllowedPaths :: all | [file_meta:path()],
-        AllowedGuidSets :: all | [[file_id:file_guid()]]
-    }.
+-spec get_data_constraints([caveats:caveat()]) -> data_constraints().
 get_data_constraints(Caveats) ->
     #{paths := Paths, guids := Guids} = lists:foldl(fun
-        (#cv_data_path{} = PathCaveat, #{paths := all} = Acc) ->
+        (#cv_data_path{} = PathCaveat, #{paths := any} = Acc) ->
             ?CV_PATH(AllowedPaths) = sanitize_cv_data_path(PathCaveat),
             Acc#{paths => AllowedPaths};
         (#cv_data_path{}, #{paths := []} = Acc) ->
@@ -96,15 +101,19 @@ get_data_constraints(Caveats) ->
         (#cv_data_path{} = PathCaveat, #{paths := Intersection} = Acc) ->
             ?CV_PATH(AllowedPaths) = sanitize_cv_data_path(PathCaveat),
             Acc#{paths => converge_paths(AllowedPaths, Intersection)};
+        (?CV_OBJECTID(ObjectIds), #{guids := any} = Acc) ->
+            Acc#{guids => [objectids_to_guids(ObjectIds)]};
         (?CV_OBJECTID(ObjectIds), #{guids := Guids} = Acc) ->
             Acc#{guids => [objectids_to_guids(ObjectIds) | Guids]};
         (_, Acc) ->
             Acc
-    end, #{paths => all, guids => []}, Caveats),
+    end, #{paths => any, guids => any}, Caveats),
 
     case Guids of
-        [] -> {Paths, all};
-        _ -> {Paths, Guids}
+        any ->
+            {Paths, any};
+        _ ->
+            {Paths, lists:filter(fun(GuidsSet) -> GuidsSet /= [] end, Guids)}
     end.
 
 

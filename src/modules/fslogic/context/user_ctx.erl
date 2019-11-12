@@ -102,11 +102,7 @@ get_auth(#user_ctx{session = Session}) ->
 %% Gets session's auth caveats from user context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_data_constraints(ctx()) ->
-    {
-        AllowedPaths :: all | [file_meta:path()],
-        AllowedGuids :: all | [[file_id:file_guid()]]
-    }.
+-spec get_data_constraints(ctx()) -> token_utils:data_constraints().
 get_data_constraints(#user_ctx{session = Session}) ->
     session:get_data_constraints(Session).
 

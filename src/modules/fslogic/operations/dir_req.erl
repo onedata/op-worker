@@ -131,7 +131,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% Lists directory. Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_insecure(user_ctx:ctx(), fslogic_caveats:relation_ctx(),
+-spec read_dir_insecure(user_ctx:ctx(), fslogic_authz:relation_ctx(),
     Offset :: integer(), Limit :: non_neg_integer(),
     Token :: undefined | binary(),
     StartId :: undefined | file_meta:name()
@@ -165,7 +165,7 @@ read_dir_insecure(UserCtx, RelationCtx, Offset, Limit, Token, StartId) ->
 %% Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_plus_insecure(user_ctx:ctx(), fslogic_caveats:relation_ctx(),
+-spec read_dir_plus_insecure(user_ctx:ctx(), fslogic_authz:relation_ctx(),
     Offset :: non_neg_integer(), Limit :: non_neg_integer(),
     Token :: undefined | binary()) -> fslogic_worker:fuse_response().
 read_dir_plus_insecure(UserCtx, RelationCtx, Offset, Limit, Token) ->
@@ -203,7 +203,7 @@ read_dir_plus_insecure(UserCtx, RelationCtx, Offset, Limit, Token) ->
 
 
 %% @private
--spec get_file_children(fslogic_caveats:relation_ctx(), user_ctx:ctx(),
+-spec get_file_children(fslogic_authz:relation_ctx(), user_ctx:ctx(),
     Offset :: integer(),
     Limit :: non_neg_integer(),
     Token :: undefined | datastore_links_iter:token(),
@@ -229,7 +229,7 @@ get_file_children({subpath, FileCtx}, UserCtx, Offset, Limit, Token, StartId) ->
             end,
             {C, NT2, IL, FC}
     end;
-get_file_children({ancestor, FileCtx0, AllowedChildren0},
+get_file_children({{ancestor, AllowedChildren0}, FileCtx0},
     UserCtx, Offset, Limit, _Token, StartId
 ) ->
     AllowedChildren1 = case StartId of

@@ -134,8 +134,8 @@ create_root_session() ->
             status = active,
             identity = #user_identity{user_id = ?ROOT_USER_ID},
             auth = ?ROOT_AUTH,
-            allowed_paths = all,
-            allowed_guids = all
+            allowed_paths = any,
+            guid_constraints = any
         }
     }).
 
@@ -154,8 +154,8 @@ create_guest_session() ->
             status = active,
             identity = #user_identity{user_id = ?GUEST_USER_ID},
             auth = ?GUEST_AUTH,
-            allowed_paths = all,
-            allowed_guids = all
+            allowed_paths = any,
+            guid_constraints = any
         }
     }).
 
@@ -225,12 +225,19 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
         _ ->
             []
     end,
-    {AllowedPaths, AllowedGuids} = token_utils:get_data_constraints(Caveats),
-    critical_section:run([?MODULE, SessId], fun() ->
-        reuse_or_create_session(
-            SessId, SessType, Iden, Auth, AllowedPaths, AllowedGuids, ProxyVia
-        )
-    end).
+    case token_utils:get_data_constraints(Caveats) of
+        {[], _} ->
+            {error, invalid_token};
+        {_, []} ->
+            {error, invalid_token};
+        {AllowedPaths, GuidConstraints} ->
+            critical_section:run([?MODULE, SessId], fun() ->
+                reuse_or_create_session(
+                    SessId, SessType, Iden, Auth,
+                    AllowedPaths, GuidConstraints, ProxyVia
+                )
+            end)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -244,13 +251,12 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
     Iden :: session:identity(), Auth :: session:auth() | undefined,
-    AllowedPaths :: all | [file_meta:path()],
-    AllowedGuids :: all | [[file_id:file_guid()]],
+    token_utils:allowed_paths(), token_utils:guid_constraints(),
     ProxyVia :: undefined | oneprovider:id()
 ) ->
     {ok, SessId :: session:id()} | error().
 reuse_or_create_session(SessId, SessType, Iden, Auth,
-    AllowedPaths, AllowedGuids, ProxyVia
+    AllowedPaths, GuidConstraints, ProxyVia
 ) ->
     Sess = #session{
         type = SessType,
@@ -258,7 +264,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth,
         identity = Iden,
         auth = Auth,
         allowed_paths = AllowedPaths,
-        allowed_guids = AllowedGuids,
+        guid_constraints = GuidConstraints,
         proxy_via = ProxyVia
     },
     Diff = fun
@@ -282,7 +288,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth,
                 {error, already_exists} ->
                     reuse_or_create_session(
                         SessId, SessType, Iden, Auth,
-                        AllowedPaths, AllowedGuids, ProxyVia
+                        AllowedPaths, GuidConstraints, ProxyVia
                     );
                 Other ->
                     Other

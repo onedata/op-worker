@@ -290,16 +290,9 @@ get_auth(#document{value = Session}) ->
     get_auth(Session).
 
 
--spec get_data_constraints(record() | doc()) ->
-    {
-        AllowedPaths :: all | [file_meta:path()],
-        AllowedGuids :: all | [[file_id:file_guid()]]
-    }.
-get_data_constraints(#session{
-    allowed_paths = AllowedPaths,
-    allowed_guids = AllowedGuids
-}) ->
-    {AllowedPaths, AllowedGuids};
+-spec get_data_constraints(record() | doc()) -> token_utils:data_constraints().
+get_data_constraints(#session{} = Sess) ->
+    {Sess#session.allowed_paths, Sess#session.guid_constraints};
 get_data_constraints(#document{value = Session}) ->
     get_data_constraints(Session).
 

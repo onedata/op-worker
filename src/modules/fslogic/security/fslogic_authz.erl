@@ -29,12 +29,9 @@
 -type children_set() :: gb_sets:set(file_meta:name()).
 -type relation() :: subpath | {ancestor, children_set()}.
 
--type allowed_paths() :: all | [file_meta:path()].
--type allowed_guids() :: all | [[file_id:file_guid()]].
-
 -type relation_ctx() ::
     {subpath, file_ctx:ctx()} |
-    {ancestor, file_ctx:ctx(), children_list()}.
+    {{ancestor, children_list()}, file_ctx:ctx()}.
 
 -export_type([relation_ctx/0]).
 
@@ -67,13 +64,10 @@ ensure_authorized(UserCtx, FileCtx0, AccessRequirements) ->
 ensure_authorized(
     UserCtx, FileCtx0, AccessRequirements, AllowAncestorsOfPaths
 ) ->
-    FileCtx2 = case check_and_cache_data_constraints(
+    {_, FileCtx1} = check_and_cache_data_constraints(
         UserCtx, FileCtx0, AllowAncestorsOfPaths
-    ) of
-        {subpath, FileCtx1} -> FileCtx1;
-        {ancestor, FileCtx1, _} -> FileCtx1
-    end,
-    fslogic_access:assert_granted(UserCtx, FileCtx2, AccessRequirements).
+    ),
+    fslogic_access:assert_granted(UserCtx, FileCtx1, AccessRequirements).
 
 
 %%--------------------------------------------------------------------
@@ -101,36 +95,32 @@ ensure_authorized_readdir(UserCtx, FileCtx0, AccessRequirements) ->
 -spec check_and_cache_data_constraints(user_ctx:ctx(), file_ctx:ctx(),
     boolean()) -> relation_ctx().
 check_and_cache_data_constraints(UserCtx, FileCtx, AllowAncestorsOfPaths) ->
-    {AllowedPaths, AllowedGuids} = user_ctx:get_data_constraints(UserCtx),
+    {AllowedPaths, GuidConstraints} = user_ctx:get_data_constraints(UserCtx),
     check_and_cache_data_constraints(
-        UserCtx, FileCtx, AllowedPaths, AllowedGuids, AllowAncestorsOfPaths
+        UserCtx, FileCtx, AllowedPaths, GuidConstraints, AllowAncestorsOfPaths
     ).
 
 
 %% @private
 -spec check_and_cache_data_constraints(user_ctx:ctx(), file_ctx:ctx(),
-    allowed_paths(), allowed_guids(), AllowAncestorsOfPaths :: boolean()
+    token_utils:allowed_paths(), token_utils:guid_constraints(),
+    AllowAncestorsOfPaths :: boolean()
 ) ->
     relation_ctx() | no_return().
-check_and_cache_data_constraints(_UserCtx, FileCtx, all, all, _) ->
+check_and_cache_data_constraints(_UserCtx, FileCtx, any, any, _) ->
     {subpath, FileCtx};
 check_and_cache_data_constraints(
-    UserCtx, FileCtx0, AllowedPaths, AllowedGuids, AllowAncestorsOfPaths
+    UserCtx, FileCtx0, AllowedPaths, GuidConstraints, AllowAncestorsOfPaths
 ) ->
     FileGuid = file_ctx:get_guid_const(FileCtx0),
-    SessionDiscriminator = case user_ctx:get_auth(UserCtx) of
-        #token_auth{token = SerializedToken} ->
-            SerializedToken;
-        SessionAuth ->
-            SessionAuth
-    end,
+    SessionDiscriminator = get_session_discriminator(UserCtx),
     CacheKey = {data_constraint, SessionDiscriminator, FileGuid},
     case permissions_cache:check_permission(CacheKey) of
         {ok, subpath} ->
             {subpath, FileCtx0};
-        {ok, {ancestor, Children}} ->
+        {ok, {ancestor, _ChildrenList} = Ancestor} ->
             case AllowAncestorsOfPaths of
-                true -> {ancestor, FileCtx0, Children};
+                true -> {Ancestor, FileCtx0};
                 false -> throw(?EACCES)
             end;
         {ok, ?EACCES} ->
@@ -151,11 +141,21 @@ check_and_cache_data_constraints(
                     % because knowledge that parent is ancestor does not
                     % tell whether file is also ancestor or subpath
                     try
-                        Result = check_data_constraints(
-                            UserCtx, SessionDiscriminator, FileCtx1,
-                            AllowedPaths, AllowedGuids, AllowAncestorsOfPaths
+                        {PathRel, FileCtx2} = check_data_path_constraints(
+                            FileCtx1, AllowedPaths, AllowAncestorsOfPaths
                         ),
-                        sanitize_and_cache_relation(CacheKey, Result)
+                        {GuidRel, FileCtx3} = check_data_guid_constraints(
+                            UserCtx, SessionDiscriminator, FileCtx2,
+                            GuidConstraints, AllowAncestorsOfPaths
+                        ),
+                        Relation = case converge_relations(PathRel, GuidRel) of
+                            subpath ->
+                                subpath;
+                            {ancestor, ChildrenSet} ->
+                                {ancestor, gb_sets:to_list(ChildrenSet)}
+                        end,
+                        permissions_cache:cache_permission(CacheKey, Relation),
+                        {Relation, FileCtx3}
                     catch throw:?EACCES ->
                         permissions_cache:cache_permission(CacheKey, ?EACCES),
                         throw(?EACCES)
@@ -165,40 +165,9 @@ check_and_cache_data_constraints(
 
 
 %% @private
--spec sanitize_and_cache_relation(CacheKey :: term(),
-    {relation(), file_ctx:ctx()}) -> relation_ctx().
-sanitize_and_cache_relation(CacheKey, {subpath, _FileCtx} = Rel) ->
-    permissions_cache:cache_permission(CacheKey, subpath),
-    Rel;
-sanitize_and_cache_relation(CacheKey, {{ancestor, ChildrenSet}, FileCtx}) ->
-    ChildrenList = gb_sets:to_list(ChildrenSet),
-    permissions_cache:cache_permission(CacheKey, {ancestor, ChildrenList}),
-    {ancestor, FileCtx, ChildrenList}.
-
-
-%% @private
--spec check_data_constraints(user_ctx:ctx(), SessionDiscriminator :: term(),
-    file_ctx:ctx(), allowed_paths(), allowed_guids(),
-    AllowAncestorsOfPaths :: boolean()
-) ->
-    {relation(), file_ctx:ctx()} | no_return().
-check_data_constraints(UserCtx, SessionDiscriminator, FileCtx0,
-    AllowedPaths, AllowedGuids, AllowAncestorsOfPaths
-) ->
-    {PathRel, FileCtx1} = check_data_path_constraints(
-        FileCtx0, AllowedPaths, AllowAncestorsOfPaths
-    ),
-    {GuidRel, FileCtx2} = check_data_guid_constraint(
-        UserCtx, SessionDiscriminator, FileCtx1,
-        AllowedGuids, AllowAncestorsOfPaths
-    ),
-    {converge_relations(PathRel, GuidRel), FileCtx2}.
-
-
-%% @private
--spec check_data_path_constraints(file_ctx:ctx(), all | [file_meta:path()],
+-spec check_data_path_constraints(file_ctx:ctx(), token_utils:allowed_paths(),
     boolean()) -> {relation(), file_ctx:ctx()} | no_return().
-check_data_path_constraints(FileCtx, all, _AllowAncestorsOfPaths) ->
+check_data_path_constraints(FileCtx, any, _AllowAncestorsOfPaths) ->
     {subpath, FileCtx};
 check_data_path_constraints(FileCtx0, AllowedPaths, false) ->
     {FilePath0, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
@@ -229,13 +198,13 @@ check_data_path_constraints(FileCtx0, AllowedPaths, true) ->
 
 
 %% @private
--spec check_data_guid_constraint(user_ctx:ctx(), SessionDiscriminator :: term(),
-    file_ctx:ctx(), all | [file_meta:path()], boolean()
+-spec check_data_guid_constraints(user_ctx:ctx(), SessionDiscriminator :: term(),
+    file_ctx:ctx(), token_utils:guid_constraints(), boolean()
 ) ->
     {relation(), file_ctx:ctx()} | no_return().
-check_data_guid_constraint(_, _, FileCtx, all, _AllowAncestorsOfPaths) ->
+check_data_guid_constraints(_, _, FileCtx, any, _AllowAncestorsOfPaths) ->
     {subpath, FileCtx};
-check_data_guid_constraint(
+check_data_guid_constraints(
     UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids, false
 ) ->
     case is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids) of
@@ -244,7 +213,7 @@ check_data_guid_constraint(
         {false, _, _} ->
             throw(?EACCES)
     end;
-check_data_guid_constraint(
+check_data_guid_constraints(
     UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids, true
 ) ->
     case is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids) of
@@ -267,9 +236,10 @@ check_data_guid_constraint(
 
 
 -spec is_guid_allowed(user_ctx:ctx(), SessionDiscriminator :: term(),
-    file_ctx:ctx(), allowed_guids()
+    file_ctx:ctx(), token_utils:guid_constraints()
 ) ->
-    {true, file_ctx:ctx()} | {false, allowed_guids(), file_ctx:ctx()}.
+    {true, file_ctx:ctx()} |
+    {false, token_utils:guid_constraints(), file_ctx:ctx()}.
 is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx, AllGuidSets) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     CacheKey = {guid_constraint, SessionDiscriminator, FileGuid},
@@ -312,23 +282,6 @@ is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx, AllGuidSets) ->
                     end
             end
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns intersection of relation sets.
-%% @end
-%%--------------------------------------------------------------------
--spec converge_relations(relation(), relation()) -> relation().
-converge_relations(subpath, subpath) ->
-    subpath;
-converge_relations({ancestor, _Children} = Ancestor, subpath) ->
-    Ancestor;
-converge_relations(subpath, {ancestor, _Children} = Ancestor) ->
-    Ancestor;
-converge_relations({ancestor, ChildrenA}, {ancestor, ChildrenB}) ->
-    {ancestor, gb_sets:intersection(ChildrenA, ChildrenB)}.
 
 
 %%--------------------------------------------------------------------
@@ -396,6 +349,23 @@ is_subpath(PossibleSubPath, Path, PathLen) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns intersection of relation sets.
+%% @end
+%%--------------------------------------------------------------------
+-spec converge_relations(relation(), relation()) -> relation().
+converge_relations(subpath, subpath) ->
+    subpath;
+converge_relations({ancestor, _Children} = Ancestor, subpath) ->
+    Ancestor;
+converge_relations(subpath, {ancestor, _Children} = Ancestor) ->
+    Ancestor;
+converge_relations({ancestor, ChildrenA}, {ancestor, ChildrenB}) ->
+    {ancestor, gb_sets:intersection(ChildrenA, ChildrenB)}.
+
+
 %% @private
 -spec guids_to_paths([file_id:file_guid()]) -> [file_meta:path()].
 guids_to_paths(Guids) ->
@@ -410,3 +380,13 @@ guids_to_paths(Guids) ->
             false
         end
     end, Guids).
+
+
+%% @private
+get_session_discriminator(UserCtx) ->
+    case user_ctx:get_auth(UserCtx) of
+        #token_auth{token = SerializedToken} ->
+            SerializedToken;
+        SessionAuth ->
+            SessionAuth
+    end.
