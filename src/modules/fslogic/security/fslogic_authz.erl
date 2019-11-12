@@ -21,6 +21,10 @@
     ensure_authorized_readdir/3
 ]).
 
+-ifdef(TEST).
+-export([check_data_path_relation/2, is_subpath/2]).
+-endif.
+
 -type children_list() :: [file_meta:name()].
 -type children_set() :: gb_sets:set(file_meta:name()).
 -type relation() :: subpath | {ancestor, children_set()}.
