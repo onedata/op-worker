@@ -28,7 +28,9 @@
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
     remove_share/3, remove_share_by_guid/3, resolve_guid/3, schedule_file_replica_eviction/5,
     schedule_file_replication/4, get_file_distribution/3,
-    schedule_replication_by_view/6, schedule_replica_eviction_by_view/7]).
+    schedule_replication_by_view/6, schedule_replica_eviction_by_view/7,
+    get_effective_file_qos/3, add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3, check_qos_fulfilled/3,
+    check_qos_fulfilled/4]).
 
 -define(EXEC(Worker, Function),
     exec(Worker,
@@ -492,6 +494,37 @@ schedule_replica_eviction_by_view(Worker, SessId, ProviderId, MigrationProviderI
 -spec get_file_distribution(node(), session:id(), lfm:file_key()) -> {ok, list()}.
 get_file_distribution(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_file_distribution(SessId, FileKey)).
+
+-spec add_qos_entry(node(), session:id(), lfm:file_key(), qos_expression:raw(),
+    qos_entry:replicas_num()) -> {ok, qos_entry:id()} | lfm:error_reply().
+add_qos_entry(Worker, SessId, FileKey, Expression, ReplicasNum) ->
+    ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, Expression, ReplicasNum)).
+
+-spec get_effective_file_qos(node(), session:id(), lfm:file_key()) ->
+    {ok, {[qos_entry:id()], file_qos:assigned_entries()}} | lfm:error_reply().
+get_effective_file_qos(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_effective_file_qos(SessId, FileKey)).
+
+-spec get_qos_entry(node(), session:id(), qos_entry:id()) ->
+    {ok, qos_entry:record()} | lfm:error_reply().
+get_qos_entry(Worker, SessId, QosEntryId) ->
+    ?EXEC(Worker, lfm:get_qos_entry(SessId, QosEntryId)).
+
+-spec remove_qos_entry(node(), session:id(), qos_entry:id()) ->
+    ok | lfm:error_reply().
+remove_qos_entry(Worker, SessId, QosEntryId) ->
+    ?EXEC(Worker, lfm:remove_qos_entry(SessId, QosEntryId)).
+
+-spec check_qos_fulfilled(node(), session:id(), qos_entry:id()) ->
+    {ok, boolean()} | lfm:error_reply().
+check_qos_fulfilled(Worker, SessId, QosEntryId) ->
+    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosEntryId)).
+
+-spec check_qos_fulfilled(node(), session:id(), qos_entry:id(), lfm:file_key()) ->
+    {ok, boolean()} | lfm:error_reply().
+check_qos_fulfilled(Worker, SessId, QosEntryId, FileKey) ->
+    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosEntryId, FileKey)).
+
 
 %%%===================================================================
 %%% Internal functions
