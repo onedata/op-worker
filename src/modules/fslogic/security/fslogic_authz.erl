@@ -32,6 +32,12 @@
 -type allowed_paths() :: all | [file_meta:path()].
 -type allowed_guids() :: all | [[file_id:file_guid()]].
 
+-type relation_ctx() ::
+    {subpath, file_ctx:ctx()} |
+    {ancestor, file_ctx:ctx(), children_list()}.
+
+-export_type([relation_ctx/0]).
+
 
 %%%===================================================================
 %%% API
@@ -52,9 +58,8 @@ ensure_authorized(UserCtx, FileCtx0, AccessRequirements) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks access to specified file and verifies data caveats.
-%% AllowAncestorsOfLocationCaveats means that permission can be granted
-%% not only for files in subpaths allowed by caveats but also for their
-%% ancestors.
+%% AllowAncestorsOfPaths means that permission can be granted not only
+%% for files in subpaths allowed by caveats but also for their ancestors.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_authorized(user_ctx:ctx(), file_ctx:ctx(),
@@ -62,10 +67,13 @@ ensure_authorized(UserCtx, FileCtx0, AccessRequirements) ->
 ensure_authorized(
     UserCtx, FileCtx0, AccessRequirements, AllowAncestorsOfPaths
 ) ->
-    {_, FileCtx1} = check_data_and_cache_constraints(
+    FileCtx2 = case check_and_cache_data_constraints(
         UserCtx, FileCtx0, AllowAncestorsOfPaths
-    ),
-    fslogic_access:assert_granted(UserCtx, FileCtx1, AccessRequirements).
+    ) of
+        {subpath, FileCtx1} -> FileCtx1;
+        {ancestor, FileCtx1, _} -> FileCtx1
+    end,
+    fslogic_access:assert_granted(UserCtx, FileCtx2, AccessRequirements).
 
 
 %%--------------------------------------------------------------------
@@ -76,15 +84,12 @@ ensure_authorized(
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_authorized_readdir(user_ctx:ctx(), file_ctx:ctx(),
-    [fslogic_access:requirement()]
-) ->
-    {subpath, file_ctx:ctx()} |
-    {ancestor, file_ctx:ctx(), children_list()}.
+    [fslogic_access:requirement()]) -> relation_ctx().
 ensure_authorized_readdir(UserCtx, FileCtx0, AccessRequirements) ->
     FileCtx1 = fslogic_access:assert_granted(
         UserCtx, FileCtx0, AccessRequirements
     ),
-    check_data_and_cache_constraints(UserCtx, FileCtx1, true).
+    check_and_cache_data_constraints(UserCtx, FileCtx1, true).
 
 
 %%%===================================================================
@@ -93,11 +98,9 @@ ensure_authorized_readdir(UserCtx, FileCtx0, AccessRequirements) ->
 
 
 %% @private
--spec check_data_and_cache_constraints(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
-    {subpath, file_ctx:ctx()} |
-    {ancestor, file_ctx:ctx(), children_list()} |
-    no_return().
-check_data_and_cache_constraints(UserCtx, FileCtx, AllowAncestorsOfPaths) ->
+-spec check_and_cache_data_constraints(user_ctx:ctx(), file_ctx:ctx(),
+    boolean()) -> relation_ctx().
+check_and_cache_data_constraints(UserCtx, FileCtx, AllowAncestorsOfPaths) ->
     {AllowedPaths, AllowedGuids} = user_ctx:get_data_constraints(UserCtx),
     check_and_cache_data_constraints(
         UserCtx, FileCtx, AllowedPaths, AllowedGuids, AllowAncestorsOfPaths
@@ -105,12 +108,10 @@ check_data_and_cache_constraints(UserCtx, FileCtx, AllowAncestorsOfPaths) ->
 
 
 %% @private
--spec check_and_cache_data_constraints(user_ctx:ctx(), file_ctx:ctx(), allowed_paths(),
-    allowed_guids(), AllowAncestorsOfPaths :: boolean()
+-spec check_and_cache_data_constraints(user_ctx:ctx(), file_ctx:ctx(),
+    allowed_paths(), allowed_guids(), AllowAncestorsOfPaths :: boolean()
 ) ->
-    {subpath, file_ctx:ctx()} |
-    {ancestor, file_ctx:ctx(), children_list()} |
-    no_return().
+    relation_ctx() | no_return().
 check_and_cache_data_constraints(_UserCtx, FileCtx, all, all, _) ->
     {subpath, FileCtx};
 check_and_cache_data_constraints(
@@ -150,11 +151,11 @@ check_and_cache_data_constraints(
                     % because knowledge that parent is ancestor does not
                     % tell whether file is also ancestor or subpath
                     try
-                        Relation = check_data_constraints(
-                            UserCtx, FileCtx1, AllowedPaths, AllowedGuids,
-                            AllowAncestorsOfPaths
+                        Result = check_data_constraints(
+                            UserCtx, SessionDiscriminator, FileCtx1,
+                            AllowedPaths, AllowedGuids, AllowAncestorsOfPaths
                         ),
-                        sanitize_and_cache_relation(CacheKey, Relation)
+                        sanitize_and_cache_relation(CacheKey, Result)
                     catch throw:?EACCES ->
                         permissions_cache:cache_permission(CacheKey, ?EACCES),
                         throw(?EACCES)
@@ -164,99 +165,34 @@ check_and_cache_data_constraints(
 
 
 %% @private
--spec sanitize_and_cache_relation(CacheKey :: term(), relation()) ->
-    {subpath, file_ctx:ctx()} | {ancestor, file_ctx:ctx(), children_list()}.
+-spec sanitize_and_cache_relation(CacheKey :: term(),
+    {relation(), file_ctx:ctx()}) -> relation_ctx().
 sanitize_and_cache_relation(CacheKey, {subpath, _FileCtx} = Rel) ->
     permissions_cache:cache_permission(CacheKey, subpath),
     Rel;
 sanitize_and_cache_relation(CacheKey, {{ancestor, ChildrenSet}, FileCtx}) ->
     ChildrenList = gb_sets:to_list(ChildrenSet),
-    CacheVal = {ancestor, ChildrenList},
-    permissions_cache:cache_permission(CacheKey, CacheVal),
+    permissions_cache:cache_permission(CacheKey, {ancestor, ChildrenList}),
     {ancestor, FileCtx, ChildrenList}.
 
 
 %% @private
--spec check_data_constraints(user_ctx:ctx(), file_ctx:ctx(), allowed_paths(),
-    allowed_guids(), AllowAncestorsOfPaths :: boolean()
+-spec check_data_constraints(user_ctx:ctx(), SessionDiscriminator :: term(),
+    file_ctx:ctx(), allowed_paths(), allowed_guids(),
+    AllowAncestorsOfPaths :: boolean()
 ) ->
     {relation(), file_ctx:ctx()} | no_return().
-check_data_constraints(_, FileCtx0, AllowedPaths, AllowedGuids, AllowAncestorsOfPaths) ->
+check_data_constraints(UserCtx, SessionDiscriminator, FileCtx0,
+    AllowedPaths, AllowedGuids, AllowAncestorsOfPaths
+) ->
     {PathRel, FileCtx1} = check_data_path_constraints(
         FileCtx0, AllowedPaths, AllowAncestorsOfPaths
     ),
     {GuidRel, FileCtx2} = check_data_guid_constraint(
-        FileCtx1, AllowedGuids, AllowAncestorsOfPaths
+        UserCtx, SessionDiscriminator, FileCtx1,
+        AllowedGuids, AllowAncestorsOfPaths
     ),
-    case {PathRel, GuidRel} of
-        {subpath, subpath} ->
-            {subpath, FileCtx2};
-        {{ancestor, _Children} = Ancestor, subpath} ->
-            {Ancestor, FileCtx2};
-        {subpath, {ancestor, _Children} = Ancestor} ->
-            {Ancestor, FileCtx2};
-        {{ancestor, ChildrenA}, {ancestor, ChildrenB}} ->
-            {{ancestor, gb_sets:intersection(ChildrenA, ChildrenB)}, FileCtx2}
-    end.
-
-
-%% @private
--spec check_data_guid_constraint(file_ctx:ctx(), all | [file_meta:path()],
-    boolean()) -> {relation(), file_ctx:ctx()} | no_return().
-check_data_guid_constraint(FileCtx, _, _AllowAncestorsOfPaths) ->
-    {subpath, FileCtx}.
-%%check_data_guid_constraint(FileCtx0, AllowedGuids, false) ->
-%%    case is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids) of
-%%        {true, FileCtx1} ->
-%%            {subpath, FileCtx1};
-%%        {false, _} ->
-%%            throw(?EACCES)
-%%    end;
-%%check_data_guid_constraint(FileCtx0, AllowedGuids, true) ->
-%%    case is_guid_allowed() of
-%%        true ->
-%%            {subpath, FileCtx0};
-%%        false ->
-%%            {FilePath0, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
-%%            FilePath1 = string:trim(FilePath0, trailing, "/"),
-%%            AllowedPaths = guids_to_paths(AllowedGuids),
-%%            case check_data_path_relation(FilePath1, AllowedPaths) of
-%%                undefined ->
-%%                    throw(?EACCES);
-%%                subpath ->
-%%                    {subpath, FileCtx1};
-%%                {ancestor, Children} ->
-%%                    {ancestor, FileCtx1, Children}
-%%            end
-%%    end.
-%%
-%%
-%%is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx, AllowedGuids0) ->
-%%    Guid = file_ctx:get_guid_const(FileCtx),
-%%    CacheKey = {guid_constraint, SessionDiscriminator, Guid},
-%%
-%%    case permissions_cache:check_permission(CacheKey) of
-%%        {ok, true} ->
-%%            {true, FileCtx};
-%%        {ok, false} ->
-%%            {false, FileCtx};
-%%        _ ->
-%%            AllowedGuids1 = lists:filter(fun(GuidsSet) ->
-%%                not lists:member(Guid, GuidsSet)
-%%            end, AllowedGuids0),
-%%            case AllowedGuids1 of
-%%                [] ->
-%%                    {true, FileCtx};
-%%                _ ->
-%%                    {FileCtx1, ParentCtx} = file_ctx:get_parent(FileCtx, UserCtx),
-%%                    {IsParentAllowed, _} = is_guid_allowed(
-%%                        UserCtx, SessionDiscriminator,
-%%                        ParentCtx, AllowedGuids1
-%%                    ),
-%%                    permissions_cache:cache_permission(CacheKey, IsParentAllowed),
-%%                    {IsParentAllowed, FileCtx1}
-%%            end
-%%    end.
+    {converge_relations(PathRel, GuidRel), FileCtx2}.
 
 
 %% @private
@@ -290,6 +226,109 @@ check_data_path_constraints(FileCtx0, AllowedPaths, true) ->
         {ancestor, _Children} = Ancestor ->
             {Ancestor, FileCtx1}
     end.
+
+
+%% @private
+-spec check_data_guid_constraint(user_ctx:ctx(), SessionDiscriminator :: term(),
+    file_ctx:ctx(), all | [file_meta:path()], boolean()
+) ->
+    {relation(), file_ctx:ctx()} | no_return().
+check_data_guid_constraint(_, _, FileCtx, all, _AllowAncestorsOfPaths) ->
+    {subpath, FileCtx};
+check_data_guid_constraint(
+    UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids, false
+) ->
+    case is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids) of
+        {true, FileCtx1} ->
+            {subpath, FileCtx1};
+        {false, _, _} ->
+            throw(?EACCES)
+    end;
+check_data_guid_constraint(
+    UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids, true
+) ->
+    case is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids) of
+        {true, FileCtx1} ->
+            {subpath, FileCtx1};
+        {false, _, FileCtx1} ->
+            {FilePath0, FileCtx2} = file_ctx:get_canonical_path(FileCtx1),
+            FilePath1 = string:trim(FilePath0, trailing, "/"),
+
+            lists:foldl(fun(GuidsSet, {CurrRelation, CurrFileCtx}) ->
+                AllowedPaths = guids_to_paths(GuidsSet),
+                case check_data_path_relation(FilePath1, AllowedPaths) of
+                    undefined ->
+                        throw(?EACCES);
+                    Relation ->
+                        {converge_relations(CurrRelation, Relation), CurrFileCtx}
+                end
+            end, {subpath, FileCtx2}, AllowedGuids)
+    end.
+
+
+-spec is_guid_allowed(user_ctx:ctx(), SessionDiscriminator :: term(),
+    file_ctx:ctx(), allowed_guids()
+) ->
+    {true, file_ctx:ctx()} | {false, allowed_guids(), file_ctx:ctx()}.
+is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx, AllGuidSets) ->
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    CacheKey = {guid_constraint, SessionDiscriminator, FileGuid},
+
+    case permissions_cache:check_permission(CacheKey) of
+        {ok, true} ->
+            {true, FileCtx};
+        {ok, {false, NotFulfilledGuidSets}} ->
+            {false, NotFulfilledGuidSets, FileCtx};
+        _ ->
+            case file_ctx:is_root_dir_const(FileCtx) of
+                true ->
+                    RemainingGuidSets = lists:filter(fun(GuidsSet) ->
+                        not lists:member(FileGuid, GuidsSet)
+                    end, AllGuidSets),
+                    permissions_cache:cache_permission(
+                        CacheKey, {false, RemainingGuidSets}
+                    ),
+                    {false, RemainingGuidSets, FileCtx};
+                false ->
+                    {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
+                    case is_guid_allowed(UserCtx, SessionDiscriminator, ParentCtx, AllGuidSets) of
+                        {true, _} ->
+                            permissions_cache:cache_permission(CacheKey, true),
+                            {true, FileCtx1};
+                        {false, RemainingGuidSets0, _} ->
+                            RemainingGuidSets1 = lists:filter(fun(GuidsSet) ->
+                                not lists:member(FileGuid, GuidsSet)
+                            end, RemainingGuidSets0),
+                            case RemainingGuidSets1 of
+                                [] ->
+                                    permissions_cache:cache_permission(CacheKey, true),
+                                    {true, FileCtx1};
+                                _ ->
+                                    permissions_cache:cache_permission(
+                                        CacheKey, {false, RemainingGuidSets1}
+                                    ),
+                                    {false, RemainingGuidSets1, FileCtx1}
+                            end
+                    end
+            end
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns intersection of relation sets.
+%% @end
+%%--------------------------------------------------------------------
+-spec converge_relations(relation(), relation()) -> relation().
+converge_relations(subpath, subpath) ->
+    subpath;
+converge_relations({ancestor, _Children} = Ancestor, subpath) ->
+    Ancestor;
+converge_relations(subpath, {ancestor, _Children} = Ancestor) ->
+    Ancestor;
+converge_relations({ancestor, ChildrenA}, {ancestor, ChildrenB}) ->
+    {ancestor, gb_sets:intersection(ChildrenA, ChildrenB)}.
 
 
 %%--------------------------------------------------------------------
