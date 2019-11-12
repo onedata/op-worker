@@ -120,6 +120,8 @@ remove_auxiliary_documents(FileCtx) ->
     ok = file_popularity:delete(FileUuid),
     ok = custom_metadata:delete(FileUuid),
     ok = times:delete(FileUuid),
+    ok = file_qos:delete(FileUuid),
+    ok = file_meta_posthooks:delete(FileUuid),
     ok = transferred_file:clean_up(FileGuid).
 
 %%--------------------------------------------------------------------
