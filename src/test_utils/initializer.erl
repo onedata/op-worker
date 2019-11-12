@@ -1334,7 +1334,7 @@ setup_storage(Worker, Domain, ProviderConfig, Config, StorageMapping) ->
 -spec on_space_supported(atom(), od_storage:id(), boolean()) -> any().
 on_space_supported(Worker, StorageId, MountInRoot) ->
     case MountInRoot of
-        true -> ok = rpc:call(Worker, storage_config, set_mount_in_root, [StorageId]);
+        true -> ok = rpc:call(Worker, storage_config, set_mount_in_root_insecure, [StorageId, true]);
         false -> ok
     end.
 

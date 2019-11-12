@@ -365,7 +365,7 @@ revamp_storage_docs(#document{key = StorageId, value = Storage}) ->
         luma_config = LumaConfig
     },
     case storage_config:save_doc( #document{key = StorageId, value = StorageConfig}) of
-        ok -> ok;
+        {ok, _} -> ok;
         {error, already_exists} -> ok;
         Error -> throw(Error)
     end,
