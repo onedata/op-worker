@@ -61,7 +61,7 @@ everyone_acl_conversion_test() ->
     Json = gui_acl_parser:acl_to_json(Acl),
     DecodedAcl = gui_acl_parser:json_to_acl(Json),
 
-    ?assertEqual([?JSON_ACE(<<"allow">>, Mask, <<"everyone">>, null, null)],
+    ?assertEqual([?JSON_ACE(<<"allow">>, Mask, <<"everyone@">>, null, null)],
         Json),
     ?assertEqual(Acl, DecodedAcl).
 
@@ -72,7 +72,7 @@ owner_acl_conversion_test() ->
     Json = gui_acl_parser:acl_to_json(Acl),
     DecodedAcl = gui_acl_parser:json_to_acl(Json),
 
-    ?assertEqual([?JSON_ACE(<<"allow">>, Mask, <<"owner">>, null, null)],
+    ?assertEqual([?JSON_ACE(<<"allow">>, Mask, <<"owner@">>, null, null)],
         Json),
     ?assertEqual(Acl, DecodedAcl).
 
