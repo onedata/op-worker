@@ -249,7 +249,7 @@ setup_session(Worker, [{_, #user_config{
 
     Identity = #user_identity{user_id = UserId},
     Auth = #token_auth{token = Token, peer_ip = local_ip_v4()},
-    {ok, SessId} = ?assertMatch({ok, SessId}, rpc:call(
+    {ok, SessId} = ?assertMatch({ok, _}, rpc:call(
         Worker,
         session_manager,
         reuse_or_create_fuse_session,
