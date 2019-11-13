@@ -7,6 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for authorization of fslogic operations.
+%%% It takes care of constraints (like allowed paths and guid constraints
+%%% carried by tokens) checks and delegates subject access checks (acl/posix)
+%%% to fslogic_access.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(fslogic_authz).
@@ -205,82 +208,113 @@ check_data_path_constraints(FileCtx0, AllowedPaths, true) ->
 check_data_guid_constraints(_, _, FileCtx, any, _AllowAncestorsOfPaths) ->
     {subpath, FileCtx};
 check_data_guid_constraints(
-    UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids, false
+    UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints, false
 ) ->
-    case is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids) of
+    case does_fulfills_guid_constraints(
+        UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints
+    ) of
         {true, FileCtx1} ->
             {subpath, FileCtx1};
         {false, _, _} ->
             throw(?EACCES)
     end;
 check_data_guid_constraints(
-    UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids, true
+    UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints, true
 ) ->
-    case is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx0, AllowedGuids) of
+    case does_fulfills_guid_constraints(
+        UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints
+    ) of
         {true, FileCtx1} ->
             {subpath, FileCtx1};
         {false, _, FileCtx1} ->
             {FilePath0, FileCtx2} = file_ctx:get_canonical_path(FileCtx1),
             FilePath1 = string:trim(FilePath0, trailing, "/"),
 
-            lists:foldl(fun(GuidsSet, {CurrRelation, CurrFileCtx}) ->
+            Relation = lists:foldl(fun(GuidsSet, CurrRelation) ->
                 AllowedPaths = guids_to_paths(GuidsSet),
                 case check_data_path_relation(FilePath1, AllowedPaths) of
                     undefined ->
                         throw(?EACCES);
-                    Relation ->
-                        {converge_relations(CurrRelation, Relation), CurrFileCtx}
+                    Rel ->
+                        converge_relations(CurrRelation, Rel)
                 end
-            end, {subpath, FileCtx2}, AllowedGuids)
+            end, subpath, GuidConstraints),
+
+            {Relation, FileCtx2}
     end.
 
 
--spec is_guid_allowed(user_ctx:ctx(), SessionDiscriminator :: term(),
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks whether file fulfills guid constraints, which means that all
+%% guid sets (contained in constraints) have either this file's guid or
+%% any of it's ancestors.
+%% @end
+%%--------------------------------------------------------------------
+-spec does_fulfills_guid_constraints(user_ctx:ctx(),
+    SessionDiscriminator :: term(),
     file_ctx:ctx(), token_utils:guid_constraints()
 ) ->
     {true, file_ctx:ctx()} |
     {false, token_utils:guid_constraints(), file_ctx:ctx()}.
-is_guid_allowed(UserCtx, SessionDiscriminator, FileCtx, AllGuidSets) ->
+does_fulfills_guid_constraints(
+    UserCtx, SessionDiscriminator, FileCtx, AllGuidConstraints
+) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     CacheKey = {guid_constraint, SessionDiscriminator, FileGuid},
 
     case permissions_cache:check_permission(CacheKey) of
         {ok, true} ->
             {true, FileCtx};
-        {ok, {false, NotFulfilledGuidSets}} ->
-            {false, NotFulfilledGuidSets, FileCtx};
+        {ok, {false, NotFulfilledGuidConstraints}} ->
+            {false, NotFulfilledGuidConstraints, FileCtx};
         _ ->
             case file_ctx:is_root_dir_const(FileCtx) of
                 true ->
-                    RemainingGuidSets = lists:filter(fun(GuidsSet) ->
-                        not lists:member(FileGuid, GuidsSet)
-                    end, AllGuidSets),
-                    permissions_cache:cache_permission(
-                        CacheKey, {false, RemainingGuidSets}
-                    ),
-                    {false, RemainingGuidSets, FileCtx};
+                    check_and_cache_guid_constraints_fulfillment(
+                        FileCtx, CacheKey, AllGuidConstraints
+                    );
                 false ->
                     {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
-                    case is_guid_allowed(UserCtx, SessionDiscriminator, ParentCtx, AllGuidSets) of
+                    DoesParentFulfillsGuidConstraints = does_fulfills_guid_constraints(
+                        UserCtx, SessionDiscriminator, ParentCtx,
+                        AllGuidConstraints
+                    ),
+                    case DoesParentFulfillsGuidConstraints of
                         {true, _} ->
                             permissions_cache:cache_permission(CacheKey, true),
                             {true, FileCtx1};
-                        {false, RemainingGuidSets0, _} ->
-                            RemainingGuidSets1 = lists:filter(fun(GuidsSet) ->
-                                not lists:member(FileGuid, GuidsSet)
-                            end, RemainingGuidSets0),
-                            case RemainingGuidSets1 of
-                                [] ->
-                                    permissions_cache:cache_permission(CacheKey, true),
-                                    {true, FileCtx1};
-                                _ ->
-                                    permissions_cache:cache_permission(
-                                        CacheKey, {false, RemainingGuidSets1}
-                                    ),
-                                    {false, RemainingGuidSets1, FileCtx1}
-                            end
+                        {false, RemainingGuidSets, _} ->
+                            check_and_cache_guid_constraints_fulfillment(
+                                FileCtx, CacheKey, RemainingGuidSets
+                            )
                     end
             end
+    end.
+
+
+%% @private
+-spec check_and_cache_guid_constraints_fulfillment(file_ctx:ctx(),
+    CacheKey :: term(), token_utils:guid_constraints()
+) ->
+    {true, file_ctx:ctx()} |
+    {false, token_utils:guid_constraints(), file_ctx:ctx()}.
+check_and_cache_guid_constraints_fulfillment(FileCtx, CacheKey, GuidConstraints) ->
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    RemainingGuidConstraints = lists:filter(fun(GuidsSet) ->
+        not lists:member(FileGuid, GuidsSet)
+    end, GuidConstraints),
+
+    case RemainingGuidConstraints of
+        [] ->
+            permissions_cache:cache_permission(CacheKey, true),
+            {true, FileCtx};
+        _ ->
+            permissions_cache:cache_permission(
+                CacheKey, {false, RemainingGuidConstraints}
+            ),
+            {false, GuidConstraints, FileCtx}
     end.
 
 
@@ -349,12 +383,7 @@ is_subpath(PossibleSubPath, Path, PathLen) ->
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Returns intersection of relation sets.
-%% @end
-%%--------------------------------------------------------------------
 -spec converge_relations(relation(), relation()) -> relation().
 converge_relations(subpath, subpath) ->
     subpath;
