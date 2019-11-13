@@ -50,6 +50,7 @@ create() ->
             timestamp = time_utils:cluster_time_seconds()
         }
     }),
+    timer:apply_after(timer:seconds(?NONCE_TTL), ?MODULE, delete, [Nonce]),
     {ok, Nonce}.
 
 %%--------------------------------------------------------------------

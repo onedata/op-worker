@@ -7,6 +7,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Utility functions to add or strip names based on identifiers in ACLs.
+%% TODO VFS-5751
 %%% @end
 %%%--------------------------------------------------------------------
 -module(acl_names).
@@ -20,9 +21,11 @@
 %% API
 -export([strip/1, add/1]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,13 +62,9 @@ add(Acl) ->
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
+
 %% @private
-%% @doc Transforms global id to acl name representation (name and hash suffix)
-%% i. e. "fif3nhh238hdfg33f3" -> "John Dow#fif3n"
-%% @end
-%%--------------------------------------------------------------------
--spec uid_to_ace_name(od_space:id()) -> binary().
+-spec uid_to_ace_name(od_space:id()) -> undefined | binary().
 uid_to_ace_name(?owner) ->
     undefined;
 uid_to_ace_name(?everyone) ->
@@ -73,16 +72,16 @@ uid_to_ace_name(?everyone) ->
 uid_to_ace_name(?group) ->
     undefined;
 uid_to_ace_name(Uid) ->
-    {ok, FullName} = user_logic:get_full_name(?ROOT_SESS_ID, Uid),
-    FullName.
+    case user_logic:get_full_name(?ROOT_SESS_ID, Uid) of
+        {ok, FullName} -> FullName;
+        {error, _} -> undefined
+    end.
 
-%%--------------------------------------------------------------------
+
 %% @private
-%% @doc Transforms global group id to acl group name representation (name and hash suffix)
-%% i. e. "fif3nhh238hdfg33f3" -> "group1#fif3n"
-%% @end
-%%--------------------------------------------------------------------
--spec gid_to_ace_name(GroupId :: binary()) -> binary().
+-spec gid_to_ace_name(GroupId :: binary()) -> undefined | binary().
 gid_to_ace_name(GroupId) ->
-    {ok, Name} = group_logic:get_name(?ROOT_SESS_ID, GroupId),
-    Name.
+    case group_logic:get_name(?ROOT_SESS_ID, GroupId) of
+        {ok, Name} -> Name;
+        {error, _} -> undefined
+    end.
