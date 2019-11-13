@@ -361,7 +361,10 @@ run_caveats_scenario(
     ScenarioRootDirGuid = maps:get(ScenarioRootDirPath, ExtraData),
     {ok, ScenarioRootDirObjectId} = file_id:guid_to_objectid(ScenarioRootDirGuid),
 
-    Token1 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [<<"i_do_not_exist">>]}),
+    DummyGuid = <<"Z3VpZCNfaGFzaF9mNmQyOGY4OTNjOTkxMmVh">>,
+    {ok, DummyObjectId} = file_id:guid_to_objectid(DummyGuid),
+
+    Token1 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [DummyObjectId]}),
     SessId1 = lfm_permissions_test_utils:create_session(Node, Identity, Token1),
     ?assertMatch(
         {error, ?EACCES},
@@ -372,7 +375,6 @@ run_caveats_scenario(
         whitelist = [ScenarioRootDirObjectId]
     }),
     SessId2 = lfm_permissions_test_utils:create_session(Node, Identity, Token2),
-    timer:sleep(timer:seconds(10)),
     ?assertNotMatch(
         {error, ?EACCES},
         Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData), 100
