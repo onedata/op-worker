@@ -76,6 +76,16 @@ owner_acl_conversion_test() ->
         Json),
     ?assertEqual(Acl, DecodedAcl).
 
+group_owner_acl_conversion_test() ->
+    Mask = 17,
+    Acl = [?ACE(?allow_mask, Mask, ?no_flags_mask, ?group)],
+
+    Json = gui_acl_parser:acl_to_json(Acl),
+    DecodedAcl = gui_acl_parser:json_to_acl(Json),
+
+    ?assertEqual([?JSON_ACE(<<"allow">>, Mask, <<"group@">>, null, null)],
+        Json),
+    ?assertEqual(Acl, DecodedAcl).
 
 multiple_acl_conversion_test() ->
     UserId = <<"userId">>,

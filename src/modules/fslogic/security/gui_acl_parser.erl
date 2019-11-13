@@ -134,7 +134,7 @@ subject(_, Id) ->
     {AceFlags :: non_neg_integer(), Identifier :: binary()}.
 who(<<"everyone@">>, _, _) ->
     {?no_flags_mask, ?everyone};
-who(<<"group@">>, _, GroupId) ->
+who(<<"group@">>, _, _) ->
     {?no_flags_mask, ?group};
 who(<<"owner@">>, _, _) ->
     {?no_flags_mask, ?owner};
