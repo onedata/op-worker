@@ -261,7 +261,7 @@ check_data_guid_constraints(
 does_fulfills_guid_constraints(
     UserCtx, SessionDiscriminator, FileCtx, AllGuidConstraints
 ) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = get_file_guid(FileCtx),
     CacheKey = {guid_constraint, SessionDiscriminator, FileGuid},
 
     case permissions_cache:check_permission(CacheKey) of
@@ -301,7 +301,7 @@ does_fulfills_guid_constraints(
     {true, file_ctx:ctx()} |
     {false, token_utils:guid_constraints(), file_ctx:ctx()}.
 check_and_cache_guid_constraints_fulfillment(FileCtx, CacheKey, GuidConstraints) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = get_file_guid(FileCtx),
     RemainingGuidConstraints = lists:filter(fun(GuidsSet) ->
         not lists:member(FileGuid, GuidsSet)
     end, GuidConstraints),
@@ -419,3 +419,9 @@ get_session_discriminator(UserCtx) ->
         SessionAuth ->
             SessionAuth
     end.
+
+
+%% @private
+-spec get_file_guid(file_ctx:ctx()) -> file_id:file_guid().
+get_file_guid(FileCtx) ->
+    file_id:share_guid_to_guid(file_ctx:get_guid_const(FileCtx)).
