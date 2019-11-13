@@ -30,9 +30,9 @@
 ]).
 
 -export([
+    caveats_test/1,
     mkdir_test/1,
     ls_test/1,
-    ls_caveat_test/1,
     readdir_plus_test/1,
     get_child_attr_test/1,
     mv_dir_test/1,
@@ -86,9 +86,9 @@
 
 all() ->
     ?ALL([
+        caveats_test,
         mkdir_test,
         ls_test,
-        ls_caveat_test,
         readdir_plus_test,
         get_child_attr_test,
         mv_dir_test,
@@ -149,45 +149,7 @@ all() ->
 %%%===================================================================
 
 
-mkdir_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
-        test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        files = [#dir{
-            name = <<"dir1">>,
-            perms = [?traverse_container, ?add_subcontainer]
-        }],
-        posix_requires_space_privs = [?SPACE_WRITE_DATA],
-        acl_requires_space_privs = [?SPACE_WRITE_DATA],
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
-            lfm_proxy:mkdir(W, SessId, <<TestCaseRootDirPath/binary, "/dir1/dir2">>)
-        end
-    }, Config).
-
-
-ls_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-
-    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
-        test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
-        files = [#dir{
-            name = <<"dir1">>,
-            perms = [?list_container]
-        }],
-        posix_requires_space_privs = [?SPACE_READ_DATA],
-        acl_requires_space_privs = [?SPACE_READ_DATA],
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
-            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            DirGuid = maps:get(DirPath, ExtraData),
-            lfm_proxy:ls(W, SessId, {guid, DirGuid}, 0, 100)
-        end
-    }, Config).
-
-
-ls_caveat_test(Config) ->
+caveats_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     Owner = <<"user1">>,
@@ -336,12 +298,51 @@ ls_caveat_test(Config) ->
         {ok, [_ | _]},
         lfm_proxy:ls(W, SessId12, {guid, Space1RootDir}, 0, 100)
     ),
-    % But with caveats space ls should show only dirs leading to allowed files
+    % And all operations on it and it's children should be allowed
+    ?assertMatch(
+        {ok, _},
+        lfm_proxy:get_acl(W, SessId12, {guid, Space1RootDir})
+    ),
+    ?assertMatch(
+        {ok, _},
+        lfm_proxy:get_acl(W, SessId12, {guid, DirGuid})
+    ),
+    % But with caveats space ls should show only dirs leading to allowed files.
     Token13 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1]}),
     SessId13 = lfm_permissions_test_utils:create_session(W, Identity, Token13),
     ?assertMatch(
         {ok, [{DirGuid, DirName}]},
         lfm_proxy:ls(W, SessId13, {guid, Space1RootDir}, 0, 100)
+    ),
+    % On such dirs (ancestor) it should be possible to perform only certain
+    % operations like ls, stat, resolve_guid, get_parent and resolve_path.
+    ?assertMatch(
+        {ok, [F1]},
+        lfm_proxy:ls(W, SessId13, {guid, DirGuid}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, #file_attr{name = DirName, type = ?DIRECTORY_TYPE}},
+        lfm_proxy:stat(W, SessId13, {guid, DirGuid})
+    ),
+    ?assertMatch(
+        {ok, DirGuid},
+        lfm_proxy:resolve_guid(W, SessId13, DirPath)
+    ),
+    ?assertMatch(
+        {ok, Space1RootDir},
+        lfm_proxy:get_parent(W, SessId13, {guid, DirGuid})
+    ),
+    ?assertMatch(
+        {ok, DirPath},
+        lfm_proxy:get_file_path(W, SessId13, DirGuid)
+    ),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:get_acl(W, SessId13, {guid, DirGuid})
+    ),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:create(W, SessId13, DirGuid, <<"file1">>, 8#777)
     ),
 
     % Test listing with caveats and options (offset, limit)
@@ -359,6 +360,44 @@ ls_caveat_test(Config) ->
         {ok, [F4]},
         lfm_proxy:ls(W, SessId14, {guid, DirGuid}, 2, 1)
     ).
+
+
+mkdir_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container, ?add_subcontainer]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
+            lfm_proxy:mkdir(W, SessId, <<TestCaseRootDirPath/binary, "/dir1/dir2">>)
+        end
+    }, Config).
+
+
+ls_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?list_container]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            DirGuid = maps:get(DirPath, ExtraData),
+            lfm_proxy:ls(W, SessId, {guid, DirGuid}, 0, 100)
+        end
+    }, Config).
 
 
 readdir_plus_test(Config) ->
