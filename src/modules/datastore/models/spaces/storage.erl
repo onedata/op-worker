@@ -50,6 +50,8 @@
 -spec delete(od_storage:id()) -> ok | {error, term()}.
 delete(StorageId) ->
     datastore_model:delete(?CTX, StorageId).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of all records.
@@ -215,7 +217,7 @@ upgrade_record(4, {_, Name, Helpers, Readonly, LumaConfig}) ->
                 extended_direct_io = ExtendedDirectIO,
                 storage_path_type = ?CANONICAL_STORAGE_PATH
             } || {_, HelperName, HelperArgs, AdminCtx, Insecure,
-                ExtendedDirectIO} <- Helpers
+            ExtendedDirectIO} <- Helpers
         ],
         Readonly,
         LumaConfig

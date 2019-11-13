@@ -35,7 +35,7 @@
 
 -export([migrate_to_zone/0]).
 
--compile({no_auto_import,[get/1]}).
+-compile({no_auto_import, [get/1]}).
 
 %%%===================================================================
 %%% API
@@ -98,7 +98,7 @@ get_shared_data(StorageId, SpaceId) ->
     }).
 
 
--spec delete(od_storage:id()) -> ok | errors:error().
+-spec delete(od_storage:id()) -> ok | {error, term()}.
 delete(StorageId) ->
     case delete_in_zone(StorageId) of
         ok -> storage_config:delete(StorageId);
@@ -257,7 +257,7 @@ get_qos_parameters(StorageId, SpaceId) ->
 %% any space.
 %% @end
 %%--------------------------------------------------------------------
--spec safe_delete(od_storage:id()) -> ok | errors:error().
+-spec safe_delete(od_storage:id()) -> ?ERROR_STORAGE_IN_USE | {error, term()}.
 safe_delete(StorageId) ->
     critical_section:run({storage_support, StorageId}, fun() ->
         case supports_any_space(StorageId) of
@@ -332,7 +332,7 @@ migrate_to_zone(false, 0) ->
 migrate_to_zone(false, Retries) ->
     ?warning("There is no connection to Onezone. Next retry in 10 seconds"),
     timer:sleep(timer:seconds(10)),
-    migrate_to_zone(oneprovider:is_connected_to_oz(), Retries-1);
+    migrate_to_zone(oneprovider:is_connected_to_oz(), Retries - 1);
 migrate_to_zone(true, _) ->
     ?info("Starting storage migration procedure..."),
     {ok, StorageDocs} = storage_config:list(),
@@ -349,7 +349,13 @@ migrate_to_zone(true, _) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
 %% @private
+%% Renames old `storage` record to `storage_config` and creates
+%% appropriate storages in Onezone.
+%% @end
+%%--------------------------------------------------------------------
 -spec revamp_storage_docs(storage_config:doc()) -> ok.
 revamp_storage_docs(#document{key = StorageId, value = Storage}) ->
     #storage{
@@ -364,7 +370,7 @@ revamp_storage_docs(#document{key = StorageId, value = Storage}) ->
         readonly = Readonly,
         luma_config = LumaConfig
     },
-    case storage_config:save_doc( #document{key = StorageId, value = StorageConfig}) of
+    case storage_config:save_doc(#document{key = StorageId, value = StorageConfig}) of
         {ok, _} -> ok;
         {error, already_exists} -> ok;
         Error -> throw(Error)

@@ -357,7 +357,7 @@ set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
 %% Sets storage mount in root value if it is not supporting any space.
 %% @end
 %%--------------------------------------------------------------------
--spec set_mount_in_root(od_storage:id(), boolean()) -> ok.
+-spec set_mount_in_root(od_storage:id(), boolean()) -> ok | ?ERROR_STORAGE_IN_USE.
 set_mount_in_root(StorageId, Value) when is_boolean(Value)->
     case storage_logic:supports_any_space(StorageId) of
         true ->
