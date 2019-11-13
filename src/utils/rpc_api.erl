@@ -256,8 +256,7 @@ new_luma_config(URL, ApiKey) ->
     luma_config:new(URL, ApiKey).
 
 
--spec verify_storage_on_all_nodes(helpers:helper()) ->
-    ok | {error, term()} | {error, term(), Stacktrace :: list()}.
+-spec verify_storage_on_all_nodes(helpers:helper()) -> ok | errors:error().
 verify_storage_on_all_nodes(Helper) ->
     storage_detector:verify_storage_on_all_nodes(Helper).
 
