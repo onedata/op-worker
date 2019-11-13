@@ -372,13 +372,14 @@ handle_fuse_request(UserCtx, #verify_storage_test_file{
     file_id = FileId,
     file_content = FileContent
 }, undefined) ->
+    Session = user_ctx:get_session_id(UserCtx),
     case storage_req:verify_storage_test_file(UserCtx, SpaceId,
         StorageId, FileId, FileContent) of
         #fuse_response{status = #status{code = ?OK}} = Ans ->
-            Session = user_ctx:get_session_id(UserCtx),
-            session:set_direct_io(Session, true),
+            session:set_direct_io(Session, SpaceId, true),
             Ans;
         Error ->
+            session:set_direct_io(Session, SpaceId, false),
             Error
     end.
 
