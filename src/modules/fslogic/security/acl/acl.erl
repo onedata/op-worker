@@ -125,12 +125,16 @@ uid_to_ace_name(?group) ->
 uid_to_ace_name(?everyone) ->
     undefined;
 uid_to_ace_name(UserId) ->
-    {ok, FullName} = user_logic:get_full_name(?ROOT_SESS_ID, UserId),
-    FullName.
+    case user_logic:get_full_name(?ROOT_SESS_ID, UserId) of
+        {ok, FullName} -> FullName;
+        {error, _} -> undefined
+    end.
 
 
 %% @private
 -spec gid_to_ace_name(od_group:id()) -> undefined | od_group:name().
 gid_to_ace_name(GroupId) ->
-    {ok, Name} = group_logic:get_name(?ROOT_SESS_ID, GroupId),
-    Name.
+    case group_logic:get_name(?ROOT_SESS_ID, GroupId) of
+        {ok, Name} -> Name;
+        {error, _} -> undefined
+    end.

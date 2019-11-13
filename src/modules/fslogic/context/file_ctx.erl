@@ -1235,7 +1235,7 @@ file_exists_const(_) ->
 %%--------------------------------------------------------------------
 -spec is_in_user_space_const(ctx(), user_ctx:ctx()) -> boolean().
 is_in_user_space_const(FileCtx, UserCtx) ->
-    case is_root_dir_const(FileCtx) of
+    case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             true;
         false ->
