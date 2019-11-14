@@ -101,11 +101,14 @@ end).
 
 -define(HIST_ASSERT(DomainsAndBytes, Length),
     fun(HistMap) ->
-        maps:fold(fun(Domain,  TransferredBytes, AccIn) ->
-            case TransferredBytes > 0 of
+        maps:fold(fun(Domain, TransferredBytes, AccIn) ->
+            case is_integer(TransferredBytes) andalso TransferredBytes > 0 of
                 true ->
                     Hist = maps:get(Domain, HistMap),
                     AccIn and (lists:sum(Hist) =:= TransferredBytes) and (length(Hist) =:= Length);
+                false when is_function(TransferredBytes) ->
+                    Hist = maps:get(Domain, HistMap),
+                    AccIn and TransferredBytes(lists:sum(Hist));
                 false ->
                     AccIn
             end
