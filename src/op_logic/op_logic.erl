@@ -129,7 +129,6 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
         ensure_exists(ReqCtx2),
         ensure_authorized(ReqCtx2),
         validate_request(ReqCtx2),
-
         process_request(ReqCtx2)
     catch
         % Intentional errors (throws) are be returned to client as is

@@ -75,7 +75,13 @@
     list_xattr_test/1,
     set_xattr_test/1,
     remove_xattr_test/1,
-
+    
+    add_qos_entry_test/1,
+    get_qos_entry_test/1,
+    remove_qos_entry_test/1,
+    get_effective_file_qos_test/1,
+    check_qos_fulfillment_test/1,
+    
     permission_cache_test/1,
     expired_session_test/1
 ]).
@@ -130,6 +136,12 @@ all() ->
         list_xattr_test,
         set_xattr_test,
         remove_xattr_test,
+
+        add_qos_entry_test,
+        get_qos_entry_test,
+        remove_qos_entry_test,
+        get_effective_file_qos_test,
+        check_qos_fulfillment_test,
 
         permission_cache_test,
         expired_session_test
@@ -1097,6 +1109,128 @@ remove_xattr_test(Config) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
             lfm_proxy:remove_xattr(W, SessId, {guid, FileGuid}, <<"myxattr">>)
+        end
+    }, Config).
+
+
+add_qos_entry_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileGuid = maps:get(FilePath, ExtraData),
+            lfm_proxy:add_qos_entry(W, SessId, {guid, FileGuid}, <<"country=FR">>, 1)
+        end
+    }, Config).
+
+
+get_qos_entry_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata],
+            on_create = fun(OwnerSessId, Guid) ->
+                {ok, QosEntryId} = lfm_proxy:add_qos_entry(
+                    W, OwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                ),
+                QosEntryId
+            end 
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            QosEntryId = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_qos_entry(W, SessId, QosEntryId)
+        end
+    }, Config).
+
+
+remove_qos_entry_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?write_metadata],
+            on_create = fun(OwnerSessId, Guid) ->
+                {ok, QosEntryId} = lfm_proxy:add_qos_entry(
+                    W, OwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                ),
+                QosEntryId
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_WRITE_DATA],
+        acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            QosEntryId = maps:get(FilePath, ExtraData),
+            lfm_proxy:remove_qos_entry(W, SessId, QosEntryId)
+        end
+    }, Config).
+
+
+get_effective_file_qos_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata],
+            on_create = fun(OwnerSessId, Guid) ->
+                {ok, _QosEntryId} = lfm_proxy:add_qos_entry(
+                    W, OwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                )
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            lfm_proxy:get_effective_file_qos(W, SessId, {path, FilePath})
+        end
+    }, Config).
+
+
+check_qos_fulfillment_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata],
+            on_create = fun(OwnerSessId, Guid) ->
+                {ok, QosEntryId} = lfm_proxy:add_qos_entry(
+                    W, OwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                ),
+                QosEntryId
+            end
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            QosEntryId = maps:get(FilePath, ExtraData),
+            lfm_proxy:check_qos_fulfilled(W, SessId, QosEntryId)
         end
     }, Config).
 

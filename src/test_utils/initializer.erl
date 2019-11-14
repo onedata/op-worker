@@ -716,6 +716,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
 
     cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
+    ok = init_qos_bounded_cache(Config),
 
     %% Setup storage
     lists:foreach(fun({SpaceId, _}) ->
@@ -1347,6 +1348,15 @@ index_of(Value, List) ->
         {Value, Index} -> Index;
         false -> not_found
     end.
+
+-spec init_qos_bounded_cache(list()) -> ok.
+init_qos_bounded_cache(Config) ->
+    DifferentProvidersWorkers = get_different_domain_workers(Config),
+    {Results, BadNodes} = rpc:multicall(
+        DifferentProvidersWorkers, qos_bounded_cache, ensure_exists_for_all_spaces, []
+    ),
+    ?assertMatch([], BadNodes),
+    lists:foreach(fun(Result) -> ?assertMatch(ok, Result) end, Results).
 
 
 %% @private

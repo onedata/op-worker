@@ -752,10 +752,10 @@ transfer_continues_on_modified_storage(Config, Type, FileKeyType) ->
                     files_to_process => 111,
                     files_processed => 111,
                     files_replicated => FilesNum,
-                    bytes_replicated => TotalTransferredBytes,
-                    hr_hist => ?HOUR_HIST(#{ProviderId1 => TotalTransferredBytes}),
-                    dy_hist => ?DAY_HIST(#{ProviderId1 => TotalTransferredBytes}),
-                    mth_hist => ?MONTH_HIST(#{ProviderId1 => TotalTransferredBytes})
+                    bytes_replicated => fun(X) -> X >= TotalTransferredBytes end,
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => fun(X) -> X >= TotalTransferredBytes end}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => fun(X) -> X >= TotalTransferredBytes end}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => fun(X) -> X >= TotalTransferredBytes end})
                 },
                 distribution = [
                     #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},

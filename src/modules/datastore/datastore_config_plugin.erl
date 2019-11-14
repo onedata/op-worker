@@ -72,6 +72,9 @@ get_models() -> [
     harvesting_state,
     idp_access_token,
     tree_traverse_job,
+    file_qos,
+    qos_entry,
+    file_meta_posthooks,
     storage_sync_links,
     storage_traverse_job
 ].

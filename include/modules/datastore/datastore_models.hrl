@@ -12,6 +12,7 @@
 -ifndef(DATASTORE_SPECIFIC_MODELS_HRL).
 -define(DATASTORE_SPECIFIC_MODELS_HRL, 1).
 
+-include("modules/datastore/qos.hrl").
 -include("modules/events/subscriptions.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
@@ -187,10 +188,6 @@
     cached_identity_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()}
 }).
 
--record(authorization_nonce, {
-    timestamp :: integer()
-}).
-
 -record(file_download_code, {
     session_id :: session:id(),
     file_guid :: fslogic_worker:file_guid()
@@ -262,6 +259,43 @@
 % An empty model used for creating storage_sync_links
 % For more information see storage_sync_links.erl
 -record(storage_sync_links, {}).
+
+% This model can be associated with file and holds information about hooks
+% for given file. Hooks will be executed on future change of given
+% file's file_meta document.
+-record(file_meta_posthooks, {
+    hooks = #{} :: #{file_meta_posthooks:hook_identifier() => file_meta_posthooks:hook()}
+}).
+
+% This model holds information about QoS entries defined for given file.
+% Each file can be associated with zero or one such record. It is used to
+% calculate effective_file_qos. (see file_qos.erl)
+-record(file_qos, {
+    % List containing qos_entry IDs defined for given file.
+    qos_entries = [] :: [qos_entry:id()],
+    % Mapping storage ID -> list containing qos_entry IDs.
+    % When new QoS entry is added for file or directory storages on which replicas
+    % should be stored are calculated using QoS expression. Calculated storages
+    % are used to create traverse requests in qos_entry document. When provider
+    % notices change in qos_entry document, it checks whether traverse request
+    % for his storage is present. If yes provider updates entry in assigned_entries
+    % map for his local storage.
+    assigned_entries = #{} :: file_qos:assigned_entries()
+}).
+
+% This model holds information about QoS entry, that is QoS requirement
+% defined by the user for file or directory through QoS expression and
+% number of required replicas. Each such requirement creates new qos_entry
+% document even if expressions are exactly the same. For each file / directory
+% multiple qos_entry can be defined.
+-record(qos_entry, {
+    file_uuid :: file_meta:uuid(),
+    expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.
+    replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
+    is_possible = false :: boolean(),
+    % These are requests to providers to start QoS traverse.
+    traverse_reqs = #{} :: qos_entry:traverse_map()
+}).
 
 -record(file_meta, {
     name :: undefined | file_meta:name(),
