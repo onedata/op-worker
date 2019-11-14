@@ -372,19 +372,11 @@ code_change(_OldVsn, State, _Extra) ->
 -spec delegate_request_insecure(worker_ref(), term(), req_id(), respond_via()) ->
     ok | error().
 delegate_request_insecure(proc, HandlerFun, ReqId, RespondVia) ->
-    Pid = spawn(fun() ->
-        Response = try
-            HandlerFun()
-        catch
-            Type:Error ->
-                ?error("Failed to handle delegated request ~p due to ~p:~p", [
-                    ReqId, Type, Error
-                ]),
-                #processing_status{code = 'ERROR'}
-        end,
-        respond(RespondVia, ReqId, Response)
-    end),
-    report_pending_request(RespondVia, Pid, ReqId);
+    delegate_proc_request_insecure(node(), HandlerFun, ReqId, RespondVia);
+
+delegate_request_insecure({proc, Key}, HandlerFun, ReqId, RespondVia) ->
+    Node = consistent_hashing:get_node(Key),
+    delegate_proc_request_insecure(Node, HandlerFun, ReqId, RespondVia);
 
 delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->
     ReplyFun =
@@ -404,6 +396,20 @@ delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->
             Error
     end.
 
+delegate_proc_request_insecure(Node, HandlerFun, ReqId, RespondVia) ->
+    Pid = spawn(Node, fun() ->
+        Response = try
+            HandlerFun()
+        catch
+            Type:Error ->
+                ?error("Failed to handle delegated request ~p due to ~p:~p", [
+                    ReqId, Type, Error
+                ]),
+                #processing_status{code = 'ERROR'}
+        end,
+        respond(RespondVia, ReqId, Response)
+    end),
+    report_pending_request(RespondVia, Pid, ReqId).
 
 %% @private
 -spec report_pending_request(respond_via(), pid(), req_id()) -> ok.

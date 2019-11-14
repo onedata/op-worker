@@ -167,6 +167,12 @@ route_direct_message(#server_message{message_id = #message_id{
 %%--------------------------------------------------------------------
 -spec route_and_ignore_answer(Msg :: #client_message{}) -> ok.
 route_and_ignore_answer(#client_message{
+    message_body = FuseRequest = #fuse_request{fuse_request = #file_request{context_guid = ContextGuid}}
+} = Msg) ->
+    Uuid = file_id:guid_to_uuid(ContextGuid),
+    Req = {fuse_request, effective_session_id(Msg), FuseRequest},
+    ok = worker_proxy:cast({id, fslogic_worker, Uuid}, Req);
+route_and_ignore_answer(#client_message{
     message_body = #fuse_request{} = FuseRequest
 } = Msg) ->
     Req = {fuse_request, effective_session_id(Msg), FuseRequest},
@@ -268,11 +274,19 @@ answer_or_delegate(Msg = #client_message{
 
 answer_or_delegate(#client_message{
     message_id = MsgId,
-    message_body = Request = #get_remote_document{}
+    message_body = Request = #get_remote_document{key = Key}
 }, RIB) ->
-    delegate_request(proc, fun() ->
+    delegate_request({proc, Key}, fun() ->
         datastore_remote_driver:handle(Request)
     end, MsgId, RIB);
+
+answer_or_delegate(Msg = #client_message{
+    message_id = MsgId,
+    message_body = FuseRequest = #fuse_request{fuse_request = #file_request{context_guid = ContextGuid}}
+}, RIB) ->
+    Uuid = file_id:guid_to_uuid(ContextGuid),
+    Req = {fuse_request, effective_session_id(Msg), FuseRequest},
+    delegate_request({id, fslogic_worker, Uuid}, Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
@@ -283,10 +297,11 @@ answer_or_delegate(Msg = #client_message{
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
-    message_body = ProviderRequest = #provider_request{}
+    message_body = ProviderRequest = #provider_request{context_guid = ContextGuid}
 }, RIB) ->
+    Uuid = file_id:guid_to_uuid(ContextGuid),
     Req = {provider_request, effective_session_id(Msg), ProviderRequest},
-    delegate_request(fslogic_worker, Req, MsgId, RIB);
+    delegate_request({id, fslogic_worker, Uuid}, Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = Id,
@@ -306,6 +321,7 @@ answer_or_delegate(Msg = #client_message{
     delegate_request(dbsync_worker, Req, MsgId, RIB);
 
 answer_or_delegate(Msg, _) ->
+    % TODO - rutowanie na wlasciwy node, sesja na wlasciwym node?
     event_router:route_message(Msg).
 
 
