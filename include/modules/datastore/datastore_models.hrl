@@ -185,6 +185,7 @@
 
 -record(od_storage, {
     provider :: od_provider:id() | undefined,
+    spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
     cache_state = #{} :: cache_state()
 }).
@@ -331,7 +332,7 @@
     helpers = [] :: [storage_config:helper()],
     readonly = false :: boolean(),
     luma_config = undefined :: undefined | luma_config:config(),
-    mount_in_root = false :: boolean()
+    imported_storage = false :: boolean()
 }).
 
 

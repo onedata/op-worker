@@ -1290,9 +1290,9 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
 %% in root.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_mount_in_root(proplists:proplist()) -> boolean().
-maybe_mount_in_root(ProviderConfig) ->
-    case proplists:get_value(<<"mounted_in_root">>, ProviderConfig) of
+-spec maybe_imported_storage(proplists:proplist()) -> boolean().
+maybe_imported_storage(ProviderConfig) ->
+    case proplists:get_value(<<"imported_storage">>, ProviderConfig) of
         <<"true">> -> true;
         _ -> false
     end.
@@ -1312,7 +1312,7 @@ setup_storage(Worker, Domain, ProviderConfig, Config, StorageMapping) ->
                 undefined ->
                     ok;
                 StorageId ->
-                    on_space_supported(Worker, StorageId, maybe_mount_in_root(ProviderConfig))
+                    on_space_supported(Worker, StorageId, maybe_imported_storage(ProviderConfig))
             end;
         StorageName ->
             StorageId = case ?config({storage_id, Domain}, Config) of
@@ -1322,7 +1322,7 @@ setup_storage(Worker, Domain, ProviderConfig, Config, StorageMapping) ->
                 StId ->
                     StId
             end,
-            on_space_supported(Worker, StorageId, maybe_mount_in_root(ProviderConfig))
+            on_space_supported(Worker, StorageId, maybe_imported_storage(ProviderConfig))
     end.
 
 %%--------------------------------------------------------------------
@@ -1334,7 +1334,7 @@ setup_storage(Worker, Domain, ProviderConfig, Config, StorageMapping) ->
 -spec on_space_supported(atom(), od_storage:id(), boolean()) -> any().
 on_space_supported(Worker, StorageId, MountInRoot) ->
     case MountInRoot of
-        true -> ok = rpc:call(Worker, storage_config, set_mount_in_root_insecure, [StorageId, true]);
+        true -> ok = rpc:call(Worker, storage_config, set_imported_storage_insecure, [StorageId, true]);
         false -> ok
     end.
 

@@ -21,7 +21,7 @@
 
 %% API
 -export([new/2, new/5]).
--export([get_id/1, get_name/1, is_readonly/1, is_mount_in_root/1,
+-export([get_id/1, get_name/1, is_readonly/1, is_imported_storage/1,
     get_helpers/1, get_luma_config_map/1, get_helper/1, get_type/1]).
 -export([select_helper/2, select/1]).
 -export([get/1, exists/1, delete/1, update/2, save_doc/1, list/0]).
@@ -31,7 +31,7 @@
 %% Exports for onepanel RPC
 -export([update_name/2, update_helper_args/3, update_admin_ctx/3,
     update_luma_config/2, set_luma_config/2, set_insecure/3, set_readonly/2,
-    set_mount_in_root/2, set_mount_in_root_insecure/2, describe/1]).
+    set_imported_storage/2, set_imported_storage_insecure/2, describe/1]).
 -export([get_luma_config/1, is_luma_enabled/1]).
 
 %% datastore_model callbacks
@@ -67,7 +67,7 @@ update(Key, Diff) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates storage.
+%% Saves storage document in datastore.
 %% @end
 %%--------------------------------------------------------------------
 -spec save_doc(doc()) -> {ok, od_storage:id()} | {error, term()}.
@@ -137,7 +137,7 @@ new(Name, Helpers, ReadOnly, LumaConfig, MiR) ->
         helpers = Helpers,
         readonly = ReadOnly,
         luma_config = LumaConfig,
-        mount_in_root = MiR
+        imported_storage = MiR
     }}.
 
 
@@ -182,14 +182,14 @@ is_readonly(#document{value = #storage_config{} = Value}) ->
 %% Checks whether storage is mounted in root.
 %% @end
 %%--------------------------------------------------------------------
--spec is_mount_in_root(record() | doc() | od_storage:id()) -> boolean().
-is_mount_in_root(#storage_config{mount_in_root = MiR}) ->
-    MiR;
-is_mount_in_root(#document{value = #storage_config{} = Value}) ->
-    is_mount_in_root(Value);
-is_mount_in_root(StorageId) ->
+-spec is_imported_storage(record() | doc() | od_storage:id()) -> boolean().
+is_imported_storage(#storage_config{imported_storage = ImportedStorage}) ->
+    ImportedStorage;
+is_imported_storage(#document{value = #storage_config{} = Value}) ->
+    is_imported_storage(Value);
+is_imported_storage(StorageId) ->
     {ok, #document{value = Value}} = ?MODULE:get(StorageId),
-    is_mount_in_root(Value).
+    is_imported_storage(Value).
 
 -spec get_helper(record() | doc() | od_storage:id()) -> helper().
 get_helper(Storage) ->
@@ -354,28 +354,28 @@ set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets storage mount in root value if it is not supporting any space.
+%% Sets imported storage value if storage is not supporting any space.
 %% @end
 %%--------------------------------------------------------------------
--spec set_mount_in_root(od_storage:id(), boolean()) -> ok | ?ERROR_STORAGE_IN_USE.
-set_mount_in_root(StorageId, Value) when is_boolean(Value)->
+-spec set_imported_storage(od_storage:id(), boolean()) -> ok | ?ERROR_STORAGE_IN_USE.
+set_imported_storage(StorageId, Value) when is_boolean(Value)->
     case storage_logic:supports_any_space(StorageId) of
         true ->
             ?ERROR_STORAGE_IN_USE;
         false ->
-            set_mount_in_root_insecure(StorageId, Value)
+            set_imported_storage_insecure(StorageId, Value)
     end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sets storage mount in root value.
+%% Sets imported storage value.
 %% @end
 %%--------------------------------------------------------------------
--spec set_mount_in_root_insecure(od_storage:id(), boolean()) -> ok.
-set_mount_in_root_insecure(StorageId, Value) ->
+-spec set_imported_storage_insecure(od_storage:id(), boolean()) -> ok.
+set_imported_storage_insecure(StorageId, Value) ->
     ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
-        {ok, Storage#storage_config{mount_in_root = Value}}
+        {ok, Storage#storage_config{imported_storage = Value}}
     end)).
 
 
@@ -449,7 +449,7 @@ describe(StorageId) ->
                 <<"storagePathType">> => helper:get_storage_path_type(Helper),
                 <<"lumaEnabled">> => maps:get(enabled, LumaConfigMap, false),
                 <<"lumaUrl">> => maps:get(url, LumaConfigMap, undefined),
-                <<"mountInRoot">> => is_mount_in_root(Storage)
+                <<"mountInRoot">> => is_imported_storage(Storage)
             }};
         {error, _} = Error -> Error
     end.
@@ -512,7 +512,7 @@ get_record_struct(1) ->
             {url, string},
             {api_key, string}
         ]}},
-        {mount_in_root, boolean}
+        {imported_storage, boolean}
     ]}.
 
 

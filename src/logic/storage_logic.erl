@@ -25,15 +25,18 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([create/1, get/1]).
+-export([safe_delete/1]).
 -export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_support/2]).
 -export([set_qos_parameters/2, get_qos_parameters/2]).
 -export([describe/1]).
 -export([supports_any_space/1]).
--export([safe_delete/1]).
 
 -export([migrate_to_zone/0]).
+
+% for test purpose
+-export([create_in_zone/2, delete_in_zone/1]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -67,11 +70,14 @@ create(StorageConfig) ->
 -spec create_in_zone(storage_config:name(), od_storage:id() | undefined) ->
     {ok, od_storage:id()} | errors:error().
 create_in_zone(StorageName, StorageId) ->
-    ?CREATE_RETURN_ID(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
         data = #{<<"name">> => StorageName}
-    })).
+    }),
+    ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
+    end)).
 
 
 -spec get(od_storage:id()) -> {ok, od_storage:doc()} | errors:error().
@@ -98,6 +104,24 @@ get_shared_data(StorageId, SpaceId) ->
     }).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes storage. Fails with an error if the storage supports
+%% any space.
+%% @end
+%%--------------------------------------------------------------------
+-spec safe_delete(od_storage:id()) -> ?ERROR_STORAGE_IN_USE | {error, term()}.
+safe_delete(StorageId) ->
+    case supports_any_space(StorageId) of
+        true ->
+            ?ERROR_STORAGE_IN_USE;
+        false ->
+            % TODO VFS-5124 Remove from rtransfer
+            delete(StorageId)
+    end.
+
+
+%% @private
 -spec delete(od_storage:id()) -> ok | {error, term()}.
 delete(StorageId) ->
     case delete_in_zone(StorageId) of
@@ -109,10 +133,15 @@ delete(StorageId) ->
 %% @private
 -spec delete_in_zone(od_storage:id()) -> ok | errors:error().
 delete_in_zone(StorageId) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = delete,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance}
-    }).
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id()),
+        % only storage not supporting any space can be deleted so no need to invalidate od_space cache
+        gs_client_worker:invalidate_cache(od_storage, StorageId)
+    end).
 
 
 -spec support_space(od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
@@ -130,7 +159,7 @@ support_space_insecure(StorageId, SerializedToken, SupportSize) ->
 %% @TODO VFS-5497 This check will not be needed when multisupport is implemented (will be checked in zone)
     case check_support_token(SerializedToken) of
         {ok, SpaceId} ->
-            case storage_config:is_mount_in_root(StorageId) andalso supports_any_space(StorageId) of
+            case storage_config:is_imported_storage(StorageId) andalso supports_any_space(StorageId) of
                 true -> ?ERROR_STORAGE_IN_USE;
                 false ->
                     Data = #{<<"token">> => SerializedToken, <<"size">> => SupportSize},
@@ -251,35 +280,21 @@ get_qos_parameters(StorageId, SpaceId) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes storage. Fails with an error if the storage supports
-%% any space.
-%% @end
-%%--------------------------------------------------------------------
--spec safe_delete(od_storage:id()) -> ?ERROR_STORAGE_IN_USE | {error, term()}.
-safe_delete(StorageId) ->
-    critical_section:run({storage_support, StorageId}, fun() ->
-        case supports_any_space(StorageId) of
-            true ->
-                ?ERROR_STORAGE_IN_USE;
-            false ->
-                % TODO VFS-5124 Remove from rtransfer
-                delete(StorageId)
-        end
-    end).
+-spec get_spaces(od_storage:id()) -> {ok, [od_space:id()]} | errors:error().
+get_spaces(StorageId) ->
+    case get(StorageId) of
+        {ok, #document{value = #od_storage{spaces = Spaces}}} ->
+            {ok, Spaces};
+        Error -> Error
+    end.
 
 
--spec supports_any_space(StorageId :: od_storage:id()) -> boolean().
+-spec supports_any_space(od_storage:id()) -> boolean().
 supports_any_space(StorageId) ->
-    case provider_logic:get_spaces() of
-        {ok, Spaces} ->
-            lists:any(fun(SpaceId) ->
-                {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
-                lists:member(StorageId, StorageIds)
-            end, Spaces);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            false
+    case get_spaces(StorageId) of
+        {ok, []} -> false;
+        {ok, _Spaces} -> true;
+        {error, _} -> false
     end.
 
 
@@ -335,14 +350,15 @@ migrate_to_zone(false, Retries) ->
     migrate_to_zone(oneprovider:is_connected_to_oz(), Retries - 1);
 migrate_to_zone(true, _) ->
     ?info("Starting storage migration procedure..."),
-    {ok, StorageDocs} = storage_config:list(),
-    lists:foreach(fun revamp_storage_docs/1, StorageDocs),
+    {ok, StorageDocs} = storage:list(),
+    lists:foreach(fun migrate_storage_docs/1, StorageDocs),
 
     {ok, Spaces} = provider_logic:get_spaces(),
     lists:foreach(fun migrate_space_support/1, Spaces),
 
     % Remove virtual storage (with id equal to that of provider) in Onezone
-    case delete_in_zone(oneprovider:get_id()) of
+    % call using ?MODULE macro for mocking in tests
+    case ?MODULE:delete_in_zone(oneprovider:get_id()) of
         ok -> ok;
         ?ERROR_NOT_FOUND -> ok;
         Error -> throw(Error)
@@ -356,8 +372,8 @@ migrate_to_zone(true, _) ->
 %% appropriate storages in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec revamp_storage_docs(storage_config:doc()) -> ok.
-revamp_storage_docs(#document{key = StorageId, value = Storage}) ->
+-spec migrate_storage_docs(storage_config:doc()) -> ok.
+migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
     #storage{
         name = Name,
         helpers = Helpers,
@@ -378,51 +394,54 @@ revamp_storage_docs(#document{key = StorageId, value = Storage}) ->
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            ?notice("Creating storage ~p in Onezone", [StorageId]),
-            {ok, StorageId} = create_in_zone(Name, StorageId)
+            % call using ?MODULE macro for mocking in tests
+            {ok, StorageId} = ?MODULE:create_in_zone(Name, StorageId),
+            ?notice("Storage ~p created in Onezone", [StorageId])
     end,
-    ok = storage_config:delete(StorageId).
+    ok = storage:delete(StorageId).
 
 
 %% @private
 -spec migrate_space_support(od_space:id()) -> ok.
 migrate_space_support(SpaceId) ->
-    {StorageIds, MiR} = case space_storage:get(SpaceId) of
+    {StorageId, ImportedStorage} = case space_storage:get(SpaceId) of
         {ok, SpaceStorage} ->
-            S = space_storage:get_storage_ids(SpaceStorage),
+            [S] = space_storage:get_storage_ids(SpaceStorage),
             M = space_storage:get_mounted_in_root(SpaceStorage),
-            {S, M};
+            {S, lists:member(S, M)};
         ?ERROR_NOT_FOUND ->
             {[], []}
     end,
-    lists:foreach(fun(StorageId) ->
-        case space_logic:is_supported_by_storage(SpaceId, StorageId) of
-            true -> ok;
-            false ->
-                case revamp_space_support(StorageId, SpaceId) of
-                    ok -> ?notice("Support of space ~p by storage ~p revamped in Onezone", [SpaceId]);
-                    Error -> throw(Error)
-                end
-        end
-    end, StorageIds),
-    lists:foreach(fun(StorageId) ->
-        ok = storage_config:set_mount_in_root_insecure(StorageId, true),
-        ?notice("Storage ~p set mount in root", [StorageId])
-    end, MiR),
-    ok = space_storage:delete(SpaceId),
-    ?info("Supports of space: ~p successfully migrated").
+    case space_logic:is_supported_by_storage(SpaceId, StorageId) of
+        true -> ok;
+        false ->
+            case upgrade_legacy_support(StorageId, SpaceId) of
+                ok -> ?notice("Support of space ~p by storage ~p upgraded in Onezone", [SpaceId]);
+                Error1 -> throw(Error1)
+            end
+    end,
+    case ImportedStorage of
+        true -> ok = storage_config:set_imported_storage_insecure(StorageId, true);
+        false -> ok
+    end,
+    case space_storage:delete(SpaceId) of
+        ok -> ok;
+        ?ERROR_NOT_FOUND -> ok;
+        Error2 -> throw(Error2)
+    end,
+    ?notice("Support of space: ~p successfully migrated", [SpaceId]).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @private
-%% Revamps space support in Onezone to model with new storages.
+%% Upgrades legacy space support in Onezone to model with new storages.
 %% Dedicated for upgrading Oneprovider from 19.02.* to the next major release.
 %% @end
 %%--------------------------------------------------------------------
--spec revamp_space_support(od_storage:id(), od_space:id()) -> ok | errors:error().
-revamp_space_support(StorageId, SpaceId) ->
+-spec upgrade_legacy_support(od_storage:id(), od_space:id()) -> ok | errors:error().
+upgrade_legacy_support(StorageId, SpaceId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_storage, id = StorageId, aspect = {revamp_space_support, SpaceId}}
+        gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_legacy_support, SpaceId}}
     }).

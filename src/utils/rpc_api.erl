@@ -30,7 +30,7 @@
     storage_update_helper_args/3,
     storage_set_insecure/3,
     storage_set_readonly/2,
-    storage_set_mount_in_root/2,
+    storage_set_imported_storage/2,
     storage_set_luma_config/2,
     storage_set_qos_parameters/2,
     storage_update_luma_config/2,
@@ -39,7 +39,7 @@
     get_storage_config_by_name/1,
     storage_exists/1,
     storage_describe/1,
-    storage_is_mounted_in_root/1,
+    storage_is_imported_storage/1,
     invalidate_luma_cache/1,
     new_helper/5,
     new_luma_config/2,
@@ -183,10 +183,10 @@ storage_set_readonly(StorageId, Readonly) ->
     storage_config:set_readonly(StorageId, Readonly).
 
 
--spec storage_set_mount_in_root(od_storage:id(), boolean()) ->
+-spec storage_set_imported_storage(od_storage:id(), boolean()) ->
     ok | {error, term()}.
-storage_set_mount_in_root(StorageId, Value) ->
-    storage_config:set_mount_in_root(StorageId, Value).
+storage_set_imported_storage(StorageId, Value) ->
+    storage_config:set_imported_storage(StorageId, Value).
 
 
 -spec storage_set_luma_config(od_storage:id(), luma_config:config() | undefined) ->
@@ -234,9 +234,10 @@ storage_exists(StorageId) ->
 storage_describe(StorageId) ->
     storage_logic:describe(StorageId).
 
--spec storage_is_mounted_in_root(od_storage:id()) -> boolean().
-storage_is_mounted_in_root(StorageId) ->
-    storage_config:is_mount_in_root(StorageId).
+
+-spec storage_is_imported_storage(od_storage:id()) -> boolean().
+storage_is_imported_storage(StorageId) ->
+    storage_config:is_imported_storage(StorageId).
 
 -spec invalidate_luma_cache(od_storage:id()) -> ok.
 invalidate_luma_cache(StorageId) ->

@@ -340,6 +340,7 @@
 
 -define(STORAGE_PRIVATE_DATA_MATCHER(__Storage), #document{key = __Storage, value = #od_storage{
     provider = ?PROVIDER_1,
+    spaces = [],
     qos_parameters = #{}
 }}).
 
@@ -497,5 +498,6 @@ end).
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_storage, id = __StorageId, aspect = instance, scope = private}),
     <<"provider">> => ?PROVIDER_1,
+    <<"spaces">> => [],
     <<"qos_parameters">> => #{}
 }).

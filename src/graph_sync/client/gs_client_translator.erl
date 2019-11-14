@@ -229,6 +229,7 @@ translate(#gri{type = od_storage, id = Id, aspect = instance, scope = private}, 
         key = Id,
         value = #od_storage{
             provider = maps:get(<<"provider">>, Result),
+            spaces = maps:get(<<"spaces">>, Result),
             qos_parameters = maps:get(<<"qos_parameters">>, Result)
         }
     };
@@ -332,7 +333,8 @@ apply_scope_mask(Doc = #document{value = Handle = #od_handle{}}, public) ->
 apply_scope_mask(Doc = #document{value = Storage = #od_storage{}}, shared) ->
     Doc#document{
         value = Storage#od_storage{
-            provider = undefined
+            provider = undefined,
+            spaces = []
         }
     }.
 
