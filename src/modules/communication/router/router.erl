@@ -104,6 +104,7 @@ build_rib(SessionId) ->
 -spec route_message(message(), rib()) ->
     ok | {ok, server_message()} | {error, term()}.
 route_message(Msg, RIB) ->
+    ?info("qqqqq ~p", [Msg]),
     case stream_router:is_stream_message(Msg) of
         true ->
             stream_router:route_message(Msg);
