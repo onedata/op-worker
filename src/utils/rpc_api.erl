@@ -277,7 +277,7 @@ space_logic_get_storage_ids(SpaceId) ->
 
 
 -spec file_popularity_api_configure(file_popularity_config:id(), map()) ->
-    ok | {error, term()}.
+    ok | errors:error() | {error, term()}.
 file_popularity_api_configure(SpaceId, NewConfiguration) ->
     file_popularity_api:configure(SpaceId, NewConfiguration).
 
@@ -429,7 +429,8 @@ update_subdomain_delegation_ips() ->
     provider_logic:update_subdomain_delegation_ips().
 
 
--spec autocleaning_configure(od_space:id(), map()) -> ok | {error, term()}.
+-spec autocleaning_configure(od_space:id(), map()) ->
+    ok | errors:error() | {error, term()}.
 autocleaning_configure(SpaceId, Configuration) ->
     autocleaning_api:configure(SpaceId, Configuration).
 
