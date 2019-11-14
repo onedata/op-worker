@@ -43,7 +43,7 @@
 
 %% API
 -export([get/2, get_mtime/1, get_batch_hash/3, are_all_batches_processed/1, delete/2, init_batch_counters/2,
-    update_mtime/4, increase_batches_to_process/2, update_hashes/3,
+    update_mtime/4, increase_batches_to_process/2, increase_batches_to_process/3, update_hashes/3,
     mark_processed_batch/3, mark_processed_batch/6, mark_processed_batch/7]).
 
 % exported for CT tests
@@ -115,9 +115,13 @@ update_mtime(StorageFileId, SpaceId, NewMtime, StatTimestamp) ->
 
 -spec increase_batches_to_process(helpers:file_id(), od_space:id()) -> ok.
 increase_batches_to_process(StorageFileId, SpaceId) ->
+   increase_batches_to_process(StorageFileId, SpaceId, 1).
+
+-spec increase_batches_to_process(helpers:file_id(), od_space:id(), non_neg_integer()) -> ok.
+increase_batches_to_process(StorageFileId, SpaceId, Number) ->
     ok = ?extract_ok(create_or_update(StorageFileId, SpaceId,
         fun(SSI = #storage_sync_info{batches_to_process = ToProcess}) ->
-            {ok, SSI#storage_sync_info{batches_to_process = ToProcess + 1}}
+            {ok, SSI#storage_sync_info{batches_to_process = ToProcess + Number}}
         end
     )).
 
@@ -146,10 +150,11 @@ mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, Length, BatchHash) -
 %% mtime fields.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_processed_batch(helpers:file_id(), od_space:id(), non_neg_integer(), undefined | non_neg_integer(),
+-spec mark_processed_batch(helpers:file_id(), od_space:id(), undefined | non_neg_integer(), undefined | non_neg_integer(),
     undefined | non_neg_integer(), undefined | hash(), boolean()) -> {ok, doc()}.
 mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, BatchSize, BatchHash, UpdateHashesOnFinish) ->
     update(StorageFileId, SpaceId, fun(SSI = #storage_sync_info{
+        mtime = OldMtime,
         batches_processed = BatchesProcessed,
         batches_to_process = BatchesToProcess,
         children_hashes = ChildrenHashes,
@@ -163,7 +168,7 @@ mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, BatchSize, BatchHash
                     batches_processed = BatchesProcessed2,
                     hashes_to_update = #{},
                     children_hashes = maps:merge(ChildrenHashes, HashesToUpdate),
-                    mtime = Mtime
+                    mtime = utils:ensure_defined(Mtime, undefined, OldMtime)
                 }};
             false ->
                 {ok, SSI#storage_sync_info{

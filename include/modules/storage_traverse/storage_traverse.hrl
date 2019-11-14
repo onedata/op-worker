@@ -66,8 +66,17 @@
 }).
 
 -record(storage_traverse_slave, {
-    storage_file_ctx :: storage_file_ctx:ctx(),
+    storage_file_ctx :: storage_file_ctx:ctx() | undefined,
     info :: storage_traverse:info()
 }).
+
+-define(ON_SUCCESSFUL_SLAVE_JOBS(Callback),
+    fun(_MasterJobExtendedArgs, SlavesDescription) ->
+        case maps:get(slave_jobs_failed, SlavesDescription) of
+            0 -> Callback();
+            _ -> ok
+        end
+    end
+).
 
 -endif.

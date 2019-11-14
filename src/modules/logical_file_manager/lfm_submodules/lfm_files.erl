@@ -627,23 +627,21 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions) ->
         {error, Reason} ->
             {error, Reason};
         {ok, Bytes} ->
-            {ok, FileHandle, Bytes}
-    % todo wywalic jak nie zepsuje testów
-%%            case size(Bytes) of
-%%                MaxSize ->
-%%                    {ok, FileHandle, Bytes};
-%%                0 ->
-%%                    {ok, FileHandle, Bytes};
-%%                Size ->
-%%                    case read(FileHandle, Offset + Size, MaxSize - Size,
-%%                        GenerateEvents, PrefetchData, SyncOptions)
-%%                    of
-%%                        {ok, NewHandle1, Bytes1} ->
-%%                            {ok, NewHandle1, <<Bytes/binary, Bytes1/binary>>};
-%%                        {error, Reason} ->
-%%                            {error, Reason}
-%%                    end
-%%            end
+            case size(Bytes) of
+                MaxSize ->
+                    {ok, FileHandle, Bytes};
+                0 ->
+                    {ok, FileHandle, Bytes};
+                Size ->
+                    case read(FileHandle, Offset + Size, MaxSize - Size,
+                        GenerateEvents, PrefetchData, SyncOptions)
+                    of
+                        {ok, NewHandle1, Bytes1} ->
+                            {ok, NewHandle1, <<Bytes/binary, Bytes1/binary>>};
+                        {error, Reason} ->
+                            {error, Reason}
+                    end
+            end
     end.
 
 %%--------------------------------------------------------------------

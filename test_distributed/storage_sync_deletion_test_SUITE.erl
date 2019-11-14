@@ -24,7 +24,6 @@
 %% tests
 -export([
     delete_child_file_basic_test/1,
-    delete_child_file_basic_synchronous_run_test/1,
     empty_child_dir_should_not_be_deleted_test/1,
     delete_child_subtree_test/1,
     delete_nested_child_on_object_storage_test/1,
@@ -38,7 +37,6 @@
 
 -define(TEST_CASES, [
     delete_child_file_basic_test,
-    delete_child_file_basic_synchronous_run_test,
     empty_child_dir_should_not_be_deleted_test,
     delete_child_subtree_test,
     delete_nested_child_on_object_storage_test,
@@ -82,14 +80,9 @@ end).
 
 % {StorageType, MountInRoot}
 -define(BLOCK_STORAGE_CONFIGS, [{block_storage, false}, {block_storage, true}]).
--define(OBJECT_STORAGE_CONFIGS, [
-    {object_storage, false}
-%%    ,
-%%    {object_storage, true}
-]).
+-define(OBJECT_STORAGE_CONFIGS, [{object_storage, false}, {object_storage, true}]).
 
-%%-define(STORAGE_CONFIGS, ?BLOCK_STORAGE_CONFIGS ++ ?OBJECT_STORAGE_CONFIGS).
--define(STORAGE_CONFIGS, ?OBJECT_STORAGE_CONFIGS).
+-define(STORAGE_CONFIGS, ?BLOCK_STORAGE_CONFIGS ++ ?OBJECT_STORAGE_CONFIGS).
 
 -define(STORAGE_TO_SPACE_ID(StorageType, MountInRoot),
     case {StorageType, MountInRoot} of
@@ -100,7 +93,7 @@ end).
     end).
 
 -define(FOR_ALL_STORAGE_CONFIGS(TestFun, Args),
-    run_test_for_all_storage_configs(?FUNCTION, TestFun, Args, ?STORAGE_CONFIGS)).
+    ?FOR_EACH_STORAGE_CONFIG(TestFun, Args, ?STORAGE_CONFIGS)).
 
 -define(FOR_EACH_STORAGE_CONFIG(TestFun, Args, StorageConfigs),
     run_test_for_all_storage_configs(?FUNCTION, TestFun, Args, StorageConfigs)).
@@ -113,9 +106,6 @@ end).
 
 delete_child_file_basic_test(Config) ->
     ?FOR_ALL_STORAGE_CONFIGS(fun delete_child_file_basic_test_base/1, [Config]).
-
-delete_child_file_basic_synchronous_run_test(Config) ->
-    ?FOR_ALL_STORAGE_CONFIGS(fun delete_child_file_basic_synchronous_run_test_base/1, [Config]).
 
 empty_child_dir_should_not_be_deleted_test(Config) ->
     ?FOR_ALL_STORAGE_CONFIGS(fun empty_child_dir_should_not_be_deleted_test_base/1, [Config]).
@@ -161,7 +151,6 @@ delete_children6_test(Config) ->
 delete_child_file_basic_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    StorageType = ?config(storage_type, Config),
     MountInRoot = ?config(mount_in_root, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
@@ -172,33 +161,13 @@ delete_child_file_basic_test_base(Config) ->
     {ok, H} = lfm_proxy:open(W, SessionId, {guid, Guid}, write),
     {ok, _} = lfm_proxy:write(W, H, 0, <<"test_data">>),
 
-    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId), StorageType),
+    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessionId, {guid, Guid}), ?TIMEOUT),
     ?assertMatch({ok, []}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1), ?TIMEOUT).
-
-delete_child_file_basic_synchronous_run_test_base(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SpaceId = ?config(space_id, Config),
-    StorageType = ?config(storage_type, Config),
-    MountInRoot = ?config(mount_in_root, Config),
-    SpaceGuid = ?SPACE_GUID(SpaceId),
-    SessionId = ?SESSION_ID(Config, W),
-    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
-    Child = <<"child1">>,
-
-    {ok, Guid} = lfm_proxy:create(W, SessionId, SpaceGuid, Child, 8#664),
-    {ok, H} = lfm_proxy:open(W, SessionId, {guid, Guid}, write),
-    {ok, _} = lfm_proxy:write(W, H, 0, <<"test_data">>),
-
-    run_sync_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId), StorageType),
-
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessionId, {guid, Guid})),
-    ?assertMatch({ok, []}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1)).
 
 empty_child_dir_should_not_be_deleted_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    StorageType = ?config(storage_type, Config),
     MountInRoot = ?config(mount_in_root, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
@@ -206,14 +175,13 @@ empty_child_dir_should_not_be_deleted_test_base(Config) ->
     Child = <<"child">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, Child, 8#775),
 
-    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId), StorageType),
+    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W, SessionId, {guid, Guid}), ?TIMEOUT),
     ?assertMatch({ok, [{Guid, _}]}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1), ?TIMEOUT).
 
 delete_child_subtree_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    StorageType = ?config(storage_type, Config),
     MountInRoot = ?config(mount_in_root, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
@@ -230,7 +198,7 @@ delete_child_subtree_test_base(Config) ->
     {ok, H} = lfm_proxy:open(W, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(W, H, 0, <<"test_data">>),
 
-    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId), StorageType),
+    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessionId, {guid, FileGuid}), ?TIMEOUT),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:ls(W, SessionId, {guid, DirGuid1}, 0, 1), ?TIMEOUT),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:ls(W, SessionId, {guid, DirGuid2}, 0, 1), ?TIMEOUT),
@@ -240,7 +208,6 @@ delete_child_subtree_test_base(Config) ->
 delete_nested_child_on_object_storage_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    StorageType = ?config(storage_type, Config),
     MountInRoot = ?config(mount_in_root, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
@@ -253,6 +220,8 @@ delete_nested_child_on_object_storage_test_base(Config) ->
     SpaceStorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
     SpaceStorageFileId = storage_file_ctx:get_storage_file_id_const(SpaceStorageFileCtx),
 
+    ct:pal("SpaceStorageFIleId: ~p", [SpaceStorageFileId]),
+
     {ok, DirGuid1} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, ChildDir1, 8#775),
     {ok, DirGuid2} = lfm_proxy:mkdir(W, SessionId, DirGuid1, ChildDir2, 8#775),
     {ok, DirGuid3} = lfm_proxy:mkdir(W, SessionId, DirGuid2, ChildDir3, 8#775),
@@ -264,9 +233,9 @@ delete_nested_child_on_object_storage_test_base(Config) ->
     {ok, _} = lfm_proxy:write(W, H2, 0, <<"test_data">>),
     ?assertMatch({ok, [{DirGuid1, _}]}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1), ?TIMEOUT),
     Child1FilePath = filename:join([SpaceStorageFileId, ChildDir1, ChildDir2, ChildDir3, ChildFile1]),
-    add_storage_sync_link(W, SpaceStorageFileId, Child1FilePath, SpaceId, StorageId, true),
+    ok = add_storage_sync_link(W, SpaceStorageFileId, Child1FilePath, SpaceId, StorageId, true),
 
-    run_deletion(W, SpaceStorageFileCtx, ?SPACE_CTX(SpaceId), StorageType),
+    run_deletion(W, SpaceStorageFileCtx, ?SPACE_CTX(SpaceId)),
 
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W, SessionId, {guid, FileGuid}), ?TIMEOUT),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessionId, {guid, FileGuid2}), ?TIMEOUT),
@@ -278,7 +247,6 @@ delete_nested_child_on_object_storage_test_base(Config) ->
 delete_nested_child_on_block_storage_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    StorageType = ?config(storage_type, Config),
     MountInRoot = ?config(mount_in_root, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
@@ -293,7 +261,7 @@ delete_nested_child_on_block_storage_test_base(Config) ->
     {ok, _} = lfm_proxy:write(W, H, 0, <<"test_data">>),
     DirCtx = file_ctx:new_by_guid(DirGuid),
 
-    run_deletion(W, DirStorageFileCtx, DirCtx, StorageType),
+    run_deletion(W, DirStorageFileCtx, DirCtx),
 
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W, SessionId, {guid, FileGuid}), ?TIMEOUT),
     ?assertMatch({ok, []}, lfm_proxy:ls(W, SessionId, {guid, DirGuid}, 0, 1), ?TIMEOUT),
@@ -317,7 +285,7 @@ do_not_delete_child_file_basic_test_base(Config) ->
 
     ChildStorageFileId = filename:join([RootStorageFileId, Child]),
     ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves),
-    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId), StorageType),
+    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({ok, [_]}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1), ?TIMEOUT).
 
 do_not_delete_child_file_without_location_test_base(Config) ->
@@ -336,7 +304,7 @@ do_not_delete_child_file_without_location_test_base(Config) ->
 
     ChildStorageFileId = filename:join([RootStorageFileId, Child]),
     ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves),
-    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId), StorageType),
+    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({ok, [_]}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1), ?TIMEOUT).
 
 delete_children_files_test_base(Config, ChildrenToStayNum, ChildrenToDeleteNum) ->
@@ -369,15 +337,15 @@ delete_children_files_test_base(Config, ChildrenToStayNum, ChildrenToDeleteNum) 
         end
     end, {0, 0}, lists:seq(1, ChildrenToStayNum + ChildrenToDeleteNum)),
 
-    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId), StorageType),
+    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({ok, []}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, ChildrenToStayNum + ChildrenToDeleteNum), 5 * ?TIMEOUT).
 
 delete_children_files_test_base2(Config, ChildrenToStayNum, ChildrenToDeleteNum) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    StorageType = ?config(storage_type, Config),
     MountInRoot = ?config(mount_in_root, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
+    StorageType = ?config(storage_type, Config),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = get_storage_id(W, SpaceId),
@@ -402,7 +370,7 @@ delete_children_files_test_base2(Config, ChildrenToStayNum, ChildrenToDeleteNum)
         end
     end, {0, 0}, lists:seq(1, ChildrenToStayNum + ChildrenToDeleteNum)),
 
-    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId), StorageType),
+    run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({ok, []}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, ChildrenToStayNum + ChildrenToDeleteNum), 5 * ?TIMEOUT).
 
 %===================================================================
@@ -453,11 +421,8 @@ get_storage_id(Worker, SpaceId) ->
     {ok, [StorageId | _]} = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
     StorageId.
 
-run_deletion(Worker, StorageFileCtx, FileCtx, Mode) ->
-    ok = rpc:call(Worker, storage_sync_deletion, run, [StorageFileCtx, FileCtx, Mode, false, true]).
-
-run_sync_deletion(Worker, StorageFileCtx, FileCtx, Mode) ->
-    ok = rpc:call(Worker, storage_sync_deletion, run, [StorageFileCtx, FileCtx, Mode, false, false]).
+run_deletion(Worker, StorageFileCtx, FileCtx) ->
+    ok = rpc:call(Worker, storage_sync_traverse, run_deletion_scan, [StorageFileCtx, 0, #{max_depth => 1000000000000000000000}, FileCtx, false]).
 
 clean_spaces(Worker) ->
     lfm_proxy:close_all(Worker),
@@ -531,4 +496,7 @@ run_test(TestFun, StorageConfig = {StorageType, MountInRoot}, [Config | OtherArg
             ct:pal("Testcase ~p failed due to ~p for storage config ~p~n"
             "Stacktrace: ~p", [TestFun, {E, R}, StorageConfig, erlang:get_stacktrace()]),
             error
+    after
+        [W | _] = ?config(op_worker_nodes, Config),
+        storage_sync_test_base:clean_traverse_tasks(W)
     end.

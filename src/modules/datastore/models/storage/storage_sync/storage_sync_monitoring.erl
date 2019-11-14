@@ -495,9 +495,9 @@ reset(SpaceId, StorageId) ->
     end)).
 
 
--spec mark_finished_scan(od_space:id(), storage:id()) -> ok.
+-spec mark_finished_scan(od_space:id(), storage:id()) -> ok | {error, term()}.
 mark_finished_scan(SpaceId, StorageId) ->
-    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM) -> {ok, mark_finished_scan(SSM)} end)).
+    ?extract_ok(update(SpaceId, StorageId, fun(SSM) -> {ok, mark_finished_scan(SSM)} end)).
 
 %%%===================================================================
 %%% Internal functions

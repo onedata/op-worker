@@ -14,6 +14,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %%%===================================================================
 %%% Exports

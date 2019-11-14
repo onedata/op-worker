@@ -8,7 +8,6 @@
 %%% This module is responsible for detecting which files in the
 %%% synchronized space were deleted on storage and therefore should be
 %%% deleted from the Onedata file system.
-%%% The module bases on traverse framework.
 %%% It uses storage_sync_links to compare lists of files on the storage
 %%% with files in the database.
 %%% @end
@@ -16,220 +15,118 @@
 -module(storage_sync_deletion).
 -author("Jakub Kudzia").
 
--behaviour(traverse_behaviour).
 
--include("global_definitions.hrl").
--include_lib("ctool/include/logging.hrl").
+%%-include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/storage_traverse/storage_traverse.hrl").
+-include_lib("ctool/include/logging.hrl").
 
+% API
+-export([do_master_job/2, do_slave_job/2, get_master_job/1, get_master_job/2]).
 
-%% Pool API
--export([init_pool/0, stop_pool/0, run/5]).
-
-
-%% Traverse callbacks
--export([
-    do_master_job/2, do_slave_job/2,
-    get_job/1, update_job_progress/5,
-    task_started/1, task_finished/1, to_string/1]).
-
-% master job
--record(storage_sync_deletion, {
-    storage_file_ctx :: storage_file_ctx:ctx(),
-    file_ctx :: file_ctx:ctx(),
-    storage_type :: helper:type(),
-    file_meta_token = #link_token{} :: datastore_links_iter:token(),
-    file_meta_children = [] :: file_meta_children(),
-    sync_links_token = #link_token{} :: datastore_links_iter:token(),
-    sync_links_children = [] :: sync_links_children(),
-    update_sync_counters = true :: boolean()
-}).
-
--record(slave_job, {
-    file_ctx :: file_ctx:ctx(),
-    storage_id :: storage:id(),
-    update_sync_counters = true :: boolean()
-}).
-
--type job() :: #storage_sync_deletion{}.
--type slave_job() :: #slave_job{}.
+-type master_job() :: storage_sync_traverse:master_job().
+-type slave_job() :: storage_sync_traverse:slave_job().
 -type file_meta_children() :: [#child_link_uuid{}].
 -type sync_links_children() :: [{storage_sync_links:link_name(), storage_sync_links:link_target()}].
 
 -define(BATCH_SIZE, application:get_env(?APP_NAME, storage_sync_deletion_batch_size, 1000)).
 
--define(POOL, atom_to_binary(?MODULE, utf8)).
--define(MASTER_JOBS_LIMIT,
-    application:get_env(?APP_NAME, storage_sync_deletion_master_jobs_limit, 10)).
--define(SLAVE_JOBS_LIMIT,
-    application:get_env(?APP_NAME, storage_sync_deletion_slave_workers_limit, 10)).
--define(PARALLEL_SYNCED_SPACES_LIMIT,
-    application:get_env(?APP_NAME, storage_sync_deletion_parallel_synced_spaces_limit, 10)).
-
--define(SYNC_RUN_TIMEOUT, timer:hours(1)).
--define(TASK_FINISHED(Ref), {task_finished, Ref}).
-
 %%%===================================================================
 %%% Pool API
 %%%===================================================================
 
--spec init_pool() -> ok.
-init_pool() ->
-    traverse:init_pool(?POOL, ?MASTER_JOBS_LIMIT, ?SLAVE_JOBS_LIMIT, ?PARALLEL_SYNCED_SPACES_LIMIT,
-        #{executor => oneprovider:get_id_or_undefined()}).
+% todo to nie bedzie pool api
+% todo trzeba ogarnac czy są drzewa, ajak nie to nie wywolywac updat'e ss info
+% todo trzeba ogarnac update ss info
+% todo wywalenie testów ss deletion
 
--spec stop_pool() -> ok.
-stop_pool() ->
-    traverse:stop_pool(?POOL).
+get_master_job(Job) ->
+    get_master_job(Job, true).
 
--spec run(storage_file_ctx:ctx(), file_ctx:ctx(), helper:type(), boolean(), boolean()) -> ok.
-run(StorageFileCtx, FileCtx, StorageType, UpdateSyncCounters, AsyncCall) ->
-    TaskId = datastore_utils:gen_key(),
-    Job = #storage_sync_deletion{
-        storage_file_ctx = StorageFileCtx,
-        file_ctx = FileCtx,
-        storage_type = StorageType,
-        update_sync_counters = UpdateSyncCounters
-    },
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    maybe_increase_to_process_counter(SpaceId, StorageId, 1, UpdateSyncCounters),
-    case AsyncCall of
-        true ->
-            traverse:run(?POOL, TaskId, Job);
-        false ->
-            Opts = #{additional_data => #{
-                <<"pid">> => transfer_utils:encode_pid(self()),
-                <<"ref">> => BinRef = list_to_binary(ref_to_list(make_ref()))
-            }},
-            traverse:run(?POOL, TaskId, Job, Opts),
-            receive
-                ?TASK_FINISHED(BinRef) ->
-                    ok
-            after
-                ?SYNC_RUN_TIMEOUT ->
-                    ?error("Timeout in call ~p:run", [?MODULE]),
-                    {error, timeout}
-            end
-    end.
+get_master_job(Job = #storage_traverse_master{info = Info}, UpdateSyncCounters) ->
+    Job#storage_traverse_master{
+        info = Info#{
+            detect_deletions => true,
+            sync_links_token => #link_token{},
+            sync_links_children => [],
+            file_meta_token => #link_token{},
+            file_meta_children => [],
+            update_sync_counters => UpdateSyncCounters  %todo zostaje?,
+        }
+    }.
 
 
 %%%===================================================================
 %%% Traverse callbacks
 %%%===================================================================
 
--spec do_master_job(job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
-do_master_job(Job = #storage_sync_deletion{
+-spec do_master_job(master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
+do_master_job(Job = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
-    file_ctx = FileCtx,
-    sync_links_token = SLToken,
-    sync_links_children = SLChildren,
-    file_meta_token = FMToken,
-    file_meta_children = FMChildren,
-    update_sync_counters = UpdateSyncCounters
-}, _Args) ->
+    info = #{
+        file_ctx := FileCtx,
+        sync_links_token := SLToken,
+        sync_links_children := SLChildren,
+        file_meta_token := FMToken,
+        file_meta_children := FMChildren,
+        update_sync_counters := UpdateSyncCounters
+}}, _Args) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    Result = case refill_file_meta_children(FMChildren, FileCtx, FMToken) of
-        {error, not_found} ->
-            {ok, #{}};
-        {[], _NewFMToken} ->
-            {ok, #{}};
-        {FMChildren2, FMToken2} ->
-            case refill_sync_links_children(SLChildren, StorageFileCtx, SLToken) of
-                {error, not_found} ->
-                    {ok, #{}};
-                {SLChildren2, SLToken2} ->
-                    {MasterJobs, SlaveJobs} = generate_deletion_jobs(Job, SLChildren2, SLToken2, FMChildren2, FMToken2),
-                    maybe_increase_to_process_counter(SpaceId, StorageId, length(SlaveJobs) + length(MasterJobs), UpdateSyncCounters),
-                    {ok, #{
-                        slave_jobs => SlaveJobs,
-                        async_master_jobs => MasterJobs
-                    }}
-            end
+    Result = try
+        case refill_file_meta_children(FMChildren, FileCtx, FMToken) of
+            {error, not_found} ->
+                {ok, #{}};
+            {[], _NewFMToken} ->
+                {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
+                FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
+                    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+                    storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime)
+                end),
+                {ok, #{finish_callback => FinishCallback}};
+            {FMChildren2, FMToken2} ->
+                case refill_sync_links_children(SLChildren, StorageFileCtx, SLToken) of
+                    {error, not_found} ->
+                        {ok, #{}};
+                    {SLChildren2, SLToken2} ->
+                        StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+                        {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
+                        {MasterJobs, SlaveJobs} = generate_deletion_jobs(Job, SLChildren2, SLToken2, FMChildren2, FMToken2),
+                        maybe_increase_to_process_counter(SpaceId, StorageId, length(SlaveJobs) + length(MasterJobs), UpdateSyncCounters),
+                        StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+                        storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId, length(MasterJobs)),
+                        FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
+                            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+                            storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime)
+                        end),
+                        {ok, #{
+                            slave_jobs => SlaveJobs,
+                            async_master_jobs => MasterJobs,
+                            finish_callback => FinishCallback
+                        }}
+                end
+        end
+    catch
+        throw:?ENOENT ->
+            {ok, #{}}
     end,
     maybe_mark_processed_file(SpaceId, StorageId, UpdateSyncCounters),
     Result.
 
 -spec do_slave_job(slave_job(), traverse:id()) -> ok.
-do_slave_job(#slave_job{
-    file_ctx = FileCtx,
-    storage_id = StorageId,
-    update_sync_counters = UpdateSyncCounters
-}, _Task) ->
+do_slave_job(#storage_traverse_slave{
+    info = #{
+        file_ctx := FileCtx,
+        storage_id := StorageId,
+        update_sync_counters := UpdateSyncCounters
+}}, _Task) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters).
-
--spec update_job_progress(undefined | main_job | traverse:job_id(),
-    traverse:job(), traverse:pool(), traverse:id(), traverse:job_status()) ->
-    {ok, traverse:job_id()}  | {error, term()}.
-update_job_progress(_ID, _Job, _Pool, _TaskID, _Status) ->
-    % TODO persist deletion traverse jobs
-    ID2 = list_to_binary(ref_to_list(make_ref())),
-    {ok, ID2}.
-
--spec get_job(traverse:job_id()) -> {ok, traverse:job(), traverse:pool(), traverse:id()}  | {error, term()}.
-get_job(_DocOrID) ->
-    % TODO persist deletion traverse jobs
-    ok.
-
--spec task_started(traverse:id()) -> ok.
-task_started(TaskId) ->
-    ?debug("Storage sync deletion traverse ~p started", [TaskId]).
-
--spec task_finished(traverse:id()) -> ok.
-task_finished(TaskId) ->
-    {ok, #document{value = #traverse_task{additional_data = AD}}} = traverse_task:get(?POOL, TaskId),
-    ?debug("Storage sync deletion ~p finished", [TaskId]),
-    case maps:get(<<"pid">>, AD, undefined) of
-        undefined ->
-            ok;
-        Pid ->
-            BinRef = maps:get(<<"ref">>, AD),
-            notify_finished_sync_task(transfer_utils:decode_pid(Pid), BinRef)
-    end.
-
-
--spec to_string(job() | slave_job()) -> binary().
-to_string(#storage_sync_deletion{
-    storage_file_ctx = StorageFileCtx,
-    file_ctx = FileCtx,
-    storage_type = StorageType
-}) ->
-    {CanonicalPath, _} = file_ctx:get_canonical_path(FileCtx),
-    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    str_utils:format_bin(
-        " ~nstorage_sync_deletion master job:~n"
-        "    storage_file_id: ~p~n"
-        "    canonical_path: ~p~n"
-        "    space: ~p~n"
-        "    storage: ~p~n"
-        "    storage_type: ~p~n",
-        [StorageFileId, CanonicalPath, SpaceId, StorageId, StorageType]);
-to_string(#slave_job{
-    file_ctx = FileCtx,
-    storage_id = StorageId
-}) ->
-    {CanonicalPath, _} = file_ctx:get_canonical_path(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    str_utils:format_bin(
-        " ~nstorage_sync_deletion slave job:~n"
-        "    canonical_path: ~p~n"
-        "    space: ~p~n"
-        "    storage: ~p~n",
-        [CanonicalPath, SpaceId, StorageId]).
+    maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters).
 
 %%===================================================================
 %% Internal functions
 %%===================================================================
-
--spec notify_finished_sync_task(pid(), binary()) -> ok.
-notify_finished_sync_task(Pid, BinRef) ->
-    Pid ! ?TASK_FINISHED(BinRef),
-    ok.
 
 -spec refill_sync_links_children(sync_links_children(), storage_file_ctx:ctx(),
     datastore_links_iter:token()) -> {sync_links_children(), datastore_links_iter:token()} | {error, term()}.
@@ -267,8 +164,8 @@ refill_file_meta_children(CurrentChildren, FileCtx, Token) ->
             {CurrentChildren, Token}
     end.
 
--spec generate_deletion_jobs(job(), sync_links_children(), datastore_links_iter:token(),
-    file_meta_children(), datastore_links_iter:token()) -> {[job()], [slave_job()]}.
+-spec generate_deletion_jobs(master_job(), sync_links_children(), datastore_links_iter:token(),
+    file_meta_children(), datastore_links_iter:token()) -> {[master_job()], [slave_job()]}.
 generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMToken) ->
     generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMToken, [], []).
 
@@ -298,8 +195,8 @@ generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMToken) ->
 %% and therefore we have to traverse whole structure, not only direct children.
 %% @end
 %%-------------------------------------------------------------------
--spec generate_deletion_jobs(job(), sync_links_children(), datastore_links_iter:token(),
-    file_meta_children(), datastore_links_iter:token(), [job()], [slave_job()]) -> {[job()], [slave_job()]}.
+-spec generate_deletion_jobs(master_job(), sync_links_children(), datastore_links_iter:token(),
+    file_meta_children(), datastore_links_iter:token(), [master_job()], [slave_job()]) -> {[master_job()], [slave_job()]}.
 generate_deletion_jobs(_Job, _SLChildren, _SLFinished, [], #link_token{is_last = true}, MasterJobs, SlaveJobs) ->
     % there are no more children in file_meta links, we can finish the job;
     {MasterJobs, SlaveJobs};
@@ -329,7 +226,7 @@ generate_deletion_jobs(Job, [], SLToken, FMChildren, FMToken, MasterJobs, SlaveJ
     % all left file_meta children must be processed after refilling sl children
     NextBatchJob = next_batch_master_job(Job, [], SLToken, FMChildren, FMToken),
     {[NextBatchJob | MasterJobs], SlaveJobs};
-generate_deletion_jobs(Job = #storage_sync_deletion{storage_type = ?BLOCK_STORAGE},
+generate_deletion_jobs(Job = #storage_traverse_master{info = #{storage_type := ?BLOCK_STORAGE}},
     [{Name, _} | RestSLChildren], SLToken, [#child_link_uuid{name = Name} | RestFMChildren], FMToken,
     MasterJobs, SlaveJobs
 ) ->
@@ -337,14 +234,14 @@ generate_deletion_jobs(Job = #storage_sync_deletion{storage_type = ?BLOCK_STORAG
     % on block storage we process only direct children of a directory,
     % we do not go deeper in the files' structure
     generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMToken, MasterJobs, SlaveJobs);
-generate_deletion_jobs(Job = #storage_sync_deletion{storage_type = ?OBJECT_STORAGE},
+generate_deletion_jobs(Job = #storage_traverse_master{info = #{storage_type := ?OBJECT_STORAGE}},
     [{Name, undefined} | RestSLChildren], SLToken, [#child_link_uuid{name = Name} | RestFMChildren], FMToken,
     MasterJobs, SlaveJobs
 ) ->
     % file with name Name is on both lists therefore we cannot delete it
     % on object storage if child link's target is undefined it means that it's a regular file's link
     generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMToken, MasterJobs, SlaveJobs);
-generate_deletion_jobs(Job = #storage_sync_deletion{storage_type = ?OBJECT_STORAGE},
+generate_deletion_jobs(Job = #storage_traverse_master{info = #{storage_type := ?OBJECT_STORAGE}},
     [{Name, _} | RestSLChildren], SLToken, [#child_link_uuid{name = Name, uuid = Uuid} | RestFMChildren], FMToken,
     MasterJobs, SlaveJobs
 ) ->
@@ -367,42 +264,49 @@ generate_deletion_jobs(Job, [{SLName, _} | RestSLChildren], SLToken,
     generate_deletion_jobs(Job, RestSLChildren, SLToken, AllFMChildren, FMToken, MasterJobs, SlaveJobs).
 
 
--spec new_slave_job(job(), file_meta:uuid()) -> slave_job().
-new_slave_job(#storage_sync_deletion{
+-spec new_slave_job(master_job(), file_meta:uuid()) -> slave_job().
+new_slave_job(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
-    update_sync_counters = UpdateSyncCounters
+    info  = #{update_sync_counters := UpdateSyncCounters}
 }, ChildUuid) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    #slave_job{
-        file_ctx = file_ctx:new_by_guid(file_id:pack_guid(ChildUuid, SpaceId)),
-        storage_id = StorageId,
-        update_sync_counters = UpdateSyncCounters
-    }.
+    #storage_traverse_slave{
+        info = #{
+            detect_deletions => true,
+            file_ctx => file_ctx:new_by_guid(file_id:pack_guid(ChildUuid, SpaceId)),
+            storage_id => StorageId,
+            update_sync_counters => UpdateSyncCounters
+        }}.
 
--spec next_batch_master_job(job(), sync_links_children(), datastore_links_iter:token(),
-    file_meta_children(), datastore_links_iter:token()) -> job().
-next_batch_master_job(SSD, SLChildrenToProcess, SLToken, FMChildrenToProcess, FMToken) ->
-    SSD#storage_sync_deletion{
-        sync_links_token = SLToken,
-        sync_links_children = SLChildrenToProcess,
-        file_meta_token = FMToken,
-        file_meta_children = FMChildrenToProcess
-    }.
+-spec next_batch_master_job(master_job(), sync_links_children(), datastore_links_iter:token(),
+    file_meta_children(), datastore_links_iter:token()) -> master_job().
+next_batch_master_job(Job = #storage_traverse_master{info = Info}, SLChildrenToProcess, SLToken, FMChildrenToProcess, FMToken) ->
+    Job#storage_traverse_master{
+        info = Info#{
+            sync_links_token => SLToken,
+            sync_links_children => SLChildrenToProcess,
+            file_meta_token => FMToken,
+            file_meta_children => FMChildrenToProcess
+    }}.
 
--spec new_child_master_job(job(), file_meta:name(), file_meta:uuid()) -> job().
-new_child_master_job(#storage_sync_deletion{
-    storage_type = StorageType,
+-spec new_child_master_job(master_job(), file_meta:name(), file_meta:uuid()) -> master_job().
+new_child_master_job(Job = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
-    update_sync_counters = UpdateSyncCounters
-}, ChildName, ChildUuid) ->
+    info = Info = #{
+        storage_type := StorageType,
+        update_sync_counters := UpdateSyncCounters
+}}, ChildName, ChildUuid) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    #storage_sync_deletion{
+    ChildMasterJob = Job#storage_traverse_master{
         storage_file_ctx = storage_file_ctx:get_child_ctx_const(StorageFileCtx, ChildName),
-        file_ctx = file_ctx:new_by_guid(file_id:pack_guid(ChildUuid, SpaceId)),
-        storage_type = StorageType,
-        update_sync_counters = UpdateSyncCounters
-    }.
+        info = #{
+            storage_type => StorageType,
+            file_ctx => file_ctx:new_by_guid(file_id:pack_guid(ChildUuid, SpaceId))}
+    },
+    get_master_job(ChildMasterJob, UpdateSyncCounters).
+
+
 %%-------------------------------------------------------------------
 %% @doc
 %% This functions checks whether file is a directory or a regular file
@@ -410,9 +314,9 @@ new_child_master_job(#storage_sync_deletion{
 %% suitable functions.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_delete_imported_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(),
+-spec maybe_delete_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(),
     boolean()) -> ok.
-maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
+maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     try
         {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
@@ -426,8 +330,8 @@ maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId, Upda
         end
     catch
         Error:Reason ->
-            ?error_stacktrace("maybe_delete_imported_file_and_update_counters failed due to ~p",
-                [{Error, Reason}]),
+            ?error_stacktrace("~p:maybe_delete_file_and_update_counters failed due to ~p",
+                [?MODULE, {Error, Reason}]),
             maybe_mark_failed_file(SpaceId, StorageId, UpdateSyncCounters)
     end.
 
@@ -499,14 +403,13 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId, UpdateS
         {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, ChunkSize),
         maybe_increase_to_process_counter(SpaceId, StorageId, length(ChildrenCtxs), UpdateSyncCounters),
         lists:foreach(fun(ChildCtx) ->
-            maybe_delete_imported_file_and_update_counters(ChildCtx, SpaceId, StorageId, UpdateSyncCounters)
+            maybe_delete_file_and_update_counters(ChildCtx, SpaceId, StorageId, UpdateSyncCounters)
         end, ChildrenCtxs),
         case length(ChildrenCtxs) < ChunkSize of
             true ->
                 {ok, FileCtx2};
             false ->
-                delete_children(FileCtx2, UserCtx, Offset + ChunkSize, ChunkSize, SpaceId,
-                    StorageId, UpdateSyncCounters)
+                delete_children(FileCtx2, UserCtx, Offset + ChunkSize, ChunkSize, SpaceId, StorageId, UpdateSyncCounters)
         end
     catch
         throw:?ENOENT ->

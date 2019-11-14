@@ -52,7 +52,6 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     ok = storage_sync_traverse:init_pool(),
-    ok = storage_sync_deletion:init_pool(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -89,7 +88,6 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     storage_sync_traverse:stop_pool(),
-    storage_sync_deletion:stop_pool(),
     ok.
 
 %%%===================================================================

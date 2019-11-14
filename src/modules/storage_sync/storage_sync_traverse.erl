@@ -37,9 +37,6 @@
 -behaviour(traverse_behaviour).
 -behaviour(storage_traverse).
 
-% todo rename space_strategies model
-% todo refactor modules structure storage/sync/ etc.
-
 -include("global_definitions.hrl").
 -include("modules/storage_traverse/storage_traverse.hrl").
 -include("modules/storage_sync/storage_sync.hrl").
@@ -62,10 +59,10 @@
 %%%===================================================================
 
 %% Types
--export_type([scan_status/0, info/0]).
+-export_type([scan_status/0, info/0, master_job/0, slave_job/0]).
 
 %% API
--export([init_pool/0, stop_pool/0, run/4, run_import/3, run_update/3, cancel/2]).
+-export([init_pool/0, stop_pool/0, run_import/3, run_update/3, cancel/2]).
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, get_job/1, update_job_progress/5, to_string/1,
@@ -75,7 +72,7 @@
 -export([reset_info/1, get_next_batch_job_prehook/1, get_children_master_job_prehook/1, get_compute_fun/1]).
 
 %% exported for tests
--export([has_mtime_changed/2]).
+-export([has_mtime_changed/2, run/4, run_deletion_scan/5]).
 
 %%%===================================================================
 %%% Macros
@@ -85,15 +82,6 @@
 -define(POOL_BIN, atom_to_binary(?POOL, utf8)).
 -define(TASK_ID_SEP, <<"###">>).
 -define(TASK_ID_PREFIX, <<"storage_sync">>).
-
--define(ON_SUCCESSFUL_SLAVE_JOBS(Callback),
-    fun(_MasterJobExtendedArgs, SlavesDescription) ->
-        case maps:get(slave_jobs_failed, SlavesDescription) of
-            0 -> Callback();
-            _ -> ok
-        end
-    end
-).
 
 %%%===================================================================
 %%% API functions
@@ -142,12 +130,16 @@ cancel(SpaceId, StorageId) ->
 %===================================================================
 
 -spec do_master_job(master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
+do_master_job(DeletionJob = #storage_traverse_master{info = #{detect_deletions := true}}, Args) ->
+    storage_sync_deletion:do_master_job(DeletionJob, Args);
 do_master_job(TraverseJob = #storage_traverse_master{info = #{scan_num := 1}}, Args) ->
     do_import_master_job(TraverseJob, Args);
 do_master_job(TraverseJob = #storage_traverse_master{info = #{scan_num := ScanNum}}, Args) when ScanNum >= 1 ->
     do_update_master_job(TraverseJob, Args).
 
 -spec do_slave_job(slave_job(), traverse:id()) -> ok | {error, term()}.
+do_slave_job(Job = #storage_traverse_slave{info = #{detect_deletions := true}}, Task) ->
+    storage_sync_deletion:do_slave_job(Job, Task);
 do_slave_job(#storage_traverse_slave{
     storage_file_ctx = StorageFileCtx,
     info = Info
@@ -191,6 +183,8 @@ task_canceled(TaskId) ->
     storage_sync_logger:log_scan_cancelled(SpaceId, ScanNum, TaskId).
 
 -spec to_string(slave_job() | master_job()) -> binary().
+to_string(undefined) ->
+    <<"\nundefined\n">>;
 to_string(#storage_traverse_slave{
     storage_file_ctx = StorageFileCtx,
     info = #{scan_num := ScanNum}
@@ -269,6 +263,41 @@ has_mtime_changed(undefined, _StorageFileCtx) ->
 has_mtime_changed(SSIDoc, StorageFileCtx) ->
     {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
     storage_sync_info:get_mtime(SSIDoc) =/= STMtime.
+
+-spec run_deletion_scan(storage_file_ctx:ctx(), non_neg_integer(), space_strategies:config(), file_ctx:ctx(), boolean())
+        -> ok.
+run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx, UpdateSyncCounters) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    SpaceStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
+    storage_sync_info:init_batch_counters(SpaceStorageFileId, SpaceId),
+    TaskId = encode_task_id(SpaceId, StorageId, ScanNum),
+    {MaxDepth, Config2} = maps:take(max_depth, Config),
+    TraverseInfo = Config2#{
+        scan_num => ScanNum,
+        parent_ctx => file_ctx:new_root_ctx(),
+        storage_type => storage:get_type(StorageId),
+        space_storage_file_id => SpaceStorageFileId,
+        file_ctx => FileCtx,
+        detect_deletions => true,
+        update_sync_counters => UpdateSyncCounters,
+        sync_links_token => #link_token{},
+        sync_links_children => [],
+        file_meta_token => #link_token{},
+        file_meta_children => []
+    },
+    RunOpts = #{
+        execute_slave_on_dir => false,
+        async_children_master_jobs => true,
+        async_next_batch_job => true,
+        next_batch_job_prehook => get_next_batch_job_prehook(TraverseInfo),
+        children_master_job_prehook => get_children_master_job_prehook(TraverseInfo),
+        batch_size => ?SYNC_DIR_BATCH_SIZE,
+        max_depth => MaxDepth,
+        compute_fun => get_compute_fun(TraverseInfo),
+        compute_init => []
+    },
+    storage_traverse:run(?POOL, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts).
 
 %%%===================================================================
 %%% Internal functions
@@ -353,24 +382,24 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
             Error2
     end.
 
--spec do_update_master_job(master_job(), traverse:master_job_extended_args()) ->
-    {ok, traverse:master_job_map()} | {error, term()}.
-do_update_master_job(#storage_traverse_master{
-    storage_file_ctx = StorageFileCtx,
-    info = #{
-        detect_deletions := true,
-        file_ctx := FileCtx,
-        storage_type := StorageType
-    }
-}, _Args) ->
-    % detect deletions flag is enabled
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    ok = storage_sync_deletion:run(StorageFileCtx, FileCtx, StorageType, true, false),
-    {ok, #{finish_callback => fun(_MasterJobExtendedArgs, _SlavesDescription) ->
-        StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-        {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
-        storage_sync_info:update_hashes(StorageFileId, SpaceId, STMtime)
-    end}};
+%%-spec do_update_master_job(master_job(), traverse:master_job_extended_args()) ->
+%%    {ok, traverse:master_job_map()} | {error, term()}.
+%%do_update_master_job(#storage_traverse_master{
+%%    storage_file_ctx = StorageFileCtx,
+%%    info = #{
+%%        detect_deletions := true,
+%%        file_ctx := FileCtx,
+%%        storage_type := StorageType
+%%    }
+%%}, _Args) ->
+%%    % detect deletions flag is enabled
+%%    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+%%    ok = storage_sync_deletion:run(StorageFileCtx, FileCtx, StorageType, true, false),
+%%    {ok, #{finish_callback => fun(_MasterJobExtendedArgs, _SlavesDescription) ->
+%%        StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+%%        {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
+%%        storage_sync_info:update_hashes(StorageFileId, SpaceId, STMtime)
+%%    end}};
 do_update_master_job(TraverseJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = Info = #{
@@ -419,11 +448,11 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
             storage_sync_monitoring:mark_updated_file(SpaceId, StorageId),
             {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
             FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, _SlavesDescription) ->
-                MasterJobCallback([TraverseJob#storage_traverse_master{info = Info#{
-                    detect_deletions => true,
-                    file_ctx => FileCtx,
-                    parent_ctx => ParentCtx2
-                }}])
+                MasterJobCallback([storage_sync_deletion:get_master_job(TraverseJob#storage_traverse_master{
+                    info = Info#{
+                        file_ctx => FileCtx,
+                        parent_ctx => ParentCtx2
+                    }})])
             end,
             {ok, #{finish_callback => FinishCallback}};
         Error = {error, _} ->
@@ -478,16 +507,13 @@ schedule_jobs_for_directories_only(#storage_traverse_master{storage_file_ctx = S
     ToProcess = length(AsyncMasterJobs),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, ToProcess),
     {ok, MasterJobMap2#{finish_callback => FinishCallback}};
-schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
-    storage_file_ctx = StorageFileCtx,
-    info = Info
-}, MasterJobMap, true
+schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{storage_file_ctx = StorageFileCtx},
+    MasterJobMap, true
 ) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     MasterJobMap2 = maps:remove(slave_jobs, MasterJobMap),
     {#statbuf{st_mtime = STMtime}, _StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-
 
     FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, SlavesDescription) ->
         case maps:get(slave_jobs_failed, SlavesDescription) of
@@ -496,21 +522,24 @@ schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
                 {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
                 {ok, SSI} = storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime),
                 case storage_sync_info:are_all_batches_processed(SSI) of
-                    true -> MasterJobCallback([TraverseJob#storage_traverse_master{info = Info#{detect_deletions => true}}]);
-                    false -> ok
+                    true ->
+                        storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId),
+                        storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
+                        MasterJobCallback([storage_sync_deletion:get_master_job(TraverseJob)]);
+                    false ->
+                        ok
                 end;
             _ ->
                 ok
         end
     end,
-
     AsyncMasterJobs = maps:get(async_master_jobs, MasterJobMap2, []),
     ToProcess = length(AsyncMasterJobs),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, ToProcess),
     {ok, MasterJobMap2#{finish_callback => FinishCallback}}.
 
--spec schedule_jobs_for_all_files(master_job(), traverse:master_job_map(), storage_sync_hash:hash(), boolean()) ->
-    {ok, traverse:master_job_map()}.
+-spec schedule_jobs_for_all_files(master_job(), traverse:master_job_map(), storage_sync_hash:hash(),
+    DeleteEnable :: boolean()) -> {ok, traverse:master_job_map()}.
 schedule_jobs_for_all_files(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     offset = Offset,
@@ -532,8 +561,7 @@ schedule_jobs_for_all_files(#storage_traverse_master{
 schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     offset = Offset,
-    batch_size = BatchSize,
-    info = Info
+    batch_size = BatchSize
 }, MasterJobMap, BatchHash, true
 ) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -549,8 +577,12 @@ schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{
                 {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
                 {ok, SSI} = storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime, Offset, BatchSize, BatchHash, false),
                 case storage_sync_info:are_all_batches_processed(SSI) of
-                    true -> MasterJobCallback([TraverseJob#storage_traverse_master{info = Info#{detect_deletions => true}}]);
-                    false -> ok
+                    true ->
+                        storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId),
+                        storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
+                        MasterJobCallback([storage_sync_deletion:get_master_job(TraverseJob)]);
+                    false ->
+                        ok
                 end;
             _ ->
                 ok
@@ -675,4 +707,5 @@ maybe_add_deletion_detection_link(StorageFileCtx, Info = #{space_storage_file_id
 scan_finished(SpaceId, StorageId) ->
     SpaceStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
     ok = storage_sync_links:delete_recursive(SpaceStorageFileId, SpaceId, StorageId),
-    storage_sync_monitoring:mark_finished_scan(SpaceId, StorageId).
+    storage_sync_monitoring:mark_finished_scan(SpaceId, StorageId),
+    ok.
