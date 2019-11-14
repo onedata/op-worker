@@ -10,13 +10,13 @@
 %%% deleted from the Onedata file system.
 %%% It uses storage_sync_links to compare lists of files on the storage
 %%% with files in the database.
+%%% Functions in this module are called from master and slave jobs
+%%% executed by storage_sync_traverse pool.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_deletion).
 -author("Jakub Kudzia").
 
-
-%%-include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/storage_traverse/storage_traverse.hrl").
@@ -33,17 +33,14 @@
 -define(BATCH_SIZE, application:get_env(?APP_NAME, storage_sync_deletion_batch_size, 1000)).
 
 %%%===================================================================
-%%% Pool API
+%%% API functions
 %%%===================================================================
 
-% todo to nie bedzie pool api
-% todo trzeba ogarnac czy są drzewa, ajak nie to nie wywolywac updat'e ss info
-% todo trzeba ogarnac update ss info
-% todo wywalenie testów ss deletion
-
+-spec get_master_job(master_job()) -> master_job().
 get_master_job(Job) ->
     get_master_job(Job, true).
 
+-spec get_master_job(master_job(), boolean()) -> master_job().
 get_master_job(Job = #storage_traverse_master{info = Info}, UpdateSyncCounters) ->
     Job#storage_traverse_master{
         info = Info#{
@@ -52,15 +49,18 @@ get_master_job(Job = #storage_traverse_master{info = Info}, UpdateSyncCounters) 
             sync_links_children => [],
             file_meta_token => #link_token{},
             file_meta_children => [],
-            update_sync_counters => UpdateSyncCounters  %todo zostaje?,
+            update_sync_counters => UpdateSyncCounters
         }
     }.
 
-
-%%%===================================================================
-%%% Traverse callbacks
-%%%===================================================================
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Performs master job responsible for detecting which files in the
+%% synchronized space were deleted on storage and therefore should be
+%% deleted from the Onedata file system.
+%% This job is executed by storage_sync_traverse pool.
+%% @end
+%%--------------------------------------------------------------------
 -spec do_master_job(master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
 do_master_job(Job = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
@@ -79,31 +79,21 @@ do_master_job(Job = #storage_traverse_master{
             {error, not_found} ->
                 {ok, #{}};
             {[], _NewFMToken} ->
-                {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
-                FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
-                    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-                    storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime)
-                end),
-                {ok, #{finish_callback => FinishCallback}};
+                {ok, #{finish_callback => finish_callback(StorageFileCtx)}};
             {FMChildren2, FMToken2} ->
                 case refill_sync_links_children(SLChildren, StorageFileCtx, SLToken) of
                     {error, not_found} ->
                         {ok, #{}};
                     {SLChildren2, SLToken2} ->
                         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-                        {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
                         {MasterJobs, SlaveJobs} = generate_deletion_jobs(Job, SLChildren2, SLToken2, FMChildren2, FMToken2),
                         maybe_increase_to_process_counter(SpaceId, StorageId, length(SlaveJobs) + length(MasterJobs), UpdateSyncCounters),
                         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId, length(MasterJobs)),
-                        FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
-                            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-                            storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime)
-                        end),
                         {ok, #{
                             slave_jobs => SlaveJobs,
                             async_master_jobs => MasterJobs,
-                            finish_callback => FinishCallback
+                            finish_callback => finish_callback(StorageFileCtx)
                         }}
                 end
         end
@@ -114,6 +104,12 @@ do_master_job(Job = #storage_traverse_master{
     maybe_mark_processed_file(SpaceId, StorageId, UpdateSyncCounters),
     Result.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Performs job responsible for deleting file, which has been deleted on
+%% synced storage from the Onedata file system.
+%% @end
+%%--------------------------------------------------------------------
 -spec do_slave_job(slave_job(), traverse:id()) -> ok.
 do_slave_job(#storage_traverse_slave{
     info = #{
@@ -293,7 +289,7 @@ next_batch_master_job(Job = #storage_traverse_master{info = Info}, SLChildrenToP
 -spec new_child_master_job(master_job(), file_meta:name(), file_meta:uuid()) -> master_job().
 new_child_master_job(Job = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
-    info = Info = #{
+    info = #{
         storage_type := StorageType,
         update_sync_counters := UpdateSyncCounters
 }}, ChildName, ChildUuid) ->
@@ -460,3 +456,18 @@ maybe_increase_to_process_counter(SpaceId, StorageId, ToProcessNum, true) ->
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, ToProcessNum);
 maybe_increase_to_process_counter(_SpaceId, _StorageId, _ToProcessNum, false) ->
     ok.
+
+-spec finish_callback(storage_file_ctx:ctx()) -> function().
+finish_callback(StorageFileCtx) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    MTime = try
+        {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
+        STMtime
+    catch
+        throw:?ENOENT ->
+            undefined
+    end,
+    ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
+        StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, MTime)
+    end).

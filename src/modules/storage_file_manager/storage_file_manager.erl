@@ -409,7 +409,33 @@ read(#sfm_handle{open_flag = write}, _, _) ->
     throw(?EPERM);
 read(SFMHandle = #sfm_handle{file_handle = FileHandle}, Offset, MaxSize) ->
     ?RUN(SFMHandle, fun() ->
-        helpers:read(FileHandle, Offset, MaxSize)
+        case read_internal(SFMHandle, Offset, MaxSize) of
+            {ok, Bytes} ->
+                case byte_size(Bytes) of
+                    0 ->
+                        {ok, Bytes};
+                    MaxSize ->
+                        {ok, Bytes};
+                    Size ->
+                        case read(SFMHandle, Offset + Size, MaxSize - Size) of
+                            {ok, Bytes2} ->
+                                {ok, <<Bytes/binary, Bytes2/binary>>};
+                            Error = {error, _} ->
+                                Error
+                        end
+                end;
+            {error, ?ENOENT} when Offset > 0 ->
+                % some object storages return enoent when trying to read bytes out of file's range
+                % we must ensure that file exists
+                case stat(SFMHandle) of
+                    {ok, _} ->
+                        {ok, <<"">>};
+                    {error, ?ENOENT} ->
+                        {error, ?ENOENT}
+                end;
+            Error = {error, _} ->
+                Error
+        end
     end, FileHandle).
 
 %%--------------------------------------------------------------------
@@ -599,6 +625,12 @@ fsync(SFMHandle = #sfm_handle{file_handle = FileHandle}, DataOnly) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec read_internal(handle(), non_neg_integer(), non_neg_integer()) -> {ok, binary()} | {error, term()}.
+read_internal(SFMHandle = #sfm_handle{file_handle = FileHandle}, Offset, MaxSize) ->
+    ?RUN(SFMHandle, fun() ->
+        helpers:read(FileHandle, Offset, MaxSize)
+    end, FileHandle).
 
 %%--------------------------------------------------------------------
 %% @private

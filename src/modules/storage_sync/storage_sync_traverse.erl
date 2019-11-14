@@ -382,24 +382,8 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
             Error2
     end.
 
-%%-spec do_update_master_job(master_job(), traverse:master_job_extended_args()) ->
-%%    {ok, traverse:master_job_map()} | {error, term()}.
-%%do_update_master_job(#storage_traverse_master{
-%%    storage_file_ctx = StorageFileCtx,
-%%    info = #{
-%%        detect_deletions := true,
-%%        file_ctx := FileCtx,
-%%        storage_type := StorageType
-%%    }
-%%}, _Args) ->
-%%    % detect deletions flag is enabled
-%%    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-%%    ok = storage_sync_deletion:run(StorageFileCtx, FileCtx, StorageType, true, false),
-%%    {ok, #{finish_callback => fun(_MasterJobExtendedArgs, _SlavesDescription) ->
-%%        StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-%%        {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
-%%        storage_sync_info:update_hashes(StorageFileId, SpaceId, STMtime)
-%%    end}};
+-spec do_update_master_job(master_job(), traverse:master_job_extended_args()) ->
+    {ok, traverse:master_job_map()} | {error, term()}.
 do_update_master_job(TraverseJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = Info = #{
@@ -448,6 +432,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
             storage_sync_monitoring:mark_updated_file(SpaceId, StorageId),
             {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
             FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, _SlavesDescription) ->
+                storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
                 MasterJobCallback([storage_sync_deletion:get_master_job(TraverseJob#storage_traverse_master{
                     info = Info#{
                         file_ctx => FileCtx,
