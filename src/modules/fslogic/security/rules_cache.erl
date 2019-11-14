@@ -12,7 +12,7 @@
 -module(rules_cache).
 -author("Tomasz Lichon").
 
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([check_and_cache_results/3]).

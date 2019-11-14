@@ -16,8 +16,7 @@
 -behaviour(op_logic_behaviour).
 
 -include("op_logic.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -export([op_logic_plugin/0]).
 -export([
@@ -263,8 +262,8 @@ get(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = 
     case fetch_share(Auth, ShareId) of
         {ok, {Share, _}} ->
             get(Req#op_req{gri = GRI#gri{id = ShareId, aspect = instance}}, Share);
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+        {error, _} = Error ->
+            Error
     end;
 
 get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
@@ -334,8 +333,8 @@ fetch_share(?USER(_UserId, SessionId), ShareId) ->
     case share_logic:get(SessionId, ShareId) of
         {ok, #document{value = Share}} ->
             {ok, {Share, 1}};
-        _ ->
-            ?ERROR_NOT_FOUND
+        {error, _} = Error ->
+            Error
     end.
 
 

@@ -32,9 +32,10 @@
 %% determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec decode_and_normalize(binary(), storage_file_ctx:ctx()) -> {ok, acl_logic:acl()}.
+-spec decode_and_normalize(binary(), storage_file_ctx:ctx()) ->
+    {ok, acl:acl()}.
 decode_and_normalize(ACLBin, StorageFileCtx) ->
-    {ok,  ACL} = decode(ACLBin),
+    {ok, ACL} = decode(ACLBin),
     normalize(ACL, StorageFileCtx).
 
 %%-------------------------------------------------------------------
@@ -42,9 +43,9 @@ decode_and_normalize(ACLBin, StorageFileCtx) ->
 %% Converts list of #access_control_entity records to binary form. 
 %% @end
 %%-------------------------------------------------------------------
--spec encode(acl_logic:acl()) -> binary().
-encode(#acl{value = ACEs}) ->
-    encode(ACEs, []).
+-spec encode(acl:acl()) -> binary().
+encode(Acl) ->
+    encode(Acl, []).
 
 %%%===================================================================
 %%% Internal functions
@@ -60,12 +61,12 @@ encode(#acl{value = ACEs}) ->
 %% user/group ids.
 %% @end
 %%-------------------------------------------------------------------
--spec decode(binary()) -> {ok, acl_logic:acl()}.
+-spec decode(binary()) -> {ok, acl:acl()}.
 decode(ACLBin) ->
     {ACLLen, {ACLBin, Pos1}} = xdrlib:dec_unsigned_int({ACLBin, 1}),
     ACLBin2 = binary:part(ACLBin, Pos1 - 1, byte_size(ACLBin) - Pos1 + 1),
-    ACEs = decode(ACLBin2, ACLLen, []),
-    {ok, #acl{value = ACEs}}.
+    Acl = decode(ACLBin2, ACLLen, []),
+    {ok, Acl}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -76,10 +77,10 @@ decode(ACLBin) ->
 %% determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize(acl_logic:acl(), storage_file_ctx:ctx()) ->
-    {ok, acl_logic:acl()}.
-normalize(Acl = #acl{value = ACEs}, StorageFileCtx) ->
-    {ok, Acl#acl{value = normalize(ACEs, [], StorageFileCtx)}}.
+-spec normalize(acl:acl(), storage_file_ctx:ctx()) ->
+    {ok, acl:acl()}.
+normalize(Acl, StorageFileCtx) ->
+    {ok, normalize(Acl, [], StorageFileCtx)}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -87,7 +88,7 @@ normalize(Acl = #acl{value = ACEs}, StorageFileCtx) ->
 %% Tail-recursive helper function for decode_acl/1.
 %% @end
 %%-------------------------------------------------------------------
--spec decode(binary(), non_neg_integer(), [acl_logic:ace()]) -> [acl_logic:ace()].
+-spec decode(binary(), non_neg_integer(), acl:acl()) -> acl:acl().
 decode(_, 0, DecodedACL) ->
     lists:reverse(DecodedACL);
 decode(ACLBin, N, DecodedACL) ->
@@ -100,7 +101,7 @@ decode(ACLBin, N, DecodedACL) ->
 %% Tail-recursive helper function for encode_acl/1.
 %% @end
 %%-------------------------------------------------------------------
--spec encode([acl_logic:ace()], [binary()]) -> binary().
+-spec encode(acl:acl(), [binary()]) -> binary().
 encode([], EncodedACL) ->
     LengthBin = xdrlib:enc_unsigned_int(length(EncodedACL)),
     <<LengthBin/binary, (list_to_binary(lists:reverse(EncodedACL)))/binary>>;
@@ -114,7 +115,7 @@ encode([ACE | ACLRest], EncodedACL) ->
 %% Decodes ACE from binary form.
 %% @end
 %%-------------------------------------------------------------------
--spec decode_ace(binary()) -> {acl_logic:ace(), binary()}.
+-spec decode_ace(binary()) -> {ace:ace(), binary()}.
 decode_ace(ACLBin) ->
     {Type, {ACLBin, P1}} = xdrlib:dec_unsigned_int({ACLBin, 1}),
     {Flags, {ACLBin, P2}} = xdrlib:dec_unsigned_int({ACLBin, P1}),
@@ -135,7 +136,7 @@ decode_ace(ACLBin) ->
 %% Encodes ACE to binary form.
 %% @end
 %%-------------------------------------------------------------------
--spec encode_ace(acl_logic:ace()) -> binary().
+-spec encode_ace(ace:ace()) -> binary().
 encode_ace(#access_control_entity{
     acetype = Type,
     aceflags = Flags,
@@ -154,8 +155,8 @@ encode_ace(#access_control_entity{
 %% Tail-recursive helper function for normalize/2.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize([acl_logic:ace()], [acl_logic:ace()], storage_file_ctx:ctx()) ->
-    [acl_logic:ace()].
+-spec normalize(acl:acl(), acl:acl(), storage_file_ctx:ctx()) ->
+    acl:acl().
 normalize([], NormalizedACL, _StorageFileCtx) ->
     lists:reverse(NormalizedACL);
 normalize([ACE | Rest], NormalizedACL, StorageFileCtx) ->
@@ -168,8 +169,8 @@ normalize([ACE | Rest], NormalizedACL, StorageFileCtx) ->
 %% Normalizes given #access_control_entity.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize_ace(acl_logic:ace(), storage_file_ctx:ctx()) ->
-    {acl_logic:ace(), storage_file_ctx:ctx()}.
+-spec normalize_ace(ace:ace(), storage_file_ctx:ctx()) ->
+    {ace:ace(), storage_file_ctx:ctx()}.
 normalize_ace(ACE = #access_control_entity{identifier = ?owner}, StorageFileCtx) ->
     {ACE, StorageFileCtx};
 normalize_ace(ACE = #access_control_entity{identifier = ?group}, StorageFileCtx) ->

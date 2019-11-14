@@ -183,9 +183,11 @@ end_per_testcase(_Case, Config) ->
     {ok, Mgr :: pid()}.
 start_event_manager(Worker, SessId) ->
     MgrSup = self(),
-    ?assertMatch({ok, _}, rpc:call(Worker, gen_server, start, [
+    Ans = ?assertMatch({ok, _}, rpc:call(Worker, gen_server, start, [
         event_manager, [MgrSup, SessId], []
-    ])).
+    ])),
+    timer:sleep(500), % start of event streams is async
+    Ans.
 
 %%--------------------------------------------------------------------
 %% @private

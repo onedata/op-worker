@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -define(SAMPLE_METADATA_BINARY, <<"
 {

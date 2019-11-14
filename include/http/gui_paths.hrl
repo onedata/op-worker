@@ -24,17 +24,17 @@
 % Endpoint for nagios healthcheck
 -define(NAGIOS_OZ_CONNECTIVITY_PATH, "/nagios/oz_connectivity").
 
-% Endpoint for uploading files
--define(FILE_UPLOAD_PATH, "/upload").
+% Deprecated endpoint for uploading files
+-define(DEPRECATED_FILE_UPLOAD_PATH, "/upload").
+
+% New endpoint for uploading files
+-define(FILE_UPLOAD_PATH, "/file_upload").
 
 % Endpoint for downloading files
 -define(FILE_DOWNLOAD_PATH, "/download").
 
-%% Endpoint used to get provider's identity macaroon
--define(IDENTITY_MACAROON_PATH, "/get_identity_macaroon").
-
-%% Endpoint used to verify authorization nonces issued by this provider
--define(NONCE_VERIFY_PATH, "/verify_authorization_nonce").
+%% Endpoint used to get provider's identity token
+-define(IDENTITY_TOKEN_PATH, "/identity_token").
 
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").

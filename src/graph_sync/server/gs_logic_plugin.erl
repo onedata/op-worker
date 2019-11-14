@@ -18,17 +18,17 @@
 -include("op_logic.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 %% API
--export([verify_handshake_auth/1]).
+-export([verify_handshake_auth/2]).
 -export([client_connected/2, client_disconnected/2]).
 -export([verify_auth_override/2]).
 -export([is_authorized/5]).
 -export([handle_rpc/4]).
 -export([handle_graph_request/6]).
--export([is_subscribable/1]).
+-export([is_subscribable/1, is_type_supported/1]).
 
 
 %%%===================================================================
@@ -38,17 +38,17 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link gs_logic_plugin_behaviour} callback verify_handshake_auth/1.
+%% {@link gs_logic_plugin_behaviour} callback verify_handshake_auth/2.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_handshake_auth(gs_protocol:client_auth()) ->
-    {ok, aai:auth()} | gs_protocol:error().
-verify_handshake_auth(undefined) ->
+-spec verify_handshake_auth(gs_protocol:client_auth(), ip_utils:ip()) ->
+    {ok, aai:auth()} | errors:error().
+verify_handshake_auth(undefined, _) ->
     {ok, ?NOBODY};
-verify_handshake_auth(nobody) ->
+verify_handshake_auth(nobody, _) ->
     {ok, ?NOBODY};
-verify_handshake_auth({macaroon, Macaroon, _DischargeMacaroons}) ->
-    Credentials = #macaroon_auth{macaroon = Macaroon},
+verify_handshake_auth({token, Token}, PeerIp) ->
+    Credentials = #token_auth{token = Token, peer_ip = PeerIp},
     case http_auth:authenticate(Credentials, gui) of
         {ok, ?USER = Auth} ->
             {ok, Auth};
@@ -89,7 +89,7 @@ client_disconnected(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_auth_override(aai:auth(), gs_protocol:auth_override()) ->
-    {ok, aai:auth()} | gs_protocol:error().
+    {ok, aai:auth()} | errors:error().
 verify_auth_override(_, _) ->
     ?ERROR_UNAUTHORIZED.
 
@@ -100,8 +100,8 @@ verify_auth_override(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_authorized(aai:auth(), gs_protocol:auth_hint(),
-    gs_protocol:gri(), gs_protocol:operation(), gs_protocol:versioned_entity()) ->
-    {true, gs_protocol:gri()} | false.
+    gri:gri(), gs_protocol:operation(), gs_protocol:versioned_entity()) ->
+    {true, gri:gri()} | false.
 is_authorized(Auth, AuthHint, GRI, Operation, VersionedEntity) ->
     OpReq = #op_req{
         auth = Auth,
@@ -121,7 +121,7 @@ is_authorized(Auth, AuthHint, GRI, Operation, VersionedEntity) ->
     gs_protocol:rpc_function(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
 handle_rpc(_, Auth, RpcFun, Data) ->
-    file_rpc:handle(Auth, RpcFun, Data).
+    gs_rpc:handle(Auth, RpcFun, Data).
 
 
 %%--------------------------------------------------------------------
@@ -130,7 +130,7 @@ handle_rpc(_, Auth, RpcFun, Data) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_graph_request(aai:auth(), gs_protocol:auth_hint(),
-    gs_protocol:gri(), gs_protocol:operation(), gs_protocol:data(),
+    gri:gri(), gs_protocol:operation(), gs_protocol:data(),
     gs_protocol:versioned_entity()) -> gs_protocol:graph_request_result().
 handle_graph_request(Auth, AuthHint, GRI, Operation, Data, VersionedEntity) ->
     OpReq = #op_req{
@@ -150,6 +150,22 @@ handle_graph_request(Auth, AuthHint, GRI, Operation, Data, VersionedEntity) ->
 %% NOTE: prototype implementation without subscribables
 %% @end
 %%--------------------------------------------------------------------
--spec is_subscribable(gs_protocol:gri()) -> boolean().
+-spec is_subscribable(gri:gri()) -> boolean().
 is_subscribable(_) ->
     false.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link gs_logic_plugin_behaviour} callback is_type_supported/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_type_supported(gri:gri()) -> boolean().
+is_type_supported(#gri{type = op_provider}) -> true;
+is_type_supported(#gri{type = op_space}) -> true;
+is_type_supported(#gri{type = op_user}) -> true;
+is_type_supported(#gri{type = op_group}) -> true;
+is_type_supported(#gri{type = op_file}) -> true;
+is_type_supported(#gri{type = op_replica}) -> true;
+is_type_supported(#gri{type = op_transfer}) -> true;
+is_type_supported(#gri{type = _}) -> false.

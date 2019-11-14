@@ -12,9 +12,11 @@
 -module(rest_test_utils).
 -author("Jakub Kudzia").
 
+-include("op_logic.hrl").
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
@@ -46,12 +48,13 @@ request(Node, URL, Method, Headers, Body, Opts) ->
             Other
     end.
 
-user_token_header(Config, User)  ->
-    #macaroon_auth{macaroon = Macaroon} = ?config({auth, User}, Config),
+user_token_header(Config, User) ->
+    #token_auth{token = Token} = ?config({auth, User}, Config),
     case rand:uniform(3) of
-        1 -> {<<"Macaroon">>, Macaroon};
-        2 -> {<<"X-Auth-Token">>, Macaroon};
-        3 -> {<<"Authorization">>, <<"Bearer ", Macaroon/binary>>}
+        1 -> {?HDR_X_AUTH_TOKEN, Token};
+        2 -> {?HDR_AUTHORIZATION, <<"Bearer ", Token/binary>>};
+        %% @todo VFS-5554 Deprecated, included for backward compatibility
+        3 -> {?HDR_MACAROON, Token}
     end.
 
 assert_request_error(ExpectedError = {error, _}, RequestParams) ->
@@ -70,8 +73,8 @@ assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
             true;
         false ->
             ct:pal("Wrong response code: ~n"
-                   "    Expected: ~p~n"
-                   "    Got: ~p~n", [ExpectedCode, RespCode]),
+            "    Expected: ~p~n"
+            "    Got: ~p~n", [ExpectedCode, RespCode]),
             print_request(Node, URL, Method, Headers, Body),
             false
     end,
@@ -80,8 +83,7 @@ assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
         {binary, ExpBin} ->
             ExpBin == RespBody;
         _ ->
-            DecodedBody = json_utils:decode(RespBody),
-            ExpectedBody == DecodedBody
+            ExpectedBody == json_utils:decode(RespBody)
     end,
 
     case BodyMatched of
@@ -98,12 +100,7 @@ assert_request_error(_ExpectedError = {ExpectedCode, ExpectedBody},
 
 get_rest_error(Error) ->
     #rest_resp{code = ExpCode, body = ExpBody} = rest_translator:error_response(Error),
-    case ExpBody of
-        {binary, Bin} ->
-            {ExpCode, json_utils:decode(Bin)};
-        _ ->
-            {ExpCode, ExpBody}
-    end.
+    {ExpCode, ExpBody}.
 
 %%%===================================================================
 %%% Internal functions

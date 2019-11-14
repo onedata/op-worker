@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage_sync/storage_sync.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -define(STORAGE_TABLE_PREFIX, <<"st_children_">>).
 -define(DB_TABLE_PREFIX, <<"db_children_">>).

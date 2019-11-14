@@ -16,7 +16,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -record(storage_file_ctx, {
     id :: helpers:file_id(),

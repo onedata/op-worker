@@ -31,7 +31,6 @@ get_models() -> [
     od_handle,
     od_harvester,
     provider_auth,
-    authorization_nonce,
     file_download_code,
     subscription,
     file_subscription,
@@ -72,7 +71,10 @@ get_models() -> [
     file_popularity_config,
     harvesting_state,
     idp_access_token,
-    tree_traverse_job
+    tree_traverse_job,
+    file_qos,
+    qos_entry,
+    file_meta_posthooks
 ].
 
 %%--------------------------------------------------------------------

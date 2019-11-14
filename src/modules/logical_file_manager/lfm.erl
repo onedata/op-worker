@@ -31,10 +31,9 @@
     end).
 
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
 
 -type handle() :: lfm_context:ctx().
 -type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.
@@ -69,6 +68,9 @@
 -export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
 %% Utility functions
 -export([check_result/1]).
+%% Functions concerning qos
+-export([add_qos_entry/4, get_qos_entry/2, remove_qos_entry/2, get_effective_file_qos/2,
+    check_qos_fulfilled/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
 %%% API
@@ -485,7 +487,7 @@ set_perms(SessId, FileKey, NewPerms) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms(session:id(), file_key(), helpers:open_flag()) ->
-    {ok, boolean()} | error_reply().
+    ok | error_reply().
 check_perms(SessId, FileKey, PermType) ->
     ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).
 
@@ -495,7 +497,7 @@ check_perms(SessId, FileKey, PermType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, [lfm_perms:access_control_entity()]} | error_reply().
+    {ok, acl:acl()} | error_reply().
 get_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:get_acl(SessId, FileKey) end).
 
@@ -505,7 +507,7 @@ get_acl(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    EntityList :: [lfm_perms:access_control_entity()]) -> ok | error_reply().
+    acl:acl()) -> ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(SessId, FileKey, EntityList) end).
 
@@ -735,3 +737,62 @@ check_result({ok, _} = Res) -> Res;
 check_result({ok, _, _} = Res) -> Res;
 check_result({ok, _, _, _} = Res) -> Res;
 check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds new qos_entry for file or directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
+    qos_entry:replicas_num()) -> {ok, qos_entry:id()} | error_reply().
+add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
+    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets effective QoS for file or directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_effective_file_qos(session:id(), file_key()) ->
+    {ok, {[qos_entry:id()], file_qos:assigned_entries()}} | error_reply().
+get_effective_file_qos(SessId, FileKey) ->
+    ?run(fun() -> lfm_qos:get_effective_file_qos(SessId, FileKey) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get details of specified qos_entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_qos_entry(session:id(), qos_entry:id()) ->
+    {ok, qos_entry:record()} | error_reply().
+get_qos_entry(SessId, QosEntryId) ->
+    ?run(fun() -> lfm_qos:get_qos_entry(SessId, QosEntryId) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove qos_entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_qos_entry(session:id(), qos_entry:id()) -> ok | error_reply().
+remove_qos_entry(SessId, QosEntryId) ->
+    ?run(fun() -> lfm_qos:remove_qos_entry(SessId, QosEntryId) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if QoS requirements defined in qos_entry document are fulfilled.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_qos_fulfilled(session:id(), qos_entry:id()) -> {ok, boolean()} | error_reply().
+check_qos_fulfilled(SessId, QosEntryId) ->
+    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosEntryId) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if QoS requirements defined in qos_entry document/documents
+%% are fulfilled for given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_qos_fulfilled(session:id(), qos_entry:id(), file_key()) ->
+    {ok, boolean()} | error_reply().
+check_qos_fulfilled(SessId, QosEntryId, FileKey) ->
+    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosEntryId, FileKey) end).

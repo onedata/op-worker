@@ -94,7 +94,7 @@ many_files_test_base(Config, TestScenario) ->
             Pids = lists:map(fun(_) ->
                 spawn_link(fun() ->
                     try
-                        {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+                        {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
                         start_slave(Config, Sock, SpaceGuid, Master, TestScenario)
                     catch
                         E1:E2 ->

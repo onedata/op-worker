@@ -60,9 +60,9 @@ is_authorized(Req, State) ->
 %% Authenticates user based on request headers.
 %% @end
 %%--------------------------------------------------------------------
--spec authenticate(#macaroon_auth{} | cowboy_req:req(), rest | gui) ->
-    aai:auth() | {error, term()}.
-authenticate(#macaroon_auth{} = Credentials, Type) ->
+-spec authenticate(#token_auth{} | cowboy_req:req(), rest | gui) ->
+    {ok, aai:auth()} | {error, term()}.
+authenticate(#token_auth{} = Credentials, Type) ->
     case user_identity:get_or_fetch(Credentials) of
         {ok, #document{value = #user_identity{user_id = UserId} = Iden}} ->
             Result = case Type of
@@ -86,5 +86,6 @@ authenticate(Req, Type) ->
         undefined ->
             {ok, ?NOBODY};
         AccessToken ->
-            authenticate(#macaroon_auth{macaroon = AccessToken}, Type)
+            {PeerIp, _} = cowboy_req:peer(Req),
+            authenticate(#token_auth{token = AccessToken, peer_ip = PeerIp}, Type)
     end.

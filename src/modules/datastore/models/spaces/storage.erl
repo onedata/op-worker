@@ -15,6 +15,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/storage_file_manager/helpers/helpers.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([new/2, new/4]).
@@ -26,7 +27,7 @@
 %% Exports for onepanel RPC
 -export([update_name/2, update_helper_args/3, update_admin_ctx/3,
     update_luma_config/2, set_luma_config/2, set_insecure/3,
-    set_readonly/2, safe_remove/1]).
+    set_readonly/2, safe_remove/1, describe/1]).
 -export([get_luma_config/1, is_luma_enabled/1]).
 
 %% datastore_model callbacks
@@ -44,7 +45,8 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    fold_enabled => true
+    fold_enabled => true,
+    memory_copies => all
 }).
 
 %%%===================================================================
@@ -214,8 +216,13 @@ get_luma_config_map(#document{value = Storage}) ->
 %% Selects storage helper by its name form the list of configured storage helpers.
 %% @end
 %%--------------------------------------------------------------------
--spec select_helper(record() | doc(), helper:name() | [helper:name()]) ->
-    {ok, helper() | [helper()]} | {error, Reason :: term()}.
+%% @formatter:off
+-spec select_helper
+    (record() | doc() | id(), [helper:name()]) ->
+        {ok, [helper()]} | {error, Reason :: term()};
+    (record() | doc() | id(), helper:name()) ->
+        {ok, helper()} | {error, Reason :: term()}.
+%% @formatter:on
 select_helper(Storage, HelperNames) when is_list(HelperNames) ->
     Helpers = lists:filter(fun(Helper) ->
         lists:member(helper:get_name(Helper), HelperNames)
@@ -224,6 +231,7 @@ select_helper(Storage, HelperNames) when is_list(HelperNames) ->
         [] -> {error, not_found};
         _ -> {ok, Helpers}
     end;
+
 select_helper(Storage, HelperName) ->
     case select_helper(Storage, [HelperName]) of
         {ok, [Helper]} -> {ok, Helper};
@@ -350,10 +358,14 @@ safe_remove(StorageId) ->
 %%--------------------------------------------------------------------
 -spec supports_any_space(StorageId :: id()) -> boolean().
 supports_any_space(StorageId) ->
-    {ok, Spaces} = provider_logic:get_spaces(),
-    lists:any(fun(SpaceId) ->
-        lists:member(StorageId, space_storage:get_storage_ids(SpaceId))
-    end, Spaces).
+    case provider_logic:get_spaces() of
+        {ok, Spaces} ->
+            lists:any(fun(SpaceId) ->
+                lists:member(StorageId, space_storage:get_storage_ids(SpaceId))
+            end, Spaces);
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+            false
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -400,6 +412,35 @@ is_luma_enabled(#storage{luma_config = #luma_config{}}) ->
 is_luma_enabled(#document{value = #storage{} = Storage}) ->
     is_luma_enabled(Storage).
 
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns map describing the storage. The data is redacted to
+%% remove sensitive information.
+%% @end
+%%-------------------------------------------------------------------
+-spec describe(id()) ->
+    {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.
+describe(StorageId) ->
+    case ?MODULE:get(StorageId) of
+        {ok, #document{value = Storage}} ->
+            [Helper | _] = get_helpers(Storage),
+            AdminCtx = helper:get_redacted_admin_ctx(Helper),
+            HelperArgs = helper:get_args(Helper),
+            LumaConfigMap = get_luma_config_map(Storage),
+            Base = maps:merge(HelperArgs, AdminCtx),
+            {ok, Base#{
+                <<"id">> => StorageId,
+                <<"name">> => get_name(Storage),
+                <<"type">> => helper:get_name(Helper),
+                <<"readonly">> => is_readonly(Storage),
+                <<"insecure">> => helper:is_insecure(Helper),
+                <<"storagePathType">> => helper:get_storage_path_type(Helper),
+                <<"lumaEnabled">> => maps:get(enabled, LumaConfigMap, false),
+                <<"lumaUrl">> => maps:get(url, LumaConfigMap, undefined)
+            }};
+        {error, _} = Error -> Error
+    end.
 
 %%%===================================================================
 %%% datastore_model callbacks

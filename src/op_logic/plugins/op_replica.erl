@@ -20,7 +20,8 @@
 -behaviour(op_logic_behaviour).
 
 -include("op_logic.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 -export([op_logic_plugin/0]).
@@ -33,6 +34,16 @@
     validate/2
 ]).
 -export([create/1, get/2, update/1, delete/1]).
+
+-define(check_transfer_creation(__FunctionCall),
+    case __FunctionCall of
+        {ok, __TransferId} ->
+            {ok, value, __TransferId};
+        {error, __Errno} ->
+            ?ERROR_POSIX(__Errno)
+    end
+
+).
 
 
 %%%===================================================================
@@ -172,15 +183,13 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = instance
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_REPLICATION);
+    transfer_utils:authorize_creation(SpaceId, UserId, replication, false);
 
 authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #gri{
     aspect = replicate_by_view
 }}, _) ->
     SpaceId = maps:get(<<"space_id">>, Data),
-    space_logic:has_eff_privileges(
-        SpaceId, UserId, [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS]
-    );
+    transfer_utils:authorize_creation(SpaceId, UserId, replication, true);
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = distribution}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
@@ -191,35 +200,21 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #
     aspect = instance
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    case maps:get(<<"migration_provider_id">>, Data, undefined) of
-        undefined ->
-            % only eviction
-            space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_EVICTION);
-        _ ->
-            % migration (eviction preceded by replication)
-            space_logic:has_eff_privileges(
-                SpaceId, UserId,
-                [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
-            )
-    end;
+    TransferType = case maps:get(<<"migration_provider_id">>, Data, undefined) of
+        undefined -> eviction;
+        _ -> migration
+    end,
+    transfer_utils:authorize_creation(SpaceId, UserId, TransferType, false);
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #gri{
     aspect = evict_by_view
 }}, _) ->
     SpaceId = maps:get(<<"space_id">>, Data),
-    case maps:get(<<"migration_provider_id">>, Data, undefined) of
-        undefined ->
-            % only eviction
-            space_logic:has_eff_privileges(SpaceId, UserId, [
-                ?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS
-            ]);
-        _ ->
-            % migration (eviction preceded by replication)
-            space_logic:has_eff_privileges(SpaceId, UserId, [
-                ?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION,
-                ?SPACE_QUERY_VIEWS
-            ])
-    end.
+    TransferType = case maps:get(<<"migration_provider_id">>, Data, undefined) of
+        undefined -> eviction;
+        _ -> migration
+    end,
+    transfer_utils:authorize_creation(SpaceId, UserId, TransferType, true).
 
 
 %%--------------------------------------------------------------------
@@ -229,32 +224,24 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
 validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
+    Data = Req#op_req.data,
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:assert_space_supported_locally(SpaceId),
 
-    op_logic_utils:assert_file_exists(Req#op_req.auth, Guid),
-
-    % If `provider_id` is not specified local provider is chosen as target instead
-    case maps:get(<<"provider_id">>, Req#op_req.data, undefined) of
-        undefined ->
-            ok;
-        ReplicatingProvider ->
-            op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider)
-    end;
+    ReplicatingProvider = maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
+    transfer_utils:validate_creation(
+        Req#op_req.auth, SpaceId,
+        ReplicatingProvider, undefined, {guid, Guid}
+    );
 
 validate(#op_req{operation = create, gri = #gri{id = Name, aspect = replicate_by_view}} = Req, _) ->
     Data = Req#op_req.data,
     SpaceId = maps:get(<<"space_id">>, Data),
-    op_logic_utils:assert_space_supported_locally(SpaceId),
 
-    % If `provider_id` is not specified local provider is chosen as target instead
-    case maps:get(<<"provider_id">>, Data, undefined) of
-        undefined ->
-            assert_view_exists_on_provider(SpaceId, Name, oneprovider:get_id());
-        ReplicatingProvider ->
-            op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider),
-            assert_view_exists_on_provider(SpaceId, Name, ReplicatingProvider)
-    end;
+    ReplicatingProvider = maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
+    transfer_utils:validate_creation(
+        Req#op_req.auth, SpaceId,
+        ReplicatingProvider, undefined, {view, Name}
+    );
 
 validate(#op_req{operation = get, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
@@ -263,46 +250,24 @@ validate(#op_req{operation = get, gri = #gri{id = FileGuid, aspect = distributio
 validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
     Data = Req#op_req.data,
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:assert_space_supported_locally(SpaceId),
 
-    op_logic_utils:assert_file_exists(Req#op_req.auth, Guid),
-
-    % If `provider_id` is not specified local provider is chosen as target instead
-    case maps:get(<<"provider_id">>, Data, undefined) of
-        undefined ->
-            ok;
-        EvictingProvider ->
-            op_logic_utils:assert_space_supported_by(SpaceId, EvictingProvider)
-    end,
-
-    case maps:get(<<"migration_provider_id">>, Data, undefined) of
-        undefined ->
-            ok;
-        ReplicatingProvider ->
-            op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider)
-    end;
+    EvictingProvider = maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
+    ReplicatingProvider = maps:get(<<"migration_provider_id">>, Data, undefined),
+    transfer_utils:validate_creation(
+        Req#op_req.auth, SpaceId,
+        ReplicatingProvider, EvictingProvider, {guid, Guid}
+    );
 
 validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_view}} = Req, _) ->
     Data = Req#op_req.data,
     SpaceId = maps:get(<<"space_id">>, Data),
-    op_logic_utils:assert_space_supported_locally(SpaceId),
 
-    % If `provider_id` is not specified local provider is chosen as target instead
-    case maps:get(<<"provider_id">>, Data, undefined) of
-        undefined ->
-            assert_view_exists_on_provider(SpaceId, Name, oneprovider:get_id());
-        EvictingProvider ->
-            op_logic_utils:assert_space_supported_by(SpaceId, EvictingProvider),
-            assert_view_exists_on_provider(SpaceId, Name, EvictingProvider)
-    end,
-
-    case maps:get(<<"migration_provider_id">>, Data, undefined) of
-        undefined ->
-            ok;
-        ReplicatingProvider ->
-            op_logic_utils:assert_space_supported_by(SpaceId, ReplicatingProvider),
-            assert_view_exists_on_provider(SpaceId, Name, ReplicatingProvider)
-    end.
+    EvictingProvider = maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
+    ReplicatingProvider = maps:get(<<"migration_provider_id">>, Data, undefined),
+    transfer_utils:validate_creation(
+        Req#op_req.auth, SpaceId,
+        ReplicatingProvider, EvictingProvider, {view, Name}
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -312,32 +277,22 @@ validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_vie
 %%--------------------------------------------------------------------
 -spec create(op_logic:req()) -> op_logic:create_result().
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
-    case lfm:schedule_file_replication(
+    ?check_transfer_creation(lfm:schedule_file_replication(
         Auth#auth.session_id,
         {guid, FileGuid},
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"url">>, Data, undefined)
-    ) of
-        {ok, TransferId} ->
-            {ok, value, TransferId};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    ));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ViewName, aspect = replicate_by_view}}) ->
-    case lfm:schedule_replication_by_view(
+    ?check_transfer_creation(lfm:schedule_replication_by_view(
         Auth#auth.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"url">>, Data, undefined),
         maps:get(<<"space_id">>, Data),
         ViewName,
         view_utils:sanitize_query_options(Data)
-    ) of
-        {ok, TransferId} ->
-            {ok, value, TransferId};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end.
+    )).
 
 
 %%--------------------------------------------------------------------
@@ -347,13 +302,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = ViewName, aspect = repl
 %%--------------------------------------------------------------------
 -spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
-    SessionId = Auth#auth.session_id,
-    case lfm:get_file_distribution(SessionId, {guid, FileGuid}) of
-        {ok, _Blocks} = Res ->
-            Res;
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end.
+    ?check(lfm:get_file_distribution(Auth#auth.session_id, {guid, FileGuid})).
 
 
 %%--------------------------------------------------------------------
@@ -373,46 +322,19 @@ update(_) ->
 %%--------------------------------------------------------------------
 -spec delete(op_logic:req()) -> op_logic:delete_result().
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
-    case lfm:schedule_replica_eviction(
+    ?check_transfer_creation(lfm:schedule_replica_eviction(
         Auth#auth.session_id,
         {guid, FileGuid},
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"migration_provider_id">>, Data, undefined)
-    ) of
-        {ok, TransferId} ->
-            {ok, value, TransferId};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
+    ));
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = ViewName, aspect = evict_by_view}}) ->
-    case lfm:schedule_replica_eviction_by_view(
+    ?check_transfer_creation(lfm:schedule_replica_eviction_by_view(
         Auth#auth.session_id,
         maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
         maps:get(<<"migration_provider_id">>, Data, undefined),
         maps:get(<<"space_id">>, Data),
         ViewName,
         view_utils:sanitize_query_options(Data)
-    ) of
-        {ok, TransferId} ->
-            {ok, value, TransferId};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec assert_view_exists_on_provider(od_space:id(), index:name(),
-    od_provider:id()) -> ok | no_return().
-assert_view_exists_on_provider(SpaceId, ViewName, ProviderId) ->
-    case index:exists_on_provider(SpaceId, ViewName, ProviderId) of
-        true ->
-            ok;
-        false ->
-            throw(?ERROR_VIEW_NOT_EXISTS_ON(ProviderId))
-    end.
+    )).

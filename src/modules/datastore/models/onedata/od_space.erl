@@ -32,7 +32,8 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    fold_enabled => true
+    fold_enabled => true,
+    memory_copies => all
 }).
 
 %% API
@@ -83,6 +84,8 @@ run_after(_Function, _Args, Result) ->
 run_after(Doc = #document{key = SpaceId}) ->
     space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
+    ok = qos_bounded_cache:ensure_exists_on_all_nodes(SpaceId),
+    ok = fslogic_worker:init_cannonical_paths_cache(SpaceId),
     emit_monitoring_event(Doc),
     maybe_revise_space_harvesters(Doc),
     {ok, Doc}.

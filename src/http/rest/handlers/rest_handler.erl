@@ -21,7 +21,8 @@
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -type method() :: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'.
 -type parse_body() :: ignore | as_json_params | as_is.
@@ -205,6 +206,7 @@ rest_routes() ->
         file_routes:routes(),
         monitoring_routes:routes(),
         oneprovider_routes:routes(),
+        qos_routes:routes(),
         replica_routes:routes(),
         share_routes:routes(),
         space_routes:routes(),
@@ -402,7 +404,7 @@ get_data(Req, as_is, Consumes) ->
         [ConsumedType] ->
             ConsumedType;
         _ ->
-            {Type, Subtype, _} = cowboy_req:parse_header(<<"content-type">>, Req2),
+            {Type, Subtype, _} = cowboy_req:parse_header(?HDR_CONTENT_TYPE, Req2),
             <<Type/binary, "/", Subtype/binary>>
     end,
     ParsedBody = case ContentType of

@@ -39,19 +39,15 @@
 get_routing_key(#event{type = Type}) ->
     get_routing_key(Type);
 get_routing_key(#file_attr_changed_event{file_attr = FileAttr}) ->
-    {ok, <<"file_attr_changed.", (FileAttr#file_attr.guid)/binary>>};
+    {ok, key_from_guid(<<"file_attr_changed.">>, (FileAttr#file_attr.guid))};
 get_routing_key(#file_location_changed_event{file_location = FileLocation}) ->
-    FileGuid = file_id:pack_guid(
-        FileLocation#file_location.uuid,
-        FileLocation#file_location.space_id
-    ),
-    {ok, <<"file_location_changed.", FileGuid/binary>>};
+    {ok, <<"file_location_changed.", (FileLocation#file_location.uuid)/binary>>};
 get_routing_key(#file_perm_changed_event{file_guid = FileGuid}) ->
-    {ok, <<"file_perm_changed.", FileGuid/binary>>};
+    {ok, key_from_guid(<<"file_perm_changed.">>, FileGuid)};
 get_routing_key(#file_removed_event{file_guid = FileGuid}) ->
-    {ok, <<"file_removed.", FileGuid/binary>>};
+    {ok, key_from_guid(<<"file_removed.">>, FileGuid)};
 get_routing_key(#file_renamed_event{top_entry = Entry}) ->
-    {ok, <<"file_renamed.", (Entry#file_renamed_entry.old_guid)/binary>>};
+    {ok, key_from_guid(<<"file_renamed.">>, (Entry#file_renamed_entry.old_guid))};
 get_routing_key(#quota_exceeded_event{}) ->
     {ok, <<"quota_exceeded">>};
 get_routing_key(#helper_params_changed_event{storage_id = StorageId}) ->
@@ -183,3 +179,12 @@ update_context(#file_renamed_event{top_entry = E} = Evt, {file, FileCtx}) ->
     Evt#file_renamed_event{top_entry = E#file_renamed_entry{old_guid = FileGuid}};
 update_context(Evt, _Ctx) ->
     Evt.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec key_from_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
+key_from_guid(Prefix, Guid) ->
+    Uuid = file_id:guid_to_uuid(Guid),
+    <<Prefix/binary, Uuid/binary>>.
