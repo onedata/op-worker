@@ -23,7 +23,7 @@
 -export([get_link/2, get_link/4, list/4, delete_link/4]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
+-export([get_ctx/0]).
 
 -type root_id() :: binary().
 -type link_name() :: helpers:file_id().
@@ -214,12 +214,3 @@ for_each(RootId, Callback, Acc0, Opts) ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
-
-%%--------------------  ------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, []}.

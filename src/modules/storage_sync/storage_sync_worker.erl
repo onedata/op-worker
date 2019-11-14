@@ -243,5 +243,5 @@ schedule_spaces_check(IntervalSeconds) ->
 
 -spec schedule(non_neg_integer(), term()) -> ok.
 schedule(IntervalSeconds, Request) ->
-    {ok, _} = timer:apply_after(timer:seconds(IntervalSeconds), worker_proxy, cast, [?MODULE, Request]),
+    erlang:send_after(timer:seconds(IntervalSeconds), whereis(?MODULE), [Request]),
     ok.

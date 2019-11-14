@@ -77,7 +77,6 @@ process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileI
     end,
     case file_ctx:is_root_dir_const(ParentCtx2) of
         true ->
-
             try_syncing_file(StorageFileCtx2, SpaceCtx, ?DIRECTORY_TYPE, Info2);
         false ->
             % check whether FileName of processed file is in the form
