@@ -21,7 +21,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("modules/storage_traverse/storage_traverse.hrl").
+-include("modules/storage/traverse/storage_traverse.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").

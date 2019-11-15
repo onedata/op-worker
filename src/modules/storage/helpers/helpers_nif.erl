@@ -13,7 +13,7 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 
 -type helper_handle() :: term().
 -type file_handle() :: term().

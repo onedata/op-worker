@@ -15,7 +15,7 @@
 -define(FSLOGIC_COMMON_HRL, 1).
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 
 %% helper macro for not implemented functions
 -define(NOT_IMPLEMENTED, erlang:error(not_yet_implemented)).

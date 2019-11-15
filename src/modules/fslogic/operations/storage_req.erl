@@ -16,7 +16,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 
@@ -122,7 +122,7 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
             {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx, true),
             Dirname = filename:dirname(StorageFileId),
-            FileCtx3 = sfm_utils:create_parent_dirs(FileCtx2),
+            FileCtx3 = sd_utils:create_parent_dirs(FileCtx2),
             {Size, _} = file_ctx:get_file_size(FileCtx3),
             TestFileName = storage_detector:generate_file_id(),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),

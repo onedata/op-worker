@@ -335,7 +335,7 @@ init_per_testcase(Case, Config) when
     Case =:= lfm_open_and_create_open_failure_test orelse
     Case =:= lfm_copy_failure_multiple_users_test ->
   Workers = ?config(op_worker_nodes, Config),
-  test_utils:mock_new(Workers, storage_file_manager, [passthrough]),
+  test_utils:mock_new(Workers, storage_driver, [passthrough]),
   init_per_testcase(default, Config);
 
 init_per_testcase(ShareTest, Config) when
@@ -373,7 +373,7 @@ end_per_testcase(Case, Config) when
     Case =:= lfm_open_and_create_open_failure_test orelse
     Case =:= lfm_copy_failure_multiple_users_test ->
   Workers = ?config(op_worker_nodes, Config),
-  test_utils:mock_unload(Workers, [storage_file_manager]),
+  test_utils:mock_unload(Workers, [storage_driver]),
   end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(ShareTest, Config) when

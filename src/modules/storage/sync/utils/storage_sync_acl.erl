@@ -8,7 +8,7 @@
 %%% Functions for handling NFSv4 ACLs.
 %%% @end
 %%%-------------------------------------------------------------------
--module(nfs4_acl).
+-module(storage_sync_acl).
 -author("Jakub Kudzia").
 
 -include("proto/oneprovider/provider_messages.hrl").

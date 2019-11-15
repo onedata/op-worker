@@ -12,7 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("modules/storage_traverse/storage_traverse.hrl").
+-include("modules/storage/traverse/storage_traverse.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 

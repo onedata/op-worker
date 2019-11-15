@@ -10,7 +10,7 @@
 %%% Utility functions for storage file manager module.
 %%% @end
 %%%--------------------------------------------------------------------
--module(sfm_utils).
+-module(sd_utils).
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
@@ -54,11 +54,11 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
         {true, _FileCtx2} ->
             ok;
         {false, FileCtx2} ->
-            case storage_file_manager:new_handle(SessId, FileCtx2, false) of
+            case storage_driver:new_handle(SessId, FileCtx2, false) of
                 {undefined, _} ->
                     ok;
-                {SFMHandle, _} ->
-                    case storage_file_manager:chmod(SFMHandle, Mode) of
+                {SDHandle, _} ->
+                    case storage_driver:chmod(SDHandle, Mode) of
                         ok -> ok;
                         {error, ?ENOENT} -> ok;
                         {error, ?EROFS} -> {error, ?EROFS}
@@ -76,9 +76,9 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
 rename_storage_file(SessId, SpaceId, StorageId, FileUuid, SourceFileId, TargetFileId) ->
     %create target dir
     TargetDir = filename:dirname(TargetFileId),
-    TargetDirHandle = storage_file_manager:new_handle(?ROOT_SESS_ID,
+    TargetDirHandle = storage_driver:new_handle(?ROOT_SESS_ID,
         SpaceId, undefined, StorageId, TargetDir, undefined),
-    case storage_file_manager:mkdir(TargetDirHandle,
+    case storage_driver:mkdir(TargetDirHandle,
         ?AUTO_CREATED_PARENT_DIR_MODE, true)
     of
         ok ->
@@ -89,21 +89,21 @@ rename_storage_file(SessId, SpaceId, StorageId, FileUuid, SourceFileId, TargetFi
 
     case SourceFileId =/= TargetFileId of
         true ->
-            SourceHandle = storage_file_manager:new_handle(SessId, SpaceId,
+            SourceHandle = storage_driver:new_handle(SessId, SpaceId,
                 FileUuid, StorageId, SourceFileId, undefined),
-            storage_file_manager:mv(SourceHandle, TargetFileId);
+            storage_driver:mv(SourceHandle, TargetFileId);
             % TODO VFS-5290 - solution resutls in problems with sed
-%%            TargetHandle = storage_file_manager:new_handle(SessId, SpaceId,
+%%            TargetHandle = storage_driver:new_handle(SessId, SpaceId,
 %%                FileUuid, Storage, TargetFileId, undefined),
 %%
-%%            case storage_file_manager:stat(TargetHandle) of
+%%            case storage_driver:stat(TargetHandle) of
 %%                {ok, _} ->
 %%                    ?warning("Moving file into existing one, source ~p, target ~p",
 %%                        [SourceFileId, TargetFileId]),
 %%                    NewTargetFileId = ?CONFLICTING_STORAGE_FILE_NAME(TargetFileId, FileUuid),
-%%                    storage_file_manager:mv(SourceHandle, NewTargetFileId);
+%%                    storage_driver:mv(SourceHandle, NewTargetFileId);
 %%                _ ->
-%%                    storage_file_manager:mv(SourceHandle, TargetFileId)
+%%                    storage_driver:mv(SourceHandle, TargetFileId)
 %%            end;
         false ->
             ok
@@ -173,20 +173,20 @@ create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
         _ -> {true, user_ctx:get_session_id(user_ctx:new(?ROOT_SESS_ID))}
     end,
 
-    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-    {ok, FinalCtx} = case storage_file_manager:create(SFMHandle, Mode) of
+    {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
+    {ok, FinalCtx} = case storage_driver:create(SDHandle, Mode) of
         {error, ?ENOENT} ->
             FileCtx4 = create_parent_dirs(FileCtx3),
-            {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
+            {storage_driver:create(SDHandle, Mode), FileCtx4};
         {error, ?EEXIST} ->
-            handle_eexists(VerifyDeletionLink, SFMHandle, Mode, FileCtx3, UserCtx);
+            handle_eexists(VerifyDeletionLink, SDHandle, Mode, FileCtx3, UserCtx);
          {error, ?EACCES} ->
             % eacces is possible because there is race condition
             % on creating and chowning parent dir
             % for this reason it is acceptable to try chowning parent once
             {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
             files_to_chown:chown_or_schedule_chowning(ParentCtx),
-            {storage_file_manager:create(SFMHandle, Mode), FileCtx4};
+            {storage_driver:create(SDHandle, Mode), FileCtx4};
         ok ->
             {StorageDoc, FileCtx4} = file_ctx:get_storage_doc(FileCtx3),
             FileCtx6 = case storage_sync_worker:is_syncable_object_storage(StorageDoc) of
@@ -215,12 +215,12 @@ create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
     ok | {error, term()}.
 delete_storage_file(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    case storage_file_manager:new_handle(SessId, FileCtx, false) of
+    case storage_driver:new_handle(SessId, FileCtx, false) of
         {undefined, _} ->
             {error, ?ENOENT};
-        {SFMHandle, _} ->
+        {SDHandle, _} ->
             {Size, _} = file_ctx:get_file_size(FileCtx),
-            storage_file_manager:unlink(SFMHandle, Size)
+            storage_driver:unlink(SDHandle, Size)
     end.
 
 %%--------------------------------------------------------------------
@@ -251,25 +251,25 @@ recursive_delete(FileCtx, UserCtx) ->
 delete_storage_dir(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case storage_file_manager:new_handle(SessId, FileCtx, false) of
+    case storage_driver:new_handle(SessId, FileCtx, false) of
         {undefined, _} ->
             ok;
-        {SFMHandle, _} ->
-            case storage_file_manager:rmdir(SFMHandle) of
+        {SDHandle, _} ->
+            case storage_driver:rmdir(SDHandle) of
                 ok ->
                     dir_location:delete(FileUuid);
                 {error, ?ENOENT} ->
                     dir_location:delete(FileUuid);
                 {error, ?ENOTEMPTY} ->
                     % todo VFS-4997
-                    spawn(?MODULE, retry_dir_deletion, [SFMHandle, FileUuid, 0]),
+                    spawn(?MODULE, retry_dir_deletion, [SDHandle, FileUuid, 0]),
                     ok;
                 {error,'Function not implemented'} = Error ->
                     % Some helpers do not support rmdir
-                    ?debug("sfm_utils:delete_storage_dir failed with ~p", [Error]),
+                    ?debug("sd_utils:delete_storage_dir failed with ~p", [Error]),
                     ok;
                 Error ->
-                    ?error("sfm_utils:delete_storage_dir failed with ~p", [Error]),
+                    ?error("sd_utils:delete_storage_dir failed with ~p", [Error]),
                     Error
             end
     end.
@@ -280,11 +280,11 @@ delete_storage_dir(FileCtx, UserCtx) ->
 %% if it fails with ENOTEMPTY.
 %% @end
 %%-------------------------------------------------------------------
--spec retry_dir_deletion(storage_file_manager:handle(), file_meta:uuid(),
+-spec retry_dir_deletion(storage_driver:handle(), file_meta:uuid(),
     non_neg_integer()) -> ok  | {error, term()}.
-retry_dir_deletion(#sfm_handle{file = FileId, space_id = SpaceId}, _FileUuid, ?CLEANUP_MAX_RETRIES_NUM) ->
+retry_dir_deletion(#sd_handle{file = FileId, space_id = SpaceId}, _FileUuid, ?CLEANUP_MAX_RETRIES_NUM) ->
     ?error("Could not delete directory ~p on storage in space ~p", [FileId, SpaceId]);
-retry_dir_deletion(SFMHandle = #sfm_handle{
+retry_dir_deletion(SDHandle = #sd_handle{
     file = FileId,
     space_id = SpaceId
 }, FileUuid, RetryNum) ->
@@ -292,13 +292,13 @@ retry_dir_deletion(SFMHandle = #sfm_handle{
         "Delayed deletion of directory ~p on storage in space ~p. Retry number: ~p",
         [FileId, SpaceId, RetryNum + 1]),
     timer:sleep(timer:seconds(?CLEANUP_DELAY)),
-    case storage_file_manager:rmdir(SFMHandle) of
+    case storage_driver:rmdir(SDHandle) of
         ok ->
             dir_location:delete(FileUuid);
         {error, ?ENOENT} ->
             dir_location:delete(FileUuid);
         {error, ?ENOTEMPTY} ->
-            retry_dir_deletion(SFMHandle, FileUuid, RetryNum + 1);
+            retry_dir_deletion(SDHandle, FileUuid, RetryNum + 1);
         Error ->
             ?error(
                 "Unexpected error when trying to delete directory ~p on storage in space ~p",
@@ -353,23 +353,23 @@ create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, StorageId) ->
 -spec create_dir(file_ctx:ctx(), od_space:id(), storage:id()) -> file_ctx:ctx().
 create_dir(FileCtx, SpaceId, StorageId) ->
     {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId,
+    SDHandle0 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId,
         undefined, StorageId, FileId, undefined),
     try
         {#document{value = #file_meta{
             mode = Mode}}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
         case file_ctx:is_space_dir_const(FileCtx3) of
             true ->
-                mkdir_and_maybe_chown(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE,
+                mkdir_and_maybe_chown(SDHandle0, ?AUTO_CREATED_PARENT_DIR_MODE,
                     FileCtx3, false);
             false ->
-                mkdir_and_maybe_chown(SFMHandle0, Mode, FileCtx3, true)
+                mkdir_and_maybe_chown(SDHandle0, Mode, FileCtx3, true)
         end
     catch
         Error:Reason ->
             ?error_stacktrace("Creating parent dir ~p failed due to ~p.
             Parent dir will be create with default mode.", [FileId, {Error, Reason}]),
-            mkdir_and_maybe_chown(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, FileCtx, true)
+            mkdir_and_maybe_chown(SDHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, FileCtx, true)
     end.
 
 %%-------------------------------------------------------------------
@@ -379,12 +379,12 @@ create_dir(FileCtx, SpaceId, StorageId) ->
 %% true.
 %% @end
 %%-------------------------------------------------------------------
--spec mkdir_and_maybe_chown(storage_file_manager:handle(), non_neg_integer(),
+-spec mkdir_and_maybe_chown(storage_driver:handle(), non_neg_integer(),
     file_ctx:ctx(), boolean()) -> any().
-mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
+mkdir_and_maybe_chown(SDHandle, Mode, FileCtx, ShouldChown) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case storage_file_manager:mkdir(SFMHandle, Mode, false) of
+    case storage_driver:mkdir(SDHandle, Mode, false) of
         ok ->
             case dir_location:mark_dir_created_on_storage(FileUuid, SpaceId) of
                 {ok, _} -> ok;
@@ -434,14 +434,14 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize) ->
 %% Creates file on storage with uuid as suffix
 %% @end
 %%-------------------------------------------------------------------
--spec create_storage_file_with_suffix(storage_file_manager:handle(), 
+-spec create_storage_file_with_suffix(storage_driver:handle(),
     file_meta:posix_permissions()) -> {ok, helpers:file_id()}.
-create_storage_file_with_suffix(#sfm_handle{file_uuid = Uuid, file = FileId} = SFMHandle, Mode) ->
+create_storage_file_with_suffix(#sd_handle{file_uuid = Uuid, file = FileId} = SDHandle, Mode) ->
     NewName = ?CONFLICTING_STORAGE_FILE_NAME(FileId, Uuid),
-    SFMHandle1 = SFMHandle#sfm_handle{file = NewName},
+    SDHandle1 = SDHandle#sd_handle{file = NewName},
     
     ?debug("File ~p exists on storage, creating ~p instead", [FileId, NewName]),
-    case storage_file_manager:create(SFMHandle1, Mode) of
+    case storage_driver:create(SDHandle1, Mode) of
         ok ->
             {ok, NewName};
         Error ->
@@ -454,15 +454,15 @@ create_storage_file_with_suffix(#sfm_handle{file_uuid = Uuid, file = FileId} = S
 %% Handles eexists error on storage.
 %% @end
 %%-------------------------------------------------------------------
--spec handle_eexists(boolean(), storage_file_manager:handle(),
+-spec handle_eexists(boolean(), storage_driver:handle(),
     file_meta:posix_permissions(), file_ctx:ctx(),  user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-handle_eexists(_VerifyDeletionLink, SFMHandle, Mode, FileCtx, _UserCtx) ->
-    {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
+handle_eexists(_VerifyDeletionLink, SDHandle, Mode, FileCtx, _UserCtx) ->
+    {ok, StorageFileId} = create_storage_file_with_suffix(SDHandle, Mode),
     {ok, file_ctx:set_file_id(FileCtx, StorageFileId)}.
     % TODO VFS-5271 - handle conflicting directories
 %%    case VerifyDeletionLink of
 %%        false ->
-%%            {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
+%%            {ok, StorageFileId} = create_storage_file_with_suffix(SDHandle, Mode),
 %%            {ok, file_ctx:set_file_id(FileCtx, StorageFileId)};
 %%        _ ->
 %%            {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
@@ -470,9 +470,9 @@ handle_eexists(_VerifyDeletionLink, SFMHandle, Mode, FileCtx, _UserCtx) ->
 %%            case location_and_link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
 %%                {error, not_found} ->
 %%                    % Try once again to prevent races
-%%                    storage_file_manager:create(SFMHandle, Mode);
+%%                    storage_driver:create(SDHandle, Mode);
 %%                {ok, _FileUuid} ->
-%%                    {ok, StorageFileId} = create_storage_file_with_suffix(SFMHandle, Mode),
+%%                    {ok, StorageFileId} = create_storage_file_with_suffix(SDHandle, Mode),
 %%                    {ok, file_ctx:set_file_id(FileCtx3, StorageFileId)}
 %%            end
 %%    end.

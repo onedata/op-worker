@@ -46,7 +46,7 @@ get_models() -> [
     space_quota,
     monitoring_state,
     file_handles,
-    sfm_handle,
+    sd_handle,
     custom_metadata,
     permissions_cache,
     permissions_cache_helper,

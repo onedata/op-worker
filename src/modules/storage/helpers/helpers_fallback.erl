@@ -17,7 +17,7 @@
 -export([apply_and_maybe_handle_ekeyexpired/3]).
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
@@ -27,11 +27,11 @@
 
 -spec apply_and_maybe_handle_ekeyexpired
     (SfmHandle, Operation, HelperOrFileHandle) -> Result when
-    SfmHandle :: storage_file_manager:handle(),
+    SfmHandle :: storage_driver:handle(),
     Operation :: fun(() -> Result),
     HelperOrFileHandle :: helpers:helper_handle() | helpers:file_handle(),
     Result :: ok | {ok, term()} | {error, term()}.
-apply_and_maybe_handle_ekeyexpired(#sfm_handle{
+apply_and_maybe_handle_ekeyexpired(#sd_handle{
     session_id = SessionId,
     space_id = SpaceId,
     storage_id = StorageId

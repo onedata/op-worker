@@ -15,7 +15,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("transfers_test_mechanism.hrl").
 -include("countdown_server.hrl").
 -include("rest_test_utils.hrl").

@@ -33,12 +33,12 @@
 %% Reads data from a location uniquely specified by {StorageID, FileID} pair.
 %% @end
 %%--------------------------------------------------------------------
--spec read(user_ctx:ctx(), file_ctx:ctx(), HandleId :: storage_file_manager:handle_id(),
+-spec read(user_ctx:ctx(), file_ctx:ctx(), HandleId :: storage_driver:handle_id(),
     Offset :: non_neg_integer(), Size :: pos_integer()) ->
     fslogic_worker:proxyio_response().
 read(UserCtx, FileCtx, HandleId, Offset, Size) ->
     {ok, Handle} =  get_handle(UserCtx, FileCtx, HandleId, read),
-    {ok, Data} = storage_file_manager:read(Handle, Offset, Size),
+    {ok, Data} = storage_driver:read(Handle, Offset, Size),
     #proxyio_response{
         status = #status{code = ?OK},
         proxyio_response = #remote_data{data = Data}
@@ -50,7 +50,7 @@ read(UserCtx, FileCtx, HandleId, Offset, Size) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec write(user_ctx:ctx(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id(),
+    HandleId :: storage_driver:handle_id(),
     ByteSequences :: [#byte_sequence{}]) -> fslogic_worker:proxyio_response().
 write(UserCtx, FileCtx, HandleId, ByteSequences) ->
     {ok, Handle0} = get_handle(UserCtx, FileCtx, HandleId, write),
@@ -85,8 +85,8 @@ get_proxyio_node(Uuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_handle(user_ctx:ctx(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id(), operation()) ->
-    {ok, storage_file_manager:handle()} | lfm:error_reply().
+    HandleId :: storage_driver:handle_id(), operation()) ->
+    {ok, storage_driver:handle()} | lfm:error_reply().
 get_handle(UserCtx, FileCtx, HandleId, Operation) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case session_handles:get(SessId, HandleId) of
@@ -106,7 +106,7 @@ get_handle(UserCtx, FileCtx, HandleId, Operation) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_handle(user_ctx:ctx(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id(), operation()) -> ok.
+    HandleId :: storage_driver:handle_id(), operation()) -> ok.
 create_handle(UserCtx, FileCtx, HandleId, Operation) ->
     try
         create_handle_helper(UserCtx, FileCtx, HandleId, rdwr)
@@ -122,7 +122,7 @@ create_handle(UserCtx, FileCtx, HandleId, Operation) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_handle_helper(user_ctx:ctx(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id(),
+    HandleId :: storage_driver:handle_id(),
     fslogic_worker:open_flag()) -> ok.
 create_handle_helper(UserCtx, FileCtx, HandleId, Flag) ->
     #fuse_response{
@@ -136,13 +136,13 @@ create_handle_helper(UserCtx, FileCtx, HandleId, Flag) ->
 %% Writes all of the data to the storage or dies trying.
 %% @end
 %%--------------------------------------------------------------------
--spec write_all(Handle :: storage_file_manager:handle(),
+-spec write_all(Handle :: storage_driver:handle(),
     Offset :: non_neg_integer(), Data :: binary(),
-    Wrote :: non_neg_integer()) -> {non_neg_integer(), storage_file_manager:handle()}.
+    Wrote :: non_neg_integer()) -> {non_neg_integer(), storage_driver:handle()}.
 write_all(Handle, _Offset, <<>>, Written) -> {Written, Handle};
 write_all(Handle, Offset, Data, Written) ->
-    {ok, WrittenNow} = storage_file_manager:write(Handle, Offset, Data),
-    Handle2 = storage_file_manager:increase_size(Handle, WrittenNow),
+    {ok, WrittenNow} = storage_driver:write(Handle, Offset, Data),
+    Handle2 = storage_driver:increase_size(Handle, WrittenNow),
     write_all(Handle2, Offset + WrittenNow,
               binary_part(Data, {byte_size(Data), WrittenNow - byte_size(Data)}),
               Written + WrittenNow).

@@ -214,7 +214,7 @@ process_file_links(FileCtx, UserCtx, KeepParentLink) ->
         -> ok | {error, term()}.
 maybe_remove_file_on_storage(FileCtx, UserCtx) ->
     try
-        case sfm_utils:recursive_delete(FileCtx, UserCtx) of
+        case sd_utils:recursive_delete(FileCtx, UserCtx) of
             ok -> ok;
             {error, ?ENOENT} -> ok;
             OtherError -> OtherError

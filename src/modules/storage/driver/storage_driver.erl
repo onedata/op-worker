@@ -10,15 +10,14 @@
 %%% operates directly on storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage_file_manager).
+-module(storage_driver).
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/proxyio_messages.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("storage_file_manager_errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([new_handle/2, new_handle/3, new_handle/6, set_size/1, increase_size/2, get_storage_file_id/1]).
@@ -32,14 +31,14 @@
 % Export for tests
 -export([open_insecure/2]).
 
--type handle() :: #sfm_handle{}.
+-type handle() :: #sd_handle{}.
 -type handle_id() :: binary().
 -type error_reply() :: {error, term()}.
 
 -export_type([handle/0, handle_id/0, error_reply/0]).
 
--define(RUN(SFMHandle, Fun, HelperOrFileHandle),
-    helpers_fallback:apply_and_maybe_handle_ekeyexpired(SFMHandle, Fun, HelperOrFileHandle)).
+-define(RUN(SDHandle, Fun, HelperOrFileHandle),
+    helpers_fallback:apply_and_maybe_handle_ekeyexpired(SDHandle, Fun, HelperOrFileHandle)).
 
 %%%===================================================================
 %%% API
@@ -82,7 +81,7 @@ new_handle(SessionId, FileCtx, Generate) ->
 -spec new_handle(session:id(), od_space:id(), file_meta:uuid(), storage:id(),
     helpers:file_id(), od_share:id() | undefined) -> handle().
 new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId, ShareId) ->
-    #sfm_handle{
+    #sd_handle{
         file = StorageFileId,
         file_uuid = FileUuid,
         session_id = SessionId,
@@ -97,12 +96,12 @@ new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId, ShareId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_size(handle()) -> handle().
-set_size(#sfm_handle{
+set_size(#sd_handle{
     space_id = SpaceId,
     file_uuid = FileUuid
 } = Handle) ->
     FSize = get_size(FileUuid, SpaceId),
-    Handle#sfm_handle{
+    Handle#sd_handle{
         file_size = FSize
     }.
 
@@ -112,13 +111,13 @@ set_size(#sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec increase_size(handle(), non_neg_integer()) -> handle().
-increase_size(SFMHandle = #sfm_handle{file_size = CurrentSize}, Increase) ->
-    SFMHandle#sfm_handle{
+increase_size(SDHandle = #sd_handle{file_size = CurrentSize}, Increase) ->
+    SDHandle#sd_handle{
         file_size = CurrentSize + Increase
     }.
 
 -spec get_storage_file_id(handle()) -> helpers:file_id().
-get_storage_file_id(#sfm_handle{file = StorageFileId}) ->
+get_storage_file_id(#sd_handle{file = StorageFileId}) ->
     StorageFileId.
 
 %%--------------------------------------------------------------------
@@ -130,12 +129,12 @@ get_storage_file_id(#sfm_handle{file = StorageFileId}) ->
 %%--------------------------------------------------------------------
 -spec open(handle(), OpenFlag :: helpers:open_flag()) ->
     {ok, handle()} | error_reply().
-open(SFMHandle, read) ->
-    open_for_read(SFMHandle);
-open(SFMHandle, write) ->
-    open_for_write(SFMHandle);
-open(SFMHandle, rdwr) ->
-    open_for_rdwr(SFMHandle).
+open(SDHandle, read) ->
+    open_for_read(SDHandle);
+open(SDHandle, write) ->
+    open_for_write(SDHandle);
+open(SDHandle, rdwr) ->
+    open_for_rdwr(SDHandle).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -146,8 +145,8 @@ open(SFMHandle, rdwr) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_at_creation(handle()) -> {ok, handle()} | error_reply().
-open_at_creation(SFMHandle) ->
-    open_insecure(SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr).
+open_at_creation(SDHandle) ->
+    open_insecure(SDHandle#sd_handle{session_id = ?ROOT_SESS_ID}, rdwr).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -155,8 +154,8 @@ open_at_creation(SFMHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec release(handle()) -> ok | error_reply().
-release(SFMHandle = #sfm_handle{file_handle = FileHandle}) ->
-    ?RUN(SFMHandle, fun() ->
+release(SDHandle = #sd_handle{file_handle = FileHandle}) ->
+    ?RUN(SDHandle, fun() ->
         helpers:release(FileHandle)
     end, FileHandle).
 
@@ -177,15 +176,15 @@ mkdir(Handle, Mode) ->
 %%--------------------------------------------------------------------
 -spec mkdir(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
     ok | error_reply().
-mkdir(#sfm_handle{
+mkdir(#sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
-} = SFMHandle, Mode, Recursive) ->
+} = SDHandle, Mode, Recursive) ->
 
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         Noop = fun(_) -> ok end,
         case helpers:mkdir(HelperHandle, FileId, Mode) of
             ok ->
@@ -196,7 +195,7 @@ mkdir(#sfm_handle{
                     [_] -> ok;
                     [_ | _] ->
                         LeafLess = filename:dirname(FileId),
-                        case mkdir(SFMHandle#sfm_handle{file = LeafLess},
+                        case mkdir(SDHandle#sd_handle{file = LeafLess},
                             ?AUTO_CREATED_PARENT_DIR_MODE, true)
                         of
                             ok -> ok;
@@ -207,9 +206,9 @@ mkdir(#sfm_handle{
                                 throw(ParentError)
                         end
                 end,
-                R = case mkdir(SFMHandle, Mode, false) of
+                R = case mkdir(SDHandle, Mode, false) of
                     ok ->
-                        chmod(SFMHandle, Mode); %% @todo: find out why umask(0) in helpers_nif.cc doesn't work
+                        chmod(SDHandle, Mode); %% @todo: find out why umask(0) in helpers_nif.cc doesn't work
                     E -> E
                 end,
                 Noop(HelperHandle), %% @todo: check why NIF crashes when this term is destroyed before recursive call
@@ -227,14 +226,14 @@ mkdir(#sfm_handle{
 %%--------------------------------------------------------------------
 -spec mv(FileHandleFrom :: handle(), FileTo :: helpers:file_id()) ->
     ok | error_reply().
-mv(SFMHandle = #sfm_handle{
+mv(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileFrom,
     space_id = SpaceId,
     session_id = SessionId
 }, FileTo) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:rename(HelperHandle, FileFrom, FileTo)
     end, HelperHandle).
 
@@ -246,14 +245,14 @@ mv(SFMHandle = #sfm_handle{
 %%--------------------------------------------------------------------
 -spec chmod(handle(), NewMode :: file_meta:posix_permissions()) ->
     ok | error_reply().
-chmod(SFMHandle = #sfm_handle{
+chmod(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
 }, Mode) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:chmod(HelperHandle, FileId, Mode)
     end, HelperHandle).
 
@@ -264,14 +263,14 @@ chmod(SFMHandle = #sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec chown(FileHandle :: handle(), non_neg_integer(), non_neg_integer()) -> ok | error_reply().
-chown(SFMHandle = #sfm_handle{
+chown(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     session_id = ?ROOT_SESS_ID,
     space_id = SpaceId
 }, Uid, Gid) ->
     {ok, HelperHandle} = session_helpers:get_helper(?ROOT_SESS_ID, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:chown(HelperHandle, FileId, Uid, Gid)
     end, HelperHandle);
 chown(_, _, _) ->
@@ -284,14 +283,14 @@ chown(_, _, _) ->
 %%--------------------------------------------------------------------
 -spec link(FileHandleFrom :: handle(), FileTo :: helpers:file_id()) ->
     ok | error_reply().
-link(SFMHandle = #sfm_handle{
+link(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileFrom,
     space_id = SpaceId,
     session_id = SessionId
 }, FileTo) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:link(HelperHandle, FileFrom, FileTo)
     end, HelperHandle).
 
@@ -301,14 +300,14 @@ link(SFMHandle = #sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(FileHandle :: handle()) -> {ok, helpers:stat()} | error_reply().
-stat(SFMHandle = #sfm_handle{
+stat(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
 }) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:getattr(HelperHandle, FileId)
     end, HelperHandle).
 
@@ -321,14 +320,14 @@ stat(SFMHandle = #sfm_handle{
 -spec readdir(FileHandle :: handle(), Offset :: non_neg_integer(),
     Count :: non_neg_integer()) ->
     {ok, [helpers:file_id()]} | error_reply().
-readdir(SFMHandle = #sfm_handle{
+readdir(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
 }, Offset, Count) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:readdir(HelperHandle, FileId, Offset, Count)
     end, HelperHandle).
 
@@ -339,14 +338,14 @@ readdir(SFMHandle = #sfm_handle{
 %%--------------------------------------------------------------------
 -spec listobjects(FileHandle :: handle(), Marker :: binary(), Offset :: non_neg_integer(),
     Count :: non_neg_integer()) -> {ok, [helpers:file_id()]} | error_reply().
-listobjects(SFMHandle = #sfm_handle{
+listobjects(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
 }, Marker, Offset, Count) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:listobjects(HelperHandle, FileId, Marker, Offset, Count)
     end, HelperHandle).
 
@@ -356,14 +355,14 @@ listobjects(SFMHandle = #sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_handle(handle(), helpers:file_id()) -> handle().
-get_child_handle(#sfm_handle{
+get_child_handle(#sd_handle{
     session_id = SessionId,
     space_id = SpaceId,
     file = StorageFileId,
     storage_id = StorageId,
     share_id = ShareId
 }, ChildName) ->
-    #sfm_handle{
+    #sd_handle{
         session_id = SessionId,
         space_id = SpaceId,
         file = filename:join(StorageFileId, ChildName),
@@ -380,17 +379,17 @@ get_child_handle(#sfm_handle{
 -spec write(FileHandle :: handle(), Offset :: non_neg_integer(),
     Buffer :: binary()) ->
     {ok, non_neg_integer()} | error_reply().
-write(#sfm_handle{open_flag = undefined}, _, _) ->
+write(#sd_handle{open_flag = undefined}, _, _) ->
     throw(?EPERM);
-write(#sfm_handle{open_flag = read}, _, _) ->
+write(#sd_handle{open_flag = read}, _, _) ->
     throw(?EPERM);
-write(SFMHandle = #sfm_handle{
+write(SDHandle = #sd_handle{
     space_id = SpaceId,
     file_handle = FileHandle,
     file_size = CSize
 }, Offset, Buffer) ->
     %% @todo: VFS-2086 handle sparse files
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         space_quota:assert_write(SpaceId, max(0, Offset + size(Buffer) - CSize)),
         helpers:write(FileHandle, Offset, Buffer)
     end, FileHandle).
@@ -403,13 +402,13 @@ write(SFMHandle = #sfm_handle{
 -spec read(FileHandle :: handle(), Offset :: non_neg_integer(),
     MaxSize :: non_neg_integer()) ->
     {ok, binary()} | error_reply().
-read(#sfm_handle{open_flag = undefined}, _, _) ->
+read(#sd_handle{open_flag = undefined}, _, _) ->
     throw(?EPERM);
-read(#sfm_handle{open_flag = write}, _, _) ->
+read(#sd_handle{open_flag = write}, _, _) ->
     throw(?EPERM);
-read(SFMHandle = #sfm_handle{file_handle = FileHandle}, Offset, MaxSize) ->
-    ?RUN(SFMHandle, fun() ->
-        case read_internal(SFMHandle, Offset, MaxSize) of
+read(SDHandle = #sd_handle{file_handle = FileHandle}, Offset, MaxSize) ->
+    ?RUN(SDHandle, fun() ->
+        case read_internal(SDHandle, Offset, MaxSize) of
             {ok, Bytes} ->
                 case byte_size(Bytes) of
                     0 ->
@@ -417,7 +416,7 @@ read(SFMHandle = #sfm_handle{file_handle = FileHandle}, Offset, MaxSize) ->
                     MaxSize ->
                         {ok, Bytes};
                     Size ->
-                        case read(SFMHandle, Offset + Size, MaxSize - Size) of
+                        case read(SDHandle, Offset + Size, MaxSize - Size) of
                             {ok, Bytes2} ->
                                 {ok, <<Bytes/binary, Bytes2/binary>>};
                             Error = {error, _} ->
@@ -427,7 +426,7 @@ read(SFMHandle = #sfm_handle{file_handle = FileHandle}, Offset, MaxSize) ->
             {error, ?ENOENT} when Offset > 0 ->
                 % some object storages return enoent when trying to read bytes out of file's range
                 % we must ensure that file exists
-                case stat(SFMHandle) of
+                case stat(SDHandle) of
                     {ok, _} ->
                         {ok, <<"">>};
                     {error, ?ENOENT} ->
@@ -449,14 +448,14 @@ create(Handle, Mode) ->
 
 -spec create(handle(), Mode :: non_neg_integer(), Recursive :: boolean()) ->
     ok | error_reply().
-create(#sfm_handle{
+create(#sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
-} = SFMHandle, Mode, Recursive) ->
+} = SDHandle, Mode, Recursive) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         case helpers:mknod(HelperHandle, FileId, Mode, reg) of
             ok ->
                 ok;
@@ -464,14 +463,14 @@ create(#sfm_handle{
                 Tokens = fslogic_path:split(FileId),
                 LeafLess = fslogic_path:join(lists:sublist(Tokens, 1, length(Tokens) - 1)),
                 ok =
-                    case mkdir(SFMHandle#sfm_handle{file = LeafLess},
+                    case mkdir(SDHandle#sd_handle{file = LeafLess},
                         ?AUTO_CREATED_PARENT_DIR_MODE, true)
                     of
                         ok -> ok;
                         {error, ?EEXIST} -> ok;
                         E0 -> E0
                     end,
-                create(SFMHandle, Mode, false);
+                create(SDHandle, Mode, false);
             {error, Reason} ->
                 {error, Reason}
         end
@@ -486,17 +485,17 @@ create(#sfm_handle{
 %%--------------------------------------------------------------------
 -spec truncate(handle(), Size :: integer(), CurrentSize :: non_neg_integer())
     -> ok | error_reply().
-truncate(#sfm_handle{open_flag = undefined}, _, _) ->
+truncate(#sd_handle{open_flag = undefined}, _, _) ->
     throw(?EPERM);
-truncate(#sfm_handle{open_flag = read}, _, _) -> throw(?EPERM);
-truncate(SFMHandle = #sfm_handle{
+truncate(#sd_handle{open_flag = read}, _, _) -> throw(?EPERM);
+truncate(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
 }, Size, CurrentSize) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:truncate(HelperHandle, FileId, Size, CurrentSize)
     end, HelperHandle).
 
@@ -507,14 +506,14 @@ truncate(SFMHandle = #sfm_handle{
 %%--------------------------------------------------------------------
 -spec setxattr(handle(), Name :: binary(), Value :: binary(),
     Create :: boolean(), Replace :: boolean()) -> ok | error_reply().
-setxattr(SFMHandle = #sfm_handle{
+setxattr(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
 }, Name, Value, Create, Replace) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:setxattr(HelperHandle, FileId, Name, Value, Create, Replace)
     end, HelperHandle).
 
@@ -524,14 +523,14 @@ setxattr(SFMHandle = #sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec getxattr(handle(), Name :: binary()) -> {ok, binary()} | error_reply().
-getxattr(SFMHandle = #sfm_handle{
+getxattr(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
 }, Name) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:getxattr(HelperHandle, FileId, Name)
     end, HelperHandle).
 
@@ -541,14 +540,14 @@ getxattr(SFMHandle = #sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec removexattr(handle(), Name :: binary()) -> ok | error_reply().
-removexattr(SFMHandle = #sfm_handle{
+removexattr(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
 }, Name) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:removexattr(HelperHandle, FileId, Name)
     end, HelperHandle).
 
@@ -558,14 +557,14 @@ removexattr(SFMHandle = #sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec listxattr(handle()) -> {ok, [binary()]} | error_reply().
-listxattr(SFMHandle = #sfm_handle{
+listxattr(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
 }) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:listxattr(HelperHandle, FileId)
     end, HelperHandle).
 
@@ -576,7 +575,7 @@ listxattr(SFMHandle = #sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec unlink(handle(), CurrentSize :: integer()) -> ok | error_reply().
-unlink(SFMHandle = #sfm_handle{
+unlink(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
@@ -587,7 +586,7 @@ unlink(SFMHandle = #sfm_handle{
         {error, not_found} -> ok
     end,
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         case helpers:unlink(HelperHandle, FileId, CurrentSize) of
             ok -> ok;
             {error, ?ENOENT} -> ok
@@ -600,14 +599,14 @@ unlink(SFMHandle = #sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec rmdir(handle()) -> ok | error_reply().
-rmdir(SFMHandle = #sfm_handle{
+rmdir(SDHandle = #sd_handle{
     storage_id = StorageId,
     file = FileId,
     space_id = SpaceId,
     session_id = SessionId
 }) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         helpers:rmdir(HelperHandle, FileId)
     end, HelperHandle).
 
@@ -617,8 +616,8 @@ rmdir(SFMHandle = #sfm_handle{
 %% @end
 %%--------------------------------------------------------------------
 -spec fsync(handle(), boolean()) -> ok | error_reply().
-fsync(SFMHandle = #sfm_handle{file_handle = FileHandle}, DataOnly) ->
-    ?RUN(SFMHandle, fun() ->
+fsync(SDHandle = #sd_handle{file_handle = FileHandle}, DataOnly) ->
+    ?RUN(SDHandle, fun() ->
         helpers:fsync(FileHandle, DataOnly)
     end, FileHandle).
 
@@ -627,8 +626,8 @@ fsync(SFMHandle = #sfm_handle{file_handle = FileHandle}, DataOnly) ->
 %%%===================================================================
 
 -spec read_internal(handle(), non_neg_integer(), non_neg_integer()) -> {ok, binary()} | {error, term()}.
-read_internal(SFMHandle = #sfm_handle{file_handle = FileHandle}, Offset, MaxSize) ->
-    ?RUN(SFMHandle, fun() ->
+read_internal(SDHandle = #sd_handle{file_handle = FileHandle}, Offset, MaxSize) ->
+    ?RUN(SDHandle, fun() ->
         helpers:read(FileHandle, Offset, MaxSize)
     end, FileHandle).
 
@@ -639,10 +638,10 @@ read_internal(SFMHandle = #sfm_handle{file_handle = FileHandle}, Offset, MaxSize
 %% @end
 %%--------------------------------------------------------------------
 -spec open_for_read(handle()) -> {ok, handle()} | error_reply().
-open_for_read(SFMHandle) ->
+open_for_read(SDHandle) ->
     check_permissions:execute(
         [?read_object],
-        [SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, read],
+        [SDHandle#sd_handle{session_id = ?ROOT_SESS_ID}, read],
         fun open_insecure/2
     ).
 
@@ -653,10 +652,10 @@ open_for_read(SFMHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_for_write(handle()) -> {ok, handle()} | error_reply().
-open_for_write(SFMHandle) ->
+open_for_write(SDHandle) ->
     check_permissions:execute(
         [?write_object],
-        [SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, write],
+        [SDHandle#sd_handle{session_id = ?ROOT_SESS_ID}, write],
         fun open_insecure/2
     ).
 
@@ -667,10 +666,10 @@ open_for_write(SFMHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_for_rdwr(handle()) -> {ok, handle()} | error_reply().
-open_for_rdwr(SFMHandle) ->
+open_for_rdwr(SDHandle) ->
     check_permissions:execute(
         [?read_object, ?write_object],
-        [SFMHandle#sfm_handle{session_id = ?ROOT_SESS_ID}, rdwr],
+        [SDHandle#sd_handle{session_id = ?ROOT_SESS_ID}, rdwr],
         fun open_insecure/2
     ).
 
@@ -681,18 +680,18 @@ open_for_rdwr(SFMHandle) ->
 %%--------------------------------------------------------------------
 -spec open_insecure(handle(), OpenFlag :: helpers:open_flag()) ->
     {ok, handle()} | error_reply().
-open_insecure(#sfm_handle{
+open_insecure(#sd_handle{
     storage_id = StorageId,
     file = FileId,
     session_id = SessionId,
     space_id = SpaceId
-} = SFMHandle, OpenFlag
+} = SDHandle, OpenFlag
 ) ->
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, StorageId),
-    ?RUN(SFMHandle, fun() ->
+    ?RUN(SDHandle, fun() ->
         case helpers:open(HelperHandle, FileId, OpenFlag) of
             {ok, FileHandle} ->
-                {ok, SFMHandle#sfm_handle{
+                {ok, SDHandle#sd_handle{
                     file_handle = FileHandle,
                     open_flag = OpenFlag
                 }};

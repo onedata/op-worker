@@ -9,7 +9,7 @@
 %%% Stores handles to files at storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sfm_handle).
+-module(sd_handle).
 -author("Michał Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -22,7 +22,7 @@
 -export([get_ctx/0]).
 
 -type key() :: datastore:key().
--type record() :: #sfm_handle{}.
+-type record() :: #sd_handle{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 

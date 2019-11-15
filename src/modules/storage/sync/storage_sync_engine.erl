@@ -13,7 +13,7 @@
 -module(storage_sync_engine).
 -author("Jakub Kudzia").
 
--include("modules/storage_sync/storage_sync.hrl").
+-include("modules/storage/sync/storage_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_sufix.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -102,8 +102,8 @@ process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileI
                             % Race could happen if previous stat was performed before file was
                             % deleted from the system and if links (and file) were deleted
                             % before we checked the links.
-                            SFMHandle = storage_file_ctx:get_handle_const(StorageFileCtx2),
-                            case storage_file_manager:stat(SFMHandle) of
+                            SDHandle = storage_file_ctx:get_handle_const(StorageFileCtx2),
+                            case storage_driver:stat(SDHandle) of
                                 {ok, _} ->
                                     import_file(StorageFileCtx2,  undefined,  Info2);
                                 _ ->
@@ -679,7 +679,7 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
         false ->
             try
                 {ACLBin, _} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
-                {ok, NormalizedACL} = nfs4_acl:decode_and_normalize(ACLBin, SpaceId, StorageId),
+                {ok, NormalizedACL} = storage_sync_acl:decode_and_normalize(ACLBin, SpaceId, StorageId),
                 {SanitizedAcl, FileCtx2} = sanitize_acl(NormalizedACL, FileCtx),
                 #provider_response{status = #status{code = ?OK}} =
                     acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl),
@@ -715,7 +715,7 @@ maybe_update_nfs4_acl(StorageFileCtx, FileCtx, true) ->
             #provider_response{provider_response = ACL} = acl_req:get_acl(UserCtx, FileCtx),
             try
                 {ACLBin, _} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
-                {ok, NormalizedNewACL} = nfs4_acl:decode_and_normalize(ACLBin, SpaceId, StorageId),
+                {ok, NormalizedNewACL} = storage_sync_acl:decode_and_normalize(ACLBin, SpaceId, StorageId),
                 {SanitizedAcl, FileCtx2} = sanitize_acl(NormalizedNewACL, FileCtx),
                 case #acl{value = SanitizedAcl} of
                     ACL ->

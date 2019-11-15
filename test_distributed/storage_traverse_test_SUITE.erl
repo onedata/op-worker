@@ -15,8 +15,8 @@
 -behaviour(traverse_behaviour).
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/storage_traverse/storage_traverse.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/traverse/storage_traverse.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -275,14 +275,14 @@ traverse_and_execute_jobs_only_on_files_test_base(Config, SpaceId, Opts) ->
     [W | _] = ?config(op_worker_nodes, Config),
     StorageId = get_storage_id(W, SpaceId),
     SpaceDir = space_dir(W, SpaceId, StorageId),
-    Handle = sfm_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
+    Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
     TestFilesStructure = [{10, 10}, {10, 10}, {0, 10}],
-    sfm_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
+    sd_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
     MaxDepth = maps:get(max_depth, Opts, ?INF_MAX_DEPTH),
     StrippedTestFilesStructure = lists:sublist(TestFilesStructure, MaxDepth),
     % generate names of files taking max_depth into consideration
-    {_CreatedDirs, CreatedFiles} = sfm_test_utils:setup_test_files_structure(W, Handle,
+    {_CreatedDirs, CreatedFiles} = sd_test_utils:setup_test_files_structure(W, Handle,
         StrippedTestFilesStructure, true),
     {_DirsNum, FilesNum} = count_files_and_dirs(TestFilesStructure, MaxDepth),
     FilesCounterRef = countdown_server:init_counter(W, FilesNum),
@@ -297,14 +297,14 @@ traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, SpaceId, Opts) ->
     [W | _] = ?config(op_worker_nodes, Config),
     StorageId = get_storage_id(W, SpaceId),
     SpaceDir = space_dir(W, SpaceId, StorageId),
-    Handle = sfm_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
+    Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
     TestFilesStructure = [{10, 10}, {10, 10}, {10, 10}],
-    sfm_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
+    sd_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
     MaxDepth = maps:get(max_depth, Opts, ?INF_MAX_DEPTH),
     StrippedTestFilesStructure = lists:sublist(TestFilesStructure, MaxDepth),
     % generate names of files taking max_depth into consideration
-    {CreatedDirs, CreatedFiles} = sfm_test_utils:setup_test_files_structure(W, Handle,
+    {CreatedDirs, CreatedFiles} = sd_test_utils:setup_test_files_structure(W, Handle,
         StrippedTestFilesStructure, true),
     CreatedDirs2 = [space_dir(W, SpaceId, StorageId) | CreatedDirs],
     {DirsNum, FilesNum} = count_files_and_dirs(TestFilesStructure, MaxDepth),
@@ -324,14 +324,14 @@ custom_compute_test_base(Config, SpaceId, Opts, ExpectedComputeValue) ->
     [W | _] = ?config(op_worker_nodes, Config),
     StorageId = get_storage_id(W, SpaceId),
     SpaceDir = space_dir(W, SpaceId, StorageId),
-    Handle = sfm_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
+    Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
     TestFilesStructure = [{10, 0}, {10, 0}, {0, 10}],
-    sfm_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
+    sd_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
     MaxDepth = maps:get(max_depth, Opts, ?INF_MAX_DEPTH),
     StrippedTestFilesStructure = lists:sublist(TestFilesStructure, MaxDepth),
     % generate names of files taking max_depth into consideration
-    {_CreatedDirs, CreatedFiles} = sfm_test_utils:setup_test_files_structure(W, Handle,
+    {_CreatedDirs, CreatedFiles} = sd_test_utils:setup_test_files_structure(W, Handle,
         StrippedTestFilesStructure, true),
     {_DirsNum, FilesNum} = count_files_and_dirs(TestFilesStructure, MaxDepth),
     FilesCounterRef = countdown_server:init_counter(W, FilesNum),
@@ -360,7 +360,7 @@ init_per_suite(Config) ->
         initializer:mock_provider_ids(NewConfig),
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), NewConfig)
     end,
-    [{?LOAD_MODULES, [initializer, sfm_test_utils, ?MODULE, countdown_server]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
+    [{?LOAD_MODULES, [initializer, sd_test_utils, ?MODULE, countdown_server]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
@@ -378,8 +378,8 @@ end_per_testcase(_Case, Config) ->
     lists:foreach(fun(SpaceId) ->
         StorageId = get_storage_id(W, SpaceId),
         SpaceDir = space_dir(W, SpaceId, StorageId),
-        Handle = sfm_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
-        sfm_test_utils:recursive_rm(W, Handle, true)
+        Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
+        sd_test_utils:recursive_rm(W, Handle, true)
     end, ?SPACES),
     stop_pool(W).
 

@@ -17,9 +17,9 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/storage_sync/storage_sync.hrl").
+-include("modules/storage/sync/storage_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -131,13 +131,13 @@ get_parent_ctx_const(#storage_file_ctx{
 get_stat_timestamp_const(#storage_file_ctx{stat_timestamp = StatTimestamp}) ->
     StatTimestamp.
 
--spec get_handle_const(ctx()) -> storage_file_manager:handle().
+-spec get_handle_const(ctx()) -> storage_driver:handle().
 get_handle_const(#storage_file_ctx{
     storage_file_id = StorageFileId,
     space_id = SpaceId,
     storage_id = StorageId
 }) ->
-    storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId,
+    storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId,
         StorageFileId, undefined).
 
 
@@ -145,8 +145,8 @@ get_handle_const(#storage_file_ctx{
 -spec stat(ctx()) -> {helpers:stat(), ctx()}.
 stat(StorageFileCtx = #storage_file_ctx{stat = undefined}) ->
     Timestamp = time_utils:system_time_seconds(),
-    SFMHandle = get_handle_const(StorageFileCtx),
-    case storage_file_manager:stat(SFMHandle) of
+    SDHandle = get_handle_const(StorageFileCtx),
+    case storage_driver:stat(SDHandle) of
         {ok, StatBuf} ->
             {StatBuf, StorageFileCtx#storage_file_ctx{
                 stat = StatBuf,
@@ -178,8 +178,8 @@ get_nfs4_acl(StorageFileCtx) ->
 %%-------------------------------------------------------------------
 -spec get_xattr(ctx(), binary()) -> {binary(), ctx()}.
 get_xattr(StorageFileCtx = #storage_file_ctx{xattr = undefined}, XattrName) ->
-    SFMHandle = get_handle_const(StorageFileCtx),
-    case storage_file_manager:getxattr(SFMHandle, XattrName) of
+    SDHandle = get_handle_const(StorageFileCtx),
+    case storage_driver:getxattr(SDHandle, XattrName) of
         {ok, Xattr} ->
             {Xattr, StorageFileCtx#storage_file_ctx{xattr = Xattr}};
         {error, ?ENOTSUP} ->

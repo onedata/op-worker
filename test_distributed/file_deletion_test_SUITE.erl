@@ -212,7 +212,7 @@ init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
     case DelayedFileCreation of
         true -> ok;
         false ->
-            test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 2, 1)
+            test_utils:mock_assert_num_calls(Worker, storage_driver, unlink, 2, 1)
     end.
 
 open_file_deletion_request(Config) ->
@@ -236,7 +236,7 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
     case DelayedFileCreation of
         true -> ok;
         false ->
-            test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 2, 1)
+            test_utils:mock_assert_num_calls(Worker, storage_driver, unlink, 2, 1)
     end.
 
 deletion_of_not_open_file(Config) ->
@@ -262,7 +262,7 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
     case DelayedFileCreation of
         true -> ok;
         false ->
-            test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 2, 1)
+            test_utils:mock_assert_num_calls(Worker, storage_driver, unlink, 2, 1)
     end.
 
 file_shouldnt_be_listed_after_deletion(Config) ->
@@ -406,31 +406,31 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
     {ok, H2} = lfm_proxy:open(Worker, SessId, {guid, G2}, rdwr),
 
     FileCtx1 = rpc:call(Worker, file_ctx, new_by_guid, [G1]),
-    {SfmHandle1, _} = rpc:call(Worker, storage_file_manager, new_handle, [SessId, FileCtx1]),
+    {SfmHandle1, _} = rpc:call(Worker, storage_driver, new_handle, [SessId, FileCtx1]),
     FileCtx2 = rpc:call(Worker, file_ctx, new_by_guid, [G2]),
-    {SfmHandle2, _} = rpc:call(Worker, storage_file_manager, new_handle, [SessId, FileCtx2]),
+    {SfmHandle2, _} = rpc:call(Worker, storage_driver, new_handle, [SessId, FileCtx2]),
 
-    ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
-    ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60),
 
     case DeleteNewFileFirst of
         true ->
             ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
             ok = lfm_proxy:close(Worker, H2),
-            ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
-            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+            ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
+            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60),
             ok = lfm_proxy:close(Worker, H1);
 
         false ->
             ok = lfm_proxy:close(Worker, H1),
-            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
-            ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
+            ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60),
             ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
             ok = lfm_proxy:close(Worker, H2)
     end,
 
-    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
-    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60).
+    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
+    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60).
     
 
 %===================================================================
@@ -489,7 +489,7 @@ init_per_testcase(Case, Config) when
     ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    test_utils:mock_new(Worker, [storage_file_manager, rename_req,
+    test_utils:mock_new(Worker, [storage_driver, rename_req,
         worker_proxy, file_meta], [passthrough]),
     test_utils:mock_expect(Worker, worker_proxy, cast,
         fun(W, A) -> worker_proxy:call(W, A) end),
@@ -539,8 +539,7 @@ end_per_testcase(Case, Config) when
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
 
-    test_utils:mock_validate_and_unload(Worker, [storage_file_manager,
-        rename_req]),
+    test_utils:mock_validate_and_unload(Worker, [storage_driver, rename_req]),
     test_utils:mock_unload(Worker, [worker_proxy, file_meta]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 

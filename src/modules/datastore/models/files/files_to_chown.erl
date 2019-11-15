@@ -61,7 +61,7 @@ chown_or_schedule_chowning(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec chown_file(file_ctx:ctx()) -> file_ctx:ctx().
 chown_file(FileCtx) ->
-    {SFMHandle, FileCtx2} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx),
+    {SDHandle, FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx),
     {#document{value =
         #file_meta{
             owner = OwnerUserId,
@@ -70,7 +70,7 @@ chown_file(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     % TODO VFS-3868 implement chown in s3/ceph and remove this catch
     {Uid, Gid} = luma:get_posix_user_ctx(?ROOT_SESS_ID, OwnerUserId, GroupOwnerId, SpaceId),
-    (catch storage_file_manager:chown(SFMHandle, Uid, Gid)),
+    (catch storage_driver:chown(SDHandle, Uid, Gid)),
     FileCtx3.
 
 %%--------------------------------------------------------------------

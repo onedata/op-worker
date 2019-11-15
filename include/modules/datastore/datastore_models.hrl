@@ -229,8 +229,8 @@
     expiration_time :: idp_access_token:expires()
 }).
 
-%% File handle used by the module
--record(sfm_handle, {
+%% File handle used by the storage_driver module
+-record(sd_handle, {
     file_handle :: undefined | helpers:file_handle(),
     file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),

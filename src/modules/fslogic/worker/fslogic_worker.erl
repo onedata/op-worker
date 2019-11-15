@@ -547,7 +547,7 @@ handle_provider_request(UserCtx, #check_qos_fulfillment{qos_id = QosEntryId}, Fi
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_proxyio_request(user_ctx:ctx(), proxyio_request_type(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id()) -> proxyio_response().
+    HandleId :: storage_driver:handle_id()) -> proxyio_response().
 handle_proxyio_request(UserCtx, #remote_write{byte_sequence = ByteSequences}, FileCtx,
     HandleId) ->
     read_write_req:write(UserCtx, FileCtx, HandleId, ByteSequences);

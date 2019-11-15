@@ -17,7 +17,7 @@
 -author("Rafal Slota").
 -author("Jakub Kudzia").
 
--include("modules/storage_sync/storage_sync.hrl").
+-include("modules/storage/sync/storage_sync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").

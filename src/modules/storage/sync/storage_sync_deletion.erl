@@ -19,7 +19,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("modules/storage_traverse/storage_traverse.hrl").
+-include("modules/storage/traverse/storage_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % API

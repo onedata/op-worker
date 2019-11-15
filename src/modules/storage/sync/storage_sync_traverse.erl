@@ -38,9 +38,9 @@
 -behaviour(storage_traverse).
 
 -include("global_definitions.hrl").
--include("modules/storage_traverse/storage_traverse.hrl").
--include("modules/storage_sync/storage_sync.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/traverse/storage_traverse.hrl").
+-include("modules/storage/sync/storage_sync.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").

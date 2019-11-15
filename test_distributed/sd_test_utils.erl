@@ -6,11 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Util functions for performing operations on storage using storage_file_manager
+%%% Util functions for performing operations on storage using storage_driver
 %%% in tests.
 %%% @end
 %%%-------------------------------------------------------------------
--module(sfm_test_utils).
+-module(sd_test_utils).
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
@@ -39,30 +39,30 @@ get_storage_doc(Worker, StorageId) ->
 new_handle(Worker, SpaceId, StorageFileId, #document{key = StorageId}) ->
     new_handle(Worker, SpaceId, StorageFileId, StorageId);
 new_handle(Worker, SpaceId, StorageFileId, StorageId) when is_binary(StorageId) ->
-    rpc:call(Worker, storage_file_manager, new_handle,
+    rpc:call(Worker, storage_driver, new_handle,
         [?ROOT_SESS_ID, SpaceId, undefined, StorageId, StorageFileId, undefined]).
 
 new_child_handle(ParentHandle, ChildName) ->
-    storage_file_manager:get_child_handle(ParentHandle, ChildName).
+    storage_driver:get_child_handle(ParentHandle, ChildName).
 
-mkdir(Worker, SFMHandle, Mode) ->
-    rpc:call(Worker, storage_file_manager, mkdir, [SFMHandle, Mode, true]).
+mkdir(Worker, SDHandle, Mode) ->
+    rpc:call(Worker, storage_driver, mkdir, [SDHandle, Mode, true]).
 
-create_file(Worker, SFMHandle, Mode) ->
-    ok = rpc:call(Worker, storage_file_manager, create, [SFMHandle, Mode, true]).
+create_file(Worker, SDHandle, Mode) ->
+    ok = rpc:call(Worker, storage_driver, create, [SDHandle, Mode, true]).
 
-open(Worker, SFMHandle, Flag) ->
-    rpc:call(Worker, storage_file_manager, open_insecure, [SFMHandle, Flag]).
+open(Worker, SDHandle, Flag) ->
+    rpc:call(Worker, storage_driver, open_insecure, [SDHandle, Flag]).
 
-write_file(Node, SFMHandle, Offset, Data) ->
+write_file(Node, SDHandle, Offset, Data) ->
     % this function opens and writes to file to ensure that file_handle is not deleted
     % after RPC process dies
     Self = self(),
     rpc:call(Node, erlang, spawn, [fun() ->
         Result = try
-            case storage_file_manager:open_insecure(SFMHandle, write) of
-                {ok, SFMHandle2} ->
-                    storage_file_manager:write(SFMHandle2, Offset, Data);
+            case storage_driver:open_insecure(SDHandle, write) of
+                {ok, SDHandle2} ->
+                    storage_driver:write(SDHandle2, Offset, Data);
                 Error = {error, _} ->
                     Error
             end
@@ -79,15 +79,15 @@ write_file(Node, SFMHandle, Offset, Data) ->
             ct:fail("write file timeout")
     end.
 
-read_file(Node, SFMHandle, Offset, Size) ->
+read_file(Node, SDHandle, Offset, Size) ->
     % this function opens and writes to file to ensure that file_handle is not deleted
     % after RPC process dies
     Self = self(),
     rpc:call(Node, erlang, spawn, [fun() ->
         Result = try
-            case storage_file_manager:open_insecure(SFMHandle, read) of
-                {ok, SFMHandle2} ->
-                    storage_file_manager:read(SFMHandle2, Offset, Size);
+            case storage_driver:open_insecure(SDHandle, read) of
+                {ok, SDHandle2} ->
+                    storage_driver:read(SDHandle2, Offset, Size);
                 Error = {error, _} ->
                     Error
             end
@@ -104,57 +104,57 @@ read_file(Node, SFMHandle, Offset, Size) ->
             ct:fail("read file timeout")
     end.
 
-unlink(Worker, SFMHandle, Size) ->
-    ok = rpc:call(Worker, storage_file_manager, unlink, [SFMHandle, Size]).
+unlink(Worker, SDHandle, Size) ->
+    ok = rpc:call(Worker, storage_driver, unlink, [SDHandle, Size]).
 
-chown(Worker, SFMHandle, Uid, Gid) ->
-    ok = rpc:call(Worker, storage_file_manager, chown, [SFMHandle, Uid, Gid]).
+chown(Worker, SDHandle, Uid, Gid) ->
+    ok = rpc:call(Worker, storage_driver, chown, [SDHandle, Uid, Gid]).
 
-chmod(Worker, SFMHandle, Mode) ->
-    ok = rpc:call(Worker, storage_file_manager, chmod, [SFMHandle, Mode]).
+chmod(Worker, SDHandle, Mode) ->
+    ok = rpc:call(Worker, storage_driver, chmod, [SDHandle, Mode]).
 
-stat(Worker, SFMHandle) ->
-    rpc:call(Worker, storage_file_manager, stat, [SFMHandle]).
+stat(Worker, SDHandle) ->
+    rpc:call(Worker, storage_driver, stat, [SDHandle]).
 
-ls(Worker, SFMHandle, Offset, Count) ->
-    rpc:call(Worker, storage_file_manager, readdir, [SFMHandle, Offset, Count]).
+ls(Worker, SDHandle, Offset, Count) ->
+    rpc:call(Worker, storage_driver, readdir, [SDHandle, Offset, Count]).
 
-listobjects(Worker, SFMHandle, Marker, Offset, Count) ->
-    rpc:call(Worker, storage_file_manager, listobjects, [SFMHandle, Marker, Offset, Count]).
+listobjects(Worker, SDHandle, Marker, Offset, Count) ->
+    rpc:call(Worker, storage_driver, listobjects, [SDHandle, Marker, Offset, Count]).
 
-rmdir(Worker, SFMHandle) ->
-    rpc:call(Worker, storage_file_manager, rmdir, [SFMHandle]).
+rmdir(Worker, SDHandle) ->
+    rpc:call(Worker, storage_driver, rmdir, [SDHandle]).
 
-truncate(Worker, SFMHandle, NewSize, CurrentSize) ->
-    ok = rpc:call(Worker, storage_file_manager, truncate, [SFMHandle, NewSize, CurrentSize]).
+truncate(Worker, SDHandle, NewSize, CurrentSize) ->
+    ok = rpc:call(Worker, storage_driver, truncate, [SDHandle, NewSize, CurrentSize]).
 
-type(Worker, SFMHandle) ->
-    case stat(Worker, SFMHandle) of
+type(Worker, SDHandle) ->
+    case stat(Worker, SDHandle) of
         {ok, #statbuf{st_mode = Mode}} ->
             file_meta:type(Mode);
         Error ->
             Error
     end.
 
-size(Worker, SFMHandle) ->
-    case stat(Worker, SFMHandle) of
+size(Worker, SDHandle) ->
+    case stat(Worker, SDHandle) of
         {ok, #statbuf{st_size = Size}} ->
             Size;
         Error ->
             Error
     end.
 
-recursive_rm(Worker, SFMHandle) ->
-    recursive_rm(Worker, SFMHandle, false).
+recursive_rm(Worker, SDHandle) ->
+    recursive_rm(Worker, SDHandle, false).
 
-recursive_rm(Worker, SFMHandle = #sfm_handle{storage_id = StorageId}, DoNotDeleteRoot) ->
-    case type(Worker, SFMHandle) of
+recursive_rm(Worker, SDHandle = #sd_handle{storage_id = StorageId}, DoNotDeleteRoot) ->
+    case type(Worker, SDHandle) of
         ?REGULAR_FILE_TYPE ->
-            case size(Worker, SFMHandle) of
+            case size(Worker, SDHandle) of
                 {error, ?ENOENT} ->
                     ok;
                 Size ->
-                    unlink(Worker, SFMHandle, Size)
+                    unlink(Worker, SDHandle, Size)
             end;
         ?DIRECTORY_TYPE ->
             {ok, Storage} = rpc:call(Worker, storage, get, [StorageId]),
@@ -162,42 +162,42 @@ recursive_rm(Worker, SFMHandle = #sfm_handle{storage_id = StorageId}, DoNotDelet
             HelperName = helper:get_name(Helper),
             case HelperName of
                 ?POSIX_HELPER_NAME ->
-                    recursive_rm_posix(Worker, SFMHandle, 0, 1000, DoNotDeleteRoot);
+                    recursive_rm_posix(Worker, SDHandle, 0, 1000, DoNotDeleteRoot);
                 ?S3_HELPER_NAME ->
-                    recursive_rm_s3(Worker, SFMHandle, <<"/">>, 0, 1000)
+                    recursive_rm_s3(Worker, SDHandle, <<"/">>, 0, 1000)
             end;
         {error, ?ENOENT} ->
             ok
     end.
 
-recursive_rm_posix(Worker, SFMHandle, Offset, Count, DoNotDeleteRoot) ->
-    case ls(Worker, SFMHandle, Offset, Count) of
+recursive_rm_posix(Worker, SDHandle, Offset, Count, DoNotDeleteRoot) ->
+    case ls(Worker, SDHandle, Offset, Count) of
         {ok, Children} when length(Children) < Count ->
-            rm_children(Worker, SFMHandle, Children),
+            rm_children(Worker, SDHandle, Children),
             case DoNotDeleteRoot of
                 true ->
                     ok;
                 false ->
-                    case rmdir(Worker, SFMHandle) of
+                    case rmdir(Worker, SDHandle) of
                         ok -> ok;
                         {error, ?EBUSY} -> ok;
                         {error, ?ENOENT} -> ok
                     end
             end;
         {ok, Children} ->
-            rm_children(Worker, SFMHandle, Children),
-            recursive_rm_posix(Worker, SFMHandle, Offset + Count, Count, false)
+            rm_children(Worker, SDHandle, Children),
+            recursive_rm_posix(Worker, SDHandle, Offset + Count, Count, false)
     end.
 
-recursive_rm_s3(Worker, SFMHandle, Marker, Offset, Count) ->
-    case listobjects(Worker, SFMHandle, Marker, Offset, Count) of
+recursive_rm_s3(Worker, SDHandle, Marker, Offset, Count) ->
+    case listobjects(Worker, SDHandle, Marker, Offset, Count) of
         {ok, Children} when length(Children) < Count ->
-            rm_children(Worker, SFMHandle, Children),
+            rm_children(Worker, SDHandle, Children),
             ok;
         {ok, Children} ->
-            rm_children(Worker, SFMHandle, Children),
+            rm_children(Worker, SDHandle, Children),
             NewMarker = lists:last(Children),
-            recursive_rm_s3(Worker, SFMHandle, NewMarker, Offset, Count)
+            recursive_rm_s3(Worker, SDHandle, NewMarker, Offset, Count)
     end.
 
 
@@ -223,9 +223,9 @@ setup_test_files_structure(W, RootHandle, [{Dirs, Files}], CreatedDirs, CreatedF
             true ->
                 ok;
             false ->
-                ok = sfm_test_utils:mkdir(W, SubDirHandle, 8#755)
+                ok = sd_test_utils:mkdir(W, SubDirHandle, 8#755)
         end,
-        NewDirId = storage_file_manager:get_storage_file_id(SubDirHandle),
+        NewDirId = storage_driver:get_storage_file_id(SubDirHandle),
         [NewDirId | CreatedDirsIn]
     end, CreatedDirs, lists:seq(1, Dirs)),
     {CreatedDirs2, create_files(W, RootHandle, Files, CreatedFiles, OnlyGenerateNames)};
@@ -236,11 +236,11 @@ setup_test_files_structure(W, RootHandle, [{Dirs, Files} | Rest], CreatedDirs, C
             true ->
                 ok;
             false ->
-                ok = sfm_test_utils:mkdir(W, SubDirHandle, 8#755)
+                ok = sd_test_utils:mkdir(W, SubDirHandle, 8#755)
         end,
         {CreatedDirsIn2, CreatedFilesIn2} =
             setup_test_files_structure(W, SubDirHandle, Rest, CreatedDirsIn, CreatedFilesIn, OnlyGenerateNames),
-        NewDirId = storage_file_manager:get_storage_file_id(SubDirHandle),
+        NewDirId = storage_driver:get_storage_file_id(SubDirHandle),
         {[NewDirId | CreatedDirsIn2], CreatedFilesIn2}
     end, {CreatedDirs, CreatedFiles}, lists:seq(1, Dirs)),
     {CreatedDirs2, create_files(W, RootHandle, Files, CreatedFiles2, OnlyGenerateNames)}.
@@ -252,8 +252,8 @@ create_files(W, RootHandle, FilesNum, CreatedFiles, OnlyGenerateNames) ->
             true ->
                 ok;
             false ->
-                ok = sfm_test_utils:create_file(W, SubDirHandle, 8#664)
+                ok = sd_test_utils:create_file(W, SubDirHandle, 8#664)
         end,
-        NewFileId = storage_file_manager:get_storage_file_id(SubDirHandle),
+        NewFileId = storage_driver:get_storage_file_id(SubDirHandle),
         [NewFileId | CreatedFilesIn]
     end, CreatedFiles, lists:seq(1, FilesNum)).
