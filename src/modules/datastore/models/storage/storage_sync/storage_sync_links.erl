@@ -9,6 +9,16 @@
 %%% are implemented.
 %%% storage_sync_links are links used by storage_sync to compare lists of
 %%% files on storage with lists of files in the Onedata system.
+%%% For each directory on synced storage, separate links tree is created.
+%%% Functions with suffix `_recursive` in this module operate on whole
+%%% trees structure.
+%%% Assume that there is a file on storage with
+%%% an absolute path: <<"/root1/dir1/dir2/dir3/leaf">>
+%%% Trees structure will look like presented below: (notation: TREE_ID -> {LinkName, LinkValue})
+%%%    * ?ROOT(<<"/root1">>) -> {<<"dir1">>, ?ROOT(<<"/root1/dir1">>)}
+%%%    * ?ROOT(<<"/root1/dir1">>) -> {<<"dir2">>, ?ROOT(<<"/root1/dir1/dir2">>)}
+%%%    * ?ROOT(<<"/root1/dir1/dir2">>) -> {<<"dir3">>, ?ROOT(<<"/root1/dir1/dir2/dir3">>)}
+%%%    * ?ROOT(<<"/root1/dir1/dir2/dir3">>) -> {<<"leaf">>, LeafValue)}
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_links).
@@ -34,8 +44,9 @@
 -export_type([link_name/0, link_target/0]).
 
 -define(CTX, #{model => ?MODULE}).
--define(ROOT_ID(RootStorageFileId, SpaceId, StorageId),
-    <<"storage_sync_links_", (base64:encode(crypto:hash(md5, [RootStorageFileId, SpaceId, StorageId])))/binary>>).
+% RootId of a links tree associated with StorageFileId directory
+-define(ROOT_ID(StorageFileId, SpaceId, StorageId),
+    <<"storage_sync_links_", (base64:encode(crypto:hash(md5, [StorageFileId, SpaceId, StorageId])))/binary>>).
 
 %%%===================================================================
 %%% API functions
@@ -43,14 +54,15 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% This function adds link associated with ChildStorageFileId to tree
-%% associated with RootStorageFileId.
+%% This function adds link associated with ChildStorageFileId to trees
+%% structure with root at RootStorageFileId.
+%% Separate tree is created for each directory.
 %% This function is recursive, which means, that if ChildStorageFileId
 %% is not a direct child of RootStorageFileId, the function will create
 %% intermediate links and trees.
 %% e. g.
 %% call add_link(<<"/root1">>, <<"/root1/dir1/dir2/dir3/leaf">>)
-%% will create the following links (link is presented as a pair {LinkName, LinkValue}):
+%% will create the following trees and links: (notation: TREE_ID -> {LinkName, LinkValue})
 %%    * ?ROOT(<<"/root1">>) -> {<<"dir1">>, ?ROOT(<<"/root1/dir1">>)}
 %%    * ?ROOT(<<"/root1/dir1">>) -> {<<"dir2">>, ?ROOT(<<"/root1/dir1/dir2">>)}
 %%    * ?ROOT(<<"/root1/dir1/dir2">>) -> {<<"dir3">>, ?ROOT(<<"/root1/dir1/dir2/dir3">>)}
@@ -69,9 +81,16 @@ add_link_recursive(RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, Ma
 
 -spec list(helpers:file_id(), od_space:id(), storage:id(), datastore_links_iter:token(), non_neg_integer()) ->
     {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
-list(RootStorageFileId, SpaceId, StorageId, Token, Limit) ->
-    list_internal(?ROOT_ID(RootStorageFileId, SpaceId, StorageId), Token, Limit).
+list(StorageFileId, SpaceId, StorageId, Token, Limit) ->
+    list_internal(?ROOT_ID(StorageFileId, SpaceId, StorageId), Token, Limit).
 
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function adds deletes whole trees structure with root at
+%% RootStorageFileId.
+%% @end
+%%-------------------------------------------------------------------
 -spec delete_recursive(helpers:file_id(), od_space:id(), storage:id()) -> ok.
 delete_recursive(RootStorageFileId, SpaceId, StorageId) ->
     delete_recursive_internal(?ROOT_ID(RootStorageFileId, SpaceId, StorageId)).
@@ -88,13 +107,13 @@ get_link(RootId, ChildName) ->
     end.
 
 -spec get_link(helpers:file_id(), od_space:id(), storage:id(), link_name()) -> {ok, link_target()} | error().
-get_link(RootStorageFileId, SpaceId, StorageId, ChildName) ->
-    get_link(?ROOT_ID(RootStorageFileId, SpaceId, StorageId), ChildName).
+get_link(StorageFileId, SpaceId, StorageId, ChildName) ->
+    get_link(?ROOT_ID(StorageFileId, SpaceId, StorageId), ChildName).
 
 -spec list(helpers:file_id(), od_space:id(), storage:id(), non_neg_integer()) ->
     {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
-list(RootStorageFileId, SpaceId, StorageId, Limit) ->
-    list_internal(?ROOT_ID(RootStorageFileId, SpaceId, StorageId), #link_token{}, Limit).
+list(StorageFileId, SpaceId, StorageId, Limit) ->
+    list_internal(?ROOT_ID(StorageFileId, SpaceId, StorageId), #link_token{}, Limit).
 
 -spec delete_link(helpers:file_id(), od_space:id(), storage:id(), link_name()) -> ok.
 delete_link(RootStorageFileId, SpaceId, StorageId, ChildName) ->

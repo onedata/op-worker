@@ -68,19 +68,21 @@
 -export([equals/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_file_doc/1,
+-export([get_canonical_path/1, get_canonical_path_tokens/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1, get_storage_file_id/2,
-    get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
+    get_new_storage_file_id/1, get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3,
     get_file_children/4, get_file_children/5, get_file_children/6,
     get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2, fill_location_gaps/4,
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
-    get_local_file_location_doc/2, get_or_create_local_file_location_doc/2, get_or_create_local_regular_file_location_doc/3,
-    get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
+    get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
+    get_or_create_local_regular_file_location_doc/3, get_file_location_ids/1,
+    get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/1, get_acl/1, get_mode/1, get_child_canonical_path/2,
-    get_file_size/1, get_file_size_from_remote_locations/1, get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
+    get_file_size/1, get_file_size_from_remote_locations/1, get_owner/1,
+    get_group_owner/1, get_local_storage_file_size/1,
     is_space_synced/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1
 ]).
 -export([is_dir/1]).
@@ -288,6 +290,24 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
 get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
     {Path, FileCtx}.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's canonical path tokens (starting with "/", "SpaceId/", ...).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_canonical_path_tokens(ctx()) -> {[file_meta:name()], ctx()}.
+get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
+    case is_root_dir_const(FileCtx) of
+        true ->
+            {[<<"/">>], FileCtx#file_ctx{canonical_path = <<"/">>}};
+        false ->
+            {CanonicalPathTokens, FileCtx2} = generate_canonical_path(FileCtx),
+            CanonicalPath = filename:join(CanonicalPathTokens),
+            {CanonicalPathTokens,
+                FileCtx2#file_ctx{canonical_path = CanonicalPath}}
+    end;
+get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
+    {fslogic_path:split(Path), FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -468,7 +488,7 @@ get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate)
                     end,
                     case Continue of
                         true ->
-                            generate_storage_file_id(FileCtx2);
+                            get_new_storage_file_id(FileCtx2);
                         _ ->
                             {undefined, FileCtx2}
                     end
@@ -477,6 +497,20 @@ get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate)
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
     {StorageFileId, FileCtx}.
 
+-spec get_new_storage_file_id(ctx()) -> {helpers:file_id(), ctx()}.
+get_new_storage_file_id(FileCtx) ->
+    {StorageDoc, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+    Helper = storage:get_helper(StorageDoc),
+    case helper:get_storage_path_type(Helper) of
+        ?FLAT_STORAGE_PATH ->
+            {FileId, FileCtx3} = storage_file_id:flat(FileCtx2),
+            % TODO - do not get_canonical_path (fix acceptance tests before)
+            {_, FileCtx4} = get_canonical_path(FileCtx3),
+            {FileId, FileCtx4#file_ctx{storage_file_id = FileId}};
+        ?CANONICAL_STORAGE_PATH ->
+            {StorageFileId, FileCtx3} = storage_file_id:canonical(FileCtx2),
+            {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}}
+    end.
 
 -spec is_space_synced(ctx()) -> {boolean(), ctx()}.
 is_space_synced(FileCtx = #file_ctx{is_space_synced = undefined}) ->
@@ -1265,20 +1299,4 @@ list_user_spaces(UserCtx, Offset, Limit) ->
             Children;
         false ->
             []
-    end.
-
-%% @private
--spec generate_storage_file_id(ctx()) -> {helpers:file_id(), ctx()}.
-generate_storage_file_id(FileCtx) ->
-    {StorageDoc, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    Helper = storage:get_helper(StorageDoc),
-    case helper:get_storage_path_type(Helper) of
-        ?FLAT_STORAGE_PATH ->
-            {FileId, FileCtx3} = storage_file_id:flat(FileCtx2),
-            % TODO - do not get_canonical_path (fix acceptance tests before)
-            {_, FileCtx4} = get_canonical_path(FileCtx3),
-            {FileId, FileCtx4#file_ctx{storage_file_id = FileId}};
-        ?CANONICAL_STORAGE_PATH ->
-            {StorageFileId, FileCtx3} = storage_file_id:canonical(FileCtx2),
-            {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}}
     end.

@@ -34,7 +34,7 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([notify_connection_to_oz/0, is_syncable_object_storage/1, ss_eff_init/0, ss_eff_cleanup/0]).
+-export([notify_connection_to_oz/0, is_syncable_object_storage/1]).
 
 %% Exported for tests
 -export([schedule_spaces_check/1]).
@@ -96,13 +96,7 @@ cleanup() ->
 
 -spec notify_connection_to_oz() -> ok.
 notify_connection_to_oz() ->
-    schedule_init_on_connection_to_oz(0).
-
-ss_eff_init() ->
-    schedule(0, ss_eff_init).
-
-ss_eff_cleanup() ->
-    schedule(0, ss_eff_cleanup).
+    schedule_spaces_check().
 
 %%%===================================================================
 %%% Internal functions
@@ -229,10 +223,6 @@ is_syncable_object_storage(StorageDoc = #document{value = #storage{}}) ->
         andalso (StoragePathType =:= ?CANONICAL_STORAGE_PATH)
         andalso (<<"0">> =:= maps:get(<<"blockSize">>, Args, undefined)).
 
--spec schedule_init_on_connection_to_oz(non_neg_integer()) -> ok.
-schedule_init_on_connection_to_oz(Interval) ->
-    schedule(Interval, ?PROVIDER_CONNECTED_TO_OZ).
-
 -spec schedule_spaces_check() -> ok.
 schedule_spaces_check() ->
     schedule(?STORAGE_SYNC_CHECK_INTERVAL, ?SPACES_CHECK).
@@ -243,5 +233,5 @@ schedule_spaces_check(IntervalSeconds) ->
 
 -spec schedule(non_neg_integer(), term()) -> ok.
 schedule(IntervalSeconds, Request) ->
-    erlang:send_after(timer:seconds(IntervalSeconds), whereis(?MODULE), [Request]),
+    erlang:send_after(timer:seconds(IntervalSeconds), ?MODULE, {sync_timer, Request}),
     ok.
