@@ -964,7 +964,7 @@ get_space_mount_point(Worker, SpaceId) ->
 
 
 get_supporting_storage_id(Worker, SpaceId) ->
-    [StorageId] = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
+    {ok, [StorageId]} = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
     StorageId.
 
 
