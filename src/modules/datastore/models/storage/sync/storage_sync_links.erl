@@ -55,10 +55,10 @@
 %%-------------------------------------------------------------------
 %% @doc
 %% This function adds link associated with ChildStorageFileId to trees
-%% structure with root at RootStorageFileId.
+%% structure with root at StorageFileId.
 %% Separate tree is created for each directory.
 %% This function is recursive, which means, that if ChildStorageFileId
-%% is not a direct child of RootStorageFileId, the function will create
+%% is not a direct child of StorageFileId, the function will create
 %% intermediate links and trees.
 %% e. g.
 %% call add_link(<<"/root1">>, <<"/root1/dir1/dir2/dir3/leaf">>)
@@ -74,10 +74,10 @@
 %% @end
 %%-------------------------------------------------------------------
 -spec add_link_recursive(helpers:file_id(), od_space:id(), storage:id(), link_name(), boolean()) -> ok.
-add_link_recursive(RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves) ->
-    ChildrenTokens = fslogic_path:split(ChildStorageFileId) -- fslogic_path:split(RootStorageFileId),
-    RootId = ?ROOT_ID(RootStorageFileId, SpaceId, StorageId),
-    add_link_recursive(RootId, RootStorageFileId, SpaceId, StorageId, ChildrenTokens, MarkLeaves).
+add_link_recursive(StorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves) ->
+    ChildrenTokens = fslogic_path:split(ChildStorageFileId) -- fslogic_path:split(StorageFileId),
+    RootId = ?ROOT_ID(StorageFileId, SpaceId, StorageId),
+    add_link_recursive(RootId, StorageFileId, SpaceId, StorageId, ChildrenTokens, MarkLeaves).
 
 -spec list(helpers:file_id(), od_space:id(), storage:id(), datastore_links_iter:token(), non_neg_integer()) ->
     {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
@@ -88,12 +88,12 @@ list(StorageFileId, SpaceId, StorageId, Token, Limit) ->
 %%-------------------------------------------------------------------
 %% @doc
 %% This function adds deletes whole trees structure with root at
-%% RootStorageFileId.
+%% StorageFileId.
 %% @end
 %%-------------------------------------------------------------------
 -spec delete_recursive(helpers:file_id(), od_space:id(), storage:id()) -> ok.
-delete_recursive(RootStorageFileId, SpaceId, StorageId) ->
-    delete_recursive_internal(?ROOT_ID(RootStorageFileId, SpaceId, StorageId)).
+delete_recursive(StorageFileId, SpaceId, StorageId) ->
+    delete_recursive_internal(?ROOT_ID(StorageFileId, SpaceId, StorageId)).
 
 %%%===================================================================
 %%% functions exported for CT tests
@@ -116,8 +116,8 @@ list(StorageFileId, SpaceId, StorageId, Limit) ->
     list_internal(?ROOT_ID(StorageFileId, SpaceId, StorageId), #link_token{}, Limit).
 
 -spec delete_link(helpers:file_id(), od_space:id(), storage:id(), link_name()) -> ok.
-delete_link(RootStorageFileId, SpaceId, StorageId, ChildName) ->
-    delete_link_internal(?ROOT_ID(RootStorageFileId, SpaceId, StorageId), ChildName).
+delete_link(StorageFileId, SpaceId, StorageId, ChildName) ->
+    delete_link_internal(?ROOT_ID(StorageFileId, SpaceId, StorageId), ChildName).
 
 %%%===================================================================
 %%% Internal functions
@@ -133,10 +133,10 @@ add_link_internal(RootId, ChildName, Target) ->
 
 -spec add_link_recursive(root_id(), helpers:file_id(), od_space:id(), storage:id(),
     [helpers:file_id()], boolean()) -> ok.
-add_link_recursive(_RootId, _RootStorageFileId, _SpaceId, _StorageId, [], _MarkLeaves) ->
+add_link_recursive(_RootId, _StorageFileId, _SpaceId, _StorageId, [], _MarkLeaves) ->
     ok;
-add_link_recursive(RootId, RootStorageFileId, SpaceId, StorageId, [ChildName | RestChildren], MarkLeaves) ->
-    ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
+add_link_recursive(RootId, StorageFileId, SpaceId, StorageId, [ChildName | RestChildren], MarkLeaves) ->
+    ChildStorageFileId = filename:join([StorageFileId, ChildName]),
     ChildRootId = case get_link(RootId, ChildName) of
         {ok, ChildRootId0} ->
             ChildRootId0;

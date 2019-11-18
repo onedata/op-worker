@@ -58,7 +58,19 @@ get_master_job(Job = #storage_traverse_master{info = Info}, UpdateSyncCounters) 
 %% Performs master job responsible for detecting which files in the
 %% synchronized space were deleted on storage and therefore should be
 %% deleted from the Onedata file system.
+%% It compares list of children of directory associated with StorageFileCtx,
+%% acquired from storage_sync_links, with list of children of the directory
+%% acquired from file_meta links.
+%% The lists are sorted in the same order so it is possible to compare them in
+%% linear time.
 %% This job is executed by storage_sync_traverse pool.
+%% Files that are missing on the storage_sync_links list are scheduled to be
+%% deleted in slave jobs.
+%% NOTE!!!
+%% On posix storages, only direct children are compared.
+%% On canonical object storages, whole file strucuture is compared.
+%% Traversing whole file structure (on canonical object storages) is performed
+%% by scheduling master jobs for directories.
 %% @end
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.

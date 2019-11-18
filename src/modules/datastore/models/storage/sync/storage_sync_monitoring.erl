@@ -36,7 +36,7 @@
     get_update_status/1, get_update_status/2,
     get_info/2, get_metric/3,
     is_scan_in_progress/1, is_scan_in_progress/2,
-    get_scans_num/1, get_scans_num/2,
+    get_finished_scans_num/1, get_finished_scans_num/2,
     get_import_finish_time/1, get_last_update_finish_time/1]).
 
 %% datastore_model callbacks
@@ -431,17 +431,17 @@ get_update_status(SpaceId, StorageId) ->
         {error, not_found} -> not_started
     end.
 
--spec get_scans_num(doc() | record()) -> {ok, non_neg_integer()}.
-get_scans_num(#storage_sync_monitoring{scans = Scans}) ->
+-spec get_finished_scans_num(doc() | record()) -> {ok, non_neg_integer()}.
+get_finished_scans_num(#storage_sync_monitoring{scans = Scans}) ->
     {ok, Scans};
-get_scans_num(#document{value = SSM}) ->
-    get_scans_num(SSM).
+get_finished_scans_num(#document{value = SSM}) ->
+    get_finished_scans_num(SSM).
 
--spec get_scans_num(od_space:id(), storage:id()) -> {ok, non_neg_integer()} | error().
-get_scans_num(SpaceId, StorageId) ->
+-spec get_finished_scans_num(od_space:id(), storage:id()) -> {ok, non_neg_integer()} | error().
+get_finished_scans_num(SpaceId, StorageId) ->
     case get(SpaceId, StorageId) of
         {ok, Doc} ->
-            get_scans_num(Doc);
+            get_finished_scans_num(Doc);
         Error = {error, _}->
             Error
     end.

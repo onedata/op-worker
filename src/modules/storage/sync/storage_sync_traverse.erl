@@ -69,7 +69,7 @@
     task_started/1, task_finished/1, task_canceled/1]).
 
 %% storage_traverse callbacks
--export([reset_info/1, get_next_batch_job_prehook/1, get_children_master_job_prehook/1, get_compute_fun/1]).
+-export([reset_info/1, get_next_batch_job_prehook/1, get_children_master_job_prehook/1, get_fold_children_fun/1]).
 
 %% exported for tests
 -export([has_mtime_changed/2, run/4, run_deletion_scan/5]).
@@ -103,7 +103,7 @@ stop_pool() ->
 run_import(SpaceId, StorageId, ImportConfig) ->
     CurrentTimestamp = time_utils:cluster_time_seconds(),
     {ok, SSM} = storage_sync_monitoring:prepare_new_import_scan(SpaceId, StorageId, CurrentTimestamp),
-    {ok, ScansNum} = storage_sync_monitoring:get_scans_num(SSM),
+    {ok, ScansNum} = storage_sync_monitoring:get_finished_scans_num(SSM),
     ?debug("Starting storage_sync scan no. 1 for space: ~p and storage: ~p", [SpaceId, StorageId]),
     run(SpaceId, StorageId, ScansNum + 1, ImportConfig).
 
@@ -111,13 +111,13 @@ run_import(SpaceId, StorageId, ImportConfig) ->
 run_update(SpaceId, StorageId, UpdateConfig) ->
     CurrentTimestamp = time_utils:cluster_time_seconds(),
     {ok, SSM} = storage_sync_monitoring:prepare_new_update_scan(SpaceId, StorageId, CurrentTimestamp),
-    {ok, ScansNum} = storage_sync_monitoring:get_scans_num(SSM),
+    {ok, ScansNum} = storage_sync_monitoring:get_finished_scans_num(SSM),
     ?debug("Starting storage_sync scan no. ~p for space: ~p and storage: ~p", [ScansNum + 1, SpaceId, StorageId]),
     run(SpaceId, StorageId, ScansNum + 1, UpdateConfig).
 
 -spec cancel(od_space:id(), storage:id()) -> ok.
 cancel(SpaceId, StorageId) ->
-    case storage_sync_monitoring:get_scans_num(SpaceId, StorageId) of
+    case storage_sync_monitoring:get_finished_scans_num(SpaceId, StorageId) of
         {ok, ScansNum} ->
             traverse:cancel(?POOL_BIN, encode_task_id(SpaceId, StorageId, ScansNum + 1));
         {error, ?ENOENT} ->
@@ -148,7 +148,7 @@ do_slave_job(#storage_traverse_slave{
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     case process_storage_file(StorageFileCtx, Info) of
         {ok, {SyncResult, _, _}} ->
-            increase_suitable_counter(SyncResult, SpaceId, StorageId);
+            increase_counter(SyncResult, SpaceId, StorageId);
         Error = {error, _} ->
             storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
             Error
@@ -244,8 +244,8 @@ get_children_master_job_prehook(_TraverseInfo) ->
         storage_sync_info:init_batch_counters(StorageFileId, SpaceId)
     end.
 
--spec get_compute_fun(info()) -> storage_traverse:compute().
-get_compute_fun(TraverseInfo) ->
+-spec get_fold_children_fun(info()) -> storage_traverse:fold_children_fun().
+get_fold_children_fun(TraverseInfo) ->
     SyncAcl = maps:get(sync_acl, TraverseInfo, false),
     fun(StorageFileCtx, Info, HashAcc) ->
         {Hash, StorageFileCtx2} = storage_sync_hash:compute_file_attrs_hash(StorageFileCtx, SyncAcl),
@@ -294,8 +294,8 @@ run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx, UpdateSyncCounters) 
         children_master_job_prehook => get_children_master_job_prehook(TraverseInfo),
         batch_size => ?SYNC_DIR_BATCH_SIZE,
         max_depth => MaxDepth,
-        compute_fun => get_compute_fun(TraverseInfo),
-        compute_init => []
+        fold_children_fun => get_fold_children_fun(TraverseInfo),
+        fold_children_init => []
     },
     storage_traverse:run(?POOL, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts).
 
@@ -323,8 +323,8 @@ run(SpaceId, StorageId, ScanNum, Config) ->
         children_master_job_prehook => get_children_master_job_prehook(TraverseInfo),
         batch_size => ?SYNC_DIR_BATCH_SIZE,
         max_depth => MaxDepth,
-        compute_fun => get_compute_fun(TraverseInfo),
-        compute_init => []
+        fold_children_fun => get_fold_children_fun(TraverseInfo),
+        fold_children_init => []
     },
     storage_traverse:run(?POOL, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts).
 
@@ -342,7 +342,7 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
     % for next batches are scheduled asynchronously
     case do_slave_job_on_directory(TraverseJob) of
         {ok, {SyncResult, FileCtx, StorageFileCtx2}} ->
-            increase_suitable_counter(SyncResult, SpaceId, StorageId),
+            increase_counter(SyncResult, SpaceId, StorageId),
             % stat result will be cached in StorageFileCtx
             % we perform stat here to ensure that jobs for all batches for given directory
             % will be scheduled with the same stat result
@@ -410,7 +410,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
                 }
             },
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx3),
-            increase_suitable_counter(SyncResult, SpaceId, StorageId),
+            increase_counter(SyncResult, SpaceId, StorageId),
 
             case {MTimeHasChanged, DeleteEnable, WriteOnce} of
                 {true, true, _} ->
@@ -421,7 +421,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
                     % WriteOnce option is enabled and MTime of directory has not changed, therefore
                     % we are sure that hash computed out of children (only regular files) attributes
                     % mustn't have changed
-                    traverse_only_directories(TraverseJob2#storage_traverse_master{compute_enabled = false}, Args);
+                    traverse_only_directories(TraverseJob2#storage_traverse_master{fold_enabled = false}, Args);
                 {_, _, _} ->
                     % Hash of children attrs might have changed, therefore it must be computed
                     traverse(TraverseJob2, Args, false)
@@ -633,12 +633,12 @@ process_storage_file(StorageFileCtx, Info) ->
             {error, {Error2, Reason2}}
     end.
 
--spec increase_suitable_counter(storage_sync_engine:result(), od_space:id(), storage:id()) -> ok.
-increase_suitable_counter(imported, SpaceId, StorageId) ->
+-spec increase_counter(storage_sync_engine:result(), od_space:id(), storage:id()) -> ok.
+increase_counter(imported, SpaceId, StorageId) ->
     storage_sync_monitoring:mark_imported_file(SpaceId, StorageId);
-increase_suitable_counter(updated, SpaceId, StorageId) ->
+increase_counter(updated, SpaceId, StorageId) ->
     storage_sync_monitoring:mark_updated_file(SpaceId, StorageId);
-increase_suitable_counter(processed, SpaceId, StorageId) ->
+increase_counter(processed, SpaceId, StorageId) ->
     storage_sync_monitoring:mark_processed_file(SpaceId, StorageId).
 
 -spec get_storage_sync_info_doc(master_job()) -> storage_sync_info:doc().

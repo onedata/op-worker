@@ -106,7 +106,8 @@ readdir(Handle, FileId, Offset, Count) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Calls {@link helpers_nif:listobjects/5} function.
-%% Listing objects starts from object with id == Marker.
+%% Listing objects starts from object with id which comes
+%% lexicographically after the Marker (object with id == Marker is not included).
 %% Marker may be used to list objects in batches.
 %% Each time Marker should be equal to id of the last object
 %% from the previous batch.

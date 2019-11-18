@@ -34,20 +34,20 @@
 -export([do_master_job/2, get_job/1, update_job_progress/5]).
 
 -type pool() :: traverse:pool() | atom().
--type info() :: term().
+-type info() :: term(). % additional info used by specific module that uses storage_traverse framework
 -type master_job() :: #storage_traverse_master{}.
 -type slave_job() :: #storage_traverse_slave{}.
 -type children_batch() :: [{helpers:file_id(), Depth :: non_neg_integer()}].
--type iterator() :: block_storage_iterator | canonical_object_storage_iterator.
+-type iterator_module() :: block_storage_iterator | canonical_object_storage_iterator.
 -type next_batch_job_prehook() :: fun((TraverseJob :: master_job()) -> ok).
 -type children_master_job_prehook() :: fun((TraverseJob :: master_job()) -> ok).
--type compute_init() :: term().
--type compute_result() :: term().
+-type fold_children_init() :: term().
+-type fold_children_result() :: term().
 -type callback_module() :: module().
 
--type compute() :: fun(
-    (StorageFileCtx :: storage_file_ctx:ctx(), Info :: info(), ComputeAcc :: term()) ->
-    {ComputeResult :: term(), UpdatedStorageFileCtx :: storage_file_ctx:ctx()}
+-type fold_children_fun() :: fun(
+    (StorageFileCtx :: storage_file_ctx:ctx(), Info :: info(), Acc :: term()) ->
+    {Result :: term(), UpdatedStorageFileCtx :: storage_file_ctx:ctx()}
 ).
 
 % opts that can be passed from calling method
@@ -71,16 +71,18 @@
     % prehook executed before scheduling job for processing children directory
     children_master_job_prehook => children_master_job_prehook(),
     % custom function that is called on each listed child
-    compute_fun => undefined | compute(),
+    % result from one call is passed to next call in the same batch
+    % final result is returned from ?MODULE:do_master_job
+    fold_children_fun => undefined | fold_children_fun(),
     % initial argument for compute function
-    compute_init => term(),
-    % allows to disable compute for specific batch, by default its enabled, but compute_fun must be defined
-    compute_enabled => boolean()
+    fold_children_init => term(),
+    % allows to disable compute for specific batch, by default its enabled, but fold_children_fun must be defined
+    fold_children_enabled => boolean()
 }.
 %% @formatter:on
 
--export_type([run_opts/0, info/0, master_job/0, slave_job/0, children_batch/0, next_batch_job_prehook/0, compute/0,
-    children_master_job_prehook/0, iterator/0, compute_init/0, compute_result/0, callback_module/0]).
+-export_type([run_opts/0, info/0, master_job/0, slave_job/0, children_batch/0, next_batch_job_prehook/0, fold_children_fun/0,
+    children_master_job_prehook/0, iterator_module/0, fold_children_init/0, fold_children_result/0, callback_module/0]).
 
 %%%===================================================================
 %%% Definitions of optional storage_traverse behaviour callbacks
@@ -91,7 +93,7 @@
 
 -callback get_children_master_job_prehook(info()) -> children_master_job_prehook().
 
--callback get_compute_fun(info()) -> compute_result().
+-callback get_fold_children_fun(info()) -> fold_children_result().
 
 %%%===================================================================
 %%% API functions
@@ -129,7 +131,7 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
     ChildrenMasterJobPrehook = maps:get(children_master_job_prehook, RunOpts, ?DEFAULT_CHILDREN_BATCH_JOB_PREHOOK),
     StorageTraverse = #storage_traverse_master{
         storage_file_ctx = RootStorageFileCtx,
-        iterator = Iterator,
+        iterator_module = Iterator,
         execute_slave_on_dir = maps:get(execute_slave_on_dir, RunOpts, ?DEFAULT_EXECUTE_SLAVE_ON_DIR),
         async_next_batch_job = maps:get(async_next_batch_job, RunOpts, ?DEFAULT_ASYNC_NEXT_BATCH_JOB),
         async_children_master_jobs = maps:get(async_children_master_jobs, RunOpts, ?DEFAULT_ASYNC_CHILDREN_MASTER_JOBS),
@@ -139,8 +141,8 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
         max_depth = maps:get(max_depth, RunOpts, ?DEFAULT_MAX_DEPTH),
         next_batch_job_prehook = maps:get(next_batch_job_prehook, RunOpts, ?DEFAULT_NEXT_BATCH_JOB_PREHOOK),
         children_master_job_prehook = ChildrenMasterJobPrehook,
-        compute_fun = maps:get(compute_fun, RunOpts, undefined),
-        compute_init = maps:get(compute_init, RunOpts, undefined),
+        fold_children_fun = maps:get(fold_children_fun, RunOpts, undefined),
+        fold_init = maps:get(fold_children_init, RunOpts, undefined),
         callback_module = binary_to_atom(Pool, utf8),
         info = TraverseInfo
     },
@@ -153,10 +155,10 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
 %%%===================================================================
 
 -spec do_master_job(master_job(), traverse:master_job_extended_args()) ->
-    {ok, traverse:master_job_map()} |{ok, traverse:master_job_map(), term()} | {error, term()}.
+    {ok, traverse:master_job_map()} |{ok, traverse:master_job_map(), fold_children_result()} | {error, term()}.
 do_master_job(MasterJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
-    iterator = Iterator
+    iterator_module = Iterator
 }, Args) ->
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
@@ -174,8 +176,6 @@ do_master_job(MasterJob = #storage_traverse_master{
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
     traverse:job(), traverse:pool(), traverse:id(), traverse:job_status()) ->
     {ok, traverse:job_id()}  | {error, term()}.
-update_job_progress(main_job, _Job, _Pool, _TaskId, _Status) ->
-    {ok, datastore_utils:gen_key()};
 update_job_progress(Id, Job, Pool, TaskId, Status)
     when Status =:= waiting
     orelse Status =:= on_pool
@@ -207,7 +207,7 @@ reset_info(MasterJob = #storage_traverse_master{callback_module = CallbackModule
 %% with passed helper type.
 %% @end
 %%-------------------------------------------------------------------
--spec get_iterator(helper:type()) -> iterator().
+-spec get_iterator(helper:type()) -> iterator_module().
 get_iterator(?BLOCK_STORAGE) ->
     block_storage_iterator;
 get_iterator(?OBJECT_STORAGE) ->
@@ -216,7 +216,7 @@ get_iterator(?OBJECT_STORAGE) ->
 -spec generate_master_and_slave_jobs(master_job(), master_job() | undefined, [{helpers:file_id(), Depth :: non_neg_integer()}],
     traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} |
-    {ok, traverse:master_job_map(), compute_result()}.
+    {ok, traverse:master_job_map(), fold_children_result()}.
 generate_master_and_slave_jobs(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     max_depth = MaxDepth,
@@ -236,8 +236,8 @@ generate_master_and_slave_jobs(CurrentMasterJob = #storage_traverse_master{
     execute_slave_on_dir = OnDir,
     async_children_master_jobs = AsyncChildrenMasterJobs,
     offset = Offset,
-    compute_fun = ComputeFun,
-    compute_enabled = ComputeEnabled,
+    fold_children_fun = FoldChildrenFun,
+    fold_enabled = FoldChildrenEnabled,
     info = Info
 }, NextBatchMaterJob, ChildrenBatch, Args) ->
     MasterJobs = maybe_schedule_next_batch_job(CurrentMasterJob, NextBatchMaterJob, Args),
@@ -256,7 +256,7 @@ generate_master_and_slave_jobs(CurrentMasterJob = #storage_traverse_master{
         sequential_slave_jobs => SeqSlaveJobs,
         slave_jobs => SlaveJobs
     },
-    case ComputeFun =:= undefined orelse ComputeEnabled =:= false of
+    case FoldChildrenFun =:= undefined orelse FoldChildrenEnabled =:= false of
         true -> {ok, MasterJobsMap};
         false -> {ok, MasterJobsMap, ComputeResult}
     end.
@@ -284,15 +284,15 @@ maybe_schedule_next_batch_job(_CurrentMasterJob, _NextBatchMasterJob, _Args) ->
     [].
 
 
--spec process_children_batch(master_job(), children_batch()) -> {[master_job()], [slave_job()], compute_result()}.
+-spec process_children_batch(master_job(), children_batch()) -> {[master_job()], [slave_job()], fold_children_result()}.
 process_children_batch(CurrentMasterJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
-    iterator = Iterator,
+    iterator_module = Iterator,
     max_depth = MaxDepth,
     children_master_job_prehook = ChildrenMasterJobPrehook,
-    compute_fun = ComputeFun,
-    compute_init = ComputeInit,
-    compute_enabled = ComputeEnabled,
+    fold_children_fun = FoldChildrenFun,
+    fold_init = FoldChildrenInit,
+    fold_enabled = FoldChildrenEnabled,
     info = Info
 }, ChildrenBatch) ->
     ResetInfo = reset_info(CurrentMasterJob),
@@ -304,7 +304,8 @@ process_children_batch(CurrentMasterJob = #storage_traverse_master{
             case {ChildDepth =< MaxDepth, file_meta:is_hidden(ChildName)} of
                 {true, false} ->
                     ChildCtx = storage_file_ctx:new(ChildStorageFileId, SpaceId, StorageId),
-                    {ComputePartialResult, ChildCtx2} = compute(ComputeFun, ChildCtx, Info, ComputeAcc, ComputeEnabled),
+                    {ComputePartialResult, ChildCtx2} = compute(FoldChildrenFun, ChildCtx, Info, ComputeAcc,
+                        FoldChildrenEnabled),
                     case Iterator:is_dir(ChildCtx2) of
                         {false, ChildCtx3} ->
                             {MasterJobsIn, [get_slave_job(ChildCtx3, ResetInfo) | SlaveJobsIn], ComputePartialResult};
@@ -316,23 +317,23 @@ process_children_batch(CurrentMasterJob = #storage_traverse_master{
                 _ ->
                     Acc
             end
-        end, {[], [], ComputeInit}, ChildrenBatch),
+        end, {[], [], FoldChildrenInit}, ChildrenBatch),
 
     {lists:reverse(MasterJobsRev), lists:reverse(SlaveJobsRev), ComputeResult}.
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Calls ComputeFun on ChildCtx if it id defined and if ComputeEnabled == true.
+%% Calls FoldChildrenFun on ChildCtx if it id defined and if ComputeEnabled == true.
 %% @end
 %%-------------------------------------------------------------------
--spec compute(undefined | compute(), ChildCtx :: storage_file_ctx:ctx(), info(), compute_init(), ComputeEnabled :: boolean()) ->
-    {compute_result(), ChildCtx2 :: storage_file_ctx:ctx()}.
-compute(_ComputeFun, _StorageFileCtx, _Info, ComputeAcc, false) ->
-    {ComputeAcc, _StorageFileCtx};
-compute(undefined, _StorageFileCtx, _Info, ComputeAcc, _ComputeEnabled) ->
-    {ComputeAcc, _StorageFileCtx};
-compute(ComputeFun, StorageFileCtx, Info, ComputeAcc, true) ->
-    ComputeFun(StorageFileCtx, Info, ComputeAcc).
+-spec compute(undefined | fold_children_fun(), ChildCtx :: storage_file_ctx:ctx(), info(), fold_children_result(), ComputeEnabled :: boolean()) ->
+    {fold_children_result(), ChildCtx2 :: storage_file_ctx:ctx()}.
+compute(_FoldChildrenFun, _StorageFileCtx, _Info, FoldChildrenResult, false) ->
+    {FoldChildrenResult, _StorageFileCtx};
+compute(undefined, _StorageFileCtx, _Info, FoldChildrenResult, _ComputeEnabled) ->
+    {FoldChildrenResult, _StorageFileCtx};
+compute(FoldChildrenFun, StorageFileCtx, Info, FoldChildrenResult, true) ->
+    FoldChildrenFun(StorageFileCtx, Info, FoldChildrenResult).
 
 -spec get_child_master_job(storage_file_ctx:ctx(), master_job(), info(), non_neg_integer()) -> master_job().
 get_child_master_job(ChildCtx, StorageTraverse, ChildInfo, Depth) ->
@@ -341,7 +342,7 @@ get_child_master_job(ChildCtx, StorageTraverse, ChildInfo, Depth) ->
         info = ChildInfo,
         depth = Depth,
         offset = 0,
-        compute_enabled = true
+        fold_enabled = true
     }.
 
 -spec get_slave_job(storage_file_ctx:ctx(), info()) -> slave_job().

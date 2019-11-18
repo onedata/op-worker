@@ -339,8 +339,8 @@ custom_compute_test_base(Config, SpaceId, Opts, ExpectedComputeValue) ->
     StartTime = time_utils:system_time_millis(),
     run_traverse(W, SpaceId, StorageId, {CSPid, undefined, FilesCounterRef, ComputeCounterRef},
         Opts#{
-            compute_fun => fun(StorageFileCtx, _Info, Acc) -> {Acc + 1, StorageFileCtx} end,
-            compute_init => 0
+            fold_children_fun => fun(StorageFileCtx, _Info, Acc) -> {Acc + 1, StorageFileCtx} end,
+            fold_children_init => 0
         }),
     ReceivedFiles = countdown_server:await(W, FilesCounterRef, ?TIMEOUT),
     countdown_server:await(W, ComputeCounterRef, ?TIMEOUT),
@@ -387,7 +387,7 @@ end_per_testcase(_Case, Config) ->
 % Pool callbacks
 %===================================================================
 
-do_master_job(TraverseJob = #storage_traverse_master{compute_fun = undefined}, TaskId) ->
+do_master_job(TraverseJob = #storage_traverse_master{fold_children_fun = undefined}, TaskId) ->
     storage_traverse:do_master_job(TraverseJob, TaskId);
 do_master_job(TraverseJob = #storage_traverse_master{info = {Pid, _, _, ComputeCounterRef}}, TaskId) ->
     {ok, MasterJobMap, ComputeResult} = storage_traverse:do_master_job(TraverseJob, TaskId),

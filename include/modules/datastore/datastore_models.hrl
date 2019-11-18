@@ -538,7 +538,7 @@
     storage_file_id :: helper:name(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),
-    iterator :: storage_traverse:iterator(),
+    iterator_module :: storage_traverse:iterator_module(),
     offset = 0 ::  non_neg_integer(),
     batch_size :: non_neg_integer(),
     marker :: undefined | helpers:marker(),
@@ -550,9 +550,9 @@
     % flag that informs whether job for processing next batch of given directory should be scheduled asynchronously
     async_next_batch_job :: boolean(),
     % initial argument for compute function (see storage_traverse.erl for more info)
-    compute_init :: term(),
+    fold_children_init :: term(),
     % flag that informs whether compute function should be executed (see storage_traverse.erl for more info)
-    compute_enabled :: boolean(),
+    fold_children_enabled :: boolean(),
     info :: storage_traverse:info()
 }).
 

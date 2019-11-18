@@ -95,5 +95,8 @@ is_dir(StorageFileCtx) ->
 
 -spec depth(helpers:file_id(), [helpers:file_id()]) -> non_neg_integer().
 depth(ChildId, ParentIdTokens) ->
+    % ParentId is always storage file id of space
+    % depending whether space is mounted in root, to calculate file depth
+    % we have to subtract 1 (in case of mount_in_root) or 2 from length of ChildTokens.
     ChildTokens = filename:split(ChildId),
     length(ChildTokens) - length(ParentIdTokens).

@@ -41,8 +41,10 @@ save_master_job(Key, StorageTraverseMaster = #storage_traverse_master{
     callback_module = CallbackModule
 }, Pool, TaskId) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    % if Key == main_job, set Key to undefined so that datastore will generate key
+    Key2 = utils:ensure_defined(Key, main_job, undefined),
     ?extract_key(datastore_model:save(?CTX, #document{
-        key = Key,
+        key = Key2,
         value = create_record(Pool, TaskId, CallbackModule, StorageTraverseMaster),
         scope = SpaceId
     })).
@@ -60,7 +62,7 @@ get_master_job(#document{value = #storage_traverse_job{
     storage_file_id = StorageFileId,
     space_id = SpaceId,
     storage_id = StorageId,
-    iterator = Iterator,
+    iterator_module = IteratorModule,
     offset = Offset,
     batch_size = BatchSize,
     marker = Marker,
@@ -68,26 +70,26 @@ get_master_job(#document{value = #storage_traverse_job{
     execute_slave_on_dir = ExecuteSlaveOnDir,
     async_children_master_jobs = AsyncChildrenMasterJobs,
     async_next_batch_job = AsyncNextBatchJob,
-    compute_init = ComputeInit,
-    compute_enabled = ComputeEnabled,
+    fold_children_init = FoldChildrenInit,
+    fold_children_enabled = FoldChildrenEnabled,
     info = Info
 }}) ->
     TraverseInfo = binary_to_term(Info),
     Job = #storage_traverse_master{
         storage_file_ctx = storage_file_ctx:new(StorageFileId, SpaceId, StorageId),
-        iterator = Iterator,
+        iterator_module = IteratorModule,
         offset = Offset,
         batch_size = BatchSize,
         marker = Marker,
         max_depth = MaxDepth,
         next_batch_job_prehook = get_next_batch_job_prehook(CallbackModule, TraverseInfo),
         children_master_job_prehook = get_children_master_job_prehook(CallbackModule, TraverseInfo),
-        compute_fun = get_compute_fun(CallbackModule, TraverseInfo),
+        fold_children_fun = get_fold_children_fun(CallbackModule, TraverseInfo),
         execute_slave_on_dir = ExecuteSlaveOnDir,
         async_children_master_jobs = AsyncChildrenMasterJobs,
         async_next_batch_job = AsyncNextBatchJob,
-        compute_init = ComputeInit,
-        compute_enabled = ComputeEnabled,
+        fold_init = FoldChildrenInit,
+        fold_enabled = FoldChildrenEnabled,
         callback_module = CallbackModule,
         info = TraverseInfo
     },
@@ -123,7 +125,7 @@ get_record_struct(1) ->
         {storage_file_id, string},
         {space_id, string},
         {storage_id, string},
-        {iterator, atom},
+        {iterator_module, atom},
         {offset, integer},
         {batch_size, integer},
         {marker, string},
@@ -131,8 +133,8 @@ get_record_struct(1) ->
         {execute_slave_on_dir, boolean},
         {async_children_master_jobs, boolean},
         {async_next_batch_job, boolean},
-        {compute_init, term},
-        {compute_enabled, boolean},
+        {fold_children_init, term},
+        {fold_children_enabled, boolean},
         {info, binary}
     ]}.
 
@@ -144,7 +146,7 @@ get_record_struct(1) ->
     record().
 create_record(Pool, TaskId, CallbackModule, #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
-    iterator = Iterator,
+    iterator_module = IteratorModule,
     offset = Offset,
     batch_size = BatchSize,
     marker = Marker,
@@ -152,8 +154,8 @@ create_record(Pool, TaskId, CallbackModule, #storage_traverse_master{
     execute_slave_on_dir = ExecuteSlaveOnDir,
     async_children_master_jobs = AsyncChildrenMasterJobs,
     async_next_batch_job = AsyncNextBatchJob,
-    compute_init = ComputeInit,
-    compute_enabled = ComputeEnabled,
+    fold_init = FoldChildrenInit,
+    fold_enabled = FoldChildrenEnabled,
     info = Info
 }) ->
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
@@ -166,7 +168,7 @@ create_record(Pool, TaskId, CallbackModule, #storage_traverse_master{
         storage_file_id = StorageFileId,
         space_id = SpaceId,
         storage_id = StorageId,
-        iterator = Iterator,
+        iterator_module = IteratorModule,
         offset = Offset,
         batch_size = BatchSize,
         marker = Marker,
@@ -174,8 +176,8 @@ create_record(Pool, TaskId, CallbackModule, #storage_traverse_master{
         execute_slave_on_dir = ExecuteSlaveOnDir,
         async_children_master_jobs = AsyncChildrenMasterJobs,
         async_next_batch_job = AsyncNextBatchJob,
-        compute_init = ComputeInit,
-        compute_enabled = ComputeEnabled,
+        fold_children_init = FoldChildrenInit,
+        fold_children_enabled = FoldChildrenEnabled,
         info = term_to_binary(Info)
     }.
 
@@ -199,12 +201,12 @@ get_children_master_job_prehook(CallbackModule, TraverseInfo) ->
             ?DEFAULT_CHILDREN_BATCH_JOB_PREHOOK
     end.
 
--spec get_compute_fun(traverse:callback_module(), storage_traverse:info()) ->
-    storage_traverse:compute() | undefined.
-get_compute_fun(CallbackModule, TraverseInfo) ->
-    case erlang:function_exported(CallbackModule, get_compute_fun, 1) of
+-spec get_fold_children_fun(traverse:callback_module(), storage_traverse:info()) ->
+    storage_traverse:fold_children_fun() | undefined.
+get_fold_children_fun(CallbackModule, TraverseInfo) ->
+    case erlang:function_exported(CallbackModule, get_fold_children_fun, 1) of
         true ->
-            CallbackModule:get_compute_fun(TraverseInfo);
+            CallbackModule:get_fold_children_fun(TraverseInfo);
         false ->
             undefined
     end.

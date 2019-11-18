@@ -35,7 +35,7 @@
     % the module must implement functions required by traverse.erl
     callback_module :: traverse:callback_module(),
     % storage specific module that encapsulates details of listing files on specific storage helpers
-    iterator :: storage_traverse:iterator(),
+    iterator_module :: storage_traverse:iterator_module(),
     % offset from which children files are listed in order to produce master and slave jobs
     offset = ?DEFAULT_OFFSET :: non_neg_integer(),
     % size of batch used to list children files on storage
@@ -57,11 +57,11 @@
     % prehook executed before scheduling job for processing children directory
     children_master_job_prehook = ?DEFAULT_CHILDREN_BATCH_JOB_PREHOOK :: storage_traverse:children_master_job_prehook(),
     % custom function that is called on each listed child
-    compute_fun :: undefined | storage_traverse:compute(),
-    % initial argument for compute function (see storage_traverse.erl for more info)
-    compute_init :: term(),
-    % allows to disable compute for specific batch, by default its enabled, but compute_fun must be defined
-    compute_enabled = true :: boolean(),
+    fold_children_fun :: undefined | storage_traverse:fold_children_fun(),
+    % initial argument for fold_children_fun function (see storage_traverse.erl for more info)
+    fold_init :: term(),
+    % allows to disable fold for specific batch, by default its enabled, but fold_children_fun must be defined
+    fold_enabled = true :: boolean(),
     info :: storage_traverse:info()
 }).
 
