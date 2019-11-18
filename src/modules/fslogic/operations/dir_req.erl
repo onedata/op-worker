@@ -103,7 +103,6 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     }},
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
     {ok, DirUuid} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
-    % TODO - event attr_changed
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
     {ok, _} = times:save(#document{
         key = DirUuid,

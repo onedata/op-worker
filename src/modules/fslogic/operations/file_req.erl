@@ -387,12 +387,13 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
     no_return() | {storage_file_manager:handle_id(), file_location:record(), file_ctx:ctx()}.
 open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink) ->
     FileCtx = verify_file_exists(FileCtx0, HandleId0),
+    SpaceID = file_ctx:get_space_id_const(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
     check_and_register_open(FileCtx, SessId, HandleId0),
     try
         {FileLocation, FileCtx2} =
             create_location(FileCtx, UserCtx, VerifyDeletionLink),
-        HandleId = open_on_storage(FileCtx2, SessId, Flag, user_ctx:is_direct_io(UserCtx), HandleId0),
+        HandleId = open_on_storage(FileCtx2, SessId, Flag, user_ctx:is_direct_io(UserCtx, SpaceID), HandleId0),
         {HandleId, FileLocation, FileCtx2}
     catch
         E1:E2 ->

@@ -243,11 +243,12 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
     Iden = #user_identity{user_id = UserId},
 
-    lists:foreach(fun({_, SpaceName}) ->
+    lists:foreach(fun({SpaceId, SpaceName}) ->
         case get(SpaceName) of
             undefined -> put(SpaceName, [SessId]);
             SessIds -> put(SpaceName, [SessId | SessIds])
-        end
+        end,
+        rpc:call(Worker, session, set_direct_io, [SessId, SpaceId, false])
     end, Spaces),
 
     Auth = #macaroon_auth{macaroon = Macaroon},
