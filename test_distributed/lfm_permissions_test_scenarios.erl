@@ -320,11 +320,10 @@ run_data_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
             }
         ),
 
-        % Set all posix or acl (depending on scenario) perms to files
         set_all_perms(acl, Node, maps:keys(PermsPerFile)),
 
-        % Assert that even with all perms set operation cannot be performed
-        % when caveats forbids
+        % Assert that even with all perms set operation can be performed
+        % only when caveats allows it
         run_caveats_scenario(
             Node, MainToken, OwnerUserSessId, User, Operation, ScenarioType,
             ScenarioRootDirPath, ExtraData

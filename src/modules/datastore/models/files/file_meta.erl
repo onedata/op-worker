@@ -541,20 +541,20 @@ list_children_bounded(Entry, Offset, Limit, AllowedChildren) ->
 
     ?run(begin
         {ok, FileUuid} = get_uuid(Entry),
-        case datastore_model:get_links(?CTX, FileUuid, all, Names) of
-            {error, _Reason} = Error ->
-                Error;
-            LinksList ->
-                Links = lists:foldl(fun({ok, L}, Acc) ->
-                    L ++ Acc
-                end, [], LinksList),
-                % Above foldl reversed list so it is necessary to calculate
-                % appropriate indexes to get Links[-Offset-Size:-Offset]
-                LinksNum = length(Links),
-                EndIdx = max(1, LinksNum - Offset + 1),
-                StartIdx = max(1, EndIdx - Limit),
-                Size = EndIdx - StartIdx,
-                prepare_list_ans(lists:sublist(Links, StartIdx, Size), #{})
+
+        ValidLinks = lists:foldr(fun
+            ({ok, L}, Acc) ->
+                L ++ Acc;
+            ({error, _Reason}, Acc) ->
+                Acc
+        end, [], datastore_model:get_links(?CTX, FileUuid, all, Names)),
+
+        case Offset < length(ValidLinks) of
+            true ->
+                RequestedLinks = lists:sublist(ValidLinks, Offset+1, Limit),
+                {ok, tag_children(RequestedLinks), #{}};
+            false ->
+                {ok, [], #{}}
         end
     end).
 

@@ -151,7 +151,7 @@ check_and_cache_data_constraints(
                             UserCtx, SessionDiscriminator, FileCtx2,
                             GuidConstraints, AllowAncestorsOfPaths
                         ),
-                        Relation = case converge_relations(PathRel, GuidRel) of
+                        Relation = case intersect_relations(PathRel, GuidRel) of
                             subpath ->
                                 subpath;
                             {ancestor, ChildrenSet} ->
@@ -173,11 +173,10 @@ check_and_cache_data_constraints(
 check_data_path_constraints(FileCtx, any, _AllowAncestorsOfPaths) ->
     {subpath, FileCtx};
 check_data_path_constraints(FileCtx0, AllowedPaths, false) ->
-    {FilePath0, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
-    FilePath1 = string:trim(FilePath0, trailing, "/"),
+    {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
 
     IsFileInAllowedSubPath = lists:any(fun(AllowedPath) ->
-        is_subpath(FilePath1, AllowedPath)
+        is_subpath(FilePath, AllowedPath)
     end, AllowedPaths),
 
     case IsFileInAllowedSubPath of
@@ -187,10 +186,9 @@ check_data_path_constraints(FileCtx0, AllowedPaths, false) ->
             throw(?EACCES)
     end;
 check_data_path_constraints(FileCtx0, AllowedPaths, true) ->
-    {FilePath0, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
-    FilePath1 = string:trim(FilePath0, trailing, "/"),
+    {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
 
-    case check_data_path_relation(FilePath1, AllowedPaths) of
+    case check_data_path_relation(FilePath, AllowedPaths) of
         undefined ->
             throw(?EACCES);
         subpath ->
@@ -210,7 +208,7 @@ check_data_guid_constraints(_, _, FileCtx, any, _AllowAncestorsOfPaths) ->
 check_data_guid_constraints(
     UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints, false
 ) ->
-    case does_fulfills_guid_constraints(
+    case does_fulfill_guid_constraints(
         UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints
     ) of
         {true, FileCtx1} ->
@@ -221,22 +219,21 @@ check_data_guid_constraints(
 check_data_guid_constraints(
     UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints, true
 ) ->
-    case does_fulfills_guid_constraints(
+    case does_fulfill_guid_constraints(
         UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints
     ) of
         {true, FileCtx1} ->
             {subpath, FileCtx1};
         {false, _, FileCtx1} ->
-            {FilePath0, FileCtx2} = file_ctx:get_canonical_path(FileCtx1),
-            FilePath1 = string:trim(FilePath0, trailing, "/"),
+            {FilePath, FileCtx2} = get_canonical_path(FileCtx1),
 
-            Relation = lists:foldl(fun(GuidsSet, CurrRelation) ->
-                AllowedPaths = guids_to_paths(GuidsSet),
-                case check_data_path_relation(FilePath1, AllowedPaths) of
+            Relation = lists:foldl(fun(GuidsList, CurrRelation) ->
+                AllowedPaths = guids_to_paths(GuidsList),
+                case check_data_path_relation(FilePath, AllowedPaths) of
                     undefined ->
                         throw(?EACCES);
                     Rel ->
-                        converge_relations(CurrRelation, Rel)
+                        intersect_relations(CurrRelation, Rel)
                 end
             end, subpath, GuidConstraints),
 
@@ -248,17 +245,17 @@ check_data_guid_constraints(
 %% @private
 %% @doc
 %% Checks whether file fulfills guid constraints, which means that all
-%% guid sets (contained in constraints) have either this file's guid or
+%% guid lists (contained in constraints) have either this file's guid or
 %% any of it's ancestors.
 %% @end
 %%--------------------------------------------------------------------
--spec does_fulfills_guid_constraints(user_ctx:ctx(),
+-spec does_fulfill_guid_constraints(user_ctx:ctx(),
     SessionDiscriminator :: term(),
     file_ctx:ctx(), token_utils:guid_constraints()
 ) ->
     {true, file_ctx:ctx()} |
     {false, token_utils:guid_constraints(), file_ctx:ctx()}.
-does_fulfills_guid_constraints(
+does_fulfill_guid_constraints(
     UserCtx, SessionDiscriminator, FileCtx, AllGuidConstraints
 ) ->
     FileGuid = get_file_guid(FileCtx),
@@ -277,7 +274,7 @@ does_fulfills_guid_constraints(
                     );
                 false ->
                     {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
-                    DoesParentFulfillsGuidConstraints = does_fulfills_guid_constraints(
+                    DoesParentFulfillsGuidConstraints = does_fulfill_guid_constraints(
                         UserCtx, SessionDiscriminator, ParentCtx,
                         AllGuidConstraints
                     ),
@@ -285,9 +282,9 @@ does_fulfills_guid_constraints(
                         {true, _} ->
                             permissions_cache:cache_permission(CacheKey, true),
                             {true, FileCtx1};
-                        {false, RemainingGuidSets, _} ->
+                        {false, RemainingGuidsLists, _} ->
                             check_and_cache_guid_constraints_fulfillment(
-                                FileCtx, CacheKey, RemainingGuidSets
+                                FileCtx, CacheKey, RemainingGuidsLists
                             )
                     end
             end
@@ -302,8 +299,8 @@ does_fulfills_guid_constraints(
     {false, token_utils:guid_constraints(), file_ctx:ctx()}.
 check_and_cache_guid_constraints_fulfillment(FileCtx, CacheKey, GuidConstraints) ->
     FileGuid = get_file_guid(FileCtx),
-    RemainingGuidConstraints = lists:filter(fun(GuidsSet) ->
-        not lists:member(FileGuid, GuidsSet)
+    RemainingGuidConstraints = lists:filter(fun(GuidsList) ->
+        not lists:member(FileGuid, GuidsList)
     end, GuidConstraints),
 
     case RemainingGuidConstraints of
@@ -384,14 +381,14 @@ is_subpath(PossibleSubPath, Path, PathLen) ->
 
 
 %% @private
--spec converge_relations(relation(), relation()) -> relation().
-converge_relations(subpath, subpath) ->
+-spec intersect_relations(relation(), relation()) -> relation().
+intersect_relations(subpath, subpath) ->
     subpath;
-converge_relations({ancestor, _Children} = Ancestor, subpath) ->
+intersect_relations({ancestor, _Children} = Ancestor, subpath) ->
     Ancestor;
-converge_relations(subpath, {ancestor, _Children} = Ancestor) ->
+intersect_relations(subpath, {ancestor, _Children} = Ancestor) ->
     Ancestor;
-converge_relations({ancestor, ChildrenA}, {ancestor, ChildrenB}) ->
+intersect_relations({ancestor, ChildrenA}, {ancestor, ChildrenB}) ->
     {ancestor, gb_sets:intersection(ChildrenA, ChildrenB)}.
 
 
@@ -401,8 +398,8 @@ guids_to_paths(Guids) ->
     lists:filtermap(fun(Guid) ->
         try
             FileCtx = file_ctx:new_by_guid(Guid),
-            {Path, _} = file_ctx:get_canonical_path(FileCtx),
-            {true, string:trim(Path, trailing, "/")}
+            {Path, _} = get_canonical_path(FileCtx),
+            {true, Path}
         catch _:_ ->
             % File may have been deleted so it is not possible to resolve
             % it's path
@@ -425,3 +422,9 @@ get_session_discriminator(UserCtx) ->
 -spec get_file_guid(file_ctx:ctx()) -> file_id:file_guid().
 get_file_guid(FileCtx) ->
     file_id:share_guid_to_guid(file_ctx:get_guid_const(FileCtx)).
+
+
+%% @private
+get_canonical_path(FileCtx) ->
+    {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+    {string:trim(Path, trailing, "/"), FileCtx2}.

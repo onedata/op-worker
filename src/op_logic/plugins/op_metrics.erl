@@ -134,13 +134,13 @@ exists(_, _) ->
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = space
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_STATISTICS);
 
-authorize(#op_req{operation = get, auth = ?USER(UserId) = Auth, gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = {user, _}
 }}, _) ->

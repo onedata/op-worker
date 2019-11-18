@@ -27,7 +27,7 @@
 
 -ifdef(TEST).
 -export([
-    converge_paths/2,
+    intersect_paths/2,
     consolidate_paths/1
 ]).
 -endif.
@@ -100,7 +100,7 @@ get_data_constraints(Caveats) ->
             Acc;
         (#cv_data_path{} = PathCaveat, #{paths := Intersection} = Acc) ->
             ?CV_PATH(AllowedPaths) = sanitize_cv_data_path(PathCaveat),
-            Acc#{paths => converge_paths(AllowedPaths, Intersection)};
+            Acc#{paths => intersect_paths(AllowedPaths, Intersection)};
         (?CV_OBJECTID(ObjectIds), #{guids := any} = Acc) ->
             Acc#{guids => [objectids_to_guids(ObjectIds)]};
         (?CV_OBJECTID(ObjectIds), #{guids := Guids} = Acc) ->
@@ -153,20 +153,20 @@ objectids_to_guids(Objectids) ->
 %% Returns intersection of 2 sets of paths.
 %% @end
 %%--------------------------------------------------------------------
--spec converge_paths([file_meta:path()], [file_meta:path()]) ->
+-spec intersect_paths([file_meta:path()], [file_meta:path()]) ->
     [file_meta:path()].
-converge_paths(PathsA, PathsB) ->
-    lists:reverse(converge_paths(PathsA, PathsB, [])).
+intersect_paths(PathsA, PathsB) ->
+    lists:reverse(intersect_paths(PathsA, PathsB, [])).
 
 
 %% @private
--spec converge_paths([file_meta:path()], [file_meta:path()],
+-spec intersect_paths([file_meta:path()], [file_meta:path()],
     [file_meta:path()]) -> [file_meta:path()].
-converge_paths([], _, Intersection) ->
+intersect_paths([], _, Intersection) ->
     Intersection;
-converge_paths(_, [], Intersection) ->
+intersect_paths(_, [], Intersection) ->
     Intersection;
-converge_paths([PathA | RestA] = A, [PathB | RestB] = B, Intersection) ->
+intersect_paths([PathA | RestA] = A, [PathB | RestB] = B, Intersection) ->
     PathALen = size(PathA),
     PathBLen = size(PathB),
 
@@ -174,18 +174,18 @@ converge_paths([PathA | RestA] = A, [PathB | RestB] = B, Intersection) ->
         true ->
             case PathB of
                 <<PathA:PathALen/binary, "/", _/binary>> ->
-                    converge_paths(RestA, RestB, [PathB | Intersection]);
+                    intersect_paths(RestA, RestB, [PathB | Intersection]);
                 _ ->
-                    converge_paths(RestA, B, Intersection)
+                    intersect_paths(RestA, B, Intersection)
             end;
         false ->
             case PathA of
                 PathB ->
-                    converge_paths(RestA, RestB, [PathA | Intersection]);
+                    intersect_paths(RestA, RestB, [PathA | Intersection]);
                 <<PathB:PathBLen/binary, "/", _/binary>> ->
-                    converge_paths(RestA, RestB, [PathA | Intersection]);
+                    intersect_paths(RestA, RestB, [PathA | Intersection]);
                 _ ->
-                    converge_paths(A, RestB, Intersection)
+                    intersect_paths(A, RestB, Intersection)
             end
     end.
 

@@ -99,7 +99,7 @@ get_auth(#user_ctx{session = Session}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets session's auth caveats from user context.
+%% Gets session's data constraints.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_data_constraints(ctx()) -> token_utils:data_constraints().

@@ -32,7 +32,7 @@
 ]).
 
 -export([
-    token_test/1,
+    token_auth_test/1,
     invalid_request_should_fail/1,
     unauthorized_request_should_fail/1,
     changes_stream_file_meta_create_test/1,
@@ -48,7 +48,7 @@
 
 all() ->
     ?ALL([
-        token_test,
+        token_auth_test,
         invalid_request_should_fail,
         unauthorized_request_should_fail,
         changes_stream_file_meta_create_test,
@@ -73,7 +73,7 @@ all() ->
 %%%===================================================================
 
 
-token_test(Config) ->
+token_auth_test(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Json = #{<<"fileMeta">> => #{

@@ -20,15 +20,15 @@
 converge_paths_test_() -> [
     ?_assertEqual(
         [],
-        token_utils:converge_paths([<<"/q/w/e">>], [<<"/a/s/d">>])
+        token_utils:intersect_paths([<<"/q/w/e">>], [<<"/a/s/d">>])
     ),
     ?_assertEqual(
         [<<"/q/w/e">>],
-        token_utils:converge_paths([<<"/q/w/e">>], [<<"/e/w/q">>, <<"/q/w/e">>])
+        token_utils:intersect_paths([<<"/q/w/e">>], [<<"/e/w/q">>, <<"/q/w/e">>])
     ),
     ?_assertEqual(
         [<<"/z/x/c/d/e">>],
-        token_utils:converge_paths([<<"/q/w/e">>, <<"/z/x/c">>], [<<"/a/s/d">>, <<"/z/x/c/d/e">>])
+        token_utils:intersect_paths([<<"/q/w/e">>, <<"/z/x/c">>], [<<"/a/s/d">>, <<"/z/x/c/d/e">>])
     )
 ].
 
