@@ -220,7 +220,7 @@
     proxy_via :: oneprovider:id() | undefined,
     % Key-value in-session memory
     memory = #{} :: map(),
-    direct_io = #{} :: #{od_space:id() => boolean()} % TODO - zamiast tego flaga w open
+    direct_io = #{} :: #{od_space:id() => boolean()}
 }).
 
 % Model used to cache idp access tokens
