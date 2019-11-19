@@ -22,6 +22,30 @@
 -define(CV_OBJECTID(__OBJECTIDS), #cv_data_objectid{whitelist = __OBJECTIDS}).
 
 
+is_ancestor_test_() -> [
+    ?_assertEqual(
+        false,
+        data_constraints:is_ancestor(<<"/c/b/a">>, <<"/a/b/c">>)
+    ),
+    ?_assertEqual(
+        false,
+        data_constraints:is_ancestor(<<"/a/b/c/d">>, <<"/a/b/c/">>)
+    ),
+    ?_assertEqual(
+        false,
+        data_constraints:is_ancestor(<<"/a/b/c">>, <<"/a/b/c">>)
+    ),
+    ?_assertEqual(
+        {true, <<"c">>},
+        data_constraints:is_ancestor(<<"/a/b">>, <<"/a/b/c">>)
+    ),
+    ?_assertEqual(
+        {true, <<"b">>},
+        data_constraints:is_ancestor(<<"/a">>, <<"/a/b/c">>)
+    )
+].
+
+
 is_subpath_test_() -> [
     ?_assertEqual(
         false,
@@ -168,6 +192,13 @@ check_data_path_relation_test_() -> [
         data_constraints:check_data_path_relation(
             <<"/qwe/bin/users">>,
             [<<"/asd/bin/users/qwe">>, <<"/qwe/bin">>]
+        )
+    ),
+    ?_assertEqual(
+        undefined,
+        data_constraints:check_data_path_relation(
+            <<"/qwe/bin/users">>,
+            [<<"/asd/bin/users/qwe">>]
         )
     )
 ].

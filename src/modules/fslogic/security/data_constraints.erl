@@ -24,6 +24,9 @@
 %%% containing file's immediate children leading to paths allowed by
 %%% constraints is also returned (may be useful to e.g. filter
 %%% readdir result).
+%%%
+%%% To see examples of how function is this module works please check
+%%% data_constraints_test.erl
 %%% @end
 %%%-------------------------------------------------------------------
 -module(data_constraints).
@@ -43,7 +46,7 @@
     consolidate_paths/1,
 
     check_data_path_relation/2,
-    is_subpath/2, is_path_or_subpath/2
+    is_ancestor/2, is_subpath/2, is_path_or_subpath/2
 ]).
 -endif.
 
@@ -238,8 +241,8 @@ check_and_cache_data_constraints(
     UserCtx, FileCtx0, AllowedPaths, GuidConstraints, AllowAncestorsOfPaths
 ) ->
     FileGuid = file_ctx:get_guid_const(FileCtx0),
-    SessionDiscriminator = get_session_discriminator(UserCtx),
-    CacheKey = {data_constraint, SessionDiscriminator, FileGuid},
+    SerializedToken = get_serialized_token(UserCtx),
+    CacheKey = {data_constraint, SerializedToken, FileGuid},
     case permissions_cache:check_permission(CacheKey) of
         {ok, subpath} ->
             {subpath, FileCtx0};
@@ -252,7 +255,7 @@ check_and_cache_data_constraints(
             throw(?EACCES);
         _ ->
             {ParentGuid, FileCtx1} = file_ctx:get_parent_guid(FileCtx0, UserCtx),
-            ParentCacheKey = {data_constraint, SessionDiscriminator, ParentGuid},
+            ParentCacheKey = {data_constraint, SerializedToken, ParentGuid},
             case permissions_cache:check_permission(ParentCacheKey) of
                 {ok, subpath} ->
                     permissions_cache:cache_permission(CacheKey, subpath),
@@ -270,7 +273,7 @@ check_and_cache_data_constraints(
                             FileCtx1, AllowedPaths, AllowAncestorsOfPaths
                         ),
                         {GuidRel, FileCtx3} = check_guid_constraints(
-                            UserCtx, SessionDiscriminator, FileCtx2,
+                            UserCtx, SerializedToken, FileCtx2,
                             GuidConstraints, AllowAncestorsOfPaths
                         ),
                         Relation = case intersect_relations(PathRel, GuidRel) of
@@ -323,17 +326,17 @@ check_allowed_paths(FileCtx0, AllowedPaths, true) ->
 
 
 %% @private
--spec check_guid_constraints(user_ctx:ctx(), SessionDiscriminator :: term(),
+-spec check_guid_constraints(user_ctx:ctx(), tokens:serialized(),
     file_ctx:ctx(), guid_constraints(), AllowAncestorsOfPaths :: boolean()
 ) ->
     {relation(), file_ctx:ctx()} | no_return().
 check_guid_constraints(_, _, FileCtx, any, _AllowAncestorsOfPaths) ->
     {subpath, FileCtx};
 check_guid_constraints(
-    UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints, false
+    UserCtx, SerializedToken, FileCtx0, GuidConstraints, false
 ) ->
     case does_fulfill_guid_constraints(
-        UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints
+        UserCtx, SerializedToken, FileCtx0, GuidConstraints
     ) of
         {true, FileCtx1} ->
             {subpath, FileCtx1};
@@ -341,10 +344,10 @@ check_guid_constraints(
             throw(?EACCES)
     end;
 check_guid_constraints(
-    UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints, true
+    UserCtx, SerializedToken, FileCtx0, GuidConstraints, true
 ) ->
     case does_fulfill_guid_constraints(
-        UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints
+        UserCtx, SerializedToken, FileCtx0, GuidConstraints
     ) of
         {true, FileCtx1} ->
             {subpath, FileCtx1};
@@ -373,17 +376,16 @@ check_guid_constraints(
 %% any of it's ancestors (which is done recursively).
 %% @end
 %%--------------------------------------------------------------------
--spec does_fulfill_guid_constraints(user_ctx:ctx(),
-    SessionDiscriminator :: term(),
+-spec does_fulfill_guid_constraints(user_ctx:ctx(), tokens:serialized(),
     file_ctx:ctx(), guid_constraints()
 ) ->
     {true, file_ctx:ctx()} |
     {false, guid_constraints(), file_ctx:ctx()}.
 does_fulfill_guid_constraints(
-    UserCtx, SessionDiscriminator, FileCtx, AllGuidConstraints
+    UserCtx, SerializedToken, FileCtx, AllGuidConstraints
 ) ->
     FileGuid = get_file_guid(FileCtx),
-    CacheKey = {guid_constraint, SessionDiscriminator, FileGuid},
+    CacheKey = {guid_constraint, SerializedToken, FileGuid},
 
     case permissions_cache:check_permission(CacheKey) of
         {ok, true} ->
@@ -399,7 +401,7 @@ does_fulfill_guid_constraints(
                 false ->
                     {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
                     DoesParentFulfillGuidConstraints = does_fulfill_guid_constraints(
-                        UserCtx, SessionDiscriminator, ParentCtx,
+                        UserCtx, SerializedToken, ParentCtx,
                         AllGuidConstraints
                     ),
                     case DoesParentFulfillGuidConstraints of
@@ -466,17 +468,14 @@ check_data_path_relation(Path, AllowedPaths) ->
                         false -> Acc
                     end;
                 false ->
-                    % Check if FilePath is ancestor to AllowedPath
-                    case AllowedPath of
-                        <<Path:PathLen/binary, "/", SubPath/binary>> ->
-                            [Name | _] = string:split(SubPath, <<"/">>),
+                    case is_ancestor(Path, PathLen, AllowedPath) of
+                        {true, Child} ->
                             NamesAcc = case Acc of
                                 undefined -> gb_sets:new();
                                 {ancestor, Children} -> Children
                             end,
-                            {ancestor, gb_sets:add(Name, NamesAcc)};
-                        _ ->
-                            Acc
+                            {ancestor, gb_sets:add(Child, NamesAcc)};
+                        false -> Acc
                     end
             end
     end, undefined, AllowedPaths).
@@ -492,6 +491,30 @@ intersect_relations(subpath, {ancestor, _Children} = Ancestor) ->
     Ancestor;
 intersect_relations({ancestor, ChildrenA}, {ancestor, ChildrenB}) ->
     {ancestor, gb_sets:intersection(ChildrenA, ChildrenB)}.
+
+
+%% @private
+is_ancestor(Path, PossibleSubPath) ->
+    is_ancestor(Path, size(Path), PossibleSubPath).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks whether Path is ancestor of PossibleSubPath. If it is then
+%% returns additionally it's immediate child.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_ancestor(file_meta:path(), pos_integer(), file_meta:path()) ->
+    {true, file_meta:name()} | false.
+is_ancestor(Path, PathLen, PossibleSubPath) ->
+    case PossibleSubPath of
+        <<Path:PathLen/binary, "/", SubPath/binary>> ->
+            [Name | _] = string:split(SubPath, <<"/">>),
+            {true, Name};
+        _ ->
+            false
+    end.
 
 
 %% @private
@@ -578,10 +601,7 @@ get_file_guid(FileCtx) ->
 
 
 %% @private
-get_session_discriminator(UserCtx) ->
-    case user_ctx:get_auth(UserCtx) of
-        #token_auth{token = SerializedToken} ->
-            SerializedToken;
-        SessionAuth ->
-            SessionAuth
-    end.
+-spec get_serialized_token(user_ctx:ctx()) -> tokens:serialized().
+get_serialized_token(UserCtx) ->
+    #token_auth{token = SerializedToken} = user_ctx:get_auth(UserCtx),
+    SerializedToken.
