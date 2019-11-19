@@ -682,8 +682,7 @@ maybe_add_deletion_detection_link(StorageFileCtx, Info = #{space_storage_file_id
     end,
     case maps:get(add_deletion_detection_link, Info, false) of
         true ->
-            storage_sync_links:add_link_recursive(
-                ParentStorageFileId2, SpaceId, StorageId, StorageFileId, MarkLeaves);
+            storage_sync_links:add_link_recursive(ParentStorageFileId2, StorageId, StorageFileId, MarkLeaves);
         _ ->
             ok
     end.
@@ -691,6 +690,6 @@ maybe_add_deletion_detection_link(StorageFileCtx, Info = #{space_storage_file_id
 -spec scan_finished(od_space:id(), storage:id()) -> ok.
 scan_finished(SpaceId, StorageId) ->
     SpaceStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
-    ok = storage_sync_links:delete_recursive(SpaceStorageFileId, SpaceId, StorageId),
+    ok = storage_sync_links:delete_recursive(SpaceStorageFileId, StorageId),
     storage_sync_monitoring:mark_finished_scan(SpaceId, StorageId),
     ok.

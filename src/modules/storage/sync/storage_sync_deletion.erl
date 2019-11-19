@@ -142,10 +142,9 @@ refill_sync_links_children(CurrentChildren, StorageFileCtx, Token) ->
     case length(CurrentChildren) < ?BATCH_SIZE of
         true ->
             RootStorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
             ToFetch = ?BATCH_SIZE - length(CurrentChildren),
-            case storage_sync_links:list(RootStorageFileId, SpaceId, StorageId, Token, ToFetch) of
+            case storage_sync_links:list(RootStorageFileId, StorageId, Token, ToFetch) of
                 {{ok, NewChildren}, NewToken} ->
                     {CurrentChildren ++ NewChildren, NewToken};
                 Error = {error, _} ->

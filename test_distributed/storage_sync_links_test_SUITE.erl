@@ -172,17 +172,14 @@ add_child_link_test_base(Config, MountInRoot, MarkLeaves) ->
     RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildName = <<"child1">>,
     ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
-    ok = storage_sync_links_test_utils:add_link(
-        W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves),
+    ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId, MarkLeaves),
     case MarkLeaves of
         true ->
             ?assertMatch({ok, undefined},
-                storage_sync_links_test_utils:get_link(
-                    W, RootStorageFileId, SpaceId, StorageId, ChildName));
+                storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName));
         false ->
             {ok, ChildRootId} = ?assertMatch({ok, _},
-                storage_sync_links_test_utils:get_link(
-                    W, RootStorageFileId, SpaceId, StorageId, ChildName)),
+                storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName)),
             ?assertNotEqual(undefined, ChildRootId)
     end.
 
@@ -196,18 +193,14 @@ add_existing_child_link_test_base(Config, MountInRoot, MarkLeaves) ->
     RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildName = <<"child1">>,
     ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
-    ok = storage_sync_links_test_utils:add_link(
-        W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves),
-    ok = storage_sync_links_test_utils:add_link(
-        W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves),
+    ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId, MarkLeaves),
+    ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId, MarkLeaves),
     case MarkLeaves of
         true ->
-            ?assertMatch({ok, undefined}, storage_sync_links_test_utils:get_link(
-                W, RootStorageFileId, SpaceId, StorageId, ChildName));
+            ?assertMatch({ok, undefined}, storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName));
         false ->
             {ok, ChildRootId} = ?assertMatch({ok, _},
-                storage_sync_links_test_utils:get_link(
-                    W, RootStorageFileId, SpaceId, StorageId, ChildName)),
+                storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName)),
             ?assertNotEqual(undefined, ChildRootId)
     end.
 
@@ -223,18 +216,17 @@ add_children_links_test_base(Config, MountInRoot, MarkLeaves) ->
     ChildrenNames = [<<"child", (integer_to_binary(N))/binary>> || N <- lists:seq(1, ChildrenNum)],
     ChildStorageFileIds = [filename:join([RootStorageFileId, CN]) || CN <- ChildrenNames],
     lists:foreach(fun(ChildStorageFileId) ->
-        storage_sync_links_test_utils:add_link(
-            W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves)
+        storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId, MarkLeaves)
     end, ChildStorageFileIds),
     lists:foreach(fun(ChildName) ->
         case MarkLeaves of
             true ->
                 ?assertMatch({ok, undefined}, storage_sync_links_test_utils:get_link(
-                    W, RootStorageFileId, SpaceId, StorageId, ChildName));
+                    W, RootStorageFileId, StorageId, ChildName));
             false ->
                 {ok, ChildRootId} = ?assertMatch({ok, _},
                     storage_sync_links_test_utils:get_link(
-                        W, RootStorageFileId, SpaceId, StorageId, ChildName)),
+                        W, RootStorageFileId, StorageId, ChildName)),
                 ?assertNotEqual(undefined, ChildRootId)
         end
     end, ChildrenNames).
@@ -258,31 +250,26 @@ add_children_links_recursive_test_base(Config, MountInRoot, MarkLeaves) ->
     ChildStorageFileId4 = filename:join([ChildStorageFileId3, ChildName4]),
     ChildStorageFileId5 = filename:join([ChildStorageFileId4, ChildName5]),
 
-    ok = storage_sync_links_test_utils:add_link(
-        W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId5, MarkLeaves),
+    ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId5, MarkLeaves),
 
     {ok, RootId1} = ?assertMatch({ok, _},
-        storage_sync_links_test_utils:get_link(
-            W, RootStorageFileId, SpaceId, StorageId, ChildName1)),
+        storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName1)),
     ?assertNotEqual(RootId1, undefined),
 
     {ok, RootId2} = ?assertMatch({ok, _},
-        storage_sync_links_test_utils:get_link(
-            W, ChildStorageFileId1, SpaceId, StorageId, ChildName2)),
+        storage_sync_links_test_utils:get_link(W, ChildStorageFileId1, StorageId, ChildName2)),
     ?assertNotEqual(RootId2, undefined),
     ?assertEqual({ok, RootId2},
         storage_sync_links_test_utils:get_link(W, RootId1, ChildName2)),
 
     {ok, RootId3} = ?assertMatch({ok, _},
-        storage_sync_links_test_utils:get_link(
-            W, ChildStorageFileId2, SpaceId, StorageId, ChildName3)),
+        storage_sync_links_test_utils:get_link(W, ChildStorageFileId2, StorageId, ChildName3)),
     ?assertNotEqual(RootId3, undefined),
     ?assertEqual({ok, RootId3},
         storage_sync_links_test_utils:get_link(W, RootId2, ChildName3)),
 
     {ok, RootId4} = ?assertMatch({ok, _},
-        storage_sync_links_test_utils:get_link(
-            W, ChildStorageFileId3, SpaceId, StorageId, ChildName4)),
+        storage_sync_links_test_utils:get_link(W, ChildStorageFileId3, StorageId, ChildName4)),
     ?assertNotEqual(RootId4, undefined),
     ?assertEqual({ok, RootId4},
         storage_sync_links_test_utils:get_link(W, RootId3, ChildName4)),
@@ -290,14 +277,12 @@ add_children_links_recursive_test_base(Config, MountInRoot, MarkLeaves) ->
     case MarkLeaves of
         true ->
             ?assertMatch({ok, undefined},
-                storage_sync_links_test_utils:get_link(
-                    W, ChildStorageFileId4, SpaceId, StorageId, ChildName5)),
+                storage_sync_links_test_utils:get_link(W, ChildStorageFileId4, StorageId, ChildName5)),
             ?assertEqual({ok, undefined},
                 storage_sync_links_test_utils:get_link(W, RootId4, ChildName5));
         false ->
             {ok, RootId5} = ?assertMatch({ok, _},
-                storage_sync_links_test_utils:get_link(
-                    W, ChildStorageFileId4, SpaceId, StorageId, ChildName5)),
+                storage_sync_links_test_utils:get_link(W, ChildStorageFileId4, StorageId, ChildName5)),
             ?assertNotEqual(undefined, RootId5),
             ?assertEqual({ok, RootId5},
                 storage_sync_links_test_utils:get_link(W, RootId4, ChildName5))
@@ -312,12 +297,11 @@ list_children_links_test_base(Config, MountInRoot) ->
     ChildrenNames = [<<"child", (integer_to_binary(N))/binary>> || N <- lists:seq(1, ChildrenNum)],
     ChildStorageFileIds = [filename:join([RootStorageFileId, CN]) || CN <- ChildrenNames],
     lists:foreach(fun(ChildStorageFileId) ->
-        storage_sync_links_test_utils:add_link(
-            W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId)
+        storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId)
     end, ChildStorageFileIds),
 
     {{ok, Children}, _} = ?assertMatch({{ok, _}, #link_token{}},
-        storage_sync_links_test_utils:list(W, RootStorageFileId, SpaceId, StorageId, 10)),
+        storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, 10)),
     ?assertEqual(ChildrenNames, [C || {C, _} <- Children]).
 
 list_children_links_token_test_base(Config, MountInRoot) ->
@@ -333,19 +317,18 @@ list_children_links_token_test_base(Config, MountInRoot) ->
     ChildrenNames = [ChildName1, ChildName2, ChildName3, ChildName4, ChildName5],
     ChildStorageFileIds = [filename:join([RootStorageFileId, CN]) || CN <- ChildrenNames],
     lists:foreach(fun(ChildStorageFileId) ->
-        storage_sync_links_test_utils:add_link(
-            W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId)
+        storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId)
     end, ChildStorageFileIds),
     {{ok, _}, T1} = ?assertMatch({{ok, [{ChildName1, _}]}, #link_token{}},
-        storage_sync_links_test_utils:list(W, RootStorageFileId, SpaceId, StorageId, 1)),
+        storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, 1)),
     {{ok, _}, T2} = ?assertMatch({{ok, [{ChildName2, _}]}, #link_token{}},
-        storage_sync_links_test_utils:list(W, RootStorageFileId, SpaceId, StorageId, T1, 1)),
+        storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, T1, 1)),
     {{ok, _}, T3} = ?assertMatch({{ok, [{ChildName3, _}]}, #link_token{}},
-        storage_sync_links_test_utils:list(W, RootStorageFileId, SpaceId, StorageId, T2, 1)),
+        storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, T2, 1)),
     {{ok, _}, T4} = ?assertMatch({{ok, [{ChildName4, _}]}, #link_token{}},
-        storage_sync_links_test_utils:list(W, RootStorageFileId, SpaceId, StorageId, T3, 1)),
+        storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, T3, 1)),
     {{ok, _}, T5} = ?assertMatch({{ok, [{ChildName5, _}]}, #link_token{}},
-        storage_sync_links_test_utils:list(W, RootStorageFileId, SpaceId, StorageId, T4, 1)),
+        storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, T4, 1)),
     ?assertEqual(true, T5#link_token.is_last).
 
 delete_link_test_base(Config, MountInRoot) ->
@@ -355,18 +338,14 @@ delete_link_test_base(Config, MountInRoot) ->
     RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
     ChildName = <<"child1">>,
     ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
-    ok = storage_sync_links_test_utils:add_link(
-        W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId),
+    ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId),
     ?assertMatch({ok, _},
-        storage_sync_links_test_utils:get_link(
-            W, RootStorageFileId, SpaceId, StorageId, ChildName)),
-    ok = storage_sync_links_test_utils:delete_link(
-        W, RootStorageFileId, SpaceId, StorageId, ChildName),
+        storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName)),
+    ok = storage_sync_links_test_utils:delete_link(W, RootStorageFileId, StorageId, ChildName),
     ?assertEqual({error, not_found},
-        storage_sync_links_test_utils:get_link(
-            W, RootStorageFileId, SpaceId, StorageId, ChildName)),
+        storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName)),
     ?assertMatch({{ok, []}, #link_token{}}, storage_sync_links_test_utils:list(
-        W, RootStorageFileId, SpaceId, StorageId, 10)).
+        W, RootStorageFileId, StorageId, 10)).
 
 delete_links_test_base(Config, MountInRoot) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -377,20 +356,18 @@ delete_links_test_base(Config, MountInRoot) ->
     ChildrenNames = [<<"child", (integer_to_binary(N))/binary>> || N <- lists:seq(1, ChildrenNum)],
     ChildStorageFileIds = [filename:join([RootStorageFileId, CN]) || CN <- ChildrenNames],
     lists:foreach(fun(ChildStorageFileId) ->
-        storage_sync_links_test_utils:add_link(
-            W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId)
+        storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId)
     end, ChildStorageFileIds),
     lists:foreach(fun(ChildName) ->
         ?assertMatch({ok, _},
-            storage_sync_links_test_utils:get_link(
-                W, RootStorageFileId, SpaceId, StorageId, ChildName))
+            storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName))
     end, ChildrenNames),
-    ok = storage_sync_links_test_utils:delete_recursive(W, RootStorageFileId, SpaceId, StorageId),
+    ok = storage_sync_links_test_utils:delete_recursive(W, RootStorageFileId, StorageId),
     ?assertMatch({{ok, []}, #link_token{}},
-        storage_sync_links_test_utils:list(W, RootStorageFileId, SpaceId, StorageId, 10)),
+        storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, 10)),
     lists:foreach(fun(ChildName) ->
         ?assertMatch({error, not_found},
-            storage_sync_links_test_utils:get_link(W, RootStorageFileId, SpaceId, StorageId, ChildName))
+            storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName))
     end, ChildrenNames).
 
 delete_links_recursive_test_base(Config, MountInRoot) ->
@@ -410,41 +387,35 @@ delete_links_recursive_test_base(Config, MountInRoot) ->
     ChildStorageFileId5 = filename:join([ChildStorageFileId4, ChildName5]),
     ChildStorageFileIds = [ChildStorageFileId1, ChildStorageFileId2, ChildStorageFileId3, ChildStorageFileId4, ChildStorageFileId5],
 
-    ok = storage_sync_links_test_utils:add_link(
-        W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId5),
+    ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId5),
 
     {ok, RootId1} = ?assertMatch({ok, _},
-        storage_sync_links_test_utils:get_link(
-            W, RootStorageFileId, SpaceId, StorageId, ChildName1)),
+        storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName1)),
     ?assertNotEqual(RootId1, undefined),
 
     {ok, RootId2} = ?assertMatch({ok, _},
-        storage_sync_links_test_utils:get_link(
-            W, ChildStorageFileId1, SpaceId, StorageId, ChildName2)),
+        storage_sync_links_test_utils:get_link(W, ChildStorageFileId1, StorageId, ChildName2)),
     ?assertEqual({ok, RootId2}, storage_sync_links_test_utils:get_link(W, RootId1, ChildName2)),
 
     {ok, RootId3} = ?assertMatch({ok, _},
-        storage_sync_links_test_utils:get_link(
-            W, ChildStorageFileId2, SpaceId, StorageId, ChildName3)),
+        storage_sync_links_test_utils:get_link(W, ChildStorageFileId2, StorageId, ChildName3)),
     ?assertEqual({ok, RootId3}, storage_sync_links_test_utils:get_link(W, RootId2, ChildName3)),
 
     {ok, RootId4} = ?assertMatch({ok, _},
-        storage_sync_links_test_utils:get_link(
-            W, ChildStorageFileId3, SpaceId, StorageId, ChildName4)),
+        storage_sync_links_test_utils:get_link(W, ChildStorageFileId3, StorageId, ChildName4)),
     ?assertEqual({ok, RootId4}, storage_sync_links_test_utils:get_link(W, RootId3, ChildName4)),
 
     {ok, RootId5} = ?assertMatch({ok, _},
-        storage_sync_links_test_utils:get_link(
-            W, ChildStorageFileId4, SpaceId, StorageId, ChildName5)),
+        storage_sync_links_test_utils:get_link(W, ChildStorageFileId4, StorageId, ChildName5)),
     ?assertEqual({ok, RootId5}, storage_sync_links_test_utils:get_link(W, RootId4, ChildName5)),
 
-    ok = storage_sync_links_test_utils:delete_recursive(W, RootStorageFileId, SpaceId, StorageId),
+    ok = storage_sync_links_test_utils:delete_recursive(W, RootStorageFileId, StorageId),
     ?assertMatch({{ok, []}, #link_token{}},
-        storage_sync_links_test_utils:list(W, RootStorageFileId, SpaceId, StorageId, 10)),
+        storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, 10)),
 
     lists:foreach(fun(ChildStorageFileId) ->
         ?assertMatch({{ok, []}, _},
-            storage_sync_links_test_utils:list(W, ChildStorageFileId, SpaceId, StorageId, 10))
+            storage_sync_links_test_utils:list(W, ChildStorageFileId, StorageId, 10))
     end, ChildStorageFileIds).
 
 add_many_children_links_recursive_test_base(Config, MountInRoot) ->
@@ -455,10 +426,10 @@ add_many_children_links_recursive_test_base(Config, MountInRoot) ->
     FilesStructure = [10, 10, 10, 10],
     StorageFileIds = generate_storage_file_ids(RootStorageFileId, FilesStructure),
     lists:foreach(fun(StorageFileId) ->
-        cast_add_link(W, RootStorageFileId, SpaceId, StorageId, StorageFileId)
+        cast_add_link(W, RootStorageFileId, StorageId, StorageFileId)
     end, StorageFileIds),
 
-    ?assertList(StorageFileIds, W, RootStorageFileId, SpaceId, StorageId).
+    ?assertList(StorageFileIds, W, RootStorageFileId, StorageId).
 
 delete_many_children_links_recursive_test_base(Config, MountInRoot) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -468,13 +439,13 @@ delete_many_children_links_recursive_test_base(Config, MountInRoot) ->
     FilesStructure = [10, 10, 10, 10],
     StorageFileIds = generate_storage_file_ids(RootStorageFileId, FilesStructure),
     lists:foreach(fun(StorageFileId) ->
-        cast_add_link(W, RootStorageFileId, SpaceId, StorageId, StorageFileId)
+        cast_add_link(W, RootStorageFileId, StorageId, StorageFileId)
     end, StorageFileIds),
 
-    ?assertList(StorageFileIds, W, RootStorageFileId, SpaceId, StorageId),
+    ?assertList(StorageFileIds, W, RootStorageFileId, StorageId),
 
-    storage_sync_links_test_utils:delete_recursive(W, RootStorageFileId, SpaceId, StorageId),
-    ?assertList([], W, RootStorageFileId, SpaceId, StorageId).
+    storage_sync_links_test_utils:delete_recursive(W, RootStorageFileId, StorageId),
+    ?assertList([], W, RootStorageFileId, StorageId).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -523,6 +494,6 @@ generate_storage_file_ids(RootStorageFileId, [Level | Rest]) ->
         [Child] ++ generate_storage_file_ids(Child, Rest) ++ AccIn
     end, [], lists:seq(1, Level)).
 
-cast_add_link(Worker, RootStorageFileId, SpaceId, StorageId, StorageFileId) ->
+cast_add_link(Worker, RootStorageFileId, StorageId, StorageFileId) ->
     ok = worker_pool:cast(?POOL,
-        {storage_sync_links_test_utils, add_link, [Worker, RootStorageFileId, SpaceId, StorageId, StorageFileId]}).
+        {storage_sync_links_test_utils, add_link, [Worker, RootStorageFileId, StorageId, StorageFileId]}).

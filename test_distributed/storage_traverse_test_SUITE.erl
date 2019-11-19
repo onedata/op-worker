@@ -240,7 +240,7 @@ posix_files_and_dirs_mount_in_root_max_depth2_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{max_depth => 2}).
 
 posix_files_and_dirs_mount_in_root_max_depth3_test(Config) ->
-    traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{max_depth => 4}).
+    traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{max_depth => 3}).
 
 
 posix_files_only_synchronous_next_batch_test(Config) ->
@@ -262,10 +262,10 @@ posix_files_and_dirs_synchronous_next_batch_mount_in_root_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{async_next_batch_job => false}).
 
 posix_custom_compute_test(Config) ->
-    custom_compute_test_base(Config, <<"space1">>, #{}, 1110).
+    custom_compute_test_base(Config, <<"space1">>, #{}, 110).
 
 canonical_s3_custom_compute_test(Config) ->
-    custom_compute_test_base(Config, <<"space3">>, #{}, 1000).
+    custom_compute_test_base(Config, <<"space3">>, #{}, 100).
 
 %%%===================================================================
 %%% Test bases
@@ -277,7 +277,7 @@ traverse_and_execute_jobs_only_on_files_test_base(Config, SpaceId, Opts) ->
     SpaceDir = space_dir(W, SpaceId, StorageId),
     Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
-    TestFilesStructure = [{10, 10}, {10, 10}, {0, 10}],
+    TestFilesStructure = [{10, 10}, {0, 10}],
     sd_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
     MaxDepth = maps:get(max_depth, Opts, ?INF_MAX_DEPTH),
     StrippedTestFilesStructure = lists:sublist(TestFilesStructure, MaxDepth),
@@ -299,7 +299,7 @@ traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, SpaceId, Opts) ->
     SpaceDir = space_dir(W, SpaceId, StorageId),
     Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
-    TestFilesStructure = [{10, 10}, {10, 10}, {10, 10}],
+    TestFilesStructure = [{10, 10}, {10, 10}],
     sd_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
     MaxDepth = maps:get(max_depth, Opts, ?INF_MAX_DEPTH),
     StrippedTestFilesStructure = lists:sublist(TestFilesStructure, MaxDepth),
@@ -326,7 +326,7 @@ custom_compute_test_base(Config, SpaceId, Opts, ExpectedComputeValue) ->
     SpaceDir = space_dir(W, SpaceId, StorageId),
     Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
-    TestFilesStructure = [{10, 0}, {10, 0}, {0, 10}],
+    TestFilesStructure = [{10, 0}, {0, 10}],
     sd_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
     MaxDepth = maps:get(max_depth, Opts, ?INF_MAX_DEPTH),
     StrippedTestFilesStructure = lists:sublist(TestFilesStructure, MaxDepth),

@@ -233,7 +233,7 @@ delete_nested_child_on_object_storage_test_base(Config) ->
     {ok, _} = lfm_proxy:write(W, H2, 0, <<"test_data">>),
     ?assertMatch({ok, [{DirGuid1, _}]}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1), ?TIMEOUT),
     Child1FilePath = filename:join([SpaceStorageFileId, ChildDir1, ChildDir2, ChildDir3, ChildFile1]),
-    ok = add_storage_sync_link(W, SpaceStorageFileId, Child1FilePath, SpaceId, StorageId, true),
+    ok = add_storage_sync_link(W, SpaceStorageFileId, Child1FilePath, StorageId, true),
 
     run_deletion(W, SpaceStorageFileCtx, ?SPACE_CTX(SpaceId)),
 
@@ -284,7 +284,7 @@ do_not_delete_child_file_basic_test_base(Config) ->
     {ok, _} = lfm_proxy:write(W, H, 0, <<"test_data">>),
 
     ChildStorageFileId = filename:join([RootStorageFileId, Child]),
-    ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves),
+    ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId, MarkLeaves),
     run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({ok, [_]}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1), ?TIMEOUT).
 
@@ -303,7 +303,7 @@ do_not_delete_child_file_without_location_test_base(Config) ->
     {ok, _} = lfm_proxy:create(W, SessionId, SpaceGuid, Child, 8#664),
 
     ChildStorageFileId = filename:join([RootStorageFileId, Child]),
-    ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, SpaceId, StorageId, ChildStorageFileId, MarkLeaves),
+    ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId, MarkLeaves),
     run_deletion(W, StorageFileCtx, ?SPACE_CTX(SpaceId)),
     ?assertMatch({ok, [_]}, lfm_proxy:ls(W, SessionId, {guid, SpaceGuid}, 0, 1), ?TIMEOUT).
 
@@ -326,13 +326,13 @@ delete_children_files_test_base(Config, ChildrenToStayNum, ChildrenToDeleteNum) 
                 create_file(W, SpaceGuid, Child, SessionId),
                 {ToStayIn, ToDeleteIn + 1};
             {true, _, false} ->
-                add_storage_sync_link(W, RootStorageFileId, Child, SpaceId, StorageId, MarkLeaves),
+                add_storage_sync_link(W, RootStorageFileId, Child, StorageId, MarkLeaves),
                 {ToStayIn + 1, ToDeleteIn};
             {false, true, _} ->
                 create_file(W, SpaceGuid, Child, SessionId),
                 {ToStayIn, ToDeleteIn + 1};
             {true, false, _} ->
-                add_storage_sync_link(W, RootStorageFileId, Child, SpaceId, StorageId, MarkLeaves),
+                add_storage_sync_link(W, RootStorageFileId, Child, StorageId, MarkLeaves),
                 {ToStayIn + 1, ToDeleteIn}
         end
     end, {0, 0}, lists:seq(1, ChildrenToStayNum + ChildrenToDeleteNum)),
@@ -359,13 +359,13 @@ delete_children_files_test_base2(Config, ChildrenToStayNum, ChildrenToDeleteNum)
                 create_file(W, SpaceGuid, Child, SessionId),
                 {ToStayIn, ToDeleteIn + 1};
             {true, _, false} ->
-                add_storage_sync_link(W, RootStorageFileId, Child, SpaceId, StorageId, MarkLeaves),
+                add_storage_sync_link(W, RootStorageFileId, Child, StorageId, MarkLeaves),
                 {ToStayIn + 1, ToDeleteIn};
             {false, true, _} ->
                 create_file(W, SpaceGuid, Child, SessionId),
                 {ToStayIn, ToDeleteIn + 1};
             {true, false, _} ->
-                add_storage_sync_link(W, RootStorageFileId, Child, SpaceId, StorageId, MarkLeaves),
+                add_storage_sync_link(W, RootStorageFileId, Child, StorageId, MarkLeaves),
                 {ToStayIn + 1, ToDeleteIn}
         end
     end, {0, 0}, lists:seq(1, ChildrenToStayNum + ChildrenToDeleteNum)),
@@ -456,8 +456,8 @@ clean_storage_sync_links(Worker) ->
 
 clean_storage_sync_links(Worker, SpaceId) ->
     StorageId = get_storage_id(Worker, SpaceId),
-    storage_sync_links_test_utils:delete_recursive(Worker, space_storage_file_id(SpaceId, true), SpaceId, StorageId),
-    storage_sync_links_test_utils:delete_recursive(Worker, space_storage_file_id(SpaceId, false), SpaceId, StorageId).
+    storage_sync_links_test_utils:delete_recursive(Worker, space_storage_file_id(SpaceId, true), StorageId),
+    storage_sync_links_test_utils:delete_recursive(Worker, space_storage_file_id(SpaceId, false), StorageId).
 
 create_file(Worker, ParentGuid, ChildName, SessionId) ->
     {ok, Guid} = lfm_proxy:create(Worker, SessionId, ParentGuid, ChildName, 8#664),
@@ -465,10 +465,9 @@ create_file(Worker, ParentGuid, ChildName, SessionId) ->
     {ok, _} = lfm_proxy:write(Worker, H, 0, <<"test_data">>),
     lfm_proxy:close(Worker, H).
 
-add_storage_sync_link(Worker, RootStorageFileId, ChildName, SpaceId, StorageId, MarkLeaves) ->
+add_storage_sync_link(Worker, RootStorageFileId, ChildName, StorageId, MarkLeaves) ->
     ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
-    ok = storage_sync_links_test_utils:add_link(Worker, RootStorageFileId, SpaceId, StorageId,
-        ChildStorageFileId, MarkLeaves).
+    ok = storage_sync_links_test_utils:add_link(Worker, RootStorageFileId, StorageId, ChildStorageFileId, MarkLeaves).
 
 should_mark_leaves(object_storage = _StorageType) -> true;
 should_mark_leaves(block_storage = _StorageType) -> false.

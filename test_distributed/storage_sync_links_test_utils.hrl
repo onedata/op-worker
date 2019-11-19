@@ -18,12 +18,12 @@
 
 -define(TIMEOUT, 30).
 
--define(assertList(ExpectedList, Worker, RootStorageFileId, SpaceId, StorageId),
-    ?assertList(ExpectedList, Worker, RootStorageFileId, SpaceId, StorageId, ?TIMEOUT)).
+-define(assertList(ExpectedList, Worker, RootStorageFileId, StorageId),
+    ?assertList(ExpectedList, Worker, RootStorageFileId, StorageId, ?TIMEOUT)).
 
--define(assertList(ExpectedList, Worker, RootStorageFileId, SpaceId, StorageId, Timeout),
+-define(assertList(ExpectedList, Worker, RootStorageFileId, StorageId, Timeout),
     ?assertEqual(lists:sort(ExpectedList), try
-        {ok, Result} = storage_sync_links_test_utils:list_recursive(Worker, RootStorageFileId, SpaceId, StorageId),
+        {ok, Result} = storage_sync_links_test_utils:list_recursive(Worker, RootStorageFileId, StorageId),
         lists:sort(Result)
     catch
         E:R ->
