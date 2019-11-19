@@ -37,7 +37,7 @@
     get_child/2, get_child_uuid/2,
     list_children/2, list_children/3, list_children/4,
     list_children/5, list_children/6,
-    list_children_bounded/4
+    list_children_whitelisted/4
 ]).
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
@@ -527,17 +527,17 @@ list_children(Entry, Offset, Size, Token, PrevLinkKey, PrevTeeID) ->
 %% and given options (Offset and Size).
 %% @end
 %%--------------------------------------------------------------------
--spec list_children_bounded(
+-spec list_children_whitelisted(
     Entry :: entry(),
     Offset :: non_neg_integer(),
     Limit :: non_neg_integer(),
-    AllowedChildren :: [file_meta:name()]
+    ChildrenWhiteList :: [file_meta:name()]
 ) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children_bounded(Entry, Offset, Limit, AllowedChildren) ->
+list_children_whitelisted(Entry, Offset, Limit, ChildrenWhiteList) ->
     Names = lists:filter(fun(ChildName) ->
         not (is_hidden(ChildName) orelse is_deletion_link(ChildName))
-    end, AllowedChildren),
+    end, ChildrenWhiteList),
 
     ?run(begin
         {ok, FileUuid} = get_uuid(Entry),
