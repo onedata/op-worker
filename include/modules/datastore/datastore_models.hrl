@@ -188,10 +188,6 @@
     cached_identity_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()}
 }).
 
--record(authorization_nonce, {
-    timestamp :: integer()
-}).
-
 -record(file_download_code, {
     session_id :: session:id(),
     file_guid :: fslogic_worker:file_guid()
@@ -224,7 +220,7 @@
     proxy_via :: oneprovider:id() | undefined,
     % Key-value in-session memory
     memory = #{} :: map(),
-    direct_io = #{} :: #{od_space:id() => boolean()} % TODO - zamiast tego flaga w open
+    direct_io = #{} :: #{od_space:id() => boolean()}
 }).
 
 % Model used to cache idp access tokens

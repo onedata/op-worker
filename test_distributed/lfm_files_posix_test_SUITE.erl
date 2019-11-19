@@ -329,7 +329,7 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, user_ctx, [passthrough]),
     test_utils:mock_expect(Workers, user_ctx, is_direct_io,
-        fun(_) ->
+        fun(_, _) ->
             true
         end),
     init_per_testcase(default, Config);
