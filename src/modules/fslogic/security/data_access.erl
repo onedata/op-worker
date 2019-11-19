@@ -10,7 +10,7 @@
 %%% This module handles access requirements checks for files.
 %%% @end
 %%%--------------------------------------------------------------------
--module(fslogic_access).
+-module(data_access).
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
@@ -81,14 +81,14 @@ check_and_cache_result(UserCtx, FileCtx0, Requirement) ->
     CacheKey = {Requirement, UserId, Guid},
 
     case permissions_cache:check_permission(CacheKey) of
-        {ok, ok} ->
+        {ok, granted} ->
             FileCtx0;
         {ok, ?EACCES} ->
             throw(?EACCES);
         _ ->
             try
                 {ok, FileCtx1} = check_access(UserCtx, FileCtx0, Requirement),
-                permissions_cache:cache_permission(CacheKey, ok),
+                permissions_cache:cache_permission(CacheKey, granted),
                 FileCtx1
             catch _:?EACCES ->
                 permissions_cache:cache_permission(CacheKey, ?EACCES),
