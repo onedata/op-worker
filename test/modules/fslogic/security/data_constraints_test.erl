@@ -25,23 +25,23 @@
 is_ancestor_test_() -> [
     ?_assertEqual(
         false,
-        data_constraints:is_ancestor(<<"/c/b/a">>, <<"/a/b/c">>)
+        is_ancestor(<<"/c/b/a">>, <<"/a/b/c">>)
     ),
     ?_assertEqual(
         false,
-        data_constraints:is_ancestor(<<"/a/b/c/d">>, <<"/a/b/c/">>)
+        is_ancestor(<<"/a/b/c/d">>, <<"/a/b/c/">>)
     ),
     ?_assertEqual(
         false,
-        data_constraints:is_ancestor(<<"/a/b/c">>, <<"/a/b/c">>)
+        is_ancestor(<<"/a/b/c">>, <<"/a/b/c">>)
     ),
     ?_assertEqual(
         {true, <<"c">>},
-        data_constraints:is_ancestor(<<"/a/b">>, <<"/a/b/c">>)
+        is_ancestor(<<"/a/b">>, <<"/a/b/c">>)
     ),
     ?_assertEqual(
         {true, <<"b">>},
-        data_constraints:is_ancestor(<<"/a">>, <<"/a/b/c">>)
+        is_ancestor(<<"/a">>, <<"/a/b/c">>)
     )
 ].
 
@@ -49,19 +49,19 @@ is_ancestor_test_() -> [
 is_subpath_test_() -> [
     ?_assertEqual(
         false,
-        data_constraints:is_subpath(<<"/c/b/a">>, <<"/a/b/c">>)
+        is_subpath(<<"/c/b/a">>, <<"/a/b/c">>)
     ),
     ?_assertEqual(
         false,
-        data_constraints:is_subpath(<<"/a/b/c">>, <<"/a/b/c/">>)
+        is_subpath(<<"/a/b/c">>, <<"/a/b/c/">>)
     ),
     ?_assertEqual(
         false,
-        data_constraints:is_subpath(<<"/a/b/c">>, <<"/a/b/c">>)
+        is_subpath(<<"/a/b/c">>, <<"/a/b/c">>)
     ),
     ?_assertEqual(
         true,
-        data_constraints:is_subpath(<<"/a/b/c/d">>, <<"/a/b/c">>)
+        is_subpath(<<"/a/b/c/d">>, <<"/a/b/c">>)
     )
 ].
 
@@ -202,6 +202,14 @@ check_data_path_relation_test_() -> [
         )
     )
 ].
+
+
+is_ancestor(Path, PossibleSubPath) ->
+    data_constraints:is_ancestor(Path, size(Path), PossibleSubPath).
+
+
+is_subpath(PossibleSubPath, Path) ->
+    data_constraints:is_subpath(PossibleSubPath, Path, size(Path)).
 
 
 -endif.

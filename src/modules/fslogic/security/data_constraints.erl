@@ -46,7 +46,7 @@
     consolidate_paths/1,
 
     check_data_path_relation/2,
-    is_ancestor/2, is_subpath/2, is_path_or_subpath/2
+    is_ancestor/3, is_subpath/3, is_path_or_subpath/2
 ]).
 -endif.
 
@@ -245,61 +245,48 @@ check_and_cache_data_constraints(
     CacheKey = {data_constraint, SerializedToken, FileGuid},
     case permissions_cache:check_permission(CacheKey) of
         {ok, subpath} ->
+            % File is allowed by constraints - every operations are permitted
             {subpath, FileCtx0};
         {ok, {subpath, ?EACCES}} when not AllowAncestorsOfPaths ->
+            % File is not allowed by constraints but it may be ancestor to some
+            % of those paths (such checks were not performed) - forbid only
+            % operations on subpaths
             throw(?EACCES);
-        {ok, {ancestor, _} = Ancestor} when AllowAncestorsOfPaths ->
-            {Ancestor, FileCtx0};
-        {ok, {ancestor, _}} ->
-            throw(?EACCES);
+        {ok, {ancestor, _} = Ancestor} ->
+            % File is ancestor to path allowed by constraints so only specific
+            % operations are allowed
+            case AllowAncestorsOfPaths of
+                true -> {Ancestor, FileCtx0};
+                false -> throw(?EACCES)
+            end;
         {ok, ?EACCES} ->
+            % File is not permitted by constraints - eacces
             throw(?EACCES);
         _ ->
-            {ParentGuid, FileCtx1} = file_ctx:get_parent_guid(FileCtx0, UserCtx),
-            ParentCacheKey = {data_constraint, SerializedToken, ParentGuid},
-            case permissions_cache:check_permission(ParentCacheKey) of
-                {ok, subpath} ->
-                    permissions_cache:cache_permission(CacheKey, subpath),
-                    {subpath, FileCtx1};
-                {ok, ?EACCES} ->
-                    permissions_cache:cache_permission(CacheKey, ?EACCES),
-                    throw(?EACCES);
-                _ ->
-                    % Situations when nothing is cached for parent or
-                    % {ancestor, Children} is cached are not differentiated
-                    % because knowledge that parent is ancestor does not
-                    % tell whether file is also ancestor or subpath
-                    try
-                        {PathRel, FileCtx2} = check_allowed_paths(
-                            FileCtx1, AllowedPaths, AllowAncestorsOfPaths
-                        ),
-                        {GuidRel, FileCtx3} = check_guid_constraints(
-                            UserCtx, SerializedToken, FileCtx2,
-                            GuidConstraints, AllowAncestorsOfPaths
-                        ),
-                        Relation = case intersect_relations(PathRel, GuidRel) of
-                            subpath ->
-                                subpath;
-                            {ancestor, ChildrenSet} ->
-                                {ancestor, gb_sets:to_list(ChildrenSet)}
-                        end,
-                        permissions_cache:cache_permission(CacheKey, Relation),
-                        {Relation, FileCtx3}
-                    catch throw:?EACCES ->
-                        case AllowAncestorsOfPaths of
-                            true ->
-                                % File is neither subpath nor ancestor to any paths
-                                % allowed by constraints so no operation can be
-                                % performed
-                                permissions_cache:cache_permission(CacheKey, ?EACCES);
-                            false ->
-                                % Only subpath checks were performed and failed so
-                                % only operations possible to perform on subpaths
-                                % should be forbidden.
-                                permissions_cache:cache_permission(CacheKey, {subpath, ?EACCES})
-                        end,
-                        throw(?EACCES)
-                    end
+            try
+                {PathRel, FileCtx1} = check_allowed_paths(
+                    FileCtx0, AllowedPaths, AllowAncestorsOfPaths
+                ),
+                {GuidRel, FileCtx3} = check_guid_constraints(
+                    UserCtx, SerializedToken, FileCtx1,
+                    GuidConstraints, AllowAncestorsOfPaths
+                ),
+                Relation = case intersect_relations(PathRel, GuidRel) of
+                    subpath ->
+                        subpath;
+                    {ancestor, ChildrenSet} ->
+                        {ancestor, gb_sets:to_list(ChildrenSet)}
+                end,
+                permissions_cache:cache_permission(CacheKey, Relation),
+                {Relation, FileCtx3}
+            catch throw:?EACCES ->
+                case AllowAncestorsOfPaths of
+                    true ->
+                        permissions_cache:cache_permission(CacheKey, ?EACCES);
+                    false ->
+                        permissions_cache:cache_permission(CacheKey, {subpath, ?EACCES})
+                end,
+                throw(?EACCES)
             end
     end.
 
@@ -505,11 +492,6 @@ intersect_relations({ancestor, ChildrenA}, {ancestor, ChildrenB}) ->
     {ancestor, gb_sets:intersection(ChildrenA, ChildrenB)}.
 
 
-%% @private
-is_ancestor(Path, PossibleSubPath) ->
-    is_ancestor(Path, size(Path), PossibleSubPath).
-
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -527,12 +509,6 @@ is_ancestor(Path, PathLen, PossibleSubPath) ->
         _ ->
             false
     end.
-
-
-%% @private
--spec is_subpath(file_meta:path(), file_meta:path()) -> boolean().
-is_subpath(PossibleSubPath, Path) ->
-    is_subpath(PossibleSubPath, Path, size(Path)).
 
 
 %% @private
