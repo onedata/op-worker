@@ -306,9 +306,11 @@
     file_uuid :: file_meta:uuid(),
     expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
-    is_possible = false :: boolean(),
     % These are requests to providers to start QoS traverse.
-    traverse_reqs = #{} :: qos_entry:traverse_map()
+    traverse_reqs = #{} :: qos_entry:traverse_map(),
+    % Id of provider that calculated traverse requests
+    % undefined means that given entry is impossible to fulfill
+    computing_provider = undefined :: od_provider:id() | undefined
 }).
 
 -record(file_meta, {

@@ -37,6 +37,7 @@
 -export([revoke_space_support/2]).
 -export([get_name/1]).
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
+-export([get_provider_of_remote_storage/2]).
 -export([get_spaces/1]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
@@ -182,6 +183,20 @@ get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
     QosParameters.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Get provider id of storage supporting given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider_of_remote_storage(od_storage:id(), od_space:id()) ->
+    {ok, od_provider:id()} | errors:error().
+get_provider_of_remote_storage(StorageId, SpaceId) ->
+    case get_shared_data(StorageId, SpaceId) of
+        {ok, #document{value = #od_storage{provider = Provider}}} -> {ok, Provider};
+        Error -> Error
+    end.
+
+
 -spec get_spaces(od_storage:id()) -> {ok, [od_space:id()]} | errors:error().
 get_spaces(StorageId) ->
     case get(StorageId) of
@@ -213,7 +228,6 @@ set_qos_parameters(StorageId, QosParameters) ->
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_storage, StorageId)
     end).
-
 
 %%--------------------------------------------------------------------
 %% @doc

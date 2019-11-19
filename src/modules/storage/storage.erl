@@ -36,7 +36,8 @@
 
 %%% Functions to retrieve storage details
 -export([get_id/1, get_name/1, get_helper/1, get_type/1, get_luma_config/1,
-    get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
+    get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2,
+    get_provider_of_remote_storage/2]).
 -export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
 
 %%% Functions to modify storage details
@@ -271,6 +272,17 @@ get_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageI
     storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves id of provider to which given storage belongs. This information is
+%% retrieved from storage details shared between providers through given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_provider_of_remote_storage(od_storage:id(), od_space:id()) -> oneprovider:id().
+get_provider_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
+    storage_logic:get_provider_of_remote_storage(StorageId, SpaceId).
+
+
 -spec is_readonly(record() | od_storage:id()) -> boolean().
 is_readonly(StorageId) when is_binary(StorageId) ->
     {ok, Storage} = get(StorageId),
@@ -348,7 +360,10 @@ set_imported_storage(StorageId, ImportedStorage) ->
 
 -spec set_qos_parameters(od_storage:id(), od_storage:qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
-    storage_logic:set_qos_parameters(StorageId, QosParameters).
+    case storage_logic:set_qos_parameters(StorageId, QosParameters) of
+        ok -> qos_hooks:revalidate_impossible_qos();
+        Error -> Error
+    end.
 
 
 -spec update_helper_args(od_storage:id(), helper:args()) -> ok | {error, term()}.
