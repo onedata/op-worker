@@ -979,10 +979,10 @@ import_nfs_acl_test(Config, MountSpaceInRoot) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
 
-import_nfs_acl_with_disabled_luma_should_fail_test(Config, MountSpaceInRoot) ->
+import_nfs_acl_with_disabled_luma_should_fail_test(Config, ImportedStorage) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, ImportedStorage),
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
 
     %% Create file on storage

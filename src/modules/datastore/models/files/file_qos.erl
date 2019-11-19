@@ -109,8 +109,8 @@ get_effective(FileUuid) ->
 remove_qos_entry_id(FileUuid, QosEntryId) ->
     Diff = fun(FileQos = #file_qos{qos_entries = QosEntries, assigned_entries = AssignedEntries}) ->
         UpdatedQosEntries = lists:delete(QosEntryId, QosEntries),
-        UpdatedAssignedEntries = maps:fold(fun(StorageId, QosEntries, UpdatedAssignedEntriesPartial) ->
-            case lists:delete(QosEntryId, QosEntries) of
+        UpdatedAssignedEntries = maps:fold(fun(StorageId, StorageEntries, UpdatedAssignedEntriesPartial) ->
+            case lists:delete(QosEntryId, StorageEntries) of
                 [] ->
                     UpdatedAssignedEntriesPartial;
                 List ->

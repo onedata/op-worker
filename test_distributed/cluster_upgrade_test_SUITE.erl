@@ -76,6 +76,7 @@ upgrade_from_19_02_x_storages(Config) ->
 
     ?assertEqual({ok, 2}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [1])),
 
+    ?assertMatch({error, not_found}, rpc:call(Worker, datastore_model, get, [storage:get_ctx(), St])),
     ?assertMatch({ok, #document{value = ExpectedStorageConfig}}, rpc:call(Worker, storage_config, get, [St])).
 
 

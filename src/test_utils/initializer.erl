@@ -1286,12 +1286,12 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Returns true if space configured by ProviderConfig should be mounted
-%% in root.
+%% Returns true if storage configured by ProviderConfig should have
+%% imported storage value set to true.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_imported_storage(proplists:proplist()) -> boolean().
-maybe_imported_storage(ProviderConfig) ->
+-spec maybe_set_imported_storage_value(proplists:proplist()) -> boolean().
+maybe_set_imported_storage_value(ProviderConfig) ->
     case proplists:get_value(<<"imported_storage">>, ProviderConfig) of
         <<"true">> -> true;
         _ -> false
@@ -1312,7 +1312,7 @@ setup_storage(Worker, Domain, ProviderConfig, Config, StorageMapping) ->
                 undefined ->
                     ok;
                 StorageId ->
-                    on_space_supported(Worker, StorageId, maybe_imported_storage(ProviderConfig))
+                    on_space_supported(Worker, StorageId, maybe_set_imported_storage_value(ProviderConfig))
             end;
         StorageName ->
             StorageId = case ?config({storage_id, Domain}, Config) of
@@ -1322,7 +1322,7 @@ setup_storage(Worker, Domain, ProviderConfig, Config, StorageMapping) ->
                 StId ->
                     StId
             end,
-            on_space_supported(Worker, StorageId, maybe_imported_storage(ProviderConfig))
+            on_space_supported(Worker, StorageId, maybe_set_imported_storage_value(ProviderConfig))
     end.
 
 %%--------------------------------------------------------------------
@@ -1332,8 +1332,8 @@ setup_storage(Worker, Domain, ProviderConfig, Config, StorageMapping) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec on_space_supported(atom(), od_storage:id(), boolean()) -> any().
-on_space_supported(Worker, StorageId, MountInRoot) ->
-    case MountInRoot of
+on_space_supported(Worker, StorageId, ImportedStorage) ->
+    case ImportedStorage of
         true -> ok = rpc:call(Worker, storage_config, set_imported_storage_insecure, [StorageId, true]);
         false -> ok
     end.

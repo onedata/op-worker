@@ -294,7 +294,7 @@ supports_any_space(StorageId) ->
     case get_spaces(StorageId) of
         {ok, []} -> false;
         {ok, _Spaces} -> true;
-        {error, _} -> false
+        {error, _} = Error -> Error
     end.
 
 
@@ -404,30 +404,31 @@ migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
 %% @private
 -spec migrate_space_support(od_space:id()) -> ok.
 migrate_space_support(SpaceId) ->
-    {StorageId, ImportedStorage} = case space_storage:get(SpaceId) of
+    case space_storage:get(SpaceId) of
         {ok, SpaceStorage} ->
-            [S] = space_storage:get_storage_ids(SpaceStorage),
-            M = space_storage:get_mounted_in_root(SpaceStorage),
-            {S, lists:member(S, M)};
+            % so far space could have been supported by only one storage in given provider
+            [StorageId] = space_storage:get_storage_ids(SpaceStorage),
+            MiR = space_storage:get_mounted_in_root(SpaceStorage),
+
+            case space_logic:is_supported_by_storage(SpaceId, StorageId) of
+                true -> ok;
+                false ->
+                    case upgrade_legacy_support(StorageId, SpaceId) of
+                        ok -> ?notice("Support of space ~p by storage ~p upgraded in Onezone", [SpaceId]);
+                        Error1 -> throw(Error1)
+                    end
+            end,
+            case lists:member(StorageId, MiR) of
+                true -> ok = storage_config:set_imported_storage_insecure(StorageId, true);
+                false -> ok
+            end,
+            case space_storage:delete(SpaceId) of
+                ok -> ok;
+                ?ERROR_NOT_FOUND -> ok;
+                Error2 -> throw(Error2)
+            end;
         ?ERROR_NOT_FOUND ->
-            {[], []}
-    end,
-    case space_logic:is_supported_by_storage(SpaceId, StorageId) of
-        true -> ok;
-        false ->
-            case upgrade_legacy_support(StorageId, SpaceId) of
-                ok -> ?notice("Support of space ~p by storage ~p upgraded in Onezone", [SpaceId]);
-                Error1 -> throw(Error1)
-            end
-    end,
-    case ImportedStorage of
-        true -> ok = storage_config:set_imported_storage_insecure(StorageId, true);
-        false -> ok
-    end,
-    case space_storage:delete(SpaceId) of
-        ok -> ok;
-        ?ERROR_NOT_FOUND -> ok;
-        Error2 -> throw(Error2)
+            ok
     end,
     ?notice("Support of space: ~p successfully migrated", [SpaceId]).
 

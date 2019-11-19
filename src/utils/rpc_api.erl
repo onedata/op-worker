@@ -119,8 +119,8 @@ apply(Function, Args) ->
 
 -spec storage_config_new(storage_config:name(), [storage_config:helper()], boolean(),
     undefined | luma_config:config(), boolean()) -> storage_config:doc().
-storage_config_new(Name, Helpers, ReadOnly, LumaConfig, MiR) ->
-    storage_config:new(Name, Helpers, ReadOnly, LumaConfig, MiR).
+storage_config_new(Name, Helpers, ReadOnly, LumaConfig, ImportedStorage) ->
+    storage_config:new(Name, Helpers, ReadOnly, LumaConfig, ImportedStorage).
 
 
 -spec storage_create(storage_config:doc()) -> {ok, od_storage:id()} | {error, term()}.

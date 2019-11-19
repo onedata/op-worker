@@ -192,6 +192,7 @@ get_local_storage_ids(SpaceId) ->
             Error
     end.
 
+
 -spec get_all_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
 get_all_storage_ids(SpaceId) ->
     case get(?ROOT_SESS_ID, SpaceId) of

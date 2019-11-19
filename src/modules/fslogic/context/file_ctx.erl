@@ -348,10 +348,10 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 -spec is_imported_storage(ctx()) -> {boolean(), ctx()}.
 is_imported_storage(FileCtx = #file_ctx{is_imported_storage = undefined}) ->
     {StorageConfig, FileCtx2} = get_storage_doc(FileCtx),
-    MiR = storage_config:is_imported_storage(StorageConfig),
-    {MiR, FileCtx2#file_ctx{is_imported_storage = MiR}};
-is_imported_storage(FileCtx = #file_ctx{is_imported_storage = MiR}) ->
-    {MiR, FileCtx}.
+    ImportedStorage = storage_config:is_imported_storage(StorageConfig),
+    {ImportedStorage, FileCtx2#file_ctx{is_imported_storage = ImportedStorage}};
+is_imported_storage(FileCtx = #file_ctx{is_imported_storage = ImportedStorage}) ->
+    {ImportedStorage, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc

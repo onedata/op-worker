@@ -131,13 +131,13 @@ new(Name, Helpers) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec new(name(), [helper()], boolean(), undefined | luma_config:config(), boolean()) -> doc().
-new(Name, Helpers, ReadOnly, LumaConfig, MiR) ->
+new(Name, Helpers, ReadOnly, LumaConfig, ImportedStorage) ->
     #document{value = #storage_config{
         name = Name,
         helpers = Helpers,
         readonly = ReadOnly,
         luma_config = LumaConfig,
-        imported_storage = MiR
+        imported_storage = ImportedStorage
     }}.
 
 
@@ -179,7 +179,7 @@ is_readonly(#document{value = #storage_config{} = Value}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks whether storage is mounted in root.
+%% Checks whether imported storage value is set for given storage.
 %% @end
 %%--------------------------------------------------------------------
 -spec is_imported_storage(record() | doc() | od_storage:id()) -> boolean().
@@ -449,7 +449,7 @@ describe(StorageId) ->
                 <<"storagePathType">> => helper:get_storage_path_type(Helper),
                 <<"lumaEnabled">> => maps:get(enabled, LumaConfigMap, false),
                 <<"lumaUrl">> => maps:get(url, LumaConfigMap, undefined),
-                <<"mountInRoot">> => is_imported_storage(Storage)
+                <<"importedStorage">> => is_imported_storage(Storage)
             }};
         {error, _} = Error -> Error
     end.
