@@ -78,7 +78,7 @@ reuse_or_create_outgoing_provider_session(SessId, Iden) ->
 %% Creates or reuses proxy session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_proxied_session(SessId :: session:id(),
+-spec reuse_or_create_proxied_session(session:id(),
     ProxyVia :: oneprovider:id(),
     session:auth(), SessionType :: atom()) ->
     {ok, session:id()} | error().
@@ -96,8 +96,8 @@ reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
 %% Creates REST session or if session exists reuses it.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_rest_session(session:identity(),
-    session:auth() | undefined) -> {ok, session:id()} | error().
+-spec reuse_or_create_rest_session(session:identity(), session:auth()) ->
+    {ok, session:id()} | error().
 reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
     SessId = datastore_utils:gen_key(<<"">>, term_to_binary({rest, Auth})),
     case user_logic:exists(?ROOT_SESS_ID, UserId) of
@@ -134,8 +134,7 @@ create_root_session() ->
             status = active,
             identity = #user_identity{user_id = ?ROOT_USER_ID},
             auth = ?ROOT_AUTH,
-            allowed_paths = any,
-            guid_constraints = any
+            data_constraints = data_constraints:get_allow_all_constraints()
         }
     }).
 
@@ -154,8 +153,7 @@ create_guest_session() ->
             status = active,
             identity = #user_identity{user_id = ?GUEST_USER_ID},
             auth = ?GUEST_AUTH,
-            allowed_paths = any,
-            guid_constraints = any
+            data_constraints = data_constraints:get_allow_all_constraints()
         }
     }).
 
@@ -219,24 +217,24 @@ reuse_or_create_session(SessId, SessType, Iden, Auth) ->
     {ok, SessId :: session:id()} | error().
 reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
     Caveats = case Auth of
+        % Providers sessions are not constrained by any caveats
+        undefined ->
+            [];
         #token_auth{token = SerializedToken} ->
             {ok, Token} = tokens:deserialize(SerializedToken),
-            tokens:get_caveats(Token);
-        _ ->
-            []
+            tokens:get_caveats(Token)
     end,
-    case token_utils:get_data_constraints(Caveats) of
-        {[], _} ->
-            {error, invalid_token};
-        {_, []} ->
-            {error, invalid_token};
-        {AllowedPaths, GuidConstraints} ->
+
+    case data_constraints:get(Caveats) of
+        {ok, DataConstraints} ->
             critical_section:run([?MODULE, SessId], fun() ->
                 reuse_or_create_session(
                     SessId, SessType, Iden, Auth,
-                    AllowedPaths, GuidConstraints, ProxyVia
+                    DataConstraints, ProxyVia
                 )
-            end)
+            end);
+        {error, invalid_constraints} ->
+            {error, invalid_token}
     end.
 
 
@@ -251,20 +249,17 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
     Iden :: session:identity(), Auth :: session:auth() | undefined,
-    token_utils:allowed_paths(), token_utils:guid_constraints(),
+    DataConstraints :: data_constraints:constraints(),
     ProxyVia :: undefined | oneprovider:id()
 ) ->
     {ok, SessId :: session:id()} | error().
-reuse_or_create_session(SessId, SessType, Iden, Auth,
-    AllowedPaths, GuidConstraints, ProxyVia
-) ->
+reuse_or_create_session(SessId, SessType, Iden, Auth, DataConstraints, ProxyVia) ->
     Sess = #session{
         type = SessType,
         status = initializing,
         identity = Iden,
         auth = Auth,
-        allowed_paths = AllowedPaths,
-        guid_constraints = GuidConstraints,
+        data_constraints = DataConstraints,
         proxy_via = ProxyVia
     },
     Diff = fun
@@ -288,7 +283,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth,
                 {error, already_exists} ->
                     reuse_or_create_session(
                         SessId, SessType, Iden, Auth,
-                        AllowedPaths, GuidConstraints, ProxyVia
+                        DataConstraints, ProxyVia
                     );
                 Other ->
                     Other
@@ -323,6 +318,4 @@ start_session(#document{value = #session{type = SessType}} = Doc) ->
 %%--------------------------------------------------------------------
 -spec close_connections(Cons :: [pid()]) -> ok.
 close_connections(Cons) ->
-    lists:foreach(fun(Conn) ->
-        connection:close(Conn)
-    end, Cons).
+    lists:foreach(fun(Conn) -> connection:close(Conn) end, Cons).

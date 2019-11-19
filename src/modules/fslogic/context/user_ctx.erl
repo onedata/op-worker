@@ -102,7 +102,7 @@ get_auth(#user_ctx{session = Session}) ->
 %% Gets session's data constraints.
 %% @end
 %%--------------------------------------------------------------------
--spec get_data_constraints(ctx()) -> token_utils:data_constraints().
+-spec get_data_constraints(ctx()) -> data_constraints:constraints().
 get_data_constraints(#user_ctx{session = Session}) ->
     session:get_data_constraints(Session).
 

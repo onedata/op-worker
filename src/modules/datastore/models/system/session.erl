@@ -290,9 +290,9 @@ get_auth(#document{value = Session}) ->
     get_auth(Session).
 
 
--spec get_data_constraints(record() | doc()) -> token_utils:data_constraints().
-get_data_constraints(#session{} = Sess) ->
-    {Sess#session.allowed_paths, Sess#session.guid_constraints};
+-spec get_data_constraints(record() | doc()) -> data_constraints:constraints().
+get_data_constraints(#session{data_constraints = DataConstraints}) ->
+    DataConstraints;
 get_data_constraints(#document{value = Session}) ->
     get_data_constraints(Session).
 

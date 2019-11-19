@@ -142,7 +142,7 @@ run_space_privs_scenarios(ScenariosRootDirPath, #perms_test_spec{
         ),
 
         % Set all posix or acl (depending on scenario) perms to files
-        set_all_perms(ScenarioType, Node, maps:keys(PermsPerFile)),
+        set_full_perms(ScenarioType, Node, maps:keys(PermsPerFile)),
 
         % Assert that even with all perms set operation cannot be performed
         % without space privileges
@@ -320,7 +320,7 @@ run_data_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
             }
         ),
 
-        set_all_perms(acl, Node, maps:keys(PermsPerFile)),
+        set_full_perms(acl, Node, maps:keys(PermsPerFile)),
 
         % Assert that even with all perms set operation can be performed
         % only when caveats allows it
@@ -803,13 +803,13 @@ get_file_path(Node, SessionId, Guid) ->
     Path.
 
 
--spec set_all_perms(posix | acl, node(), [file_id:file_guid()]) -> ok.
-set_all_perms(posix, Node, Files) ->
+-spec set_full_perms(posix | acl, node(), [file_id:file_guid()]) -> ok.
+set_full_perms(posix, Node, Files) ->
     AllPosixPermsPerFile = lists:foldl(fun(Guid, Acc) ->
         Acc#{Guid => 8#777}
     end, #{}, Files),
     lfm_permissions_test_utils:set_modes(Node, AllPosixPermsPerFile);
-set_all_perms(acl, Node, Files) ->
+set_full_perms(acl, Node, Files) ->
     AllAclPermsPerFile = lists:foldl(fun(Guid, Acc) ->
         Acc#{Guid => lfm_permissions_test_utils:all_perms(Node, Guid)}
     end, #{}, Files),

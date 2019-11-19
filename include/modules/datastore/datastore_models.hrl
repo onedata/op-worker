@@ -214,11 +214,7 @@
     type :: undefined | session:type(),
     identity :: undefined | session:identity(),
     auth :: undefined | session:auth(),
-    allowed_paths :: token_utils:allowed_paths(),
-    % List of guid lists. When checking authorization to perform fslogic
-    % operation on some file then every such set must contain either that
-    % file's guid or any of it's ancestors.
-    guid_constraints :: token_utils:guid_constraints(),
+    data_constraints :: data_constraints:constraints(),
     node :: node(),
     supervisor :: undefined | pid(),
     event_manager :: undefined | pid(),
