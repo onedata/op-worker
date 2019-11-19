@@ -196,14 +196,11 @@ allowed_methods(Req, State) ->
 is_authorized(Req, State) ->
     case http_auth:authenticate(Req, rest, false) of
         {ok, ?USER(UserId, SessionId) = Auth} ->
-            case catch authorize(Req, Auth) of
+            case authorize(Req, Auth) of
                 ok ->
                     {true, Req, State#{user_id => UserId, auth => SessionId}};
                 {error, _} = Error ->
-                    {stop, send_error_response(Req, Error), State};
-                _ ->
-                    NewReq = send_error_response(Req, ?ERROR_INTERNAL_SERVER_ERROR),
-                    {stop, NewReq, State}
+                    {stop, send_error_response(Req, Error), State}
             end;
         {ok, ?NOBODY} ->
             {stop, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), State};
@@ -270,16 +267,23 @@ stream_space_changes(Req, State) ->
 
 
 %% @private
--spec authorize(cowboy_req:req(), aai:auth()) -> ok | no_return().
+-spec authorize(cowboy_req:req(), aai:auth()) -> ok | errors:error().
 authorize(Req, ?USER(UserId) = Auth) ->
     SpaceId = cowboy_req:binding(sid, Req),
 
-    GRI = #gri{type = op_metrics, id = SpaceId, aspect = changes},
-    token_utils:verify_api_caveats(Auth#auth.caveats, create, GRI),
-
     case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_CHANGES_STREAM) of
-        true -> ok;
-        false -> throw(?ERROR_FORBIDDEN)
+        true ->
+            try
+                GRI = #gri{type = op_metrics, id = SpaceId, aspect = changes},
+                token_utils:verify_api_caveats(Auth#auth.caveats, create, GRI)
+            catch
+                throw:Error ->
+                    Error;
+                _:_ ->
+                    ?ERROR_INTERNAL_SERVER_ERROR
+            end;
+        false ->
+            ?ERROR_FORBIDDEN
     end.
 
 

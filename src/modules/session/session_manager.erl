@@ -227,6 +227,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
 
     case data_constraints:get(Caveats) of
         {ok, DataConstraints} ->
+            % TODO VFS-5895 check if this critical section is still necessary
             critical_section:run([?MODULE, SessId], fun() ->
                 reuse_or_create_session(
                     SessId, SessType, Iden, Auth,

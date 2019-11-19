@@ -59,6 +59,7 @@ authenticate_insecure(#token_auth{
     Caveats = get_caveats(SerializedToken),
     ensure_valid_caveats(Caveats, Interface, AcceptDataCaveats),
 
+    % TODO VFS-5895 - return api errors from user_identity
     {ok, #document{value = Iden}} = user_identity:get_or_fetch(Credentials),
     case create_or_reuse_session(Iden, Credentials, Interface) of
         {ok, SessionId} ->
@@ -103,7 +104,10 @@ get_caveats(SerializedToken) ->
     ok | no_return().
 ensure_valid_caveats(Caveats, Interface, AcceptDataCaveats) ->
     token_utils:assert_interface_allowed(Caveats, Interface),
-    AcceptDataCaveats orelse token_utils:assert_no_data_caveats(Caveats).
+    case AcceptDataCaveats of
+        true -> ok;
+        false -> token_utils:assert_no_data_caveats(Caveats)
+    end.
 
 
 %% @private

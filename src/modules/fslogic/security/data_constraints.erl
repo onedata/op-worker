@@ -19,9 +19,10 @@
 %%%                      of it's ancestors.
 %%% NOTE !!!
 %%% Sometimes access may be granted not only to paths or subpaths allowed
-%%% by constraints directly but also to those paths ancestors. For such
-%%% cases whitelist containing file's immediate children leading to paths
-%%% allowed by constraints is also returned (may be useful to e.g. filter
+%%% by constraints directly but also to those paths ancestors (operations like
+%%% readdir, stat, resolve_path/guid, get_parent). For such cases whitelist
+%%% containing file's immediate children leading to paths allowed by
+%%% constraints is also returned (may be useful to e.g. filter
 %%% readdir result).
 %%% @end
 %%%-------------------------------------------------------------------
@@ -41,6 +42,7 @@
     intersect_path_whitelists/2,
     consolidate_paths/1,
 
+    check_data_path_relation/2,
     is_subpath/2, is_path_or_subpath/2
 ]).
 -endif.
@@ -264,10 +266,10 @@ check_and_cache_data_constraints(
                     % because knowledge that parent is ancestor does not
                     % tell whether file is also ancestor or subpath
                     try
-                        {PathRel, FileCtx2} = check_data_path_constraints(
+                        {PathRel, FileCtx2} = check_allowed_paths(
                             FileCtx1, AllowedPaths, AllowAncestorsOfPaths
                         ),
-                        {GuidRel, FileCtx3} = check_data_guid_constraints(
+                        {GuidRel, FileCtx3} = check_guid_constraints(
                             UserCtx, SessionDiscriminator, FileCtx2,
                             GuidConstraints, AllowAncestorsOfPaths
                         ),
@@ -288,13 +290,13 @@ check_and_cache_data_constraints(
 
 
 %% @private
--spec check_data_path_constraints(file_ctx:ctx(), allowed_paths(),
+-spec check_allowed_paths(file_ctx:ctx(), allowed_paths(),
     AllowAncestorsOfPaths :: boolean()
 ) ->
     {relation(), file_ctx:ctx()} | no_return().
-check_data_path_constraints(FileCtx, any, _AllowAncestorsOfPaths) ->
+check_allowed_paths(FileCtx, any, _AllowAncestorsOfPaths) ->
     {subpath, FileCtx};
-check_data_path_constraints(FileCtx0, AllowedPaths, false) ->
+check_allowed_paths(FileCtx0, AllowedPaths, false) ->
     {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
 
     IsFileAllowedSubPath = lists:any(fun(AllowedPath) ->
@@ -307,7 +309,7 @@ check_data_path_constraints(FileCtx0, AllowedPaths, false) ->
         false ->
             throw(?EACCES)
     end;
-check_data_path_constraints(FileCtx0, AllowedPaths, true) ->
+check_allowed_paths(FileCtx0, AllowedPaths, true) ->
     {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
 
     case check_data_path_relation(FilePath, AllowedPaths) of
@@ -321,13 +323,13 @@ check_data_path_constraints(FileCtx0, AllowedPaths, true) ->
 
 
 %% @private
--spec check_data_guid_constraints(user_ctx:ctx(), SessionDiscriminator :: term(),
+-spec check_guid_constraints(user_ctx:ctx(), SessionDiscriminator :: term(),
     file_ctx:ctx(), guid_constraints(), AllowAncestorsOfPaths :: boolean()
 ) ->
     {relation(), file_ctx:ctx()} | no_return().
-check_data_guid_constraints(_, _, FileCtx, any, _AllowAncestorsOfPaths) ->
+check_guid_constraints(_, _, FileCtx, any, _AllowAncestorsOfPaths) ->
     {subpath, FileCtx};
-check_data_guid_constraints(
+check_guid_constraints(
     UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints, false
 ) ->
     case does_fulfill_guid_constraints(
@@ -338,7 +340,7 @@ check_data_guid_constraints(
         {false, _, _} ->
             throw(?EACCES)
     end;
-check_data_guid_constraints(
+check_guid_constraints(
     UserCtx, SessionDiscriminator, FileCtx0, GuidConstraints, true
 ) ->
     case does_fulfill_guid_constraints(
