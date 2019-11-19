@@ -6,7 +6,23 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% This module handles operations on data constraints (e.g. verifying
+%%% whether access to file should be allowed).
+%%% There are 2 types of constraints:
+%%% - allowed_paths - list of paths which are allowed (also their subpaths).
+%%%                   To verify if allowed_paths hold for some file one must
+%%%                   check if file path is contained in list or is subpath
+%%%                   of any path from list,
+%%% - guid_constraints - list of guid lists. To verify if guid_constraints
+%%%                      hold for some file one must check if every list
+%%%                      contains either that file's guid or any
+%%%                      of it's ancestors.
+%%% NOTE !!!
+%%% Sometimes access may be granted not only to paths or subpaths allowed
+%%% by constraints directly but also to those paths ancestors. For such
+%%% cases whitelist containing file's immediate children leading to paths
+%%% allowed by constraints is also returned (may be useful to e.g. filter
+%%% readdir result).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(data_constraints).
@@ -34,9 +50,6 @@
 -type relation() :: subpath | {ancestor, gb_sets:set(file_meta:name())}.
 
 -type allowed_paths() :: any | path_whitelist().
-% List of guid lists. To verify if guid_constraints hold for some file
-% one must check if every list contains either that file's guid or any
-% of it's ancestors.
 -type guid_constraints() :: any | [[file_id:file_guid()]].
 -type constraints() :: {allowed_paths(), guid_constraints()}.
 
