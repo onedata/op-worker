@@ -126,17 +126,17 @@ get(Caveats) ->
 %%--------------------------------------------------------------------
 -spec verify(user_ctx:ctx(), file_ctx:ctx(), AllowAncestorsOfPaths :: boolean()) ->
     {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
-verify(UserCtx, FileCtx, AllowAncestorsOfPaths) ->
+verify(UserCtx, FileCtx0, AllowAncestorsOfPaths) ->
     {AllowedPaths, GuidConstraints} = user_ctx:get_data_constraints(UserCtx),
     Result = check_and_cache_data_constraints(
-        UserCtx, FileCtx,
+        UserCtx, FileCtx0,
         AllowedPaths, GuidConstraints, AllowAncestorsOfPaths
     ),
     case Result of
-        {subpath, FileCtx} ->
-            {undefined, FileCtx};
-        {{ancestor, ChildrenWhiteList}, FileCtx} ->
-            {ChildrenWhiteList, FileCtx}
+        {subpath, FileCtx1} ->
+            {undefined, FileCtx1};
+        {{ancestor, ChildrenWhiteList}, FileCtx1} ->
+            {ChildrenWhiteList, FileCtx1}
     end.
 
 
@@ -246,11 +246,12 @@ check_and_cache_data_constraints(
     case permissions_cache:check_permission(CacheKey) of
         {ok, subpath} ->
             {subpath, FileCtx0};
-        {ok, {ancestor, _ChildrenList} = Ancestor} ->
-            case AllowAncestorsOfPaths of
-                true -> {Ancestor, FileCtx0};
-                false -> throw(?EACCES)
-            end;
+        {ok, {subpath, ?EACCES}} when not AllowAncestorsOfPaths ->
+            throw(?EACCES);
+        {ok, {ancestor, _} = Ancestor} when AllowAncestorsOfPaths ->
+            {Ancestor, FileCtx0};
+        {ok, {ancestor, _}} ->
+            throw(?EACCES);
         {ok, ?EACCES} ->
             throw(?EACCES);
         _ ->
@@ -285,7 +286,18 @@ check_and_cache_data_constraints(
                         permissions_cache:cache_permission(CacheKey, Relation),
                         {Relation, FileCtx3}
                     catch throw:?EACCES ->
-                        permissions_cache:cache_permission(CacheKey, ?EACCES),
+                        case AllowAncestorsOfPaths of
+                            true ->
+                                % File is neither subpath nor ancestor to any paths
+                                % allowed by constraints so no operation can be
+                                % performed
+                                permissions_cache:cache_permission(CacheKey, ?EACCES);
+                            false ->
+                                % Only subpath checks were performed and failed so
+                                % only operations possible to perform on subpaths
+                                % should be forbidden.
+                                permissions_cache:cache_permission(CacheKey, {subpath, ?EACCES})
+                        end,
                         throw(?EACCES)
                     end
             end

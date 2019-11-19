@@ -30,7 +30,9 @@
 ]).
 
 -export([
-    caveats_test/1,
+    data_caveats_test/1,
+    data_caveats_ancestors_test/1,
+
     mkdir_test/1,
     ls_test/1,
     readdir_plus_test/1,
@@ -92,7 +94,9 @@
 
 all() ->
     ?ALL([
-        caveats_test,
+        data_caveats_test,
+        data_caveats_ancestors_test,
+
         mkdir_test,
         ls_test,
         readdir_plus_test,
@@ -161,7 +165,7 @@ all() ->
 %%%===================================================================
 
 
-caveats_test(Config) ->
+data_caveats_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     Owner = <<"user1">>,
@@ -371,6 +375,98 @@ caveats_test(Config) ->
     ?assertMatch(
         {ok, [F4]},
         lfm_proxy:ls(W, SessId14, {guid, DirGuid}, 2, 1)
+    ).
+
+
+data_caveats_ancestors_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    UserId = <<"user3">>,
+    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+    Identity = #user_identity{user_id = UserId},
+    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
+
+    SpaceName = <<"space2">>,
+    SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
+
+    Dirs0 = [{LastDirGuid, _} | _] = lists:foldl(fun(Num, [{DirGuid, _} | _] = Acc) ->
+        SubDirName = <<"dir", (integer_to_binary(Num))/binary>>,
+        {ok, SubDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
+            W, UserSessId, DirGuid, SubDirName, 8#777
+        )),
+        ?assertMatch({ok, _}, lfm_proxy:create(
+            W, UserSessId, DirGuid, <<"file", ($0 + Num)>>, 8#777
+        )),
+        [{SubDirGuid, SubDirName} | Acc]
+    end, [{SpaceRootDirGuid, SpaceName}], lists:seq(1, 20)),
+    Dirs1 = lists:reverse(Dirs0),
+
+    FileName = <<"file">>,
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
+        W, UserSessId, LastDirGuid, FileName, 8#777
+    )),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    {ok, Token} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
+        onezone_domain = <<"zone">>,
+        subject = ?SUB(user, UserId),
+        nonce = UserId,
+        type = ?ACCESS_TOKEN,
+        persistent = false
+    }, UserId, [#cv_data_objectid{whitelist = [FileObjectId]}]))),
+    SessId = lfm_permissions_test_utils:create_session(W, Identity, Token),
+
+    lists:foldl(
+        fun({{DirGuid, DirName}, Child}, {ParentPath, ParentGuid}) ->
+            DirPath = case ParentPath of
+                <<>> ->
+                    <<"/">>;
+                <<"/">> ->
+                    <<"/", DirName/binary>>;
+                _ ->
+                    <<ParentPath/binary, "/", DirName/binary>>
+            end,
+
+            % Most operations should be forbidden to perform on dirs/ancestors
+            % leading to files allowed by caveats
+            ?assertMatch(
+                {error, ?EACCES},
+                lfm_proxy:get_acl(W, SessId, {guid, DirGuid})
+            ),
+
+            % Below operations should succeed for every dir/ancestor leading
+            % to file allowed by caveats
+            ?assertMatch(
+                {ok, [Child]},
+                lfm_proxy:ls(W, SessId, {guid, DirGuid}, 0, 100)
+            ),
+            ?assertMatch(
+                {ok, #file_attr{name = DirName, type = ?DIRECTORY_TYPE}},
+                lfm_proxy:stat(W, SessId, {guid, DirGuid})
+            ),
+            ?assertMatch(
+                {ok, DirGuid},
+                lfm_proxy:resolve_guid(W, SessId, DirPath)
+            ),
+            ?assertMatch(
+                {ok, ParentGuid},
+                lfm_proxy:get_parent(W, SessId, {guid, DirGuid})
+            ),
+            ?assertMatch(
+                {ok, DirPath},
+                lfm_proxy:get_file_path(W, SessId, DirGuid)
+            ),
+
+            {DirPath, DirGuid}
+        end,
+        {<<>>, undefined},
+        lists:zip([{UserRootDir, UserId} | Dirs1], Dirs1 ++ [{FileGuid, FileName}])
+    ),
+
+    % Get acl should finally succeed for file which is allowed by caveats
+    ?assertMatch(
+        {ok, []},
+        lfm_proxy:get_acl(W, SessId, {guid, FileGuid})
     ).
 
 
