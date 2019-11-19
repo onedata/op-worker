@@ -161,42 +161,42 @@ get_test_() ->
 check_data_path_relation_test_() -> [
     ?_assertEqual(
         undefined,
-        data_constraints:check_data_path_relation(
+        data_constraints:check_against_allowed_paths(
             <<"/qwe/binar">>,
             [<<"asd">>, <<"/qwe/users">>]
         )
     ),
     ?_assertEqual(
         undefined,
-        data_constraints:check_data_path_relation(
+        data_constraints:check_against_allowed_paths(
             <<"/qwe/binar">>,
             [<<"/qwe/bin">>, <<"/qwe/binaries">>]
         )
     ),
     ?_assertEqual(
         {ancestor, gb_sets:from_list([<<"asd">>, <<"chmod">>])},
-        data_constraints:check_data_path_relation(
+        data_constraints:check_against_allowed_paths(
             <<"/qwe/bin">>,
             [<<"/asd/binaries">>, <<"/qwe/bin/chmod">>, <<"/asd/qwe/asd">>, <<"/qwe/bin/asd">>]
         )
     ),
     ?_assertEqual(
         subpath,
-        data_constraints:check_data_path_relation(
+        data_constraints:check_against_allowed_paths(
             <<"/qwe/binaries/chmod">>,
             [<<"/asd/bin">>, <<"/qwe/binaries">>]
         )
     ),
     ?_assertEqual(
         subpath,
-        data_constraints:check_data_path_relation(
+        data_constraints:check_against_allowed_paths(
             <<"/qwe/bin/users">>,
             [<<"/asd/bin/users/qwe">>, <<"/qwe/bin">>]
         )
     ),
     ?_assertEqual(
         undefined,
-        data_constraints:check_data_path_relation(
+        data_constraints:check_against_allowed_paths(
             <<"/qwe/bin/users">>,
             [<<"/asd/bin/users/qwe">>]
         )

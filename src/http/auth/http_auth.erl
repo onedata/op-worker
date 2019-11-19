@@ -22,6 +22,8 @@
 %% API
 -export([authenticate/3]).
 
+-type data_caveats_policy() :: allow_data_caveats | disallow_data_caveats.
+
 
 %%%===================================================================
 %%% API
@@ -29,10 +31,10 @@
 
 
 -spec authenticate(#token_auth{} | cowboy_req:req(), rest | gui,
-    AcceptDataCaveats :: boolean()) -> {ok, aai:auth()} | errors:error().
-authenticate(ReqOrTokenAuth, Interface, AcceptDataCaveats) ->
+    data_caveats_policy()) -> {ok, aai:auth()} | errors:error().
+authenticate(ReqOrTokenAuth, Interface, DataCaveatsPolicy) ->
     try
-        authenticate_insecure(ReqOrTokenAuth, Interface, AcceptDataCaveats)
+        authenticate_insecure(ReqOrTokenAuth, Interface, DataCaveatsPolicy)
     catch
         throw:Error ->
             Error;
@@ -51,13 +53,13 @@ authenticate(ReqOrTokenAuth, Interface, AcceptDataCaveats) ->
 
 %% @private
 -spec authenticate_insecure(#token_auth{} | cowboy_req:req(), rest | gui,
-    AcceptDataCaveats :: boolean()) -> {ok, aai:auth()} | no_return().
+    data_caveats_policy()) -> {ok, aai:auth()} | no_return().
 authenticate_insecure(#token_auth{
     token = SerializedToken,
     peer_ip = PeerIp
-} = Credentials, Interface, AcceptDataCaveats) ->
+} = Credentials, Interface, DataCaveatsPolicy) ->
     Caveats = get_caveats(SerializedToken),
-    ensure_valid_caveats(Caveats, Interface, AcceptDataCaveats),
+    ensure_valid_caveats(Caveats, Interface, DataCaveatsPolicy),
 
     % TODO VFS-5895 - return api errors from user_identity
     {ok, #document{value = Iden}} = user_identity:get_or_fetch(Credentials),
@@ -71,9 +73,9 @@ authenticate_insecure(#token_auth{
             }};
         {error, {invalid_identity, _}} ->
             user_identity:delete(Credentials),
-            authenticate_insecure(Credentials, Interface, AcceptDataCaveats)
+            authenticate_insecure(Credentials, Interface, DataCaveatsPolicy)
     end;
-authenticate_insecure(Req, Interface, AcceptDataCaveats) ->
+authenticate_insecure(Req, Interface, DataCaveatsPolicy) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
             {ok, ?NOBODY};
@@ -83,7 +85,7 @@ authenticate_insecure(Req, Interface, AcceptDataCaveats) ->
                 token = AccessToken,
                 peer_ip = PeerIp
             },
-            authenticate_insecure(TokenAuth, Interface, AcceptDataCaveats)
+            authenticate_insecure(TokenAuth, Interface, DataCaveatsPolicy)
     end.
 
 
@@ -100,13 +102,13 @@ get_caveats(SerializedToken) ->
 
 
 %% @private
--spec ensure_valid_caveats([caveats:caveat()], gui | rest, boolean()) ->
-    ok | no_return().
-ensure_valid_caveats(Caveats, Interface, AcceptDataCaveats) ->
+-spec ensure_valid_caveats([caveats:caveat()], gui | rest,
+    data_caveats_policy()) -> ok | no_return().
+ensure_valid_caveats(Caveats, Interface, DataCaveatsPolicy) ->
     token_utils:assert_interface_allowed(Caveats, Interface),
-    case AcceptDataCaveats of
-        true -> ok;
-        false -> token_utils:assert_no_data_caveats(Caveats)
+    case DataCaveatsPolicy of
+        allow_data_caveats -> ok;
+        disallow_data_caveats -> token_utils:assert_no_data_caveats(Caveats)
     end.
 
 

@@ -28,7 +28,7 @@
     | owner_if_parent_sticky
     | share
     | traverse_ancestors            % Means ancestors' exec permission
-    | binary().                     % Permissions defined in acl.hrl
+    | acl:permission().
 
 -type requirement() ::
     root

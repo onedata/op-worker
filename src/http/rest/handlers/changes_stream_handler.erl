@@ -194,7 +194,7 @@ allowed_methods(Req, State) ->
 -spec is_authorized(cowboy_req:req(), map()) ->
     {true | {false, binary()} | halt, cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
-    case http_auth:authenticate(Req, rest, false) of
+    case http_auth:authenticate(Req, rest, disallow_data_caveats) of
         {ok, ?USER(UserId, SessionId) = Auth} ->
             case authorize(Req, Auth) of
                 ok ->

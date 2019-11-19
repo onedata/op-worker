@@ -45,7 +45,7 @@
     intersect_path_whitelists/2,
     consolidate_paths/1,
 
-    check_data_path_relation/2,
+    check_against_allowed_paths/2,
     is_ancestor/3, is_subpath/3, is_path_or_subpath/2
 ]).
 -endif.
@@ -314,7 +314,7 @@ check_allowed_paths(FileCtx0, AllowedPaths, false) ->
 check_allowed_paths(FileCtx0, AllowedPaths, true) ->
     {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
 
-    case check_data_path_relation(FilePath, AllowedPaths) of
+    case check_against_allowed_paths(FilePath, AllowedPaths) of
         undefined ->
             throw(?EACCES);
         subpath ->
@@ -355,7 +355,7 @@ check_guid_constraints(
 
             Relation = lists:foldl(fun(GuidsList, CurrRelation) ->
                 AllowedPaths = guids_to_paths(GuidsList),
-                case check_data_path_relation(FilePath, AllowedPaths) of
+                case check_against_allowed_paths(FilePath, AllowedPaths) of
                     undefined ->
                         throw(?EACCES);
                     Rel ->
@@ -443,16 +443,16 @@ check_and_cache_guid_constraints_fulfillment(FileCtx, CacheKey, GuidConstraints)
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether FilePath is ancestor or subpath to any of specified paths.
-%% In case when FilePath is ancestor to one path and subpath to another, then
-%% subpath takes precedence.
-%% Additionally, if it is ancestor, it returns list of it's immediate
-%% children.
+%% Checks whether Path is ancestor or subpath to any of specified
+%% AllowedPaths. In case when Path is ancestor to one path and subpath
+%% to another, then subpath takes precedence.
+%% Additionally, if it is ancestor, it returns whitelist of it's immediate
+%% children from AllowedPaths.
 %% @end
 %%--------------------------------------------------------------------
--spec check_data_path_relation(file_meta:path(), [file_meta:path()]) ->
+-spec check_against_allowed_paths(file_meta:path(), [file_meta:path()]) ->
     undefined | relation().
-check_data_path_relation(Path, AllowedPaths) ->
+check_against_allowed_paths(Path, AllowedPaths) ->
     PathLen = size(Path),
 
     lists:foldl(fun

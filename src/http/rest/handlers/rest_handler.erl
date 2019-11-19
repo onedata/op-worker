@@ -140,7 +140,7 @@ content_types_provided(Req, #state{rest_req = #rest_req{produces = Produces}} = 
     {true | {false, binary()}, cowboy_req:req(), state()}.
 is_authorized(Req, State) ->
     % Data caveats must be allowed because of op_file endpoints.
-    case http_auth:authenticate(Req, rest, true) of
+    case http_auth:authenticate(Req, rest, allow_data_caveats) of
         {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
             {true, Req, State#state{auth = Auth}};
