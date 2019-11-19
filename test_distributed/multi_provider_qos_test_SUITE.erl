@@ -58,7 +58,9 @@
     qos_restoration_dir_test/1,
     qos_status_test/1,
 
-    reconcile_qos_using_file_meta_posthooks_test/1
+    reconcile_qos_using_file_meta_posthooks_test/1,
+
+    revalidate_impossible_qos_test/1
 ]).
 
 all() -> [
@@ -90,7 +92,9 @@ all() -> [
     qos_restoration_dir_test,
     qos_status_test,
 
-    reconcile_qos_using_file_meta_posthooks_test
+    reconcile_qos_using_file_meta_posthooks_test,
+
+    revalidate_impossible_qos_test
 ].
 
 
@@ -102,7 +106,7 @@ all() -> [
 -define(SPACE_ID, <<"space1">>).
 -define(SPACE1, <<"/space1">>).
 
--define(PROVIDER_ID(Worker), initializer:domain_to_provider_id(?GET_DOMAIN(Worker))).
+-define(PROVIDER_ID(Worker), ?GET_DOMAIN_BIN(Worker)).
 -define(GET_FILE_UUID(Worker, SessId, FilePath), qos_tests_utils:get_guid(Worker, SessId, FilePath)).
 
 -define(ATTEMPTS, 60).
@@ -146,7 +150,7 @@ simple_key_val_qos(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:simple_key_val_qos_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:simple_key_val_qos_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -162,7 +166,7 @@ qos_with_intersection(Config) ->
     Workers = [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP3)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:qos_with_intersection_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:qos_with_intersection_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -178,7 +182,7 @@ qos_with_complement(Config) ->
     Workers = [WorkerP1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:qos_with_complement_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:qos_with_complement_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -194,7 +198,7 @@ qos_with_union(Config) ->
     Workers = [WorkerP1, _WorkerP2, _WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:qos_with_union_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:qos_with_union_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -210,7 +214,7 @@ qos_with_multiple_replicas(Config) ->
     Workers = [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP3)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:qos_with_multiple_replicas_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:qos_with_multiple_replicas_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -226,7 +230,7 @@ qos_with_intersection_and_union(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2), ?PROVIDER_ID(WorkerP3)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:qos_with_intersection_and_union_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:qos_with_intersection_and_union_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -242,7 +246,7 @@ qos_with_union_and_complement(Config) ->
     Workers = [WorkerP1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:qos_with_union_and_complement_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:qos_with_union_and_complement_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -258,7 +262,7 @@ qos_with_intersection_and_complement(Config) ->
     Workers = [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP3)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:qos_with_intersection_and_complement_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:qos_with_intersection_and_complement_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -273,7 +277,7 @@ qos_with_multiple_replicas_and_union(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2), ?PROVIDER_ID(WorkerP3)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:qos_with_multiple_replicas_and_union_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:qos_with_multiple_replicas_and_union_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -289,7 +293,7 @@ key_val_qos_that_cannot_be_fulfilled(Config) ->
     Workers = [WorkerP1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:key_val_qos_that_cannot_be_fulfilled_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:key_val_qos_that_cannot_be_fulfilled_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -305,7 +309,7 @@ qos_that_cannot_be_fulfilled(Config) ->
     Workers = [WorkerP1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:qos_that_cannot_be_fulfilled_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:qos_that_cannot_be_fulfilled_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -321,7 +325,7 @@ qos_with_parens(Config) ->
     Workers = [WorkerP1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:qos_with_parens_spec(Path, WorkerP1, Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:qos_with_parens_spec(Path, WorkerP1, Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -343,7 +347,7 @@ multi_qos_resulting_in_different_storages(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2), ?PROVIDER_ID(WorkerP3)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:multi_qos_resulting_in_different_storages_spec(Path, [WorkerP1, WorkerP2], Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:multi_qos_resulting_in_different_storages_spec(Path, [WorkerP1, WorkerP2], Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -359,7 +363,7 @@ multi_qos_resulting_in_the_same_storages(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:multi_qos_resulting_in_the_same_storages_spec(Path, [WorkerP2, WorkerP3], Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:multi_qos_resulting_in_the_same_storages_spec(Path, [WorkerP2, WorkerP3], Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -375,7 +379,7 @@ same_qos_multiple_times(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:same_qos_multiple_times_spec(Path, [WorkerP1, WorkerP2, WorkerP3], Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:same_qos_multiple_times_spec(Path, [WorkerP1, WorkerP2, WorkerP3], Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -391,7 +395,7 @@ contrary_qos(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP2, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:contrary_qos_spec(Path, [WorkerP2, WorkerP3], Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:contrary_qos_spec(Path, [WorkerP2, WorkerP3], Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -407,7 +411,7 @@ multi_qos_where_one_cannot_be_satisfied(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:multi_qos_where_one_cannot_be_satisfied_spec(Path, [WorkerP1, WorkerP3], Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:multi_qos_where_one_cannot_be_satisfied_spec(Path, [WorkerP1, WorkerP3], Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -423,7 +427,7 @@ multi_qos_that_overlaps(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     run_tests(Config, [file, dir], WorkerP1, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2), ?PROVIDER_ID(WorkerP3)],
         fun(Path, InitialDirStructure, ExpectedDirStructure) ->
-            QosSpec = qos_test_base:multi_qos_that_overlaps_spec(Path, [WorkerP2, WorkerP3], Workers, get_providers_mapping(Config)),
+            QosSpec = qos_test_base:multi_qos_that_overlaps_spec(Path, [WorkerP2, WorkerP3], Workers, get_provider_to_storage_mappings(Config)),
             #fulfill_qos_test_spec{
                 initial_dir_structure = InitialDirStructure,
                 qos_to_add = QosSpec#qos_spec.qos_to_add,
@@ -456,7 +460,7 @@ effective_qos_for_file_in_directory(Config) ->
         FilePath = filename:join(DirPath, <<"file1">>),
 
         QosSpec = qos_test_base:effective_qos_for_file_in_directory_spec(DirPath,
-            FilePath, Worker1, Workers, get_providers_mapping(Config)),
+            FilePath, Worker1, Workers, get_provider_to_storage_mappings(Config)),
         add_qos_for_dir_and_check_effective_qos(Config,
             #effective_qos_test_spec{
                 initial_dir_structure = #test_dir_structure{
@@ -500,7 +504,7 @@ effective_qos_for_file_in_nested_directories(Config) ->
         File31Path = filename:join(Dir3Path, <<"file31">>),
 
         QosSpec = qos_test_base:effective_qos_for_file_in_nested_directories_spec(
-            [Dir1Path, Dir2Path, Dir3Path], [File21Path, File31Path], WorkerConf, Workers, get_providers_mapping(Config)
+            [Dir1Path, Dir2Path, Dir3Path], [File21Path, File31Path], WorkerConf, Workers, get_provider_to_storage_mappings(Config)
         ),
         add_qos_for_dir_and_check_effective_qos(Config,
             #effective_qos_test_spec{
@@ -556,7 +560,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
         File21Path = filename:join(Dir2Path, <<"file21">>),
         File31Path = filename:join(Dir3Path, <<"file31">>),
         QosSpec = qos_test_base:effective_qos_for_files_in_different_directories_of_tree_structure_spec(
-            [Dir1Path, Dir2Path, Dir3Path], [File21Path, File31Path], WorkerConf, Workers, get_providers_mapping(Config)
+            [Dir1Path, Dir2Path, Dir3Path], [File21Path, File31Path], WorkerConf, Workers, get_provider_to_storage_mappings(Config)
         ),
 
         add_qos_for_dir_and_check_effective_qos(Config,
@@ -727,6 +731,75 @@ reconcile_qos_using_file_meta_posthooks_test(Config) ->
     DirStructureAfter = get_expected_structure_for_single_dir([?PROVIDER_ID(Worker1), ?PROVIDER_ID(Worker2)]),
     qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructureAfter,  #{files => [{Guid, FilePath}], dirs => []}).
 
+
+revalidate_impossible_qos_test(Config) ->
+    [Worker1, Worker2, Worker3 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+
+    DirName = <<"dir1">>,
+    DirPath = filename:join(?SPACE1, DirName),
+    FileName = <<"file1">>,
+
+    QosSpec = #fulfill_qos_test_spec{
+        initial_dir_structure = #test_dir_structure{
+            worker = Worker2,
+            dir_structure = {?SPACE1, [
+                {DirName, [{FileName, ?TEST_DATA, [?PROVIDER_ID(Worker2)]}]}
+            ]}
+        },
+        qos_to_add = [
+            #qos_to_add{
+                worker = Worker1,
+                qos_name = ?QOS1,
+                path = DirPath,
+                expression = <<"country=other">>
+            }
+        ],
+        expected_qos_entries = [
+            #expected_qos_entry{
+                workers = Workers,
+                qos_name = ?QOS1,
+                file_key = {path, DirPath},
+                replicas_num = 1,
+                qos_expression_in_rpn = [<<"country=other">>],
+                computing_provider = undefined
+            }
+        ],
+        wait_for_qos_fulfillment = []
+    },
+
+    {_GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
+
+    qos_tests_utils:mock_storage_qos(Worker1, qos_tests_utils:inject_storage_id([Worker1], #{?P1 => #{<<"country">> => <<"other">>}})),
+    qos_tests_utils:mock_storage_qos(Worker2, qos_tests_utils:inject_storage_id([Worker2], #{?P2 => #{<<"country">> => <<"other">>}})),
+    qos_tests_utils:mock_storage_qos(Worker3, qos_tests_utils:inject_storage_id([Worker3], #{?P3 => #{<<"country">> => <<"other">>}})),
+
+    % trigger on all providers to test conflict resolution
+    rpc:call(Worker1, qos_hooks, revalidate_impossible_qos, []),
+    rpc:call(Worker2, qos_hooks, revalidate_impossible_qos, []),
+    rpc:call(Worker3, qos_hooks, revalidate_impossible_qos, []),
+
+    ExpectedQosEntriesAfter = [
+        #expected_qos_entry{
+            workers = Workers,
+            qos_name = ?QOS1,
+            file_key = {path, DirPath},
+            replicas_num = 1,
+            qos_expression_in_rpn = [<<"country=other">>],
+            computing_provider = ?PROVIDER_ID(Worker1)
+        }
+    ],
+    qos_tests_utils:wait_for_qos_fulfilment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntriesAfter),
+
+    ExpectedFileQos = [
+        #expected_file_qos{
+            workers = Workers,
+            path = DirPath,
+            qos_entries = [?QOS1],
+            assigned_entries = #{qos_tests_utils:get_provider_storage(Worker1) => [?QOS1]}
+        }
+    ],
+    qos_tests_utils:assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, true, 10).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -773,7 +846,9 @@ init_per_testcase(_, Config) ->
     ct:timetrap(timer:minutes(10)),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(NewConfig),
-    qos_tests_utils:mock_providers_qos(NewConfig, ?TEST_PROVIDERS_QOS),
+    Workers = ?config(op_worker_nodes, NewConfig),
+    MockWithStorageId = qos_tests_utils:inject_storage_id(Workers, ?TEST_PROVIDERS_QOS),
+    qos_tests_utils:mock_storage_qos(Workers, MockWithStorageId),
     NewConfig.
 
 
@@ -866,7 +941,8 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename, WaitForQos) ->
                 qos_name = ?QOS1,
                 file_key = {path, ?FILE_PATH(QosFilename)},
                 qos_expression_in_rpn = [<<"country=PT">>],
-                replicas_num = 1
+                replicas_num = 1,
+                computing_provider = ?GET_DOMAIN_BIN(Worker1)
             }
         ],
         expected_file_qos = [
@@ -874,7 +950,7 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename, WaitForQos) ->
                 path = ?FILE_PATH(QosFilename),
                 qos_entries = [?QOS1],
                 assigned_entries = #{
-                    ?PROVIDER_ID(Worker3) => [?QOS1]
+                    qos_tests_utils:get_provider_storage(Worker3) => [?QOS1]
                 }
             }
         ],
@@ -973,12 +1049,12 @@ read_file(Worker, FilePath) ->
     rpc:call(Worker, file, read_file, [FilePath]).
 
 
-get_providers_mapping(Config) ->
+get_provider_to_storage_mappings(Config) ->
     [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     #{
-        ?P1 => ?PROVIDER_ID(WorkerP1),
-        ?P2 => ?PROVIDER_ID(WorkerP2),
-        ?P3 => ?PROVIDER_ID(WorkerP3)
+        ?P1 => qos_tests_utils:get_provider_storage(WorkerP1),
+        ?P2 => qos_tests_utils:get_provider_storage(WorkerP2),
+        ?P3 => qos_tests_utils:get_provider_storage(WorkerP3)
     }.
 
 

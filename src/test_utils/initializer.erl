@@ -1119,6 +1119,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         {ok, [X || X <- ProviderStorageIds, Y <-maps:keys(StorageIds), X==Y]}
     end),
 
+    test_utils:mock_expect(Workers, space_logic, get_all_storage_ids, fun(SpaceId) ->
+        {ok, #document{value = #od_space{storages = StorageIds}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
+        {ok, maps:keys(StorageIds)}
+    end),
+
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(Client, SpaceId) ->
         {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(Client, SpaceId),
         {ok, maps:keys(Providers)}
@@ -1343,6 +1348,17 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
         end),
 
 
+    test_utils:mock_expect(AllWorkers, provider_logic, get_storage_ids,
+        fun(PID) ->
+            GetStorageIdsFun(PID)
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, get_storage_ids,
+        fun() ->
+            GetStorageIdsFun(oneprovider:get_id())
+        end),
+
+
     test_utils:mock_expect(AllWorkers, provider_logic, has_eff_user,
         fun(UserId) ->
             HasEffUserFun(?ROOT_SESS_ID, oneprovider:get_id(), UserId)
@@ -1441,6 +1457,7 @@ storage_mock_setup(Workers) ->
             name = <<>>,
             qos_parameters = #{}
         }}} end),
+    % fixme mock get_provider
     ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_local_storage, fun(_) -> #{} end),
     ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(_,_) -> #{} end),
     ok = test_utils:mock_expect(Workers, storage_logic, get_name,

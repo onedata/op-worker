@@ -15,16 +15,6 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st1"
-                },
-                {
-                    "type": "nulldevice",
-                    "name": "nulldevice",
-                    "latencyMin": "10",
-                    "latencyMax": "20",
-                    "timeoutProbability": "0.0",
-                    "filter": "*",
-                    "simulatedFilesystemParameters": "",
-                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
@@ -35,16 +25,6 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st2"
-                },
-                {
-                    "type": "nulldevice",
-                    "name": "nulldevice",
-                    "latencyMin": "10",
-                    "latencyMax": "20",
-                    "timeoutProbability": "0.0",
-                    "filter": "*",
-                    "simulatedFilesystemParameters": "",
-                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
@@ -55,16 +35,6 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st3"
-                },
-                {
-                    "type": "nulldevice",
-                    "name": "nulldevice",
-                    "latencyMin": "10",
-                    "latencyMax": "20",
-                    "timeoutProbability": "0.0",
-                    "filter": "*",
-                    "simulatedFilesystemParameters": "",
-                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],

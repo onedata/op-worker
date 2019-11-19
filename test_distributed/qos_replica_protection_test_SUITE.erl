@@ -626,7 +626,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         function = Function,
         new_storages_mock = NewStoragesMock
     } = TestSpec,
-    [WorkerP1, WorkerP2, WorkerP3] = qos_tests_utils:get_op_nodes_sorted(Config),
+    [WorkerP1, WorkerP2, WorkerP3] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
 
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(Config, DirStructureType, Filename),
@@ -636,7 +636,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         undefined ->
             ok;
         _ ->
-            qos_tests_utils:mock_providers_qos(Config, NewStoragesMock)
+            qos_tests_utils:mock_storage_qos(Workers, NewStoragesMock)
     end,
 
     QosTransfers = transfers_test_utils:list_ended_transfers(WorkerP1, ?SPACE_ID),
@@ -738,19 +738,17 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
         lists:foreach(fun(Worker) ->
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?APP_NAME, prefetching, off)
-        end, ?config(op_worker_nodes, NewConfig2)),
+        end, ?config(op_worker_nodes, NewConfig)),
 
         application:start(ssl),
         hackney:start(),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
@@ -766,7 +764,8 @@ init_per_testcase(_Case, Config) ->
         ?P2 => ?TEST_QOS(<<"other">>),
         ?P3 => ?TEST_QOS(<<"other">>)
     },
-    qos_tests_utils:mock_providers_qos(Config, Mock),
+    Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    qos_tests_utils:mock_storage_qos(Workers, qos_tests_utils:inject_storage_id(Workers, Mock)),
     case ?config(?SPACE_ID_KEY, Config) of
         undefined ->
             [{?SPACE_ID_KEY, ?SPACE_ID} | Config];
@@ -845,14 +844,15 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename) ->
                 qos_name = ?QOS1,
                 file_key = {path, ?FILE_PATH(QosFilename)},
                 qos_expression_in_rpn = [<<"country=PL">>],
-                replicas_num = 1
+                replicas_num = 1,
+                computing_provider = ?GET_DOMAIN_BIN(WorkerP1)
             }
         ],
         expected_file_qos = [
             #expected_file_qos{
                 path = ?FILE_PATH(QosFilename),
                 qos_entries = [?QOS1],
-                assigned_entries = #{?PROVIDER_ID(WorkerP1) => [?QOS1]}
+                assigned_entries = #{qos_tests_utils:get_provider_storage(WorkerP1) => [?QOS1]}
             }
         ],
         expected_dir_structure = #test_dir_structure{

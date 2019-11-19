@@ -128,7 +128,6 @@ all() -> [
 }).
 
 
-
 -define(GET_CACHE_TABLE_SIZE(SPACE_ID),
     element(2, lists:keyfind(size, 1, rpc:call(Worker, ets, info, [?CACHE_TABLE_NAME(SPACE_ID)])))
 ).
@@ -576,11 +575,11 @@ init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    qos_tests_utils:mock_providers_qos(ConfigWithSessionInfo, ?TEST_PROVIDERS_QOS),
     % do not start file synchronization
     qos_tests_utils:mock_synchronize_transfers(ConfigWithSessionInfo),
     qos_tests_utils:mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
-    mock_start_traverse(ConfigWithSessionInfo),
+    qos_tests_utils:mock_storage_qos(Workers, ?TEST_PROVIDERS_QOS),
+    mock_storage_get_provider(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 
@@ -644,13 +643,13 @@ add_qos_for_dir_and_check_effective_qos(Config, #effective_qos_test_spec{
 
 
 create_test_file(Config) ->
-    [Worker] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     qos_tests_utils:create_file(Worker, SessId, ?TEST_FILE_PATH, ?TEST_DATA).
 
 
 create_test_dir_with_file(Config) ->
-    [Worker] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     DirGuid = qos_tests_utils:create_directory(Worker, SessId, ?TEST_DIR_PATH),
     FilePath = filename:join(?TEST_DIR_PATH, <<"file1">>),
@@ -658,14 +657,11 @@ create_test_dir_with_file(Config) ->
     DirGuid.
 
 
-mock_start_traverse(Config) ->
+mock_storage_get_provider(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, qos_hooks, [passthrough]),
-    ok = test_utils:mock_expect(Workers, qos_hooks, maybe_start_traverse,
-        fun(FileCtx, QosEntryId, Storage, TaskId) ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            ok = qos_traverse:start_initial_traverse(FileCtx, QosEntryId, TaskId)
-        end).
+    lists:foreach(fun(Worker) ->
+    ok = test_utils:mock_expect(Workers, storage_logic, get_provider,
+        fun(_StorageId, _) ->
+            {ok, ?GET_DOMAIN_BIN(Worker)}
+        end)
+    end, Workers).
