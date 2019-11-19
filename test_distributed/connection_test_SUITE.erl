@@ -639,7 +639,7 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, token_logic, [passthrough]),
 
-    test_utils:mock_expect(Workers, token_logic, verify_identity, fun
+    test_utils:mock_expect(Workers, token_logic, verify_identity_token, fun
         (?CORRECT_TOKEN) ->
             {ok, ?SUB(?ONEPROVIDER, ?CORRECT_PROVIDER_ID)};
         (?INCORRECT_TOKEN) ->

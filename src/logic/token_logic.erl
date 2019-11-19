@@ -18,28 +18,25 @@
 -include_lib("ctool/include/aai/aai.hrl").
 
 -export([
-    preauthorize/1,
-    verify_identity/1
+    verify_access_token/1,
+    verify_identity_token/1
 ]).
-
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @doc
-%% Pre-authorizes subject - asks Onezone to verify given token, and upon success,
-%% returns the auth object, including subject's identity and caveats that were
-%% inscribed in the token.
+%% Verifies given access token in Onezone, and upon success, returns the auth
+%% object, including subject's identity and caveats that were inscribed in the token.
 %% @end
 %%--------------------------------------------------------------------
--spec preauthorize(#token_auth{}) -> {ok, aai:auth()} | errors:error().
-preauthorize(#token_auth{token = SerializedToken, peer_ip = PeerIp}) ->
+-spec verify_access_token(#token_auth{}) -> {ok, aai:auth()} | errors:error().
+verify_access_token(#token_auth{token = SerializedToken, peer_ip = PeerIp}) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_token, id = undefined, aspect = preauthorize, scope = public},
+        gri = #gri{type = od_token, id = undefined, aspect = verify_access_token, scope = public},
         data = #{
             <<"token">> => SerializedToken,
             <<"peerIp">> => case PeerIp of
@@ -62,15 +59,15 @@ preauthorize(#token_auth{token = SerializedToken, peer_ip = PeerIp}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies given provider in Onezone based on its identity token.
+%% Verifies given identity token in Onezone and returns the subject on success.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_identity(tokens:serialized()) ->
+-spec verify_identity_token(tokens:serialized()) ->
     {ok, aai:subject()} | errors:error().
-verify_identity(SerializedToken) ->
+verify_identity_token(SerializedToken) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_token, id = undefined, aspect = verify_identity, scope = public},
+        gri = #gri{type = od_token, id = undefined, aspect = verify_identity_token, scope = public},
         data = #{
             <<"token">> => SerializedToken
         }

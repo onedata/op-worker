@@ -249,7 +249,7 @@ setup_session(Worker, [{_, #user_config{
 
     Identity = #user_identity{user_id = UserId},
     Auth = #token_auth{token = Token, peer_ip = local_ip_v4()},
-    {ok, SessId} = ?assertMatch({ok, SessId}, rpc:call(
+    {ok, SessId} = ?assertMatch({ok, _}, rpc:call(
         Worker,
         session_manager,
         reuse_or_create_fuse_session,
@@ -880,7 +880,7 @@ user_logic_mock_setup(Workers, Users) ->
             end
     end,
 
-    test_utils:mock_expect(Workers, token_logic, preauthorize, fun(#token_auth{token = UserToken}) ->
+    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(#token_auth{token = UserToken}) ->
         case proplists:get_value(UserToken, UsersByToken, undefined) of
             undefined -> {error, not_found};
             UserId -> {ok, ?USER(UserId)}
@@ -1252,7 +1252,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity, fun(_) -> ok end),
 
-    test_utils:mock_expect(AllWorkers, token_logic, verify_identity, VerifyProviderIdentityFun).
+    test_utils:mock_expect(AllWorkers, token_logic, verify_identity_token, VerifyProviderIdentityFun).
 
 %%--------------------------------------------------------------------
 %% @private
