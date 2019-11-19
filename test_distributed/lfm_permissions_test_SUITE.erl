@@ -32,6 +32,7 @@
 -export([
     data_caveats_test/1,
     data_caveats_ancestors_test/1,
+    data_caveats_ancestors_test2/1,
 
     mkdir_test/1,
     ls_test/1,
@@ -96,6 +97,7 @@ all() ->
     ?ALL([
         data_caveats_test,
         data_caveats_ancestors_test,
+        data_caveats_ancestors_test2,
 
         mkdir_test,
         ls_test,
@@ -467,6 +469,100 @@ data_caveats_ancestors_test(Config) ->
     ?assertMatch(
         {ok, []},
         lfm_proxy:get_acl(W, SessId, {guid, FileGuid})
+    ).
+
+
+data_caveats_ancestors_test2(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    UserId = <<"user3">>,
+    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+    Identity = #user_identity{user_id = UserId},
+    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
+
+    SpaceName = <<"space2">>,
+    SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
+
+    RootDirName = (atom_to_binary(?FUNCTION_NAME, utf8)),
+    {ok, RootDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
+        W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777
+    )),
+
+    CentralDirName = <<"central">>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(
+        W, UserSessId, RootDirGuid, CentralDirName, 8#777
+    )),
+
+    [
+        {RightDirGuid, RightDirName, RightFileObjectId, RightFile},
+        {LeftDirGuid, LeftDirName, LeftFileObjectId, LeftFile}
+    ] = lists:map(fun(DirName) ->
+        {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
+            W, UserSessId, RootDirGuid, DirName, 8#777
+        )),
+        [{FileObjectId, File} | _] = lists:map(fun(Num) ->
+            FileName = <<"file", ($0 + Num)>>,
+            {ok, FileGuid} = ?assertMatch(
+                {ok, _},
+                lfm_proxy:create(W, UserSessId, DirGuid, FileName, 8#777)
+            ),
+            {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+            {FileObjectId, {FileGuid, FileName}}
+        end, lists:seq(1, 5)),
+        {DirGuid, DirName, FileObjectId, File}
+    end, [<<"right">>, <<"left">>]),
+
+    {ok, MainToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
+        onezone_domain = <<"zone">>,
+        subject = ?SUB(user, UserId),
+        nonce = UserId,
+        type = ?ACCESS_TOKEN,
+        persistent = false
+    }, UserId, []))),
+
+    % All dirs leading to files allowed by caveat should be listed in ls
+    Token1 = tokens:confine(MainToken, #cv_data_objectid{
+        whitelist = [LeftFileObjectId, RightFileObjectId]
+    }),
+    SessId1 = lfm_permissions_test_utils:create_session(W, Identity, Token1),
+    ?assertMatch(
+        {ok, [{SpaceRootDirGuid, SpaceName}]},
+        lfm_proxy:ls(W, SessId1, {guid, UserRootDir}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, [{RootDirGuid, RootDirName}]},
+        lfm_proxy:ls(W, SessId1, {guid, SpaceRootDirGuid}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, [{LeftDirGuid, LeftDirName}, {RightDirGuid, RightDirName}]},
+        lfm_proxy:ls(W, SessId1, {guid, RootDirGuid}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, [LeftFile]},
+        lfm_proxy:ls(W, SessId1, {guid, LeftDirGuid}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, [RightFile]},
+        lfm_proxy:ls(W, SessId1, {guid, RightDirGuid}, 0, 100)
+    ),
+
+    % When caveats have empty intersection then ls should return []
+    Token2 = tokens:confine(MainToken, [
+        #cv_data_objectid{whitelist = [LeftFileObjectId]},
+        #cv_data_objectid{whitelist = [RightFileObjectId]}
+    ]),
+    SessId2 = lfm_permissions_test_utils:create_session(W, Identity, Token2),
+    ?assertMatch(
+        {ok, [{SpaceRootDirGuid, SpaceName}]},
+        lfm_proxy:ls(W, SessId2, {guid, UserRootDir}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, [{RootDirGuid, RootDirName}]},
+        lfm_proxy:ls(W, SessId2, {guid, SpaceRootDirGuid}, 0, 100)
+    ),
+    ?assertMatch(
+        {ok, []},
+        lfm_proxy:ls(W, SessId2, {guid, RootDirGuid}, 0, 100)
     ).
 
 
