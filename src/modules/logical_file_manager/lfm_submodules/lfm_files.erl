@@ -452,7 +452,7 @@ read(FileHandle, Offset, MaxSize) ->
     {ok, NewHandle :: lfm:handle(), binary()} |
     lfm:error_reply().
 read(FileHandle, Offset, MaxSize, SyncOptions) ->
-    read(FileHandle, Offset, MaxSize, true, true, SyncOptions).
+    read(FileHandle, Offset, MaxSize, true, true, SyncOptions, false).
 
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, true, true,

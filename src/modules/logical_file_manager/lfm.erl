@@ -432,7 +432,7 @@ read(FileHandle, Offset, MaxSize) ->
 %% Reads requested part of a file with size check.
 %% @end
 %%--------------------------------------------------------------------
--spec read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
+-spec check_size_and_read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
     {ok, NewHandle :: handle(), binary()} | error_reply().
 check_size_and_read(FileHandle, Offset, MaxSize) ->
     ?run(fun() -> lfm_files:check_size_and_read(FileHandle, Offset, MaxSize) end).
