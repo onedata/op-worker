@@ -19,7 +19,7 @@
 %% API
 -export([add/2, add/3]).
 -export([get/1, delete/1, update/2]).
--export([get_storage_ids/1, get_mounted_in_root/1]).
+-export([get_storage_ids/1, get_mounted_in_root/1, get_storage_id/1]).
 
 %% datastore_model callbacks
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -113,14 +113,7 @@ add(SpaceId, StorageId, MountInRoot) ->
             end
         end,
         #document{value = Default} = new(SpaceId, StorageId, MountInRoot),
-
-        case datastore_model:update(?CTX, SpaceId, Diff, Default) of
-            {ok, _} ->
-                ok = space_strategies:add_storage(SpaceId, StorageId),
-                {ok, SpaceId};
-            {error, Reason} ->
-                {error, Reason}
-        end
+        ?extract_key(datastore_model:update(?CTX, SpaceId, Diff, Default))
     end).
 
 %%--------------------------------------------------------------------
@@ -128,14 +121,36 @@ add(SpaceId, StorageId, MountInRoot) ->
 %% Returns list of storage IDs attached to the space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_ids(record() | doc() | id()) -> [storage:id()].
+-spec get_storage_ids(record() | doc() | id()) -> {ok, [storage:id()]} | {error, term()}.
 get_storage_ids(#space_storage{storage_ids = StorageIds}) ->
-    StorageIds;
+    {ok, StorageIds};
 get_storage_ids(#document{value = #space_storage{} = Value}) ->
     get_storage_ids(Value);
 get_storage_ids(SpaceId) ->
-    {ok, Doc} = ?MODULE:get(SpaceId),
-    get_storage_ids(Doc).
+    case ?MODULE:get(SpaceId) of
+        {ok, Doc} ->
+            get_storage_ids(Doc);
+        Error = {error, _} ->
+            Error
+    end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function returns StorageId for given SpaceId.
+%% WARNING!!! After allowing to support one space with many storages
+%% on one provider, this function will be useless !!!
+%% @end
+%%-------------------------------------------------------------------
+-spec get_storage_id(od_space:id()) -> storage:id() | undefined.
+get_storage_id(SpaceId) ->
+    case get_storage_ids(SpaceId) of
+        {ok, []} ->
+            undefined;
+        {ok, StorageIds} ->
+            hd(StorageIds);
+        {error, not_found} ->
+            undefined
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

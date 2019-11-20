@@ -46,7 +46,7 @@ get_models() -> [
     space_quota,
     monitoring_state,
     file_handles,
-    sfm_handle,
+    sd_handle,
     custom_metadata,
     permissions_cache,
     permissions_cache_helper,
@@ -74,7 +74,9 @@ get_models() -> [
     tree_traverse_job,
     file_qos,
     qos_entry,
-    file_meta_posthooks
+    file_meta_posthooks,
+    storage_sync_links,
+    storage_traverse_job
 ].
 
 %%--------------------------------------------------------------------

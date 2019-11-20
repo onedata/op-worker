@@ -55,7 +55,7 @@
 %%--------------------------------------------------------------------
 -spec execute([raw_access_definition()], Args :: [term()], function()) ->
     term().
-execute(AccessDefinitions, Args = [#sfm_handle{
+execute(AccessDefinitions, Args = [#sd_handle{
     session_id = SessionId,
     space_id = SpaceId,
     file_uuid = FileUuid,
@@ -63,7 +63,7 @@ execute(AccessDefinitions, Args = [#sfm_handle{
 } | _], Function) ->
     UserCtx = user_ctx:new(SessionId),
     FileGuid = file_id:pack_share_guid(FileUuid, SpaceId, ShareId),
-    DefaultFileCtx = file_ctx:new_by_guid(FileGuid), %todo store file_ctx in sfm_handle
+    DefaultFileCtx = file_ctx:new_by_guid(FileGuid), %todo store file_ctx in sd_handle
     {ExpandedAccessDefinitions, DefaultFileCtx2} = expand_access_defs(AccessDefinitions, UserCtx, DefaultFileCtx, Args),
     rules_cache:check_and_cache_results(ExpandedAccessDefinitions, UserCtx, DefaultFileCtx2),
     NewArgs = set_root_context_if_file_has_acl(Args),
@@ -158,12 +158,12 @@ resolve_file_entry(UserCtx, DefaultFileCtx, {parent, Item}, Inputs) ->
 %% updates storage handle context to ROOT in provided arguments.
 %% @end
 %%--------------------------------------------------------------------
--spec set_root_context_if_file_has_acl([#sfm_handle{} | term()]) ->
-    [#sfm_handle{} | term()].
-set_root_context_if_file_has_acl(Args = [Handle = #sfm_handle{file_uuid = FileUuid} | RestOfArgs]) ->
+-spec set_root_context_if_file_has_acl([#sd_handle{} | term()]) ->
+    [#sd_handle{} | term()].
+set_root_context_if_file_has_acl(Args = [Handle = #sd_handle{file_uuid = FileUuid} | RestOfArgs]) ->
     case file_meta:get_active_perms_type(FileUuid) of
         {ok, acl} ->
-            [Handle#sfm_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs];
+            [Handle#sd_handle{session_id = ?ROOT_SESS_ID} | RestOfArgs];
         _ ->
             Args
     end.

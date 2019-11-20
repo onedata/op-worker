@@ -29,7 +29,7 @@
 %% Test API
 -export([create_file_doc/4]).
 
--type handle_id() :: storage_file_manager:handle_id() | undefined.
+-type handle_id() :: storage_driver:handle_id() | undefined.
 
 -define(NEW_HANDLE_ID, base64:encode(crypto:strong_rand_bytes(20))).
 
@@ -149,7 +149,7 @@ release(UserCtx, FileCtx, HandleId) ->
     ok = case session_handles:get(SessId, HandleId) of
         {ok, SfmHandle} ->
             ok = session_handles:remove(SessId, HandleId),
-            ok = storage_file_manager:release(SfmHandle);
+            ok = storage_driver:release(SfmHandle);
         {error, {not_found, _}} ->
             ok;
         {error, not_found} ->
@@ -207,7 +207,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         Error:Reason ->
             ?error_stacktrace("create_file_insecure error: ~p:~p",
                 [Error, Reason]),
-            sfm_utils:delete_storage_file(FileCtx, UserCtx),
+            sd_utils:delete_storage_file(FileCtx, UserCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
@@ -374,7 +374,7 @@ open_file_with_extended_info_insecure(UserCtx, FileCtx, Flag, HandleId0) ->
 %%--------------------------------------------------------------------
 -spec open_file_internal(user_ctx:ctx(),
     FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), boolean()) ->
-    no_return() | {storage_file_manager:handle_id(), file_location:record(), file_ctx:ctx()}.
+    no_return() | {storage_driver:handle_id(), file_location:record(), file_ctx:ctx()}.
 open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink) ->
     open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink, true).
 
@@ -386,7 +386,7 @@ open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink) ->
 %%--------------------------------------------------------------------
 -spec open_file_internal(user_ctx:ctx(),
     FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), boolean(), boolean()) ->
-    no_return() | {storage_file_manager:handle_id(), file_location:record(), file_ctx:ctx()}.
+    no_return() | {storage_driver:handle_id(), file_location:record(), file_ctx:ctx()}.
 open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink, CheckLocationExists) ->
     FileCtx = verify_file_exists(FileCtx0, HandleId0),
     SessId = user_ctx:get_session_id(UserCtx),
@@ -411,7 +411,7 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink, Check
 %% @end
 %%--------------------------------------------------------------------
 -spec open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(), boolean(),
-    handle_id()) -> storage_file_manager:handle_id().
+    handle_id()) -> storage_driver:handle_id().
 open_on_storage(_FileCtx, _SessId, _Flag, true, undefined) ->
     ?NEW_HANDLE_ID;
 open_on_storage(FileCtx, SessId, Flag, false, undefined) ->
@@ -429,11 +429,11 @@ open_on_storage(FileCtx, SessId, Flag, _IsDirectIO, HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
-    handle_id()) -> {ok, storage_file_manager:handle_id()} | no_return().
+    handle_id()) -> {ok, storage_driver:handle_id()} | no_return().
 open_on_storage(FileCtx, SessId, Flag, HandleId) ->
-    {SFMHandle, _FileCtx2} = storage_file_manager:new_handle(SessId, FileCtx),
-    SFMHandle2 = storage_file_manager:set_size(SFMHandle),
-    {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
+    {SDHandle, _FileCtx2} = storage_driver:new_handle(SessId, FileCtx),
+    SDHandle2 = storage_driver:set_size(SDHandle),
+    {ok, Handle} = storage_driver:open(SDHandle2, Flag),
     session_handles:add(SessId, HandleId, Handle),
     {ok, HandleId}.
 
@@ -493,7 +493,7 @@ create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
             {FL, FileCtx2};
         _ ->
             {#document{value = FL}, FileCtx2} =
-                sfm_utils:create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
+                sd_utils:create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
             {FL, FileCtx2}
     end.
 
@@ -624,7 +624,7 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
     ok = case session_handles:get(SessId, HandleId) of
         {ok, Handle} ->
-            storage_file_manager:fsync(Handle, DataOnly);
+            storage_driver:fsync(Handle, DataOnly);
         {error, {not_found, _}} ->
             ok;
         {error, not_found} ->

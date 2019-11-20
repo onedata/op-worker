@@ -5,8 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model for file's metadata. Implemets low-level metadata operations such as
-%%%      walking through file graph.
+%%% @doc Model for file's metadata. Implements low-level metadata
+%%% operations such as walking through file graph.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta).

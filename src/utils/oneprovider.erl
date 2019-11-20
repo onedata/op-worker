@@ -299,7 +299,8 @@ on_connect_to_oz() ->
     ok = provider_logic:update_subdomain_delegation_ips(),
     ok = main_harvesting_stream:revise_all_spaces(),
     ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
-    ok = fslogic_worker:init_cannonical_paths_cache(all).
+    ok = fslogic_worker:init_cannonical_paths_cache(all),
+    storage_sync_worker:notify_connection_to_oz().
 
 
 %%--------------------------------------------------------------------

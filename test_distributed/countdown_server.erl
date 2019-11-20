@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2, init_counter/2, decrease/3, await/3]).
+-export([start_link/2, init_counter/2, decrease/2, decrease/3, decrease_by_value/3, await/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -44,6 +44,9 @@
     parent :: pid(),
     counters = #{} :: #{reference() => #counter{}}
 }).
+
+-type counter() :: #counter{}.
+-type data() :: term().
 
 %%%===================================================================
 %%% API
@@ -71,12 +74,29 @@ init_counter(Node, InitialValue) ->
 
 %%-------------------------------------------------------------------
 %% @doc
+%% Decreases counter associated with given Ref.
+%% @end
+%%-------------------------------------------------------------------
+-spec decrease(node() | pid(), reference()) -> ok.
+decrease(NodeOrPid, Ref) ->
+    decrease_by_value(NodeOrPid, Ref, 1).
+
+-spec decrease_by_value(node() | pid(), reference(), non_neg_integer()) -> ok.
+decrease_by_value(Node, Ref, Value) when is_atom(Node) ->
+    gen_server:cast(?COUNTDOWN_SERVER(Node), {decrease_by_value, Ref, Value});
+decrease_by_value(Pid, Ref, Value) when is_pid(Pid) ->
+    gen_server:cast(Pid, {decrease_by_value, Ref, Value}).
+
+%%-------------------------------------------------------------------
+%% @doc
 %% Decreases counter associated with given Ref. Saves Data
 %% @end
 %%-------------------------------------------------------------------
--spec decrease(node(), reference(), term()) -> ok.
-decrease(Node, Ref, Data) ->
-    gen_server:cast(?COUNTDOWN_SERVER(Node), {decrease, Ref, Data}).
+-spec decrease(node() | pid(), reference(), [data()] | data()) -> ok.
+decrease(Node, Ref, Data) when is_atom(Node) ->
+    gen_server:cast(?COUNTDOWN_SERVER(Node), {decrease, Ref, Data});
+decrease(Pid, Ref, Data) when is_pid(Pid) ->
+    gen_server:cast(Pid, {decrease, Ref, Data}).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -151,6 +171,20 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
+handle_cast({decrease_by_value, Ref, Value}, State = #state{
+    parent = Parent,
+    node = Node,
+    counters = Counters
+}) ->
+    Counter = maps:get(Ref, Counters),
+    Counter2 = decrease_by_value(Counter, Value),
+    case Counter2#counter.value of
+        0 ->
+            notify_parent(Parent, Node, Ref, Counter2#counter.data),
+            {noreply, State#state{counters = maps:remove(Ref, Counters)}};
+        _ ->
+            {noreply, State#state{counters = maps:update(Ref, Counter2, Counters)}}
+    end;
 handle_cast({decrease, Ref, Data}, State = #state{
     parent = Parent,
     node = Node,
@@ -222,17 +256,23 @@ code_change(_OldVsn, State, _Extra) ->
 notify_parent(Parent, Node, Ref, Data) ->
     Parent ! {?COUNTDOWN_FINISHED, Ref, Node, Data}.
 
+-spec decrease_by_value(counter(), non_neg_integer()) -> counter().
+decrease_by_value(Counter = #counter{value = Value0}, Value) ->
+    Counter#counter{value = Value0 - Value}.
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
 %% Decreases given Counter and saves Data.
 %% @end
 %%-------------------------------------------------------------------
--spec decrease_and_save_data(any(), any()) -> any().
-decrease_and_save_data(Counter = #counter{
-    value = Value,
-    data = Data0
-}, Data) ->
+-spec decrease_and_save_data(counter(), data() | [data()]) -> counter().
+decrease_and_save_data(Counter = #counter{value = Value, data = Data0}, Data) when is_list(Data) ->
+    Counter#counter{
+        value = Value - length(Data),
+        data = Data ++ Data0
+    };
+decrease_and_save_data(Counter = #counter{value = Value, data = Data0}, Data) ->
     Counter#counter{
         value = Value - 1,
         data = [Data | Data0]

@@ -27,14 +27,10 @@
 -spec select_storage(od_space:id()) ->
     {ok, storage:doc()} | {error, Reason :: term()}.
 select_storage(SpaceId) ->
-    case space_storage:get(SpaceId) of
-        {ok, Doc} ->
-            case space_storage:get_storage_ids(Doc) of
-                [] -> {error, {no_storage_avaliable, SpaceId}};
-                [StorageId | _] -> storage:get(StorageId)
-            end;
-        {error, Reason} ->
-            {error, Reason}
+    case space_storage:get_storage_ids(SpaceId) of
+        {ok, [StorageId | _]} -> storage:get(StorageId);
+        {ok, []} -> {error, {no_storage_avaliable, SpaceId}};
+        {error, Reason} -> {error, Reason}
     end.
 
 %%--------------------------------------------------------------------

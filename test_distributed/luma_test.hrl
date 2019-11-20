@@ -14,7 +14,7 @@
 -define(LUMA_TEST_HRL, 1).
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 
 -define(STRIP_OK(Result), begin {ok, _} = Result, element(2, Result) end).
 

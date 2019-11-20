@@ -155,9 +155,9 @@ rename_or_delete(FileCtx,
 ) ->
     case provider_logic:supports_space(TargetSpaceId) of
         true ->
-            {ok, Storage} = fslogic_storage:select_storage(TargetSpaceId),
-            case sfm_utils:rename_storage_file(?ROOT_SESS_ID, TargetSpaceId,
-                Storage, FileUuid, SourceFileId, RemoteTargetFileId)
+            {ok, #document{key = StorageId}} = fslogic_storage:select_storage(TargetSpaceId),
+            case sd_utils:rename_storage_file(?ROOT_SESS_ID, TargetSpaceId,
+                StorageId, FileUuid, SourceFileId, RemoteTargetFileId)
             of
                 ok -> ok;
                 {error, ?ENOENT} -> ok

@@ -229,26 +229,36 @@
     expiration_time :: idp_access_token:expires()
 }).
 
-%% File handle used by the module
--record(sfm_handle, {
+%% File handle used by the storage_driver module
+-record(sd_handle, {
     file_handle :: undefined | helpers:file_handle(),
     file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),
     space_id :: undefined | od_space:id(),
-    storage :: undefined | storage:doc(),
     storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
     needs_root_privileges :: undefined | boolean(),
-    file_size :: undefined | non_neg_integer(),
+    file_size = 0 :: non_neg_integer(),
     share_id :: undefined | od_share:id()
 }).
 
 -record(storage_sync_info, {
-    children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
+    children_hashes = #{} :: storage_sync_info:hashes(),
     mtime :: undefined | non_neg_integer(),
-    last_stat :: undefined | non_neg_integer()
+    last_stat :: undefined | non_neg_integer(),
+    % below counters are used to check whether all batches of given directory
+    % were processed, as they are processed in parallel
+    batches_to_process = 0 :: non_neg_integer(),
+    batches_processed = 0:: non_neg_integer(),
+    % below map contains new hashes, that will be used to update values in children_hashes
+    % when counters batches_to_process == batches_processed
+    hashes_to_update = #{} :: storage_sync_info:hashes()
 }).
+
+% An empty model used for creating storage_sync_links
+% For more information see storage_sync_links.erl
+-record(storage_sync_links, {}).
 
 % This model can be associated with file and holds information about hooks
 % for given file. Hooks will be executed on future change of given
@@ -445,25 +455,18 @@
     storage_file_created = false :: boolean()
 }).
 
--define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
--define(DEFAULT_STORAGE_UPDATE_STRATEGY, {no_update, #{}}).
-
-%% Model that maps space to storage strategies
--record(storage_strategies, {
-    storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY :: space_strategy:config(),
-    storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGY :: space_strategy:config()
+%% Model that stores configuration of storage_sync mechanism
+-record(storage_sync_config, {
+    import_enabled = false :: boolean(),
+    update_enabled = false :: boolean(),
+    import_config = #{} :: space_strategies:import_config(),
+    update_config = #{} :: space_strategies:update_config()
 }).
-
--define(DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY, {ignore_conflicts, #{}}).
--define(DEFAULT_FILE_CACHING_STRATEGY, {no_cache, #{}}).
--define(DEFAULT_ENOENT_HANDLING_STRATEGY, {error_passthrough, #{}}).
 
 %% Model that maps space to storage strategies
 -record(space_strategies, {
-    storage_strategies = #{} :: map(), %todo dialyzer crashes on: #{storage:id() => #storage_strategies{}},
-    file_conflict_resolution = ?DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY :: space_strategy:config(),
-    file_caching = ?DEFAULT_FILE_CACHING_STRATEGY :: space_strategy:config(),
-    enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY :: space_strategy:config()
+    % todo VFS-5717 rename model to storage_sync_configs?
+    sync_configs = #{} :: space_strategies:sync_configs()
 }).
 
 -record(storage_sync_monitoring, {
@@ -524,6 +527,33 @@
 %% The Key of this document is UserId.
 -record(files_to_chown, {
     file_guids = [] :: [fslogic_worker:file_guid()]
+}).
+
+-record(storage_traverse_job, {
+    % Information about execution environment and processing task
+    pool :: traverse:pool(),
+    task_id :: traverse:id(),
+    callback_module :: traverse:callback_module(),
+    % storage traverse specific fields
+    storage_file_id :: helper:name(),
+    space_id :: od_space:id(),
+    storage_id :: storage:id(),
+    iterator_module :: storage_traverse:iterator_module(),
+    offset = 0 ::  non_neg_integer(),
+    batch_size :: non_neg_integer(),
+    marker :: undefined | helpers:marker(),
+    max_depth :: non_neg_integer(),
+    % flag that informs whether slave_job should be scheduled on directories
+    execute_slave_on_dir :: boolean(),
+    % flag that informs whether children master jobs should be scheduled asynchronously
+    async_children_master_jobs :: boolean(),
+    % flag that informs whether job for processing next batch of given directory should be scheduled asynchronously
+    async_next_batch_job :: boolean(),
+    % initial argument for compute function (see storage_traverse.erl for more info)
+    fold_children_init :: term(),
+    % flag that informs whether compute function should be executed (see storage_traverse.erl for more info)
+    fold_children_enabled :: boolean(),
+    info :: storage_traverse:info()
 }).
 
 %% Model for holding current quota state for spaces
