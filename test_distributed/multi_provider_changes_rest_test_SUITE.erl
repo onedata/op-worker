@@ -541,7 +541,7 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 
-init_per_testcase(token_test, Config) ->
+init_per_testcase(token_auth_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
@@ -587,7 +587,7 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 
-end_per_testcase(token_test, Config) ->
+end_per_testcase(token_auth_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [user_identity]),
     end_per_testcase(all, Config);
