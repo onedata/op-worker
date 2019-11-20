@@ -1318,6 +1318,9 @@ copy(Config) ->
     ?assertEqual(FileData2, get_file_content(Config, FileName2)),
     ?assertEqual({ok, Acl}, get_acl(Config, FileName2)),
 
+    % Wait for events propagation, TODO VFS-5924
+    timer:sleep(1000),
+
     % copy file using cdmi
     RequestHeaders4 = [user_1_token_header(Config), ?CDMI_VERSION_HEADER, ?OBJECT_CONTENT_TYPE_HEADER],
     RequestBody4 = json_utils:encode(#{<<"copy">> => list_to_binary(FileName2)}),
