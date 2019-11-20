@@ -239,7 +239,7 @@ consolidate_paths([PathA, PathB | RestOfPaths], ConsolidatedPaths) ->
 -spec check_and_cache_data_constraints(user_ctx:ctx(), file_ctx:ctx(),
     allowed_paths(), guid_constraints(), ancestor_policy()
 ) ->
-    {relation(), file_ctx:ctx()} | no_return().
+    {subpath | {ancestor, [file_meta:name()]}, file_ctx:ctx()} | no_return().
 check_and_cache_data_constraints(_UserCtx, FileCtx, any, any, _) ->
     {subpath, FileCtx};
 check_and_cache_data_constraints(
@@ -276,14 +276,14 @@ check_and_cache_data_constraints(
                     UserCtx, SerializedToken, FileCtx1,
                     GuidConstraints, AncestorPolicy
                 ),
-                Relation = case intersect_relations(PathRel, GuidRel) of
+                Result = case intersect_relations(PathRel, GuidRel) of
                     subpath ->
                         subpath;
                     {ancestor, ChildrenSet} ->
                         {ancestor, gb_sets:to_list(ChildrenSet)}
                 end,
-                permissions_cache:cache_permission(CacheKey, Relation),
-                {Relation, FileCtx3}
+                permissions_cache:cache_permission(CacheKey, Result),
+                {Result, FileCtx3}
             catch throw:?EACCES ->
                 case AncestorPolicy of
                     allow_ancestors ->
