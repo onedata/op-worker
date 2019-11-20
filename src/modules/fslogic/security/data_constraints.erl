@@ -71,7 +71,8 @@
 
 
 -spec get_allow_all_constraints() -> constraints().
-get_allow_all_constraints() -> {any, any}.
+get_allow_all_constraints() ->
+    {any, any}.
 
 
 -spec get([caveats:caveat()]) ->
@@ -119,9 +120,12 @@ get(Caveats) ->
 %% not only for files/directories directly allowed by constraints but also
 %% to their ancestors.
 %% For some operations and in case of file being ancestor to paths allowed
-%% by constraints it may be necessary to know list of file's immediate
-%% children leading to paths allowed by constraints. That is why it is
-%% also returned.
+%% by constraints (with AllowAncestorsOfPaths set to true) it may be necessary
+%% to know list of file's immediate children leading to paths allowed by
+%% constraints. That is why it is also returned.
+%% NOTE !!!
+%% AllowAncestorsOfPaths set to true involves potentially higher calculation
+%% cost so it should be used only in necessity.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify(user_ctx:ctx(), file_ctx:ctx(), AllowAncestorsOfPaths :: boolean()) ->
