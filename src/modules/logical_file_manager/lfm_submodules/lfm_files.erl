@@ -656,38 +656,47 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions) ->
     {ok, binary()} | lfm:error_reply().
 read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions) ->
     FileGuid = lfm_context:get_guid(LfmCtx),
-    SessId = lfm_context:get_session_id(LfmCtx),
-    case SyncOptions of
-        off ->
-            ok;
-        {priority, Priority} ->
-            ok = remote_utils:call_fslogic(SessId, file_request, FileGuid,
-                #synchronize_block{block = #file_block{offset = Offset, size = MaxSize},
-                    prefetch = PrefetchData, priority = Priority},
-                fun(_) -> ok end)
-    end,
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    {MetadataSize, _} = file_ctx:get_file_size(FileCtx),
 
-    FileId = lfm_context:get_file_id(LfmCtx),
-    StorageId = lfm_context:get_storage_id(LfmCtx),
-    HandleId = lfm_context:get_handle_id(LfmCtx),
-    ProxyIORequest = #proxyio_request{
-        parameters = #{
-            ?PROXYIO_PARAMETER_FILE_GUID => FileGuid,
-            ?PROXYIO_PARAMETER_HANDLE_ID => HandleId
-        },
-        file_id = FileId,
-        storage_id = StorageId,
-        proxyio_request = #remote_read{
-            offset = Offset,
-            size = MaxSize
-        }
-    },
+    ReadSize = min(MetadataSize - Offset, MaxSize),
+    case ReadSize > 0 of
+        true ->
+            SessId = lfm_context:get_session_id(LfmCtx),
+            case SyncOptions of
+                off ->
+                    ok;
+                {priority, Priority} ->
+                    ok = remote_utils:call_fslogic(SessId, file_request, FileGuid,
+                        #synchronize_block{block = #file_block{offset = Offset, size = ReadSize},
+                            prefetch = PrefetchData, priority = Priority},
+                        fun(_) -> ok end)
+            end,
 
-    remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
-        fun(#remote_data{data = Data}) ->
-            ReadBlocks = [#file_block{offset = Offset, size = size(Data)}],
-            ok = lfm_event_emitter:maybe_emit_file_read(
-                FileGuid, ReadBlocks, SessId, GenerateEvents),
-            {ok, Data}
-        end
-    ).
+            FileId = lfm_context:get_file_id(LfmCtx),
+            StorageId = lfm_context:get_storage_id(LfmCtx),
+            HandleId = lfm_context:get_handle_id(LfmCtx),
+            ProxyIORequest = #proxyio_request{
+                parameters = #{
+                    ?PROXYIO_PARAMETER_FILE_GUID => FileGuid,
+                    ?PROXYIO_PARAMETER_HANDLE_ID => HandleId
+                },
+                file_id = FileId,
+                storage_id = StorageId,
+                proxyio_request = #remote_read{
+                    offset = Offset,
+                    size = ReadSize
+                }
+            },
+
+            remote_utils:call_fslogic(SessId, proxyio_request, ProxyIORequest,
+                fun(#remote_data{data = Data}) ->
+                    ReadBlocks = [#file_block{offset = Offset, size = size(Data)}],
+                    ok = lfm_event_emitter:maybe_emit_file_read(
+                        FileGuid, ReadBlocks, SessId, GenerateEvents),
+                    {ok, Data}
+                end
+            );
+        _ ->
+            {ok, <<>>}
+    end.
