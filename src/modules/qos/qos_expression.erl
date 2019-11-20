@@ -55,7 +55,7 @@ raw_to_rpn(Expression) ->
     ParensBin = <<?L_PAREN/binary, ?R_PAREN/binary>>,
     Tokens = re:split(Expression, <<"([", ParensBin/binary, OperatorsBin/binary, "])">>),
     try
-        {ok, transform_to_rpn_internal(Tokens, [], [])}
+        {ok, raw_to_rpn_internal(Tokens, [], [])}
     catch
         throw:?ERROR_INVALID_QOS_EXPRESSION ->
             ?ERROR_INVALID_QOS_EXPRESSION
@@ -124,28 +124,28 @@ calculate_storages(Expression, ReplicasNum, SpaceStorages, FileLocations, SpaceI
 %% internal version of transform_to_rpn/2
 %% @end
 %%--------------------------------------------------------------------
--spec transform_to_rpn_internal([binary()], operator_stack(), rpn()) -> rpn().
-transform_to_rpn_internal([<<>>], [], []) ->
+-spec raw_to_rpn_internal([binary()], operator_stack(), rpn()) -> rpn().
+raw_to_rpn_internal([<<>>], [], []) ->
     [];
-transform_to_rpn_internal([<<>> | Expression], Stack, RPNExpression) ->
-    transform_to_rpn_internal(Expression, Stack, RPNExpression);
-transform_to_rpn_internal([], Stack, RPNExpression) ->
+raw_to_rpn_internal([<<>> | Expression], Stack, RPNExpression) ->
+    raw_to_rpn_internal(Expression, Stack, RPNExpression);
+raw_to_rpn_internal([], Stack, RPNExpression) ->
     RPNExpression ++ Stack;
-transform_to_rpn_internal([Operator | Expression], Stack, RPNExpression) when
+raw_to_rpn_internal([Operator | Expression], Stack, RPNExpression) when
         Operator =:= ?INTERSECTION orelse
         Operator =:= ?UNION orelse
         Operator =:= ?COMPLEMENT ->
     {Stack2, RPNExpression2} = handle_operator(Operator, Stack, RPNExpression),
-    transform_to_rpn_internal(Expression, Stack2, RPNExpression2);
-transform_to_rpn_internal([?L_PAREN | Expression], Stack, RPNExpression) ->
-    transform_to_rpn_internal(Expression, [?L_PAREN|Stack], RPNExpression);
-transform_to_rpn_internal([?R_PAREN | Expression], Stack, RPNExpression) ->
+    raw_to_rpn_internal(Expression, Stack2, RPNExpression2);
+raw_to_rpn_internal([?L_PAREN | Expression], Stack, RPNExpression) ->
+    raw_to_rpn_internal(Expression, [?L_PAREN|Stack], RPNExpression);
+raw_to_rpn_internal([?R_PAREN | Expression], Stack, RPNExpression) ->
     {Stack2, RPNExpression2} = handle_right_paren(Stack, RPNExpression),
-    transform_to_rpn_internal(Expression, Stack2, RPNExpression2);
-transform_to_rpn_internal([Operand | Expression], Stack, RPNExpression) ->
+    raw_to_rpn_internal(Expression, Stack2, RPNExpression2);
+raw_to_rpn_internal([Operand | Expression], Stack, RPNExpression) ->
     case binary:split(Operand, [?EQUALITY], [global]) of
         [_Key, _Val] ->
-            transform_to_rpn_internal(Expression, Stack, RPNExpression ++ [Operand]);
+            raw_to_rpn_internal(Expression, Stack, RPNExpression ++ [Operand]);
         _ ->
             throw(?ERROR_INVALID_QOS_EXPRESSION)
     end.
@@ -195,8 +195,8 @@ handle_operator(ParsedOperator, Stack, RPNExpression) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% @private
-%% Filters given providers list using QoS expression so that only providers
-%% fulfilling QoS left.
+%% Filters given storages list using QoS expression so that only storages
+%% fulfilling QoS are left.
 %% @end
 %%--------------------------------------------------------------------
 -spec eval_rpn(rpn(), [od_storage:id()], od_space:id()) -> [od_storage:id()].
@@ -282,7 +282,7 @@ select(StorageList, ReplicasNum, FileLocations, SpaceId) ->
 -spec get_storage_blocks_size(od_storage:id(), [#file_location{}], od_space:id()) -> integer().
 get_storage_blocks_size(StorageId, FileLocations, SpaceId) ->
     lists:foldl(fun(FileLocation, PartialStorageBlockSize) ->
-        {ok, ProviderId} = storage:get_provider_of_remote_storage(StorageId, SpaceId),
+        ProviderId = storage:get_provider_of_remote_storage(StorageId, SpaceId),
         case maps:get(<<"providerId">>, FileLocation) of
             ProviderId ->
                 PartialStorageBlockSize + maps:get(<<"totalBlocksSize">>, FileLocation);
@@ -300,8 +300,5 @@ get_storage_blocks_size(StorageId, FileLocations, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec get_space_storages(file_ctx:ctx()) -> [od_storage:id()].
 get_space_storages(FileCtx) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-
-    {ok, StorageIds} = space_logic:get_all_storage_ids(SpaceId),
+    {ok, StorageIds} = space_logic:get_all_storage_ids(file_ctx:get_space_id_const(FileCtx)),
     StorageIds.

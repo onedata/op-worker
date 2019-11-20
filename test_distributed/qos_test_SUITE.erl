@@ -116,10 +116,10 @@ all() -> [
 
 
 -define(SPACE1_ID, <<"space_id1">>).
--define(SPACE1, <<"/space_name1">>).
+-define(SPACE_PATH1, <<"/space_name1">>).
 -define(TEST_DATA, <<"test_data">>).
--define(TEST_FILE_PATH, filename:join(?SPACE1, <<"file1">>)).
--define(TEST_DIR_PATH, filename:join(?SPACE1, <<"dir1">>)).
+-define(TEST_FILE_PATH, filename:join(?SPACE_PATH1, <<"file1">>)).
+-define(TEST_DIR_PATH, filename:join(?SPACE_PATH1, <<"dir1">>)).
 
 -define(PROVIDERS_MAP, #{
     ?P1 => ?P1,
@@ -142,7 +142,7 @@ all() -> [
 ).
 
 
--define(NESTED_DIR_STRUCTURE, {?SPACE1, [
+-define(NESTED_DIR_STRUCTURE, {?SPACE_PATH1, [
     {<<"dir1">>, [
         {<<"dir2">>, [
             {<<"dir3">>, [
@@ -162,8 +162,8 @@ all() -> [
 
 qos_bounded_cache_should_be_periodically_cleaned_if_overfilled(Config) ->
     [Worker] = ?config(op_worker_nodes, Config),
-    Dir1Path = filename:join([?SPACE1, <<"dir1">>]),
-    FilePath = filename:join([?SPACE1, <<"dir1">>, <<"dir2">>, <<"dir3">>, <<"dir4">>, <<"file41">>]),
+    Dir1Path = filename:join([?SPACE_PATH1, <<"dir1">>]),
+    FilePath = filename:join([?SPACE_PATH1, <<"dir1">>, <<"dir2">>, <<"dir3">>, <<"dir4">>, <<"file41">>]),
 
     EffQosTestSpec = #effective_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
@@ -202,8 +202,8 @@ qos_bounded_cache_should_be_periodically_cleaned_if_overfilled(Config) ->
 
 qos_bounded_cache_should_not_be_cleaned_if_not_overfilled(Config) ->
     [Worker] = ?config(op_worker_nodes, Config),
-    Dir1Path = filename:join([?SPACE1, <<"dir1">>]),
-    FilePath = filename:join([?SPACE1, <<"dir1">>, <<"dir2">>, <<"dir3">>, <<"dir4">>, <<"file41">>]),
+    Dir1Path = filename:join([?SPACE_PATH1, <<"dir1">>]),
+    FilePath = filename:join([?SPACE_PATH1, <<"dir1">>, <<"dir2">>, <<"dir3">>, <<"dir4">>, <<"file41">>]),
 
     EffQosTestSpec = #effective_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
@@ -346,7 +346,6 @@ mismatching_nested_parens(Config) ->
 %%%===================================================================
 
 simple_key_val_qos(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     run_tests(Config, [file, dir], fun(Path) ->
         [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
         qos_test_base:simple_key_val_qos_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)
@@ -486,7 +485,7 @@ multi_qos_that_overlaps(Config) ->
 %%%===================================================================
 
 effective_qos_for_file_in_directory(Config) ->
-    DirPath = filename:join(?SPACE1, <<"dir1">>),
+    DirPath = filename:join(?SPACE_PATH1, <<"dir1">>),
     FilePath = filename:join(DirPath, <<"file1">>),
     [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
 
@@ -494,7 +493,7 @@ effective_qos_for_file_in_directory(Config) ->
         FilePath, Worker, [Worker], ?PROVIDERS_MAP),
     TestSpec = #effective_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
-            dir_structure = {?SPACE1, [
+            dir_structure = {?SPACE_PATH1, [
                 {<<"dir1">>, [
                     {<<"file1">>, ?TEST_DATA}
                 ]}
@@ -543,7 +542,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
     ),
     TestSpec = #effective_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
-            dir_structure = {?SPACE1, [
+            dir_structure = {?SPACE_PATH1, [
                 {<<"dir1">>, [
                     {<<"dir2">>, [{<<"file21">>, ?TEST_DATA}]},
                     {<<"dir3">>, [{<<"file31">>, ?TEST_DATA}]}
@@ -578,7 +577,7 @@ init_per_testcase(_, Config) ->
     % do not start file synchronization
     qos_tests_utils:mock_synchronize_transfers(ConfigWithSessionInfo),
     qos_tests_utils:mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
-    qos_tests_utils:mock_storage_qos(Workers, ?TEST_PROVIDERS_QOS),
+    qos_tests_utils:mock_storage_qos_parameters(Workers, ?TEST_PROVIDERS_QOS),
     mock_storage_get_provider(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
 
@@ -615,7 +614,7 @@ add_qos_and_check_qos_docs(Config, #qos_spec{
     expected_qos_entries = ExpectedQosEntries,
     expected_file_qos = ExpectedFileQos
 } ) ->
-    % add QoS for file and w8 for appropriate QoS status
+    % add QoS for file and wait for appropriate QoS status
     QosNameIdMapping = qos_tests_utils:add_multiple_qos_in_parallel(Config, QosToAddList),
     qos_tests_utils:wait_for_qos_fulfilment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntries),
 
@@ -633,7 +632,7 @@ add_qos_for_dir_and_check_effective_qos(Config, #effective_qos_test_spec{
     % create initial dir structure
     qos_tests_utils:create_dir_structure(Config, InitialDirStructure),
 
-    % add QoS and w8 for appropriate QoS status
+    % add QoS and wait for appropriate QoS status
     QosNameIdMapping = qos_tests_utils:add_multiple_qos_in_parallel(Config, QosToAddList),
     qos_tests_utils:wait_for_qos_fulfilment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntries),
 
@@ -660,7 +659,7 @@ create_test_dir_with_file(Config) ->
 mock_storage_get_provider(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
-    ok = test_utils:mock_expect(Workers, storage_logic, get_provider,
+    ok = test_utils:mock_expect(Workers, storage, get_provider_of_remote_storage,
         fun(_StorageId, _) ->
             {ok, ?GET_DOMAIN_BIN(Worker)}
         end)

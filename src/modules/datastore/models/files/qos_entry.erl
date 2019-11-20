@@ -25,11 +25,11 @@
 %%% Adding two identical QoS requirements for the same file results in two
 %%% different qos_entry documents.
 %%% qos_entry is considered as fulfilled when:
-%%%     - there is no information that qos_entry cannot be
-%%%       satisfied (this information is stored in is_possible field
-%%%       in qos_entry document. It is set to true if during evaluation of
-%%%       QoS expression it was not possible to calculate list of storages
-%%%       that would fulfill QoS requirements)
+%%%     - there is no information that qos_entry cannot be satisfied (this
+%%%       information is stored in `possibility_check` field in qos_entry document.
+%%%       It is set to `{possible, ProviderId}` if during evaluation of QoS expression
+%%%       it provider ProviderId wa able to calculate list of storages
+%%%       that would fulfill QoS requirements, otherwise it is set to `{impossible, ProviderId}`)
 %%%     - there are no traverse requests in qos_entry document. Traverse requests
 %%%       are added to qos_entry document on its creation and removed from document
 %%%       when traverse task for this request is completed
@@ -49,25 +49,19 @@
 %% functions operating on document using datastore model API
 -export([
     get/1, delete/1, create/5, create/7,
-    add_links/4, delete_links/4, fold_links/4
+    add_links/4, delete_links/4, fold_links/5
 ]).
 
 %% higher-level functions operating on qos_entry document
 -export([
-    add_impossible_qos/2, list_impossible_qos/0, delete_impossible_qos/2,
-    mark_entry_possible/3, is_possible/1, get_space_id/1
+    add_to_impossible_list/2, get_impossible_list/1, delete_from_impossible_list/2,
+    mark_entry_possible/3, is_possible/1, get_space_id/1, remove_traverse_req/2
 ]).
 
 %% functions operating on qos_entry record
 -export([
     get_file_guid/1, get_expression/1, get_replicas_num/1,
-    get_file_uuid/1, get_traverse_map/1, are_all_traverses_finished/1
-]).
-
-%% functions responsible for traverses under given qos_entry.
--export([
-    prepare_traverse_map/2, remove_traverse_req/2,
-    traverse_req_get_storage_id/1, traverse_req_get_start_file_uuid/1
+    get_file_uuid/1, get_traverse_reqs/1
 ]).
 
 %% datastore_model callbacks
@@ -82,11 +76,9 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type replicas_num() :: pos_integer().
--type traverse_req() :: #qos_traverse_req{}.
--type traverse_map() :: #{traverse:id() => traverse_req()}.
 -type one_or_many(Type) :: Type | [Type].
 
--export_type([id/0, doc/0, record/0, replicas_num/0, traverse_map/0]).
+-export_type([id/0, doc/0, record/0, replicas_num/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -96,6 +88,7 @@
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
 
+-define(IMPOSSIBLE_KEY(SpaceId), <<"impossible_qos_key_", SpaceId/binary>>).
 
 %%%===================================================================
 %%% Functions operating on document using datastore_model API
@@ -108,18 +101,22 @@ create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum) ->
 
 
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
-    replicas_num(), boolean(), traverse_map()) -> {ok, doc()} | {error, term()}.
+    replicas_num(), boolean(), qos_traverse_req:traverse_reqs()) ->
+    {ok, doc()} | {error, term()}.
 create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible, TraverseReqs) ->
-    ProviderId = case Possible of
-        true -> oneprovider:get_id();
-        false -> undefined
+    PossibilityCheck = case Possible of
+        true ->
+            {possible, oneprovider:get_id()};
+        false ->
+            ok = add_to_impossible_list(QosEntryId, SpaceId),
+            {impossible, oneprovider:get_id()}
     end,
     datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
         value = #qos_entry{
             file_uuid = FileUuid,
             expression = Expression,
             replicas_num = ReplicasNum,
-            computing_provider = ProviderId,
+            possibility_check = PossibilityCheck,
             traverse_reqs = TraverseReqs
         }
     }).
@@ -147,6 +144,20 @@ add_links(Scope, Key, TreeId, Links) ->
     datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
 
+-spec add_links(datastore:key(), datastore:tree_id(),
+    one_or_many({datastore:link_name(), datastore:link_target()})) ->
+    one_or_many({ok, datastore:link()} | {error, term()}).
+add_links(Key, TreeId, Links) ->
+    datastore_model:add_links(?CTX, Key, TreeId, Links).
+
+
+-spec delete_links(datastore:key(), datastore:tree_id(),
+    one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
+    one_or_many(ok | {error, term()}).
+delete_links(Key, TreeId, Links) ->
+    datastore_model:delete_links(?CTX, Key, TreeId, Links).
+
+
 -spec delete_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
@@ -154,10 +165,11 @@ delete_links(Scope, Key, TreeId, Links) ->
     datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
 
--spec fold_links(id(), datastore:fold_fun(datastore:link()), datastore:fold_acc(), datastore:fold_opts()) ->
-    {ok, datastore:fold_acc()} | {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
-fold_links(Key, Fun, Acc, Opts) ->
-    datastore_model:fold_links(?CTX, Key, all, Fun, Acc, Opts).
+-spec fold_links(id(), datastore_model:tree_ids(), datastore:fold_fun(datastore:link()),
+    datastore:fold_acc(), datastore:fold_opts()) -> {ok, datastore:fold_acc()} |
+    {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
+fold_links(Key, TreeIds, Fun, Acc, Opts) ->
+    datastore_model:fold_links(?CTX, Key, TreeIds, Fun, Acc, Opts).
 
 
 %%%===================================================================
@@ -193,122 +205,98 @@ get_space_id(QosEntryId) ->
 %% qos_entry documents that cannot be fulfilled at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec add_impossible_qos(id(), datastore_doc:scope()) ->  ok.
-add_impossible_qos(QosEntryId, Scope) ->
+-spec add_to_impossible_list(id(), od_space:id()) ->  ok.
+add_to_impossible_list(QosEntryId, SpaceId) ->
     ?extract_ok(
-        add_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), {QosEntryId, QosEntryId})
-    ).
-
--spec delete_impossible_qos(id(), datastore_doc:scope()) ->  ok.
-delete_impossible_qos(QosEntryId, Scope) ->
-    ?extract_ok(
-        delete_links(Scope, ?IMPOSSIBLE_QOS_KEY, oneprovider:get_id(), QosEntryId)
+        add_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId})
     ).
 
 
--spec list_impossible_qos() ->  {ok, [id()]} | {error, term()}.
-list_impossible_qos() ->
-    fold_links(?IMPOSSIBLE_QOS_KEY,
+-spec delete_from_impossible_list(id(), od_space:id()) ->  ok.
+delete_from_impossible_list(QosEntryId, SpaceId) ->
+    ?extract_ok(
+        delete_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)
+    ).
+
+
+-spec get_impossible_list(od_space:id()) ->  {ok, [id()]} | {error, term()}.
+get_impossible_list(SpaceId) ->
+    fold_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(),
         fun(#link{target = T}, Acc) -> {ok, [T | Acc]} end,
         [], #{}
     ).
 
 
--spec mark_entry_possible(id(), od_space:id(), traverse_map()) -> ok.
-mark_entry_possible(QosEntryId, SpaceId, TraverseReqs) ->
-    update(QosEntryId, fun(QosEntry) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks given entry as possible and saves for it given traverse requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_entry_possible(id(), od_space:id(), qos_traverse_req:traverse_reqs()) -> ok.
+mark_entry_possible(QosEntryId, SpaceId, AllTraverseReqs) ->
+    {ok, _} = update(QosEntryId, fun(QosEntry) ->
         {ok, QosEntry#qos_entry{
-            computing_provider = oneprovider:get_id(),
-            traverse_reqs = TraverseReqs
+            possibility_check = {possible, oneprovider:get_id()},
+            traverse_reqs = AllTraverseReqs
         }}
     end),
-    delete_impossible_qos(QosEntryId, SpaceId).
-
-
-%%%===================================================================
-%%% Functions responsible for traverses under given qos_entry.
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns new traverse reqs map based on given storages list and file uuid.
-%% @end
-%%--------------------------------------------------------------------
--spec prepare_traverse_map(file_meta:uuid(), [od_storage:id()]) -> traverse_map().
-prepare_traverse_map(FileUuid, StoragesList) ->
-    lists:foldl(fun(Storage, Acc) ->
-        TaskId = datastore_utils:gen_key(),
-        Acc#{TaskId => #qos_traverse_req{
-            start_file_uuid = FileUuid,
-            storage_id = Storage
-        }}
-    end, #{}, StoragesList).
+    ok = delete_from_impossible_list(QosEntryId, SpaceId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes given traverse from traverse reqs map.
+%% Removes given traverse from traverse reqs of given QoS entry.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_traverse_req(id(), traverse:id()) -> ok.
+-spec remove_traverse_req(id(), qos_traverse_req:id()) -> ok.
 remove_traverse_req(QosEntryId, TraverseId) ->
     Diff = fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
         {ok, QosEntry#qos_entry{
-            traverse_reqs = maps:remove(TraverseId, TR)
+            traverse_reqs = qos_traverse_req:remove(TraverseId, TR)
         }}
     end,
 
     ?extract_ok(update(QosEntryId, Diff)).
 
-
--spec traverse_req_get_storage_id(traverse_req()) -> od_storage:id().
-traverse_req_get_storage_id(#qos_traverse_req{storage_id = StorageId}) ->
-    StorageId.
-
-
--spec traverse_req_get_start_file_uuid(traverse_req()) -> file_meta:uuid().
-traverse_req_get_start_file_uuid(#qos_traverse_req{start_file_uuid = FileUuid}) ->
-    FileUuid.
-
-
 %%%===================================================================
 %%% Functions operating on qos_entry record.
 %%%===================================================================
 
--spec get_expression(record()) -> qos_expression:rpn().
+-spec get_expression(doc() | record()) -> {ok, qos_expression:rpn()}.
+get_expression(#document{value = QosEntry}) ->
+    get_expression(QosEntry);
 get_expression(QosEntry) ->
-    QosEntry#qos_entry.expression.
+    {ok, QosEntry#qos_entry.expression}.
 
 
--spec get_replicas_num(record()) -> replicas_num().
+-spec get_replicas_num(record()) -> {ok, replicas_num()}.
+get_replicas_num(#document{value = QosEntry}) ->
+    get_replicas_num(QosEntry);
 get_replicas_num(QosEntry) ->
-    QosEntry#qos_entry.replicas_num.
+    {ok, QosEntry#qos_entry.replicas_num}.
 
 
--spec get_file_uuid(record()) -> file_meta:uuid().
+-spec get_file_uuid(record()) -> {ok, file_meta:uuid()}.
+get_file_uuid(#document{value = QosEntry}) ->
+    get_file_uuid(QosEntry);
 get_file_uuid(QosEntry) ->
-    QosEntry#qos_entry.file_uuid.
+    {ok, QosEntry#qos_entry.file_uuid}.
 
 
--spec get_traverse_map(record()) -> traverse_map().
-get_traverse_map(QosEntry) ->
-    QosEntry#qos_entry.traverse_reqs.
+-spec get_traverse_reqs(record()) -> {ok, qos_traverse_req:traverse_reqs()}.
+get_traverse_reqs(#document{value = QosEntry}) ->
+    get_traverse_reqs(QosEntry);
+get_traverse_reqs(QosEntry) ->
+    {ok, QosEntry#qos_entry.traverse_reqs}.
 
 
--spec is_possible(record() | doc()) -> boolean().
+-spec is_possible(doc() | record()) -> boolean().
 is_possible(#document{value = QosEntry}) ->
     is_possible(QosEntry);
-
-is_possible(QosEntry) ->
-    QosEntry#qos_entry.computing_provider =/= undefined.
-
-
--spec are_all_traverses_finished(record() | doc()) -> boolean().
-are_all_traverses_finished(#document{value = QosEntry}) ->
-    are_all_traverses_finished(QosEntry);
-
-are_all_traverses_finished(QosEntry) ->
-    QosEntry#qos_entry.traverse_reqs == #{}.
+is_possible(#qos_entry{possibility_check = {possible, _}}) ->
+    true;
+is_possible(#qos_entry{possibility_check = {impossible, _}}) ->
+    false.
 
 
 %%%===================================================================
@@ -332,11 +320,11 @@ get_record_struct(1) ->
         {file_uuid, string},
         {expression, [string]},
         {replicas_num, integer},
-        {traverse_reqs, #{binary => {record, [
+        {traverse_reqs, #{string => {record, [
             {start_file_uuid, string},
             {storage_id, string}
         ]}}},
-        {computing_provider, string}
+        {possibility_check, {atom, string}}
     ]}.
 
 
@@ -358,7 +346,9 @@ get_record_struct(1) ->
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
     {boolean(), doc()} | ignore | default.
-resolve_conflict(_Ctx, #document{key = QosId, value = RemoteValue, scope = SpaceId} = RemoteDoc, #document{value = LocalValue}) ->
+resolve_conflict(_Ctx, #document{key = QosId, value = RemoteValue, scope = SpaceId} = RemoteDoc,
+    #document{value = LocalValue}) ->
+
     case resolve_conflict_internal(SpaceId, QosId, RemoteValue, LocalValue) of
         default ->
             default;
@@ -373,10 +363,9 @@ resolve_conflict(_Ctx, #document{key = QosId, value = RemoteValue, scope = Space
 %% @private
 -spec resolve_conflict_internal(od_space:id(), id(), record(), record()) -> default | record().
 resolve_conflict_internal(SpaceId, QosId,
-    #qos_entry{computing_provider = RemoteEntryProviderId, file_uuid = FileUuid} = RemoteEntry,
-    #qos_entry{computing_provider = LocalEntryProviderId} = LocalEntry)
-    when is_binary(RemoteEntryProviderId) and is_binary(LocalEntryProviderId)
-    andalso RemoteEntryProviderId =/= LocalEntryProviderId ->
+    #qos_entry{possibility_check = {possible, RemoteEntryProviderId}, file_uuid = FileUuid} = RemoteEntry,
+    #qos_entry{possibility_check = {possible, LocalEntryProviderId}} = LocalEntry)
+    when RemoteEntryProviderId =/= LocalEntryProviderId ->
     % target storages were calculated by different providers
 
     case RemoteEntryProviderId < LocalEntryProviderId of
@@ -388,7 +377,8 @@ resolve_conflict_internal(SpaceId, QosId,
                     ok ->
                         ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
                     {error, _} = Error ->
-                        ?error("Could not remvove qos_entry ~p from file_qos of file ~p: ~p", [QosId, FileUuid, Error])
+                        ?error("Could not remvove qos_entry ~p from file_qos of file ~p: ~p",
+                            [QosId, FileUuid, Error])
                 end
             end),
             RemoteEntry;
@@ -396,31 +386,37 @@ resolve_conflict_internal(SpaceId, QosId,
             % remote changes were made by provider with higher id -> ignore them
             LocalEntry
     end;
-resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = TR}, #qos_entry{traverse_reqs = TR}) ->
+resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = TR},
+    #qos_entry{traverse_reqs = TR}) ->
     % traverse requests are equal in both documents
+
     default;
-resolve_conflict_internal(SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReqs}, #qos_entry{traverse_reqs = LocalReqs} = Value) ->
+resolve_conflict_internal(SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReqs},
+    #qos_entry{traverse_reqs = LocalReqs} = Value) ->
     % traverse requests are different
-    {LocalTraverses, _} = split_traverses(LocalReqs, SpaceId),
-    {_, RemoteTraverses} = split_traverses(RemoteReqs, SpaceId),
+
+    {LocalTraverseIds, _} = split_traverse_reqs(LocalReqs, SpaceId),
+    {_, RemoteTraverseIds} = split_traverse_reqs(RemoteReqs, SpaceId),
     Value#qos_entry{
-        traverse_reqs = maps:with(LocalTraverses ++ RemoteTraverses, LocalReqs)
+        traverse_reqs = qos_traverse_req:select_traverse_reqs(
+            LocalTraverseIds ++ RemoteTraverseIds, LocalReqs)
     }.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Splits given traverses to those of current provider and those of remote providers.
+%% Splits given traverse reqs to those of current provider and those of remote providers.
 %% @end
 %%--------------------------------------------------------------------
--spec split_traverses(traverse_map(), od_space:id()) -> {[traverse:id()], [traverse:id()]}.
-split_traverses(Traverses, SpaceId) ->
+-spec split_traverse_reqs(qos_traverse_req:traverse_reqs(), od_space:id()) ->
+    {[qos_traverse_req:id()], [qos_traverse_req:id()]}.
+split_traverse_reqs(AllTraverseReqs, SpaceId) ->
     ProviderId = oneprovider:get_id(),
-    maps:fold(fun(TaskId, QosTraverse, {LocalTraverses, RemoteTraverses}) ->
-        StorageId = QosTraverse#qos_traverse_req.storage_id,
-        case storage_logic:get_provider(StorageId, SpaceId) of
-            {ok, ProviderId} -> {[TaskId | LocalTraverses], RemoteTraverses};
-            _ -> {LocalTraverses, [TaskId | RemoteTraverses]}
+    maps:fold(fun(TaskId, TraverseReq, {LocalTraverseReqs, RemoteTraverseReqs}) ->
+        StorageId = qos_traverse_req:get_storage(TraverseReq),
+        case storage:get_provider_of_remote_storage(StorageId, SpaceId) of
+            ProviderId -> {[TaskId | LocalTraverseReqs], RemoteTraverseReqs};
+            _ -> {LocalTraverseReqs, [TaskId | RemoteTraverseReqs]}
         end
-    end, {[], []}, Traverses).
+    end, {[], []}, AllTraverseReqs).

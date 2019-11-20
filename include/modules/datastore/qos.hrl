@@ -39,9 +39,6 @@
 -define(QOS_BOUNDED_CACHE_GROUP, <<"qos_bonded_cache_group">>).
 
 
--define(IMPOSSIBLE_QOS_KEY, <<"impossible_qos_key">>).
-
-
 % Request to remote providers to start QoS traverse.
 % This record is used as an element of datastore document (qos_entry).
 % Traverse is started in response to change of qos_entry document. (see qos_hooks.erl)

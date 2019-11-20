@@ -155,8 +155,13 @@
             }
         },
         "storages": {
-            "p1": ["/mnt/st1"],
-            "p2": ["/mnt/synced_storage", "/mnt/rdwr_storage"]
+            "p1": {
+                "/mnt/st1": {}
+            },
+            "p2": {
+                "/mnt/synced_storage": {},
+                "/mnt/rdwr_storage": {},
+            }
         }
     }
 }

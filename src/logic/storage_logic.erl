@@ -102,7 +102,7 @@ delete_in_zone(StorageId) ->
 
 
 -spec support_space(od_storage:id(), tokens:serialized(), od_space:support_size()) ->
-    {ok, od_space:id()}.
+    {ok, od_space:id()} | errors:error().
 support_space(StorageId, SpaceSupportToken, SupportSize) ->
     Data = #{<<"token">> => SpaceSupportToken, <<"size">> => SupportSize},
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{

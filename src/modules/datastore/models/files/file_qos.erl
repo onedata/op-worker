@@ -48,7 +48,7 @@
 
 %% higher-level functions operating on effective_file_qos record.
 -export([
-    get_qos_to_update/2, get_qos_entries/1, get_assigned_entries/1
+    get_assigned_entries_for_storage/2, get_qos_entries/1, get_assigned_entries/1
 ]).
 
 %% datastore_model callbacks
@@ -196,18 +196,19 @@ is_replica_protected(FileUuid, StorageId) ->
 %%%===================================================================
 
 -spec get_qos_entries(effective_file_qos()) -> [qos_entry:id()].
-get_qos_entries(FileQos) ->
-    FileQos#effective_file_qos.qos_entries.
+get_qos_entries(EffectiveFileQos) ->
+    EffectiveFileQos#effective_file_qos.qos_entries.
 
 
 -spec get_assigned_entries(effective_file_qos()) -> assigned_entries().
-get_assigned_entries(FileQos) ->
-    FileQos#effective_file_qos.assigned_entries.
+get_assigned_entries(EffectiveFileQos) ->
+    EffectiveFileQos#effective_file_qos.assigned_entries.
 
 
--spec get_qos_to_update(od_storage:id(), effective_file_qos()) -> [qos_entry:id()].
-get_qos_to_update(StorageId, EffectiveFileQos) ->
-    maps:get(StorageId, EffectiveFileQos#effective_file_qos.assigned_entries, []).
+-spec get_assigned_entries_for_storage(od_storage:id(), effective_file_qos()) ->
+    [qos_entry:id()].
+get_assigned_entries_for_storage(EffectiveFileQos, StorageId) ->
+    maps:get(StorageId, get_assigned_entries(EffectiveFileQos), []).
 
 
 %%%===================================================================

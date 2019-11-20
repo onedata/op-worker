@@ -241,14 +241,14 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     QosEntryId = datastore_utils:gen_key(),
 
-    TraverseReqs = qos_entry:prepare_traverse_map(FileUuid, Storages),
+    AllTraverseReqs = qos_traverse_req:new_traverse_reqs(FileUuid, Storages),
 
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN,
-                          ReplicasNum, true, TraverseReqs) of
+                          ReplicasNum, true, AllTraverseReqs) of
         {ok, _} ->
-            % QoS cache is invalidated by each provider that should start traverse
-            % task (see qos_hooks:maybe_start_traverse)
-            qos_hooks:check_traverse_reqs(QosEntryId, SpaceId, TraverseReqs),
+            % No need to invalidate QoS cache here; it is invalidated by each provider
+            % that should start traverse task (see qos_traverse_req:start_traverse)
+            qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs),
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #qos_entry_id{id = QosEntryId}
@@ -275,7 +275,6 @@ add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
         {ok, _} ->
             ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            ok = qos_entry:add_impossible_qos(QosEntryId, SpaceId),
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #qos_entry_id{id = QosEntryId}

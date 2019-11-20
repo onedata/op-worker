@@ -636,7 +636,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         undefined ->
             ok;
         _ ->
-            qos_tests_utils:mock_storage_qos(Workers, NewStoragesMock)
+            qos_tests_utils:mock_storage_qos_parameters(Workers, NewStoragesMock)
     end,
 
     QosTransfers = transfers_test_utils:list_ended_transfers(WorkerP1, ?SPACE_ID),
@@ -765,7 +765,7 @@ init_per_testcase(_Case, Config) ->
         ?P3 => ?TEST_QOS(<<"other">>)
     },
     Workers = qos_tests_utils:get_op_nodes_sorted(Config),
-    qos_tests_utils:mock_storage_qos(Workers, qos_tests_utils:inject_storage_id(Workers, Mock)),
+    qos_tests_utils:mock_storage_qos_parameters(Workers, qos_tests_utils:inject_storage_id(Workers, Mock)),
     case ?config(?SPACE_ID_KEY, Config) of
         undefined ->
             [{?SPACE_ID_KEY, ?SPACE_ID} | Config];
@@ -845,7 +845,7 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename) ->
                 file_key = {path, ?FILE_PATH(QosFilename)},
                 qos_expression_in_rpn = [<<"country=PL">>],
                 replicas_num = 1,
-                computing_provider = ?GET_DOMAIN_BIN(WorkerP1)
+                possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerP1)}
             }
         ],
         expected_file_qos = [

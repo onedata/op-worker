@@ -361,7 +361,11 @@ set_imported_storage(StorageId, ImportedStorage) ->
 -spec set_qos_parameters(od_storage:id(), od_storage:qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
     case storage_logic:set_qos_parameters(StorageId, QosParameters) of
-        ok -> qos_hooks:revalidate_impossible_qos();
+        ok ->
+            {ok, Spaces} = storage_logic:get_spaces(StorageId),
+            lists:foreach(fun(SpaceId) ->
+                qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId)
+            end, Spaces);
         Error -> Error
     end.
 
@@ -415,7 +419,13 @@ support_space_insecure(StorageId, SpaceSupportToken, SupportSize) ->
                 true ->
                     ?ERROR_STORAGE_IN_USE;
                 false ->
-                    storage_logic:support_space(StorageId, SpaceSupportToken, SupportSize)
+                    case storage_logic:support_space(StorageId, SpaceSupportToken, SupportSize) of
+                        {ok, SpaceId} ->
+                            on_space_supported(SpaceId),
+                            {ok, SpaceId};
+                        {error, _} = Error ->
+                            Error
+                    end
             end;
         Error ->
             Error
@@ -483,6 +493,11 @@ supports_any_space(StorageId) ->
 -spec on_storage_created(od_storage:id()) -> ok.
 on_storage_created(StorageId) ->
     rtransfer_config:add_storage(StorageId).
+
+%% @private
+-spec on_space_supported(od_space:id()) -> ok.
+on_space_supported(SpaceId) ->
+    ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 %% @private
 -spec on_space_unsupported(od_space:id(), od_storage:id()) -> ok.

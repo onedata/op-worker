@@ -31,7 +31,7 @@
 % mocks
 -export([
     mock_space_storages/2,
-    mock_storage_qos/2,
+    mock_storage_qos_parameters/2,
     mock_synchronize_transfers/1
 ]).
 
@@ -233,7 +233,7 @@ wait_for_qos_fulfilment_in_parallel(Config, QosToWaitForList, QosNameIdMapping, 
         end, ExpectedQosEntries),
         ExpectedIsPossible = case LookupExpectedQosEntry of
             [ExpectedQosEntry] ->
-                ExpectedQosEntry#expected_qos_entry.computing_provider =/= undefined;
+                ExpectedQosEntry#expected_qos_entry.possibility_check =/= impossible;
             [] ->
                 true
         end,
@@ -251,7 +251,7 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
     Fun = fun() ->
         ErrMsg = case rpc:call(Worker, lfm_qos, get_qos_entry, [SessId, QosEntryId]) of
             {ok, #qos_entry{
-                computing_provider = ProviderId,
+                possibility_check = PossibilityCheck,
                 traverse_reqs = TraversReqs
             }} ->
                 case ExpectedIsPossible of
@@ -262,7 +262,7 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
                             "QosName: ~p ~n"
                             "ProviderId: ~p ~n"
                             "TraverseReqs: ~p ~n",
-                            [Worker, QosName, ProviderId, TraversReqs]
+                            [Worker, QosName, PossibilityCheck, TraversReqs]
                         );
                     false ->
                         str_utils:format(
@@ -315,7 +315,7 @@ assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, Attempt
         replicas_num = ReplicasNum,
         file_key = FileKey,
         qos_name = QosName,
-        computing_provider = ProviderId
+        possibility_check = PossibilityCheck
     }) ->
         QosEntryId = QosEntryId = maps:get(QosName, QosNameIdMapping),
         % if not specified in tests spec, check document on all nodes
@@ -329,17 +329,17 @@ assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, Attempt
                     Uuid
             end,
             assert_qos_entry_document(
-                Worker, QosEntryId, FileUuid, QosExpressionRPN, ReplicasNum, Attempts, ProviderId
+                Worker, QosEntryId, FileUuid, QosExpressionRPN, ReplicasNum, Attempts, PossibilityCheck
             )
         end, Workers)
     end, ExpectedQosEntries).
 
-assert_qos_entry_document(Worker, QosEntryId, FileUuid, Expression, ReplicasNum, Attempts, ProviderId) ->
+assert_qos_entry_document(Worker, QosEntryId, FileUuid, Expression, ReplicasNum, Attempts, PossibilityCheck) ->
     ExpectedQosEntry = #qos_entry{
         file_uuid = FileUuid,
         expression = Expression,
         replicas_num = ReplicasNum,
-        computing_provider = ProviderId
+        possibility_check = PossibilityCheck
     },
     GetQosEntryFun = fun() ->
         ?assertMatch({ok, _Doc}, rpc:call(Worker, qos_entry, get, [QosEntryId]), Attempts),
@@ -556,8 +556,8 @@ mock_space_storages(Config, StorageList) ->
         end).
 
 
-mock_storage_qos(Workers, StorageQos) ->
-    test_utils:mock_expect(Workers, storage_logic, get_qos_parameters, fun(StorageId, _SpaceId) ->
+mock_storage_qos_parameters(Workers, StorageQos) ->
+    test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(StorageId, _SpaceId) ->
         {ok, maps:get(StorageId, StorageQos, #{})}
     end).
 

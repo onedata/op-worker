@@ -60,7 +60,7 @@
 
     reconcile_qos_using_file_meta_posthooks_test/1,
 
-    revalidate_impossible_qos_test/1
+    reevaluate_impossible_qos_test/1
 ]).
 
 all() -> [
@@ -94,17 +94,17 @@ all() -> [
 
     reconcile_qos_using_file_meta_posthooks_test,
 
-    revalidate_impossible_qos_test
+    reevaluate_impossible_qos_test
 ].
 
 
--define(FILE_PATH(FileName), filename:join([?SPACE1, FileName])).
+-define(FILE_PATH(FileName), filename:join([?SPACE_PATH1, FileName])).
 -define(TEST_FILE_PATH, ?FILE_PATH(<<"file1">>)).
 -define(TEST_DIR_PATH, ?FILE_PATH(<<"dir1">>)).
 -define(TEST_DATA, <<"test_data">>).
 
 -define(SPACE_ID, <<"space1">>).
--define(SPACE1, <<"/space1">>).
+-define(SPACE_PATH1, <<"/space1">>).
 
 -define(PROVIDER_ID(Worker), ?GET_DOMAIN_BIN(Worker)).
 -define(GET_FILE_UUID(Worker, SessId, FilePath), qos_tests_utils:get_guid(Worker, SessId, FilePath)).
@@ -456,7 +456,7 @@ effective_qos_for_file_in_directory(Config) ->
     lists:foreach(fun([Worker1] = WorkerConf) ->
         ct:pal("Starting for workers: ~p~n", [WorkerConf]),
         DirName = generator:gen_name(),
-        DirPath = filename:join(?SPACE1, DirName),
+        DirPath = filename:join(?SPACE_PATH1, DirName),
         FilePath = filename:join(DirPath, <<"file1">>),
 
         QosSpec = qos_test_base:effective_qos_for_file_in_directory_spec(DirPath,
@@ -465,7 +465,7 @@ effective_qos_for_file_in_directory(Config) ->
             #effective_qos_test_spec{
                 initial_dir_structure = #test_dir_structure{
                     worker = WorkerP1,
-                    dir_structure = {?SPACE1, [
+                    dir_structure = {?SPACE_PATH1, [
                         {DirName, [
                             {<<"file1">>, ?TEST_DATA, [?PROVIDER_ID(WorkerP1)]}
                         ]}
@@ -475,7 +475,7 @@ effective_qos_for_file_in_directory(Config) ->
                 expected_qos_entries = QosSpec#qos_spec.expected_qos_entries,
                 expected_effective_qos = QosSpec#qos_spec.expected_effective_qos,
                 expected_dir_structure = #test_dir_structure{
-                    dir_structure = {?SPACE1, [
+                    dir_structure = {?SPACE_PATH1, [
                         {DirName, [
                             {<<"file1">>, ?TEST_DATA, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)]}
                         ]}
@@ -497,7 +497,7 @@ effective_qos_for_file_in_nested_directories(Config) ->
     lists:foreach(fun(WorkerConf) ->
         ct:pal("Starting for workers: ~p~n", [WorkerConf]),
         DirName = generator:gen_name(),
-        Dir1Path = filename:join(?SPACE1, DirName),
+        Dir1Path = filename:join(?SPACE_PATH1, DirName),
         Dir2Path = filename:join(Dir1Path, <<"dir2">>),
         Dir3Path = filename:join(Dir2Path, <<"dir3">>),
         File21Path = filename:join(Dir2Path, <<"file21">>),
@@ -510,7 +510,7 @@ effective_qos_for_file_in_nested_directories(Config) ->
             #effective_qos_test_spec{
                 initial_dir_structure = #test_dir_structure{
                     worker = WorkerP1,
-                    dir_structure = {?SPACE1, [
+                    dir_structure = {?SPACE_PATH1, [
                         {DirName, [
                             {<<"dir2">>, [
                                 {<<"file21">>, ?TEST_DATA, [?PROVIDER_ID(WorkerP1)]},
@@ -525,7 +525,7 @@ effective_qos_for_file_in_nested_directories(Config) ->
                 expected_qos_entries = QosSpec#qos_spec.expected_qos_entries,
                 expected_effective_qos = QosSpec#qos_spec.expected_effective_qos,
                 expected_dir_structure = #test_dir_structure{
-                    dir_structure = {?SPACE1, [
+                    dir_structure = {?SPACE_PATH1, [
                         {DirName, [
                             {<<"dir2">>, [
                                 {<<"file21">>, ?TEST_DATA, [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)]},
@@ -554,7 +554,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
     lists:foreach(fun(WorkerConf) ->
         ct:pal("Starting for workers: ~p~n", [WorkerConf]),
         DirName = generator:gen_name(),
-        Dir1Path = filename:join(?SPACE1, DirName),
+        Dir1Path = filename:join(?SPACE_PATH1, DirName),
         Dir2Path = filename:join(Dir1Path, <<"dir2">>),
         Dir3Path = filename:join(Dir1Path, <<"dir3">>),
         File21Path = filename:join(Dir2Path, <<"file21">>),
@@ -566,7 +566,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
         add_qos_for_dir_and_check_effective_qos(Config,
             #effective_qos_test_spec{
                 initial_dir_structure = #test_dir_structure{
-                    dir_structure = {?SPACE1, [
+                    dir_structure = {?SPACE_PATH1, [
                         {DirName, [
                             {<<"dir2">>, [{<<"file21">>, ?TEST_DATA, [?PROVIDER_ID(WorkerP1)]}]},
                             {<<"dir3">>, [{<<"file31">>, ?TEST_DATA, [?PROVIDER_ID(WorkerP1)]}]}
@@ -577,7 +577,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
                 expected_qos_entries = QosSpec#qos_spec.expected_qos_entries,
                 expected_effective_qos = QosSpec#qos_spec.expected_effective_qos,
                 expected_dir_structure = #test_dir_structure{
-                    dir_structure = {?SPACE1, [
+                    dir_structure = {?SPACE_PATH1, [
                         {DirName, [
                             {<<"dir2">>, [{<<"file21">>, ?TEST_DATA, [
                                 ?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2)]}
@@ -687,13 +687,13 @@ reconcile_qos_using_file_meta_posthooks_test(Config) ->
     [Worker1, Worker2 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     DirName = <<"dir1">>,
-    DirPath = filename:join(?SPACE1, DirName),
+    DirPath = filename:join(?SPACE_PATH1, DirName),
     FilePath = filename:join(DirPath, <<"file1">>),
 
     QosSpec = #fulfill_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
             worker = Worker1,
-            dir_structure = {?SPACE1, [
+            dir_structure = {?SPACE_PATH1, [
                 {DirName, []}
             ]}
         },
@@ -732,17 +732,17 @@ reconcile_qos_using_file_meta_posthooks_test(Config) ->
     qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructureAfter,  #{files => [{Guid, FilePath}], dirs => []}).
 
 
-revalidate_impossible_qos_test(Config) ->
+reevaluate_impossible_qos_test(Config) ->
     [Worker1, Worker2, Worker3 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
 
     DirName = <<"dir1">>,
-    DirPath = filename:join(?SPACE1, DirName),
+    DirPath = filename:join(?SPACE_PATH1, DirName),
     FileName = <<"file1">>,
 
     QosSpec = #fulfill_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
             worker = Worker2,
-            dir_structure = {?SPACE1, [
+            dir_structure = {?SPACE_PATH1, [
                 {DirName, [{FileName, ?TEST_DATA, [?PROVIDER_ID(Worker2)]}]}
             ]}
         },
@@ -761,7 +761,7 @@ revalidate_impossible_qos_test(Config) ->
                 file_key = {path, DirPath},
                 replicas_num = 1,
                 qos_expression_in_rpn = [<<"country=other">>],
-                computing_provider = undefined
+                possibility_check = {impossible, ?PROVIDER_ID(Worker1)}
             }
         ],
         wait_for_qos_fulfillment = []
@@ -769,14 +769,14 @@ revalidate_impossible_qos_test(Config) ->
 
     {_GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
 
-    qos_tests_utils:mock_storage_qos(Worker1, qos_tests_utils:inject_storage_id([Worker1], #{?P1 => #{<<"country">> => <<"other">>}})),
-    qos_tests_utils:mock_storage_qos(Worker2, qos_tests_utils:inject_storage_id([Worker2], #{?P2 => #{<<"country">> => <<"other">>}})),
-    qos_tests_utils:mock_storage_qos(Worker3, qos_tests_utils:inject_storage_id([Worker3], #{?P3 => #{<<"country">> => <<"other">>}})),
+    qos_tests_utils:mock_storage_qos_parameters(Worker1, qos_tests_utils:inject_storage_id([Worker1], #{?P1 => #{<<"country">> => <<"other">>}})),
+    qos_tests_utils:mock_storage_qos_parameters(Worker2, qos_tests_utils:inject_storage_id([Worker2], #{?P2 => #{<<"country">> => <<"other">>}})),
+    qos_tests_utils:mock_storage_qos_parameters(Worker3, qos_tests_utils:inject_storage_id([Worker3], #{?P3 => #{<<"country">> => <<"other">>}})),
 
     % trigger on all providers to test conflict resolution
-    rpc:call(Worker1, qos_hooks, revalidate_impossible_qos, []),
-    rpc:call(Worker2, qos_hooks, revalidate_impossible_qos, []),
-    rpc:call(Worker3, qos_hooks, revalidate_impossible_qos, []),
+    ok = rpc:call(Worker1, qos_hooks, reevaluate_all_impossible_qos_in_space, [?SPACE_ID]),
+    ok = rpc:call(Worker2, qos_hooks, reevaluate_all_impossible_qos_in_space, [?SPACE_ID]),
+    ok = rpc:call(Worker3, qos_hooks, reevaluate_all_impossible_qos_in_space, [?SPACE_ID]),
 
     ExpectedQosEntriesAfter = [
         #expected_qos_entry{
@@ -785,7 +785,7 @@ revalidate_impossible_qos_test(Config) ->
             file_key = {path, DirPath},
             replicas_num = 1,
             qos_expression_in_rpn = [<<"country=other">>],
-            computing_provider = ?PROVIDER_ID(Worker1)
+            possibility_check = {possible, ?PROVIDER_ID(Worker1)}
         }
     ],
     qos_tests_utils:wait_for_qos_fulfilment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntriesAfter),
@@ -848,7 +848,7 @@ init_per_testcase(_, Config) ->
     lfm_proxy:init(NewConfig),
     Workers = ?config(op_worker_nodes, NewConfig),
     MockWithStorageId = qos_tests_utils:inject_storage_id(Workers, ?TEST_PROVIDERS_QOS),
-    qos_tests_utils:mock_storage_qos(Workers, MockWithStorageId),
+    qos_tests_utils:mock_storage_qos_parameters(Workers, MockWithStorageId),
     NewConfig.
 
 
@@ -879,7 +879,7 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
     GuidsAndPaths = qos_tests_utils:create_dir_structure(Config, InitialDirStructure),
     ?assertMatch(true, qos_tests_utils:assert_distribution_in_dir_structure(Config, InitialDirStructure, GuidsAndPaths)),
 
-    % add QoS and w8 for fulfillment
+    % add QoS and wait for fulfillment
     QosNameIdMapping = qos_tests_utils:add_multiple_qos_in_parallel(Config, QosToAddList),
     qos_tests_utils:wait_for_qos_fulfilment_in_parallel(Config, WaitForQosFulfillment, QosNameIdMapping, ExpectedQosEntries),
 
@@ -942,7 +942,7 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename, WaitForQos) ->
                 file_key = {path, ?FILE_PATH(QosFilename)},
                 qos_expression_in_rpn = [<<"country=PT">>],
                 replicas_num = 1,
-                computing_provider = ?GET_DOMAIN_BIN(Worker1)
+                possibility_check = {possible, ?GET_DOMAIN_BIN(Worker1)}
             }
         ],
         expected_file_qos = [

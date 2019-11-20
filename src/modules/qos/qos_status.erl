@@ -85,11 +85,12 @@ report_file_reconciled(QosEntryId, SpaceId, FileUuid, TaskId) ->
 -spec check_fulfilment(qos_entry:id(), fslogic_worker:file_guid()) ->  boolean().
 check_fulfilment(QosEntryId, FileGuid) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
+    {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosDoc),
 
     case qos_entry:is_possible(QosDoc) of
         false -> false;
         true ->
-            case qos_entry:are_all_traverses_finished(QosDoc) of
+            case qos_traverse_req:are_all_finished(AllTraverseReqs) of
                 true ->
                     {ok, OriginGuid} = qos_entry:get_file_guid(QosDoc),
                     RelativePath = get_relative_path(OriginGuid, FileGuid),
@@ -135,7 +136,7 @@ get_relative_path(AncestorGuid, ChildGuid) ->
 %%--------------------------------------------------------------------
 -spec get_next_status_link(qos_entry:id(), binary()) ->  {ok, path() | empty} | {error, term()}.
 get_next_status_link(QosEntryId, PrevName) ->
-    qos_entry:fold_links(?QOS_STATUS_LINKS_KEY(QosEntryId),
+    qos_entry:fold_links(?QOS_STATUS_LINKS_KEY(QosEntryId), all,
         fun(#link{name = N}, _Acc) -> {ok, N} end,
         empty,
         #{prev_link_name => PrevName, size => 1}
