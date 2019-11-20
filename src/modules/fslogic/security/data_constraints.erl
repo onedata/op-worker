@@ -58,7 +58,9 @@
 -type guid_constraints() :: any | [[file_id:file_guid()]].
 -type constraints() :: {allowed_paths(), guid_constraints()}.
 
--export_type([constraints/0]).
+-type ancestor_policy() :: allow_ancestors | disallow_ancestors.
+
+-export_type([constraints/0, ancestor_policy/0]).
 
 
 -define(CV_PATH(__PATHS), #cv_data_path{whitelist = __PATHS}).
@@ -116,25 +118,25 @@ get(Caveats) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Verifies data constraints, that is whether access to specified file
-%% can be granted. AllowAncestorsOfPaths means that access can be granted
+%% can be granted. AncestorPolicy tells whether access can be granted
 %% not only for files/directories directly allowed by constraints but also
 %% to their ancestors.
 %% For some operations and in case of file being ancestor to paths allowed
-%% by constraints (with AllowAncestorsOfPaths set to true) it may be necessary
-%% to know list of file's immediate children leading to paths allowed by
-%% constraints. That is why it is also returned.
+%% by constraints (with AllowAncestorsOfPaths set to allow_ancestors) it may
+%% be necessary to know list of file's immediate children leading to paths
+%% allowed by constraints. That is why it is also returned.
 %% NOTE !!!
-%% AllowAncestorsOfPaths set to true involves potentially higher calculation
-%% cost so it should be used only in necessity.
+%% AllowAncestorsOfPaths set to allow_ancestors involves potentially higher
+%% calculation cost so it should be used only in necessity.
 %% @end
 %%--------------------------------------------------------------------
--spec verify(user_ctx:ctx(), file_ctx:ctx(), AllowAncestorsOfPaths :: boolean()) ->
+-spec verify(user_ctx:ctx(), file_ctx:ctx(), ancestor_policy()) ->
     {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
-verify(UserCtx, FileCtx0, AllowAncestorsOfPaths) ->
+verify(UserCtx, FileCtx0, AncestorPolicy) ->
     {AllowedPaths, GuidConstraints} = user_ctx:get_data_constraints(UserCtx),
     Result = check_and_cache_data_constraints(
         UserCtx, FileCtx0,
-        AllowedPaths, GuidConstraints, AllowAncestorsOfPaths
+        AllowedPaths, GuidConstraints, AncestorPolicy
     ),
     case Result of
         {subpath, FileCtx1} ->
@@ -235,14 +237,13 @@ consolidate_paths([PathA, PathB | RestOfPaths], ConsolidatedPaths) ->
 
 %% @private
 -spec check_and_cache_data_constraints(user_ctx:ctx(), file_ctx:ctx(),
-    allowed_paths(), guid_constraints(),
-    AllowAncestorsOfPaths :: boolean()
+    allowed_paths(), guid_constraints(), ancestor_policy()
 ) ->
     {relation(), file_ctx:ctx()} | no_return().
 check_and_cache_data_constraints(_UserCtx, FileCtx, any, any, _) ->
     {subpath, FileCtx};
 check_and_cache_data_constraints(
-    UserCtx, FileCtx0, AllowedPaths, GuidConstraints, AllowAncestorsOfPaths
+    UserCtx, FileCtx0, AllowedPaths, GuidConstraints, AncestorPolicy
 ) ->
     FileGuid = file_ctx:get_guid_const(FileCtx0),
     SerializedToken = get_serialized_token(UserCtx),
@@ -251,7 +252,7 @@ check_and_cache_data_constraints(
         {ok, subpath} ->
             % File is allowed by constraints - every operations are permitted
             {subpath, FileCtx0};
-        {ok, {subpath, ?EACCES}} when not AllowAncestorsOfPaths ->
+        {ok, {subpath, ?EACCES}} when AncestorPolicy =:= disallow_ancestors ->
             % File is not allowed by constraints but it may be ancestor to some
             % of those paths (such checks were not performed) - forbid only
             % operations on subpaths
@@ -259,9 +260,9 @@ check_and_cache_data_constraints(
         {ok, {ancestor, _} = Ancestor} ->
             % File is ancestor to path allowed by constraints so only specific
             % operations are allowed
-            case AllowAncestorsOfPaths of
-                true -> {Ancestor, FileCtx0};
-                false -> throw(?EACCES)
+            case AncestorPolicy of
+                allow_ancestors -> {Ancestor, FileCtx0};
+                disallow_ancestors -> throw(?EACCES)
             end;
         {ok, ?EACCES} ->
             % File is not permitted by constraints - eacces
@@ -269,11 +270,11 @@ check_and_cache_data_constraints(
         _ ->
             try
                 {PathRel, FileCtx1} = check_allowed_paths(
-                    FileCtx0, AllowedPaths, AllowAncestorsOfPaths
+                    FileCtx0, AllowedPaths, AncestorPolicy
                 ),
                 {GuidRel, FileCtx3} = check_guid_constraints(
                     UserCtx, SerializedToken, FileCtx1,
-                    GuidConstraints, AllowAncestorsOfPaths
+                    GuidConstraints, AncestorPolicy
                 ),
                 Relation = case intersect_relations(PathRel, GuidRel) of
                     subpath ->
@@ -284,10 +285,10 @@ check_and_cache_data_constraints(
                 permissions_cache:cache_permission(CacheKey, Relation),
                 {Relation, FileCtx3}
             catch throw:?EACCES ->
-                case AllowAncestorsOfPaths of
-                    true ->
+                case AncestorPolicy of
+                    allow_ancestors ->
                         permissions_cache:cache_permission(CacheKey, ?EACCES);
-                    false ->
+                    disallow_ancestors ->
                         permissions_cache:cache_permission(CacheKey, {subpath, ?EACCES})
                 end,
                 throw(?EACCES)
@@ -296,13 +297,11 @@ check_and_cache_data_constraints(
 
 
 %% @private
--spec check_allowed_paths(file_ctx:ctx(), allowed_paths(),
-    AllowAncestorsOfPaths :: boolean()
-) ->
+-spec check_allowed_paths(file_ctx:ctx(), allowed_paths(), ancestor_policy()) ->
     {relation(), file_ctx:ctx()} | no_return().
-check_allowed_paths(FileCtx, any, _AllowAncestorsOfPaths) ->
+check_allowed_paths(FileCtx, any, _AncestorPolicy) ->
     {subpath, FileCtx};
-check_allowed_paths(FileCtx0, AllowedPaths, false) ->
+check_allowed_paths(FileCtx0, AllowedPaths, disallow_ancestors) ->
     {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
 
     IsFileAllowedSubPath = lists:any(fun(AllowedPath) ->
@@ -315,7 +314,7 @@ check_allowed_paths(FileCtx0, AllowedPaths, false) ->
         false ->
             throw(?EACCES)
     end;
-check_allowed_paths(FileCtx0, AllowedPaths, true) ->
+check_allowed_paths(FileCtx0, AllowedPaths, allow_ancestors) ->
     {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
 
     case check_against_allowed_paths(FilePath, AllowedPaths) of
@@ -330,13 +329,13 @@ check_allowed_paths(FileCtx0, AllowedPaths, true) ->
 
 %% @private
 -spec check_guid_constraints(user_ctx:ctx(), tokens:serialized(),
-    file_ctx:ctx(), guid_constraints(), AllowAncestorsOfPaths :: boolean()
+    file_ctx:ctx(), guid_constraints(), ancestor_policy()
 ) ->
     {relation(), file_ctx:ctx()} | no_return().
-check_guid_constraints(_, _, FileCtx, any, _AllowAncestorsOfPaths) ->
+check_guid_constraints(_, _, FileCtx, any, _AncestorPolicy) ->
     {subpath, FileCtx};
 check_guid_constraints(
-    UserCtx, SerializedToken, FileCtx0, GuidConstraints, false
+    UserCtx, SerializedToken, FileCtx0, GuidConstraints, disallow_ancestors
 ) ->
     case does_fulfill_guid_constraints(
         UserCtx, SerializedToken, FileCtx0, GuidConstraints
@@ -347,7 +346,7 @@ check_guid_constraints(
             throw(?EACCES)
     end;
 check_guid_constraints(
-    UserCtx, SerializedToken, FileCtx0, GuidConstraints, true
+    UserCtx, SerializedToken, FileCtx0, GuidConstraints, allow_ancestors
 ) ->
     case does_fulfill_guid_constraints(
         UserCtx, SerializedToken, FileCtx0, GuidConstraints

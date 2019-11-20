@@ -32,27 +32,30 @@
 -spec ensure_authorized(user_ctx:ctx(), file_ctx:ctx(),
     [data_access:requirement()]) -> file_ctx:ctx() | no_return().
 ensure_authorized(UserCtx, FileCtx0, AccessRequirements) ->
-    ensure_authorized(UserCtx, FileCtx0, AccessRequirements, false).
+    ensure_authorized(
+        UserCtx, FileCtx0,
+        AccessRequirements, disallow_ancestors
+    ).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks access to specified file and verifies data constraints.
-%% AllowAncestorsOfPaths means that access can be granted not only for
+%% AncestorPolicy tells whether access can be granted not only for
 %% files/directories directly allowed by constraints but also to their
 %% ancestors.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_authorized(user_ctx:ctx(), file_ctx:ctx(),
     AccessRequirements :: [data_access:requirement()],
-    AllowAncestorsOfPaths :: boolean()
+    AncestorPolicy :: data_constraints:ancestor_policy()
 ) ->
     file_ctx:ctx().
 ensure_authorized(
-    UserCtx, FileCtx0, AccessRequirements, AllowAncestorsOfPaths
+    UserCtx, FileCtx0, AccessRequirements, AncestorPolicy
 ) ->
     {_, FileCtx1} = data_constraints:verify(
-        UserCtx, FileCtx0, AllowAncestorsOfPaths
+        UserCtx, FileCtx0, AncestorPolicy
     ),
     data_access:assert_granted(UserCtx, FileCtx1, AccessRequirements).
 
@@ -76,4 +79,4 @@ ensure_authorized_readdir(UserCtx, FileCtx0, AccessRequirements) ->
     FileCtx1 = data_access:assert_granted(
         UserCtx, FileCtx0, AccessRequirements
     ),
-    data_constraints:verify(UserCtx, FileCtx1, true).
+    data_constraints:verify(UserCtx, FileCtx1, allow_ancestors).
