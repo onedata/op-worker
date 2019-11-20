@@ -12,6 +12,8 @@
 -module(massive_multi_provider_file_ops_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-behaviour(traverse_behaviour).
+
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

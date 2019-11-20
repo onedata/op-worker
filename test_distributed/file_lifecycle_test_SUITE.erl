@@ -53,8 +53,8 @@ open_race_test(Config) ->
 
     check_dir_init(W),
 
-    test_utils:mock_new(W, sfm_utils, [passthrough]),
-    test_utils:mock_expect(W, sfm_utils, create_storage_file,
+    test_utils:mock_new(W, sd_utils, [passthrough]),
+    test_utils:mock_expect(W, sd_utils, create_storage_file,
         fun(UserCtx, FileCtx, VerifyLink) ->
             Ans = meck:passthrough([UserCtx, FileCtx, VerifyLink]),
             timer:sleep(2000),
@@ -407,7 +407,7 @@ end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_unload(Workers, [communicator, file_meta, file_req, sfm_utils, fslogic_times]).
+    test_utils:mock_unload(Workers, [communicator, file_meta, file_req, sd_utils, fslogic_times]).
 
 %%%===================================================================
 %%% Internal functions

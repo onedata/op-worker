@@ -42,10 +42,10 @@
     autocleaning_force_start/1, force_oz_connection_start/0,
     provider_auth_save/2, get_root_token_file_path/0,
     get_storage_import_details/2, get_storage_update_details/2,
-    modify_storage_import/3, modify_storage_update/3,
+    configure_storage_import/3, configure_storage_update/3,
     storage_sync_monitoring_get_metric/3,
-    storage_sync_monitoring_get_import_state/1,
-    storage_sync_monitoring_get_update_state/1, restart_rtransfer_link/0,
+    storage_sync_monitoring_get_import_status/1,
+    storage_sync_monitoring_get_update_status/1, restart_rtransfer_link/0,
     set_txt_record/3, remove_txt_record/1
 ]).
 
@@ -195,7 +195,7 @@ get_space_storage(Key) ->
     space_storage:get(Key).
 
 
--spec space_storage_get_storage_ids(space_storage:id()) -> [storage:id()].
+-spec space_storage_get_storage_ids(space_storage:id()) -> {ok, [storage:id()]}.
 space_storage_get_storage_ids(SpaceId) ->
     space_storage:get_storage_ids(SpaceId).
 
@@ -445,28 +445,27 @@ get_root_token_file_path() ->
 
 
 -spec get_storage_import_details(od_space:id(), storage:id()) ->
-    space_strategy:config().
+    space_strategies:sync_details().
 get_storage_import_details(SpaceId, StorageId) ->
-    space_strategies:get_storage_import_details(SpaceId, StorageId).
+    storage_sync:get_import_details(SpaceId, StorageId).
 
 
 -spec get_storage_update_details(od_space:id(), storage:id()) ->
-    space_strategy:config().
+    space_strategies:sync_details().
 get_storage_update_details(SpaceId, StorageId) ->
-    space_strategies:get_storage_update_details(SpaceId, StorageId).
+    storage_sync:get_update_details(SpaceId, StorageId).
 
 
--spec modify_storage_import(od_space:id(), space_strategy:name(),
-space_strategy:arguments()) ->
-    {ok, datastore:key()} | {error, term()}.
-modify_storage_import(SpaceId, StrategyName, Args) ->
-    storage_sync:modify_storage_import(SpaceId, StrategyName, Args).
+-spec configure_storage_import(od_space:id(), boolean(), space_strategies:import_config()) ->
+    ok | {error, term()}.
+configure_storage_import(SpaceId, Enabled, Args) ->
+    storage_sync:configure_import(SpaceId, Enabled, Args).
 
 
--spec modify_storage_update(od_space:id(), space_strategy:name(),
-    space_strategy:arguments()) -> {ok, datastore:key()} | {error, term()}.
-modify_storage_update(SpaceId, StrategyName, Args) ->
-    storage_sync:modify_storage_update(SpaceId, StrategyName, Args).
+-spec configure_storage_update(od_space:id(), boolean(),
+    space_strategies:update_config()) -> ok | {error, term()}.
+configure_storage_update(SpaceId, Enabled, Args) ->
+    storage_sync:configure_update(SpaceId, Enabled, Args).
 
 
 -spec storage_sync_monitoring_get_metric(od_space:id(),
@@ -476,16 +475,16 @@ storage_sync_monitoring_get_metric(SpaceId, Type, Window) ->
     storage_sync_monitoring:get_metric(SpaceId, Type, Window).
 
 
--spec storage_sync_monitoring_get_import_state(od_space:id()) ->
-    storage_import:state().
-storage_sync_monitoring_get_import_state(SpaceId) ->
-    storage_sync_monitoring:get_import_state(SpaceId).
+-spec storage_sync_monitoring_get_import_status(od_space:id()) ->
+    storage_sync_traverse:scan_status().
+storage_sync_monitoring_get_import_status(SpaceId) ->
+    storage_sync_monitoring:get_import_status(SpaceId).
 
 
--spec storage_sync_monitoring_get_update_state(od_space:id()) ->
-    storage_update:state().
-storage_sync_monitoring_get_update_state(SpaceId) ->
-    storage_sync_monitoring:get_update_state(SpaceId).
+-spec storage_sync_monitoring_get_update_status(od_space:id()) ->
+    storage_sync_traverse:scan_status().
+storage_sync_monitoring_get_update_status(SpaceId) ->
+    storage_sync_monitoring:get_update_status(SpaceId).
 
 
 -spec restart_rtransfer_link() -> ok | {error, not_running}.

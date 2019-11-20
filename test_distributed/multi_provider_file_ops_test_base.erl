@@ -70,14 +70,6 @@
 ).
 -define(rpcTest(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
 
--define(deny_user(UserId),
-    #access_control_entity{
-        acetype = ?deny_mask,
-        aceflags = ?no_flags_mask,
-        identifier = UserId,
-        acemask = (?read_mask bor ?write_mask bor ?execute_mask)
-    }).
-
 %%%===================================================================
 %%% Test skeletons
 %%%===================================================================
@@ -1836,23 +1828,23 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     {ok, _} = datastore_model:save(Ctx, LocationDoc),
 
     LeafLess = filename:dirname(FileId),
-    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, LeafLess, undefined),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
+    SDHandle0 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, LeafLess, undefined),
+    case storage_driver:mkdir(SDHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
             ok
     end,
 
 
-    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, FileId, undefined),
+    SDHandle1 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, FileId, undefined),
     FileContent = <<"abc">>,
-    storage_file_manager:unlink(SFMHandle1, size(FileContent)),
-    ok = storage_file_manager:create(SFMHandle1, 8#775),
-    {ok, SFMHandle2} = storage_file_manager:open_insecure(SFMHandle1, write),
-    SFMHandle3 = storage_file_manager:set_size(SFMHandle2),
-    {ok, 3} = storage_file_manager:write(SFMHandle3, 0, FileContent),
-    storage_file_manager:fsync(SFMHandle3, false),
+    storage_driver:unlink(SDHandle1, size(FileContent)),
+    ok = storage_driver:create(SDHandle1, 8#775),
+    {ok, SDHandle2} = storage_driver:open_insecure(SDHandle1, write),
+    SDHandle3 = storage_driver:set_size(SDHandle2),
+    {ok, 3} = storage_driver:write(SDHandle3, 0, FileContent),
+    storage_driver:fsync(SDHandle3, false),
     ok.
 
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->

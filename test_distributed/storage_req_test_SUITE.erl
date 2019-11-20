@@ -148,7 +148,7 @@ verify_storage_test_file_test(Config) ->
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
 
     FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [FileGuid]),
-    {FileId, _} = rpc:call(Worker, file_ctx, get_raw_storage_path, [FileCtx]),
+    {FileId, _} = rpc:call(Worker, file_ctx, get_storage_file_id, [FileCtx]),
     SpaceId = <<"space_id1">>,
 
     Response1 = ?req(Worker, SessId, #verify_storage_test_file{

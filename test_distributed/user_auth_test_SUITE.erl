@@ -46,7 +46,7 @@ token_authentication(Config) ->
         tokens:serialize(tokens:construct(#token{
             onezone_domain = <<"zone">>,
             subject = ?SUB(user, ?USER_ID),
-            nonce = ?USER_ID,
+            id = ?USER_ID,
             type = ?ACCESS_TOKEN,
             persistent = false
         }, ?USER_ID, []))
@@ -203,7 +203,7 @@ mock_user_logic(Config) ->
         (_, _) ->
             {error, not_found}
     end),
-    test_utils:mock_expect(Workers, token_logic, preauthorize, fun
+    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun
         (#token_auth{token = SerializedToken}) ->
             case tokens:deserialize(SerializedToken) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->

@@ -117,7 +117,7 @@ handle_provider_handshake(#provider_handshake_request{
     token = Token
 }, IpAddress) when is_binary(ProviderId) andalso is_binary(Token) ->
 
-    case token_logic:verify_identity(Token) of
+    case token_logic:verify_identity_token(Token) of
         {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
             ok;
         {ok, _} ->

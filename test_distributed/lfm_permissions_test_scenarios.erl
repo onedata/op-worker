@@ -292,7 +292,7 @@ run_data_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
     {ok, MainToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
         onezone_domain = <<"zone">>,
         subject = ?SUB(user, User),
-        nonce = User,
+        id = User,
         type = ?ACCESS_TOKEN,
         persistent = false
     }, User, []))),

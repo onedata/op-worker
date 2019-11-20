@@ -14,7 +14,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -1157,7 +1157,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     {ok, 10} = lfm_proxy:write(W1, Handle, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    {SfmHandle, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx]),
+    {SfmHandle, _} = rpc:call(W1, storage_driver, new_handle, [SessionId, FileCtx]),
     FileUuid = file_id:guid_to_uuid(FileGuid),
 
     % attach external location
@@ -1188,12 +1188,12 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when
-    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle])),
+    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SfmHandle])),
     ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, {guid, FileGuid}, LocalProviderId, ExternalProviderId),
 
     % then
     ?assertMatch({undefined, _}, rpc:call(W1, file_ctx, get_local_file_location_doc, [FileCtx])),
-    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle])),
+    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_driver, stat, [SfmHandle])),
     test_utils:mock_validate_and_unload(W1, [lfm]).
 
 dir_replica_invalidate_should_invalidate_all_children(Config) ->
@@ -1221,8 +1221,8 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
 
     FileCtx1 = file_ctx:new_by_guid(FileGuid1),
     FileCtx2 = file_ctx:new_by_guid(FileGuid2),
-    {SfmHandle1, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx1]),
-    {SfmHandle2, _} = rpc:call(W1, storage_file_manager, new_handle, [SessionId, FileCtx2]),
+    {SfmHandle1, _} = rpc:call(W1, storage_driver, new_handle, [SessionId, FileCtx1]),
+    {SfmHandle2, _} = rpc:call(W1, storage_driver, new_handle, [SessionId, FileCtx2]),
     FileUuid1 = file_id:guid_to_uuid(FileGuid1),
     FileUuid2 = file_id:guid_to_uuid(FileGuid2),
 
@@ -1270,13 +1270,13 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when
-    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle1])),
-    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle2])),
+    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SfmHandle1])),
+    ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SfmHandle2])),
     ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, {guid, DirGuid}, LocalProviderId, ExternalProviderId),
 
     % then
-    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle1])),
-    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_file_manager, stat, [SfmHandle2])),
+    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_driver, stat, [SfmHandle1])),
+    ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_driver, stat, [SfmHandle2])),
     test_utils:mock_validate_and_unload(W1, [lfm]).
 
 %%%===================================================================
@@ -1293,8 +1293,8 @@ end_per_suite(Config) ->
 init_per_testcase(local_file_location_should_be_chowned_when_missing_user_appears, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
 
-    test_utils:mock_new(W1, sfm_utils, [passthrough]),
-    test_utils:mock_expect(W1, sfm_utils, create_delayed_storage_file,
+    test_utils:mock_new(W1, sd_utils, [passthrough]),
+    test_utils:mock_expect(W1, sd_utils, create_delayed_storage_file,
         fun(FileCtx, UserCtx, VerifyLink, CheckLocationExists) ->
             {Doc, FileCtx2} = meck:passthrough([FileCtx, UserCtx, VerifyLink, CheckLocationExists]),
             {Doc, files_to_chown:chown_or_schedule_chowning(FileCtx2)}
@@ -1309,7 +1309,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(local_file_location_should_be_chowned_when_missing_user_appears, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(W1, [sfm_utils]),
+    test_utils:mock_unload(W1, [sd_utils]),
     end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),

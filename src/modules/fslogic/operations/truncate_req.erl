@@ -57,20 +57,20 @@ truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
             FileCtx2;
         _ ->
             SessId = user_ctx:get_session_id(UserCtx),
-            {SFMHandle, FileCtx3} = storage_file_manager:new_handle(SessId, FileCtx2),
-            case storage_file_manager:open(SFMHandle, write) of
+            {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
+            case storage_driver:open(SDHandle, write) of
                 {ok, Handle} ->
                     {CurrentSize, _} = file_ctx:get_file_size(FileCtx3),
-                    case storage_file_manager:truncate(Handle, Size, CurrentSize) of
+                    case storage_driver:truncate(Handle, Size, CurrentSize) of
                         ok ->
                             ok;
                         Error = {error, ?EBUSY} ->
-                            log_warning(storage_file_manager, truncate, Error, FileCtx3)
+                            log_warning(storage_driver, truncate, Error, FileCtx3)
                     end,
-                    case storage_file_manager:release(Handle) of
+                    case storage_driver:release(Handle) of
                         ok -> ok;
                         Error2 = {error, ?EDOM} ->
-                            log_warning(storage_file_manager, release, Error2, FileCtx3)
+                            log_warning(storage_driver, release, Error2, FileCtx3)
                     end,
                     ok = file_popularity:update_size(FileCtx3, Size);
                 {error, ?ENOENT} ->

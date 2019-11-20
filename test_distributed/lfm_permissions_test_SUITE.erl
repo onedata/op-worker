@@ -216,7 +216,7 @@ data_caveats_test(Config) ->
     {ok, MainToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
         onezone_domain = <<"zone">>,
         subject = ?SUB(user, UserId),
-        nonce = UserId,
+        id = UserId,
         type = ?ACCESS_TOKEN,
         persistent = false
     }, UserId, []))),
@@ -414,7 +414,7 @@ data_caveats_ancestors_test(Config) ->
     {ok, Token} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
         onezone_domain = <<"zone">>,
         subject = ?SUB(user, UserId),
-        nonce = UserId,
+        id = UserId,
         type = ?ACCESS_TOKEN,
         persistent = false
     }, UserId, [#cv_data_objectid{whitelist = [FileObjectId]}]))),
@@ -517,7 +517,7 @@ data_caveats_ancestors_test2(Config) ->
     {ok, MainToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
         onezone_domain = <<"zone">>,
         subject = ?SUB(user, UserId),
-        nonce = UserId,
+        id = UserId,
         type = ?ACCESS_TOKEN,
         persistent = false
     }, UserId, []))),
@@ -597,7 +597,7 @@ data_caveats_cache_test(Config) ->
     {ok, Token} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
         onezone_domain = <<"zone">>,
         subject = ?SUB(user, UserId),
-        nonce = UserId,
+        id = UserId,
         type = ?ACCESS_TOKEN,
         persistent = false
     }, UserId, [

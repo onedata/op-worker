@@ -268,7 +268,7 @@ session_setup(Worker, Nonce) ->
     {ok, SerializedToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
         onezone_domain = <<"zone">>,
         subject = ?SUB(user, UserId),
-        nonce = UserId,
+        id = UserId,
         type = ?ACCESS_TOKEN,
         persistent = false
     }, UserId, []))),

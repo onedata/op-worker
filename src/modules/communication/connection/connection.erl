@@ -114,6 +114,7 @@
     peer_id = undefined :: undefined | od_provider:id() | od_user:id(),
     peer_ip :: inet:ip4_address(),
     verify_msg = true :: boolean(),
+    connection_manager = undefined :: undefined | pid(),
 
     % routing information base - structure necessary for routing.
     rib :: router:rib() | undefined
@@ -145,9 +146,7 @@
 ]).
 
 %% Private API
--export([
-    init/7
-]).
+-export([connect_with_provider/8]).
 
 %% cowboy_sub_protocol callbacks
 -export([init/2, upgrade/4, upgrade/5, takeover/7]).
@@ -188,8 +187,10 @@ start_link(ProviderId, SessionId, Domain, Host, Port) ->
     Host :: binary(), Port :: non_neg_integer(), Transport :: atom(),
     Timeout :: non_neg_integer()) -> {ok, pid()} | error().
 start_link(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
-    proc_lib:start_link(?MODULE, init, [
-        ProviderId, SessionId, Domain, Host, Port, Transport, Timeout
+    ConnManager = self(),
+    proc_lib:start_link(?MODULE, connect_with_provider, [
+        ProviderId, SessionId, Domain, Host, Port,
+        Transport, Timeout, ConnManager
     ]).
 
 
@@ -338,26 +339,34 @@ handle_info({upgrade_protocol, Hostname}, State) ->
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Socket, ok = Ok} = State) ->
-    case handle_protocol_upgrade_response(State, Data) of
+    try handle_protocol_upgrade_response(State, Data) of
         {ok, State1} ->
             State2 = State1#state{status = performing_handshake},
             activate_socket(State2, false),
             {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
-        {error, Reason} ->
-            {stop, Reason, State}
+        {error, _Reason} ->
+            {stop, handshake_failed, State}
+    catch Type:Reason ->
+        ?error_stacktrace("Unexpected error during protocol upgrade: ~p:~p", [
+            Type, Reason
+        ]),
+        {stop, handshake_failed, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
-    case handle_handshake(State, Data) of
+    try handle_handshake(State, Data) of
         {ok, #state{session_id = SessionId} = State1} ->
             ok = session_connections:register(SessionId, self()),
             State2 = State1#state{status = ready},
             activate_socket(State2, false),
             {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
         {error, _Reason} ->
-            % Silence handshake errors since they are caught and logged
-            % in `handle_handshake`
-            {stop, normal, State}
+            {stop, handshake_failed, State}
+    catch Type:Reason ->
+        ?error_stacktrace("Unexpected error while performing handshake: ~p:~p", [
+            Type, Reason
+        ]),
+        {stop, handshake_failed, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok} = State) ->
@@ -397,7 +406,13 @@ handle_info(Info, State) ->
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
 terminate(Reason, #state{session_id = SessionId, socket = Socket} = State) ->
-    ?log_terminate(Reason, State),
+    case Reason of
+        handshake_failed ->
+            % Do not log terminate here as concrete errors were logged already
+            ok;
+        _ ->
+            ?log_terminate(Reason, State)
+    end,
     case SessionId of
         undefined -> ok;
         _ -> session_connections:deregister(SessionId, self())
@@ -519,15 +534,28 @@ takeover(_Parent, Ref, Socket, Transport, _Opts, _Buffer, _HandlerState) ->
 %% Initializes an outgoing connection to peer provider.
 %% @end
 %%--------------------------------------------------------------------
--spec init(od_provider:id(), session:id(), Domain :: binary(), Host :: binary(),
-    Port :: non_neg_integer(), Transport :: atom(), Timeout :: non_neg_integer()) ->
+-spec connect_with_provider(od_provider:id(), session:id(), Domain :: binary(),
+    Host :: binary(), Port :: non_neg_integer(), Transport :: atom(),
+    Timeout :: non_neg_integer(), ConnManager :: pid()
+) ->
     no_return().
-init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
+connect_with_provider(ProviderId, SessionId, Domain,
+    Host, Port, Transport, Timeout, ConnManager
+) ->
+    DomainAndIpInfo = case Domain of
+        Host -> str_utils:format("@ ~s:~b", [Host, Port]);
+        _ -> str_utils:format("@ ~s:~b (~s)", [Host, Port, Domain])
+    end,
+    ?info("Connecting to provider ~ts ~s", [
+        provider_logic:to_string(ProviderId), DomainAndIpInfo
+    ]),
+
     try
-        State = connect_to_provider(
+        State = open_socket_to_provider(
             SessionId, ProviderId, Domain, Host, Port,
-            Transport, Timeout
+            Transport, Timeout, ConnManager
         ),
+        activate_socket(State, true),
 
         self() ! {upgrade_protocol, Host},
         ok = proc_lib:init_ack({ok, self()}),
@@ -539,31 +567,25 @@ init(ProviderId, SessionId, Domain, Host, Port, Transport, Timeout) ->
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Attempts to connect to peer provider.
-%% @end
-%%--------------------------------------------------------------------
--spec connect_to_provider(session:id(), od_provider:id(),
+-spec open_socket_to_provider(session:id(), od_provider:id(),
     Domain :: binary(), Host :: binary(),
     Port :: non_neg_integer(), Transport :: atom(),
-    Timeout :: non_neg_integer()) -> state() | no_return().
-connect_to_provider(SessionId, ProviderId, Domain, Host, Port, Transport, Timeout) ->
-    DomainAndIpInfo = case Domain of
-        Host -> str_utils:format("@ ~s:~b", [Host, Port]);
-        _ -> str_utils:format("@ ~s:~b (~s)", [Host, Port, Domain])
-    end,
-    ?info("Connecting to provider ~ts ~s", [
-        provider_logic:to_string(ProviderId), DomainAndIpInfo
-    ]),
+    Timeout :: non_neg_integer(), ConnManager :: pid()
+) ->
+    state() | no_return().
+open_socket_to_provider(SessionId, ProviderId, Domain,
+    Host, Port, Transport, Timeout, ConnManager
+) ->
     SslOpts = provider_logic:provider_connection_ssl_opts(Domain),
     ConnectOpts = secure_ssl_opts:expand(Host, SslOpts),
-    {ok, Socket} = Transport:connect(binary_to_list(Host), Port, ConnectOpts, Timeout),
+    {ok, Socket} = Transport:connect(
+        binary_to_list(Host), Port, ConnectOpts, Timeout
+    ),
     {ok, {IpAddress, _Port}} = ssl:peername(Socket),
 
     {Ok, Closed, Error} = Transport:messages(),
-    State = #state{
+    #state{
         socket = Socket,
         socket_mode = ?DEFAULT_SOCKET_MODE,
         transport = Transport,
@@ -576,11 +598,9 @@ connect_to_provider(SessionId, ProviderId, Domain, Host, Port, Transport, Timeou
         peer_id = ProviderId,
         peer_ip = IpAddress,
         verify_msg = ?DEFAULT_VERIFY_MSG_FLAG,
+        connection_manager = ConnManager,
         rib = router:build_rib(SessionId)
-    },
-    activate_socket(State, true),
-
-    State.
+    }.
 
 
 %%%===================================================================
@@ -653,7 +673,7 @@ handle_handshake_request(#state{peer_ip = IpAddress} = State, Data) ->
         ?debug("Invalid handshake request - ~p:~p", [Type, Reason]),
         ErrorMsg = connection_auth:get_handshake_error_msg(Reason),
         send_server_message(State, ErrorMsg),
-        {error, Reason}
+        {error, handshake_failed}
     end.
 
 
@@ -661,28 +681,29 @@ handle_handshake_request(#state{peer_ip = IpAddress} = State, Data) ->
 -spec handle_handshake_response(state(), binary()) -> {ok, state()} | error().
 handle_handshake_response(#state{
     session_id = SessionId,
-    peer_id = ProviderId
+    peer_id = ProviderId,
+    connection_manager = ConnManager
 } = State, Data) ->
     try clproto_serializer:deserialize_server_message(Data, SessionId) of
         {ok, #server_message{message_body = #handshake_response{status = 'OK'}}} ->
             ?info("Successfully connected to provider ~ts", [
                 provider_logic:to_string(ProviderId)
             ]),
+            outgoing_connection_manager:report_successful_handshake(ConnManager),
             {ok, State};
         {ok, #server_message{message_body = #handshake_response{status = Error}}} ->
             ?error("Handshake refused by provider ~ts due to ~p, closing connection.", [
                 provider_logic:to_string(ProviderId), Error
             ]),
-            {error, {handshake_failed, Error}};
+            {error, handshake_failed};
         _ ->
             ?error("Received invalid handshake response from provider ~ts, closing connection.", [
                 provider_logic:to_string(ProviderId)
             ]),
-            {error, invalid_handshake_response}
-    catch
-        _:Error ->
-            ?error("Client handshake message decoding error: ~p", [Error]),
-            {error, Error}
+            {error, handshake_failed}
+    catch _:Error ->
+        ?error("Client handshake message decoding error: ~p", [Error]),
+        {error, handshake_failed}
     end.
 
 
@@ -813,12 +834,11 @@ send_client_message(#state{verify_msg = VerifyMsg} = State, ClientMsg) ->
     try
         {ok, Data} = clproto_serializer:serialize_client_message(ClientMsg, VerifyMsg),
         socket_send(State, Data)
-    catch
-        _:Reason ->
-            ?error_stacktrace("Unable to serialize client_message ~s due to: ~p", [
-                clproto_utils:msg_to_string(ClientMsg), Reason
-            ]),
-            {error, serialization_failed}
+    catch _:Reason ->
+        ?error_stacktrace("Unable to serialize client_message ~s due to: ~p", [
+            clproto_utils:msg_to_string(ClientMsg), Reason
+        ]),
+        {error, serialization_failed}
     end.
 
 
@@ -829,12 +849,11 @@ send_server_message(#state{verify_msg = VerifyMsg} = State, ServerMsg) ->
     try
         {ok, Data} = clproto_serializer:serialize_server_message(ServerMsg, VerifyMsg),
         socket_send(State, Data)
-    catch
-        _:Reason ->
-            ?error_stacktrace("Unable to serialize server_message ~s due to: ~p", [
-                clproto_utils:msg_to_string(ServerMsg), Reason
-            ]),
-            {error, serialization_failed}
+    catch _:Reason ->
+        ?error_stacktrace("Unable to serialize server_message ~s due to: ~p", [
+            clproto_utils:msg_to_string(ServerMsg), Reason
+        ]),
+        {error, serialization_failed}
     end.
 
 

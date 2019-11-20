@@ -82,7 +82,6 @@ run_after(_Function, _Args, Result) ->
 
 -spec run_after(doc()) -> {ok, doc()}.
 run_after(Doc = #document{key = SpaceId}) ->
-    space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
     ok = qos_bounded_cache:ensure_exists_on_all_nodes(SpaceId),
     ok = fslogic_worker:init_cannonical_paths_cache(SpaceId),

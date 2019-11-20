@@ -238,7 +238,7 @@ connect_via_token(Node, SocketOpts, Nonce) ->
         tokens:serialize(tokens:construct(#token{
             onezone_domain = <<"zone">>,
             subject = ?SUB(user, UserId),
-            nonce = UserId,
+            id = UserId,
             type = ?ACCESS_TOKEN,
             persistent = false
         }, UserId, []))

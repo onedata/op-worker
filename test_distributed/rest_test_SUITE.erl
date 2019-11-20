@@ -61,7 +61,7 @@ token_auth(Config) ->
         tokens:serialize(tokens:construct(#token{
             onezone_domain = <<"zone">>,
             subject = ?SUB(user, ?USER_ID),
-            nonce = ?USER_ID,
+            id = ?USER_ID,
             type = ?ACCESS_TOKEN,
             persistent = false
         }, ?USER_ID, []))
@@ -256,7 +256,7 @@ mock_user_logic(Config) ->
     end,
 
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
-    test_utils:mock_expect(Workers, token_logic, preauthorize, fun(Auth) ->
+    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(Auth) ->
         case GetUserFun(Auth, ?USER_ID) of
             {ok, #document{key = UserId}} -> {ok, ?USER(UserId)};
             {error, _} = Error -> Error

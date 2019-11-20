@@ -15,7 +15,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("transfers_test_mechanism.hrl").
 -include("countdown_server.hrl").
 -include("rest_test_utils.hrl").
@@ -207,7 +207,7 @@ change_storage_params(Config, #scenario{
     end, ReplicatingNodes),
 
     lists:foreach(fun(Node) ->
-        [StorageId | _] = rpc:call(Node, space_storage, get_storage_ids, [SpaceId]),
+        {ok, [StorageId | _]} = rpc:call(Node, space_storage, get_storage_ids, [SpaceId]),
         modify_storage_timeout(Node, StorageId, <<"100000">>)
     end, ReplicatingNodes),
 

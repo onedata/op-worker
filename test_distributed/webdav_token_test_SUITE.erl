@@ -18,7 +18,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -57,7 +57,7 @@ all() -> [
     storage:get_id(__Storage)
     end
 ).
--define(FILE_PATH, filename:join(["/", ?SPACE_ID, <<"dummyFile">>])).
+-define(STORAGE_FILE_ID, filename:join(["/", ?SPACE_ID, <<"dummyFile">>])).
 -define(USER, <<"user1">>).
 -define(SESSION(Worker, Config), ?SESSION(?USER, Worker, Config)).
 -define(SESSION(User, Worker, Config),
@@ -107,12 +107,12 @@ user_operation_fails_with_expired_token_on_secure_storage(Config) ->
     SessionId = ?SESSION(W, Config),
     StorageId = ?STORAGE_ID(W),
     TTL = 0,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
+    SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
 
     % setxattr should return EKEYEXPIRED due to TTL=0
-    ?assertEqual({error, ?EKEYEXPIRED}, setxattr(W, SFMHandle, <<"K">>, <<"V">>)),
+    ?assertEqual({error, ?EKEYEXPIRED}, setxattr(W, SDHandle, <<"K">>, <<"V">>)),
     % ensure that helper params were refreshed
     ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
@@ -128,17 +128,17 @@ user_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
     SessionId = ?SESSION(W, Config),
     StorageId = ?STORAGE_ID(W),
     TTL = 5,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
+    SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
 
-    ?assertEqual(ok, setxattr(W, SFMHandle, <<"K">>, <<"V">>)),
+    ?assertEqual(ok, setxattr(W, SDHandle, <<"K">>, <<"V">>)),
 
     %sleep longer than TTL to ensure that new token will be fetched
     timer:sleep(timer:seconds(TTL + 1)),
 
     % setxattr should succeed after retry with refreshed token
-    ?assertEqual(ok, setxattr(W, SFMHandle, <<"K2">>, <<"V2">>)),
+    ?assertEqual(ok, setxattr(W, SDHandle, <<"K2">>, <<"V2">>)),
     % ensure that helper params were refreshed
     ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
@@ -158,12 +158,12 @@ operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     StorageId = ?STORAGE_ID(W),
     TTL = 0,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
+    SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
 
     % setxattr should return EKEYEXPIRED due to TTL=0
-    ?assertEqual({error, ?EKEYEXPIRED}, setxattr(W, SFMHandle, <<"K">>, <<"V">>)),
+    ?assertEqual({error, ?EKEYEXPIRED}, setxattr(W, SDHandle, <<"K">>, <<"V">>)),
     % ensure that helper params were refreshed
     ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
@@ -176,17 +176,17 @@ operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Confi
     [W | _] = ?config(op_worker_nodes, Config),
     StorageId = ?STORAGE_ID(W),
     TTL = 5,
-    SFMHandle = get_sfm_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?FILE_PATH),
+    SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
 
-    ?assertEqual(ok, setxattr(W, SFMHandle, <<"K">>, <<"V">>)),
+    ?assertEqual(ok, setxattr(W, SDHandle, <<"K">>, <<"V">>)),
 
     %sleep longer than TTL to ensure that new token will be fetched
     timer:sleep(timer:seconds(TTL + 1)),
 
     % setxattr should succeed after retry with refreshed token
-    ?assertEqual(ok, setxattr(W, SFMHandle, <<"K2">>, <<"V2">>)),
+    ?assertEqual(ok, setxattr(W, SDHandle, <<"K2">>, <<"V2">>)),
     % ensure that helper params were refreshed
     ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
     % ensure that setxattr was repeated
@@ -295,10 +295,9 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
         }}
     end).
 
-get_sfm_handle(Worker, SpaceId, SessionId, Uuid, StorageId, FilePath) ->
-    {ok, StorageDoc} = rpc:call(Worker, storage, get, [StorageId]),
-    rpc:call(Worker, storage_file_manager, new_handle,
-        [SessionId, SpaceId, Uuid, StorageDoc, FilePath, undefined]).
+get_sd_handle(Worker, SpaceId, SessionId, Uuid, StorageId, FilePath) ->
+    rpc:call(Worker, storage_driver, new_handle,
+        [SessionId, SpaceId, Uuid, StorageId, FilePath, undefined]).
 
-setxattr(Worker, SFMHandle, Key, Value) ->
-    rpc:call(Worker, storage_file_manager, setxattr, [SFMHandle, Key, Value, true, true]).
+setxattr(Worker, SDHandle, Key, Value) ->
+    rpc:call(Worker, storage_driver, setxattr, [SDHandle, Key, Value, true, true]).

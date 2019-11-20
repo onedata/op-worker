@@ -55,7 +55,7 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
--define(INIT_CANNONICAL_PATHS_CACHE(Space), {init_cannonical_paths_cache, Space}).
+-define(INIT_CANONICAL_PATHS_CACHE(Space), {init_cannonical_paths_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, periodical_spaces_autocleaning_check_enabled, true)).
@@ -97,7 +97,7 @@
 -spec init_cannonical_paths_cache(od_space:id() | all) -> ok.
 init_cannonical_paths_cache(Space) ->
     lists:foreach(fun(Node) ->
-        rpc:call(Node, erlang, send_after, [0, fslogic_worker, {sync_timer, ?INIT_CANNONICAL_PATHS_CACHE(Space)}])
+        rpc:call(Node, erlang, send_after, [0, fslogic_worker, {sync_timer, ?INIT_CANONICAL_PATHS_CACHE(Space)}])
     end, consistent_hashing:get_all_nodes()).
 
 %%%===================================================================
@@ -113,7 +113,7 @@ init_cannonical_paths_cache(Space) ->
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     location_and_link_utils:init_cannonical_paths_cache_group(),
-    erlang:send_after(0, self(), {sync_timer, ?INIT_CANNONICAL_PATHS_CACHE(all)}),
+    erlang:send_after(0, self(), {sync_timer, ?INIT_CANONICAL_PATHS_CACHE(all)}),
 
     transfer:init(),
     clproto_serializer:load_msg_defs(),
@@ -195,7 +195,7 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
     {ok, Response};
 handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
-handle(?INIT_CANNONICAL_PATHS_CACHE(Space)) ->
+handle(?INIT_CANONICAL_PATHS_CACHE(Space)) ->
     location_and_link_utils:init_cannonical_paths_cache(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
@@ -288,21 +288,18 @@ handle_request_and_process_response(SessId, Request) ->
 -spec handle_request_and_process_response_locally(user_ctx:ctx(), request(),
     file_partial_ctx:ctx() | undefined) -> response().
 handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
-    {FileCtx, SpaceID} = case FilePartialCtx of
+    {FileCtx, _SpaceID} = case FilePartialCtx of
         undefined ->
             {undefined, undefined};
         _ ->
             file_ctx:new_by_partial_context(FilePartialCtx)
     end,
-    Response = try
+    try
         handle_request_locally(UserCtx, Request, FileCtx)
     catch
         Type:Error ->
             fslogic_errors:handle_error(Request, Type, Error)
-    end,
-
-    %todo TL move this storage_sync logic out of here
-    process_response(UserCtx, Request, Response, SpaceID).
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -550,7 +547,7 @@ handle_provider_request(UserCtx, #check_qos_fulfillment{qos_id = QosEntryId}, Fi
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_proxyio_request(user_ctx:ctx(), proxyio_request_type(), file_ctx:ctx(),
-    HandleId :: storage_file_manager:handle_id()) -> proxyio_response().
+    HandleId :: storage_driver:handle_id()) -> proxyio_response().
 handle_proxyio_request(UserCtx, #remote_write{byte_sequence = ByteSequences}, FileCtx,
     HandleId) ->
     read_write_req:write(UserCtx, FileCtx, HandleId, ByteSequences);
@@ -558,77 +555,6 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
     HandleId) ->
     read_write_req:read(UserCtx, FileCtx, HandleId, Offset, Size).
 
-%%--------------------------------------------------------------------
-%% @todo refactor
-%% @private
-%% @doc
-%% Do posthook for request response
-%% @end
-%%--------------------------------------------------------------------
--spec process_response(user_ctx:ctx(), request(), response(),
-    od_space:id() | undefined) -> response().
-process_response(_, _, Response, undefined) ->
-    Response;
-process_response(UserCtx, Request = #fuse_request{fuse_request = #file_request{
-    file_request = #get_child_attr{name = FileName},
-    context_guid = ParentGuid
-}}, Response = #fuse_response{status = #status{code = ?ENOENT}},
-    SpaceId) ->
-    case space_strategies:is_import_on(SpaceId) of
-        true ->
-            SessId = user_ctx:get_session_id(UserCtx),
-            Path0 = fslogic_uuid:uuid_to_path(SessId, file_id:guid_to_uuid(ParentGuid)),
-            {ok, Tokens0} = fslogic_path:split_skipping_dots(Path0),
-            Tokens = Tokens0 ++ [FileName],
-            Path = fslogic_path:join(Tokens),
-            case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
-                {path, P} ->
-                    {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
-                    case Tokens1 of
-                        [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                            Data = #{
-                                response => Response,
-                                path => Path,
-                                ctx => UserCtx,
-                                space_id => SpaceId,
-                                request => Request
-                            },
-                            Init = space_sync_worker:init(enoent_handling, SpaceId, undefined, Data),
-                            space_sync_worker:run(Init);
-                        _ -> Response
-                    end;
-                _ ->
-                    Response
-            end;
-        _ ->
-            Response
-    end;
-process_response(UserCtx,
-    Request = #fuse_request{fuse_request = #resolve_guid{path = Path}},
-    Response = #fuse_response{status = #status{code = ?ENOENT}}, SpaceId) ->
-    case space_strategies:is_import_on(SpaceId) of
-        true ->
-            {ok, Tokens} = fslogic_path:split_skipping_dots(Path),
-            case enoent_handling:get_canonical_file_entry(UserCtx, Tokens) of
-                {path, P} ->
-                    {ok, Tokens1} = fslogic_path:split_skipping_dots(P),
-                    case Tokens1 of
-                        [<<?DIRECTORY_SEPARATOR>>, SpaceId | _] ->
-                            Data = #{response => Response, path => Path, ctx => UserCtx,
-                                space_id => SpaceId, request => Request},
-                            Init = space_sync_worker:init(enoent_handling,
-                                SpaceId, undefined, Data),
-                            space_sync_worker:run(Init);
-                        _ -> Response
-                    end;
-                _ ->
-                    Response
-            end;
-        _ ->
-            Response
-    end;
-process_response(_, _, Response, _) ->
-    Response.
 
 -spec schedule_invalidate_permissions_cache() -> ok.
 schedule_invalidate_permissions_cache() ->

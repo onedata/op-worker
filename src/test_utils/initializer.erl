@@ -249,7 +249,7 @@ setup_session(Worker, [{_, #user_config{
 
     Identity = #user_identity{user_id = UserId},
     Auth = #token_auth{token = Token, peer_ip = local_ip_v4()},
-    {ok, SessId} = ?assertMatch({ok, SessId}, rpc:call(
+    {ok, SessId} = ?assertMatch({ok, _}, rpc:call(
         Worker,
         session_manager,
         reuse_or_create_fuse_session,
@@ -373,14 +373,7 @@ space_storage_mock(Workers, StorageId) ->
         }}}
     end),
     test_utils:mock_expect(Workers, space_storage, get_storage_ids,
-        fun(_) -> [StorageId] end),
-    test_utils:mock_expect(Workers, space_strategies, get, fun(_) ->
-        {ok, #document{
-            value = #space_strategies{
-                storage_strategies = maps:put(StorageId, #storage_strategies{}, #{})
-            }
-        }}
-    end).
+        fun(_) -> [StorageId] end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -690,7 +683,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         {ok, Token} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
             onezone_domain = <<"zone">>,
             subject = ?SUB(user, UserId),
-            nonce = UserId,
+            id = UserId,
             type = ?ACCESS_TOKEN,
             persistent = false
         }, UserId, []))),
@@ -885,7 +878,7 @@ user_logic_mock_setup(Workers, Users) ->
             end
     end,
 
-    test_utils:mock_expect(Workers, token_logic, preauthorize, fun(#token_auth{token = UserToken}) ->
+    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(#token_auth{token = UserToken}) ->
         case proplists:get_value(UserToken, UsersByToken, undefined) of
             undefined -> {error, not_found};
             UserId -> {ok, ?USER(UserId)}
@@ -1257,7 +1250,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity, fun(_) -> ok end),
 
-    test_utils:mock_expect(AllWorkers, token_logic, verify_identity, VerifyProviderIdentityFun).
+    test_utils:mock_expect(AllWorkers, token_logic, verify_identity_token, VerifyProviderIdentityFun).
 
 %%--------------------------------------------------------------------
 %% @private
