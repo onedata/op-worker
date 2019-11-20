@@ -33,6 +33,7 @@
     data_caveats_test/1,
     data_caveats_ancestors_test/1,
     data_caveats_ancestors_test2/1,
+    data_caveats_cache_test/1,
 
     mkdir_test/1,
     ls_test/1,
@@ -98,6 +99,7 @@ all() ->
         data_caveats_test,
         data_caveats_ancestors_test,
         data_caveats_ancestors_test2,
+        data_caveats_cache_test,
 
         mkdir_test,
         ls_test,
@@ -563,6 +565,132 @@ data_caveats_ancestors_test2(Config) ->
     ?assertMatch(
         {ok, []},
         lfm_proxy:ls(W, SessId2, {guid, RootDirGuid}, 0, 100)
+    ).
+
+
+data_caveats_cache_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    UserId = <<"user3">>,
+    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+    Identity = #user_identity{user_id = UserId},
+    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
+
+    SpaceName = <<"space2">>,
+    SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
+
+    RootDirName = (atom_to_binary(?FUNCTION_NAME, utf8)),
+    {ok, RootDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
+        W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777
+    )),
+
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
+        W, UserSessId, RootDirGuid, <<"dir">>, 8#777
+    )),
+    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
+        W, UserSessId, DirGuid, <<"file">>, 8#777
+    )),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    {ok, Token} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
+        onezone_domain = <<"zone">>,
+        subject = ?SUB(user, UserId),
+        nonce = UserId,
+        type = ?ACCESS_TOKEN,
+        persistent = false
+    }, UserId, [
+        #cv_data_objectid{whitelist = [DirObjectId]},
+        #cv_data_objectid{whitelist = [FileObjectId]}
+    ]))),
+    SessId = lfm_permissions_test_utils:create_session(W, Identity, Token),
+
+
+    %% CHECK gui_constraint CACHE
+
+    % before any call cache should be empty
+    lists:foreach(fun(Guid) ->
+        ?assertEqual(
+            calculate,
+            ?rpcCache(W, check_permission, [{guid_constraint, Token, Guid}])
+        )
+    end, [UserRootDir, SpaceRootDirGuid, RootDirGuid, DirGuid, FileGuid]),
+
+    % call on file should fill cache up to root dir with remaining guid constraints
+    ?assertMatch(
+        {ok, []},
+        lfm_proxy:get_acl(W, SessId, {guid, FileGuid})
+    ),
+    lists:foreach(fun(Guid) ->
+        ?assertEqual(
+            {ok, {false, [[FileGuid], [DirGuid]]}},
+            ?rpcCache(W, check_permission, [{guid_constraint, Token, Guid}])
+        )
+    end, [UserRootDir, SpaceRootDirGuid, RootDirGuid]),
+    ?assertEqual(
+        {ok, {false, [[FileGuid]]}},
+        ?rpcCache(W, check_permission, [{guid_constraint, Token, DirGuid}])
+    ),
+    ?assertEqual(
+        {ok, true},
+        ?rpcCache(W, check_permission, [{guid_constraint, Token, FileGuid}])
+    ),
+
+
+    %% CHECK data_constraint CACHE
+
+    % data_constraint cache is not filed recursively as guid_constraint one is
+    % so only for file should it be filled
+    lists:foreach(fun(Guid) ->
+        ?assertEqual(
+            calculate,
+            ?rpcCache(W, check_permission, [{data_constraint, Token, Guid}])
+        )
+    end, [UserRootDir, SpaceRootDirGuid, RootDirGuid, DirGuid]),
+
+    ?assertEqual(
+        {ok, subpath},
+        ?rpcCache(W, check_permission, [{data_constraint, Token, FileGuid}])
+    ),
+
+    % calling on dir any function reserved only for subpath should cache
+    % {subpath, ?EACCES} meaning that no such operation can be performed
+    % but since ancestor checks were not performed it is not known whether
+    % ancestor operations can be performed
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:get_acl(W, SessId, {guid, DirGuid})
+    ),
+    ?assertEqual(
+        {ok, {subpath, ?EACCES}},
+        ?rpcCache(W, check_permission, [{data_constraint, Token, DirGuid}])
+    ),
+
+    % after calling operation possible to perform on ancestor cached value should
+    % be changed to signal that file is ancestor and such operations can be performed
+    ?assertMatch(
+        {ok, [_]},
+        lfm_proxy:ls(W, SessId, {guid, DirGuid}, 0, 100)
+    ),
+    ?assertEqual(
+        {ok, {ancestor, [<<"file">>]}},
+        ?rpcCache(W, check_permission, [{data_constraint, Token, DirGuid}])
+    ),
+
+    % Calling ancestor operation on unrelated to file in caveats dir all checks
+    % will be performed and just ?EACESS will be cached meaning that no operation
+    % on this dir can be performed
+    {ok, OtherDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
+        W, UserSessId, RootDirGuid, <<"other_dir">>, 8#777
+    )),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:ls(W, SessId, {guid, OtherDirGuid}, 0, 100)
+    ),
+    ?assertEqual(
+        {ok, ?EACCES},
+        ?rpcCache(W, check_permission, [{data_constraint, Token, OtherDirGuid}])
     ).
 
 
