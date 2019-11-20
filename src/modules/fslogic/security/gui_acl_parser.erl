@@ -96,19 +96,19 @@ type_mask(<<"audit">>) ->
 -spec subject(non_neg_integer(), binary()) -> list().
 subject(_, ?everyone) ->
     [
-        {<<"subject">>, <<"everyone">>},
+        {<<"subject">>, <<"everyone@">>},
         {<<"user">>, null},
         {<<"group">>, null}
     ];
 subject(_, ?group) ->
     [
-        {<<"subject">>, <<"everyone">>}, % group is treated as everyone also
+        {<<"subject">>, <<"group@">>},
         {<<"user">>, null},
         {<<"group">>, null}
     ];
 subject(_, ?owner) ->
     [
-        {<<"subject">>, <<"owner">>},
+        {<<"subject">>, <<"owner@">>},
         {<<"user">>, null},
         {<<"group">>, null}
     ];
@@ -132,9 +132,11 @@ subject(_, Id) ->
 %%--------------------------------------------------------------------
 -spec who(Subject :: binary(), UserId :: binary(), GroupId :: binary()) ->
     {AceFlags :: non_neg_integer(), Identifier :: binary()}.
-who(<<"everyone">>, _, _) ->
+who(<<"everyone@">>, _, _) ->
     {?no_flags_mask, ?everyone};
-who(<<"owner">>, _, _) ->
+who(<<"group@">>, _, _) ->
+    {?no_flags_mask, ?group};
+who(<<"owner@">>, _, _) ->
     {?no_flags_mask, ?owner};
 who(<<"user">>, UserId, _) ->
     {?no_flags_mask, UserId};
