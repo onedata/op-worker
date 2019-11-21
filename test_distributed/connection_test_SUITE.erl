@@ -141,14 +141,7 @@ client_connection_test(Config) ->
     ),
 
     UserId = <<"user">>,
-    Token = tokens:construct(#token{
-        onezone_domain = <<"zone">>,
-        subject = ?SUB(user, UserId),
-        id = UserId,
-        type = ?ACCESS_TOKEN,
-        persistent = false
-    }, UserId, []),
-    {ok, SerializedToken} = tokens:serialize(Token),
+    SerializedToken = initializer:create_token(UserId),
 
     ValidMacaroon = #'Macaroon'{macaroon = SerializedToken},
     InvalidMacaroon = #'Macaroon'{macaroon = <<"invaldi">>},
@@ -193,14 +186,7 @@ python_client_test_base(Config) ->
     ),
 
     UserId = <<"user">>,
-    Token = tokens:construct(#token{
-        onezone_domain = <<"zone">>,
-        subject = ?SUB(user, UserId),
-        id = UserId,
-        type = ?ACCESS_TOKEN,
-        persistent = false
-    }, UserId, []),
-    {ok, SerializedToken} = tokens:serialize(Token),
+    SerializedToken = initializer:create_token(UserId),
 
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{

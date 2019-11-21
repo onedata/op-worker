@@ -233,16 +233,7 @@ connect_via_token(Node, SocketOpts) ->
 %%--------------------------------------------------------------------
 connect_via_token(Node, SocketOpts, Nonce) ->
     UserId = <<"user">>,
-    {ok, SerializedToken} = ?assertMatch(
-        {ok, _},
-        tokens:serialize(tokens:construct(#token{
-            onezone_domain = <<"zone">>,
-            subject = ?SUB(user, UserId),
-            id = UserId,
-            type = ?ACCESS_TOKEN,
-            persistent = false
-        }, UserId, []))
-    ),
+    SerializedToken = initializer:create_token(UserId),
     connect_via_token(Node, SocketOpts, Nonce, #token_auth{
         token = SerializedToken
     }).

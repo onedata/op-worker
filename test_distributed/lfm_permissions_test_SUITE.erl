@@ -213,13 +213,7 @@ data_caveats_test(Config) ->
         {FilePath, FileObjectId, {FileGuid, FileName}}
     end, lists:seq(1, 5)),
 
-    {ok, MainToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
-        onezone_domain = <<"zone">>,
-        subject = ?SUB(user, UserId),
-        id = UserId,
-        type = ?ACCESS_TOKEN,
-        persistent = false
-    }, UserId, []))),
+    MainToken = initializer:create_token(UserId),
 
     % Whitelisting Dir should result in listing all it's files
     Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [DirPath]}),
@@ -411,13 +405,9 @@ data_caveats_ancestors_test(Config) ->
     )),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    {ok, Token} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
-        onezone_domain = <<"zone">>,
-        subject = ?SUB(user, UserId),
-        id = UserId,
-        type = ?ACCESS_TOKEN,
-        persistent = false
-    }, UserId, [#cv_data_objectid{whitelist = [FileObjectId]}]))),
+    Token = initializer:create_token(UserId, [
+        #cv_data_objectid{whitelist = [FileObjectId]}
+    ]),
     SessId = lfm_permissions_test_utils:create_session(W, Identity, Token),
 
     lists:foldl(
@@ -514,13 +504,7 @@ data_caveats_ancestors_test2(Config) ->
         {DirGuid, DirName, FileObjectId, File}
     end, [<<"right">>, <<"left">>]),
 
-    {ok, MainToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
-        onezone_domain = <<"zone">>,
-        subject = ?SUB(user, UserId),
-        id = UserId,
-        type = ?ACCESS_TOKEN,
-        persistent = false
-    }, UserId, []))),
+    MainToken = initializer:create_token(UserId),
 
     % All dirs leading to files allowed by caveat should be listed in ls
     Token1 = tokens:confine(MainToken, #cv_data_objectid{
@@ -594,16 +578,10 @@ data_caveats_cache_test(Config) ->
     )),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    {ok, Token} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
-        onezone_domain = <<"zone">>,
-        subject = ?SUB(user, UserId),
-        id = UserId,
-        type = ?ACCESS_TOKEN,
-        persistent = false
-    }, UserId, [
+    Token = initializer:create_token(UserId, [
         #cv_data_objectid{whitelist = [DirObjectId]},
         #cv_data_objectid{whitelist = [FileObjectId]}
-    ]))),
+    ]),
     SessId = lfm_permissions_test_utils:create_session(W, Identity, Token),
 
 

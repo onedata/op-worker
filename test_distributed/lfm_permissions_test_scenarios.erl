@@ -275,8 +275,9 @@ space_privs_test(
 %%--------------------------------------------------------------------
 %% @doc
 %% Tests data caveats. For that it will setup environment,
-%% add acl permissions and assert that caveats with invalid entries
-%% will not allow to perform operation and valid ones will.
+%% add full acl permissions and assert that even with full perms set
+%% operations can be performed only when caveats (data constraints)
+%% allow it.
 %% @end
 %%--------------------------------------------------------------------
 run_data_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
@@ -289,13 +290,7 @@ run_data_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
     operation = Operation
 }, Config) ->
     OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
-    {ok, MainToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
-        onezone_domain = <<"zone">>,
-        subject = ?SUB(user, User),
-        id = User,
-        type = ?ACCESS_TOKEN,
-        persistent = false
-    }, User, []))),
+    MainToken = initializer:create_token(User),
     initializer:testmaster_mock_space_user_privileges(
         [Node], SpaceId, User, privileges:space_privileges()
     ),

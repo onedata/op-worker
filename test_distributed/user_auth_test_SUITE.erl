@@ -41,16 +41,7 @@ token_authentication(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     Nonce = <<"nonce">>,
-    {ok, SerializedToken} = ?assertMatch(
-        {ok, _},
-        tokens:serialize(tokens:construct(#token{
-            onezone_domain = <<"zone">>,
-            subject = ?SUB(user, ?USER_ID),
-            id = ?USER_ID,
-            type = ?ACCESS_TOKEN,
-            persistent = false
-        }, ?USER_ID, []))
-    ),
+    SerializedToken = initializer:create_token(?USER_ID),
 
     SessionId = datastore_utils:gen_key(
         <<"">>,

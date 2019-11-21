@@ -132,13 +132,7 @@ wait_for_mocked_connection(Config) ->
 create_user_session(Config, UserId) ->
     [Node | _] = ?NODES(Config),
 
-    {ok, SerializedToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
-        onezone_domain = <<"zone">>,
-        subject = ?SUB(user, UserId),
-        id = UserId,
-        type = ?ACCESS_TOKEN,
-        persistent = false
-    }, UserId, []))),
+    SerializedToken = initializer:create_token(UserId),
     Auth = #token_auth{token = SerializedToken},
     {ok, #document{value = Identity}} = rpc:call(Node, user_identity, get_or_fetch, [Auth]),
     {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [Identity, Auth]),

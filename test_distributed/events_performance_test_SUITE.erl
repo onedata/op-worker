@@ -442,13 +442,7 @@ end_per_testcase(_Case, Config) ->
 -spec session_setup(Worker :: node(), SessId :: session:id(),
     Iden :: session:identity(), Conn :: pid()) -> ok.
 session_setup(Worker, SessId, #user_identity{user_id = UserId} = Iden, Conn) ->
-    {ok, SerializedToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
-        onezone_domain = <<"zone">>,
-        subject = ?SUB(user, UserId),
-        id = UserId,
-        type = ?ACCESS_TOKEN,
-        persistent = false
-    }, UserId, []))),
+    SerializedToken = initializer:create_token(UserId),
     fuse_test_utils:reuse_or_create_fuse_session(
         Worker, SessId, Iden, #token_auth{token = SerializedToken}, Conn
     ).

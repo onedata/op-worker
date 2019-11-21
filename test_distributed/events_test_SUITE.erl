@@ -265,13 +265,7 @@ session_setup(Worker) ->
 session_setup(Worker, Nonce) ->
     UserId = <<"user1">>,
     Iden = #user_identity{user_id = UserId},
-    {ok, SerializedToken} = ?assertMatch({ok, _}, tokens:serialize(tokens:construct(#token{
-        onezone_domain = <<"zone">>,
-        subject = ?SUB(user, UserId),
-        id = UserId,
-        type = ?ACCESS_TOKEN,
-        persistent = false
-    }, UserId, []))),
+    SerializedToken = initializer:create_token(UserId),
     fuse_test_utils:reuse_or_create_fuse_session(
         Worker, Nonce, Iden, #token_auth{token = SerializedToken}, self()
     ).
