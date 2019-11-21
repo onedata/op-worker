@@ -675,7 +675,7 @@ open_for_rdwr(SFMHandle) ->
 %% @equiv open/2, but with permission control
 %% @end
 %%--------------------------------------------------------------------
--spec open_with_permissions_check(handle(), [data_access:requirement()],
+-spec open_with_permissions_check(handle(), [data_access_rights:requirement()],
     helpers:open_flag()) -> {ok, handle()} | error_reply().
 open_with_permissions_check(#sd_handle{
     session_id = SessionId,

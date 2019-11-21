@@ -48,7 +48,7 @@
 %% Callback called to get permissions required to check before starting transfer.
 %% @end
 %%--------------------------------------------------------------------
--callback required_permissions() -> [data_access:requirement()].
+-callback required_permissions() -> [data_access_rights:requirement()].
 
 
 %%--------------------------------------------------------------------

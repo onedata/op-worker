@@ -38,7 +38,7 @@
 
 
 %% API
--export([get_allow_all_constraints/0, get/1, verify/3]).
+-export([get_allow_all_constraints/0, get/1, inspect/3]).
 
 -ifdef(TEST).
 -export([
@@ -140,9 +140,9 @@ get(Caveats) ->
 %% calculation cost so it should be used only in necessity.
 %% @end
 %%--------------------------------------------------------------------
--spec verify(user_ctx:ctx(), file_ctx:ctx(), ancestor_policy()) ->
+-spec inspect(user_ctx:ctx(), file_ctx:ctx(), ancestor_policy()) ->
     {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
-verify(UserCtx, FileCtx0, AncestorPolicy) ->
+inspect(UserCtx, FileCtx0, AncestorPolicy) ->
     case user_ctx:get_data_constraints(UserCtx) of
         #constraints{paths = any, guids = any} ->
             {undefined, FileCtx0};

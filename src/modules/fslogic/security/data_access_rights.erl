@@ -10,7 +10,7 @@
 %%% This module handles access requirements checks for files.
 %%% @end
 %%%--------------------------------------------------------------------
--module(data_access).
+-module(data_access_rights).
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 

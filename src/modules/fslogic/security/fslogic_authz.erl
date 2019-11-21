@@ -30,7 +30,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_authorized(user_ctx:ctx(), file_ctx:ctx(),
-    [data_access:requirement()]) -> file_ctx:ctx() | no_return().
+    AccessRequirements :: [data_access_rights:requirement()]
+) ->
+    file_ctx:ctx().
 ensure_authorized(UserCtx, FileCtx0, AccessRequirements) ->
     ensure_authorized(
         UserCtx, FileCtx0,
@@ -47,17 +49,15 @@ ensure_authorized(UserCtx, FileCtx0, AccessRequirements) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_authorized(user_ctx:ctx(), file_ctx:ctx(),
-    AccessRequirements :: [data_access:requirement()],
-    AncestorPolicy :: data_constraints:ancestor_policy()
+    AccessRequirements :: [data_access_rights:requirement()],
+    data_constraints:ancestor_policy()
 ) ->
     file_ctx:ctx().
-ensure_authorized(
-    UserCtx, FileCtx0, AccessRequirements, AncestorPolicy
-) ->
-    {_, FileCtx1} = data_constraints:verify(
+ensure_authorized(UserCtx, FileCtx0, AccessRequirements, AncestorPolicy) ->
+    {_, FileCtx1} = data_constraints:inspect(
         UserCtx, FileCtx0, AncestorPolicy
     ),
-    data_access:assert_granted(UserCtx, FileCtx1, AccessRequirements).
+    data_access_rights:assert_granted(UserCtx, FileCtx1, AccessRequirements).
 
 
 %%--------------------------------------------------------------------
@@ -72,11 +72,11 @@ ensure_authorized(
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_authorized_readdir(user_ctx:ctx(), file_ctx:ctx(),
-    [data_access:requirement()]
+    AccessRequirements :: [data_access_rights:requirement()]
 ) ->
     {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
 ensure_authorized_readdir(UserCtx, FileCtx0, AccessRequirements) ->
-    FileCtx1 = data_access:assert_granted(
+    FileCtx1 = data_access_rights:assert_granted(
         UserCtx, FileCtx0, AccessRequirements
     ),
-    data_constraints:verify(UserCtx, FileCtx1, allow_ancestors).
+    data_constraints:inspect(UserCtx, FileCtx1, allow_ancestors).
