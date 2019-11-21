@@ -661,7 +661,8 @@ get_child_canonical_path(ParentCtx, FileName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: integer(), Limit :: non_neg_integer()
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit()
 ) ->
     {Children :: [ctx()], NewFileCtx :: ctx()}.
 get_file_children(FileCtx, UserCtx, Offset, Limit) ->
@@ -673,8 +674,8 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: integer(),
-    Limit :: non_neg_integer(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
     Token :: undefined | datastore_links_iter:token()
 ) ->
     {Children :: [ctx()], NewToken :: datastore_links_iter:token(), NewFileCtx :: ctx()} |
@@ -688,8 +689,8 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: integer(),
-    Limit :: non_neg_integer(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
     Token :: undefined | datastore_links_iter:token(),
     StartId :: undefined | file_meta:name()
 ) ->
@@ -721,22 +722,22 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children_whitelisted(ctx(), user_ctx:ctx(),
-    Offset :: integer(),
+    PositiveOffset :: integer(),
     Limit :: non_neg_integer(),
     ChildrenWhiteList :: [file_meta:name()]
 ) ->
     {Children :: [ctx()], NewFileCtx :: ctx()}.
-get_file_children_whitelisted(FileCtx, UserCtx, Offset, Limit, ChildrenWhiteList) ->
+get_file_children_whitelisted(FileCtx, UserCtx, PositiveOffset, Limit, ChildrenWhiteList) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            {list_user_spaces(UserCtx, Offset, Limit, ChildrenWhiteList), FileCtx};
+            {list_user_spaces(UserCtx, PositiveOffset, Limit, ChildrenWhiteList), FileCtx};
         false ->
             {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
             SpaceId = get_space_id_const(FileCtx2),
             ShareId = get_share_id_const(FileCtx2),
 
             {ok, ChildrenLinks} = file_meta:list_children_whitelisted(
-                FileDoc, Offset, Limit, ChildrenWhiteList
+                FileDoc, PositiveOffset, Limit, ChildrenWhiteList
             ),
             ChildrenCtxs = lists:map(fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
                 new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
@@ -1312,9 +1313,8 @@ get_file_size_from_remote_locations(FileCtx) ->
     end.
 
 %% @private
--spec list_user_spaces(user_ctx:ctx(), Offset :: non_neg_integer(),
-    Limit :: non_neg_integer(), SpaceWhiteList :: undefined | [od_space:id()]) ->
-    Children :: [ctx()].
+-spec list_user_spaces(user_ctx:ctx(), file_meta:offset(), file_meta:limit(),
+    SpaceWhiteList :: undefined | [od_space:id()]) -> Children :: [ctx()].
 list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     #document{value = #od_user{eff_spaces = AllSpaces}} = user_ctx:get_user(UserCtx),

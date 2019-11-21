@@ -47,7 +47,7 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: non_neg_integer(), Limit :: non_neg_integer(),
+    Offset :: file_meta:offset(), Limit :: file_meta:limit(),
     Token :: undefined | binary()
 ) ->
     fslogic_worker:fuse_response().
@@ -61,7 +61,7 @@ read_dir(UserCtx, FileCtx, Offset, Limit, Token) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: non_neg_integer(), Limit :: non_neg_integer(),
+    Offset :: file_meta:offset(), Limit :: file_meta:limit(),
     Token :: undefined | binary(),
     StartId :: undefined | file_meta:name()
 ) ->
@@ -81,7 +81,7 @@ read_dir(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir_plus(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: non_neg_integer(), Limit :: non_neg_integer(),
+    Offset :: file_meta:offset(), Limit :: file_meta:limit(),
     Token :: undefined | binary()) -> fslogic_worker:fuse_response().
 read_dir_plus(UserCtx, FileCtx0, Offset, Limit, Token) ->
     {ChildrenWhiteList, FileCtx1} = fslogic_authz:ensure_authorized_readdir(
@@ -136,7 +136,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: integer(), Limit :: non_neg_integer(),
+    Offset :: file_meta:offset(), Limit :: file_meta:limit(),
     Token :: undefined | binary(),
     StartId :: undefined | file_meta:name(),
     ChildrenWhiteList :: undefined | [file_meta:name()]
@@ -171,7 +171,7 @@ read_dir_insecure(UserCtx, FileCtx0, Offset, Limit, Token, StartId, ChildrenWhit
 %% @end
 %%--------------------------------------------------------------------
 -spec read_dir_plus_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: non_neg_integer(), Limit :: non_neg_integer(),
+    Offset :: file_meta:offset(), Limit :: file_meta:limit(),
     Token :: undefined | binary(),
     ChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
@@ -212,8 +212,8 @@ read_dir_plus_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhiteLis
 
 %% @private
 -spec get_file_children(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: integer(),
-    Limit :: non_neg_integer(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
     Token :: undefined | datastore_links_iter:token(),
     StartId :: undefined | file_meta:name(),
     ChildrenWhiteList :: undefined | [file_meta:name()]
