@@ -99,7 +99,7 @@ get_auth(#user_ctx{session = Session}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets session's data constraints.
+%% Gets session's data constraints from user context.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_data_constraints(ctx()) -> data_constraints:constraints().

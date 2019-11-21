@@ -18,7 +18,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 -type acl() :: [ace:ace()].
--type permission() :: binary().
+-type permission() :: binary().         % Permissions defined in acl.hrl
 
 -export_type([acl/0, permission/0]).
 

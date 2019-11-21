@@ -533,7 +533,7 @@ list_children(Entry, Offset, Size, Token, PrevLinkKey, PrevTeeID) ->
     Limit :: non_neg_integer(),
     ChildrenWhiteList :: [file_meta:name()]
 ) ->
-    {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
+    {ok, [#child_link_uuid{}]} | {error, term()}.
 list_children_whitelisted(Entry, Offset, Limit, ChildrenWhiteList) ->
     Names = lists:filter(fun(ChildName) ->
         not (is_hidden(ChildName) orelse is_deletion_link(ChildName))
@@ -552,9 +552,9 @@ list_children_whitelisted(Entry, Offset, Limit, ChildrenWhiteList) ->
         case Offset < length(ValidLinks) of
             true ->
                 RequestedLinks = lists:sublist(ValidLinks, Offset+1, Limit),
-                {ok, tag_children(RequestedLinks), #{}};
+                {ok, tag_children(RequestedLinks)};
             false ->
-                {ok, [], #{}}
+                {ok, []}
         end
     end).
 

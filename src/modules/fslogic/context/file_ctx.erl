@@ -735,7 +735,7 @@ get_file_children_whitelisted(FileCtx, UserCtx, Offset, Limit, ChildrenWhiteList
             SpaceId = get_space_id_const(FileCtx2),
             ShareId = get_share_id_const(FileCtx2),
 
-            {ok, ChildrenLinks, _} = file_meta:list_children_whitelisted(
+            {ok, ChildrenLinks} = file_meta:list_children_whitelisted(
                 FileDoc, Offset, Limit, ChildrenWhiteList
             ),
             ChildrenCtxs = lists:map(fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
@@ -1313,7 +1313,7 @@ get_file_size_from_remote_locations(FileCtx) ->
 
 %% @private
 -spec list_user_spaces(user_ctx:ctx(), Offset :: non_neg_integer(),
-    Limit :: non_neg_integer(), SpaceWhiteList :: undefined | [binary()]) ->
+    Limit :: non_neg_integer(), SpaceWhiteList :: undefined | [od_space:id()]) ->
     Children :: [ctx()].
 list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
     SessionId = user_ctx:get_session_id(UserCtx),

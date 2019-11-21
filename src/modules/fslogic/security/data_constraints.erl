@@ -13,10 +13,10 @@
 %%%                   To verify if allowed_paths hold for some file one must
 %%%                   check if file path is contained in list or is subpath
 %%%                   of any path from list,
-%%% - guid_constraints - list of guid lists. To verify if guid_constraints
-%%%                      hold for some file one must check if every list
+%%% - guid_constraints - list of guid whitelists. To verify if guid_constraints
+%%%                      hold for some file one must check if every whitelist
 %%%                      contains either that file's guid or any
-%%%                      of it's ancestors.
+%%%                      of its ancestors.
 %%% NOTE !!!
 %%% Sometimes access may be granted not only to paths or subpaths allowed
 %%% by constraints directly but also to those paths ancestors (operations like
@@ -51,14 +51,22 @@
 -endif.
 
 
--type path_whitelist() :: ordsets:ordset(file_meta:path()).
 -type relation() :: subpath | {ancestor, gb_sets:set(file_meta:name())}.
 
--type allowed_paths() :: any | path_whitelist().
--type guid_constraints() :: any | [[file_id:file_guid()]].
--type constraints() :: {allowed_paths(), guid_constraints()}.
-
 -type ancestor_policy() :: allow_ancestors | disallow_ancestors.
+
+-type path_whitelist() :: ordsets:ordset(file_meta:path()).
+-type allowed_paths() :: any | path_whitelist().
+
+-type guid_whitelist() :: [file_id:file_guid()].
+-type guid_constraints() :: any | [guid_whitelist()].
+
+-record(constraints, {
+    paths :: allowed_paths(),
+    guids :: guid_constraints()
+}).
+
+-type constraints() :: #constraints{}.
 
 -export_type([constraints/0, ancestor_policy/0]).
 
@@ -74,43 +82,45 @@
 
 -spec get_allow_all_constraints() -> constraints().
 get_allow_all_constraints() ->
-    {any, any}.
+    #constraints{paths = any, guids = any}.
 
 
 -spec get([caveats:caveat()]) ->
     {ok, constraints()} | {error, invalid_constraints}.
 get(Caveats) ->
-    #{paths := PathWhiteList, guids := GuidConstraints0} = lists:foldl(fun
-        (?CV_PATH(Paths), #{paths := any} = Acc) ->
-            Acc#{paths => consolidate_paths(Paths)};
-        (?CV_PATH(_), #{paths := []} = Acc) ->
+    DataConstraints = lists:foldl(fun
+        (?CV_PATH(Paths), #constraints{paths = any} = Acc) ->
+            Acc#constraints{paths = consolidate_paths(Paths)};
+        (?CV_PATH(_Paths), #constraints{paths = []} = Acc) ->
             Acc;
-        (?CV_PATH(Paths), #{paths := CurrentIntersection} = Acc) ->
-            Acc#{paths => intersect_path_whitelists(
-                consolidate_paths(Paths), CurrentIntersection
+        (?CV_PATH(Paths), #constraints{paths = AllowedPaths} = Acc) ->
+            Acc#constraints{paths = intersect_path_whitelists(
+                consolidate_paths(Paths), AllowedPaths
             )};
-        (?CV_OBJECTID(ObjectIds), #{guids := any} = Acc) ->
-            Acc#{guids => [objectids_to_guids(ObjectIds)]};
-        (?CV_OBJECTID(ObjectIds), #{guids := Guids} = Acc) ->
-            Acc#{guids => [objectids_to_guids(ObjectIds) | Guids]};
+        (?CV_OBJECTID(ObjectIds), #constraints{guids = any} = Acc) ->
+            Acc#constraints{
+                guids = case objectids_to_guid_whitelist(ObjectIds) of
+                    [] -> [];
+                    GuidWhiteList -> [GuidWhiteList]
+                end
+            };
+        (?CV_OBJECTID(ObjectIds), #constraints{guids = GuidConstraints} = Acc) ->
+            Acc#constraints{
+                guids = case objectids_to_guid_whitelist(ObjectIds) of
+                    [] -> GuidConstraints;
+                    GuidWhiteList -> [GuidWhiteList | GuidConstraints]
+                end
+            };
         (_, Acc) ->
             Acc
-    end, #{paths => any, guids => any}, Caveats),
+    end, #constraints{paths = any, guids = any}, Caveats),
 
-    GuidConstraints1 = case GuidConstraints0 of
-        any ->
-            any;
-        _ ->
-            % Filter out failed translations from objectids to guids
-            lists:filter(fun(GuidsSet) -> GuidsSet /= [] end, GuidConstraints0)
-    end,
-
-    case {PathWhiteList, GuidConstraints1} of
+    case DataConstraints of
         {[], _} ->
             {error, invalid_constraints};
         {_, []} ->
             {error, invalid_constraints};
-        DataConstraints ->
+        _ ->
             {ok, DataConstraints}
     end.
 
@@ -133,16 +143,19 @@ get(Caveats) ->
 -spec verify(user_ctx:ctx(), file_ctx:ctx(), ancestor_policy()) ->
     {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
 verify(UserCtx, FileCtx0, AncestorPolicy) ->
-    {AllowedPaths, GuidConstraints} = user_ctx:get_data_constraints(UserCtx),
-    Result = check_and_cache_data_constraints(
-        UserCtx, FileCtx0,
-        AllowedPaths, GuidConstraints, AncestorPolicy
-    ),
-    case Result of
-        {subpath, FileCtx1} ->
-            {undefined, FileCtx1};
-        {{ancestor, ChildrenWhiteList}, FileCtx1} ->
-            {ChildrenWhiteList, FileCtx1}
+    case user_ctx:get_data_constraints(UserCtx) of
+        #constraints{paths = any, guids = any} ->
+            {undefined, FileCtx0};
+        DataConstraints ->
+            CheckResult = check_and_cache_data_constraints(
+                UserCtx, FileCtx0, DataConstraints, AncestorPolicy
+            ),
+            case CheckResult of
+                {subpath, FileCtx1} ->
+                    {undefined, FileCtx1};
+                {{ancestor, ChildrenWhiteList}, FileCtx1} ->
+                    {ChildrenWhiteList, FileCtx1}
+            end
     end.
 
 
@@ -237,14 +250,13 @@ consolidate_paths([PathA, PathB | RestOfPaths], ConsolidatedPaths) ->
 
 %% @private
 -spec check_and_cache_data_constraints(user_ctx:ctx(), file_ctx:ctx(),
-    allowed_paths(), guid_constraints(), ancestor_policy()
+    constraints(), ancestor_policy()
 ) ->
     {subpath | {ancestor, [file_meta:name()]}, file_ctx:ctx()} | no_return().
-check_and_cache_data_constraints(_UserCtx, FileCtx, any, any, _) ->
-    {subpath, FileCtx};
-check_and_cache_data_constraints(
-    UserCtx, FileCtx0, AllowedPaths, GuidConstraints, AncestorPolicy
-) ->
+check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
+    paths = AllowedPaths,
+    guids = GuidConstraints
+}, AncestorPolicy) ->
     FileGuid = file_ctx:get_guid_const(FileCtx0),
     SerializedToken = get_serialized_token(UserCtx),
     CacheKey = {data_constraint, SerializedToken, FileGuid},
@@ -272,7 +284,7 @@ check_and_cache_data_constraints(
                 {PathRel, FileCtx1} = check_allowed_paths(
                     FileCtx0, AllowedPaths, AncestorPolicy
                 ),
-                {GuidRel, FileCtx3} = check_guid_constraints(
+                {GuidRel, FileCtx2} = check_guid_constraints(
                     UserCtx, SerializedToken, FileCtx1,
                     GuidConstraints, AncestorPolicy
                 ),
@@ -283,13 +295,15 @@ check_and_cache_data_constraints(
                         {ancestor, gb_sets:to_list(ChildrenSet)}
                 end,
                 permissions_cache:cache_permission(CacheKey, Result),
-                {Result, FileCtx3}
+                {Result, FileCtx2}
             catch throw:?EACCES ->
                 case AncestorPolicy of
                     allow_ancestors ->
                         permissions_cache:cache_permission(CacheKey, ?EACCES);
                     disallow_ancestors ->
-                        permissions_cache:cache_permission(CacheKey, {subpath, ?EACCES})
+                        permissions_cache:cache_permission(
+                            CacheKey, {subpath, ?EACCES}
+                        )
                 end,
                 throw(?EACCES)
             end
@@ -535,20 +549,15 @@ is_path_or_subpath(PossiblePathOrSubPath, Path) ->
 %% @private
 -spec is_path_or_subpath(file_meta:path(), file_meta:path(), pos_integer()) ->
     boolean().
+is_path_or_subpath(Path, Path, _PathLen) ->
+    true;
 is_path_or_subpath(PossiblePathOrSubPath, Path, PathLen) ->
-    case PossiblePathOrSubPath of
-        Path ->
-            true;
-        <<Path:PathLen/binary, "/", _/binary>> ->
-            true;
-        _ ->
-            false
-    end.
+    is_subpath(PossiblePathOrSubPath, Path, PathLen).
 
 
 %% @private
--spec objectids_to_guids([file_id:objectid()]) -> [file_id:file_guid()].
-objectids_to_guids(Objectids) ->
+-spec objectids_to_guid_whitelist([file_id:objectid()]) -> guid_whitelist().
+objectids_to_guid_whitelist(Objectids) ->
     lists:filtermap(fun(ObjectId) ->
         try
             {true, element(2, {ok, _} = file_id:objectid_to_guid(ObjectId))}
