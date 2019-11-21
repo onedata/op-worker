@@ -131,7 +131,7 @@ get_test_() ->
 
     [
         ?_assertEqual(
-            {ok, {any, any}},
+            {ok, {constraints, any, any}},
             data_constraints:get([])
         ),
         ?_assertEqual(
@@ -143,11 +143,11 @@ get_test_() ->
             data_constraints:get([?CV_OBJECTID([])])
         ),
         ?_assertEqual(
-            {ok, {any, [[Guid1, Guid2]]}},
+            {ok, {constraints, any, [[Guid1, Guid2]]}},
             data_constraints:get([?CV_OBJECTID([ObjectId1, ObjectId2])])
         ),
         ?_assertEqual(
-            {ok, {[<<"/z/x/c/d/e">>], [[Guid2], [Guid1]]}},
+            {ok, {constraints, [<<"/z/x/c/d/e">>], [[Guid2], [Guid1]]}},
             data_constraints:get([
                 ?CV_PATH([<<"/q/w/e">>, <<"/z/x/c">>]),
                 ?CV_OBJECTID([ObjectId1]),
@@ -174,7 +174,7 @@ check_data_path_relation_test_() -> [
         )
     ),
     ?_assertEqual(
-        {ancestor, gb_sets:from_list([<<"asd">>, <<"chmod">>])},
+        {ancestor, ordsets:from_list([<<"asd">>, <<"chmod">>])},
         data_constraints:check_against_allowed_paths(
             <<"/qwe/bin">>,
             [<<"/asd/binaries">>, <<"/qwe/bin/chmod">>, <<"/asd/qwe/asd">>, <<"/qwe/bin/asd">>]

@@ -542,12 +542,10 @@ list_children_whitelisted(Entry, Offset, Limit, ChildrenWhiteList) ->
     ?run(begin
         {ok, FileUuid} = get_uuid(Entry),
 
-        ValidLinks = lists:foldr(fun
-            ({ok, L}, Acc) ->
-                L ++ Acc;
-            ({error, _Reason}, Acc) ->
-                Acc
-        end, [], datastore_model:get_links(?CTX, FileUuid, all, Names)),
+        ValidLinks = lists:flatmap(fun
+            ({ok, L}) -> L;
+            ({error, _}) -> []
+        end, datastore_model:get_links(?CTX, FileUuid, all, Names)),
 
         case Offset < length(ValidLinks) of
             true ->

@@ -68,6 +68,14 @@
     <<__PREFIX, (atom_to_binary(__TYPE, utf8))/binary>>
 ).
 
+-define(SCENARIO_DIR(__ROOT_DIR, __SCENARIO_NAME),
+    <<
+        __ROOT_DIR/binary,
+        "/",
+        __SCENARIO_NAME/binary
+    >>
+).
+
 
 %%%===================================================================
 %%% TEST MECHANISM
@@ -123,11 +131,7 @@ run_space_privs_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
     lists:foreach(fun({ScenarioType, RequiredPrivs}) ->
         ScenarioName = ?SCENARIO_NAME("space_privs_", ScenarioType),
-        ScenarioRootDirPath = <<
-            ScenariosRootDirPath/binary,
-            "/",
-            ScenarioName/binary
-        >>,
+        ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
 
         % Create necessary file hierarchy
         {PermsPerFile, ExtraData} = create_files(
@@ -186,10 +190,10 @@ run_space_privs_scenario(
         erlang:T(R)
     after
         initializer:testmaster_mock_space_user_privileges(
-            [Node], SpaceId, Owner, privileges:space_privileges()
+            [Node], SpaceId, Owner, privileges:space_admin()
         ),
         initializer:testmaster_mock_space_user_privileges(
-            [Node], SpaceId, SpaceUser, privileges:space_privileges()
+            [Node], SpaceId, SpaceUser, privileges:space_admin()
         )
     end.
 
@@ -206,7 +210,7 @@ space_privs_test(
     OwnerSessId = ?config({session_id, {OwnerId, ?GET_DOMAIN(Node)}}, Config),
 
     initializer:testmaster_mock_space_user_privileges(
-        [Node], SpaceId, UserId, privileges:space_privileges()
+        [Node], SpaceId, UserId, privileges:space_admin()
     ),
     ?assertMatch(
         {error, _},
@@ -242,7 +246,7 @@ space_privs_test(
     Node, SpaceId, OwnerId, UserId, Operation,
     RootDirPath, ExtraData, RequiredPrivs, Config
 ) ->
-    AllSpacePrivs = privileges:space_privileges(),
+    AllSpacePrivs = privileges:space_admin(),
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(Node)}}, Config),
     OwnerSessId = ?config({session_id, {OwnerId, ?GET_DOMAIN(Node)}}, Config),
 
@@ -292,16 +296,12 @@ run_data_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
     OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
     MainToken = initializer:create_token(User),
     initializer:testmaster_mock_space_user_privileges(
-        [Node], SpaceId, User, privileges:space_privileges()
+        [Node], SpaceId, User, privileges:space_admin()
     ),
 
     lists:foreach(fun(ScenarioType) ->
         ScenarioName = ?SCENARIO_NAME("cv_", ScenarioType),
-        ScenarioRootDirPath = <<
-            ScenariosRootDirPath/binary,
-            "/",
-            ScenarioName/binary
-        >>,
+        ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
 
         % Create necessary file hierarchy
         {PermsPerFile, ExtraData} = create_files(
@@ -330,10 +330,8 @@ run_caveats_scenario(
     Node, MainToken, OwnerUserSessId, User, Operation, data_path,
     ScenarioRootDirPath, ExtraData
 ) ->
-    Identity = #user_identity{user_id = User},
-
     Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [<<"i_am_nowhere">>]}),
-    SessId1 = lfm_permissions_test_utils:create_session(Node, Identity, Token1),
+    SessId1 = lfm_permissions_test_utils:create_session(Node, User, Token1),
     ?assertMatch(
         {error, ?EACCES},
         Operation(OwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
@@ -342,7 +340,7 @@ run_caveats_scenario(
     Token2 = tokens:confine(MainToken, #cv_data_path{
         whitelist = [ScenarioRootDirPath]
     }),
-    SessId2 = lfm_permissions_test_utils:create_session(Node, Identity, Token2),
+    SessId2 = lfm_permissions_test_utils:create_session(Node, User, Token2),
     ?assertNotMatch(
         {error, ?EACCES},
         Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData)
@@ -351,7 +349,6 @@ run_caveats_scenario(
     Node, MainToken, OwnerUserSessId, User, Operation, data_objectid,
     ScenarioRootDirPath, ExtraData
 ) ->
-    Identity = #user_identity{user_id = User},
     ScenarioRootDirGuid = maps:get(ScenarioRootDirPath, ExtraData),
     {ok, ScenarioRootDirObjectId} = file_id:guid_to_objectid(ScenarioRootDirGuid),
 
@@ -359,7 +356,7 @@ run_caveats_scenario(
     {ok, DummyObjectId} = file_id:guid_to_objectid(DummyGuid),
 
     Token1 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [DummyObjectId]}),
-    SessId1 = lfm_permissions_test_utils:create_session(Node, Identity, Token1),
+    SessId1 = lfm_permissions_test_utils:create_session(Node, User, Token1),
     ?assertMatch(
         {error, ?EACCES},
         Operation(OwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
@@ -368,7 +365,7 @@ run_caveats_scenario(
     Token2 = tokens:confine(MainToken, #cv_data_objectid{
         whitelist = [ScenarioRootDirObjectId]
     }),
-    SessId2 = lfm_permissions_test_utils:create_session(Node, Identity, Token2),
+    SessId2 = lfm_permissions_test_utils:create_session(Node, User, Token2),
     ?assertNotMatch(
         {error, ?EACCES},
         Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData), 100
@@ -404,11 +401,7 @@ run_posix_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
     lists:foreach(fun({ScenarioType, SessId}) ->
         ScenarioName = ?SCENARIO_NAME("posix_", ScenarioType),
-        ScenarioRootDirPath = <<
-            ScenariosRootDirPath/binary,
-            "/",
-            ScenarioName/binary
-        >>,
+        ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
 
         % Create necessary file hierarchy
         {PermsPerFile, ExtraData} = create_files(

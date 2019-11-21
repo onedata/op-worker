@@ -36,7 +36,8 @@
 
 -spec create_session(node(), #user_identity{}, tokens:serialized()) ->
     session:id().
-create_session(Node, Identity, Token) ->
+create_session(Node, UserId, Token) ->
+    Identity = #user_identity{user_id = UserId},
     {ok, SessionId} = ?assertMatch({ok, _}, rpc:call(
         Node,
         session_manager,

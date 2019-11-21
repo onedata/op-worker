@@ -51,11 +51,11 @@
 -endif.
 
 
--type relation() :: subpath | {ancestor, gb_sets:set(file_meta:name())}.
+-type relation() :: subpath | {ancestor, ordsets:ordset(file_meta:name())}.
 
 -type ancestor_policy() :: allow_ancestors | disallow_ancestors.
 
--type path_whitelist() :: ordsets:ordset(file_meta:path()).
+-type path_whitelist() :: [file_meta:path()].
 -type allowed_paths() :: any | path_whitelist().
 
 -type guid_whitelist() :: [file_id:file_guid()].
@@ -116,9 +116,9 @@ get(Caveats) ->
     end, #constraints{paths = any, guids = any}, Caveats),
 
     case DataConstraints of
-        {[], _} ->
+        #constraints{paths = []} ->
             {error, invalid_constraints};
-        {_, []} ->
+        #constraints{guids = []} ->
             {error, invalid_constraints};
         _ ->
             {ok, DataConstraints}
@@ -223,10 +223,10 @@ intersect_path_whitelists(
 %% [/a/b/, /a/b/c, /q/w/e] results in [/a/b, /q/w/e]).
 %% @end
 %%--------------------------------------------------------------------
--spec consolidate_paths([file_meta:path()]) -> path_whitelist().
+-spec consolidate_paths(path_whitelist()) -> path_whitelist().
 consolidate_paths(Paths) ->
     TrimmedPaths = [string:trim(Path, trailing, "/") || Path <- Paths],
-    consolidate_paths(ordsets:from_list(TrimmedPaths), []).
+    consolidate_paths(lists:usort(TrimmedPaths), []).
 
 
 %% @private
@@ -252,7 +252,7 @@ consolidate_paths([PathA, PathB | RestOfPaths], ConsolidatedPaths) ->
 -spec check_and_cache_data_constraints(user_ctx:ctx(), file_ctx:ctx(),
     constraints(), ancestor_policy()
 ) ->
-    {subpath | {ancestor, [file_meta:name()]}, file_ctx:ctx()} | no_return().
+    {relation(), file_ctx:ctx()} | no_return().
 check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
     paths = AllowedPaths,
     guids = GuidConstraints
@@ -288,12 +288,7 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
                     UserCtx, SerializedToken, FileCtx1,
                     GuidConstraints, AncestorPolicy
                 ),
-                Result = case intersect_relations(PathRel, GuidRel) of
-                    subpath ->
-                        subpath;
-                    {ancestor, ChildrenSet} ->
-                        {ancestor, gb_sets:to_list(ChildrenSet)}
-                end,
+                Result = intersect_relations(PathRel, GuidRel),
                 permissions_cache:cache_permission(CacheKey, Result),
                 {Result, FileCtx2}
             catch throw:?EACCES ->
@@ -314,6 +309,7 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
 -spec check_allowed_paths(file_ctx:ctx(), allowed_paths(), ancestor_policy()) ->
     {relation(), file_ctx:ctx()} | no_return().
 check_allowed_paths(FileCtx, any, _AncestorPolicy) ->
+    % 'any' allows all subpaths of "/" - effectively all files
     {subpath, FileCtx};
 check_allowed_paths(FileCtx0, AllowedPaths, disallow_ancestors) ->
     {FilePath, FileCtx1} = get_canonical_path(FileCtx0),
@@ -347,6 +343,7 @@ check_allowed_paths(FileCtx0, AllowedPaths, allow_ancestors) ->
 ) ->
     {relation(), file_ctx:ctx()} | no_return().
 check_guid_constraints(_, _, FileCtx, any, _AncestorPolicy) ->
+    % 'any' allows all descendants of UserRootDir ("/") - effectively all files
     {subpath, FileCtx};
 check_guid_constraints(
     UserCtx, SerializedToken, FileCtx0, GuidConstraints, disallow_ancestors
@@ -467,7 +464,7 @@ check_and_cache_guid_constraints_fulfillment(FileCtx, CacheKey, GuidConstraints)
 %% children from AllowedPaths.
 %% @end
 %%--------------------------------------------------------------------
--spec check_against_allowed_paths(file_meta:path(), [file_meta:path()]) ->
+-spec check_against_allowed_paths(file_meta:path(), path_whitelist()) ->
     undefined | relation().
 check_against_allowed_paths(Path, AllowedPaths) ->
     PathLen = size(Path),
@@ -487,10 +484,10 @@ check_against_allowed_paths(Path, AllowedPaths) ->
                     case is_ancestor(Path, PathLen, AllowedPath) of
                         {true, Child} ->
                             NamesAcc = case Acc of
-                                undefined -> gb_sets:new();
+                                undefined -> ordsets:new();
                                 {ancestor, Children} -> Children
                             end,
-                            {ancestor, gb_sets:add(Child, NamesAcc)};
+                            {ancestor, ordsets:add_element(Child, NamesAcc)};
                         false -> Acc
                     end
             end
@@ -506,7 +503,7 @@ intersect_relations({ancestor, _Children} = Ancestor, subpath) ->
 intersect_relations(subpath, {ancestor, _Children} = Ancestor) ->
     Ancestor;
 intersect_relations({ancestor, ChildrenA}, {ancestor, ChildrenB}) ->
-    {ancestor, gb_sets:intersection(ChildrenA, ChildrenB)}.
+    {ancestor, ordsets:intersection(ChildrenA, ChildrenB)}.
 
 
 %%--------------------------------------------------------------------

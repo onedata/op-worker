@@ -163,6 +163,8 @@ all() ->
 
 -define(rpcCache(W, Function, Args), rpc:call(W, permissions_cache, Function, Args)).
 
+-define(GEN_SCENARIO_DIR_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
+
 
 %%%===================================================================
 %%% Test functions
@@ -176,25 +178,19 @@ data_caveats_test(Config) ->
     OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(W)}}, Config),
 
     UserId = <<"user2">>,
-    Identity = #user_identity{user_id = UserId},
     UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
     Space1RootDir = fslogic_uuid:spaceid_to_space_dir_guid(<<"space1">>),
     Space3RootDir = fslogic_uuid:spaceid_to_space_dir_guid(<<"space3">>),
 
-    DirName = atom_to_binary(?FUNCTION_NAME, utf8),
+    ScenarioName = ?GEN_SCENARIO_DIR_NAME,
+    DirName = <<ScenarioName/binary, "1">>,
     DirPath = <<"/space1/", DirName/binary>>,
-    {ok, DirGuid} = ?assertMatch(
-        {ok, _},
-        lfm_proxy:mkdir(W, OwnerUserSessId, DirPath)
-    ),
+    {ok, DirGuid} = lfm_proxy:mkdir(W, OwnerUserSessId, DirPath),
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
-    DirName2 = <<(atom_to_binary(?FUNCTION_NAME, utf8))/binary, "2">>,
+    DirName2 = <<ScenarioName/binary, "2">>,
     DirPath2 = <<"/space1/", DirName2/binary>>,
-    {ok, _DirGuid2} = ?assertMatch(
-        {ok, _},
-        lfm_proxy:mkdir(W, OwnerUserSessId, DirPath2)
-    ),
+    {ok, _DirGuid2} = lfm_proxy:mkdir(W, OwnerUserSessId, DirPath2),
 
     [
         {Path1, ObjectId1, F1},
@@ -205,109 +201,92 @@ data_caveats_test(Config) ->
     ] = lists:map(fun(Num) ->
         FileName = <<"file", ($0 + Num)>>,
         FilePath = <<DirPath/binary, "/", FileName/binary>>,
-        {ok, FileGuid} = ?assertMatch(
-            {ok, _},
-            lfm_proxy:create(W, OwnerUserSessId, FilePath, 8#777)
-        ),
+        {ok, FileGuid} = lfm_proxy:create(W, OwnerUserSessId, FilePath, 8#777),
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
         {FilePath, FileObjectId, {FileGuid, FileName}}
     end, lists:seq(1, 5)),
 
     MainToken = initializer:create_token(UserId),
 
+    LsWithConfinedToken = fun(Guid, Caveats) ->
+        LsToken = tokens:confine(MainToken, Caveats),
+        LsSessId = lfm_permissions_test_utils:create_session(W, UserId, LsToken),
+        lfm_proxy:ls(W, LsSessId, {guid, Guid}, 0, 100)
+    end,
+
+
     % Whitelisting Dir should result in listing all it's files
-    Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [DirPath]}),
-    SessId1 = lfm_permissions_test_utils:create_session(W, Identity, Token1),
     ?assertMatch(
         {ok, [F1, F2, F3, F4, F5]},
-        lfm_proxy:ls(W, SessId1, {guid, DirGuid}, 0, 100)
+        LsWithConfinedToken(DirGuid, #cv_data_path{whitelist = [DirPath]})
     ),
-    Token2 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [DirObjectId]}),
-    SessId2 = lfm_permissions_test_utils:create_session(W, Identity, Token2),
     ?assertMatch(
         {ok, [F1, F2, F3, F4, F5]},
-        lfm_proxy:ls(W, SessId2, {guid, DirGuid}, 0, 100)
+        LsWithConfinedToken(DirGuid, #cv_data_objectid{whitelist = [DirObjectId]})
     ),
 
     % Whitelisting concrete files should result in listing only them
-    Token3 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1, Path3, Path5]}),
-    SessId3 = lfm_permissions_test_utils:create_session(W, Identity, Token3),
     ?assertMatch(
         {ok, [F1, F3, F5]},
-        lfm_proxy:ls(W, SessId3, {guid, DirGuid}, 0, 100)
+        LsWithConfinedToken(DirGuid, #cv_data_path{whitelist = [Path1, Path3, Path5]})
     ),
-    Token4 = tokens:confine(MainToken, #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId5]}),
-    SessId4 = lfm_permissions_test_utils:create_session(W, Identity, Token4),
     ?assertMatch(
         {ok, [F1, F3, F5]},
-        lfm_proxy:ls(W, SessId4, {guid, DirGuid}, 0, 100)
+        LsWithConfinedToken(DirGuid, #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId5]})
     ),
 
     % Using several caveats should result in listing only their intersection
-    Token5 = tokens:confine(MainToken, [
-        #cv_data_path{whitelist = [Path1, Path3, Path4, Path5]},
-        #cv_data_path{whitelist = [Path1, Path2, Path5]},
-        #cv_data_path{whitelist = [Path1, Path5]}
-    ]),
-    SessId5 = lfm_permissions_test_utils:create_session(W, Identity, Token5),
     ?assertMatch(
         {ok, [F1, F5]},
-        lfm_proxy:ls(W, SessId5, {guid, DirGuid}, 0, 100)
+        LsWithConfinedToken(DirGuid, [
+            #cv_data_path{whitelist = [Path1, Path3, Path4, Path5]},
+            #cv_data_path{whitelist = [Path1, Path2, Path5]},
+            #cv_data_path{whitelist = [Path1, Path5]}
+        ])
     ),
-    Token6 = tokens:confine(MainToken, [
-        #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId4, ObjectId5]},
-        #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
-        #cv_data_objectid{whitelist = [ObjectId1, ObjectId5]}
-    ]),
-    SessId6 = lfm_permissions_test_utils:create_session(W, Identity, Token6),
     ?assertMatch(
         {ok, [F1, F5]},
-        lfm_proxy:ls(W, SessId6, {guid, DirGuid}, 0, 100)
+        LsWithConfinedToken(DirGuid, [
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId4, ObjectId5]},
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId5]}
+        ])
     ),
-    Token7 = tokens:confine(MainToken, [
-        #cv_data_path{whitelist = [Path1, Path3, Path4, Path5]},
-        #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
-        #cv_data_path{whitelist = [Path1, Path5]}
-    ]),
-    SessId7 = lfm_permissions_test_utils:create_session(W, Identity, Token7),
     ?assertMatch(
         {ok, [F1, F5]},
-        lfm_proxy:ls(W, SessId7, {guid, DirGuid}, 0, 100)
+        LsWithConfinedToken(DirGuid, [
+            #cv_data_path{whitelist = [Path1, Path3, Path4, Path5]},
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
+            #cv_data_path{whitelist = [Path1, Path5]}
+        ])
     ),
-    Token8 = tokens:confine(MainToken, [
-        #cv_data_objectid{whitelist = [ObjectId3, ObjectId4]},
-        #cv_data_path{whitelist = [Path1, Path5]}
-    ]),
-    SessId8 = lfm_permissions_test_utils:create_session(W, Identity, Token8),
     ?assertMatch(
         {ok, []},
-        lfm_proxy:ls(W, SessId8, {guid, DirGuid}, 0, 100)
+        LsWithConfinedToken(DirGuid, [
+            #cv_data_objectid{whitelist = [ObjectId3, ObjectId4]},
+            #cv_data_path{whitelist = [Path1, Path5]}
+        ])
     ),
 
     % Using caveat for different directory should result in {error, eacces}
-    Token9 = tokens:confine(MainToken, #cv_data_path{whitelist = [<<"/space1/qwe">>]}),
-    SessId9 = lfm_permissions_test_utils:create_session(W, Identity, Token9),
     ?assertMatch(
         {error, ?EACCES},
-        lfm_proxy:ls(W, SessId9, {guid, DirGuid}, 0, 100)
+        LsWithConfinedToken(DirGuid, #cv_data_path{whitelist = [<<"/space1/qwe">>]})
     ),
 
     % With no caveats listing user root dir should list all user spaces
-    SessId10 = lfm_permissions_test_utils:create_session(W, Identity, MainToken),
     ?assertMatch(
         {ok, [{Space1RootDir, <<"space1">>}, {Space3RootDir, <<"space3">>}]},
-        lfm_proxy:ls(W, SessId10, {guid, UserRootDir}, 0, 100)
+        LsWithConfinedToken(UserRootDir, [])
     ),
     % But with caveats user root dir ls should show only spaces leading to allowed files
-    Token11 = tokens:confine(MainToken, #cv_data_path{whitelist = [DirPath]}),
-    SessId11 = lfm_permissions_test_utils:create_session(W, Identity, Token11),
     ?assertMatch(
         {ok, [{Space1RootDir, <<"space1">>}]},
-        lfm_proxy:ls(W, SessId11, {guid, UserRootDir}, 0, 100)
+        LsWithConfinedToken(UserRootDir, #cv_data_path{whitelist = [DirPath]})
     ),
 
     % With no caveats listing space dir should list all space directories
-    SessId12 = lfm_permissions_test_utils:create_session(W, Identity, MainToken),
+    SessId12 = lfm_permissions_test_utils:create_session(W, UserId, MainToken),
     ?assertMatch(
         {ok, [_ | _]},
         lfm_proxy:ls(W, SessId12, {guid, Space1RootDir}, 0, 100)
@@ -323,7 +302,7 @@ data_caveats_test(Config) ->
     ),
     % But with caveats space ls should show only dirs leading to allowed files.
     Token13 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1]}),
-    SessId13 = lfm_permissions_test_utils:create_session(W, Identity, Token13),
+    SessId13 = lfm_permissions_test_utils:create_session(W, UserId, Token13),
     ?assertMatch(
         {ok, [{DirGuid, DirName}]},
         lfm_proxy:ls(W, SessId13, {guid, Space1RootDir}, 0, 100)
@@ -361,7 +340,7 @@ data_caveats_test(Config) ->
 
     % Test listing with caveats and options (offset, limit)
     Token14 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1, Path2, Path4, Path5]}),
-    SessId14 = lfm_permissions_test_utils:create_session(W, Identity, Token14),
+    SessId14 = lfm_permissions_test_utils:create_session(W, UserId, Token14),
     ?assertMatch(
         {ok, [F1, F2, F4]},
         lfm_proxy:ls(W, SessId14, {guid, DirGuid}, 0, 3)
@@ -381,7 +360,6 @@ data_caveats_ancestors_test(Config) ->
 
     UserId = <<"user3">>,
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
-    Identity = #user_identity{user_id = UserId},
     UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
 
     SpaceName = <<"space2">>,
@@ -389,26 +367,20 @@ data_caveats_ancestors_test(Config) ->
 
     Dirs0 = [{LastDirGuid, _} | _] = lists:foldl(fun(Num, [{DirGuid, _} | _] = Acc) ->
         SubDirName = <<"dir", (integer_to_binary(Num))/binary>>,
-        {ok, SubDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
-            W, UserSessId, DirGuid, SubDirName, 8#777
-        )),
-        ?assertMatch({ok, _}, lfm_proxy:create(
-            W, UserSessId, DirGuid, <<"file", ($0 + Num)>>, 8#777
-        )),
+        {ok, SubDirGuid} = lfm_proxy:mkdir(W, UserSessId, DirGuid, SubDirName, 8#777),
+        {ok, _} = lfm_proxy:create(W, UserSessId, DirGuid, <<"file", ($0 + Num)>>, 8#777),
         [{SubDirGuid, SubDirName} | Acc]
     end, [{SpaceRootDirGuid, SpaceName}], lists:seq(1, 20)),
     Dirs1 = lists:reverse(Dirs0),
 
-    FileName = <<"file">>,
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
-        W, UserSessId, LastDirGuid, FileName, 8#777
-    )),
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    FileInDeepestDirName = <<"file">>,
+    {ok, FileInDeepestDirGuid} = lfm_proxy:create(W, UserSessId, LastDirGuid, FileInDeepestDirName, 8#777),
+    {ok, FileInDeepestDirObjectId} = file_id:guid_to_objectid(FileInDeepestDirGuid),
 
     Token = initializer:create_token(UserId, [
-        #cv_data_objectid{whitelist = [FileObjectId]}
+        #cv_data_objectid{whitelist = [FileInDeepestDirObjectId]}
     ]),
-    SessId = lfm_permissions_test_utils:create_session(W, Identity, Token),
+    SessId = lfm_permissions_test_utils:create_session(W, UserId, Token),
 
     lists:foldl(
         fun({{DirGuid, DirName}, Child}, {ParentPath, ParentGuid}) ->
@@ -454,13 +426,13 @@ data_caveats_ancestors_test(Config) ->
             {DirPath, DirGuid}
         end,
         {<<>>, undefined},
-        lists:zip([{UserRootDir, UserId} | Dirs1], Dirs1 ++ [{FileGuid, FileName}])
+        lists:zip([{UserRootDir, UserId} | Dirs1], Dirs1 ++ [{FileInDeepestDirGuid, FileInDeepestDirName}])
     ),
 
     % Get acl should finally succeed for file which is allowed by caveats
     ?assertMatch(
         {ok, []},
-        lfm_proxy:get_acl(W, SessId, {guid, FileGuid})
+        lfm_proxy:get_acl(W, SessId, {guid, FileInDeepestDirGuid})
     ).
 
 
@@ -469,35 +441,25 @@ data_caveats_ancestors_test2(Config) ->
 
     UserId = <<"user3">>,
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
-    Identity = #user_identity{user_id = UserId},
     UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
 
     SpaceName = <<"space2">>,
     SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
 
-    RootDirName = (atom_to_binary(?FUNCTION_NAME, utf8)),
-    {ok, RootDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
-        W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777
-    )),
+    RootDirName = ?GEN_SCENARIO_DIR_NAME,
+    {ok, RootDirGuid} = lfm_proxy:mkdir(W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777),
 
     CentralDirName = <<"central">>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(
-        W, UserSessId, RootDirGuid, CentralDirName, 8#777
-    )),
+    {ok, _} = lfm_proxy:mkdir(W, UserSessId, RootDirGuid, CentralDirName, 8#777),
 
     [
         {RightDirGuid, RightDirName, RightFileObjectId, RightFile},
         {LeftDirGuid, LeftDirName, LeftFileObjectId, LeftFile}
     ] = lists:map(fun(DirName) ->
-        {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
-            W, UserSessId, RootDirGuid, DirName, 8#777
-        )),
+        {ok, DirGuid} = lfm_proxy:mkdir(W, UserSessId, RootDirGuid, DirName, 8#777),
         [{FileObjectId, File} | _] = lists:map(fun(Num) ->
             FileName = <<"file", ($0 + Num)>>,
-            {ok, FileGuid} = ?assertMatch(
-                {ok, _},
-                lfm_proxy:create(W, UserSessId, DirGuid, FileName, 8#777)
-            ),
+            {ok, FileGuid} = lfm_proxy:create(W, UserSessId, DirGuid, FileName, 8#777),
             {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
             {FileObjectId, {FileGuid, FileName}}
         end, lists:seq(1, 5)),
@@ -510,7 +472,7 @@ data_caveats_ancestors_test2(Config) ->
     Token1 = tokens:confine(MainToken, #cv_data_objectid{
         whitelist = [LeftFileObjectId, RightFileObjectId]
     }),
-    SessId1 = lfm_permissions_test_utils:create_session(W, Identity, Token1),
+    SessId1 = lfm_permissions_test_utils:create_session(W, UserId, Token1),
     ?assertMatch(
         {ok, [{SpaceRootDirGuid, SpaceName}]},
         lfm_proxy:ls(W, SessId1, {guid, UserRootDir}, 0, 100)
@@ -537,7 +499,7 @@ data_caveats_ancestors_test2(Config) ->
         #cv_data_objectid{whitelist = [LeftFileObjectId]},
         #cv_data_objectid{whitelist = [RightFileObjectId]}
     ]),
-    SessId2 = lfm_permissions_test_utils:create_session(W, Identity, Token2),
+    SessId2 = lfm_permissions_test_utils:create_session(W, UserId, Token2),
     ?assertMatch(
         {ok, [{SpaceRootDirGuid, SpaceName}]},
         lfm_proxy:ls(W, SessId2, {guid, UserRootDir}, 0, 100)
@@ -557,32 +519,25 @@ data_caveats_cache_test(Config) ->
 
     UserId = <<"user3">>,
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
-    Identity = #user_identity{user_id = UserId},
     UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
 
     SpaceName = <<"space2">>,
     SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
 
-    RootDirName = (atom_to_binary(?FUNCTION_NAME, utf8)),
-    {ok, RootDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
-        W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777
-    )),
+    RootDirName = ?GEN_SCENARIO_DIR_NAME,
+    {ok, RootDirGuid} = lfm_proxy:mkdir(W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777),
 
-    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(
-        W, UserSessId, RootDirGuid, <<"dir">>, 8#777
-    )),
+    {ok, DirGuid} = lfm_proxy:mkdir(W, UserSessId, RootDirGuid, <<"dir">>, 8#777),
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
-        W, UserSessId, DirGuid, <<"file">>, 8#777
-    )),
+    {ok, FileGuid} = lfm_proxy:create(W, UserSessId, DirGuid, <<"file">>, 8#777),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     Token = initializer:create_token(UserId, [
         #cv_data_objectid{whitelist = [DirObjectId]},
         #cv_data_objectid{whitelist = [FileObjectId]}
     ]),
-    SessId = lfm_permissions_test_utils:create_session(W, Identity, Token),
+    SessId = lfm_permissions_test_utils:create_session(W, UserId, Token),
 
 
     %% CHECK gui_constraint CACHE
@@ -677,7 +632,7 @@ mkdir_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_subcontainer]
@@ -695,7 +650,7 @@ ls_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?list_container]
@@ -715,7 +670,7 @@ readdir_plus_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?list_container]
@@ -735,7 +690,7 @@ get_child_attr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?traverse_container],
@@ -754,7 +709,7 @@ mv_dir_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [
             #dir{
                 name = <<"dir1">>,
@@ -788,7 +743,7 @@ rm_dir_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [
             #dir{
                 name = <<"dir1">>,
@@ -816,7 +771,7 @@ create_file_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_object]
@@ -836,7 +791,7 @@ open_for_read_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_object],
@@ -862,7 +817,7 @@ open_for_write_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_object],
@@ -888,7 +843,7 @@ open_for_rdwr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_object, ?write_object],
@@ -914,7 +869,7 @@ create_and_open_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_object]
@@ -934,7 +889,7 @@ truncate_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_object]
@@ -954,7 +909,7 @@ mv_file_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [
             #dir{
                 name = <<"dir1">>,
@@ -988,7 +943,7 @@ rm_file_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [
             #dir{
                 name = <<"dir1">>,
@@ -1016,7 +971,7 @@ get_parent_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -1031,7 +986,7 @@ get_file_path_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -1046,7 +1001,7 @@ get_file_guid_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -1060,7 +1015,7 @@ get_file_attr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -1075,7 +1030,7 @@ get_file_distribution_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata]
@@ -1179,7 +1134,7 @@ check_read_perms_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_object]
@@ -1199,7 +1154,7 @@ check_write_perms_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_object]
@@ -1219,7 +1174,7 @@ check_rdwr_perms_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_object, ?write_object]
@@ -1239,7 +1194,7 @@ create_share_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#dir{name = <<"dir1">>}],
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
@@ -1256,7 +1211,7 @@ remove_share_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#dir{
             name = <<"dir1">>,
             on_create = fun(OwnerSessId, Guid) ->
@@ -1281,7 +1236,7 @@ get_acl_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_acl]
@@ -1299,7 +1254,7 @@ set_acl_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_acl]
@@ -1325,7 +1280,7 @@ remove_acl_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_acl]
@@ -1345,7 +1300,7 @@ get_transfer_encoding_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_attributes],
@@ -1367,7 +1322,7 @@ set_transfer_encoding_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_attributes]
@@ -1387,7 +1342,7 @@ get_cdmi_completion_status_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_attributes],
@@ -1409,7 +1364,7 @@ set_cdmi_completion_status_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_attributes]
@@ -1429,7 +1384,7 @@ get_mimetype_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_attributes],
@@ -1451,7 +1406,7 @@ set_mimetype_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_attributes]
@@ -1471,7 +1426,7 @@ get_metadata_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata],
@@ -1495,7 +1450,7 @@ set_metadata_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata]
@@ -1515,7 +1470,7 @@ remove_metadata_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata],
@@ -1539,7 +1494,7 @@ get_xattr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata],
@@ -1564,7 +1519,7 @@ list_xattr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             on_create = fun(OwnerSessId, Guid) ->
@@ -1586,7 +1541,7 @@ set_xattr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata]
@@ -1609,7 +1564,7 @@ remove_xattr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata],
@@ -1634,7 +1589,7 @@ add_qos_entry_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata]
@@ -1654,7 +1609,7 @@ get_qos_entry_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata],
@@ -1680,7 +1635,7 @@ remove_qos_entry_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata],
@@ -1706,7 +1661,7 @@ get_effective_file_qos_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata],
@@ -1730,7 +1685,7 @@ check_qos_fulfillment_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = atom_to_binary(?FUNCTION_NAME, utf8),
+        root_dir = ?GEN_SCENARIO_DIR_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata],
