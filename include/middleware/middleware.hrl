@@ -23,9 +23,9 @@
 -record(op_req, {
     auth = ?NOBODY :: aai:auth(),
     gri :: gri:gri(),
-    operation = create :: op_logic:operation(),
-    data = #{} :: op_logic:data(),
-    auth_hint = undefined :: undefined | op_logic:auth_hint(),
+    operation = create :: middleware:operation(),
+    data = #{} :: middleware:data(),
+    auth_hint = undefined :: undefined | middleware:auth_hint(),
     % applicable for create/get requests - returns the revision of resource
     return_revision = false :: boolean()
 }).

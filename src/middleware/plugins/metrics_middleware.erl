@@ -10,12 +10,12 @@
 %%% corresponding to metrics/statistic gathering.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_metrics).
+-module(metrics_middleware).
 -author("Bartosz Walkowicz").
 
--behaviour(op_logic_behaviour).
+-behaviour(middleware_plugin).
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -45,11 +45,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback operation_supported/3.
+%% {@link middleware_plugin} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), gri:aspect(),
-    op_logic:scope()) -> boolean().
+-spec operation_supported(middleware:operation(), gri:aspect(),
+    middleware:scope()) -> boolean().
 operation_supported(get, space, private) -> true;
 operation_supported(get, {user, _}, private) -> true;
 
@@ -58,10 +58,10 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback data_spec/1.
+%% {@link middleware_plugin} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = get, gri = #gri{aspect = space}}) -> #{
     required => #{
         <<"metric">> => {binary, [
@@ -95,21 +95,21 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {user, _}}}) -> #{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback fetch_entity/1.
+%% {@link middleware_plugin} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | errors:error().
+-spec fetch_entity(middleware:req()) ->
+    {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback authorize/2.
+%% {@link middleware_plugin} callback authorize/2.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
@@ -128,33 +128,33 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback validate/2.
+%% {@link middleware_plugin} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
+-spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = space}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {user, _}}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId).
+    middleware_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback create/1.
+%% {@link middleware_plugin} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(op_logic:req()) -> op_logic:create_result().
+-spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
     ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback get/2.
+%% {@link middleware_plugin} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+-spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = SpaceId, aspect = space}}, _) ->
     Metric = binary_to_atom(maps:get(<<"metric">>, Data), utf8),
     Step = binary_to_atom(maps:get(<<"step">>, Data, ?DEFAULT_STEP), utf8),
@@ -168,20 +168,20 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = SpaceId, aspect = {user, U
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback update/1.
+%% {@link middleware_plugin} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
--spec update(op_logic:req()) -> op_logic:update_result().
+-spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
     ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback delete/1.
+%% {@link middleware_plugin} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(op_logic:req()) -> op_logic:delete_result().
+-spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.
 

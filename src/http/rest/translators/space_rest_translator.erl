@@ -12,7 +12,7 @@
 -module(space_rest_translator).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/rest.hrl").
 
 -export([get_response/2]).

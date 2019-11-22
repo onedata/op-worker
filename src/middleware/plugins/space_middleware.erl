@@ -13,12 +13,12 @@
 %%% - transfers.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_space).
+-module(space_middleware).
 -author("Bartosz Walkowicz").
 
--behaviour(op_logic_behaviour).
+-behaviour(middleware_plugin).
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -44,11 +44,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback operation_supported/3.
+%% {@link middleware_plugin} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), gri:aspect(),
-    op_logic:scope()) -> boolean().
+-spec operation_supported(middleware:operation(), gri:aspect(),
+    middleware:scope()) -> boolean().
 operation_supported(create, {view, _}, private) -> true;
 operation_supported(create, {view_reduce_function, _}, private) -> true;
 
@@ -74,10 +74,10 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback data_spec/1.
+%% {@link middleware_plugin} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = {view, _}}}) -> #{
     required => #{
         <<"application/javascript">> => {binary, non_empty}
@@ -206,21 +206,21 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = {view_reduce_function,
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback fetch_entity/1.
+%% {@link middleware_plugin} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | errors:error().
+-spec fetch_entity(middleware:req()) ->
+    {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback authorize/2.
+%% {@link middleware_plugin} callback authorize/2.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
@@ -244,7 +244,7 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     id = SpaceId,
     aspect = instance
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Auth, SpaceId);
+    middleware_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
@@ -310,15 +310,15 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback validate/2.
+%% {@link middleware_plugin} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
+-spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
 validate(#op_req{operation = create, data = Data, gri = #gri{
     id = SpaceId,
     aspect = {view, _}
 }}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId),
+    middleware_utils:assert_space_supported_locally(SpaceId),
 
     % In case of undefined `providers[]` local provider is chosen instead
     case maps:get(<<"providers[]">>, Data, undefined) of
@@ -326,7 +326,7 @@ validate(#op_req{operation = create, data = Data, gri = #gri{
             ok;
         Providers ->
             lists:foreach(fun(ProviderId) ->
-                op_logic_utils:assert_space_supported_by(SpaceId, ProviderId)
+                middleware_utils:assert_space_supported_by(SpaceId, ProviderId)
             end, Providers)
     end;
 
@@ -334,7 +334,7 @@ validate(#op_req{operation = create, gri = #gri{
     id = SpaceId,
     aspect = {view_reduce_function, _}
 }}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     % User spaces are listed by fetching information from zone,
@@ -342,41 +342,41 @@ validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     ok;
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = views}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {view, _}}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {query_view, _}}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
     As =:= eff_users;
     As =:= eff_groups;
     As =:= providers
 ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
     As =:= transfers;
     As =:= transfers_active_channels
 ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{
     id = SpaceId,
     aspect = {transfers_throughput_charts, _}
 }}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = update, gri = #gri{
     id = SpaceId,
     aspect = {view, _}
 }} = Req, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId),
+    middleware_utils:assert_space_supported_locally(SpaceId),
 
     % In case of undefined `providers[]` local provider is chosen instead
     case maps:get(<<"providers[]">>, Req#op_req.data, undefined) of
@@ -384,26 +384,26 @@ validate(#op_req{operation = update, gri = #gri{
             ok;
         Providers ->
             lists:foreach(fun(ProviderId) ->
-                op_logic_utils:assert_space_supported_by(SpaceId, ProviderId)
+                middleware_utils:assert_space_supported_by(SpaceId, ProviderId)
         end, Providers)
     end;
 
 validate(#op_req{operation = delete, gri = #gri{id = SpaceId, aspect = {view, _}}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{
     id = SpaceId,
     aspect = {view_reduce_function, _}
 }}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId).
+    middleware_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback create/1.
+%% {@link middleware_plugin} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(op_logic:req()) -> op_logic:create_result().
+-spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
     index:save(
         SpaceId, ViewName,
@@ -425,10 +425,10 @@ create(#op_req{gri = #gri{id = SpaceId, aspect = {view_reduce_function, ViewName
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback get/2.
+%% {@link middleware_plugin} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+-spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
     case user_logic:get_eff_spaces(SessionId, UserId) of
         {ok, EffSpaces} ->
@@ -584,10 +584,10 @@ get(#op_req{data = Data, gri = #gri{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback update/1.
+%% {@link middleware_plugin} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
--spec update(op_logic:req()) -> op_logic:update_result().
+-spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
     MapFunctionRaw = maps:get(<<"application/javascript">>, Data),
     MapFun = utils:ensure_defined(MapFunctionRaw, <<>>, undefined),
@@ -608,10 +608,10 @@ update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback delete/1.
+%% {@link middleware_plugin} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(op_logic:req()) -> op_logic:delete_result().
+-spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
     case index:delete(SpaceId, ViewName) of
         {error, ?EINVAL} ->

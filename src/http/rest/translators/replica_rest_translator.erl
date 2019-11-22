@@ -12,7 +12,7 @@
 -module(replica_rest_translator).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/rest.hrl").
 
 -export([create_response/4, get_response/2, delete_response/3]).
@@ -28,9 +28,9 @@
 %% {@link rest_translator_behaviour} callback create_response/4.
 %% @end
 %%--------------------------------------------------------------------
--spec create_response(gri:gri(), op_logic:auth_hint(),
-    op_logic:data_format(), Result :: term() | {gri:gri(), term()} |
-    {gri:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
+-spec create_response(gri:gri(), middleware:auth_hint(),
+    middleware:data_format(), Result :: term() | {gri:gri(), term()} |
+    {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = instance}, _, value, TransferId) ->
     PathTokens = [<<"transfers">>, TransferId],
     ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId});
@@ -54,9 +54,9 @@ get_response(_, ReplicaData) ->
 %% {@link rest_translator_behaviour} callback create_response/4.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_response(gri:gri(), op_logic:data_format(),
+-spec delete_response(gri:gri(), middleware:data_format(),
     Result :: term() | {gri:gri(), term()} |
-    {gri:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
+    {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
 delete_response(#gri{aspect = instance}, value, TransferId) ->
     PathTokens = [<<"transfers">>, TransferId],
     ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId});

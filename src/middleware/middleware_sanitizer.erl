@@ -8,14 +8,14 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module implements functions for parsing and sanitizing
-%%% parameters of op_logic request.
+%%% parameters of middleware request.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_sanitizer).
+-module(middleware_sanitizer).
 -author("Lukasz Opiola").
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 

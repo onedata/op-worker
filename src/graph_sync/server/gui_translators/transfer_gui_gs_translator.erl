@@ -13,7 +13,7 @@
 -module(transfer_gui_gs_translator).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API

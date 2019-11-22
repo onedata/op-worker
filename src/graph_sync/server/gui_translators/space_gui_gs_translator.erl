@@ -13,7 +13,7 @@
 -module(space_gui_gs_translator).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 
 %% API
 -export([

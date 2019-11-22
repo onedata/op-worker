@@ -10,12 +10,12 @@
 %%% corresponding to provider aspects such as e.g. instance or configuration.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_provider).
+-module(provider_middleware).
 -author("Bartosz Walkowicz").
 
--behaviour(op_logic_behaviour).
+-behaviour(middleware_plugin).
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -78,11 +78,11 @@ gather_configuration() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback operation_supported/3.
+%% {@link middleware_plugin} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), gri:aspect(),
-    op_logic:scope()) -> boolean().
+-spec operation_supported(middleware:operation(), gri:aspect(),
+    middleware:scope()) -> boolean().
 operation_supported(get, instance, protected) -> true;
 operation_supported(get, configuration, private) -> true;
 operation_supported(get, test_image, private) -> true;
@@ -92,10 +92,10 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback data_spec/1.
+%% {@link middleware_plugin} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = configuration}}) ->
@@ -106,11 +106,11 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = test_image}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback fetch_entity/1.
+%% {@link middleware_plugin} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | errors:error().
+-spec fetch_entity(middleware:req()) ->
+    {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri = #gri{
     id = ProviderId,
     aspect = instance,
@@ -129,10 +129,10 @@ fetch_entity(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback authorize/2.
+%% {@link middleware_plugin} callback authorize/2.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % authorization was checked by oz in `fetch_entity`
     true;
@@ -144,10 +144,10 @@ authorize(#op_req{operation = get, gri = #gri{aspect = test_image}}, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback validate/1.
+%% {@link middleware_plugin} callback validate/1.
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
+-spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
 validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % validation was checked by oz in `fetch_entity`
     ok;
@@ -159,20 +159,20 @@ validate(#op_req{operation = get, gri = #gri{aspect = test_image}}, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback create/2.
+%% {@link middleware_plugin} callback create/2.
 %% @end
 %%--------------------------------------------------------------------
--spec create(op_logic:req()) -> op_logic:create_result().
+-spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
     ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback get/2.
+%% {@link middleware_plugin} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+-spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{gri = #gri{aspect = instance, scope = protected}}, Provider) ->
     {ok, Provider};
 get(#op_req{gri = #gri{aspect = configuration}}, _) ->
@@ -191,19 +191,19 @@ get(#op_req{gri = #gri{aspect = test_image}}, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback update/1.
+%% {@link middleware_plugin} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
--spec update(op_logic:req()) -> op_logic:update_result().
+-spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
     ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback delete/1.
+%% {@link middleware_plugin} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(op_logic:req()) -> op_logic:delete_result().
+-spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.

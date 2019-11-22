@@ -12,7 +12,7 @@
 -module(transfer_rest_translator).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/rest.hrl").
 
 -export([create_response/4, get_response/2]).
@@ -26,9 +26,9 @@
 %% {@link rest_translator_behaviour} callback create_response/4.
 %% @end
 %%--------------------------------------------------------------------
--spec create_response(gri:gri(), op_logic:auth_hint(),
-    op_logic:data_format(), Result :: term() | {gri:gri(), term()} |
-    {gri:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
+-spec create_response(gri:gri(), middleware:auth_hint(),
+    middleware:data_format(), Result :: term() | {gri:gri(), term()} |
+    {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = rerun}, _, value, TransferId) ->
     PathTokens = [<<"transfers">>, TransferId],
     ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId}).

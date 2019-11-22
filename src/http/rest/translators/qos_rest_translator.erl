@@ -12,7 +12,7 @@
 -module(qos_rest_translator).
 -author("Michal Cwiertnia").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/rest.hrl").
 
 -export([create_response/4, get_response/2]).
@@ -28,9 +28,9 @@
 %% {@link rest_translator_behaviour} callback create_response/4.
 %% @end
 %%--------------------------------------------------------------------
--spec create_response(gri:gri(), op_logic:auth_hint(),
-    op_logic:data_format(), Result :: term() | {gri:gri(), term()} |
-    {gri:gri(), op_logic:auth_hint(), term()}) -> #rest_resp{}.
+-spec create_response(gri:gri(), middleware:auth_hint(),
+    middleware:data_format(), Result :: term() | {gri:gri(), term()} |
+    {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = instance}, _, value, QosEntryId) ->
     PathTokens = [<<"qos-id">>, QosEntryId],
     ?CREATED_REPLY(PathTokens, #{<<"qosEntryId">> => QosEntryId}).

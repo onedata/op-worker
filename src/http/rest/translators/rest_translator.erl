@@ -15,7 +15,7 @@
 -author("Lukasz Opiola").
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/rest.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -28,7 +28,7 @@
 %%% API
 %%%===================================================================
 
--spec response(_, op_logic:result()) -> #rest_resp{}.
+-spec response(_, middleware:result()) -> #rest_resp{}.
 response(_, {error, _} = Error) ->
     error_response(Error);
 response(#op_req{operation = create}, ok) ->

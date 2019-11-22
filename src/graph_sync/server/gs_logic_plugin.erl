@@ -15,7 +15,7 @@
 
 -behaviour(gs_logic_plugin_behaviour).
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -114,7 +114,7 @@ is_authorized(Auth, AuthHint, GRI, Operation, VersionedEntity) ->
         gri = GRI,
         auth_hint = AuthHint
     },
-    op_logic:is_authorized(OpReq, VersionedEntity).
+    middleware:is_authorized(OpReq, VersionedEntity).
 
 
 %%--------------------------------------------------------------------
@@ -146,7 +146,7 @@ handle_graph_request(Auth, AuthHint, GRI, Operation, Data, VersionedEntity) ->
         auth_hint = AuthHint,
         return_revision = true
     },
-    op_logic:handle(OpReq, VersionedEntity).
+    middleware:handle(OpReq, VersionedEntity).
 
 
 %%--------------------------------------------------------------------

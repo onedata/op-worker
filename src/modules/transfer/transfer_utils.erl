@@ -74,13 +74,13 @@ authorize_creation(SpaceId, UserId, migration, true) ->
 ) ->
     ok | no_return().
 validate_creation(Auth, SpaceId, ReplicatingProvider, EvictingProvider, {guid, Guid}) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId),
-    op_logic_utils:assert_file_exists(Auth, Guid),
+    middleware_utils:assert_space_supported_locally(SpaceId),
+    middleware_utils:assert_file_exists(Auth, Guid),
 
     assert_space_supported_by(SpaceId, ReplicatingProvider),
     assert_space_supported_by(SpaceId, EvictingProvider);
 validate_creation(_Auth, SpaceId, ReplicatingProvider, EvictingProvider, {view, Name}) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId),
+    middleware_utils:assert_space_supported_locally(SpaceId),
 
     assert_space_supported_by(SpaceId, ReplicatingProvider),
     assert_view_exists_on_provider(SpaceId, Name, ReplicatingProvider),
@@ -112,7 +112,7 @@ decode_pid(Pid) ->
 assert_space_supported_by(_SpaceId, undefined) ->
     ok;
 assert_space_supported_by(SpaceId, ProviderId) ->
-    op_logic_utils:assert_space_supported_by(SpaceId, ProviderId).
+    middleware_utils:assert_space_supported_by(SpaceId, ProviderId).
 
 
 %% @private

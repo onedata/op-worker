@@ -7,15 +7,15 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles op logic operations (create, get, update, delete)
-%%% corresponding to group.
+%%% corresponding to user.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_group).
+-module(user_middleware).
 -author("Bartosz Walkowicz").
 
--behaviour(op_logic_behaviour).
+-behaviour(middleware_plugin).
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -37,40 +37,57 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback operation_supported/3.
+%% {@link middleware_plugin} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), gri:aspect(),
-    op_logic:scope()) -> boolean().
+-spec operation_supported(middleware:operation(), gri:aspect(),
+    middleware:scope()) -> boolean().
+operation_supported(get, instance, private) -> true;
 operation_supported(get, instance, shared) -> true;
+operation_supported(get, eff_spaces, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback data_spec/1.
+%% {@link middleware_plugin} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+    undefined;
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = eff_spaces}}) ->
     undefined.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback fetch_entity/1.
+%% {@link middleware_plugin} callback fetch_entity/1.
 %%
 %% For now fetches only records for authorized users.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | errors:error().
-fetch_entity(#op_req{auth = Auth, auth_hint = AuthHint, gri = #gri{id = GroupId}}) ->
-    case group_logic:get_shared_data(Auth#auth.session_id, GroupId, AuthHint) of
-        {ok, #document{value = Group, revs = [DbRev | _]}} ->
+-spec fetch_entity(middleware:req()) ->
+    {ok, middleware:versioned_entity()} | errors:error().
+fetch_entity(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{id = UserId}}) ->
+    case user_logic:get(SessionId, UserId) of
+        {ok, #document{value = User, revs = [DbRev | _]}} ->
             {Revision, _Hash} = datastore_utils:parse_rev(DbRev),
-            {ok, {Group, Revision}};
+            {ok, {User, Revision}};
+        {error, _} = Error ->
+            Error
+    end;
+fetch_entity(#op_req{auth = ?USER(_ClientId, SessionId), auth_hint = AuthHint, gri = #gri{
+    id = UserId,
+    aspect = instance,
+    scope = shared
+}}) ->
+    case user_logic:get_shared_data(SessionId, UserId, AuthHint) of
+        {ok, #document{value = User, revs = [DbRev | _]}} ->
+            {Revision, _Hash} = datastore_utils:parse_rev(DbRev),
+            {ok, {User, Revision}};
         {error, _} = Error ->
             Error
     end;
@@ -80,12 +97,16 @@ fetch_entity(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback authorize/2.
+%% {@link middleware_plugin} callback authorize/2.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
+
+%% User can perform all operations on his record
+authorize(#op_req{auth = ?USER(UserId), gri = #gri{id = UserId}}, _) ->
+    true;
 
 authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = shared}}, _) ->
     % authorization was checked by oz in `fetch_entity`
@@ -94,56 +115,62 @@ authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = shared}
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback validate/2.
+%% {@link middleware_plugin} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
-validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
-    % validation was checked by oz in `fetch_entity`
+-spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
+validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
+    As =:= instance;
+    As =:= eff_spaces
+->
     ok.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback create/1.
+%% {@link middleware_plugin} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(op_logic:req()) -> op_logic:create_result().
+-spec create(middleware:req()) -> middleware:create_result().
 create(_) ->
     ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback get/2.
+%% {@link middleware_plugin} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
-get(#op_req{gri = #gri{aspect = instance, scope = shared}}, #od_group{
-    name = Name,
-    type = Type
+-spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
+get(#op_req{gri = #gri{aspect = instance, scope = private}}, User) ->
+    {ok, User};
+get(#op_req{gri = #gri{aspect = instance, scope = shared}}, #od_user{
+    full_name = FullName,
+    username = Username
 }) ->
     {ok, #{
-        <<"name">> => Name,
-        <<"type">> => Type
-    }}.
+        <<"fullName">> => FullName,
+        <<"username">> => Username
+    }};
+get(#op_req{gri = #gri{aspect = eff_spaces}}, User) ->
+    user_logic:get_eff_spaces(User).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback update/1.
+%% {@link middleware_plugin} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
--spec update(op_logic:req()) -> op_logic:update_result().
+-spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
     ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback delete/1.
+%% {@link middleware_plugin} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(op_logic:req()) -> op_logic:delete_result().
+-spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.

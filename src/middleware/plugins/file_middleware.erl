@@ -14,12 +14,12 @@
 %%% - rdf metadata.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_file).
+-module(file_middleware).
 -author("Bartosz Walkowicz").
 
--behaviour(op_logic_behaviour).
+-behaviour(middleware_plugin).
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -58,11 +58,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback operation_supported/3.
+%% {@link middleware_plugin} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), gri:aspect(),
-    op_logic:scope()) -> boolean().
+-spec operation_supported(middleware:operation(), gri:aspect(),
+    middleware:scope()) -> boolean().
 operation_supported(create, Aspect, Scope) ->
     create_operation_supported(Aspect, Scope);
 operation_supported(get, Aspect, Scope) ->
@@ -75,10 +75,10 @@ operation_supported(delete, Aspect, Scope) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback data_spec/1.
+%% {@link middleware_plugin} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = GRI}) ->
     data_spec_create(GRI);
 data_spec(#op_req{operation = get, gri = GRI}) ->
@@ -91,24 +91,24 @@ data_spec(#op_req{operation = delete, gri = GRI}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback fetch_entity/1.
+%% {@link middleware_plugin} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | errors:error().
+-spec fetch_entity(middleware:req()) ->
+    {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback authorize/2.
+%% {@link middleware_plugin} callback authorize/2.
 %%
 %% Checks only if user is in space in which file exists. File permissions
 %% are checked later by logical_file_manager (lfm).
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 authorize(#op_req{operation = create} = Req, Entity) ->
@@ -123,10 +123,10 @@ authorize(#op_req{operation = delete} = Req, Entity) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback validate/2.
+%% {@link middleware_plugin} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
+-spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
 validate(#op_req{operation = create} = Req, Entity) ->
     validate_create(Req, Entity);
 validate(#op_req{operation = get} = Req, Entity) ->
@@ -143,7 +143,7 @@ validate(#op_req{operation = delete} = Req, Entity) ->
 
 
 %% @private
--spec create_operation_supported(gri:aspect(), op_logic:scope()) ->
+-spec create_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
 create_operation_supported(instance, private) -> true;
 create_operation_supported(attrs, private) -> true;
@@ -154,7 +154,7 @@ create_operation_supported(_, _) -> false.
 
 
 %% @private
--spec data_spec_create(gri:gri()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec_create(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
 data_spec_create(#gri{aspect = instance}) -> #{
     required => #{
         <<"name">> => {binary, non_empty},
@@ -216,10 +216,10 @@ data_spec_create(#gri{aspect = rdf_metadata}) -> #{
 
 
 %% @private
--spec authorize_create(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize_create(middleware:req(), middleware:entity()) -> boolean().
 authorize_create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance}}, _) ->
     SpaceId = file_id:guid_to_space_id(maps:get(<<"parent">>, Data)),
-    op_logic_utils:is_eff_space_member(Auth, SpaceId);
+    middleware_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= attrs;
@@ -231,10 +231,10 @@ authorize_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
 
 
 %% @private
--spec validate_create(op_logic:req(), op_logic:entity()) -> ok | no_return().
+-spec validate_create(middleware:req(), middleware:entity()) -> ok | no_return().
 validate_create(#op_req{data = Data, gri = #gri{aspect = instance}}, _) ->
     SpaceId = file_id:guid_to_space_id(maps:get(<<"parent">>, Data)),
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= attrs;
@@ -247,10 +247,10 @@ validate_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) whe
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback create/1.
+%% {@link middleware_plugin} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(op_logic:req()) -> op_logic:create_result().
+-spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) ->
     SessionId = Auth#auth.session_id,
 
@@ -308,7 +308,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_meta
 %%%===================================================================
 
 
--spec get_operation_supported(gri:gri(), op_logic:scope()) ->
+-spec get_operation_supported(gri:gri(), middleware:scope()) ->
     boolean().
 get_operation_supported(instance, private) -> true;
 get_operation_supported(list, private) -> true;
@@ -322,7 +322,7 @@ get_operation_supported(_, _) -> false.
 
 
 %% @private
--spec data_spec_get(gri:gri()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec_get(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
 data_spec_get(#gri{aspect = instance}) ->
     undefined;
 
@@ -364,7 +364,7 @@ data_spec_get(#gri{aspect = transfers}) -> #{
 
 
 %% @private
--spec authorize_get(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize_get(middleware:req(), middleware:entity()) -> boolean().
 authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= list;
@@ -382,7 +382,7 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = trans
 
 
 %% @private
--spec validate_get(op_logic:req(), op_logic:entity()) -> ok | no_return().
+-spec validate_get(middleware:req(), middleware:entity()) -> ok | no_return().
 validate_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= list;
@@ -398,10 +398,10 @@ validate_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback get/2.
+%% {@link middleware_plugin} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+-spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
     ?check(lfm:stat(Auth#auth.session_id, {guid, FileGuid}));
 
@@ -517,7 +517,7 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
 
 
 %% @private
--spec update_operation_supported(gri:aspect(), op_logic:scope()) ->
+-spec update_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
 update_operation_supported(instance, private) -> true;
 update_operation_supported(acl, private) -> true;
@@ -525,7 +525,7 @@ update_operation_supported(_, _) -> false.
 
 
 %% @private
--spec data_spec_update(gri:gri()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec_update(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
 data_spec_update(#gri{aspect = instance}) -> #{
     optional => #{
         <<"posixPermissions">> => {binary,
@@ -556,31 +556,31 @@ data_spec_update(#gri{aspect = acl}) -> #{
 
 
 %% @private
--spec authorize_update(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize_update(middleware:req(), middleware:entity()) -> boolean().
 authorize_update(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= acl
     ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Auth, SpaceId).
+    middleware_utils:is_eff_space_member(Auth, SpaceId).
 
 
 %% @private
--spec validate_update(op_logic:req(), op_logic:entity()) -> ok | no_return().
+-spec validate_update(middleware:req(), middleware:entity()) -> ok | no_return().
 validate_update(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= acl
     ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:assert_space_supported_locally(SpaceId).
+    middleware_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback update/1.
+%% {@link middleware_plugin} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
--spec update(op_logic:req()) -> op_logic:update_result().
+-spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = instance}}) ->
     case maps:get(<<"posixPermissions">>, Data, undefined) of
         undefined ->
@@ -602,38 +602,38 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) -
 
 
 %% @private
--spec delete_operation_supported(gri:aspect(), op_logic:scope()) ->
+-spec delete_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
 delete_operation_supported(instance, private) -> true;
 delete_operation_supported(_, _) -> false.
 
 
 %% @private
--spec data_spec_delete(gri:gri()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec_delete(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
 data_spec_delete(#gri{aspect = instance}) ->
     undefined.
 
 
 %% @private
--spec authorize_delete(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize_delete(middleware:req(), middleware:entity()) -> boolean().
 authorize_delete(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = instance}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Auth, SpaceId).
+    middleware_utils:is_eff_space_member(Auth, SpaceId).
 
 
 %% @private
--spec validate_delete(op_logic:req(), op_logic:entity()) -> ok | no_return().
+-spec validate_delete(middleware:req(), middleware:entity()) -> ok | no_return().
 validate_delete(#op_req{gri = #gri{id = Guid, aspect = instance}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:assert_space_supported_locally(SpaceId).
+    middleware_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback delete/1.
+%% {@link middleware_plugin} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(op_logic:req()) -> op_logic:delete_result().
+-spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
     ?check(lfm:rm_recursive(Auth#auth.session_id, {guid, FileGuid})).
 
@@ -657,7 +657,7 @@ has_access_to_file(?USER(UserId) = Auth, Guid) ->
             true;
         _ ->
             SpaceId = file_id:guid_to_space_id(Guid),
-            op_logic_utils:is_eff_space_member(Auth, SpaceId)
+            middleware_utils:is_eff_space_member(Auth, SpaceId)
     end.
 
 
@@ -677,7 +677,7 @@ assert_file_managed_locally(?USER(UserId), Guid) ->
             ok;
         _ ->
             SpaceId = file_id:guid_to_space_id(Guid),
-            op_logic_utils:assert_space_supported_locally(SpaceId)
+            middleware_utils:assert_space_supported_locally(SpaceId)
     end.
 
 

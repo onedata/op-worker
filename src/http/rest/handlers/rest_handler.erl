@@ -17,7 +17,7 @@
 
 -behaviour(cowboy_rest).
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -140,7 +140,7 @@ content_types_provided(Req, #state{rest_req = #rest_req{produces = Produces}} = 
     {true | {false, binary()}, cowboy_req:req(), state()}.
 is_authorized(Req, State) ->
     % The data access caveats policy depends on requested resource,
-    % which is not known yet - it is checked later in op_logic.
+    % which is not known yet - it is checked later in middleware.
     case http_auth:authenticate(Req, rest, allow_data_caveats) of
         {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
@@ -268,13 +268,13 @@ process_request(Req, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Calls op_logic and translates obtained response into REST response
+%% Calls middleware and translates obtained response into REST response
 %% using TranslatorModule.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request(#op_req{}) -> #rest_resp{}.
 handle_request(#op_req{operation = Operation, gri = GRI} = ElReq) ->
-    Result = op_logic:handle(ElReq),
+    Result = middleware:handle(ElReq),
     try
         rest_translator:response(ElReq, Result)
     catch
@@ -370,7 +370,7 @@ resolve_bindings(_SessionId, Other, _Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_data(cowboy_req:req(), parse_body(), Consumes :: [term()]) ->
-    {Data :: op_logic:data(), cowboy_req:req()}.
+    {Data :: middleware:data(), cowboy_req:req()}.
 get_data(Req, ignore, _Consumes) ->
     {parse_query_string(Req), Req};
 get_data(Req, as_json_params, _Consumes) ->
@@ -475,7 +475,7 @@ method_to_binary('DELETE') -> <<"DELETE">>.
 %% that should be called to handle it.
 %% @end
 %%--------------------------------------------------------------------
--spec method_to_operation(method()) -> op_logic:operation().
+-spec method_to_operation(method()) -> middleware:operation().
 method_to_operation('POST') -> create;
 method_to_operation('PUT') -> create;
 method_to_operation('GET') -> get;

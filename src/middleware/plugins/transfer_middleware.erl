@@ -13,12 +13,12 @@
 %%% - rerunning.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_transfer).
+-module(transfer_middleware).
 -author("Bartosz Walkowicz").
 
--behaviour(op_logic_behaviour).
+-behaviour(middleware_plugin).
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -41,11 +41,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback operation_supported/3.
+%% {@link middleware_plugin} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), gri:aspect(),
-    op_logic:scope()) -> boolean().
+-spec operation_supported(middleware:operation(), gri:aspect(),
+    middleware:scope()) -> boolean().
 operation_supported(create, rerun, private) -> true;
 
 operation_supported(get, instance, private) -> true;
@@ -59,10 +59,10 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback data_spec/1.
+%% {@link middleware_plugin} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = rerun}}) ->
     undefined;
 
@@ -87,11 +87,11 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback fetch_entity/1.
+%% {@link middleware_plugin} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | errors:error().
+-spec fetch_entity(middleware:req()) ->
+    {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{gri = #gri{id = TransferId}}) ->
     case transfer:get(TransferId) of
         {ok, #document{value = Transfer}} ->
@@ -105,10 +105,10 @@ fetch_entity(#op_req{gri = #gri{id = TransferId}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback authorize/2.
+%% {@link middleware_plugin} callback authorize/2.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
@@ -143,7 +143,7 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
         UserId ->
             % User doesn't need cancel privileges to cancel his transfer but
             % must still be member of space.
-            op_logic_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
+            middleware_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
         _ ->
             case transfer:type(Transfer) of
                 replication ->
@@ -160,14 +160,14 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback validate/2.
+%% {@link middleware_plugin} callback validate/2.
 %%
 %% Does not check if space is locally supported because if it wasn't
 %% it would not be possible to fetch transfer doc (it is synchronized
 %% only between providers supporting given space).
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
+-spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
 validate(#op_req{operation = create, gri = #gri{aspect = rerun}}, _) ->
     ok;
 
@@ -184,10 +184,10 @@ validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback create/1.
+%% {@link middleware_plugin} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(op_logic:req()) -> op_logic:create_result().
+-spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}}) ->
     case transfer:rerun_ended(UserId, TransferId) of
         {ok, NewTransferId} ->
@@ -201,10 +201,10 @@ create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback get/2.
+%% {@link middleware_plugin} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+-spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{gri = #gri{aspect = instance}}, Transfer) ->
     {ok, Transfer};
 get(#op_req{gri = #gri{aspect = progress}}, #transfer{
@@ -251,20 +251,20 @@ get(#op_req{data = Data, gri = #gri{aspect = throughput_charts}}, Transfer) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback update/1.
+%% {@link middleware_plugin} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
--spec update(op_logic:req()) -> op_logic:update_result().
+-spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
     ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback delete/1.
+%% {@link middleware_plugin} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(op_logic:req()) -> op_logic:delete_result().
+-spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
     case transfer:cancel(TransferId) of
         ok ->

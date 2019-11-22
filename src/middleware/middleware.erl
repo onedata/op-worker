@@ -17,16 +17,16 @@
 %%%     5) check authorization.
 %%%     6) check validity of request (e.g. whether space is locally supported).
 %%%     7) process request.
-%%% All this operations are carried out by op_logic plugins (modules
-%%% implementing `op_logic_behaviour`). Each such module is responsible
+%%% All this operations are carried out by middleware plugins (modules
+%%% implementing `middleware_plugin` behaviour). Each such module is responsible
 %%% for handling all request pointing to the same entity type (#gri.type field).
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_logic).
+-module(middleware).
 -author("Lukasz Opiola").
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -125,8 +125,8 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
         % Unexpected errors are logged and internal server error is returned
         % to client instead
         Type:Reason ->
-            ?error_stacktrace("Unexpected error in op_logic - ~p:~p", [
-                Type, Reason
+            ?error_stacktrace("Unexpected error in ~p - ~p:~p", [
+                ?MODULE, Type, Reason
             ]),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
@@ -144,7 +144,7 @@ is_authorized(#op_req{gri = #gri{type = EntityType} = GRI} = OpReq, VersionedEnt
     try
         ensure_authorized(#req_ctx{
             req = OpReq,
-            plugin = EntityType:op_logic_plugin(),
+            plugin = get_plugin(EntityType),
             versioned_entity = VersionedEntity
         }),
         {true, GRI}
@@ -208,7 +208,7 @@ sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
             ReqCtx;
         DataSpec ->
             DataWithAspect = RawData#{aspect => Aspect},
-            SanitizedData = op_sanitizer:sanitize_data(DataWithAspect, DataSpec),
+            SanitizedData = middleware_sanitizer:sanitize_data(DataWithAspect, DataSpec),
             ReqCtx#req_ctx{req = Req#op_req{
                 data = maps:remove(aspect, SanitizedData)
             }}
@@ -259,8 +259,8 @@ ensure_authorized(#req_ctx{
     Caveats = Auth#auth.caveats,
 
     case Plugin of
-        op_file ->
-            % Only op_file endpoints allow data caveats
+        file_middleware ->
+            % Only file_middleware endpoints allow data caveats
             ok;
         _ ->
             token_utils:assert_no_data_caveats(Caveats)
@@ -382,14 +382,14 @@ process_request(#req_ctx{
 
 %% @private
 -spec get_plugin(gri:entity_type()) -> module() | no_return().
-get_plugin(op_file) -> op_file;
-get_plugin(op_group) -> op_group;
-get_plugin(op_metrics) -> op_metrics;
-get_plugin(op_provider) -> op_provider;
-get_plugin(op_qos) -> op_qos;
-get_plugin(op_replica) -> op_replica;
-get_plugin(op_share) -> op_share;
-get_plugin(op_space) -> op_space;
-get_plugin(op_transfer) -> op_transfer;
-get_plugin(op_user) -> op_user;
+get_plugin(op_file) -> file_middleware;
+get_plugin(op_group) -> group_middleware;
+get_plugin(op_metrics) -> metrics_middleware;
+get_plugin(op_provider) -> provider_middleware;
+get_plugin(op_qos) -> qos_middleware;
+get_plugin(op_replica) -> replica_middleware;
+get_plugin(op_share) -> share_middleware;
+get_plugin(op_space) -> space_middleware;
+get_plugin(op_transfer) -> transfer_middleware;
+get_plugin(op_user) -> user_middleware;
 get_plugin(_) -> throw(?ERROR_NOT_SUPPORTED).
