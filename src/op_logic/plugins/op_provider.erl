@@ -7,8 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles op logic operations (create, get, update, delete)
-%%% corresponding to provider aspects such as:
-%%% - configuration.
+%%% corresponding to provider aspects such as e.g. instance or configuration.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_provider).
@@ -17,10 +16,8 @@
 -behaviour(op_logic_behaviour).
 
 -include("op_logic.hrl").
--include("global_definitions.hrl").
 -include("modules/rtransfer/rtransfer.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/onedata.hrl").
 
 -export([gather_configuration/0]).
 
@@ -121,8 +118,9 @@ fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri
     scope = protected
 }}) ->
     case provider_logic:get_protected_data(SessionId, ProviderId, AuthHint) of
-        {ok, #document{value = Provider}} ->
-            {ok, {Provider, 1}};
+        {ok, #document{value = Provider, revs = [DbRev | _]}} ->
+            {Revision, _Hash} = datastore_utils:parse_rev(DbRev),
+            {ok, {Provider, Revision}};
         {error, _} = Error ->
             Error
     end;

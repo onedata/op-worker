@@ -69,8 +69,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     {ok, op_logic:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = Auth, auth_hint = AuthHint, gri = #gri{id = GroupId}}) ->
     case group_logic:get_shared_data(Auth#auth.session_id, GroupId, AuthHint) of
-        {ok, #document{value = Group}} ->
-            {ok, {Group, 1}};
+        {ok, #document{value = Group, revs = [DbRev | _]}} ->
+            {Revision, _Hash} = datastore_utils:parse_rev(DbRev),
+            {ok, {Group, Revision}};
         {error, _} = Error ->
             Error
     end;
@@ -109,6 +110,7 @@ authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = shared}
 %%--------------------------------------------------------------------
 -spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
 validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
+    % validation was checked by oz in `fetch_entity`
     ok.
 
 
