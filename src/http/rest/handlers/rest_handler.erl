@@ -192,14 +192,14 @@ delete_resource(Req, State) ->
 -spec rest_routes() -> [{binary(), module(), map()}].
 rest_routes() ->
     AllRoutes = lists:flatten([
-        file_routes:routes(),
-        monitoring_routes:routes(),
-        oneprovider_routes:routes(),
-        qos_routes:routes(),
-        replica_routes:routes(),
-        share_routes:routes(),
-        space_routes:routes(),
-        transfer_routes:routes()
+        file_rest_routes:routes(),
+        monitoring_rest_routes:routes(),
+        oneprovider_rest_routes:routes(),
+        qos_rest_routes:routes(),
+        replica_rest_routes:routes(),
+        share_rest_routes:routes(),
+        space_rest_routes:routes(),
+        transfer_rest_routes:routes()
     ]),
     % Aggregate routes that share the same path
     AggregatedRoutes = lists:foldr(fun

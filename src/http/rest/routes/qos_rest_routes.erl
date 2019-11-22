@@ -10,7 +10,7 @@
 %%% @doc This module contains definitions of qos REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(qos_routes).
+-module(qos_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -32,37 +32,67 @@ routes() -> [
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
-        b_gri = #b_gri{type = op_qos, id = ?PATH_BINDING, aspect = instance}
+        b_gri = #b_gri{
+            type = op_qos, 
+            id = ?PATH_BINDING, 
+            aspect = instance, 
+            scope = private
+        }
     }},
     %% Get QoS summary (by path)
     {<<"/qos/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_qos, id = ?PATH_BINDING, aspect = effective_qos}
+        b_gri = #b_gri{
+            type = op_qos, 
+            id = ?PATH_BINDING, 
+            aspect = effective_qos, 
+            scope = private
+        }
     }},
     %% Add QoS entry (by id)
     {<<"/qos-id/:id">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
-        b_gri = #b_gri{type = op_qos, id = ?OBJECTID_BINDING(id), aspect = instance}
+        b_gri = #b_gri{
+            type = op_qos, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = instance, 
+            scope = private
+        }
     }},
     %% Get QoS summary (by id)
     {<<"/qos-id/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_qos, id = ?OBJECTID_BINDING(id), aspect = effective_qos}
+        b_gri = #b_gri{
+            type = op_qos, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = effective_qos, 
+            scope = private
+        }
     }},
     %% Get QoS entry
     {<<"/qos-entry/:qid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_qos, id = ?BINDING(qid), aspect = instance}
+        b_gri = #b_gri{
+            type = op_qos, 
+            id = ?BINDING(qid), 
+            aspect = instance, 
+            scope = private
+        }
     }},
     %% Remove QoS entry
     {<<"/qos-entry/:qid">>, rest_handler, #rest_req{
         method = 'DELETE',
         consumes = [<<"application/json">>],
-        b_gri = #b_gri{type = op_qos, id = ?BINDING(qid), aspect = instance}
+        b_gri = #b_gri{
+            type = op_qos, 
+            id = ?BINDING(qid), 
+            aspect = instance, 
+            scope = private
+        }
     }}
 ].

@@ -10,7 +10,7 @@
 %%% @doc This module contains definitions of replica REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(replica_routes).
+-module(replica_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -31,13 +31,23 @@ routes() -> [
     {<<"/replicas/[...]">>, rest_handler, #rest_req{
         method = 'DELETE',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replica, id = ?PATH_BINDING, aspect = instance}
+        b_gri = #b_gri{
+            type = op_replica, 
+            id = ?PATH_BINDING, 
+            aspect = instance, 
+            scope = private
+        }
     }},
     %% Get replicas by path
     {<<"/replicas/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replica, id = ?PATH_BINDING, aspect = distribution}
+        b_gri = #b_gri{
+            type = op_replica, 
+            id = ?PATH_BINDING, 
+            aspect = distribution, 
+            scope = private
+        }
     }},
     %% Replicate file or folder by path
     {<<"/replicas/[...]">>, rest_handler, #rest_req{
@@ -45,19 +55,34 @@ routes() -> [
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replica, id = ?PATH_BINDING, aspect = instance}
+        b_gri = #b_gri{
+            type = op_replica, 
+            id = ?PATH_BINDING, 
+            aspect = instance, 
+            scope = private
+        }
     }},
     %% Evict existing replica by file Id
     {<<"/replicas-id/:fid">>, rest_handler, #rest_req{
         method = 'DELETE',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replica, id = ?OBJECTID_BINDING(fid), aspect = instance}
+        b_gri = #b_gri{
+            type = op_replica, 
+            id = ?OBJECTID_BINDING(fid), 
+            aspect = instance, 
+            scope = private
+        }
     }},
     %% Get replicas by Id
     {<<"/replicas-id/:fid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replica, id = ?OBJECTID_BINDING(fid), aspect = distribution}
+        b_gri = #b_gri{
+            type = op_replica, 
+            id = ?OBJECTID_BINDING(fid), 
+            aspect = distribution, 
+            scope = private
+        }
     }},
     %% Replicate file or folder by Id
     {<<"/replicas-id/:fid">>, rest_handler, #rest_req{
@@ -65,13 +90,23 @@ routes() -> [
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replica, id = ?OBJECTID_BINDING(fid), aspect = instance}
+        b_gri = #b_gri{
+            type = op_replica, 
+            id = ?OBJECTID_BINDING(fid), 
+            aspect = instance, 
+            scope = private
+        }
     }},
     %% Evict existing replicas by index
     {<<"/replicas-index/:index_name">>, rest_handler, #rest_req{
         method = 'DELETE',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replica, id = ?BINDING(index_name), aspect = evict_by_view}
+        b_gri = #b_gri{
+            type = op_replica, 
+            id = ?BINDING(index_name), 
+            aspect = evict_by_view, 
+            scope = private
+        }
     }},
     %% Replicate files by index
     {<<"/replicas-index/:index_name">>, rest_handler, #rest_req{
@@ -79,13 +114,23 @@ routes() -> [
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replica, id = ?BINDING(index_name), aspect = replicate_by_view}
+        b_gri = #b_gri{
+            type = op_replica, 
+            id = ?BINDING(index_name), 
+            aspect = replicate_by_view, 
+            scope = private
+        }
     }},
     %% Evict existing replicas by view
     {<<"/replicas-view/:view_name">>, rest_handler, #rest_req{
         method = 'DELETE',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replica, id = ?BINDING(view_name), aspect = evict_by_view}
+        b_gri = #b_gri{
+            type = op_replica, 
+            id = ?BINDING(view_name), 
+            aspect = evict_by_view, 
+            scope = private
+        }
     }},
     %% Replicate files by view
     {<<"/replicas-view/:view_name">>, rest_handler, #rest_req{
@@ -93,6 +138,11 @@ routes() -> [
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_replica, id = ?BINDING(view_name), aspect = replicate_by_view}
+        b_gri = #b_gri{
+            type = op_replica, 
+            id = ?BINDING(view_name), 
+            aspect = replicate_by_view, 
+            scope = private
+        }
     }}
 ].

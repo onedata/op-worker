@@ -84,8 +84,8 @@ gather_configuration() ->
 -spec operation_supported(middleware:operation(), gri:aspect(),
     middleware:scope()) -> boolean().
 operation_supported(get, instance, protected) -> true;
-operation_supported(get, configuration, private) -> true;
-operation_supported(get, test_image, private) -> true;
+operation_supported(get, configuration, public) -> true;
+operation_supported(get, test_image, public) -> true;
 
 operation_supported(_, _, _) -> false.
 

@@ -10,7 +10,7 @@
 %%% @doc This module contains definitions of share REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(share_routes).
+-module(share_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -32,67 +32,122 @@ routes() -> [
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
-        b_gri = #b_gri{type = op_share, id = ?PATH_BINDING, aspect = shared_dir}
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?PATH_BINDING, 
+            aspect = shared_dir, 
+            scope = private
+        }
     }},
     %% Get share info by folder path
     {<<"/shares/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_share, id = ?PATH_BINDING, aspect = shared_dir}
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?PATH_BINDING, 
+            aspect = shared_dir, 
+            scope = private
+        }
     }},
     %% Unshare a folder by path
     {<<"/shares/[...]">>, rest_handler, #rest_req{
         method = 'DELETE',
-        b_gri = #b_gri{type = op_share, id = ?PATH_BINDING, aspect = shared_dir}
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?PATH_BINDING, 
+            aspect = shared_dir, 
+            scope = private
+        }
     }},
     %% Rename share by folder path
     {<<"/shares/[...]">>, rest_handler, #rest_req{
         method = 'PATCH',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
-        b_gri = #b_gri{type = op_share, id = ?PATH_BINDING, aspect = shared_dir}
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?PATH_BINDING, 
+            aspect = shared_dir, 
+            scope = private
+        }
     }},
     %% Share a folder by ID
     {<<"/shares-id/:id">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
-        b_gri = #b_gri{type = op_share, id = ?OBJECTID_BINDING(id), aspect = shared_dir}
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = shared_dir, 
+            scope = private
+        }
     }},
     %% Get share info by folder id
     {<<"/shares-id/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_share, id = ?OBJECTID_BINDING(id), aspect = shared_dir}
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = shared_dir, 
+            scope = private
+        }
     }},
     %% Unshare a folder by ID
     {<<"/shares-id/:id">>, rest_handler, #rest_req{
         method = 'DELETE',
-        b_gri = #b_gri{type = op_share, id = ?OBJECTID_BINDING(id), aspect = shared_dir}
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = shared_dir, 
+            scope = private
+        }
     }},
     %% Rename share by folder id
     {<<"/shares-id/:id">>, rest_handler, #rest_req{
         method = 'PATCH',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
-        b_gri = #b_gri{type = op_share, id = ?OBJECTID_BINDING(id), aspect = shared_dir}
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = shared_dir, 
+            scope = private
+        }
     }},
     %% Get share info by public share ID
     {<<"/shares-public-id/:shid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_share, id = ?BINDING(shid), aspect = instance}
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?BINDING(shid), 
+            aspect = instance, 
+            scope = private
+        }
     }},
     %% Unshare a folder by public share ID
     {<<"/shares-public-id/:shid">>, rest_handler, #rest_req{
         method = 'DELETE',
-        b_gri = #b_gri{type = op_share, id = ?BINDING(shid), aspect = instance}
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?BINDING(shid), 
+            aspect = instance, 
+            scope = private
+        }
     }},
     %% Rename share by public share ID
     {<<"/shares-public-id/:shid">>, rest_handler, #rest_req{
         method = 'PATCH',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
-        b_gri = #b_gri{type = op_share, id = ?BINDING(shid), aspect = instance}
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?BINDING(shid), 
+            aspect = instance, 
+            scope = private
+        }
     }}
 ].
