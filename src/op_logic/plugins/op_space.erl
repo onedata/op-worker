@@ -27,7 +27,6 @@
     operation_supported/3,
     data_spec/1,
     fetch_entity/1,
-    exists/2,
     authorize/2,
     validate/2
 ]).
@@ -214,16 +213,6 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = {view_reduce_function,
     {ok, op_logic:versioned_entity()} | errors:error().
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link op_logic_behaviour} callback exists/2.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(op_logic:req(), op_logic:entity()) -> boolean().
-exists(_, _) ->
-    true.
 
 
 %%--------------------------------------------------------------------

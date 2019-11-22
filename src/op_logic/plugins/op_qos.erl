@@ -24,7 +24,6 @@
     operation_supported/3,
     data_spec/1,
     fetch_entity/1,
-    exists/2,
     authorize/2,
     validate/2
 ]).
@@ -96,16 +95,6 @@ fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
     aspect = instance
 }}) ->
     fetch_qos_entry(Auth, QosEntryId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link op_logic_behaviour} callback exists/2.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(op_logic:req(), op_logic:entity()) -> boolean().
-exists(_, _) ->
-    true.
 
 
 %%--------------------------------------------------------------------

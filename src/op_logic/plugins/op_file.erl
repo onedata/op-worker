@@ -29,7 +29,6 @@
     operation_supported/3,
     data_spec/1,
     fetch_entity/1,
-    exists/2,
     authorize/2,
     validate/2
 ]).
@@ -99,19 +98,6 @@ data_spec(#op_req{operation = delete, gri = GRI}) ->
     {ok, op_logic:versioned_entity()} | errors:error().
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link op_logic_behaviour} callback exists/2.
-%%
-%% File existence is checked later by fslogic_worker as to not increase
-%% overhead.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(op_logic:req(), op_logic:entity()) -> boolean().
-exists(_, _) ->
-    true.
 
 
 %%--------------------------------------------------------------------

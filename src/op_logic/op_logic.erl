@@ -114,9 +114,6 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
         ReqCtx1 = sanitize_request(ReqCtx0),
         ReqCtx2 = maybe_fetch_entity(ReqCtx1),
 
-        % TODO VFS-5621 exists callback is used only in entity_logic,
-        % here is left for compatibility
-        ensure_exists(ReqCtx2),
         ensure_authorized(ReqCtx2),
         validate_request(ReqCtx2),
         process_request(ReqCtx2)
@@ -239,30 +236,6 @@ maybe_fetch_entity(#req_ctx{plugin = Plugin, req = Req} = ReqCtx) ->
             ReqCtx#req_ctx{versioned_entity = VersionedEntity};
         {error, _} = Error ->
             throw(Error)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Ensures aspect of entity specified in request exists, throws on error.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_exists(req_ctx()) -> ok | no_return().
-ensure_exists(#req_ctx{req = #op_req{operation = create}}) ->
-    % No need to check for create operations.
-    ok;
-ensure_exists(#req_ctx{req = #op_req{gri = #gri{id = undefined}}}) ->
-    % Aspects where entity id is undefined always exist.
-    ok;
-ensure_exists(#req_ctx{plugin = Plugin, req = OpReq, versioned_entity = {Entity, _}}) ->
-    try Plugin:exists(OpReq, Entity) of
-        true -> ok;
-        false -> throw(?ERROR_NOT_FOUND)
-    catch _:_ ->
-        % No need for log here, 'exists' may crash depending on what the
-        % request contains and this is expected.
-        throw(?ERROR_NOT_FOUND)
     end.
 
 

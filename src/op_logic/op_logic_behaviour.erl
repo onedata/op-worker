@@ -57,15 +57,6 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Determines if given resource (aspect of entity) exists, based on
-%% op logic request and prefetched entity.
-%% @end
-%%--------------------------------------------------------------------
--callback exists(op_logic:req(), op_logic:entity()) -> boolean().
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Determines if requesting client is authorized to perform given operation,
 %% based on op logic request and prefetched entity.
 %% @end
