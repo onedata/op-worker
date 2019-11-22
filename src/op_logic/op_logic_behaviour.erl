@@ -12,6 +12,10 @@
 %%% API and op internals (e.g. lfm) in the context of specific
 %%% entity type (op_xxx records).
 %%% TODO VFS-5620
+%%%
+%%% NOTE !!!
+%%% The link between entity type and plugin module that should handle request
+%%% should be added to op_logic:get_plugin function.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(op_logic_behaviour).

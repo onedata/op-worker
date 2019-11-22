@@ -25,7 +25,6 @@
 -export([gather_configuration/0]).
 
 % op logic callbacks
--export([op_logic_plugin/0]).
 -export([
     operation_supported/3,
     data_spec/1,
@@ -79,15 +78,6 @@ gather_configuration() ->
         <<"compatibleOneproviderVersions">> => CompOpVersions,
         <<"compatibleOneclientVersions">> => CompOcVersions
     }.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the op logic plugin module that handles model logic.
-%% @end
-%%--------------------------------------------------------------------
-op_logic_plugin() ->
-    op_provider.
 
 
 %%--------------------------------------------------------------------

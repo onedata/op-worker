@@ -117,7 +117,7 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
     try
         ReqCtx0 = #req_ctx{
             req = OpReq,
-            plugin = EntityType:op_logic_plugin(),
+            plugin = get_plugin(EntityType),
             versioned_entity = VersionedEntity
         },
         ensure_operation_supported(ReqCtx0),
@@ -415,3 +415,17 @@ process_request(#req_ctx{
         {Result, _} ->
             Result
     end.
+
+
+%% @private
+-spec get_plugin(atom()) -> module().
+get_plugin(op_file) -> op_file;
+get_plugin(op_group) -> op_group;
+get_plugin(op_metrics) -> op_metrics;
+get_plugin(op_provider) -> op_provider;
+get_plugin(op_qos) -> op_qos;
+get_plugin(op_replica) -> op_replica;
+get_plugin(op_share) -> op_share;
+get_plugin(op_space) -> op_space;
+get_plugin(op_transfer) -> op_transfer;
+get_plugin(op_user) -> op_user.

@@ -25,7 +25,6 @@
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
--export([op_logic_plugin/0]).
 -export([
     operation_supported/3,
     data_spec/1,
@@ -56,15 +55,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the op logic plugin module that handles model logic.
-%% @end
-%%--------------------------------------------------------------------
-op_logic_plugin() ->
-    op_file.
 
 
 %%--------------------------------------------------------------------
