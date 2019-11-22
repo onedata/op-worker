@@ -668,19 +668,28 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions, Ver
     {ok, binary()} | lfm:error_reply().
 read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions, VerifySize) ->
     FileGuid = lfm_context:get_guid(LfmCtx),
+    SessId = lfm_context:get_session_id(LfmCtx),
 
+    % TODO - temporary fix - not needed when helpers do not return data when offset is greater than size
     ReadSize = case VerifySize of
         true ->
             FileCtx = file_ctx:new_by_guid(FileGuid),
-            {MetadataSize, _} = file_ctx:get_file_size(FileCtx),
-            min(MetadataSize - Offset, MaxSize);
+            SpaceID = file_ctx:get_space_id_const(FileCtx),
+            {ok, Providers} = space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceID),
+            case lists:member(oneprovider:get_id(), Providers) of
+                true ->
+                    {MetadataSize, _} = file_ctx:get_file_size(FileCtx),
+                    min(MetadataSize - Offset, MaxSize);
+                false ->
+                    {ok, #file_attr{size = RemoteSize}} = lfm_attrs:stat(SessId, {guid, FileGuid}),
+                    RemoteSize
+            end;
         _ ->
             MaxSize
     end,
 
     case ReadSize > 0 of
         true ->
-            SessId = lfm_context:get_session_id(LfmCtx),
             case SyncOptions of
                 off ->
                     ok;
