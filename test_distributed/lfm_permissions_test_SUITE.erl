@@ -163,7 +163,7 @@ all() ->
 
 -define(rpcCache(W, Function, Args), rpc:call(W, permissions_cache, Function, Args)).
 
--define(GEN_SCENARIO_DIR_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
+-define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
 
 
 %%%===================================================================
@@ -182,7 +182,7 @@ data_caveats_test(Config) ->
     Space1RootDir = fslogic_uuid:spaceid_to_space_dir_guid(<<"space1">>),
     Space3RootDir = fslogic_uuid:spaceid_to_space_dir_guid(<<"space3">>),
 
-    ScenarioName = ?GEN_SCENARIO_DIR_NAME,
+    ScenarioName = ?SCENARIO_NAME,
     DirName = <<ScenarioName/binary, "1">>,
     DirPath = <<"/space1/", DirName/binary>>,
     {ok, DirGuid} = lfm_proxy:mkdir(W, OwnerUserSessId, DirPath),
@@ -446,7 +446,7 @@ data_caveats_ancestors_test2(Config) ->
     SpaceName = <<"space2">>,
     SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
 
-    RootDirName = ?GEN_SCENARIO_DIR_NAME,
+    RootDirName = ?SCENARIO_NAME,
     {ok, RootDirGuid} = lfm_proxy:mkdir(W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777),
 
     CentralDirName = <<"central">>,
@@ -524,7 +524,7 @@ data_caveats_cache_test(Config) ->
     SpaceName = <<"space2">>,
     SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
 
-    RootDirName = ?GEN_SCENARIO_DIR_NAME,
+    RootDirName = ?SCENARIO_NAME,
     {ok, RootDirGuid} = lfm_proxy:mkdir(W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777),
 
     {ok, DirGuid} = lfm_proxy:mkdir(W, UserSessId, RootDirGuid, <<"dir">>, 8#777),
@@ -632,7 +632,7 @@ mkdir_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_subcontainer]
@@ -650,7 +650,7 @@ ls_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?list_container]
@@ -670,7 +670,7 @@ readdir_plus_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?list_container]
@@ -690,7 +690,7 @@ get_child_attr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?traverse_container],
@@ -709,7 +709,7 @@ mv_dir_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [
             #dir{
                 name = <<"dir1">>,
@@ -743,7 +743,7 @@ rm_dir_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [
             #dir{
                 name = <<"dir1">>,
@@ -771,7 +771,7 @@ create_file_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_object]
@@ -791,7 +791,7 @@ open_for_read_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_object],
@@ -817,7 +817,7 @@ open_for_write_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_object],
@@ -843,7 +843,7 @@ open_for_rdwr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_object, ?write_object],
@@ -869,7 +869,7 @@ create_and_open_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#dir{
             name = <<"dir1">>,
             perms = [?traverse_container, ?add_object]
@@ -889,7 +889,7 @@ truncate_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_object]
@@ -909,7 +909,7 @@ mv_file_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [
             #dir{
                 name = <<"dir1">>,
@@ -943,7 +943,7 @@ rm_file_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [
             #dir{
                 name = <<"dir1">>,
@@ -971,7 +971,7 @@ get_parent_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -986,7 +986,7 @@ get_file_path_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -1001,7 +1001,7 @@ get_file_guid_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -1015,7 +1015,7 @@ get_file_attr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
@@ -1030,7 +1030,7 @@ get_file_distribution_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata]
@@ -1134,7 +1134,7 @@ check_read_perms_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_object]
@@ -1154,7 +1154,7 @@ check_write_perms_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_object]
@@ -1174,7 +1174,7 @@ check_rdwr_perms_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_object, ?write_object]
@@ -1194,7 +1194,7 @@ create_share_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#dir{name = <<"dir1">>}],
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
@@ -1211,7 +1211,7 @@ remove_share_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#dir{
             name = <<"dir1">>,
             on_create = fun(OwnerSessId, Guid) ->
@@ -1236,7 +1236,7 @@ get_acl_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_acl]
@@ -1254,7 +1254,7 @@ set_acl_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_acl]
@@ -1280,7 +1280,7 @@ remove_acl_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_acl]
@@ -1300,7 +1300,7 @@ get_transfer_encoding_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_attributes],
@@ -1322,7 +1322,7 @@ set_transfer_encoding_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_attributes]
@@ -1342,7 +1342,7 @@ get_cdmi_completion_status_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_attributes],
@@ -1364,7 +1364,7 @@ set_cdmi_completion_status_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_attributes]
@@ -1384,7 +1384,7 @@ get_mimetype_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_attributes],
@@ -1406,7 +1406,7 @@ set_mimetype_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_attributes]
@@ -1426,7 +1426,7 @@ get_metadata_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata],
@@ -1450,7 +1450,7 @@ set_metadata_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata]
@@ -1470,7 +1470,7 @@ remove_metadata_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata],
@@ -1494,7 +1494,7 @@ get_xattr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata],
@@ -1519,7 +1519,7 @@ list_xattr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             on_create = fun(OwnerSessId, Guid) ->
@@ -1541,7 +1541,7 @@ set_xattr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata]
@@ -1564,7 +1564,7 @@ remove_xattr_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata],
@@ -1589,7 +1589,7 @@ add_qos_entry_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata]
@@ -1609,7 +1609,7 @@ get_qos_entry_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata],
@@ -1635,7 +1635,7 @@ remove_qos_entry_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?write_metadata],
@@ -1661,7 +1661,7 @@ get_effective_file_qos_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata],
@@ -1685,7 +1685,7 @@ check_qos_fulfillment_test(Config) ->
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
         test_node = W,
-        root_dir = ?GEN_SCENARIO_DIR_NAME,
+        root_dir = ?SCENARIO_NAME,
         files = [#file{
             name = <<"file1">>,
             perms = [?read_metadata],

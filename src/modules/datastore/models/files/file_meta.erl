@@ -66,6 +66,7 @@
 
 % Listing options (see datastore_links_iter.erl in cluster_worker for more information about link listing options)
 -type offset() :: integer().
+-type non_neg_offset() :: non_neg_integer().
 -type limit() :: non_neg_integer().
 -type list_opts() :: #{
     token => datastore_links_iter:token() | undefined,
@@ -82,7 +83,7 @@
 -export_type([
     doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
     size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
-    offset/0, limit/0, file_meta/0
+    offset/0, non_neg_offset/0, limit/0, file_meta/0
 ]).
 
 -define(CTX, #{
@@ -531,12 +532,12 @@ list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTeeID) ->
 %%--------------------------------------------------------------------
 -spec list_children_whitelisted(
     Entry :: entry(),
-    PositiveOffset :: non_neg_integer(),
+    NonNegOffset :: non_neg_offset(),
     Limit :: limit(),
     ChildrenWhiteList :: [file_meta:name()]
 ) ->
     {ok, [#child_link_uuid{}]} | {error, term()}.
-list_children_whitelisted(Entry, PositiveOffset, Limit, ChildrenWhiteList) ->
+list_children_whitelisted(Entry, NonNegOffset, Limit, ChildrenWhiteList) when NonNegOffset >= 0 ->
     Names = lists:filter(fun(ChildName) ->
         not (is_hidden(ChildName) orelse is_deletion_link(ChildName))
     end, ChildrenWhiteList),
@@ -549,9 +550,9 @@ list_children_whitelisted(Entry, PositiveOffset, Limit, ChildrenWhiteList) ->
             ({error, _}) -> []
         end, datastore_model:get_links(?CTX, FileUuid, all, Names)),
 
-        case PositiveOffset < length(ValidLinks) of
+        case NonNegOffset < length(ValidLinks) of
             true ->
-                RequestedLinks = lists:sublist(ValidLinks, PositiveOffset +1, Limit),
+                RequestedLinks = lists:sublist(ValidLinks, NonNegOffset+1, Limit),
                 {ok, tag_children(RequestedLinks)};
             false ->
                 {ok, []}

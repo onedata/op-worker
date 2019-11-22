@@ -722,22 +722,24 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children_whitelisted(ctx(), user_ctx:ctx(),
-    PositiveOffset :: integer(),
-    Limit :: non_neg_integer(),
+    NonNegOffset :: file_meta:non_neg_offset(),
+    Limit :: file_meta:limit(),
     ChildrenWhiteList :: [file_meta:name()]
 ) ->
     {Children :: [ctx()], NewFileCtx :: ctx()}.
-get_file_children_whitelisted(FileCtx, UserCtx, PositiveOffset, Limit, ChildrenWhiteList) ->
+get_file_children_whitelisted(
+    FileCtx, UserCtx, NonNegOffset, Limit, ChildrenWhiteList
+) when NonNegOffset > 0 ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            {list_user_spaces(UserCtx, PositiveOffset, Limit, ChildrenWhiteList), FileCtx};
+            {list_user_spaces(UserCtx, NonNegOffset, Limit, ChildrenWhiteList), FileCtx};
         false ->
             {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
             SpaceId = get_space_id_const(FileCtx2),
             ShareId = get_share_id_const(FileCtx2),
 
             {ok, ChildrenLinks} = file_meta:list_children_whitelisted(
-                FileDoc, PositiveOffset, Limit, ChildrenWhiteList
+                FileDoc, NonNegOffset, Limit, ChildrenWhiteList
             ),
             ChildrenCtxs = lists:map(fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
                 new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
