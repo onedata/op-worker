@@ -446,7 +446,7 @@ run_traverse(Worker, SpaceId, StorageId, TraversInfo, TraverseOpts) ->
     rpc:call(Worker, storage_traverse, run, [?MODULE, SpaceId, StorageId, TraversInfo, TraverseOpts]).
 
 get_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId]} = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
+    {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.
 
 space_dir(Worker, SpaceId, StorageId) ->

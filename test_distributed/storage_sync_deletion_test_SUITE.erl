@@ -418,7 +418,7 @@ space_storage_file_id(SpaceId, false) ->
     <<"/", SpaceId/binary>>.
 
 get_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId | _]} = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.
 
 run_deletion(Worker, StorageFileCtx, FileCtx) ->

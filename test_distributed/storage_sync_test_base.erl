@@ -3607,7 +3607,7 @@ create_init_file(Config, Readonly) ->
     end.
 
 is_empty(Worker, SDHandle = #sd_handle{storage_id = StorageId}) ->
-    {ok, Storage} = rpc:call(Worker, storage, get, [StorageId]),
+    {ok, Storage} = rpc:call(Worker, storage_config, get, [StorageId]),
     Helper = storage_config:get_helper(Storage),
     HelperName = helper:get_name(Helper),
     case HelperName of
@@ -3766,7 +3766,7 @@ clean_reverse_luma_cache(Worker) ->
 add_synced_storages(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     SyncedStorages = lists:foldl(fun(W, AccIn) ->
-        {ok, Storages} = rpc:call(W, storage, list, []),
+        {ok, Storages} = rpc:call(W, storage_config, list, []),
         case find_synced_storage(Storages) of
             undefined -> AccIn;
             SyncedStorage -> AccIn#{W => SyncedStorage}
