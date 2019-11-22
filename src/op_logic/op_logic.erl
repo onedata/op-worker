@@ -35,38 +35,29 @@
 % for better readability of logic modules.
 % TODO VFS-5621
 -type req() :: #op_req{}.
--type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
 % The resource the request operates on (creates, gets, updates or deletes).
 -type entity() :: undefined | #od_share{} | #transfer{} | #od_user{} | #od_group{}.
--type entity_id() :: undefined | od_share:id() | transfer:id() | od_user:id() | od_group:id().
 -type revision() :: gs_protocol:revision().
 -type versioned_entity() :: gs_protocol:versioned_entity().
--type aspect() :: gs_protocol:aspect().
 -type scope() :: gs_protocol:scope().
 -type data_format() :: gs_protocol:data_format().
 -type data() :: gs_protocol:data().
--type gri() :: gri:gri().
 -type auth_hint() :: gs_protocol:auth_hint().
 
 -type create_result() :: gs_protocol:graph_create_result().
--type get_result() :: gs_protocol:graph_get_result() | {ok, term()} | {ok, gri(), term()}.
+-type get_result() :: gs_protocol:graph_get_result() | {ok, term()} | {ok, gri:gri(), term()}.
 -type delete_result() :: gs_protocol:graph_delete_result().
 -type update_result() :: gs_protocol:graph_update_result().
 -type result() :: create_result() | get_result() | update_result() | delete_result().
--type error() :: errors:error().
 
 -export_type([
     req/0,
-    op_plugin/0,
     operation/0,
-    entity_id/0,
     entity/0,
     revision/0,
     versioned_entity/0,
-    aspect/0,
     scope/0,
-    gri/0,
     data_format/0,
     data/0,
     auth_hint/0,
@@ -74,14 +65,13 @@
     get_result/0,
     update_result/0,
     delete_result/0,
-    error/0,
     result/0
 ]).
 
 % Internal record containing the request data and state.
 -record(req_ctx, {
     req = #op_req{} :: req(),
-    plugin = undefined :: op_plugin(),
+    plugin = undefined :: module(),
     versioned_entity = {undefined, 1} :: versioned_entity()
 }).
 -type req_ctx() :: #req_ctx{}.
@@ -418,7 +408,7 @@ process_request(#req_ctx{
 
 
 %% @private
--spec get_plugin(atom()) -> module().
+-spec get_plugin(gri:entity_type()) -> module() | no_return().
 get_plugin(op_file) -> op_file;
 get_plugin(op_group) -> op_group;
 get_plugin(op_metrics) -> op_metrics;
@@ -428,4 +418,5 @@ get_plugin(op_replica) -> op_replica;
 get_plugin(op_share) -> op_share;
 get_plugin(op_space) -> op_space;
 get_plugin(op_transfer) -> op_transfer;
-get_plugin(op_user) -> op_user.
+get_plugin(op_user) -> op_user;
+get_plugin(_) -> throw(?ERROR_NOT_SUPPORTED).

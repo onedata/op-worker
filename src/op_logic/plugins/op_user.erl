@@ -41,7 +41,7 @@
 %% {@link op_logic_behaviour} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), op_logic:aspect(),
+-spec operation_supported(op_logic:operation(), gri:aspect(),
     op_logic:scope()) -> boolean().
 operation_supported(get, instance, private) -> true;
 operation_supported(get, instance, shared) -> true;
@@ -71,7 +71,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = eff_spaces}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | op_logic:error().
+    {ok, op_logic:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{id = UserId}}) ->
     case user_logic:get(SessionId, UserId) of
         {ok, #document{value = User}} ->

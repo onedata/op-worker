@@ -22,7 +22,7 @@
 % Record expressing op logic request
 -record(op_req, {
     auth = ?NOBODY :: aai:auth(),
-    gri :: op_logic:gri(),
+    gri :: gri:gri(),
     operation = create :: op_logic:operation(),
     data = #{} :: op_logic:data(),
     auth_hint = undefined :: undefined | op_logic:auth_hint(),

@@ -85,7 +85,7 @@ gather_configuration() ->
 %% {@link op_logic_behaviour} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), op_logic:aspect(),
+-spec operation_supported(op_logic:operation(), gri:aspect(),
     op_logic:scope()) -> boolean().
 operation_supported(get, instance, protected) -> true;
 operation_supported(get, configuration, private) -> true;
@@ -114,7 +114,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = test_image}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | op_logic:error().
+    {ok, op_logic:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri = #gri{
     id = ProviderId,
     aspect = instance,

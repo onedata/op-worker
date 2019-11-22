@@ -62,7 +62,7 @@
 %% {@link op_logic_behaviour} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), op_logic:aspect(),
+-spec operation_supported(op_logic:operation(), gri:aspect(),
     op_logic:scope()) -> boolean().
 operation_supported(create, Aspect, Scope) ->
     create_operation_supported(Aspect, Scope);
@@ -96,7 +96,7 @@ data_spec(#op_req{operation = delete, gri = GRI}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | op_logic:error().
+    {ok, op_logic:versioned_entity()} | errors:error().
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
 
@@ -157,7 +157,7 @@ validate(#op_req{operation = delete} = Req, Entity) ->
 
 
 %% @private
--spec create_operation_supported(op_logic:aspect(), op_logic:scope()) ->
+-spec create_operation_supported(gri:aspect(), op_logic:scope()) ->
     boolean().
 create_operation_supported(instance, private) -> true;
 create_operation_supported(attrs, private) -> true;
@@ -322,7 +322,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_meta
 %%%===================================================================
 
 
--spec get_operation_supported(op_logic:aspect(), op_logic:scope()) ->
+-spec get_operation_supported(gri:gri(), op_logic:scope()) ->
     boolean().
 get_operation_supported(instance, private) -> true;
 get_operation_supported(list, private) -> true;
@@ -531,7 +531,7 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
 
 
 %% @private
--spec update_operation_supported(op_logic:aspect(), op_logic:scope()) ->
+-spec update_operation_supported(gri:aspect(), op_logic:scope()) ->
     boolean().
 update_operation_supported(instance, private) -> true;
 update_operation_supported(acl, private) -> true;
@@ -616,7 +616,7 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) -
 
 
 %% @private
--spec delete_operation_supported(op_logic:aspect(), op_logic:scope()) ->
+-spec delete_operation_supported(gri:aspect(), op_logic:scope()) ->
     boolean().
 delete_operation_supported(instance, private) -> true;
 delete_operation_supported(_, _) -> false.

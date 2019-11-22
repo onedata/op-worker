@@ -28,7 +28,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback operation_supported(
-    op_logic:operation(), op_logic:aspect(), op_logic:scope()
+    op_logic:operation(), gri:aspect(), op_logic:scope()
 ) ->
     boolean().
 
@@ -52,7 +52,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | op_logic:error().
+    {ok, op_logic:versioned_entity()} | errors:error().
 
 
 %%--------------------------------------------------------------------

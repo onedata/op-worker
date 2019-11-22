@@ -40,7 +40,7 @@
 %% {@link op_logic_behaviour} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), op_logic:aspect(),
+-spec operation_supported(op_logic:operation(), gri:aspect(),
     op_logic:scope()) -> boolean().
 operation_supported(create, instance, private) -> true;
 
@@ -78,7 +78,7 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
 %% {@link op_logic_behaviour} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:req()) -> {ok, op_logic:versioned_entity()} | op_logic:error().
+-spec fetch_entity(op_logic:req()) -> {ok, op_logic:versioned_entity()} | errors:error().
 fetch_entity(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
     {ok, {undefined, 1}};
 

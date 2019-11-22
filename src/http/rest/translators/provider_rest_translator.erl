@@ -27,6 +27,6 @@
 %% {@link rest_translator_behaviour} callback get_response/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get_response(op_logic:gri(), Resource :: term()) -> #rest_resp{}.
+-spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(_, Configuration) ->
     ?OK_REPLY(Configuration).

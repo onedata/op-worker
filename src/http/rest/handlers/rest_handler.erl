@@ -317,7 +317,7 @@ send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_gri_bindings(session:id(), bound_gri(), cowboy_req:req()) ->
-    op_logic:gri().
+    gri:gri().
 resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) ->
     IdBinding = resolve_bindings(SessionId, Id, Req),
     AspectBinding = case As of

@@ -27,7 +27,7 @@
 %% {@link rest_translator_behaviour} callback get_response/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get_response(op_logic:gri(), Resource :: term()) -> #rest_resp{}.
+-spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
     name = Name,
     providers = ProvidersIds
