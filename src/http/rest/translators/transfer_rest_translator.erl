@@ -5,21 +5,24 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module handles translation of op logic results concerning
+%%% @doc
+%%% This module handles translation of middleware results concerning
 %%% transfer entities into REST responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfer_rest_translator).
 -author("Bartosz Walkowicz").
 
--include("middleware/middleware.hrl").
 -include("http/rest.hrl").
+-include("middleware/middleware.hrl").
 
 -export([create_response/4, get_response/2]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -40,7 +43,7 @@ create_response(#gri{aspect = rerun}, _, value, TransferId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(_, #transfer{
+get_response(#gri{aspect = instance}, #transfer{
     file_uuid = FileUuid,
     space_id = SpaceId,
     user_id = UserId,

@@ -5,15 +5,16 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module handles translation of op logic results concerning
+%%% @doc
+%%% This module handles translation of middleware results concerning
 %%% file entities into REST responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_rest_translator).
 -author("Bartosz Walkowicz").
 
--include("middleware/middleware.hrl").
 -include("http/rest.hrl").
+-include("middleware/middleware.hrl").
 
 -export([get_response/2]).
 
@@ -29,7 +30,13 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(#gri{aspect = rdf_metadata}, Metadata) ->
-    ?OK_REPLY({binary, Metadata});
-get_response(_, Metadata) ->
-    ?OK_REPLY(Metadata).
+get_response(#gri{aspect = list}, Result) ->
+    ?OK_REPLY(Result);
+get_response(#gri{aspect = As}, Metadata) when
+    As =:= attrs;
+    As =:= xattrs;
+    As =:= json_metadata
+->
+    ?OK_REPLY(Metadata);
+get_response(#gri{aspect = rdf_metadata}, RdfMetadata) ->
+    ?OK_REPLY({binary, RdfMetadata}).

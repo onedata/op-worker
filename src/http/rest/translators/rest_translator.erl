@@ -15,22 +15,22 @@
 -author("Lukasz Opiola").
 -author("Bartosz Walkowicz").
 
--include("middleware/middleware.hrl").
 -include("http/rest.hrl").
--include("graph_sync/provider_graph_sync.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/errors.hrl").
+-include("middleware/middleware.hrl").
 
 %% API
 -export([response/2, error_response/1]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+
 -spec response(_, middleware:result()) -> #rest_resp{}.
 response(_, {error, _} = Error) ->
     error_response(Error);
+
 response(#op_req{operation = create}, ok) ->
     % No need for translation, 'ok' means success with no response data
     ?NO_CONTENT_REPLY;
@@ -38,14 +38,17 @@ response(#op_req{operation = create} = OpReq, {ok, DataFormat, Result}) ->
     #op_req{gri = GRI = #gri{type = Model}, auth_hint = AuthHint} = OpReq,
     Translator = entity_type_to_translator(Model),
     Translator:create_response(GRI, AuthHint, DataFormat, Result);
+
 response(#op_req{operation = get} = OpReq, {ok, Data}) ->
     #op_req{gri = GRI = #gri{type = Model}} = OpReq,
     Translator = entity_type_to_translator(Model),
     Translator:get_response(GRI, Data);
 response(#op_req{operation = get} = OpReq, {ok, value, Data}) ->
     response(OpReq, {ok, Data});
+
 response(#op_req{operation = update}, ok) ->
     ?NO_CONTENT_REPLY;
+
 response(#op_req{operation = delete}, ok) ->
     ?NO_CONTENT_REPLY;
 response(#op_req{operation = delete} = OpReq, {ok, DataFormat, Result}) ->
@@ -55,15 +58,17 @@ response(#op_req{operation = delete} = OpReq, {ok, DataFormat, Result}) ->
 
 
 -spec error_response(errors:error()) -> #rest_resp{}.
-error_response(Error = {error, _}) ->
+error_response({error, _} = Error) ->
     #rest_resp{
         code = errors:to_http_code(Error),
         body = #{<<"error">> => errors:to_json(Error)}
     }.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %% @private
 -spec entity_type_to_translator(atom()) -> module().

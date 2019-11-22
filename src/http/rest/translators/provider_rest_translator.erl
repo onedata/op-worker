@@ -5,15 +5,16 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module handles translation of op logic results concerning
+%%% @doc
+%%% This module handles translation of middleware results concerning
 %%% provider entities into REST responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(provider_rest_translator).
 -author("Bartosz Walkowicz").
 
--include("middleware/middleware.hrl").
 -include("http/rest.hrl").
+-include("middleware/middleware.hrl").
 
 -export([get_response/2]).
 
@@ -28,5 +29,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(_, Configuration) ->
-    ?OK_REPLY(Configuration).
+get_response(#gri{aspect = As}, Result) when
+    As =:= configuration;
+    As =:= test_image
+->
+    ?OK_REPLY(Result).

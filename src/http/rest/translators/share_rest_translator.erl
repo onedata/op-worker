@@ -5,21 +5,24 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module handles translation of op logic results concerning
+%%% @doc
+%%% This module handles translation of middleware results concerning
 %%% share entities into REST responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(share_rest_translator).
 -author("Bartosz Walkowicz").
 
--include("middleware/middleware.hrl").
 -include("http/rest.hrl").
+-include("middleware/middleware.hrl").
 
 -export([create_response/4, get_response/2]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc

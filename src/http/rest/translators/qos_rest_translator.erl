@@ -5,15 +5,16 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module handles translation of op logic results concerning
+%%% @doc
+%%% This module handles translation of middleware results concerning
 %%% QoS management into REST responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_rest_translator).
 -author("Michal Cwiertnia").
 
--include("middleware/middleware.hrl").
 -include("http/rest.hrl").
+-include("middleware/middleware.hrl").
 
 -export([create_response/4, get_response/2]).
 
