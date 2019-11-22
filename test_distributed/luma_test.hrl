@@ -337,7 +337,7 @@ end).
 
 -define(STORAGE_DOC(Id, Name, Helper, LumaConfig), #document{
     key = Id,
-    value = #storage{
+    value = #storage_config{
         name = Name,
         helpers = [Helper],
         luma_config = LumaConfig

@@ -545,8 +545,8 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     TransferChunksNum = 1024,
     FileSize = ChunkSize * TransferChunksNum * TransferFileParts,
     SmallFile = {1, 1, false},
-    Transfer = {TransferChunksNum, TransferFileParts, true},
-    Files = [Transfer, SmallFile],
+    TransferredFile = {TransferChunksNum, TransferFileParts, true},
+    Files = [TransferredFile, SmallFile],
 
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
     Level2File2 = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -558,7 +558,7 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
 
     % Init rtransfer using another file
     verify_workers(Workers2, fun(W) ->
-        read_big_file(Config, ChunkSize, Level2File2, W, Transfer)
+        read_big_file(Config, ChunkSize, Level2File2, W, TransferredFile)
     end, timer:minutes(5), true),
 
     lists:foreach(fun({ChunksNum, PartNum, Transfer}) ->

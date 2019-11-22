@@ -231,7 +231,7 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosEntryId) ->
 %% Creates new qos_entry document with appropriate traverse requests.
 %% @end
 %%--------------------------------------------------------------------
--spec add_possible_qos(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), [storage:id()]) ->
+-spec add_possible_qos(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), [od_storage:id()]) ->
     fslogic_worker:provider_response().
 add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -295,7 +295,7 @@ add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec calculate_storages(session:id(), file_ctx:ctx(), qos_expression:rpn(),
-    qos_entry:replicas_num()) -> {true, [storage:id()]} | false | {error, term()}.
+    qos_entry:replicas_num()) -> {true, [od_storage:id()]} | false | {error, term()}.
 calculate_storages(SessId, FileCtx, Expression, ReplicasNum) ->
     {FileLocationsDoc, _NewFileCtx} =  file_ctx:get_file_location_docs(FileCtx),
     ProvidersBlocks = lists:map(fun(#document{value = FileLocation}) ->
@@ -322,7 +322,7 @@ calculate_storages(SessId, FileCtx, Expression, ReplicasNum) ->
 %% Get list of storage id supporting space in which given file is stored.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_storages(session:id(), file_ctx:ctx()) -> [storage:id()].
+-spec get_space_storages(session:id(), file_ctx:ctx()) -> [od_storage:id()].
 get_space_storages(SessionId, FileCtx) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     SpaceId = file_id:guid_to_space_id(FileGuid),

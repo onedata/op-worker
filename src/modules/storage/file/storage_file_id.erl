@@ -19,6 +19,8 @@
 %%% Exports
 %%%===================================================================
 
+% todo sprawdzic gdzie jest wolany modul storage i pozamieniac
+
 %% API
 -export([space_id/2, flat/1, canonical/1]).
 
@@ -31,10 +33,9 @@
 %% Returns space directory storage file id.
 %% @end
 %%-------------------------------------------------------------------
--spec space_id(od_space:id(), storage:id()) -> helpers:file_id().
+-spec space_id(od_space:id(), od_storage:id()) -> helpers:file_id().
 space_id(SpaceId, StorageId) ->
-    MountedInRoot = space_storage:get_mounted_in_root(SpaceId),
-    case lists:member(StorageId, MountedInRoot) of
+    case storage_config:is_mounted_in_root(StorageId) of
         true ->
             ?DIRECTORY_SEPARATOR_BINARY;
         false ->

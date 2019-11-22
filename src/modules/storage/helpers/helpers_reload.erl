@@ -33,7 +33,7 @@
 %% args and ctx.
 %% @end
 %%--------------------------------------------------------------------
--spec refresh_helpers_by_storage(storage:id()) -> ok.
+-spec refresh_helpers_by_storage(od_storage:id()) -> ok.
 refresh_helpers_by_storage(StorageId) ->
     {ok, Nodes} = node_manager:get_cluster_nodes(),
     rpc:multicall(Nodes, ?MODULE, local_refresh_helpers, [StorageId]),
@@ -47,37 +47,37 @@ refresh_helpers_by_storage(StorageId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec refresh_handle_params(helpers:helper_handle() | helpers:file_handle(),
-    session:id(), od_space:id(), storage:doc() | storage:id()) -> ok.
-refresh_handle_params(Handle, SessionId, SpaceId, StorageDoc = #document{value = #storage{}}) ->
+    session:id(), od_space:id(), storage_config:doc() | od_storage:id()) -> ok.
+refresh_handle_params(Handle, SessionId, SpaceId, StorageConfig = #document{value = #storage_config{}}) ->
     % gather information
-    Helper = storage:get_helper(StorageDoc),
+    {ok, Helper} = fslogic_storage:select_helper(StorageConfig),
     {ok, UserId} = session:get_user_id(SessionId),
-    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, StorageDoc),
+    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, StorageConfig),
     {ok, ArgsWithUserCtx} = helper:get_args_with_user_ctx(Helper, UserCtx),
     % do the refresh
     helpers:refresh_params(Handle, ArgsWithUserCtx);
 refresh_handle_params(Handle, SessionId, SpaceId, StorageId) when is_binary(StorageId) ->
-    {ok, StorageDoc} = storage:get(StorageId),
-    refresh_handle_params(Handle, SessionId, SpaceId, StorageDoc).
+    {ok, StorageConfig} = storage_config:get(StorageId),
+    refresh_handle_params(Handle, SessionId, SpaceId, StorageConfig).
 
 %%%===================================================================
 %%% RPC exports
 %%%===================================================================
 
--spec local_refresh_helpers(StorageId :: storage:id()) -> ok.
+-spec local_refresh_helpers(StorageId :: od_storage:id()) -> ok.
 local_refresh_helpers(StorageId) ->
-    {ok, StorageDoc} = storage:get(StorageId),
+    {ok, StorageConfig} = storage_config:get(StorageId),
     {ok, Sessions} = session:list(),
     try
         lists:foreach(fun(#document{key = SessId}) ->
             {ok, HandlesSpaces} = session_helpers:get_local_handles_by_storage(SessId, StorageId),
             lists:foreach(fun({HandleId, SpaceId}) ->
                 {ok, #document{value = Handle}} = helper_handle:get(HandleId),
-                refresh_handle_params(Handle, SessId, SpaceId, StorageDoc)
+                refresh_handle_params(Handle, SessId, SpaceId, StorageConfig)
             end, HandlesSpaces)
         end, Sessions)
     catch Type:Error ->
-        #document{value = #storage{name = StorageName}} = StorageDoc,
+        #document{value = #storage_config{name = StorageName}} = StorageConfig,
         ?error("Error updating active helper for storage ~tp with new args: ~p:~tp",
             [StorageName, Type, Error])
     end.

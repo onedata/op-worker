@@ -78,7 +78,7 @@ new_handle(SessionId, FileCtx, Generate) ->
 %% Handle created by this function may not be used for remote files.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(session:id(), od_space:id(), file_meta:uuid(), storage:id(),
+-spec new_handle(session:id(), od_space:id(), file_meta:uuid(), od_storage:id(),
     helpers:file_id(), od_share:id() | undefined) -> handle().
 new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId, ShareId) ->
     #sd_handle{

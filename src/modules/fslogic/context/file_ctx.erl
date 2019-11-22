@@ -41,7 +41,7 @@
     storage_posix_user_context :: undefined | luma:posix_user_ctx(),
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
-    storage_doc :: undefined | storage:doc(),
+    storage_doc :: undefined | storage_config:doc(),
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
     is_space_synced :: undefined | boolean(),
@@ -347,11 +347,9 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 %%--------------------------------------------------------------------
 -spec is_space_mounted_in_root(ctx()) -> {boolean(), ctx()}.
 is_space_mounted_in_root(FileCtx = #file_ctx{is_space_mounted_in_root = undefined}) ->
-    SpaceId = get_space_id_const(FileCtx),
-    InRootIDs = space_storage:get_mounted_in_root(SpaceId),
-    {StorageDoc, FileCtx2} = get_storage_doc(FileCtx),
-    IsSpaceMountedInRoot = lists:member(StorageDoc#document.key, InRootIDs),
-    {IsSpaceMountedInRoot, FileCtx2#file_ctx{is_space_mounted_in_root = IsSpaceMountedInRoot}};
+    {StorageConfig, FileCtx2} = get_storage_doc(FileCtx),
+    MiR = storage_config:is_mounted_in_root(StorageConfig),
+    {MiR, FileCtx2#file_ctx{is_space_mounted_in_root = MiR}};
 is_space_mounted_in_root(FileCtx = #file_ctx{is_space_mounted_in_root = IsSpaceMountedInRoot}) ->
     {IsSpaceMountedInRoot, FileCtx}.
 
@@ -499,8 +497,8 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
 
 -spec get_new_storage_file_id(ctx()) -> {helpers:file_id(), ctx()}.
 get_new_storage_file_id(FileCtx) ->
-    {StorageDoc, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    Helper = storage:get_helper(StorageDoc),
+    {StorageConfig, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+    Helper = storage_config:get_helper(StorageConfig),
     case helper:get_storage_path_type(Helper) of
         ?FLAT_STORAGE_PATH ->
             {FileId, FileCtx3} = storage_file_id:flat(FileCtx2),
@@ -720,7 +718,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
 %% Returns storage id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_id(ctx()) -> {storage:id(), ctx()}.
+-spec get_storage_id(ctx()) -> {od_storage:id(), ctx()}.
 get_storage_id(FileCtx) ->
     {#document{key = StorageId}, FileCtx2} = get_storage_doc(FileCtx),
     {StorageId, FileCtx2}.
@@ -730,13 +728,13 @@ get_storage_id(FileCtx) ->
 %% Returns storage document of file's space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_doc(ctx()) -> {storage:doc(), ctx()}.
+-spec get_storage_doc(ctx()) -> {storage_config:doc(), ctx()}.
 get_storage_doc(FileCtx = #file_ctx{storage_doc = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
-    {ok, StorageDoc} = fslogic_storage:select_storage(SpaceId),
-    {StorageDoc, FileCtx#file_ctx{storage_doc = StorageDoc}};
-get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageDoc}) ->
-    {StorageDoc, FileCtx}.
+    {ok, StorageConfig} = fslogic_storage:select_storage(SpaceId),
+    {StorageConfig, FileCtx#file_ctx{storage_doc = StorageConfig}};
+get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageConfig}) ->
+    {StorageConfig, FileCtx}.
 
 
 %%--------------------------------------------------------------------

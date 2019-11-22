@@ -158,7 +158,7 @@ recursive_rm(Worker, SDHandle = #sd_handle{storage_id = StorageId}, DoNotDeleteR
             end;
         ?DIRECTORY_TYPE ->
             {ok, Storage} = rpc:call(Worker, storage, get, [StorageId]),
-            Helper = storage:get_helper(Storage),
+            Helper = storage_config:get_helper(Storage),
             HelperName = helper:get_name(Helper),
             case HelperName of
                 ?POSIX_HELPER_NAME ->

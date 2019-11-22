@@ -57,7 +57,7 @@
 -type key() :: file_meta:uuid().
 -type record() :: #file_qos{}.
 -type effective_file_qos() :: #effective_file_qos{}.
--type assigned_entries() :: #{storage:id() => [qos_entry:id()]}.
+-type assigned_entries() :: #{od_storage:id() => [qos_entry:id()]}.
 
 -export_type([assigned_entries/0]).
 
@@ -144,7 +144,7 @@ add_qos_entry_id(FileUuid, SpaceId, QosEntryId) ->
 %% Creates file_qos document if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_id(file_meta:uuid(), od_space:id(), qos_entry:id(), storage:id()) -> ok.
+-spec add_qos_entry_id(file_meta:uuid(), od_space:id(), qos_entry:id(), od_storage:id() | undefined) -> ok.
 add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage) ->
     NewDoc = #document{
         key = FileUuid,
@@ -182,7 +182,7 @@ add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage) ->
 %% Checks whether given file is protected on given storage by QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec is_replica_protected(file_meta:uuid(), storage:id()) -> boolean().
+-spec is_replica_protected(file_meta:uuid(), od_storage:id()) -> boolean().
 is_replica_protected(FileUuid, StorageId) ->
     QosStorages = case get_effective(FileUuid) of
         {ok, #effective_file_qos{assigned_entries = AssignedEntries}} -> AssignedEntries;
@@ -205,7 +205,7 @@ get_assigned_entries(FileQos) ->
     FileQos#effective_file_qos.assigned_entries.
 
 
--spec get_qos_to_update(storage:id(), effective_file_qos()) -> [qos_entry:id()].
+-spec get_qos_to_update(od_storage:id(), effective_file_qos()) -> [qos_entry:id()].
 get_qos_to_update(StorageId, EffectiveFileQos) ->
     maps:get(StorageId, EffectiveFileQos#effective_file_qos.assigned_entries, []).
 

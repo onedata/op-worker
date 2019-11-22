@@ -143,7 +143,7 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
         initializer:clear_subscriptions(Worker),
-        NewConfig
+        initializer:setup_storage(NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
@@ -469,7 +469,7 @@ file_location_changed_event() ->
     #file_location_changed_event{file_location = #file_location{uuid = ?FILE_UUID, space_id = ?SPACE_ID}}.
 
 %% @private
--spec helper_params_changed_event(storage:id()) -> #helper_params_changed_event{}.
+-spec helper_params_changed_event(od_storage:id()) -> #helper_params_changed_event{}.
 helper_params_changed_event(StorageId) ->
     #helper_params_changed_event{storage_id = StorageId}.
 

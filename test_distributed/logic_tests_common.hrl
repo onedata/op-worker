@@ -53,6 +53,8 @@
 -define(HANDLE_2, <<"handle2Id">>).
 -define(HARVESTER_1, <<"harvester1Id">>).
 -define(HARVESTER_2, <<"harvester2Id">>).
+-define(STORAGE_1, <<"storage1Id">>).
+-define(STORAGE_2, <<"storage2Id">>).
 
 % User authorizations
 % Token auth is translated to {token, Token} before graph sync request.
@@ -112,6 +114,8 @@
 -define(SPACE_PROVIDERS_MATCHER(__Space), #{?PROVIDER_1 := 1000000000, ?PROVIDER_2 := 1000000000}).
 -define(SPACE_SHARES(__Space), [?SHARE_1, ?SHARE_2]).
 -define(SPACE_HARVESTERS(__Space), [?HARVESTER_1, ?HARVESTER_2]).
+-define(SPACE_STORAGES_VALUE(__Space), #{?STORAGE_1 => 1000000000, ?STORAGE_2 => 1000000000}).
+-define(SPACE_STORAGES_MATCHER(__Space), #{?STORAGE_1 := 1000000000, ?STORAGE_2 := 1000000000}).
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
@@ -129,6 +133,7 @@
 -define(PROVIDER_SUBDOMAIN(__Provider), undefined).
 -define(PROVIDER_SPACES_VALUE(__Provider), #{?SPACE_1 => 1000000000, ?SPACE_2 => 1000000000}).
 -define(PROVIDER_SPACES_MATCHER(__Provider), #{?SPACE_1 := 1000000000, ?SPACE_2 := 1000000000}).
+-define(PROVIDER_STORAGES(__Provider), [?STORAGE_1, ?STORAGE_2]).
 -define(PROVIDER_EFF_USERS(__Provider), [?USER_1, ?USER_2]).
 -define(PROVIDER_EFF_GROUPS(__Provider), [?GROUP_1, ?GROUP_2]).
 -define(PROVIDER_LATITUDE(__Provider), 0.0).
@@ -247,7 +252,8 @@
     eff_groups = ?SPACE_EFF_GROUPS_MATCHER(__Space),
     providers = ?SPACE_PROVIDERS_MATCHER(__Space),
     shares = ?SPACE_SHARES(__Space),
-    harvesters = ?SPACE_HARVESTERS(__Space)
+    harvesters = ?SPACE_HARVESTERS(__Space),
+    storages = ?SPACE_STORAGES_MATCHER(__Space)
 }}).
 -define(SPACE_PROTECTED_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
@@ -283,7 +289,8 @@
     subdomain_delegation = ?PROVIDER_SUBDOMAIN_DELEGATION(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
     online = ?PROVIDER_ONLINE(__Provider),
-    spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
+    storages = ?PROVIDER_STORAGES(__Provider),
+    eff_spaces = ?PROVIDER_SPACES_MATCHER(__Provider),
     eff_users = ?PROVIDER_EFF_USERS(__Provider),
     eff_groups = ?PROVIDER_EFF_GROUPS(__Provider)
 }}).
@@ -291,7 +298,7 @@
     name = ?PROVIDER_NAME(__Provider),
     domain = ?PROVIDER_DOMAIN(__Provider),
     online = ?PROVIDER_ONLINE(__Provider),
-    spaces = #{},
+    eff_spaces = #{},
     eff_users = [],
     eff_groups = []
 }}).
@@ -329,6 +336,11 @@
 -define(HARVESTER_PRIVATE_DATA_MATCHER(__Harvester), #document{key = __Harvester, value = #od_harvester{
     indices = ?HARVESTER_INDICES(__Harvester),
     spaces = ?HARVESTER_SPACES(__Harvester)
+}}).
+
+-define(STORAGE_PRIVATE_DATA_MATCHER(__Storage), #document{key = __Storage, value = #od_storage{
+    provider = ?PROVIDER_1,
+    qos_parameters = #{}
 }}).
 
 
@@ -388,6 +400,7 @@ end).
         <<"groups">> => ?SPACE_DIRECT_GROUPS_VALUE(__SpaceId),
         <<"effectiveGroups">> => ?SPACE_EFF_GROUPS_VALUE(__SpaceId),
 
+        <<"storages">> => ?SPACE_STORAGES_VALUE(__SpaceId),
         <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
         <<"shares">> => ?SPACE_SHARES(__SpaceId),
         <<"harvesters">> => ?SPACE_HARVESTERS(__SpaceId)
@@ -428,10 +441,11 @@ end).
         <<"subdomainDelegation">> => ?PROVIDER_SUBDOMAIN_DELEGATION(__ProviderId),
         <<"subdomain">> => ?PROVIDER_SUBDOMAIN(__ProviderId),
         <<"gri">> => gri:serialize(#gri{type = od_provider, id = __ProviderId, aspect = instance, scope = private}),
-        <<"spaces">> => case __ProviderId of
+        <<"effectiveSpaces">> => case __ProviderId of
             ?DUMMY_PROVIDER_ID -> #{};
             _ -> ?PROVIDER_SPACES_VALUE(__ProviderId)
         end,
+        <<"storages">> => ?PROVIDER_STORAGES(__ProviderId),
         <<"effectiveUsers">> => case __ProviderId of
             ?DUMMY_PROVIDER_ID -> [];
             _ -> ?PROVIDER_EFF_USERS(__ProviderId)
@@ -477,4 +491,11 @@ end).
     <<"gri">> => gri:serialize(#gri{type = od_harvester, id = __HarvesterId, aspect = instance, scope = private}),
     <<"indices">> => ?HARVESTER_INDICES(__HarvesterId),
     <<"spaces">> => ?HARVESTER_SPACES(__HarvesterId)
+}).
+
+-define(STORAGE_PRIVATE_DATA_VALUE(__StorageId), #{
+    <<"revision">> => 1,
+    <<"gri">> => gri:serialize(#gri{type = od_storage, id = __StorageId, aspect = instance, scope = private}),
+    <<"provider">> => ?PROVIDER_1,
+    <<"qos_parameters">> => #{}
 }).

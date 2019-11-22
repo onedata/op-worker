@@ -207,10 +207,7 @@ get_guid(Path, #{files := FilesGuidsAndPaths, dirs := DirsGuidsAndPaths}) ->
     end, undefined, FilesGuidsAndPaths ++ DirsGuidsAndPaths).
 
 get_guid(Worker, SessId, Path) ->
-    {ok, Guid} = ?assertMatch(
-        {ok, Guid},
-        lfm_proxy:resolve_guid(Worker, SessId, Path)
-    ),
+    {ok, Guid} = ?assertMatch({ok, _}, lfm_proxy:resolve_guid(Worker, SessId, Path)),
     Guid.
 
 

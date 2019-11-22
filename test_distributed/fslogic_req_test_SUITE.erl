@@ -186,16 +186,16 @@ fslogic_get_file_children_attrs_test(Config) ->
             end, lists:seq(1, length(AttrsList) + 1))
     end,
 
-    TestFun = fun({SessId, Path, NameList, UserRootGuid}) ->
+    TestFun = fun({SessionId, Path, NameList, UserRootGuid}) ->
         Files = lists:map(fun(Name) ->
-            {SessId, Name, 8#775, 0, <<"/", Name/binary>>, UserRootGuid}
+            {SessionId, Name, 8#775, 0, <<"/", Name/binary>>, UserRootGuid}
         end, NameList),
 
-        FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, Path, ParentGuid}) ->
+        FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, P, ParentGuid}) ->
             #fuse_response{fuse_response = #guid{guid = Guid}} =
                 ?assertMatch(
                     #fuse_response{status = #status{code = ?OK}},
-                    ?req(Worker, SessId, #resolve_guid{path = Path})
+                    ?req(Worker, SessId, #resolve_guid{path = P})
                 ),
 
             #file_attr{
@@ -205,7 +205,7 @@ fslogic_get_file_children_attrs_test(Config) ->
             }
         end, Files),
 
-        ValidateReadDirPlus({SessId, Path, FilesAttrs})
+        ValidateReadDirPlus({SessionId, Path, FilesAttrs})
     end,
 
     lists:foreach(TestFun, [

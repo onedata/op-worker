@@ -81,13 +81,11 @@ all() -> [
 -define(RULE_SETTING(Value), ?RULE_SETTING(true, Value)).
 -define(RULE_SETTING(Enabled, Value), #{enabled => Enabled, value => Value}).
 
--define(DIST(ProviderId, __Size),
-    case __Size == 0 of
-        true ->
-            [#{<<"providerId">> => ProviderId, <<"blocks">> => []}];
-        false ->
-            [#{<<"providerId">> => ProviderId, <<"blocks">> => [[0, __Size]]}]
-    end).
+-define(DIST(__ProviderId, __Size),
+    (fun
+        (P, 0) -> [#{<<"providerId">> => P, <<"blocks">> => []}];
+        (P, S) -> [#{<<"providerId">> => P, <<"blocks">> => [[0, S]]}]
+    end)(__ProviderId, __Size)).
 
 -define(DISTS(ProviderIds, Sizes), lists:flatmap(fun({PId, __Size}) ->
     ?DIST(PId, __Size)

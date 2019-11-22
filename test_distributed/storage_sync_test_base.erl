@@ -3608,7 +3608,7 @@ create_init_file(Config, Readonly) ->
 
 is_empty(Worker, SDHandle = #sd_handle{storage_id = StorageId}) ->
     {ok, Storage} = rpc:call(Worker, storage, get, [StorageId]),
-    Helper = storage:get_helper(Storage),
+    Helper = storage_config:get_helper(Storage),
     HelperName = helper:get_name(Helper),
     case HelperName of
         ?POSIX_HELPER_NAME ->
@@ -3758,7 +3758,7 @@ verify_file_deleted(Worker, FileGuid, Master, Attempts) ->
     end.
 
 clean_reverse_luma_cache(Worker) ->
-    {ok, Storages} = rpc:call(Worker, storage, list, []),
+    {ok, Storages} = rpc:call(Worker, storage_config, list, []),
     lists:foreach(fun(#document{key = StorageId}) ->
         ok = rpc:call(Worker, luma_cache, invalidate, [StorageId])
     end, Storages).
@@ -3777,7 +3777,7 @@ add_synced_storages(Config) ->
 add_rdwr_storages(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     RDWRStorages = lists:foldl(fun(W, AccIn) ->
-        {ok, Storages} = rpc:call(W, storage, list, []),
+        {ok, Storages} = rpc:call(W, storage_config, list, []),
         case find_rdwr_storage(Storages) of
             undefined -> AccIn;
             RDWRStorage -> AccIn#{W => RDWRStorage}
@@ -3811,9 +3811,9 @@ find_rdwr_storage(Storages) ->
             RDWRStorage
     end, undefined, Storages).
 
-is_rdwr(#storage{name = MountPoint, helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}) ->
+is_rdwr(#storage_config{name = MountPoint, helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}) ->
     <<"rdwr_storage">> =:= filename:basename(MountPoint);
-is_rdwr(#storage{name = <<"rdwr_storage">>, helpers = [#helper{name = ?S3_HELPER_NAME} | _]}) ->
+is_rdwr(#storage_config{name = <<"rdwr_storage">>, helpers = [#helper{name = ?S3_HELPER_NAME} | _]}) ->
     true;
 is_rdwr(_) ->
     false.
@@ -3829,14 +3829,14 @@ find_synced_storage(Storages) ->
             RDWRStorageIn
     end, undefined, Storages).
 
-is_synced(#storage{name = MountPoint, helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}) ->
+is_synced(#storage_config{name = MountPoint, helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}) ->
     <<"synced_storage">> =:= filename:basename(MountPoint);
-is_synced(#storage{name = <<"synced_storage">>, helpers = [#helper{name = ?S3_HELPER_NAME} | _]}) ->
+is_synced(#storage_config{name = <<"synced_storage">>, helpers = [#helper{name = ?S3_HELPER_NAME} | _]}) ->
     true.
 
 get_mount_point(Storage) ->
     % works only on POSIX storages!!!
-    Helper = storage:get_helper(Storage),
+    Helper = storage_config:get_helper(Storage),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
 
@@ -3846,7 +3846,7 @@ get_host_mount_point(Config, Storage) ->
     get_storage_path(Config, MountPoint).
 
 get_host_storage_file_id(Config, CanonicalPath, Storage, MountInRoot) ->
-    Helper = storage:get_helper(Storage),
+    Helper = storage_config:get_helper(Storage),
     case helper:get_name(Helper) of
         ?POSIX_HELPER_NAME ->
             get_host_posix_storage_file_id(Config, CanonicalPath, Storage, MountInRoot);

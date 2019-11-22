@@ -151,7 +151,7 @@ list_test(Config) ->
     ?assertMatch({ok, [#child_link_uuid{name = <<"f2">>}], #{token := _}},
         rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space list 1/list_test_d1">>}, 1, 1, T3])),
 
-    {ok, _, #{token := T4, last_name := LN, last_tree := LT}} = ?assertMatch({ok, [#child_link_uuid{name = <<"f1">>}], #{token := _}},
+    {ok, _, #{token := _T4, last_name := LN, last_tree := LT}} = ?assertMatch({ok, [#child_link_uuid{name = <<"f1">>}], #{token := _}},
         rpc:call(Worker1, file_meta, list_children, [{path, <<"/Space list 1/list_test_d1">>}, 1])),
     ?assertMatch({ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, D1DirUuid}, #document{value = #file_meta{name = <<"f0">>}}])),

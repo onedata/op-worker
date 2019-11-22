@@ -121,16 +121,6 @@ all() -> [
 -define(TEST_FILE_PATH, filename:join(?SPACE1, <<"file1">>)).
 -define(TEST_DIR_PATH, filename:join(?SPACE1, <<"dir1">>)).
 
-
-% record for specification of tests that adds QoS expression and checks QoS docs
-% all fields are associated with matching records defined in qos_tests_utils.hrl
--record(add_qos_and_check_docs_test_spec, {
-    qos_to_add :: [#qos_to_add{}],
-    expected_qos_entries :: [#expected_qos_entry{}],
-    expected_file_qos :: [#expected_file_qos{}]
-}).
-
-
 -define(PROVIDERS_MAP, #{
     ?P1 => ?P1,
     ?P2 => ?P2,
