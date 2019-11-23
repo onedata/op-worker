@@ -729,7 +729,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
     {Children :: [ctx()], NewFileCtx :: ctx()}.
 get_file_children_whitelisted(
     FileCtx, UserCtx, NonNegOffset, Limit, ChildrenWhiteList
-) when NonNegOffset > 0 ->
+) when NonNegOffset >= 0 ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             {list_user_spaces(UserCtx, NonNegOffset, Limit, ChildrenWhiteList), FileCtx};

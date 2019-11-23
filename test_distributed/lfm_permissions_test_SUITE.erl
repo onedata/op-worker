@@ -540,7 +540,7 @@ data_caveats_cache_test(Config) ->
     SessId = lfm_permissions_test_utils:create_session(W, UserId, Token),
 
 
-    %% CHECK gui_constraint CACHE
+    %% CHECK guid_constraint CACHE
 
     % before any call cache should be empty
     lists:foreach(fun(Guid) ->

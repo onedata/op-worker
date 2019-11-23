@@ -259,8 +259,9 @@ rename_into_different_place_within_posix_space(_, _, _, _,
 %% @doc
 %% Renames file on storage with flat paths, i.e. only modifies
 %% file_meta and optionally removes the target file, if TargetGuid
-%% is not undefined, i.e. target file already exists, it will be removed
-%% first.
+%% is not undefined (e.g. if target file already exists) it will be
+%% removed first.
+%% TODO VFS-5935
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_file_on_flat_storage(UserCtx :: user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
