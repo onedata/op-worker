@@ -21,13 +21,16 @@
 %% API
 -export([
     save/5,
-    get/4, get_active_links/1,
+    get/4, get_active_channels/1,
     update/5,
     delete/4
 ]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+-export([
+    get_ctx/0,
+    get_record_version/0, get_record_struct/1, upgrade_record/2
+]).
 
 -type timestamp() :: non_neg_integer().
 -type transfer_stats() :: #{od_provider:id() => #space_transfer_stats{}}.
@@ -123,17 +126,17 @@ get(TargetProvider, SpaceId, TransferType, StatsType) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns active links for given space (providers mapping to providers
+%% Returns active channels for given space (providers mapping to providers
 %% they recently sent data to). For efficiency reasons they are stored only
 %% with minute stats.
 %% @end
 %%-------------------------------------------------------------------
--spec get_active_links(SpaceId :: od_space:id()) ->
+-spec get_active_channels(SpaceId :: od_space:id()) ->
     {ok, #{od_provider:id() => [od_provider:id()]}} | {error, term()}.
-get_active_links(SpaceId) ->
+get_active_channels(SpaceId) ->
     case get(undefined, SpaceId, ?JOB_TRANSFERS_TYPE, ?MINUTE_PERIOD) of
-        #space_transfer_stats_cache{active_links = ActiveLinks} ->
-            {ok, ActiveLinks};
+        #space_transfer_stats_cache{active_channels = ActiveChannels} ->
+            {ok, ActiveChannels};
         Error ->
             Error
     end.
@@ -212,7 +215,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
 
 
 %%--------------------------------------------------------------------
@@ -229,7 +232,32 @@ get_record_struct(1) ->
         {stats_in, #{string => [integer]}},
         {stats_out, #{string => [integer]}},
         {active_links, #{string => [string]}}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {expires, integer},
+        {timestamp, integer},
+        {stats_in, #{string => [integer]}},
+        {stats_out, #{string => [integer]}},
+        {active_channels, #{string => [string]}}
     ]}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {Expires, Timestamp, StatsIn, StatsOut, ActiveChannels}) ->
+    {2, #space_transfer_stats_cache{
+        expires = Expires,
+        timestamp = Timestamp,
+        stats_in = StatsIn,
+        stats_out = StatsOut,
+        active_channels = ActiveChannels
+    }}.
 
 
 %%%===================================================================
@@ -333,7 +361,7 @@ prepare_aggregated_stats(TargetProvider, SpaceId, TransferType,
         timestamp = NewTimestamp,
         stats_in = maps:filter(Pred, NewStatsIn),
         stats_out = maps:filter(Pred, NewStatsOut),
-        active_links = undefined
+        active_channels = undefined
     },
 
     update(TargetProvider, SpaceId, TransferType, ?MINUTE_PERIOD, NewMinStats),
@@ -391,7 +419,7 @@ update_stats(undefined, OldStats, StatsType,
     #space_transfer_stats_cache{
         stats_in = StatsIn,
         stats_out = StatsOut,
-        active_links = ActiveLinks
+        active_channels = ActiveChannels
     } = OldStats,
 
     Histograms = get_histograms(StatsType, TransferStats),
@@ -399,8 +427,8 @@ update_stats(undefined, OldStats, StatsType,
     TimeWindow = transfer_histograms:period_to_time_window(StatsType),
     ZeroedHist = histogram:new(transfer_histograms:period_to_hist_length(StatsType)),
 
-    {HistIn, NewStatsOut, NewActiveLinks} = maps:fold(fun(SrcProvider, Hist, Acc) ->
-        {OldHistIn, OldStatsOut, OldActiveLinks} = Acc,
+    {HistIn, NewStatsOut, NewActiveChannels} = maps:fold(fun(SrcProvider, Hist, Acc) ->
+        {OldHistIn, OldStatsOut, OldActiveChannels} = Acc,
         LastUpdate = maps:get(SrcProvider, LastUpdates),
         NewHistIn = merge_histograms(
             OldHistIn, CurrentTime, Hist, LastUpdate, TimeWindow
@@ -411,20 +439,20 @@ update_stats(undefined, OldStats, StatsType,
             OldHistOut, CurrentTime, Hist, LastUpdate, TimeWindow
         ),
 
-        NewLinks = case CurrentTime - LastUpdate =< ?TRANSFER_INACTIVITY of
+        NewChannels = case CurrentTime - LastUpdate =< ?TRANSFER_INACTIVITY of
             false ->
-                OldActiveLinks;
+                OldActiveChannels;
             true ->
-                DestinationProviders = maps:get(SrcProvider, OldActiveLinks, []),
-                OldActiveLinks#{SrcProvider => [Provider | DestinationProviders]}
+                DestinationProviders = maps:get(SrcProvider, OldActiveChannels, []),
+                OldActiveChannels#{SrcProvider => [Provider | DestinationProviders]}
         end,
-        {NewHistIn, OldStatsOut#{SrcProvider => NewHistOut}, NewLinks}
-    end, {ZeroedHist, StatsOut, ActiveLinks}, Histograms),
+        {NewHistIn, OldStatsOut#{SrcProvider => NewHistOut}, NewChannels}
+    end, {ZeroedHist, StatsOut, ActiveChannels}, Histograms),
 
     OldStats#space_transfer_stats_cache{
         stats_in = StatsIn#{Provider => HistIn},
         stats_out = NewStatsOut,
-        active_links = NewActiveLinks
+        active_channels = NewActiveChannels
     };
 
 update_stats(TargetProvider, OldStats, StatsType,
@@ -486,7 +514,7 @@ merge_stats(Stats1, Stats2) ->
         timestamp = Timestamp,
         stats_in = maps:fold(MergeFun, StatsIn1, StatsIn2),
         stats_out = maps:fold(MergeFun, StatsOut1, StatsOut2),
-        active_links = undefined
+        active_channels = undefined
     }.
 
 

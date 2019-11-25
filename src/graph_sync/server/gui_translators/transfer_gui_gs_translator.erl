@@ -99,12 +99,7 @@ translate_resource(#gri{aspect = instance, scope = private}, #transfer{
             <<"dataSourceId">> => DataSourceId,
             <<"dataSourceName">> => DataSourceName,
             <<"queryParams">> => QueryParams,
-            <<"user">> => gri:serialize(#gri{
-                type = op_user,
-                id = UserId,
-                aspect = instance,
-                scope = shared
-            }),
+            <<"userId">> => UserId,
             <<"startTime">> => StartTime,
             <<"scheduleTime">> => ScheduleTime,
             <<"finishTime">> => case IsOngoing of

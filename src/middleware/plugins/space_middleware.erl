@@ -111,7 +111,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = views}}) -> #{
     optional => #{
-        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}},
         <<"page_token">> => {binary, non_empty}
     }
 };
@@ -154,7 +154,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
             ?ENDED_TRANSFERS_STATE
         ]},
         <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}},
         <<"page_token">> => {page_token, any}
     }
 };
@@ -540,8 +540,8 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
     {ok, value, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)};
 
 get(#op_req{gri = #gri{id = SpaceId, aspect = transfers_active_channels}}, _) ->
-    {ok, ActiveLinks} = space_transfer_stats_cache:get_active_links(SpaceId),
-    {ok, value, #{<<"channelDestinations">> => ActiveLinks}};
+    {ok, ActiveChannels} = space_transfer_stats_cache:get_active_channels(SpaceId),
+    {ok, value, #{<<"channelDestinations">> => ActiveChannels}};
 
 get(#op_req{data = Data, gri = #gri{
     id = SpaceId,
