@@ -27,10 +27,7 @@
 ]).
 
 %% datastore_model callbacks
--export([
-    get_ctx/0,
-    get_record_version/0, get_record_struct/1, upgrade_record/2
-]).
+-export([get_ctx/0]).
 
 -type timestamp() :: non_neg_integer().
 -type transfer_stats() :: #{od_provider:id() => #space_transfer_stats{}}.
@@ -206,58 +203,6 @@ delete(TargetProvider, SpaceId, TransferType, StatsType) ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_version() -> datastore_model:record_version().
-get_record_version() ->
-    2.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_struct(datastore_model:record_version()) ->
-    datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {expires, integer},
-        {timestamp, integer},
-        {stats_in, #{string => [integer]}},
-        {stats_out, #{string => [integer]}},
-        {active_links, #{string => [string]}}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {expires, integer},
-        {timestamp, integer},
-        {stats_in, #{string => [integer]}},
-        {stats_out, #{string => [integer]}},
-        {active_channels, #{string => [string]}}
-    ]}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades model's record from provided version to the next one.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {Expires, Timestamp, StatsIn, StatsOut, ActiveChannels}) ->
-    {2, #space_transfer_stats_cache{
-        expires = Expires,
-        timestamp = Timestamp,
-        stats_in = StatsIn,
-        stats_out = StatsOut,
-        active_channels = ActiveChannels
-    }}.
 
 
 %%%===================================================================
