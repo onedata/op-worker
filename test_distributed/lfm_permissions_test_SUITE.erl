@@ -268,6 +268,14 @@ data_caveats_test(Config) ->
         ])
     ),
 
+    % Children of dir being listed that don't exist should be omitted from  results
+    ?assertMatch(
+        {ok, [F1, F5]},
+        LsWithConfinedToken(DirGuid, [
+            #cv_data_path{whitelist = [Path1, <<DirPath/binary, "/i_do_not_exist">>, Path5]}
+        ])
+    ),
+
     % Using caveat for different directory should result in {error, eacces}
     ?assertMatch(
         {error, ?EACCES},
@@ -339,7 +347,9 @@ data_caveats_test(Config) ->
     ),
 
     % Test listing with caveats and options (offset, limit)
-    Token14 = tokens:confine(MainToken, #cv_data_path{whitelist = [Path1, Path2, Path4, Path5]}),
+    Token14 = tokens:confine(MainToken, #cv_data_path{whitelist = [
+        Path1, Path2, <<DirPath/binary, "/i_do_not_exist">>, Path4, Path5
+    ]}),
     SessId14 = lfm_permissions_test_utils:create_session(W, UserId, Token14),
     ?assertMatch(
         {ok, [F1, F2, F4]},

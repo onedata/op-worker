@@ -546,8 +546,12 @@ list_children_whitelisted(Entry, NonNegOffset, Limit, ChildrenWhiteList) when No
         {ok, FileUuid} = get_uuid(Entry),
 
         ValidLinks = lists:flatmap(fun
-            ({ok, L}) -> L;
-            ({error, _}) -> []
+            ({ok, L}) ->
+                L;
+            ({error, not_found}) ->
+                [];
+            ({error, _} = Error) ->
+                error(Error)
         end, datastore_model:get_links(?CTX, FileUuid, all, Names)),
 
         case NonNegOffset < length(ValidLinks) of
