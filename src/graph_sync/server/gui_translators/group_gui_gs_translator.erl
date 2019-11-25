@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles translation of op logic results concerning
+%%% This module handles translation of middleware results concerning
 %%% group entities into GUI GRAPH SYNC responses.
 %%% @end
 %%%-------------------------------------------------------------------

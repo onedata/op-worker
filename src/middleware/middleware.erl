@@ -98,7 +98,7 @@ handle(OpReq) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles an op logic request expressed by a #op_req{} record.
+%% Handles an middleware request expressed by a #op_req{} record.
 %% Entity can be provided if it was prefetched.
 %% @end
 %%--------------------------------------------------------------------
@@ -174,7 +174,7 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 %% @private
 %% @doc
 %% Ensures requested operation is supported by calling back
-%% proper op logic plugin, throws a proper error if not.
+%% proper middleware plugin, throws a proper error if not.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_operation_supported(req_ctx()) -> ok | no_return().
@@ -303,7 +303,7 @@ validate_request(#req_ctx{plugin = Plugin, versioned_entity = {Entity, _}, req =
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles an op logic request based on operation,
+%% Handles an middleware request based on operation,
 %% should be wrapped in a try-catch.
 %% @end
 %%--------------------------------------------------------------------

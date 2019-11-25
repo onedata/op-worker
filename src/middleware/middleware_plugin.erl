@@ -58,7 +58,7 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Determines if requesting client is authorized to perform given operation,
-%% based on op logic request and prefetched entity.
+%% based on middleware request and prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
 -callback authorize(middleware:req(), middleware:entity()) -> boolean().
@@ -76,7 +76,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a resource (aspect of entity) based on op logic request.
+%% Creates a resource (aspect of entity) based on middleware request.
 %% @end
 %%--------------------------------------------------------------------
 -callback create(middleware:req()) -> middleware:create_result().
@@ -84,7 +84,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves a resource (aspect of entity) based on op logic request and
+%% Retrieves a resource (aspect of entity) based on middleware request and
 %% prefetched entity.
 %% @end
 %%--------------------------------------------------------------------
@@ -93,7 +93,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Updates a resource (aspect of entity) based on op logic request.
+%% Updates a resource (aspect of entity) based on middleware request.
 %% @end
 %%--------------------------------------------------------------------
 -callback update(middleware:req()) -> middleware:update_result().
@@ -101,7 +101,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes a resource (aspect of entity) based on op logic request.
+%% Deletes a resource (aspect of entity) based on middleware request.
 %% @end
 %%--------------------------------------------------------------------
 -callback delete(middleware:req()) -> middleware:delete_result().

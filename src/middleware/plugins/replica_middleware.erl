@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations (create, get, update, delete)
+%%% This module handles middleware operations (create, get, update, delete)
 %%% corresponding to file aspects such as:
 %%% - distribution,
 %%% - replication,

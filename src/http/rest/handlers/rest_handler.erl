@@ -188,7 +188,7 @@ delete_resource(Req, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Processes a REST request (of any type) by calling op logic.
+%% Processes a REST request (of any type) by calling middleware.
 %% Return new Req and State (after setting cowboy response).
 %% @end
 %%--------------------------------------------------------------------

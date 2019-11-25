@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations (create, get, update, delete)
+%%% This module handles middleware operations (create, get, update, delete)
 %%% corresponding to provider aspects such as e.g. instance or configuration.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -21,7 +21,6 @@
 
 -export([gather_configuration/0]).
 
-% op logic callbacks
 -export([
     operation_supported/3,
     data_spec/1,

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides utils functions for op logic plugins.
+%%% This module provides utils functions for middleware plugins.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(middleware_utils).
