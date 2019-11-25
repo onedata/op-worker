@@ -94,10 +94,11 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{gri = #gri{id = TransferId}}) ->
     case transfer:get(TransferId) of
-        {ok, #document{value = Transfer}} ->
+        {ok, #document{value = Transfer, revs = [DbRev | _]}} ->
             % Transfer doc is synchronized only with providers supporting space
             % so if it was fetched then space must be supported locally
-            {ok, {Transfer, 1}};
+            {Revision, _Hash} = datastore_utils:parse_rev(DbRev),
+            {ok, {Transfer, Revision}};
         _ ->
             ?ERROR_NOT_FOUND
     end.
@@ -286,7 +287,7 @@ delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
 %% @doc
 %% Returns status of given transfer. Replaces active status with 'replicating'
 %% for replication and 'evicting' for eviction.
-%% In case of migration 'evicting' indicates that the transfer itself has
+%% In case of migration 'evicting' indicates that the replication itself has
 %% finished, but source replica eviction is still in progress.
 %% @end
 %%--------------------------------------------------------------------

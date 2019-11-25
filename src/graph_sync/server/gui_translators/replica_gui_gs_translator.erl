@@ -1,4 +1,5 @@
 %%%-------------------------------------------------------------------
+%%% @author Lukasz Opiola
 %%% @author Bartosz Walkowicz
 %%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -11,6 +12,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_gui_gs_translator).
+-author("Lukasz Opiola").
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
