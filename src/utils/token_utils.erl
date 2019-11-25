@@ -68,4 +68,4 @@ verify_api_caveats(Caveats, Operation, GRI) ->
             true -> ok;
             false -> throw(?ERROR_TOKEN_CAVEAT_UNVERIFIED(ApiCaveat))
         end
-    end, Caveats).
+    end, caveats:filter([cv_api], Caveats)).

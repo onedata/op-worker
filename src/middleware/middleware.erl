@@ -13,10 +13,9 @@
 %%%     1) assert operation is supported.
 %%%     2) sanitize request data.
 %%%     3) fetch resource the request refers to.
-%%%     4) check existence of relations.
-%%%     5) check authorization.
-%%%     6) check validity of request (e.g. whether space is locally supported).
-%%%     7) process request.
+%%%     4) check authorization.
+%%%     5) check validity of request (e.g. whether space is locally supported).
+%%%     6) process request.
 %%% All this operations are carried out by middleware plugins (modules
 %%% implementing `middleware_plugin` behaviour). Each such module is responsible
 %%% for handling all request pointing to the same entity type (#gri.type field).
