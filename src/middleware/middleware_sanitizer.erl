@@ -19,7 +19,9 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--type type_constraint() :: any | boolean | integer | binary | json.
+-type type_constraint() ::
+    any | boolean | integer | binary | json |
+    gri | page_token.
 -type value_constraint() ::
     any |
     non_empty |
@@ -29,12 +31,12 @@
     fun((Val :: term()) -> true | {true, NewVal :: term()} | false).
 
 -type param_spec() :: {type_constraint(), value_constraint()}.
-% The 'aspect' key word allows to validate the data provided in aspect identifier.
+% The 'aspect' keyword allows to validate the data provided in aspect identifier.
 -type params_spec() :: #{
-    Key :: binary() | {aspect, binary()} => param_spec()
+    Param :: binary() | {aspect, binary()} => param_spec()
 }.
 
--type data() :: #{Key :: aspect | binary() => term()}.
+-type data() :: #{Param :: aspect | binary() => term()}.
 -type data_spec() :: #{
     required => params_spec(),
     at_least_one => params_spec(),
@@ -61,60 +63,40 @@
 %% Sanitizes given data according to specified spec, throws on errors.
 %% @end
 %%--------------------------------------------------------------------
--spec sanitize_data(data(), data_spec()) -> data().
-sanitize_data(Data0, DataSpec) ->
+-spec sanitize_data(RawData :: data(), data_spec()) -> SanitizedData :: data().
+sanitize_data(RawData, DataSpec) ->
     RequiredParamsSpec = maps:get(required, DataSpec, #{}),
     OptionalParamsSpec = maps:get(optional, DataSpec, #{}),
     AtLeastOneParamsSpec = maps:get(at_least_one, DataSpec, #{}),
 
-    Data1 = sanitize_required_params(Data0, RequiredParamsSpec),
-    Data2 = sanitize_optional_params(Data1, OptionalParamsSpec),
-    sanitize_at_least_one_params(Data2, AtLeastOneParamsSpec).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec sanitize_required_params(data(), params_spec()) -> data().
-sanitize_required_params(Data, RequiredParamsSpec) ->
-    lists:foldl(fun(Key, DataAcc) ->
-        case transform_and_check_value(Key, DataAcc, RequiredParamsSpec) of
+    SanitizedData1 = lists:foldl(fun(Param, SanitizedDataAcc) ->
+        case sanitize_param(Param, RawData, RequiredParamsSpec) of
             false ->
-                throw(?ERROR_MISSING_REQUIRED_VALUE(Key));
-            {true, NewData} ->
-                NewData
+                throw(?ERROR_MISSING_REQUIRED_VALUE(Param));
+            {true, Val} ->
+                SanitizedDataAcc#{Param => Val}
         end
-    end, Data, maps:keys(RequiredParamsSpec)).
+    end, #{}, maps:keys(RequiredParamsSpec)),
 
-
-%% @private
--spec sanitize_optional_params(data(), params_spec()) -> data().
-sanitize_optional_params(Data, OptionalParamsSpec) ->
-    lists:foldl(fun(Key, DataAcc) ->
-        case transform_and_check_value(Key, DataAcc, OptionalParamsSpec) of
+    SanitizedData2 = lists:foldl(fun(Param, SanitizedDataAcc) ->
+        case sanitize_param(Param, RawData, OptionalParamsSpec) of
             false ->
-                DataAcc;
-            {true, NewData} ->
-                NewData
+                SanitizedDataAcc;
+            {true, Val} ->
+                SanitizedDataAcc#{Param => Val}
         end
-    end, Data, maps:keys(OptionalParamsSpec)).
+    end, SanitizedData1, maps:keys(OptionalParamsSpec)),
 
-
-%% @private
--spec sanitize_at_least_one_params(data(), params_spec()) -> data().
-sanitize_at_least_one_params(Data, AtLeastOneParamsSpec) ->
-    {Data2, HasAtLeastOne} = lists:foldl(
-        fun(Key, {DataAcc, HasAtLeastOneAcc}) ->
-            case transform_and_check_value(Key, DataAcc, AtLeastOneParamsSpec) of
+    {SanitizedData3, HasAtLeastOne} = lists:foldl(
+        fun(Param, {SanitizedDataAcc, HasAtLeastOneAcc}) ->
+            case sanitize_param(Param, RawData, AtLeastOneParamsSpec) of
                 false ->
-                    {DataAcc, HasAtLeastOneAcc};
-                {true, NewData} ->
-                    {NewData, true}
+                    {SanitizedDataAcc, HasAtLeastOneAcc};
+                {true, Val} ->
+                    {SanitizedDataAcc#{Param => Val}, true}
             end
-        end, {Data, false}, maps:keys(AtLeastOneParamsSpec)),
+        end, {SanitizedData2, false}, maps:keys(AtLeastOneParamsSpec)
+    ),
     case {length(maps:keys(AtLeastOneParamsSpec)), HasAtLeastOne} of
         {_, true} ->
             ok;
@@ -123,54 +105,58 @@ sanitize_at_least_one_params(Data, AtLeastOneParamsSpec) ->
         {_, false} ->
             throw(?ERROR_MISSING_AT_LEAST_ONE_VALUE(maps:keys(AtLeastOneParamsSpec)))
     end,
-    Data2.
+
+    SanitizedData3.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Performs simple value conversion (if possible) and checks the type and value
-%% of value for Key in Params. Takes into consideration special keys which are
-%% in form {aspect, binary()}, that allows to validate data in aspect.
-%% Params map must include 'aspect' key, that holds the aspect.
+%% Checks the type and value of Param in RawData and performs simple conversion
+%% if necessary and possible. Takes into consideration special params which are
+%% in form {aspect, binary()}, that allows to validate data in aspect
+%% (RawData must include 'aspect' key, that holds the aspect).
 %% @end
 %%--------------------------------------------------------------------
--spec transform_and_check_value(Key :: binary(), data(), params_spec()) ->
-    {true, data()} | false.
-transform_and_check_value({aspect, Key}, Data, ParamsSpec) ->
-    {TypeConstraint, ValueConstraint} = maps:get({aspect, Key}, ParamsSpec),
+-spec sanitize_param(Param :: binary(), data(), params_spec()) ->
+    {true, ParamValue :: term()} | false.
+sanitize_param({aspect, Param}, RawData, ParamsSpec) ->
+    {TypeConstraint, ValueConstraint} = maps:get({aspect, Param}, ParamsSpec),
     %% Aspect validator supports only aspects that are tuples
-    {_, Value} = maps:get(aspect, Data),
+    {_, RawValue} = maps:get(aspect, RawData),
     % Ignore the returned value - the check will throw in case the value is
     % not valid
-    transform_and_check_value(TypeConstraint, ValueConstraint, Key, Value),
-    {true, Data};
-transform_and_check_value(Key, Data, ParamsSpec) ->
-    case maps:get(Key, Data, undefined) of
+    {true, sanitize_param(TypeConstraint, ValueConstraint, Param, RawValue)};
+sanitize_param(Param, RawData, ParamsSpec) ->
+    case maps:get(Param, RawData, undefined) of
         undefined ->
             false;
-        Value ->
-            {TypeConstraint, ValueConstraint} = maps:get(Key, ParamsSpec),
-            NewValue = transform_and_check_value(
-                TypeConstraint, ValueConstraint, Key, Value
-            ),
-            {true, Data#{Key => NewValue}}
+        RawValue ->
+            {TypeConstraint, ValueConstraint} = maps:get(Param, ParamsSpec),
+            {true, sanitize_param(
+                TypeConstraint, ValueConstraint, Param, RawValue
+            )}
     end.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks the type and value for Key in Data and performs simple conversion
-%% if required and possible.
+%% Checks the type and value for Param in RawData and performs simple
+%% conversion if necessary and possible.
 %% @end
 %%--------------------------------------------------------------------
--spec transform_and_check_value(type_constraint(), value_constraint(),
-    Key :: binary(), Value :: term()) -> term().
-transform_and_check_value(TypeConstraint, ValueConstraint, Key, Value0) ->
+-spec sanitize_param(type_constraint(), value_constraint(),
+    Param :: binary(), RawValue :: term()) -> term().
+sanitize_param(TypeConstraint, ValueConstraint, Param, RawValue) ->
     try
-        Value1 = check_type(TypeConstraint, Key, Value0),
-        case check_value(TypeConstraint, ValueConstraint, Key, Value1) of
+        Value1 = check_type(TypeConstraint, Param, RawValue),
+        case check_value(TypeConstraint, ValueConstraint, Param, Value1) of
             ok ->
                 Value1;
             {ok, Value2} ->
@@ -183,143 +169,145 @@ transform_and_check_value(TypeConstraint, ValueConstraint, Key, Value0) ->
             ?error_stacktrace("Error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            throw(?ERROR_BAD_DATA(Key))
+            throw(?ERROR_BAD_DATA(Param))
     end.
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks the type of value for Key in Data and performs simple conversion
-%% if required and possible.
+%% Checks the type of value for Param and performs simple type
+%% conversion if required and possible.
 %% @end
 %%--------------------------------------------------------------------
--spec check_type(type_constraint(), Key :: binary(), Value :: term()) ->
+-spec check_type(type_constraint(), Param :: binary(), RawValue :: term()) ->
     NewVal :: term() | no_return().
-check_type(any, _Key, Term) ->
+check_type(any, _Param, Term) ->
     Term;
 
-check_type(binary, _Key, Binary) when is_binary(Binary) ->
+check_type(binary, _Param, Binary) when is_binary(Binary) ->
     Binary;
-check_type(binary, _Key, Atom) when is_atom(Atom) ->
+check_type(binary, _Param, Atom) when is_atom(Atom) ->
     atom_to_binary(Atom, utf8);
-check_type(binary, Key, _) ->
-    throw(?ERROR_BAD_VALUE_BINARY(Key));
+check_type(binary, Param, _) ->
+    throw(?ERROR_BAD_VALUE_BINARY(Param));
 
-check_type(boolean, _Key, true) ->
+check_type(boolean, _Param, true) ->
     true;
-check_type(boolean, _Key, <<"true">>) ->
+check_type(boolean, _Param, <<"true">>) ->
     true;
-check_type(boolean, _Key, false) ->
+check_type(boolean, _Param, false) ->
     false;
-check_type(boolean, _Key, <<"false">>) ->
+check_type(boolean, _Param, <<"false">>) ->
     false;
-check_type(boolean, Key, _) ->
-    throw(?ERROR_BAD_VALUE_BOOLEAN(Key));
+check_type(boolean, Param, _) ->
+    throw(?ERROR_BAD_VALUE_BOOLEAN(Param));
 
-check_type(integer, Key, Bin) when is_binary(Bin) ->
+check_type(integer, Param, Bin) when is_binary(Bin) ->
     try
         binary_to_integer(Bin)
     catch _:_ ->
-        throw(?ERROR_BAD_VALUE_INTEGER(Key))
+        throw(?ERROR_BAD_VALUE_INTEGER(Param))
     end;
-check_type(integer, _Key, Int) when is_integer(Int) ->
+check_type(integer, _Param, Int) when is_integer(Int) ->
     Int;
-check_type(integer, Key, _) ->
-    throw(?ERROR_BAD_VALUE_INTEGER(Key));
+check_type(integer, Param, _) ->
+    throw(?ERROR_BAD_VALUE_INTEGER(Param));
 
-check_type(gri, _Key, #gri{} = GRI) ->
+check_type(gri, _Param, #gri{} = GRI) ->
     GRI;
-check_type(gri, Key, EncodedGri) when is_binary(EncodedGri) ->
+check_type(gri, Param, EncodedGri) when is_binary(EncodedGri) ->
     try
         gri:deserialize(EncodedGri)
     catch _:_ ->
-        throw(?ERROR_BAD_DATA(Key))
+        throw(?ERROR_BAD_DATA(Param))
     end;
-check_type(gri, Key, _) ->
-    throw(?ERROR_BAD_DATA(Key));
+check_type(gri, Param, _) ->
+    throw(?ERROR_BAD_DATA(Param));
 
-check_type(page_token, _Key, null) ->
+check_type(page_token, _Param, null) ->
     undefined;
-check_type(page_token, _Key, <<"null">>) ->
+check_type(page_token, _Param, <<"null">>) ->
     undefined;
-check_type(page_token, _Key, undefined) ->
+check_type(page_token, _Param, undefined) ->
     undefined;
-check_type(page_token, _Key, <<"undefined">>) ->
+check_type(page_token, _Param, <<"undefined">>) ->
     undefined;
-check_type(page_token, Key, <<>>) ->
-    throw(?ERROR_BAD_VALUE_EMPTY(Key));
-check_type(page_token, _Key, PageToken) when is_binary(PageToken) ->
+check_type(page_token, Param, <<>>) ->
+    throw(?ERROR_BAD_VALUE_EMPTY(Param));
+check_type(page_token, _Param, PageToken) when is_binary(PageToken) ->
     PageToken;
-check_type(page_token, Key, _) ->
-    throw(?ERROR_BAD_DATA(Key));
+check_type(page_token, Param, _) ->
+    throw(?ERROR_BAD_DATA(Param));
 
-check_type(json, _Key, JSON) when is_map(JSON) ->
+check_type(json, _Param, JSON) when is_map(JSON) ->
     JSON;
-check_type(json, Key, _) ->
-    throw(?ERROR_BAD_VALUE_JSON(Key));
+check_type(json, Param, _) ->
+    throw(?ERROR_BAD_VALUE_JSON(Param));
 
-check_type(TypeConstraint, Key, _) ->
-    ?error("Unknown type constraint: ~p for key: ~p", [TypeConstraint, Key]),
+check_type(TypeConstraint, Param, _) ->
+    ?error("Unknown type constraint: ~p for param: ~p", [
+        TypeConstraint, Param
+    ]),
     throw(?ERROR_INTERNAL_SERVER_ERROR).
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Asserts that specified value_constraint holds for Key in Params.
+%% Asserts that specified value_constraint holds for Param's Value.
 %% It is also possible to modify value by providing RectifyFun since
 %% in some cases it may be desirable to perform specific transformations
 %% on values.
 %% @end
 %%--------------------------------------------------------------------
--spec check_value(type_constraint(), value_constraint(), Key :: binary(),
+-spec check_value(type_constraint(), value_constraint(), Param :: binary(),
     Value :: term()) -> ok | {ok, NewVal :: term()} | no_return().
-check_value(_, any, _Key, _) ->
+check_value(_, any, _Param, _) ->
     ok;
 
-check_value(binary, non_empty, Key, <<"">>) ->
-    throw(?ERROR_BAD_VALUE_EMPTY(Key));
-check_value(json, non_empty, Key, Map) when map_size(Map) == 0 ->
-    throw(?ERROR_BAD_VALUE_EMPTY(Key));
-check_value(_, non_empty, _Key, _) ->
+check_value(binary, non_empty, Param, <<"">>) ->
+    throw(?ERROR_BAD_VALUE_EMPTY(Param));
+check_value(json, non_empty, Param, Map) when map_size(Map) == 0 ->
+    throw(?ERROR_BAD_VALUE_EMPTY(Param));
+check_value(_, non_empty, _Param, _) ->
     ok;
 
-check_value(_, {not_lower_than, Threshold}, Key, Value) ->
+check_value(_, {not_lower_than, Threshold}, Param, Value) ->
     case Value >= Threshold of
         true ->
             ok;
         false ->
-            throw(?ERROR_BAD_VALUE_TOO_LOW(Key, Threshold))
+            throw(?ERROR_BAD_VALUE_TOO_LOW(Param, Threshold))
     end;
-check_value(_, {between, Low, High}, Key, Value) ->
+check_value(_, {between, Low, High}, Param, Value) ->
     case Value >= Low andalso Value =< High of
         true ->
             ok;
         false ->
-            throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(Key, Low, High))
+            throw(?ERROR_BAD_VALUE_NOT_IN_RANGE(Param, Low, High))
     end;
 
-check_value(_, AllowedValues, Key, Val) when is_list(AllowedValues) ->
+check_value(_, AllowedValues, Param, Val) when is_list(AllowedValues) ->
     case lists:member(Val, AllowedValues) of
         true ->
             ok;
         _ ->
-            throw(?ERROR_BAD_VALUE_NOT_ALLOWED(Key, AllowedValues))
+            throw(?ERROR_BAD_VALUE_NOT_ALLOWED(Param, AllowedValues))
     end;
 
-check_value(_, RectifyFun, Key, Val) when is_function(RectifyFun, 1) ->
+check_value(_, RectifyFun, Param, Val) when is_function(RectifyFun, 1) ->
     case RectifyFun(Val) of
         true ->
             ok;
         {true, NewVal} ->
             {ok, NewVal};
         false ->
-            throw(?ERROR_BAD_DATA(Key))
+            throw(?ERROR_BAD_DATA(Param))
     end;
 
-check_value(TypeConstraint, ValueConstraint, Key, _) ->
-    ?error("Unknown {type, value} constraint: {~p, ~p} for key: ~p", [
-        TypeConstraint, ValueConstraint, Key
+check_value(TypeConstraint, ValueConstraint, Param, _) ->
+    ?error("Unknown {type, value} constraint: {~p, ~p} for param: ~p", [
+        TypeConstraint, ValueConstraint, Param
     ]),
     throw(?ERROR_INTERNAL_SERVER_ERROR).

@@ -169,6 +169,21 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 %%%===================================================================
 
 
+%% @private
+-spec get_plugin(gri:entity_type()) -> module() | no_return().
+get_plugin(op_file) -> file_middleware;
+get_plugin(op_group) -> group_middleware;
+get_plugin(op_metrics) -> metrics_middleware;
+get_plugin(op_provider) -> provider_middleware;
+get_plugin(op_qos) -> qos_middleware;
+get_plugin(op_replica) -> replica_middleware;
+get_plugin(op_share) -> share_middleware;
+get_plugin(op_space) -> space_middleware;
+get_plugin(op_transfer) -> transfer_middleware;
+get_plugin(op_user) -> user_middleware;
+get_plugin(_) -> throw(?ERROR_NOT_SUPPORTED).
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -206,8 +221,9 @@ sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
         undefined ->
             ReqCtx;
         DataSpec ->
-            DataWithAspect = RawData#{aspect => Aspect},
-            SanitizedData = middleware_sanitizer:sanitize_data(DataWithAspect, DataSpec),
+            SanitizedData = middleware_sanitizer:sanitize_data(
+                RawData#{aspect => Aspect}, DataSpec
+            ),
             ReqCtx#req_ctx{req = Req#op_req{
                 data = maps:remove(aspect, SanitizedData)
             }}
@@ -217,8 +233,8 @@ sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Retrieves the entity specified in request by calling back proper op
-%% logic plugin. Does nothing if the entity is prefetched, GRI of the
+%% Retrieves the entity specified in request by calling back proper
+%% middleware plugin. Does nothing if the entity is prefetched, GRI of the
 %% request is not related to any entity or callback is not
 %% implemented by plugin.
 %% @end
@@ -377,18 +393,3 @@ process_request(#req_ctx{
         {Result, _} ->
             Result
     end.
-
-
-%% @private
--spec get_plugin(gri:entity_type()) -> module() | no_return().
-get_plugin(op_file) -> file_middleware;
-get_plugin(op_group) -> group_middleware;
-get_plugin(op_metrics) -> metrics_middleware;
-get_plugin(op_provider) -> provider_middleware;
-get_plugin(op_qos) -> qos_middleware;
-get_plugin(op_replica) -> replica_middleware;
-get_plugin(op_share) -> share_middleware;
-get_plugin(op_space) -> space_middleware;
-get_plugin(op_transfer) -> transfer_middleware;
-get_plugin(op_user) -> user_middleware;
-get_plugin(_) -> throw(?ERROR_NOT_SUPPORTED).
