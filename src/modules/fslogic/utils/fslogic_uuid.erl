@@ -26,6 +26,7 @@
 
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
+-define(USER_ROOT_SPACE_ID, <<"userRootSpaceId">>).
 
 %%%===================================================================
 %%% API
@@ -61,7 +62,7 @@ user_root_dir_uuid(UserId) ->
 %%--------------------------------------------------------------------
 -spec user_root_dir_guid(UserId :: od_user:id()) -> fslogic_worker:file_guid().
 user_root_dir_guid(UserId) ->
-    file_id:pack_guid(user_root_dir_uuid(UserId), undefined).
+    file_id:pack_guid(user_root_dir_uuid(UserId), ?USER_ROOT_SPACE_ID).
 
 %%--------------------------------------------------------------------
 %% @doc
