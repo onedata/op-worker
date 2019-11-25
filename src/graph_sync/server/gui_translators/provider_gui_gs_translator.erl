@@ -27,8 +27,14 @@
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{aspect = instance, scope = protected}, #od_provider{
-    name = Name
+    name = Name,
+    latitude = Latitude,
+    longitude = Longitude,
+    online = Online
 }) ->
     #{
-        <<"name">> => Name
+        <<"name">> => Name,
+        <<"latitude">> => Latitude,
+        <<"longitude">> => Longitude,
+        <<"online">> => Online
     }.
