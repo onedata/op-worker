@@ -17,11 +17,10 @@
 
 -behaviour(cowboy_rest).
 
--include("middleware/middleware.hrl").
 -include("http/rest.hrl").
--include("global_definitions.hrl").
--include_lib("ctool/include/logging.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
 -type method() :: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'.
@@ -50,9 +49,6 @@
     accept_resource/2,
     provide_resource/2,
     delete_resource/2
-]).
--export([
-    rest_routes/0
 ]).
 
 
@@ -182,41 +178,6 @@ provide_resource(Req, State) ->
     {stop, cowboy_req:req(), state()}.
 delete_resource(Req, State) ->
     process_request(Req, State).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns all REST routes in the cowboy router format.
-%% @end
-%%--------------------------------------------------------------------
--spec rest_routes() -> [{binary(), module(), map()}].
-rest_routes() ->
-    AllRoutes = lists:flatten([
-        file_rest_routes:routes(),
-        monitoring_rest_routes:routes(),
-        oneprovider_rest_routes:routes(),
-        qos_rest_routes:routes(),
-        replica_rest_routes:routes(),
-        share_rest_routes:routes(),
-        space_rest_routes:routes(),
-        transfer_rest_routes:routes()
-    ]),
-    % Aggregate routes that share the same path
-    AggregatedRoutes = lists:foldr(fun
-        ({Path, Handler, #rest_req{method = Method} = RestReq}, [{Path, _, RoutesForPath} | Acc]) ->
-            [{Path, Handler, RoutesForPath#{Method => RestReq}} | Acc];
-        ({Path, Handler, #rest_req{method = Method} = RestReq}, Acc) ->
-            [{Path, Handler, #{Method => RestReq}} | Acc]
-    end, [], AllRoutes),
-    % Convert all routes to cowboy-compliant routes
-    % - prepend REST prefix to every route
-    % - rest handler module must be added as second element to the tuples
-    % - RoutesForPath will serve as Opts to rest handler init.
-    {ok, PrefixStr} = application:get_env(?APP_NAME, op_rest_api_prefix),
-    Prefix = str_utils:to_binary(PrefixStr),
-    lists:map(fun({Path, Handler, RoutesForPath}) ->
-        {<<Prefix/binary, Path/binary>>, Handler, RoutesForPath}
-    end, AggregatedRoutes).
 
 
 %%%===================================================================
