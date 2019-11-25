@@ -43,13 +43,6 @@
     <<"owner_id">>, <<"shares">>, <<"type">>, <<"file_id">>
 ]).
 
--define(TRANSFER_GRI_ID(__TID), gri:serialize(#gri{
-    type = op_transfer,
-    id = __TID,
-    aspect = instance,
-    scope = private
-})).
-
 
 %%%===================================================================
 %%% API
@@ -498,14 +491,12 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
     }} = transferred_file:get_transfers(FileGuid),
 
     Transfers = #{
-        <<"ongoingList">> => [?TRANSFER_GRI_ID(Tid) || Tid <- Ongoing],
+        <<"ongoingList">> => Ongoing,
         <<"endedCount">> => length(Ended)
     },
     case maps:get(<<"include_ended_list">>, Data, false) of
         true ->
-            {ok, value, Transfers#{
-                <<"endedList">> => [?TRANSFER_GRI_ID(Tid) || Tid <- Ended]
-            }};
+            {ok, value, Transfers#{<<"endedList">> => Ended}};
         false ->
             {ok, value, Transfers}
     end.

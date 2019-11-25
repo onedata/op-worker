@@ -24,14 +24,34 @@
 ]).
 
 
+-define(TRANSFER_GRI_ID(__TID), gri:serialize(#gri{
+    type = op_transfer,
+    id = __TID,
+    aspect = instance,
+    scope = private
+})).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = transfers}, Transfers) ->
-    Transfers.
+translate_value(#gri{aspect = transfers}, TransfersForFile0) ->
+    TransfersForFile1 = maps:update_with(
+        <<"ongoingList">>,
+        fun(OngoingIds) -> [?TRANSFER_GRI_ID(Tid) || Tid <- OngoingIds] end,
+        TransfersForFile0
+    ),
+    case maps:take(<<"endedList">>, TransfersForFile1) of
+        {EndedIds, TransfersForFile2} ->
+            TransfersForFile2#{
+                <<"endedList">> => [?TRANSFER_GRI_ID(Tid) || Tid <- EndedIds]
+            };
+        error ->
+            TransfersForFile0
+    end.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
