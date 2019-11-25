@@ -638,11 +638,10 @@ read_internal(SDHandle = #sd_handle{file_handle = FileHandle}, Offset, MaxSize) 
 %% @end
 %%--------------------------------------------------------------------
 -spec open_for_read(handle()) -> {ok, handle()} | error_reply().
-open_for_read(SDHandle) ->
-    check_permissions:execute(
-        [?read_object],
-        [SDHandle#sd_handle{session_id = ?ROOT_SESS_ID}, read],
-        fun open_insecure/2
+open_for_read(SFMHandle) ->
+    open_with_permissions_check(
+        SFMHandle#sd_handle{session_id = ?ROOT_SESS_ID},
+        [?read_object], read
     ).
 
 %%--------------------------------------------------------------------
@@ -652,11 +651,10 @@ open_for_read(SDHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_for_write(handle()) -> {ok, handle()} | error_reply().
-open_for_write(SDHandle) ->
-    check_permissions:execute(
-        [?write_object],
-        [SDHandle#sd_handle{session_id = ?ROOT_SESS_ID}, write],
-        fun open_insecure/2
+open_for_write(SFMHandle) ->
+    open_with_permissions_check(
+        SFMHandle#sd_handle{session_id = ?ROOT_SESS_ID},
+        [?write_object], write
     ).
 
 %%--------------------------------------------------------------------
@@ -666,12 +664,32 @@ open_for_write(SDHandle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_for_rdwr(handle()) -> {ok, handle()} | error_reply().
-open_for_rdwr(SDHandle) ->
-    check_permissions:execute(
-        [?read_object, ?write_object],
-        [SDHandle#sd_handle{session_id = ?ROOT_SESS_ID}, rdwr],
-        fun open_insecure/2
+open_for_rdwr(SFMHandle) ->
+    open_with_permissions_check(
+        SFMHandle#sd_handle{session_id = ?ROOT_SESS_ID},
+        [?read_object, ?write_object], rdwr
     ).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @equiv open/2, but with permission control
+%% @end
+%%--------------------------------------------------------------------
+-spec open_with_permissions_check(handle(), [data_access_rights:requirement()],
+    helpers:open_flag()) -> {ok, handle()} | error_reply().
+open_with_permissions_check(#sd_handle{
+    session_id = SessionId,
+    space_id = SpaceId,
+    file_uuid = FileUuid,
+    share_id = ShareId
+} = SFMHandle, AccessRequirements, OpenFlag) ->
+    FileGuid = file_id:pack_share_guid(FileUuid, SpaceId, ShareId),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    UserCtx = user_ctx:new(SessionId),
+
+    % TODO VFS-5917
+    fslogic_authz:ensure_authorized(UserCtx, FileCtx, AccessRequirements),
+    open_insecure(SFMHandle, OpenFlag).
 
 %%--------------------------------------------------------------------
 %% @private

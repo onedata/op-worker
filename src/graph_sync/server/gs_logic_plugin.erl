@@ -47,13 +47,18 @@ verify_handshake_auth(undefined, _) ->
     {ok, ?NOBODY};
 verify_handshake_auth(nobody, _) ->
     {ok, ?NOBODY};
-verify_handshake_auth({token, Token}, PeerIp) ->
-    Credentials = #token_auth{token = Token, peer_ip = PeerIp},
-    case http_auth:authenticate(Credentials, gui) of
+verify_handshake_auth({token, SerializedToken}, PeerIp) ->
+    Credentials = #token_auth{
+        token = SerializedToken,
+        peer_ip = PeerIp
+    },
+    case http_auth:authenticate(Credentials, gui, disallow_data_caveats) of
         {ok, ?USER = Auth} ->
             {ok, Auth};
-        {error, _} ->
-            ?ERROR_UNAUTHORIZED
+        {ok, ?NOBODY} ->
+            ?ERROR_UNAUTHORIZED;
+        {error, _} = Error ->
+            Error
     end.
 
 

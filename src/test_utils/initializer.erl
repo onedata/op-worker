@@ -27,11 +27,16 @@
 -include_lib("public_key/include/public_key.hrl").
 
 %% API
--export([setup_session/3, teardown_session/2, setup_storage/1, setup_storage/2, teardown_storage/1, clean_test_users_and_spaces/1,
+-export([
+    create_token/1, create_token/2,
+    setup_session/3, teardown_session/2,
+    setup_storage/1, setup_storage/2, teardown_storage/1,
+    clean_test_users_and_spaces/1,
     remove_pending_messages/0, create_test_users_and_spaces/2,
     remove_pending_messages/1, clear_subscriptions/1, space_storage_mock/2,
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
-    domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1]).
+    domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1
+]).
 -export([mock_provider_ids/1, mock_provider_id/4, unmock_provider_ids/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
@@ -224,6 +229,27 @@ clear_subscriptions(Worker) ->
     lists:foreach(fun(#document{key = Key}) ->
         ?assertEqual(ok, rpc:call(Worker, subscription, delete, [Key]))
     end, Docs).
+
+
+-spec create_token(od_user:id()) -> tokens:serialized().
+create_token(UserId) ->
+    create_token(UserId, []).
+
+
+-spec create_token(od_user:id(), [caveats:caveat()]) -> tokens:serialized().
+create_token(UserId, Caveats) ->
+    {ok, SerializedToken} = ?assertMatch(
+        {ok, _},
+        tokens:serialize(tokens:construct(#token{
+            onezone_domain = <<"zone">>,
+            subject = ?SUB(user, UserId),
+            id = UserId,
+            type = ?ACCESS_TOKEN,
+            persistent = false
+        }, UserId, Caveats))
+    ),
+    SerializedToken.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -680,14 +706,13 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     Users = maps:fold(fun(UserId, SpacesList, AccIn) ->
         UserConfig = proplists:get_value(UserId, UsersSetup),
         DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
-        Token = ?DUMMY_USER_TOKEN(UserId),
         Name = fun(Text, User) ->
             list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
         AccIn ++ [{UserId, #user_config{
             id = UserId,
             name = Name("name", UserId),
             spaces = SpacesList,
-            token = Token,
+            token = create_token(UserId),
             default_space = DefaultSpaceId,
             groups = maps:get(UserId, UserToGroups, [])
         }}
@@ -854,7 +879,6 @@ user_logic_mock_setup(Workers, Users) ->
                     end;
                 _ ->
                     {error, forbidden}
-
             end;
         (_, SessionId, UserId) ->
             {ok, #document{value = #session{

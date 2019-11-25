@@ -28,6 +28,7 @@
 %%% API
 %%%===================================================================
 
+
 handle_handshake(#client_handshake_request{} = Request, IpAddress) ->
     handle_client_handshake(Request, IpAddress);
 handle_handshake(#provider_handshake_request{} = Request, IpAddress) ->
@@ -88,6 +89,10 @@ handle_client_handshake(#client_handshake_request{
 } = Req, IpAddress) when is_binary(Nonce) ->
 
     assert_client_compatibility(Req, IpAddress),
+    case catch token_utils:assert_interface_allowed(Token, oneclient) of
+        ok -> ok;
+        _ -> throw(invalid_token)
+    end,
 
     Auth1 = Auth0#token_auth{peer_ip = IpAddress},
     case user_identity:get_or_fetch(Auth1) of

@@ -28,7 +28,7 @@
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
--export([get_auth/1, get_user_id/1]).
+-export([get_auth/1, get_data_constraints/1, get_user_id/1]).
 -export([set_direct_io/2]).
 
 % exometer callbacks
@@ -288,6 +288,14 @@ get_auth(#session{auth = Auth}) ->
     Auth;
 get_auth(#document{value = Session}) ->
     get_auth(Session).
+
+
+-spec get_data_constraints(record() | doc()) -> data_constraints:constraints().
+get_data_constraints(#session{data_constraints = DataConstraints}) ->
+    DataConstraints;
+get_data_constraints(#document{value = Session}) ->
+    get_data_constraints(Session).
+
 
 %%--------------------------------------------------------------------
 %% @doc

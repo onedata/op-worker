@@ -13,6 +13,7 @@
 
 -include("fuse_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -327,7 +328,7 @@ remove_file_on_ceph_using_client(Config0) ->
     {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker, Handle),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker, [{active, true}], SessionId(Worker)),
+    {ok, {Sock, _}} = fuse_test_utils:connect_as_user(Config, Worker, <<"user2">>, [{active, true}]),
 
     L = utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"]),
     ?assertEqual(true, length(L) > 0),
@@ -468,8 +469,12 @@ init_per_testcase(remove_file_on_ceph_using_client, Config) ->
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = ?TOKEN}) ->
-            {ok, #document{value = #user_identity{user_id = <<"user2">>}}}
+        fun(#token_auth{token = SerializedToken}) ->
+            {ok, #token{
+                subject = ?SUB(user, UserId)
+            }} = tokens:deserialize(SerializedToken),
+
+            {ok, #document{value = #user_identity{user_id = UserId}}}
         end
     ),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model used for caching permissions to files (used by check_permissions module).
+%%% Model used for caching permissions to files (used by fslogic_authz module).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(permissions_cache).

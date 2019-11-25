@@ -17,6 +17,7 @@
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -440,9 +441,10 @@ end_per_testcase(_Case, Config) ->
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), SessId :: session:id(),
     Iden :: session:identity(), Conn :: pid()) -> ok.
-session_setup(Worker, SessId, Iden, Conn) ->
+session_setup(Worker, SessId, #user_identity{user_id = UserId} = Iden, Conn) ->
+    SerializedToken = initializer:create_token(UserId),
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, SessId, Iden, #token_auth{}, Conn
+        Worker, SessId, Iden, #token_auth{token = SerializedToken}, Conn
     ).
 
 %%--------------------------------------------------------------------

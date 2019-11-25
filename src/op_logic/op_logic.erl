@@ -288,7 +288,22 @@ ensure_authorized(#req_ctx{req = #op_req{auth = ?ROOT}}) ->
     % Root client is authorized to do everything (that client is only available
     % internally).
     ok;
-ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, versioned_entity = {Entity, _}}) ->
+ensure_authorized(#req_ctx{
+    plugin = Plugin,
+    versioned_entity = {Entity, _},
+    req = #op_req{operation = Operation, auth = Auth, gri = GRI} = OpReq
+}) ->
+    Caveats = Auth#auth.caveats,
+
+    case Plugin of
+        op_file ->
+            % Only op_file endpoints allow data caveats
+            ok;
+        _ ->
+            token_utils:assert_no_data_caveats(Caveats)
+    end,
+    token_utils:verify_api_caveats(Caveats, Operation, GRI),
+
     Result = try
         Plugin:authorize(OpReq, Entity)
     catch _:_ ->
@@ -300,7 +315,7 @@ ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, versioned_entity = {Ent
         true ->
             ok;
         false ->
-            case OpReq#op_req.auth of
+            case Auth of
                 ?NOBODY ->
                     % The client was not authenticated -> unauthorized
                     throw(?ERROR_UNAUTHORIZED);

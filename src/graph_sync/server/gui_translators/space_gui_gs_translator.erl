@@ -35,6 +35,8 @@ translate_value(#gri{aspect = transfers}, #{<<"transfers">> := TransfersIds}) ->
         aspect = instance,
         scope = private
     }) end, TransfersIds)};
+translate_value(#gri{aspect = transfers_active_channels}, ActiveChannels) ->
+    ActiveChannels;
 translate_value(#gri{aspect = {transfers_throughput_charts, _}}, Charts) ->
     Charts.
 

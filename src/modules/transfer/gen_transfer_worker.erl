@@ -48,7 +48,7 @@
 %% Callback called to get permissions required to check before starting transfer.
 %% @end
 %%--------------------------------------------------------------------
--callback required_permissions() -> [check_permissions:raw_access_definition()].
+-callback required_permissions() -> [data_access_rights:requirement()].
 
 
 %%--------------------------------------------------------------------
@@ -239,27 +239,30 @@ should_start(NextRetryTimestamp) ->
 %%-------------------------------------------------------------------
 -spec transfer_data(state(), file_ctx:ctx(), transfer_params(), non_neg_integer()) ->
     ok | {retry, file_ctx:ctx()} | {error, term()}.
-transfer_data(State = #state{mod = Mod}, FileCtx, Params, RetriesLeft) ->
-    Args = [Params#transfer_params.user_ctx, FileCtx, State, Params],
-    RequiredPerms = Mod:required_permissions(),
+transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
+    UserCtx = Params#transfer_params.user_ctx,
+    AccessDefinitions = Mod:required_permissions(),
 
-    try check_permissions:execute(RequiredPerms, Args, fun transfer_data_insecure/4) of
+    try
+        FileCtx1 = fslogic_authz:ensure_authorized(UserCtx, FileCtx0, AccessDefinitions),
+        transfer_data_insecure(UserCtx, FileCtx1, State, Params)
+    of
         ok ->
             ok;
         Error = {error, _Reason} ->
-            maybe_retry(FileCtx, Params, RetriesLeft, Error)
+            maybe_retry(FileCtx0, Params, RetriesLeft, Error)
     catch
         throw:cancelled ->
             {error, cancelled};
         throw:already_ended ->
             {error, already_ended};
         error:{badmatch, Error = {error, not_found}} ->
-            maybe_retry(FileCtx, Params, RetriesLeft, Error);
+            maybe_retry(FileCtx0, Params, RetriesLeft, Error);
         Error:Reason ->
             ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [
                 Error, Reason, Params#transfer_params.transfer_id
             ]),
-            maybe_retry(FileCtx, Params, RetriesLeft, {Error, Reason})
+            maybe_retry(FileCtx0, Params, RetriesLeft, {Error, Reason})
     end.
 
 

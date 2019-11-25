@@ -20,6 +20,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -262,9 +263,11 @@ session_setup(Worker) ->
 %%--------------------------------------------------------------------
 -spec session_setup(node(), Nonce :: binary()) -> {ok, session:id()}.
 session_setup(Worker, Nonce) ->
-    Iden = #user_identity{user_id = <<"user1">>},
+    UserId = <<"user1">>,
+    Iden = #user_identity{user_id = UserId},
+    SerializedToken = initializer:create_token(UserId),
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, Iden, #token_auth{}, self()
+        Worker, Nonce, Iden, #token_auth{token = SerializedToken}, self()
     ).
 
 %%--------------------------------------------------------------------

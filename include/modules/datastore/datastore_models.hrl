@@ -210,6 +210,7 @@
     type :: undefined | session:type(),
     identity :: undefined | session:identity(),
     auth :: undefined | session:auth(),
+    data_constraints :: data_constraints:constraints(),
     node :: node(),
     supervisor :: undefined | pid(),
     event_manager :: undefined | pid(),

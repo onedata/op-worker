@@ -46,9 +46,7 @@ get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
                             name = ?ACL_KEY,
                             value = acl:to_json(Acl, cdmi)
                         }
-                    };
-                #provider_response{} = Other ->
-                    provider_to_fuse_response(Other)
+                    }
             end;
         {posix, _} ->
             #fuse_response{status = #status{code = ?ENOATTR}}
@@ -205,11 +203,12 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
 %%--------------------------------------------------------------------
 -spec list_xattr(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(),
     ShowInternal :: boolean()) -> fslogic_worker:fuse_response().
-list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [_UserCtx, FileCtx, Inherited, ShowInternal],
-        fun list_xattr_insecure/4).
+list_xattr(UserCtx, FileCtx0, Inherited, ShowInternal) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors]
+    ),
+    list_xattr_insecure(UserCtx, FileCtx1, Inherited, ShowInternal).
 
 %%%===================================================================
 %%% Internal functions
@@ -265,6 +264,7 @@ list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
             #fuse_response{status = #status{code = ?ENOENT}}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @equiv get_custom_xattr_insecure/4 with permission checks
@@ -272,11 +272,12 @@ list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
 %%--------------------------------------------------------------------
 -spec get_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(),
     Inherited :: boolean()) -> fslogic_worker:fuse_response().
-get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_metadata],
-        [_UserCtx, FileCtx, XattrName, Inherited],
-        fun get_custom_xattr_insecure/4).
+get_custom_xattr(UserCtx, FileCtx0, XattrName, Inherited) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_metadata]
+    ),
+    get_custom_xattr_insecure(UserCtx, FileCtx1, XattrName, Inherited).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -286,11 +287,12 @@ get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
 -spec set_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{},
     Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:fuse_response().
-set_custom_xattr(_UserCtx, FileCtx, Xattr, Create, Replace) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_metadata],
-        [_UserCtx, FileCtx, Xattr, Create, Replace],
-        fun set_custom_xattr_insecure/5).
+set_custom_xattr(UserCtx, FileCtx0, Xattr, Create, Replace) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_metadata]
+    ),
+    set_custom_xattr_insecure(UserCtx, FileCtx1, Xattr, Create, Replace).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -299,11 +301,12 @@ set_custom_xattr(_UserCtx, FileCtx, Xattr, Create, Replace) ->
 %%--------------------------------------------------------------------
 -spec remove_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
     fslogic_worker:fuse_response().
-remove_custom_xattr(_UserCtx, FileCtx, XattrName) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_metadata],
-        [_UserCtx, FileCtx, XattrName],
-        fun remove_custom_xattr_insecure/3).
+remove_custom_xattr(UserCtx, FileCtx0, XattrName) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_metadata]
+    ),
+    remove_custom_xattr_insecure(UserCtx, FileCtx1, XattrName).
 
 %%--------------------------------------------------------------------
 %% @private

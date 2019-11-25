@@ -185,10 +185,10 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     SpaceId = file_id:guid_to_space_id(Guid),
     transfer_utils:authorize_creation(SpaceId, UserId, replication, false);
 
-authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = replicate_by_view
-}}, _) ->
-    SpaceId = maps:get(<<"space_id">>, Data),
+}} = OpReq, _) ->
+    SpaceId = maps:get(<<"space_id">>, OpReq#op_req.data),
     transfer_utils:authorize_creation(SpaceId, UserId, replication, true);
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = distribution}} = Req, _) ->
@@ -200,16 +200,19 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #
     aspect = instance
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
+
     TransferType = case maps:get(<<"migration_provider_id">>, Data, undefined) of
         undefined -> eviction;
         _ -> migration
     end,
     transfer_utils:authorize_creation(SpaceId, UserId, TransferType, false);
 
-authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     aspect = evict_by_view
-}}, _) ->
+}} = OpReq, _) ->
+    Data = OpReq#op_req.data,
     SpaceId = maps:get(<<"space_id">>, Data),
+
     TransferType = case maps:get(<<"migration_provider_id">>, Data, undefined) of
         undefined -> eviction;
         _ -> migration
