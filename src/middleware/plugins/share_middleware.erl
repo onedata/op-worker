@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations (create, get, update, delete)
+%%% This module handles middleware operations (create, get, update, delete)
 %%% corresponding to directory sharing.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -16,6 +16,7 @@
 -behaviour(middleware_plugin).
 
 -include("middleware/middleware.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -export([
@@ -26,6 +27,7 @@
     validate/2
 ]).
 -export([create/1, get/2, update/1, delete/1]).
+
 
 %%%===================================================================
 %%% API
@@ -288,16 +290,10 @@ update(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}} = Req) 
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
     ShareId = resolve_share_id(Auth, DirGuid),
-    case lfm:remove_share(Auth#auth.session_id, ShareId) of
-        ok -> ok;
-        {error, Errno} -> ?ERROR_POSIX(Errno)
-    end;
+    ?check(lfm:remove_share(Auth#auth.session_id, ShareId));
 
 delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
-    case lfm:remove_share(Auth#auth.session_id, ShareId) of
-        ok -> ok;
-        {error, Errno} -> ?ERROR_POSIX(Errno)
-    end.
+    ?check(lfm:remove_share(Auth#auth.session_id, ShareId)).
 
 
 %%%===================================================================
