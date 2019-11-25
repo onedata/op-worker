@@ -162,6 +162,12 @@ get_shares(SessionId, SpaceId) ->
             Error
     end.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% @TODO VFS-5497 Remove after allowing to support one space with many storages on one provider
+%% This function returns StorageId for given SpaceId.
+%% @end
+%%-------------------------------------------------------------------
 -spec get_local_storage_id(od_space:id()) -> {ok, od_storage:id()} | errors:error().
 get_local_storage_id(SpaceId) ->
     case get_local_storage_ids(SpaceId) of

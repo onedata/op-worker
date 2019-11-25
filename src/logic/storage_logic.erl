@@ -24,7 +24,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([create/1, get/1, delete/1]).
+-export([create/1, get/1]).
 -export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_support/2]).
@@ -49,7 +49,11 @@ create(StorageConfig) ->
                     ok = storage_config:on_storage_created(StorageId),
                     {ok, StorageId};
                 Error ->
-                    delete_in_zone(StorageId),
+                    case delete_in_zone(StorageId) of
+                        ok -> ok;
+                        {error, _} = Error1 ->
+                            ?warning("Could not revert storage creation in Onezone: ~p", [Error1])
+                    end,
                     Error
             end;
         Other ->
@@ -58,7 +62,7 @@ create(StorageConfig) ->
 
 
 %% @private
--spec create_in_zone(storage_config:name()) -> {ok, {gri:gri(), storage_config:doc()}} | errors:error().
+-spec create_in_zone(storage_config:name()) -> {ok, {gri:gri(), od_storage:doc()}} | errors:error().
 create_in_zone(StorageName) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
@@ -67,7 +71,7 @@ create_in_zone(StorageName) ->
     }).
 
 
--spec get(od_storage:id()) -> {ok, storage_config:doc()} | errors:error().
+-spec get(od_storage:id()) -> {ok, od_storage:doc()} | errors:error().
 get(StorageId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
@@ -81,7 +85,7 @@ get(StorageId) ->
 %% Retrieves restricted storage data shared through given SpaceId.
 %% @end
 %%--------------------------------------------------------------------
--spec get_shared_data(od_storage:id(), od_space:id()) -> {ok, storage_config:doc()} | errors:error().
+-spec get_shared_data(od_storage:id(), od_space:id()) -> {ok, od_storage:doc()} | errors:error().
 get_shared_data(StorageId, SpaceId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
@@ -111,7 +115,7 @@ delete_in_zone(StorageId) ->
 -spec support_space(od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SerializedToken, SupportSize) ->
-%% @TODO VFS-5497 This check not needed when multisupport is implemented (will be checked in zone)
+%% @TODO VFS-5497 This check will not be needed when multisupport is implemented (will be checked in zone)
     case check_support_token(SerializedToken) of
         {ok, SpaceId} ->
             Data = #{<<"token">> => SerializedToken, <<"size">> => SupportSize},
@@ -239,15 +243,13 @@ get_qos_parameters(StorageId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec safe_delete(od_storage:id()) -> ok | {error, storage_in_use | term()}.
 safe_delete(StorageId) ->
-    critical_section:run({storage_to_space, StorageId}, fun() ->
-        case supports_any_space(StorageId) of
-            true ->
-                {error, storage_in_use};
-            false ->
-                % TODO VFS-5124 Remove from rtransfer
-                delete(StorageId)
-        end
-    end).
+    case supports_any_space(StorageId) of
+        true ->
+            {error, storage_in_use};
+        false ->
+            % TODO VFS-5124 Remove from rtransfer
+            delete(StorageId)
+    end.
 
 
 -spec supports_any_space(StorageId :: od_storage:id()) -> boolean().

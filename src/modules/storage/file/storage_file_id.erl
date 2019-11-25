@@ -19,8 +19,6 @@
 %%% Exports
 %%%===================================================================
 
-% todo sprawdzic gdzie jest wolany modul storage i pozamieniac
-
 %% API
 -export([space_id/2, flat/1, canonical/1]).
 
