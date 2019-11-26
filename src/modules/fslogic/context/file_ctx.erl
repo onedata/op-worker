@@ -725,7 +725,8 @@ get_storage_id(FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns storage document of file's space.
+%% Returns local storage_config document of file's space.
+%% @TODO VFS-5853 return here higher level storage record
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_doc(ctx()) -> {storage_config:doc(), ctx()}.
