@@ -60,7 +60,7 @@ assert_no_data_caveats(Caveats) when is_list(Caveats) ->
     end.
 
 
--spec verify_api_caveats([caveats:caveat()], op_logic:operation(), gri:gri()) ->
+-spec verify_api_caveats([caveats:caveat()], middleware:operation(), gri:gri()) ->
     ok | no_return().
 verify_api_caveats(Caveats, Operation, GRI) ->
     lists:foreach(fun(ApiCaveat) ->
@@ -68,4 +68,4 @@ verify_api_caveats(Caveats, Operation, GRI) ->
             true -> ok;
             false -> throw(?ERROR_TOKEN_CAVEAT_UNVERIFIED(ApiCaveat))
         end
-    end, Caveats).
+    end, caveats:filter([cv_api], Caveats)).

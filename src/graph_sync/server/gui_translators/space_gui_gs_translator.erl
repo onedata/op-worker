@@ -6,14 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles translation of op logic results concerning
+%%% This module handles translation of middleware results concerning
 %%% space entities into GUI GRAPH SYNC responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_gui_gs_translator).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 
 %% API
 -export([

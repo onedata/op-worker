@@ -17,7 +17,7 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/cdmi.hrl").
 -include("http/rest.hrl").
 -include_lib("ctool/include/logging.hrl").

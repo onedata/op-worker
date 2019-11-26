@@ -17,11 +17,10 @@
 
 -behaviour(cowboy_rest).
 
--include("op_logic.hrl").
 -include("http/rest.hrl").
--include("global_definitions.hrl").
--include_lib("ctool/include/logging.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
 -type method() :: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'.
@@ -50,9 +49,6 @@
     accept_resource/2,
     provide_resource/2,
     delete_resource/2
-]).
--export([
-    rest_routes/0
 ]).
 
 
@@ -140,7 +136,7 @@ content_types_provided(Req, #state{rest_req = #rest_req{produces = Produces}} = 
     {true | {false, binary()}, cowboy_req:req(), state()}.
 is_authorized(Req, State) ->
     % The data access caveats policy depends on requested resource,
-    % which is not known yet - it is checked later in op_logic.
+    % which is not known yet - it is checked later in middleware.
     case http_auth:authenticate(Req, rest, allow_data_caveats) of
         {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
@@ -184,41 +180,6 @@ delete_resource(Req, State) ->
     process_request(Req, State).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns all REST routes in the cowboy router format.
-%% @end
-%%--------------------------------------------------------------------
--spec rest_routes() -> [{binary(), module(), map()}].
-rest_routes() ->
-    AllRoutes = lists:flatten([
-        file_routes:routes(),
-        monitoring_routes:routes(),
-        oneprovider_routes:routes(),
-        qos_routes:routes(),
-        replica_routes:routes(),
-        share_routes:routes(),
-        space_routes:routes(),
-        transfer_routes:routes()
-    ]),
-    % Aggregate routes that share the same path
-    AggregatedRoutes = lists:foldr(fun
-        ({Path, Handler, #rest_req{method = Method} = RestReq}, [{Path, _, RoutesForPath} | Acc]) ->
-            [{Path, Handler, RoutesForPath#{Method => RestReq}} | Acc];
-        ({Path, Handler, #rest_req{method = Method} = RestReq}, Acc) ->
-            [{Path, Handler, #{Method => RestReq}} | Acc]
-    end, [], AllRoutes),
-    % Convert all routes to cowboy-compliant routes
-    % - prepend REST prefix to every route
-    % - rest handler module must be added as second element to the tuples
-    % - RoutesForPath will serve as Opts to rest handler init.
-    {ok, PrefixStr} = application:get_env(?APP_NAME, op_rest_api_prefix),
-    Prefix = str_utils:to_binary(PrefixStr),
-    lists:map(fun({Path, Handler, RoutesForPath}) ->
-        {<<Prefix/binary, Path/binary>>, Handler, RoutesForPath}
-    end, AggregatedRoutes).
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -227,7 +188,7 @@ rest_routes() ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Processes a REST request (of any type) by calling op logic.
+%% Processes a REST request (of any type) by calling middleware.
 %% Return new Req and State (after setting cowboy response).
 %% @end
 %%--------------------------------------------------------------------
@@ -268,13 +229,13 @@ process_request(Req, State) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Calls op_logic and translates obtained response into REST response
+%% Calls middleware and translates obtained response into REST response
 %% using TranslatorModule.
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_request(#op_req{}) -> #rest_resp{}.
 handle_request(#op_req{operation = Operation, gri = GRI} = ElReq) ->
-    Result = op_logic:handle(ElReq),
+    Result = middleware:handle(ElReq),
     try
         rest_translator:response(ElReq, Result)
     catch
@@ -317,7 +278,7 @@ send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_gri_bindings(session:id(), bound_gri(), cowboy_req:req()) ->
-    op_logic:gri().
+    gri:gri().
 resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) ->
     IdBinding = resolve_bindings(SessionId, Id, Req),
     AspectBinding = case As of
@@ -370,7 +331,7 @@ resolve_bindings(_SessionId, Other, _Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_data(cowboy_req:req(), parse_body(), Consumes :: [term()]) ->
-    {Data :: op_logic:data(), cowboy_req:req()}.
+    {Data :: middleware:data(), cowboy_req:req()}.
 get_data(Req, ignore, _Consumes) ->
     {parse_query_string(Req), Req};
 get_data(Req, as_json_params, _Consumes) ->
@@ -475,7 +436,7 @@ method_to_binary('DELETE') -> <<"DELETE">>.
 %% that should be called to handle it.
 %% @end
 %%--------------------------------------------------------------------
--spec method_to_operation(method()) -> op_logic:operation().
+-spec method_to_operation(method()) -> middleware:operation().
 method_to_operation('POST') -> create;
 method_to_operation('PUT') -> create;
 method_to_operation('GET') -> get;

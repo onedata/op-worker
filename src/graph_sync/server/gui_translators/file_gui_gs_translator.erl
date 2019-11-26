@@ -6,14 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles translation of op logic results concerning
+%%% This module handles translation of middleware results concerning
 %%% file entities into GUI GRAPH SYNC responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_gui_gs_translator).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -24,14 +24,34 @@
 ]).
 
 
+-define(TRANSFER_GRI_ID(__TID), gri:serialize(#gri{
+    type = op_transfer,
+    id = __TID,
+    aspect = instance,
+    scope = private
+})).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = transfers}, Transfers) ->
-    Transfers.
+translate_value(#gri{aspect = transfers}, TransfersForFile0) ->
+    TransfersForFile1 = maps:update_with(
+        <<"ongoingList">>,
+        fun(OngoingIds) -> [?TRANSFER_GRI_ID(Tid) || Tid <- OngoingIds] end,
+        TransfersForFile0
+    ),
+    case maps:take(<<"endedList">>, TransfersForFile1) of
+        {EndedIds, TransfersForFile2} ->
+            TransfersForFile2#{
+                <<"endedList">> => [?TRANSFER_GRI_ID(Tid) || Tid <- EndedIds]
+            };
+        error ->
+            TransfersForFile0
+    end.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
