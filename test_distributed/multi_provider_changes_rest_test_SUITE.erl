@@ -82,7 +82,7 @@ token_auth_test(Config) ->
     #token_auth{token = Token} = ?config({auth, ?USER_1}, Config),
 
     % Request containing data caveats should be rejected
-    DataCaveat = #cv_data_path{whitelist = [<<"/">>]},
+    DataCaveat = #cv_data_path{whitelist = [<<"/", SpaceId/binary>>]},
     TokenWithDataCaveat = tokens:confine(Token, DataCaveat),
     ExpRestError1 = rest_test_utils:get_rest_error(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat)),
     ?assertMatch(ExpRestError1, get_changes(

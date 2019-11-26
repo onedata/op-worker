@@ -293,9 +293,7 @@ ensure_authorized(#req_ctx{
     versioned_entity = {Entity, _},
     req = #op_req{operation = Operation, auth = Auth, gri = GRI} = OpReq
 }) ->
-    Caveats = Auth#auth.caveats,
-
-    case api_caveats:check_authorization(Caveats, ?OP_WORKER, Operation, GRI) of
+    case api_auth:check_authorization(Auth, ?OP_WORKER, Operation, GRI) of
         ok -> ok;
         {error, _} = Error -> throw(Error)
     end,

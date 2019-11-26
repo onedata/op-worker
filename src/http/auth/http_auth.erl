@@ -22,16 +22,13 @@
 %% API
 -export([authenticate/3]).
 
--type data_caveats_policy() :: allow_data_caveats | disallow_data_caveats.
-
-
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
 -spec authenticate(#token_auth{} | cowboy_req:req(), rest | gui,
-    data_caveats_policy()) -> {ok, aai:auth()} | errors:error().
+    data_access_caveats:policy()) -> {ok, aai:auth()} | errors:error().
 authenticate(ReqOrTokenAuth, Interface, DataCaveatsPolicy) ->
     try
         authenticate_insecure(ReqOrTokenAuth, Interface, DataCaveatsPolicy)
@@ -53,7 +50,7 @@ authenticate(ReqOrTokenAuth, Interface, DataCaveatsPolicy) ->
 
 %% @private
 -spec authenticate_insecure(#token_auth{} | cowboy_req:req(), rest | gui,
-    data_caveats_policy()) -> {ok, aai:auth()} | no_return().
+    data_access_caveats:policy()) -> {ok, aai:auth()} | no_return().
 authenticate_insecure(#token_auth{
     token = SerializedToken,
     peer_ip = PeerIp
@@ -103,13 +100,13 @@ get_caveats(SerializedToken) ->
 
 %% @private
 -spec ensure_valid_caveats([caveats:caveat()], gui | rest,
-    data_caveats_policy()) -> ok | no_return().
+    data_access_caveats:policy()) -> ok | no_return().
 %% @TODO VFS-5914 Use auth override for that, remove token_utils
 ensure_valid_caveats(Caveats, Interface, DataCaveatsPolicy) ->
     token_utils:assert_interface_allowed(Caveats, Interface),
     case DataCaveatsPolicy of
-        allow_data_caveats -> ok;
-        disallow_data_caveats -> token_utils:assert_no_data_caveats(Caveats)
+        allow_data_access_caveats -> ok;
+        disallow_data_access_caveats -> token_utils:assert_no_data_caveats(Caveats)
     end.
 
 

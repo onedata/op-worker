@@ -30,10 +30,10 @@
 ]).
 
 -export([
-    data_caveats_test/1,
-    data_caveats_ancestors_test/1,
-    data_caveats_ancestors_test2/1,
-    data_caveats_cache_test/1,
+    data_access_caveats_test/1,
+    data_access_caveats_ancestors_test/1,
+    data_access_caveats_ancestors_test2/1,
+    data_access_caveats_cache_test/1,
 
     mkdir_test/1,
     ls_test/1,
@@ -96,10 +96,10 @@
 
 all() ->
     ?ALL([
-        data_caveats_test,
-        data_caveats_ancestors_test,
-        data_caveats_ancestors_test2,
-        data_caveats_cache_test,
+        data_access_caveats_test,
+        data_access_caveats_ancestors_test,
+        data_access_caveats_ancestors_test2,
+        data_access_caveats_cache_test,
 
         mkdir_test,
         ls_test,
@@ -171,7 +171,7 @@ all() ->
 %%%===================================================================
 
 
-data_caveats_test(Config) ->
+data_access_caveats_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     Owner = <<"user1">>,
@@ -365,7 +365,7 @@ data_caveats_test(Config) ->
     ).
 
 
-data_caveats_ancestors_test(Config) ->
+data_access_caveats_ancestors_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     UserId = <<"user3">>,
@@ -446,7 +446,7 @@ data_caveats_ancestors_test(Config) ->
     ).
 
 
-data_caveats_ancestors_test2(Config) ->
+data_access_caveats_ancestors_test2(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     UserId = <<"user3">>,
@@ -524,7 +524,7 @@ data_caveats_ancestors_test2(Config) ->
     ).
 
 
-data_caveats_cache_test(Config) ->
+data_access_caveats_cache_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     UserId = <<"user3">>,

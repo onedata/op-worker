@@ -52,7 +52,7 @@ verify_handshake_auth({token, SerializedToken}, PeerIp) ->
         token = SerializedToken,
         peer_ip = PeerIp
     },
-    case http_auth:authenticate(Credentials, gui, disallow_data_caveats) of
+    case http_auth:authenticate(Credentials, gui, disallow_data_access_caveats) of
         {ok, ?USER = Auth} ->
             {ok, Auth};
         {ok, ?NOBODY} ->
