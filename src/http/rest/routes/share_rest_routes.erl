@@ -30,11 +30,9 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Share a folder by path
+    %% Unshare a folder by path
     {<<"/shares/[...]">>, rest_handler, #rest_req{
-        method = 'POST',
-        parse_body = as_json_params,
-        consumes = [<<"application/json">>],
+        method = 'DELETE',
         b_gri = #b_gri{
             type = op_share, 
             id = ?PATH_BINDING, 
@@ -46,16 +44,6 @@ routes() -> [
     {<<"/shares/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_share, 
-            id = ?PATH_BINDING, 
-            aspect = shared_dir, 
-            scope = private
-        }
-    }},
-    %% Unshare a folder by path
-    {<<"/shares/[...]">>, rest_handler, #rest_req{
-        method = 'DELETE',
         b_gri = #b_gri{
             type = op_share, 
             id = ?PATH_BINDING, 
@@ -75,11 +63,21 @@ routes() -> [
             scope = private
         }
     }},
-    %% Share a folder by ID
-    {<<"/shares-id/:id">>, rest_handler, #rest_req{
+    %% Share a folder by path
+    {<<"/shares/[...]">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?PATH_BINDING, 
+            aspect = shared_dir, 
+            scope = private
+        }
+    }},
+    %% Unshare a folder by ID
+    {<<"/shares-id/:id">>, rest_handler, #rest_req{
+        method = 'DELETE',
         b_gri = #b_gri{
             type = op_share, 
             id = ?OBJECTID_BINDING(id), 
@@ -91,16 +89,6 @@ routes() -> [
     {<<"/shares-id/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_share, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = shared_dir, 
-            scope = private
-        }
-    }},
-    %% Unshare a folder by ID
-    {<<"/shares-id/:id">>, rest_handler, #rest_req{
-        method = 'DELETE',
         b_gri = #b_gri{
             type = op_share, 
             id = ?OBJECTID_BINDING(id), 
@@ -120,10 +108,21 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get share info by public share ID
+    %% Share a folder by ID
+    {<<"/shares-id/:id">>, rest_handler, #rest_req{
+        method = 'POST',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_share, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = shared_dir, 
+            scope = private
+        }
+    }},
+    %% Unshare a folder by public share ID
     {<<"/shares-public-id/:shid">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
+        method = 'DELETE',
         b_gri = #b_gri{
             type = op_share, 
             id = ?BINDING(shid), 
@@ -131,9 +130,10 @@ routes() -> [
             scope = private
         }
     }},
-    %% Unshare a folder by public share ID
+    %% Get share info by public share ID
     {<<"/shares-public-id/:shid">>, rest_handler, #rest_req{
-        method = 'DELETE',
+        method = 'GET',
+        produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_share, 
             id = ?BINDING(shid), 

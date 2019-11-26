@@ -30,6 +30,17 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
+    %% Get QoS summary (by path)
+    {<<"/qos/[...]">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_qos, 
+            id = ?PATH_BINDING, 
+            aspect = effective_qos, 
+            scope = private
+        }
+    }},
     %% Add QoS entry (by path)
     {<<"/qos/[...]">>, rest_handler, #rest_req{
         method = 'POST',
@@ -42,13 +53,13 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get QoS summary (by path)
-    {<<"/qos/[...]">>, rest_handler, #rest_req{
+    %% Get QoS summary (by id)
+    {<<"/qos-id/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_qos, 
-            id = ?PATH_BINDING, 
+            id = ?OBJECTID_BINDING(id), 
             aspect = effective_qos, 
             scope = private
         }
@@ -65,21 +76,10 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get QoS summary (by id)
-    {<<"/qos-id/:id">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_qos, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = effective_qos, 
-            scope = private
-        }
-    }},
-    %% Get QoS entry
+    %% Remove QoS entry
     {<<"/qos-entry/:qid">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
+        method = 'DELETE',
+        consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_qos, 
             id = ?BINDING(qid), 
@@ -87,10 +87,10 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove QoS entry
+    %% Get QoS entry
     {<<"/qos-entry/:qid">>, rest_handler, #rest_req{
-        method = 'DELETE',
-        consumes = [<<"application/json">>],
+        method = 'GET',
+        produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_qos, 
             id = ?BINDING(qid), 

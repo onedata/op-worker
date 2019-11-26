@@ -63,11 +63,9 @@ routes() -> [
             scope = private
         }
     }},
-    %% Create index (deprecated)
+    %% Remove index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
-        method = 'PUT',
-        parse_body = as_is,
-        consumes = [<<"application/javascript">>],
+        method = 'DELETE',
         b_gri = #b_gri{
             type = op_space, 
             id = ?BINDING(sid), 
@@ -86,9 +84,11 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove index (deprecated)
+    %% Update index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
-        method = 'DELETE',
+        method = 'PATCH',
+        parse_body = as_is,
+        consumes = [<<"application/javascript">>],
         b_gri = #b_gri{
             type = op_space, 
             id = ?BINDING(sid), 
@@ -96,9 +96,9 @@ routes() -> [
             scope = private
         }
     }},
-    %% Update index (deprecated)
+    %% Create index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
-        method = 'PATCH',
+        method = 'PUT',
         parse_body = as_is,
         consumes = [<<"application/javascript">>],
         b_gri = #b_gri{
@@ -152,11 +152,9 @@ routes() -> [
             scope = private
         }
     }},
-    %% Create view
+    %% Remove view
     {<<"/spaces/:sid/views/:view_name">>, rest_handler, #rest_req{
-        method = 'PUT',
-        parse_body = as_is,
-        consumes = [<<"application/javascript">>],
+        method = 'DELETE',
         b_gri = #b_gri{
             type = op_space, 
             id = ?BINDING(sid), 
@@ -175,9 +173,11 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove view
+    %% Update view
     {<<"/spaces/:sid/views/:view_name">>, rest_handler, #rest_req{
-        method = 'DELETE',
+        method = 'PATCH',
+        parse_body = as_is,
+        consumes = [<<"application/javascript">>],
         b_gri = #b_gri{
             type = op_space, 
             id = ?BINDING(sid), 
@@ -185,9 +185,9 @@ routes() -> [
             scope = private
         }
     }},
-    %% Update view
+    %% Create view
     {<<"/spaces/:sid/views/:view_name">>, rest_handler, #rest_req{
-        method = 'PATCH',
+        method = 'PUT',
         parse_body = as_is,
         consumes = [<<"application/javascript">>],
         b_gri = #b_gri{
