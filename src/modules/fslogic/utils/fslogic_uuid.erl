@@ -36,7 +36,7 @@
 %%--------------------------------------------------------------------
 -spec is_root_dir_uuid(FileUuid :: file_meta:uuid()) -> boolean().
 is_root_dir_uuid(?ROOT_DIR_UUID) -> true;
-is_root_dir_uuid(false) -> false.
+is_root_dir_uuid(_) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -54,6 +54,11 @@ is_user_root_dir_uuid(FileUuid) ->
             false
     end.
 
+%%--------------------------------------------------------------------
+%% @doc Returns Guid of root directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec root_dir_guid() -> fslogic_worker:file_guid().
 root_dir_guid() ->
     file_id:pack_guid(?ROOT_DIR_UUID, ?ROOT_DIR_SCOPE).
 

@@ -531,7 +531,7 @@ read_should_synchronize_file(Config) ->
         },
         _
     },
-        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)])
     ).
 
 
@@ -555,7 +555,7 @@ external_change_should_invalidate_blocks(Config) ->
         value = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [#file_block{offset = 2, size = 5}],
     RemoteLocation = #file_location{
         size = 10,
@@ -594,7 +594,7 @@ external_change_should_invalidate_blocks(Config) ->
             ]
         }
     }, _},
-        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])).
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)])).
 
 update_should_save_recent_changes(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -677,7 +677,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
         value = LocalLocation = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [#file_block{offset = 2, size = 5}],
     ExternalChanges = [
         [#file_block{offset = 2, size = 2}],
@@ -736,7 +736,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
                 ]
             }
         }, _},
-        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)])
     ).
 
 remote_change_without_history_should_invalidate_whole_data(Config) ->
@@ -760,7 +760,7 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
         value = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [
         #file_block{offset = 1, size = 1},
         #file_block{offset = 5, size = 1}
@@ -808,7 +808,7 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
                 ]
             }
         }, _},
-        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)])
     ).
 
 remote_change_of_size_should_notify_clients(Config) ->
@@ -831,7 +831,7 @@ remote_change_of_size_should_notify_clients(Config) ->
         value = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [],
     ExternalSize = 8,
     RemoteLocation = #file_location{
@@ -890,7 +890,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
         value = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [#file_block{offset = 1, size = 1}],
     ExternalSize = 10,
     RemoteLocation = #file_location{
@@ -945,7 +945,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
         value = LocalLoc = #file_location{
             blocks = [Block]
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     rpc:call(W1, fslogic_location_cache, save_location, [LocalDoc#document{
         value = LocalLoc#file_location{
             blocks = [Block#file_block{offset = 0, size = 5}]
@@ -957,7 +957,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
         value = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [#file_block{offset = 5, size = 5}],
     ExternalSize = 10,
     RemoteLocation = #file_location{
@@ -1016,7 +1016,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
         value = LocalLocation = #file_location{
             version_vector = VVLocal
         }
-    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)]),
+    }, _} = rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)]),
     ExternalBlocks = [#file_block{offset = 2, size = 5}],
     ExternalChanges = [
         [#file_block{offset = 0, size = 2}],
@@ -1079,7 +1079,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
                 blocks = [#file_block{offset = 4, size = 4}]
             }
         }, _},
-        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileUuid)])
+        rpc:call(W1, file_ctx, get_local_file_location_doc, [file_ctx:new_by_guid(FileGuid)])
     ).
 
 replica_invalidate_should_migrate_unique_data(Config) ->

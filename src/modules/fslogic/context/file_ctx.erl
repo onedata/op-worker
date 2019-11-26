@@ -1175,18 +1175,18 @@ new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
 -spec generate_canonical_path(ctx()) -> {[file_meta:name()], ctx()}.
 generate_canonical_path(FileCtx) ->
     Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}, scope = SpaceId}, ParentValue, CalculationInfo]) ->
-            case fslogic_uuid:is_user_root_dir_uuid(Uuid) of
-                true ->
-                    {ok, [<<"/">>], CalculationInfo};
-                false ->
-                    case fslogic_uuid:is_space_dir_uuid(Uuid) of
-                        true ->
-                            {ok, [<<"/">>, SpaceId], CalculationInfo};
-                        false ->
-                            {ok, ParentValue ++ [Name], CalculationInfo}
-                    end
-            end
-        end,
+        case fslogic_uuid:is_user_root_dir_uuid(Uuid) of
+            true ->
+                {ok, [<<"/">>], CalculationInfo};
+            false ->
+                case fslogic_uuid:is_space_dir_uuid(Uuid) of
+                    true ->
+                        {ok, [<<"/">>, SpaceId], CalculationInfo};
+                    false ->
+                        {ok, ParentValue ++ [Name], CalculationInfo}
+                end
+        end
+    end,
     {#document{value = #file_meta{name = FileName, type = FileType}, scope = Space} = Doc, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
     CacheName = location_and_link_utils:get_cannonical_paths_cache_name(Space),

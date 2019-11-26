@@ -240,8 +240,8 @@ get_including_deleted(?ROOT_DIR_UUID) ->
             mode = 8#111,
             owner = ?ROOT_USER_ID,
             parent_uuid = ?ROOT_DIR_UUID
-        },
-        scope = ?ROOT_DIR_SCOPE
+        }
+        % we do not set scope intentionally
     }};
 get_including_deleted(FileUuid) ->
     datastore_model:get(?CTX#{include_deleted => true}, FileUuid).
@@ -664,8 +664,8 @@ setup_onedata_user(UserId, EffSpaces) ->
                         owner = ?ROOT_USER_ID,
                         is_scope = true,
                         parent_uuid = ?ROOT_DIR_UUID
-                    },
-                    scope = ?USER_ROOT_DIR_SCOPE
+                    }
+                % we do not set scope intentionally
                 })
             of
                 {ok, _RootUuid} ->
@@ -1054,7 +1054,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    8.
+    9.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1206,6 +1206,27 @@ get_record_struct(8) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string}
+    ]};
+get_record_struct(9) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {owner, string},
+        {group_owner, string},
+        {is_scope, boolean},
+        % scope field has been deleted in this version
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -1255,5 +1276,12 @@ upgrade_record(7, {
 }) ->
     {8, {?MODULE, Name, Type, Mode, [],
         Owner, GroupOwner, IsScope, Scope,
+        ProviderId, Shares, Deleted, ParentUuid
+    }};
+upgrade_record(8, {
+    ?MODULE, Name, Type, Mode, ACL, Owner, GroupOwner, IsScope,
+    _Scope, ProviderId, Shares, Deleted, ParentUuid
+}) ->
+    {9, {?MODULE, Name, Type, Mode, ACL, Owner, GroupOwner, IsScope,
         ProviderId, Shares, Deleted, ParentUuid
     }}.

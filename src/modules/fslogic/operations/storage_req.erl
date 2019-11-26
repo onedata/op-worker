@@ -110,7 +110,7 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
     SpaceId = try
         file_ctx:get_space_id_const(FileCtx)
     catch
-        throw:{invalid_guid, _Guid} ->
+        error:{invalid_guid, Guid} ->
             throw(?ENOENT)
     end,
 
