@@ -82,7 +82,7 @@ get(StorageId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves restricted storage data shared through given SpaceId.
+%% Retrieves storage data shared between providers through given SpaceId.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_shared_data(od_storage:id(), od_space:id()) -> {ok, od_storage:doc()} | errors:error().
@@ -115,6 +115,15 @@ delete_in_zone(StorageId) ->
 -spec support_space(od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SerializedToken, SupportSize) ->
+    critical_section:run({storage_support, StorageId}, fun() ->
+        support_space_insecure(StorageId, SerializedToken, SupportSize)
+    end).
+
+
+%% @private
+-spec support_space_insecure(od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
+    {ok, od_space:id()} | errors:error().
+support_space_insecure(StorageId, SerializedToken, SupportSize) ->
 %% @TODO VFS-5497 This check will not be needed when multisupport is implemented (will be checked in zone)
     case check_support_token(SerializedToken) of
         {ok, SpaceId} ->
@@ -243,13 +252,15 @@ get_qos_parameters(StorageId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec safe_delete(od_storage:id()) -> ok | {error, storage_in_use | term()}.
 safe_delete(StorageId) ->
-    case supports_any_space(StorageId) of
-        true ->
-            {error, storage_in_use};
-        false ->
-            % TODO VFS-5124 Remove from rtransfer
-            delete(StorageId)
-    end.
+    critical_section:run({storage_support, StorageId}, fun() ->
+        case supports_any_space(StorageId) of
+            true ->
+                {error, storage_in_use};
+            false ->
+                % TODO VFS-5124 Remove from rtransfer
+                delete(StorageId)
+        end
+    end).
 
 
 -spec supports_any_space(StorageId :: od_storage:id()) -> boolean().
