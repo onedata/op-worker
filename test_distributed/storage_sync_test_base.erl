@@ -3845,13 +3845,13 @@ get_host_mount_point(Config, Storage) ->
     MountPoint = get_mount_point(Storage),
     get_storage_path(Config, MountPoint).
 
-get_host_storage_file_id(Config, CanonicalPath, Storage, MountInRoot) ->
+get_host_storage_file_id(Config, CanonicalPath, Storage, ImportedStorage) ->
     Helper = storage_config:get_helper(Storage),
     case helper:get_name(Helper) of
         ?POSIX_HELPER_NAME ->
-            get_host_posix_storage_file_id(Config, CanonicalPath, Storage, MountInRoot);
+            get_host_posix_storage_file_id(Config, CanonicalPath, Storage, ImportedStorage);
         ?S3_HELPER_NAME ->
-            get_host_s3_storage_file_id(CanonicalPath, MountInRoot)
+            get_host_s3_storage_file_id(CanonicalPath, ImportedStorage)
     end.
 
 get_host_posix_storage_file_id(Config, CanonicalPath, Storage, true) ->

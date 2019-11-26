@@ -22,7 +22,7 @@
 -export([get_storage_ids/1, get_mounted_in_root/1]).
 
 %% datastore_model callbacks
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type id() :: od_space:id().
 -type record() :: #space_storage{}.
@@ -91,6 +91,15 @@ get_mounted_in_root(SpaceId) ->
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
 
 %%--------------------------------------------------------------------
 %% @doc

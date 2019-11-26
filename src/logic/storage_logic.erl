@@ -36,7 +36,7 @@
 -export([migrate_to_zone/0]).
 
 % for test purpose
--export([create_in_zone/2, delete_in_zone/1]).
+-export([create_in_zone/2, delete_in_zone/1, upgrade_legacy_support/2]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -413,8 +413,10 @@ migrate_space_support(SpaceId) ->
             case space_logic:is_supported_by_storage(SpaceId, StorageId) of
                 true -> ok;
                 false ->
-                    case upgrade_legacy_support(StorageId, SpaceId) of
-                        ok -> ?notice("Support of space ~p by storage ~p upgraded in Onezone", [SpaceId]);
+                    % call using ?MODULE macro for mocking in tests
+                    case ?MODULE:upgrade_legacy_support(StorageId, SpaceId) of
+                        ok -> ?notice("Support of space ~p by storage ~p upgraded in Onezone",
+                            [SpaceId, StorageId]);
                         Error1 -> throw(Error1)
                     end
             end,
