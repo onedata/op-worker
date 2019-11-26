@@ -104,6 +104,7 @@ get_caveats(SerializedToken) ->
 %% @private
 -spec ensure_valid_caveats([caveats:caveat()], gui | rest,
     data_caveats_policy()) -> ok | no_return().
+%% @TODO VFS-5914 Use auth override for that, remove token_utils
 ensure_valid_caveats(Caveats, Interface, DataCaveatsPolicy) ->
     token_utils:assert_interface_allowed(Caveats, Interface),
     case DataCaveatsPolicy of

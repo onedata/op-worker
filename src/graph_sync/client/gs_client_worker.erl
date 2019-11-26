@@ -122,10 +122,15 @@ request(Client, Req) ->
     result().
 request(Client, Req, Timeout) ->
     try
-        do_request(Client, Req, Timeout)
+        case check_api_authorization(client_to_auth(Client), Req) of
+            ok ->
+                do_request(Client, Req, Timeout);
+            {error, _} = Err1 ->
+                Err1
+        end
     catch
-        throw:Error = {error, _} ->
-            Error;
+        throw:{error, _} = Err2 ->
+            Err2;
         Type:Reason ->
             ?error_stacktrace("Unexpected error while processing GS request - ~p:~p", [
                 Type, Reason
@@ -369,6 +374,30 @@ start_gs_connection() ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if caveats in the token allow for API operation in oz-worker service.
+%% This has two advantages: firstly, this prunes disallowed requests without
+%% unnecessarily contacting Onezone. Secondly, ensures that no data is
+%% exfiltrated from the local provider cache in case of a limited token.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_api_authorization(session:auth(), gs_protocol:rpc_req() | gs_protocol:graph_req()) ->
+    ok | errors:error().
+check_api_authorization(?ROOT_AUTH, _) ->
+    ok;
+check_api_authorization(?GUEST_AUTH, _) ->
+    ok;
+check_api_authorization(#token_auth{token = Serialized}, #gs_req_graph{operation = Operation, gri = GRI}) ->
+    %% @TODO VFS-5914 can we keep a deserialized token not to unpack it every time?
+    {ok, Token} = tokens:deserialize(Serialized),
+    Caveats = tokens:get_caveats(Token),
+    api_caveats:check_authorization(Caveats, ?OZ_WORKER, Operation, GRI);
+check_api_authorization(_, _) ->
+    ok.
+
+
 -spec do_request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req(), timeout()) ->
     result().
 do_request(Client, #gs_req_rpc{} = RpcReq, Timeout) ->
@@ -456,7 +485,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
         end,
         GsReq = #gs_req{
             subtype = SubType,
-            auth_override = resolve_authorization(Client),
+            auth_override = resolve_auth_override(client_to_auth(Client)),
             request = Request
         },
         case gen_server2:call(ConnRef, {async_request, GsReq, Timeout}) of
@@ -500,7 +529,7 @@ maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{aspect = instance} = GRI
                     % lower than requested -> invalidate cache
                     false;
                 false ->
-                    case is_authorized(Client, AuthHint, GRI, CachedDoc) of
+                    case is_authorized_to_get(Client, AuthHint, GRI, CachedDoc) of
                         unknown ->
                             false;
                         false ->
@@ -583,19 +612,30 @@ get_connection_pid() ->
     global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 
--spec resolve_authorization(client()) -> gs_protocol:auth_override().
-resolve_authorization(?ROOT_SESS_ID) ->
-    undefined;
-
-resolve_authorization(?GUEST_SESS_ID) ->
-    {nobody, undefined};
-
-resolve_authorization(SessionId) when is_binary(SessionId) ->
+-spec client_to_auth(client()) -> session:auth().
+client_to_auth(?ROOT_SESS_ID) ->
+    ?ROOT_AUTH;
+client_to_auth(?GUEST_SESS_ID) ->
+    ?GUEST_AUTH;
+client_to_auth(SessionId) when is_binary(SessionId) ->
     {ok, Auth} = session:get_auth(SessionId),
-    resolve_authorization(Auth);
+    client_to_auth(Auth);
+client_to_auth(#token_auth{} = TokenAuth) ->
+    TokenAuth.
 
-resolve_authorization(#token_auth{token = Token, peer_ip = PeerIp}) ->
-    {{token, Token}, PeerIp}.
+
+-spec resolve_auth_override(session:auth()) -> gs_protocol:auth_override().
+resolve_auth_override(?ROOT_AUTH) ->
+    undefined;
+resolve_auth_override(?GUEST_AUTH) ->
+    #auth_override{client_auth = nobody};
+resolve_auth_override(#token_auth{token = Token, peer_ip = PeerIp}) ->
+    %% @TODO VFS-5914 add full auth_ctx information
+    #auth_override{
+        client_auth = {token, Token},
+        peer_ip = PeerIp,
+        allow_data_access_caveats = true   % fixme temp. for testing
+    }.
 
 
 -spec put_cache_state(Record :: tuple(), cache_state()) -> Record :: tuple().
@@ -654,77 +694,73 @@ cmp_scope(private, private) -> same;
 cmp_scope(private, _) -> greater.
 
 
--spec is_authorized(client(), gs_protocol:auth_hint(), gri:gri(), doc()) ->
+-spec is_authorized_to_get(client(), gs_protocol:auth_hint(), gri:gri(), doc()) ->
     boolean() | unknown.
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_user, scope = private}, _) ->
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_user, scope = private}, _) ->
     false;
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_user, scope = protected}, _) ->
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_user, scope = protected}, _) ->
     true;
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_user, scope = shared}, _) ->
-    true;
-
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_group, scope = shared}, _) ->
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_user, scope = shared}, _) ->
     true;
 
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = private}, _) ->
-    true;
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected}, _) ->
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_group, scope = shared}, _) ->
     true;
 
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private}, _) ->
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_space, scope = private}, _) ->
+    true;
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected}, _) ->
+    true;
+
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private}, _) ->
     true;
 
 % Provider can access shares of spaces that it supports
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_share, scope = private}, CachedDoc) ->
-    provider_logic:supports_space(
-        ?ROOT_SESS_ID,
-        oneprovider:get_id_or_undefined(),
-        CachedDoc#document.value#od_share.space
-    );
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_share, scope = private}, CachedDoc) ->
+    provider_logic:supports_space(CachedDoc#document.value#od_share.space);
 
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_provider, scope = private}, _) ->
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_provider, scope = private}, _) ->
     true;
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_provider, scope = protected}, _) ->
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_provider, scope = protected}, _) ->
     true;
 
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_handle_service, scope = private}, _) ->
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_handle_service, scope = private}, _) ->
     false;
 
-is_authorized(?ROOT_SESS_ID, _, #gri{type = od_handle, scope = private}, _) ->
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_handle, scope = private}, _) ->
     false;
 
-is_authorized(?GUEST_SESS_ID, _, #gri{type = od_space}, _) ->
+is_authorized_to_get(?GUEST_SESS_ID, _, #gri{type = od_space}, _) ->
     % Guest session is a virtual session fully managed by provider, and it needs
     % access to space info to serve public data such as shares.
     true;
 
-is_authorized(_, _, #gri{type = od_share, scope = public}, _) ->
+is_authorized_to_get(_, _, #gri{type = od_share, scope = public}, _) ->
     true;
 
-is_authorized(_, _, #gri{type = od_handle, scope = public}, _) ->
+is_authorized_to_get(_, _, #gri{type = od_handle, scope = public}, _) ->
     true;
 
-is_authorized(SessionId, AuthHint, GRI, CachedDoc) when is_binary(SessionId) ->
+is_authorized_to_get(SessionId, AuthHint, GRI, CachedDoc) when is_binary(SessionId) ->
     {ok, UserId} = session:get_user_id(SessionId),
-    is_user_authorized(UserId, SessionId, AuthHint, GRI, CachedDoc);
+    is_user_authorized_to_get(UserId, SessionId, AuthHint, GRI, CachedDoc);
 
-is_authorized(_, _, _, _) ->
+is_authorized_to_get(_, _, _, _) ->
     unknown.
 
 
--spec is_user_authorized(od_user:id(), client(), gs_protocol:auth_hint(), gri:gri(), doc()) ->
+-spec is_user_authorized_to_get(od_user:id(), client(), gs_protocol:auth_hint(), gri:gri(), doc()) ->
     boolean() | unknown.
-is_user_authorized(UserId, _, _, #gri{type = od_user, id = UserId, scope = private}, _) ->
+is_user_authorized_to_get(UserId, _, _, #gri{type = od_user, id = UserId, scope = private}, _) ->
     true;
-is_user_authorized(_UserId, _, _, #gri{type = od_user, id = _OtherUserId, scope = private}, _) ->
+is_user_authorized_to_get(_UserId, _, _, #gri{type = od_user, id = _OtherUserId, scope = private}, _) ->
     false;
-is_user_authorized(UserId, _, _, #gri{type = od_user, id = UserId, scope = protected}, _) ->
+is_user_authorized_to_get(UserId, _, _, #gri{type = od_user, id = UserId, scope = protected}, _) ->
     true;
-is_user_authorized(_UserId, _, _, #gri{type = od_user, id = _OtherUserId, scope = protected}, _) ->
+is_user_authorized_to_get(_UserId, _, _, #gri{type = od_user, id = _OtherUserId, scope = protected}, _) ->
     false;
-is_user_authorized(UserId, _, _, #gri{type = od_user, id = UserId, scope = shared}, _) ->
+is_user_authorized_to_get(UserId, _, _, #gri{type = od_user, id = UserId, scope = shared}, _) ->
     true;
-is_user_authorized(ClientUserId, Client, AuthHint, #gri{type = od_user, id = TargetUserId, scope = shared}, _) ->
+is_user_authorized_to_get(ClientUserId, Client, AuthHint, #gri{type = od_user, id = TargetUserId, scope = shared}, _) ->
     case AuthHint of
         ?THROUGH_SPACE(SpaceId) ->
             space_logic:can_view_user_through_space(Client, SpaceId, ClientUserId, TargetUserId);
@@ -732,7 +768,7 @@ is_user_authorized(ClientUserId, Client, AuthHint, #gri{type = od_user, id = Tar
             false
     end;
 
-is_user_authorized(ClientUserId, Client, AuthHint, #gri{type = od_group, id = GroupId, scope = shared}, _) ->
+is_user_authorized_to_get(ClientUserId, Client, AuthHint, #gri{type = od_group, id = GroupId, scope = shared}, _) ->
     case AuthHint of
         ?THROUGH_SPACE(SpaceId) ->
             space_logic:can_view_group_through_space(Client, SpaceId, ClientUserId, GroupId);
@@ -740,18 +776,18 @@ is_user_authorized(ClientUserId, Client, AuthHint, #gri{type = od_group, id = Gr
             user_logic:has_eff_group(Client, ClientUserId, GroupId)
     end;
 
-is_user_authorized(UserId, _, _, #gri{type = od_space, scope = private}, CachedDoc) ->
+is_user_authorized_to_get(UserId, _, _, #gri{type = od_space, scope = private}, CachedDoc) ->
     space_logic:has_eff_user(CachedDoc, UserId);
-is_user_authorized(UserId, SessionId, _, #gri{type = od_space, scope = protected}, CachedDoc) ->
+is_user_authorized_to_get(UserId, SessionId, _, #gri{type = od_space, scope = protected}, CachedDoc) ->
     user_logic:has_eff_space(SessionId, UserId, CachedDoc#document.key);
 
-is_user_authorized(UserId, Client, _, #gri{type = od_share, scope = private}, CachedDoc) ->
+is_user_authorized_to_get(UserId, Client, _, #gri{type = od_share, scope = private}, CachedDoc) ->
     space_logic:has_eff_user(Client, CachedDoc#document.value#od_share.space, UserId);
 
-is_user_authorized(_UserId, _, _, #gri{type = od_provider, scope = private}, _) ->
+is_user_authorized_to_get(_UserId, _, _, #gri{type = od_provider, scope = private}, _) ->
     false;
 
-is_user_authorized(UserId, Client, AuthHint, #gri{type = od_provider, id = ProviderId, scope = protected}, CachedDoc) ->
+is_user_authorized_to_get(UserId, Client, AuthHint, #gri{type = od_provider, id = ProviderId, scope = protected}, CachedDoc) ->
     case {get_cache_state(CachedDoc), AuthHint} of
         {#{scope := private}, _} ->
             provider_logic:has_eff_user(CachedDoc, UserId);
@@ -762,12 +798,12 @@ is_user_authorized(UserId, Client, AuthHint, #gri{type = od_provider, id = Provi
             unknown
     end;
 
-is_user_authorized(UserId, _, _, #gri{type = od_handle_service, scope = private}, CachedDoc) ->
+is_user_authorized_to_get(UserId, _, _, #gri{type = od_handle_service, scope = private}, CachedDoc) ->
     handle_service_logic:has_eff_user(CachedDoc, UserId);
 
-is_user_authorized(UserId, _, _, #gri{type = od_handle, scope = private}, CachedDoc) ->
+is_user_authorized_to_get(UserId, _, _, #gri{type = od_handle, scope = private}, CachedDoc) ->
     handle_logic:has_eff_user(CachedDoc, UserId);
 
-is_user_authorized(_, _, _, _, _) ->
+is_user_authorized_to_get(_, _, _, _, _) ->
     false.
 

@@ -56,8 +56,8 @@
 
 % User authorizations
 % Token auth is translated to {token, Token} before graph sync request.
--define(USER_INTERNAL_TOKEN_AUTH(__User), #token_auth{token = __User}).
--define(USER_GS_TOKEN_AUTH(__User), {token, __User}).
+-define(USER_INTERNAL_TOKEN_AUTH(Token), #token_auth{token = Token}).
+-define(USER_GS_TOKEN_AUTH(Token), {token, Token}).
 
 
 -define(USER_PERMS_IN_GROUP_VALUE_BINARIES, #{?USER_1 => [atom_to_binary(?GROUP_VIEW, utf8)], ?USER_2 => [atom_to_binary(?GROUP_VIEW, utf8)]}).

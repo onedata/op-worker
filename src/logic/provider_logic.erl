@@ -28,7 +28,7 @@
 -include_lib("ctool/include/onedata.hrl").
 
 -export([get/0, get/1, get/2, get_protected_data/2, get_protected_data/3]).
--export([to_string/1]).
+-export([to_printable/1]).
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
@@ -136,8 +136,8 @@ get_protected_data(SessionId, ProviderId, AuthHint) ->
     }).
 
 
--spec to_string(od_provider:id()) -> string().
-to_string(ProviderId) ->
+-spec to_printable(od_provider:id()) -> string().
+to_printable(ProviderId) ->
     case provider_logic:get_name(ProviderId) of
         {ok, Name} -> str_utils:format("'~ts' (~s)", [Name, ProviderId]);
         _ -> str_utils:format("'~s' (name unknown)", [ProviderId])
@@ -416,8 +416,8 @@ get_nodes(ProviderId) ->
 get_nodes(ProviderId, Domain) ->
     case inet:parse_ipv4_address(binary_to_list(Domain)) of
         {ok, _} ->
-            ?warning("Provider ~ts is using an IP address instead of domain", [to_string(ProviderId)]),
-            ?info("Resolved 1 node for connection to provider ~ts: ~s", [to_string(ProviderId), Domain]),
+            ?warning("Provider ~ts is using an IP address instead of domain", [to_printable(ProviderId)]),
+            ?info("Resolved 1 node for connection to provider ~ts: ~s", [to_printable(ProviderId), Domain]),
             [Domain];
         {error, einval} ->
             {ok, IPsAtoms} = inet:getaddrs(binary_to_list(Domain), inet),
@@ -430,14 +430,14 @@ get_nodes(ProviderId, Domain) ->
             case lists:all(ConfigMatches, IPs) of
                 true ->
                     ?info("Resolved ~B node(s) for connection to provider ~ts: ~s", [
-                        length(IPs), to_string(ProviderId), IpsString
+                        length(IPs), to_printable(ProviderId), IpsString
                     ]),
                     IPs;
                 false ->
                     ?info(
                         "Falling back to domain '~ts' for connection to provider ~ts as "
                         "IP addresses failed the connectivity check (~s)", [
-                            Domain, to_string(ProviderId), IpsString
+                            Domain, to_printable(ProviderId), IpsString
                         ]),
                     [Domain]
             end
@@ -458,7 +458,7 @@ get_rtransfer_port(ProviderId) ->
                 RtransferPort;
             _ ->
                 ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~p", 
-                    [to_string(ProviderId), ?RTRANSFER_PORT]),
+                    [to_printable(ProviderId), ?RTRANSFER_PORT]),
                 ?RTRANSFER_PORT
         end,
         {true, Port, ?PROVIDER_NODES_CACHE_TTL}
@@ -749,7 +749,7 @@ verify_provider_identity(ProviderId) ->
         end
     catch Type:Reason ->
         ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
-            provider_logic:to_string(ProviderId),
+            provider_logic:to_printable(ProviderId),
             Type, Reason
         ]),
         ?ERROR_UNAUTHORIZED

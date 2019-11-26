@@ -38,11 +38,13 @@ verify_access_token(#token_auth{token = SerializedToken, peer_ip = PeerIp}) ->
         operation = create,
         gri = #gri{type = od_token, id = undefined, aspect = verify_access_token, scope = public},
         data = #{
+            %% @TODO VFS-5914 add full auth_ctx information
             <<"token">> => SerializedToken,
             <<"peerIp">> => case PeerIp of
                 undefined -> null;
                 _ -> element(2, {ok, _} = ip_utils:to_binary(PeerIp))
-            end
+            end,
+            <<"allowDataAccessCaveats">> => true  % fixme temp. for testing
         }
     }),
     case Result of
@@ -69,6 +71,7 @@ verify_identity_token(SerializedToken) ->
         operation = create,
         gri = #gri{type = od_token, id = undefined, aspect = verify_identity_token, scope = public},
         data = #{
+            %% @TODO VFS-5914 add full auth_ctx information
             <<"token">> => SerializedToken
         }
     }),

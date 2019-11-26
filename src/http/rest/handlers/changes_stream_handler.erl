@@ -275,7 +275,7 @@ authorize(Req, ?USER(UserId) = Auth) ->
         true ->
             try
                 GRI = #gri{type = op_metrics, id = SpaceId, aspect = changes},
-                token_utils:verify_api_caveats(Auth#auth.caveats, create, GRI)
+                api_caveats:check_authorization(Auth#auth.caveats, ?OP_WORKER, create, GRI)
             catch
                 throw:Error ->
                     Error;
