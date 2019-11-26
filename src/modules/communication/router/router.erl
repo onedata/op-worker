@@ -171,7 +171,11 @@ route_and_ignore_answer(#client_message{
 } = Msg) ->
     Uuid = file_id:guid_to_uuid(ContextGuid),
     Req = {fuse_request, effective_session_id(Msg), FuseRequest},
-    ok = worker_proxy:cast({id, fslogic_worker, Uuid}, Req);
+
+    case fslogic_uuid:is_space_dir_guid(ContextGuid) of
+        true -> ok = worker_proxy:cast(fslogic_worker, Req);
+        _ -> ok = worker_proxy:cast({id, fslogic_worker, Uuid}, Req)
+    end;
 route_and_ignore_answer(#client_message{
     message_body = #fuse_request{} = FuseRequest
 } = Msg) ->
@@ -286,7 +290,10 @@ answer_or_delegate(Msg = #client_message{
 }, RIB) ->
     Uuid = file_id:guid_to_uuid(ContextGuid),
     Req = {fuse_request, effective_session_id(Msg), FuseRequest},
-    delegate_request({id, fslogic_worker, Uuid}, Req, MsgId, RIB);
+    case fslogic_uuid:is_space_dir_guid(ContextGuid) of
+        true -> delegate_request(fslogic_worker, Req, MsgId, RIB);
+        _ -> ok = delegate_request({id, fslogic_worker, Uuid}, Req, MsgId, RIB)
+    end;
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
@@ -301,7 +308,10 @@ answer_or_delegate(Msg = #client_message{
 }, RIB) ->
     Uuid = file_id:guid_to_uuid(ContextGuid),
     Req = {provider_request, effective_session_id(Msg), ProviderRequest},
-    delegate_request({id, fslogic_worker, Uuid}, Req, MsgId, RIB);
+    case fslogic_uuid:is_space_dir_guid(ContextGuid) of
+        true -> delegate_request(fslogic_worker, Req, MsgId, RIB);
+        _ -> ok = delegate_request({id, fslogic_worker, Uuid}, Req, MsgId, RIB)
+    end;
 
 answer_or_delegate(Msg = #client_message{
     message_id = Id,

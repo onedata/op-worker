@@ -31,8 +31,8 @@
 -type doc() :: datastore_doc:doc(record()).
 
 -define(CTX, #{
-    model => ?MODULE,
-    fold_enabled => true
+    model => ?MODULE
+%%    fold_enabled => true % TODO - wystarczy jak bedziemy robic liste na kazdym node
 }).
 
 %%%===================================================================
@@ -65,7 +65,8 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [doc()]} | {error, term()}.
 list() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+    {ok, []}.
+%%    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 %%--------------------------------------------------------------------
 %% @doc
