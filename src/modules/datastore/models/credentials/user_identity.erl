@@ -95,7 +95,7 @@ fetch(Credentials) ->
     try
         case token_logic:verify_access_token(Auth) of
             {ok, #auth{subject = ?SUB(user, UserId), caveats = _Caveats}} ->
-                %% @TODO VFS-5719 use the caveats in op_logic and user_ctx
+                %% @TODO VFS-5719 use the caveats in middleware and user_ctx
                 case provider_logic:has_eff_user(UserId) of
                     false ->
                         ?ERROR_FORBIDDEN;

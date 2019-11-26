@@ -7,18 +7,21 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module contains definitions of oneprovider REST methods.
+%%% @doc 
+%%% This module contains definitions of oneprovider REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(oneprovider_routes).
+-module(oneprovider_rest_routes).
 
 -include("http/rest.hrl").
 
 -export([routes/0]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -31,12 +34,22 @@ routes() -> [
     {<<"/configuration">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_provider, id = undefined, aspect = configuration}
+        b_gri = #b_gri{
+            type = op_provider, 
+            id = undefined, 
+            aspect = configuration, 
+            scope = public
+        }
     }},
     %% Get test image
     {<<"/test_image">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"image/png">>],
-        b_gri = #b_gri{type = op_provider, id = undefined, aspect = test_image}
+        b_gri = #b_gri{
+            type = op_provider, 
+            id = undefined, 
+            aspect = test_image, 
+            scope = public
+        }
     }}
 ].

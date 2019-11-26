@@ -71,7 +71,7 @@ start() ->
         {?GUI_GRAPH_SYNC_WS_PATH, gs_ws_handler, [gui_gs_translator]},
         {?CDMI_ID_PATH, cdmi_handler, by_id},
         {?CDMI_PATH, cdmi_handler, by_path},
-        rest_handler:rest_routes()
+        rest_routes:routes()
     ]),
 
     DynamicPageRoutes = [

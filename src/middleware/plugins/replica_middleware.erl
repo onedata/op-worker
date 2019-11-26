@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations (create, get, update, delete)
+%%% This module handles middleware operations (create, get, update, delete)
 %%% corresponding to file aspects such as:
 %%% - distribution,
 %%% - replication,
@@ -14,26 +14,25 @@
 %%% - migration.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_replica).
+-module(replica_middleware).
 -author("Bartosz Walkowicz").
 
--behaviour(op_logic_behaviour).
+-behaviour(middleware_plugin).
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
--export([op_logic_plugin/0]).
 -export([
     operation_supported/3,
     data_spec/1,
     fetch_entity/1,
-    exists/2,
     authorize/2,
     validate/2
 ]).
 -export([create/1, get/2, update/1, delete/1]).
+
 
 -define(check_transfer_creation(__FunctionCall),
     case __FunctionCall of
@@ -53,20 +52,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the op logic plugin module that handles model logic.
+%% {@link middleware_plugin} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
-op_logic_plugin() ->
-    op_replica.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link op_logic_behaviour} callback operation_supported/3.
-%% @end
-%%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), op_logic:aspect(),
-    op_logic:scope()) -> boolean().
+-spec operation_supported(middleware:operation(), gri:aspect(),
+    middleware:scope()) -> boolean().
 operation_supported(create, instance, private) -> true;
 operation_supported(create, replicate_by_view, private) -> true;
 
@@ -80,10 +70,10 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback data_spec/1.
+%% {@link middleware_plugin} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     optional => #{
         <<"provider_id">> => {binary, non_empty},
@@ -150,31 +140,21 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = evict_by_view}}) -> #{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback fetch_entity/1.
+%% {@link middleware_plugin} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | op_logic:error().
+-spec fetch_entity(middleware:req()) ->
+    {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback exists/2.
+%% {@link middleware_plugin} callback authorize/2.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(op_logic:req(), op_logic:entity()) -> boolean().
-exists(_, _) ->
-    true.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link op_logic_behaviour} callback authorize/2.
-%% @end
-%%--------------------------------------------------------------------
--spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
@@ -183,17 +163,17 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = instance
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    transfer_utils:authorize_creation(SpaceId, UserId, replication, false);
+    authorize_transfer_creation(SpaceId, UserId, replication, false);
 
 authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = replicate_by_view
 }} = OpReq, _) ->
     SpaceId = maps:get(<<"space_id">>, OpReq#op_req.data),
-    transfer_utils:authorize_creation(SpaceId, UserId, replication, true);
+    authorize_transfer_creation(SpaceId, UserId, replication, true);
 
 authorize(#op_req{operation = get, gri = #gri{id = Guid, aspect = distribution}} = Req, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
+    middleware_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #gri{
     id = Guid,
@@ -205,7 +185,7 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), data = Data, gri = #
         undefined -> eviction;
         _ -> migration
     end,
-    transfer_utils:authorize_creation(SpaceId, UserId, TransferType, false);
+    authorize_transfer_creation(SpaceId, UserId, TransferType, false);
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     aspect = evict_by_view
@@ -217,68 +197,74 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
         undefined -> eviction;
         _ -> migration
     end,
-    transfer_utils:authorize_creation(SpaceId, UserId, TransferType, true).
+    authorize_transfer_creation(SpaceId, UserId, TransferType, true).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback validate/2.
+%% {@link middleware_plugin} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
-validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
-    Data = Req#op_req.data,
-    SpaceId = file_id:guid_to_space_id(Guid),
-
-    ReplicatingProvider = maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
-    transfer_utils:validate_creation(
-        Req#op_req.auth, SpaceId,
-        ReplicatingProvider, undefined, {guid, Guid}
+-spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
+validate(#op_req{operation = create, auth = Auth, data = Data, gri = #gri{
+    id = Guid,
+    aspect = instance
+}}, _) ->
+    validate_transfer_creation(
+        Auth,
+        file_id:guid_to_space_id(Guid),
+        maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
+        undefined,
+        {guid, Guid}
     );
 
-validate(#op_req{operation = create, gri = #gri{id = Name, aspect = replicate_by_view}} = Req, _) ->
-    Data = Req#op_req.data,
-    SpaceId = maps:get(<<"space_id">>, Data),
-
-    ReplicatingProvider = maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
-    transfer_utils:validate_creation(
-        Req#op_req.auth, SpaceId,
-        ReplicatingProvider, undefined, {view, Name}
+validate(#op_req{operation = create, auth = Auth, data = Data, gri = #gri{
+    id = Name,
+    aspect = replicate_by_view
+}}, _) ->
+    validate_transfer_creation(
+        Auth,
+        maps:get(<<"space_id">>, Data),
+        maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
+        undefined,
+        {view, Name}
     );
 
 validate(#op_req{operation = get, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = delete, gri = #gri{id = Guid, aspect = instance}} = Req, _) ->
-    Data = Req#op_req.data,
-    SpaceId = file_id:guid_to_space_id(Guid),
-
-    EvictingProvider = maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
-    ReplicatingProvider = maps:get(<<"migration_provider_id">>, Data, undefined),
-    transfer_utils:validate_creation(
-        Req#op_req.auth, SpaceId,
-        ReplicatingProvider, EvictingProvider, {guid, Guid}
+validate(#op_req{operation = delete, auth = Auth, data = Data, gri = #gri{
+    id = Guid,
+    aspect = instance
+}}, _) ->
+    validate_transfer_creation(
+        Auth,
+        file_id:guid_to_space_id(Guid),
+        maps:get(<<"migration_provider_id">>, Data, undefined),
+        maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
+        {guid, Guid}
     );
 
-validate(#op_req{operation = delete, gri = #gri{id = Name, aspect = evict_by_view}} = Req, _) ->
-    Data = Req#op_req.data,
-    SpaceId = maps:get(<<"space_id">>, Data),
-
-    EvictingProvider = maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
-    ReplicatingProvider = maps:get(<<"migration_provider_id">>, Data, undefined),
-    transfer_utils:validate_creation(
-        Req#op_req.auth, SpaceId,
-        ReplicatingProvider, EvictingProvider, {view, Name}
+validate(#op_req{operation = delete, auth = Auth, data = Data, gri = #gri{
+    id = Name,
+    aspect = evict_by_view
+}}, _) ->
+    validate_transfer_creation(
+        Auth,
+        maps:get(<<"space_id">>, Data),
+        maps:get(<<"migration_provider_id">>, Data, undefined),
+        maps:get(<<"provider_id">>, Data, oneprovider:get_id()),
+        {view, Name}
     ).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback create/1.
+%% {@link middleware_plugin} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(op_logic:req()) -> op_logic:create_result().
+-spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
     ?check_transfer_creation(lfm:schedule_file_replication(
         Auth#auth.session_id,
@@ -300,30 +286,30 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = ViewName, aspect = repl
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback get/2.
+%% {@link middleware_plugin} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+-spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
     ?check(lfm:get_file_distribution(Auth#auth.session_id, {guid, FileGuid})).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback update/1.
+%% {@link middleware_plugin} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
--spec update(op_logic:req()) -> op_logic:update_result().
+-spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
     ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback delete/1.
+%% {@link middleware_plugin} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(op_logic:req()) -> op_logic:delete_result().
+-spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = instance}}) ->
     ?check_transfer_creation(lfm:schedule_replica_eviction(
         Auth#auth.session_id,
@@ -341,3 +327,95 @@ delete(#op_req{auth = Auth, data = Data, gri = #gri{id = ViewName, aspect = evic
         ViewName,
         view_utils:sanitize_query_options(Data)
     )).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec authorize_transfer_creation(od_space:id(), od_user:id(),
+    transfer:type(), TransferByIndex :: boolean()) -> boolean().
+authorize_transfer_creation(SpaceId, UserId, replication, false) ->
+    RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION],
+    space_logic:has_eff_privileges(SpaceId, UserId, RequiredPrivs);
+authorize_transfer_creation(SpaceId, UserId, replication, true) ->
+    RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS],
+    space_logic:has_eff_privileges(SpaceId, UserId, RequiredPrivs);
+authorize_transfer_creation(SpaceId, UserId, eviction, false) ->
+    RequiredPrivs = [?SPACE_SCHEDULE_EVICTION],
+    space_logic:has_eff_privileges(SpaceId, UserId, RequiredPrivs);
+authorize_transfer_creation(SpaceId, UserId, eviction, true) ->
+    RequiredPrivs = [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
+    space_logic:has_eff_privileges(SpaceId, UserId, RequiredPrivs);
+authorize_transfer_creation(SpaceId, UserId, migration, false) ->
+    RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION],
+    space_logic:has_eff_privileges(SpaceId, UserId, RequiredPrivs);
+authorize_transfer_creation(SpaceId, UserId, migration, true) ->
+    RequiredPrivs = [
+        ?SPACE_SCHEDULE_REPLICATION,
+        ?SPACE_SCHEDULE_EVICTION,
+        ?SPACE_QUERY_VIEWS
+    ],
+    space_logic:has_eff_privileges(SpaceId, UserId, RequiredPrivs).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Validates whether transfer can be created/scheduled. That includes:
+%% - check whether space is supported locally (scheduling provider)
+%%   and by replicating and evicting providers,
+%% - check if file exists in case of transfer of file/dir,
+%% - check if index exists on replicating and evicting providers
+%%   in case of transfer by index.
+%% Depending on transfer type (replication, eviction, migration) either
+%% ReplicatingProvider or EvictingProvider should be left 'undefined'.
+%% @end
+%%--------------------------------------------------------------------
+-spec validate_transfer_creation(
+    Auth :: aai:auth(),
+    SpaceId :: od_space:id(),
+    ReplicatingProvider :: undefined | od_provider:id(),
+    EvictingProvider :: undefined | od_provider:id(),
+    TransferBy :: {guid, file_id:file_guid()} | {view, index:name()}
+) ->
+    ok | no_return().
+validate_transfer_creation(Auth, SpaceId, ReplicatingProvider, EvictingProvider, {guid, Guid}) ->
+    middleware_utils:assert_space_supported_locally(SpaceId),
+    middleware_utils:assert_file_exists(Auth, Guid),
+
+    assert_space_supported_by(SpaceId, ReplicatingProvider),
+    assert_space_supported_by(SpaceId, EvictingProvider);
+validate_transfer_creation(_Auth, SpaceId, ReplicatingProvider, EvictingProvider, {view, Name}) ->
+    middleware_utils:assert_space_supported_locally(SpaceId),
+
+    assert_space_supported_by(SpaceId, ReplicatingProvider),
+    assert_view_exists_on_provider(SpaceId, Name, ReplicatingProvider),
+
+    assert_space_supported_by(SpaceId, EvictingProvider),
+    assert_view_exists_on_provider(SpaceId, Name, EvictingProvider).
+
+
+%% @private
+-spec assert_space_supported_by(od_space:id(), undefined | od_provider:id()) ->
+    ok | no_return().
+assert_space_supported_by(_SpaceId, undefined) ->
+    ok;
+assert_space_supported_by(SpaceId, ProviderId) ->
+    middleware_utils:assert_space_supported_by(SpaceId, ProviderId).
+
+
+%% @private
+-spec assert_view_exists_on_provider(od_space:id(), index:name(),
+    undefined | od_provider:id()) -> ok | no_return().
+assert_view_exists_on_provider(_SpaceId, _ViewName, undefined) ->
+    ok;
+assert_view_exists_on_provider(SpaceId, ViewName, ProviderId) ->
+    case index:exists_on_provider(SpaceId, ViewName, ProviderId) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_VIEW_NOT_EXISTS_ON(ProviderId))
+    end.

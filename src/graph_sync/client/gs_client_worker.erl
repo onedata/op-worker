@@ -393,9 +393,7 @@ check_api_authorization(#token_auth{token = Serialized}, #gs_req_graph{operation
     %% @TODO VFS-5914 can we keep a deserialized token not to unpack it every time?
     {ok, Token = #token{subject = Subject}} = tokens:deserialize(Serialized),
     Auth = #auth{subject = Subject, caveats = tokens:get_caveats(Token)},
-    api_auth:check_authorization(Auth, ?OZ_WORKER, Operation, GRI);
-check_api_authorization(_, _) ->
-    ok.
+    api_auth:check_authorization(Auth, ?OZ_WORKER, Operation, GRI).
 
 
 -spec do_request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req(), timeout()) ->
