@@ -38,6 +38,9 @@
 -define(GUEST_AUTH, guest_auth).
 -define(GUEST_IDENTITY, #user_identity{user_id = ?GUEST_USER_ID}).
 
+-define(USER_ROOT_DIR_SCOPE, <<"userRootDirScope">>).
+-define(ROOT_DIR_SCOPE, <<"rootDirScope">>).
+
 -define(DEFAULT_SPACE_DIR_MODE, 8#775).
 
 %% Mode for automatically created parent directory while creating file/directory.

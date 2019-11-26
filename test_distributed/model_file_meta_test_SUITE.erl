@@ -61,9 +61,10 @@ rename_test(Config) ->
 
     % create file tree
     RootUuid = <<>>,
+    SpaceId = <<"Space 1">>,
     {ok, Space1DirUuid} = ?assertMatch({ok, _},
         rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{key = <<"space rename 1">>,
-            value = #file_meta{name = <<"Space 1">>, is_scope = true}}])),
+            value = #file_meta{name = SpaceId, is_scope = true}, scope = SpaceId}])),
     {ok, _Space2DirUuid} = ?assertMatch({ok, _},
         rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{key = <<"space rename 2">>,
             value = #file_meta{name = <<"Space 2">>, is_scope = true}}])),
@@ -91,15 +92,15 @@ rename_test(Config) ->
         rpc:call(Worker1, file_meta, create, [{uuid, Dd2DirUuid}, #document{value = #file_meta{name = <<"f2">>}}])),
 
     % assert that scope is correct for each file in the tree
-    ?assertEqual({ok, Space1DirUuid}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1">>}])),
-    ?assertEqual({ok, Space1DirUuid}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/f1">>}])),
-    ?assertEqual({ok, Space1DirUuid}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/f2">>}])),
-    ?assertEqual({ok, Space1DirUuid}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/f3">>}])),
-    ?assertEqual({ok, Space1DirUuid}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/f4">>}])),
-    ?assertEqual({ok, Space1DirUuid}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/dd1/f1">>}])),
-    ?assertEqual({ok, Space1DirUuid}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/dd1/f2">>}])),
-    ?assertEqual({ok, Space1DirUuid}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/dd2/f1">>}])),
-    ?assertEqual({ok, Space1DirUuid}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/dd2/f2">>}])),
+    ?assertEqual({ok, SpaceId}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1">>}])),
+    ?assertEqual({ok, SpaceId}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/f1">>}])),
+    ?assertEqual({ok, SpaceId}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/f2">>}])),
+    ?assertEqual({ok, SpaceId}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/f3">>}])),
+    ?assertEqual({ok, SpaceId}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/f4">>}])),
+    ?assertEqual({ok, SpaceId}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/dd1/f1">>}])),
+    ?assertEqual({ok, SpaceId}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/dd1/f2">>}])),
+    ?assertEqual({ok, SpaceId}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/dd2/f1">>}])),
+    ?assertEqual({ok, SpaceId}, rpc:call(Worker2, file_meta, get_scope_id, [{path, <<"/Space 1/d1/dd2/f2">>}])),
 
     % rename tree root
     {ok, Space1DirDoc} = ?assertMatch({ok, _}, rpc:call(Worker2, file_meta, get, [{path, <<"/Space 1">>}])),

@@ -1107,14 +1107,14 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
         GenerateDoc = fun(Type) ->
             Name = generator:gen_name(),
             Uuid = datastore_utils:gen_key(),
-            Doc = #document{key = Uuid, value =
-            #file_meta{
-                name = Name,
-                type = Type,
-                mode = 8#775,
-                owner = User,
-                scope = SpaceKey
-            },
+            Doc = #document{
+                key = Uuid,
+                value = #file_meta{
+                    name = Name,
+                    type = Type,
+                    mode = 8#775,
+                    owner = User
+                },
                 scope = SpaceId
             },
 %%            ct:print("Doc ~p ~p", [Uuid, Name]),
@@ -1800,10 +1800,8 @@ set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     ok.
 
 create_location(Doc, _ParentDoc, LocId, Path) ->
-    FDoc = Doc#document.value,
     FileUuid = Doc#document.key,
     SpaceId = Doc#document.scope,
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
 
     {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
     FileId = Path,
