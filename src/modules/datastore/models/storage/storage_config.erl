@@ -369,12 +369,14 @@ set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
 %%--------------------------------------------------------------------
 -spec set_imported_storage(od_storage:id(), boolean()) -> ok | ?ERROR_STORAGE_IN_USE.
 set_imported_storage(StorageId, Value) when is_boolean(Value)->
-    case storage_logic:supports_any_space(StorageId) of
-        true ->
-            ?ERROR_STORAGE_IN_USE;
-        false ->
-            set_imported_storage_insecure(StorageId, Value)
-    end.
+    critical_section:run({storage_support, StorageId}, fun() ->
+        case storage_logic:supports_any_space(StorageId) of
+            true ->
+                ?ERROR_STORAGE_IN_USE;
+            false ->
+                set_imported_storage_insecure(StorageId, Value)
+        end
+    end).
 
 
 %%--------------------------------------------------------------------

@@ -112,13 +112,15 @@ get_shared_data(StorageId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec safe_delete(od_storage:id()) -> ?ERROR_STORAGE_IN_USE | {error, term()}.
 safe_delete(StorageId) ->
-    case supports_any_space(StorageId) of
-        true ->
-            ?ERROR_STORAGE_IN_USE;
-        false ->
-            % TODO VFS-5124 Remove from rtransfer
-            delete(StorageId)
-    end.
+    critical_section:run({storage_support, StorageId}, fun() ->
+        case supports_any_space(StorageId) of
+            true ->
+                ?ERROR_STORAGE_IN_USE;
+            false ->
+                % TODO VFS-5124 Remove from rtransfer
+                delete(StorageId)
+        end
+    end).
 
 
 %% @private
