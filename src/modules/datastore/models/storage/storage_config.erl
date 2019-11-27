@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([new/2, new/5]).
+-export([new/2, new/4, new/5]).
 -export([get_id/1, get_name/1, is_readonly/1, is_imported_storage/1,
     get_helpers/1, get_luma_config_map/1, get_helper/1, get_type/1]).
 -export([select_helper/2, select/1]).
@@ -117,12 +117,22 @@ list() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv new(Name, Helpers, false).
+%% @equiv new(Name, Helpers, false, undefined).
 %% @end
 %%--------------------------------------------------------------------
 -spec new(name(), [helper()]) -> doc().
 new(Name, Helpers) ->
-    new(Name, Helpers, false, undefined, false).
+    new(Name, Helpers, false, undefined).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv new(Name, Helpers, ReadOnly, LumaConfig, false).
+%% @end
+%%--------------------------------------------------------------------
+-spec new(name(), [helper()], boolean(), undefined | luma_config:config()) -> doc().
+new(Name, Helpers, ReadOnly, LumaConfig) ->
+    new(Name, Helpers, ReadOnly, LumaConfig, false).
 
 
 %%--------------------------------------------------------------------
