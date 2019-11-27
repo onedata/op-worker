@@ -228,6 +228,6 @@ verify_test_file(Node, Helper, UserCtx, FileId, ExpectedFileContent) ->
             ?error("Storage test file read failed: ~tp~n~tp", [Reason, Stacktrace]),
             ?ERROR_STORAGE_TEST_FAILED(read);
         Result ->
-            % either success or a thrown delete error
+            % either success or a thrown deletion error
             Result
     end.
