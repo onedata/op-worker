@@ -328,7 +328,7 @@ provider_logic_update(Data) ->
 -spec support_space(od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, Token, SupportSize) ->
-    storage_logic:support_space_internal(StorageId, Token, SupportSize).
+    storage_logic:support_space(StorageId, Token, SupportSize).
 
 
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.

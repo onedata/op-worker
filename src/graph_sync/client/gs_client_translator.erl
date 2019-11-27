@@ -94,6 +94,11 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
     };
 
 translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Result) ->
+    Storages = maps:get(<<"storages">>, Result),
+
+    {ok, ProviderStorageIds} = provider_logic:get_storage_ids(),
+    LocalStorageIds = [X || X <- ProviderStorageIds, Y <- maps:keys(Storages), X == Y],
+
     #document{
         key = Id,
         value = #od_space{
@@ -105,7 +110,8 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
             direct_groups = privileges_to_atoms(maps:get(<<"groups">>, Result)),
             eff_groups = privileges_to_atoms(maps:get(<<"effectiveGroups">>, Result)),
 
-            storages = maps:get(<<"storages">>, Result),
+            storages = Storages,
+            local_storages = LocalStorageIds,
 
             providers = maps:get(<<"providers">>, Result),
             shares = maps:get(<<"shares">>, Result),
