@@ -631,8 +631,7 @@ resolve_auth_override(#token_auth{token = Token, peer_ip = PeerIp}) ->
     %% @TODO VFS-5914 add full auth_ctx information
     #auth_override{
         client_auth = {token, Token},
-        peer_ip = PeerIp,
-        data_access_caveats_policy = allow_data_access_caveats   % fixme temp. for testing
+        peer_ip = PeerIp
     }.
 
 
