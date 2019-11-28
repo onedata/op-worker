@@ -89,6 +89,7 @@ handle_client_handshake(#client_handshake_request{
 } = Req, IpAddress) when is_binary(Nonce) ->
 
     assert_client_compatibility(Req, IpAddress),
+    %% @TODO VFS-5914 Use auth override for that, remove token_utils
     case catch token_utils:assert_interface_allowed(Token, oneclient) of
         ok -> ok;
         _ -> throw(invalid_token)
@@ -125,7 +126,7 @@ handle_provider_handshake(#provider_handshake_request{
         {error, _} = Error ->
             ?debug("Discarding provider connection from ~ts @ ~s as its "
                    "identity cannot be verified: ~p", [
-                provider_logic:to_string(ProviderId),
+                provider_logic:to_printable(ProviderId),
                 inet_parse:ntoa(IpAddress), Error
             ]),
             throw(invalid_token)

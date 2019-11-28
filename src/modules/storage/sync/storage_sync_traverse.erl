@@ -661,7 +661,6 @@ get_storage_sync_info_doc(#storage_traverse_master{
 
 -spec maybe_add_deletion_detection_link(storage_file_ctx:ctx(), info()) -> ok.
 maybe_add_deletion_detection_link(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileId}) ->
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     ParentStorageFileCtx = storage_file_ctx:get_parent_ctx_const(StorageFileCtx),

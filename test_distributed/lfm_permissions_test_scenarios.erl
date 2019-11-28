@@ -98,7 +98,7 @@ run_scenarios(#perms_test_spec{
     ),
 
     run_space_privs_scenarios(ScenariosRootDirPath, Spec, Config),
-    run_data_caveats_scenarios(ScenariosRootDirPath, Spec, Config),
+    run_data_access_caveats_scenarios(ScenariosRootDirPath, Spec, Config),
     run_posix_perms_scenarios(ScenariosRootDirPath, Spec, Config),
     run_acl_perms_scenarios(ScenariosRootDirPath, Spec, Config).
 
@@ -284,7 +284,7 @@ space_privs_test(
 %% allow it.
 %% @end
 %%--------------------------------------------------------------------
-run_data_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
+run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
     test_node = Node,
     space_id = SpaceId,
     owner_user = Owner,

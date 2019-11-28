@@ -54,7 +54,7 @@ get_shared_data(SessionId, GroupId, AuthHint) ->
 -spec get_name(gs_client_worker:client(), od_group:id()) ->
     {ok, od_group:name()} | errors:error().
 get_name(SessionId, GroupId) ->
-    get_name(SessionId, GroupId, undefined).
+    get_name(SessionId, GroupId, ?THROUGH_PROVIDER(oneprovider:get_id())).
 
 -spec get_name(gs_client_worker:client(), od_group:id(), gs_protocol:auth_hint()) ->
     {ok, od_group:name()} | errors:error().
