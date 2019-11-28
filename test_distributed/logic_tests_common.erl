@@ -273,8 +273,6 @@ mock_request(#gs_req{request = #gs_req_rpc{}}) ->
     ?ERROR_RPC_UNDEFINED;
 mock_request(#gs_req{auth_override = AuthOverride, request = GraphReq = #gs_req_graph{}}) ->
     mock_graph_request(GraphReq, AuthOverride);
-mock_request(#gs_req{auth_override = undefined, request = GraphReq = #gs_req_graph{}}) ->
-    mock_graph_request(GraphReq, undefined);
 mock_request(#gs_req{request = #gs_req_unsub{}}) ->
     {ok, #gs_resp_unsub{}}.
 

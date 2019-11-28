@@ -25,7 +25,7 @@
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/graph_sync/graph_sync.hrl").
+-include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

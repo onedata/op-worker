@@ -714,7 +714,11 @@ is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private
 
 % Provider can access shares of spaces that it supports
 is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_share, scope = private}, CachedDoc) ->
-    provider_logic:supports_space(CachedDoc#document.value#od_share.space);
+    provider_logic:supports_space(
+        ?ROOT_SESS_ID,
+        oneprovider:get_id_or_undefined(),
+        CachedDoc#document.value#od_share.space
+    );
 
 is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_provider, scope = private}, _) ->
     true;

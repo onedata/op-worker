@@ -44,7 +44,7 @@ verify_access_token(#token_auth{token = SerializedToken, peer_ip = PeerIp}) ->
                 undefined -> null;
                 _ -> element(2, {ok, _} = ip_utils:to_binary(PeerIp))
             end,
-            <<"dataAccessCaveatsPolicy">> => true  % fixme temp. for testing
+            <<"allowDataAccessCaveats">> => true  % fixme temp. for testing
         }
     }),
     case Result of
