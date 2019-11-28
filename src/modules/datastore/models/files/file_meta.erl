@@ -146,15 +146,18 @@ create({uuid, ParentUuid}, FileDoc = #document{value = #file_meta{name = FileNam
     ?run(begin
         true = is_valid_filename(FileName),
         FileDoc2 = #document{key = FileUuid, value = FileMeta2} = fill_uuid(FileDoc, ParentUuid),
+        {ok, ParentDoc} = file_meta:get({uuid, ParentUuid}),
+        {ok, ParentScopeId} = get_scope_id(ParentDoc),
         FileDoc3 = #document{value = FileMeta3} =
             FileDoc2#document{value = FileMeta2#file_meta{parent_uuid = ParentUuid}},
         {ok, ScopeId} = get_scope_id(FileDoc3),
+        ScopeId2 = utils:ensure_defined(ScopeId, undefined, ParentScopeId),
         FileDoc4 = FileDoc3#document{
-            scope = ScopeId,
+            scope = ScopeId2    ,
             value = FileMeta3#file_meta{provider_id = oneprovider:get_id()}
         },
         LocalTreeId = oneprovider:get_id(),
-        Ctx = ?CTX#{scope => ScopeId},
+        Ctx = ?CTX#{scope => ParentScopeId},
         Link = {FileName, FileUuid},
         case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
             {ok, #link{}} ->
@@ -623,16 +626,16 @@ get_ancestors2(FileUuid, Acc) ->
 %% Gets "scope" id of given document.
 %% @end
 %%--------------------------------------------------------------------
--spec get_scope_id(entry()) -> {ok, ScopeId :: od_space:id()} | {error, term()}.
+-spec get_scope_id(entry()) -> {ok, ScopeId :: od_space:id() | undefined} | {error, term()}.
 get_scope_id(#document{key = FileUuid, value = #file_meta{is_scope = true}, scope = <<>>}) ->
     % scope has not been set yet
     case fslogic_uuid:is_space_dir_uuid(FileUuid) of
         true -> {ok, fslogic_uuid:space_dir_uuid_to_spaceid(FileUuid)};
         false -> {ok, ?ROOT_DIR_SCOPE}
     end;
-get_scope_id(#document{value = #file_meta{is_scope = false, parent_uuid = ParentUuid}, scope = <<>>}) ->
+get_scope_id(#document{value = #file_meta{is_scope = false}, scope = <<>>}) ->
     % scope has not been set yet
-    get_scope_id({uuid, ParentUuid});
+    {ok, undefined};
 get_scope_id(#document{value = #file_meta{}, scope = Scope}) ->
     {ok, Scope};
 get_scope_id(Entry) ->
