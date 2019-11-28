@@ -18,7 +18,7 @@
 -behavior(data_backend_behaviour).
 -author("Lukasz Opiola").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -166,21 +166,21 @@ create_record(<<"transfer">>, Data) ->
 
     Result = case TransferType of
         replication ->
-            op_logic:handle(#op_req{
+            middleware:handle(#op_req{
                 operation = create,
                 auth =?USER(UserId, SessionId),
                 gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
                 data = #{<<"provider_id">> => ReplicatingProvider}
             });
         eviction ->
-            op_logic:handle(#op_req{
+            middleware:handle(#op_req{
                 operation = delete,
                 auth = ?USER(UserId, SessionId),
                 gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
                 data = #{<<"provider_id">> => EvictingProvider}
             });
         migration ->
-            op_logic:handle(#op_req{
+            middleware:handle(#op_req{
                 operation = delete,
                 auth = ?USER(UserId, SessionId),
                 gri = #gri{type = op_replica, id = FileGuid, aspect = instance},
@@ -247,7 +247,7 @@ cancel_transfer(SessionId, StateAndTransferId) ->
     {_, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
     {ok, UserId} = session:get_user_id(SessionId),
 
-    Result = op_logic:handle(#op_req{
+    Result = middleware:handle(#op_req{
         operation = delete,
         auth = ?USER(UserId, SessionId),
         gri = #gri{type = op_transfer, id = TransferId, aspect = instance}
@@ -282,7 +282,7 @@ rerun_transfer(SessionId, StateAndTransferId) ->
     {_, TransferId} = op_gui_utils:association_to_ids(StateAndTransferId),
     {ok, UserId} = session:get_user_id(SessionId),
 
-    Result = op_logic:handle(#op_req{
+    Result = middleware:handle(#op_req{
         operation = create,
         auth = ?USER(UserId, SessionId),
         gri = #gri{type = op_transfer, id = TransferId, aspect = rerun}

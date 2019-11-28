@@ -36,7 +36,8 @@
 -export([
     get_child/2, get_child_uuid/2,
     list_children/2, list_children/3, list_children/4,
-    list_children/5, list_children/6
+    list_children/5, list_children/6,
+    list_children_whitelisted/4
 ]).
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
@@ -56,18 +57,21 @@
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
 -type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE.
--type offset() :: non_neg_integer().
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
 -type time() :: non_neg_integer().
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
 -type permissions_type() :: posix | acl.
+
 % Listing options (see datastore_links_iter.erl in cluster_worker for more information about link listing options)
+-type offset() :: integer().
+-type non_neg_offset() :: non_neg_integer().
+-type limit() :: non_neg_integer().
 -type list_opts() :: #{
     token => datastore_links_iter:token() | undefined,
-    size => non_neg_integer(),
-    offset => non_neg_integer(),
+    size => limit(),
+    offset => offset(),
     prev_link_name => name(),
     prev_tree_id => od_provider:id()}.
 % Map returned from listing functions, containing information needed for next batch listing
@@ -78,8 +82,8 @@
 
 -export_type([
     doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
-    offset/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
-    file_meta/0
+    size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    offset/0, non_neg_offset/0, limit/0, file_meta/0
 ]).
 
 -define(CTX, #{
@@ -441,31 +445,31 @@ get_child_uuid(ParentUuid, Name) ->
 %% @equiv list_children_internal(Entry, #{size => Size, token => #link_token{}}).
 %% @end
 %%--------------------------------------------------------------------
--spec list_children(entry(), non_neg_integer()) ->
+-spec list_children(entry(), limit()) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Size) ->
-    list_children_internal(Entry, #{size => Size, token => #link_token{}}).
+list_children(Entry, Limit) ->
+    list_children_internal(Entry, #{size => Limit, token => #link_token{}}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv list_children(Entry, Offset, Size, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec list_children(entry(), integer(), non_neg_integer()) ->
+-spec list_children(entry(), offset(), limit()) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Size) ->
-    list_children_internal(Entry, #{offset => Offset, size => Size}).
+list_children(Entry, Offset, Limit) ->
+    list_children_internal(Entry, #{offset => Offset, size => Limit}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv list_children(Entry, Offset, Size, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec list_children(entry(), integer(), non_neg_integer(),
+-spec list_children(entry(), offset(), limit(),
     datastore_links_iter:token() | undefined) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Size, Token) ->
-    list_children(Entry, Offset, Size, Token, undefined).
+list_children(Entry, Offset, Limit, Token) ->
+    list_children(Entry, Offset, Limit, Token, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -474,14 +478,14 @@ list_children(Entry, Offset, Size, Token) ->
 %%--------------------------------------------------------------------
 -spec list_children(
     Entry :: entry(),
-    Offset :: integer(),
-    Size :: non_neg_integer(),
+    Offset :: offset(),
+    Limit :: limit(),
     Token :: undefined | datastore_links_iter:token(),
     PrevLinkKey :: undefined | name()
 ) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Size, Token, PrevLinkKey) ->
-    list_children(Entry, Offset, Size, Token, PrevLinkKey, undefined).
+list_children(Entry, Offset, Limit, Token, PrevLinkKey) ->
+    list_children(Entry, Offset, Limit, Token, PrevLinkKey, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -490,17 +494,17 @@ list_children(Entry, Offset, Size, Token, PrevLinkKey) ->
 %%--------------------------------------------------------------------
 -spec list_children(
     Entry :: entry(),
-    Offset :: integer(),
-    Size :: non_neg_integer(),
+    Offset :: offset(),
+    Limit :: limit(),
     Token :: undefined | datastore_links_iter:token(),
     PrevLinkKey :: undefined | name(),
     PrevTeeID :: undefined | oneprovider:id()
 ) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Size, Token, PrevLinkKey, PrevTeeID) ->
+list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTeeID) ->
     Opts = case Offset of
-        0 -> #{size => Size};
-        _ -> #{offset => Offset, size => Size}
+        0 -> #{size => Limit};
+        _ -> #{offset => Offset, size => Limit}
     end,
 
     Opts2 = case Token of
@@ -519,6 +523,45 @@ list_children(Entry, Offset, Size, Token, PrevLinkKey, PrevTeeID) ->
     end,
 
     list_children_internal(Entry, Opts4).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists children of given #file_meta bounded by specified AllowedChildren
+%% and given options (PositiveOffset and Limit).
+%% @end
+%%--------------------------------------------------------------------
+-spec list_children_whitelisted(
+    Entry :: entry(),
+    NonNegOffset :: non_neg_offset(),
+    Limit :: limit(),
+    ChildrenWhiteList :: [file_meta:name()]
+) ->
+    {ok, [#child_link_uuid{}]} | {error, term()}.
+list_children_whitelisted(Entry, NonNegOffset, Limit, ChildrenWhiteList) when NonNegOffset >= 0 ->
+    Names = lists:filter(fun(ChildName) ->
+        not (is_hidden(ChildName) orelse is_deletion_link(ChildName))
+    end, ChildrenWhiteList),
+
+    ?run(begin
+        {ok, FileUuid} = get_uuid(Entry),
+
+        ValidLinks = lists:flatmap(fun
+            ({ok, L}) ->
+                L;
+            ({error, not_found}) ->
+                [];
+            ({error, _} = Error) ->
+                error(Error)
+        end, datastore_model:get_links(?CTX, FileUuid, all, Names)),
+
+        case NonNegOffset < length(ValidLinks) of
+            true ->
+                RequestedLinks = lists:sublist(ValidLinks, NonNegOffset+1, Limit),
+                {ok, tag_children(RequestedLinks)};
+            false ->
+                {ok, []}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc

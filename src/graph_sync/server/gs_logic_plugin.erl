@@ -15,7 +15,7 @@
 
 -behaviour(gs_logic_plugin_behaviour).
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -47,13 +47,18 @@ verify_handshake_auth(undefined, _) ->
     {ok, ?NOBODY};
 verify_handshake_auth(nobody, _) ->
     {ok, ?NOBODY};
-verify_handshake_auth({token, Token}, PeerIp) ->
-    Credentials = #token_auth{token = Token, peer_ip = PeerIp},
-    case http_auth:authenticate(Credentials, gui) of
+verify_handshake_auth({token, SerializedToken}, PeerIp) ->
+    Credentials = #token_auth{
+        token = SerializedToken,
+        peer_ip = PeerIp
+    },
+    case http_auth:authenticate(Credentials, gui, disallow_data_access_caveats) of
         {ok, ?USER = Auth} ->
             {ok, Auth};
-        {error, _} ->
-            ?ERROR_UNAUTHORIZED
+        {ok, ?NOBODY} ->
+            ?ERROR_UNAUTHORIZED;
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -109,7 +114,7 @@ is_authorized(Auth, AuthHint, GRI, Operation, VersionedEntity) ->
         gri = GRI,
         auth_hint = AuthHint
     },
-    op_logic:is_authorized(OpReq, VersionedEntity).
+    middleware:is_authorized(OpReq, VersionedEntity).
 
 
 %%--------------------------------------------------------------------
@@ -141,7 +146,7 @@ handle_graph_request(Auth, AuthHint, GRI, Operation, Data, VersionedEntity) ->
         auth_hint = AuthHint,
         return_revision = true
     },
-    op_logic:handle(OpReq, VersionedEntity).
+    middleware:handle(OpReq, VersionedEntity).
 
 
 %%--------------------------------------------------------------------

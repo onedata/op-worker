@@ -22,7 +22,8 @@
     get_public_data_test/1,
     mixed_get_test/1,
     subscribe_test/1,
-    create_update_delete_test/1
+    create_update_delete_test/1,
+    confined_access_token_test/1
 ]).
 
 all() -> ?ALL([
@@ -30,7 +31,8 @@ all() -> ?ALL([
     get_public_data_test,
     mixed_get_test,
     subscribe_test,
-    create_update_delete_test
+    create_update_delete_test,
+    confined_access_token_test
 ]).
 
 %%%===================================================================
@@ -338,6 +340,22 @@ create_update_delete_test(Config) ->
     ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
+
+
+confined_access_token_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    Caveat = #cv_interface{interface = oneclient},
+    Auth = #token_auth{token = initializer:create_token(?USER_1, [Caveat])},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    % Request should be denied before contacting Onezone because of the
+    % oneclient interface caveat
+    ?assertMatch(
+        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
+        rpc:call(Node, share_logic, get, [Auth, ?SHARE_1])
+    ),
+    ?assertEqual(GraphCalls, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================

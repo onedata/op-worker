@@ -12,7 +12,7 @@
 -module(rest_test_utils).
 -author("Jakub Kudzia").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").

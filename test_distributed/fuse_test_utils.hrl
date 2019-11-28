@@ -12,4 +12,3 @@
 -author("Michal Stanisz").
 
 -define(TIMEOUT, timer:minutes(1)).
--define(TOKEN, <<"DUMMY-TOKEN">>).

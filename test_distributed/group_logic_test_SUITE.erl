@@ -20,13 +20,15 @@
 -export([
     get_shared_data_test/1,
     subscribe_test/1,
-    convenience_functions_test/1
+    convenience_functions_test/1,
+    confined_access_token_test/1
 ]).
 
 all() -> ?ALL([
     get_shared_data_test,
     subscribe_test,
-    convenience_functions_test
+    convenience_functions_test,
+    confined_access_token_test
 ]).
 
 %%%===================================================================
@@ -78,6 +80,7 @@ get_shared_data_test(Config) ->
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
+
 
 subscribe_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
@@ -138,6 +141,7 @@ subscribe_test(Config) ->
 
     ok.
 
+
 convenience_functions_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
@@ -155,6 +159,22 @@ convenience_functions_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
+
+
+confined_access_token_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    Caveat = #cv_data_path{whitelist = [<<"/spaceid/file/dir.txt">>]},
+    Auth = #token_auth{token = initializer:create_token(?USER_1, [Caveat])},
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    % Request should be denied before contacting Onezone because of
+    % data access caveat presence
+    ?assertMatch(
+        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
+        rpc:call(Node, group_logic, get_shared_data, [Auth, ?GROUP_1, undefined])
+    ),
+    ?assertEqual(GraphCalls, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================

@@ -6,14 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles translation of op logic results concerning
+%%% This module handles translation of middleware results concerning
 %%% space entities into GUI GRAPH SYNC responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_gui_gs_translator).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 
 %% API
 -export([
@@ -35,6 +35,8 @@ translate_value(#gri{aspect = transfers}, #{<<"transfers">> := TransfersIds}) ->
         aspect = instance,
         scope = private
     }) end, TransfersIds)};
+translate_value(#gri{aspect = transfers_active_channels}, ActiveChannels) ->
+    ActiveChannels;
 translate_value(#gri{aspect = {transfers_throughput_charts, _}}, Charts) ->
     Charts.
 

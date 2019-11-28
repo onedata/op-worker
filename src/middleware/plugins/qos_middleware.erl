@@ -6,30 +6,29 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations (create, get, delete)
+%%% This module handles middleware operations (create, get, delete)
 %%% corresponding to QoS management.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_qos).
+-module(qos_middleware).
 -author("Michal Cwiertnia").
 
--behaviour(op_logic_behaviour).
+-behaviour(middleware_plugin).
 
+-include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("op_logic.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([op_logic_plugin/0]).
 -export([
     operation_supported/3,
     data_spec/1,
     fetch_entity/1,
-    exists/2,
     authorize/2,
     validate/2
 ]).
 -export([create/1, get/2, update/1, delete/1]).
+
 
 %%%===================================================================
 %%% API
@@ -38,20 +37,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the op logic plugin module that handles model logic.
+%% {@link middleware_plugin} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
-op_logic_plugin() ->
-    op_qos.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link op_logic_behaviour} callback operation_supported/3.
-%% @end
-%%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), op_logic:aspect(),
-    op_logic:scope()) -> boolean().
+-spec operation_supported(middleware:operation(), gri:aspect(),
+    middleware:scope()) -> boolean().
 operation_supported(create, instance, private) -> true;
 
 operation_supported(get, instance, private) -> true;
@@ -64,10 +54,10 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback data_spec/1.
+%% {@link middleware_plugin} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{<<"expression">> => {binary, non_empty}},
     optional => #{<<"replicasNum">> => {integer, {not_lower_than, 1}}}
@@ -85,10 +75,11 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback fetch_entity/1.
+%% {@link middleware_plugin} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:req()) -> {ok, op_logic:versioned_entity()} | op_logic:error().
+-spec fetch_entity(middleware:req()) ->
+    {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
     {ok, {undefined, 1}};
 
@@ -110,22 +101,12 @@ fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback exists/2.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(op_logic:req(), op_logic:entity()) -> boolean().
-exists(_, _) ->
-    true.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link op_logic_behaviour} callback authorize/2.
+%% {@link middleware_plugin} callback authorize/2.
 %%
 %% Checks only membership in space.
 %% @end
 %%--------------------------------------------------------------------
--spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
@@ -134,57 +115,71 @@ authorize(#op_req{operation = create, auth = Auth, gri = #gri{
     aspect = instance
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    op_logic_utils:is_eff_space_member(Auth, SpaceId);
+    middleware_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance, id = QosEntryId}},
-    _QosEntry
-) ->
+authorize(#op_req{operation = get, auth = Auth, gri = #gri{
+    id = QosEntryId,
+    aspect = instance
+}}, _QosEntry) ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
-    op_logic_utils:is_eff_space_member(Auth, SpaceId);
+    middleware_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     id = FileGuid,
     aspect = effective_qos
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    op_logic_utils:is_eff_space_member(Auth, SpaceId);
+    middleware_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = delete, auth = Auth, gri = #gri{aspect = instance, id = QosEntryId}},
-    _QosEntry
-) ->
+authorize(#op_req{operation = delete, auth = Auth, gri = #gri{
+    id = QosEntryId,
+    aspect = instance
+}}, _QosEntry) ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
-    op_logic_utils:is_eff_space_member(Auth, SpaceId).
+    middleware_utils:is_eff_space_member(Auth, SpaceId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback validate/2.
+%% {@link middleware_plugin} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
-validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = instance}}, _) ->
+-spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
+validate(#op_req{operation = create, gri = #gri{
+    id = Guid,
+    aspect = instance
+}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{aspect = instance, id = QosEntryId}}, _QosEntry) ->
+validate(#op_req{operation = get, gri = #gri{
+    id = QosEntryId,
+    aspect = instance
+}}, _QosEntry) ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{id = Guid, aspect = effective_qos}}, _) ->
+validate(#op_req{operation = get, gri = #gri{
+    id = Guid,
+    aspect = effective_qos
+}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = delete, gri = #gri{aspect = instance, id = QosEntryId}}, _QosEntry) ->
+validate(#op_req{operation = delete, gri = #gri{
+    id = QosEntryId,
+    aspect = instance
+}}, _QosEntry) ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
-    op_logic_utils:assert_space_supported_locally(SpaceId).
+    middleware_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback create/1.
+%% {@link middleware_plugin} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(op_logic:req()) -> op_logic:create_result().
+-spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}} = Req) ->
     SessionId = Auth#auth.session_id,
     QosExpression = maps:get(<<"expression">>, Req#op_req.data),
@@ -199,29 +194,36 @@ create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}} = Req)
             ?ERROR_POSIX(Errno)
     end.
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback get/2.
+%% {@link middleware_plugin} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+-spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = effective_qos}}, _) ->
     SessionId = Auth#auth.session_id,
     case lfm:get_effective_file_qos(SessionId, {guid, FileGuid}) of
         {ok, {QosEntries, AssignedEntries}} ->
-            {ok, Fulfilled} = ?check(lfm_qos:check_qos_fulfilled(SessionId, QosEntries, {guid, FileGuid})),
+            {ok, Fulfilled} = ?check(lfm_qos:check_qos_fulfilled(
+                SessionId, QosEntries, {guid, FileGuid})
+            ),
             {ok, #{
                 <<"qosEntries">> => QosEntries,
                 <<"assignedEntries">> => AssignedEntries,
                 <<"fulfilled">> => Fulfilled
             }};
         ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
+            ?ERROR_NOT_FOUND;
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
     end;
 
 get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEntry) ->
     SessionId = Auth#auth.session_id,
-    {ok, Fulfilled} = ?check(lfm_qos:check_qos_fulfilled(SessionId, QosEntryId)),
+    {ok, Fulfilled} = ?check(lfm_qos:check_qos_fulfilled(
+        SessionId, QosEntryId
+    )),
     {ok, #{
         <<"qosEntryId">> => QosEntryId,
         <<"expression">> => qos_entry:get_expression(QosEntry),
@@ -232,25 +234,22 @@ get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEnt
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback update/1.
+%% {@link middleware_plugin} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
--spec update(op_logic:req()) -> op_logic:update_result().
+-spec update(middleware:req()) -> middleware:update_result().
 update(_) ->
     ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback delete/1.
+%% {@link middleware_plugin} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(op_logic:req()) -> op_logic:delete_result().
+-spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
-    case lfm:remove_qos_entry(Auth#auth.session_id, QosEntryId) of
-        ok -> ok;
-        {error, Errno} -> ?ERROR_POSIX(Errno)
-    end.
+    ?check(lfm:remove_qos_entry(Auth#auth.session_id, QosEntryId)).
 
 
 %%%===================================================================
@@ -260,7 +259,7 @@ delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
 
 %% @private
 -spec fetch_qos_entry(aai:auth(), qos_entry:id()) ->
-    {ok, {qos_entry:record(), op_logic:revision()}} | ?ERROR_NOT_FOUND.
+    {ok, {qos_entry:record(), middleware:revision()}} | ?ERROR_NOT_FOUND.
 fetch_qos_entry(?USER(_UserId, SessionId), QosEntryId) ->
     case lfm:get_qos_entry(SessionId, QosEntryId) of
         {ok, QosEntry} ->
