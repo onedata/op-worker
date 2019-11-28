@@ -7,43 +7,59 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module contains definitions of monitoring REST methods.
+%%% @doc 
+%%% This module contains definitions of transfer REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(monitoring_routes).
+-module(transfer_rest_routes).
 
 -include("http/rest.hrl").
 
 -export([routes/0]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of monitoring REST paths.
+%% Definitions of transfer REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Get space metrics
-    {<<"/metrics/space/:sid">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>, <<"application/xml">>],
-        b_gri = #b_gri{type = op_metrics, id = ?BINDING(sid), aspect = space}
+    %% Cancel specific transfer
+    {<<"/transfers/:tid">>, rest_handler, #rest_req{
+        method = 'DELETE',
+        b_gri = #b_gri{
+            type = op_transfer, 
+            id = ?BINDING(tid), 
+            aspect = instance, 
+            scope = private
+        }
     }},
-    %% Get space user metrics
-    {<<"/metrics/space/:sid/user/:uid">>, rest_handler, #rest_req{
+    %% Get transfer status
+    {<<"/transfers/:tid">>, rest_handler, #rest_req{
         method = 'GET',
-        produces = [<<"application/json">>, <<"application/xml">>],
-        b_gri = #b_gri{type = op_metrics, id = ?BINDING(sid), aspect = {user, ?BINDING(uid)}}
-    }},
-    %% Subscribe to file events
-    {<<"/changes/metadata/:sid">>, changes_stream_handler, #rest_req{
-        method = 'POST',
-        consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
-        b_gri = #b_gri{type = op_metrics, id = ?BINDING(sid), aspect = changes}
+        b_gri = #b_gri{
+            type = op_transfer, 
+            id = ?BINDING(tid), 
+            aspect = instance, 
+            scope = private
+        }
+    }},
+    %% Rerun ended transfer
+    {<<"/transfers/:tid/rerun">>, rest_handler, #rest_req{
+        method = 'POST',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_transfer, 
+            id = ?BINDING(tid), 
+            aspect = rerun, 
+            scope = private
+        }
     }}
 ].

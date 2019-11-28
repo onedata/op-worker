@@ -6,29 +6,27 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles op logic operations (create, get, update, delete)
+%%% This module handles middleware operations (create, get, update, delete)
 %%% corresponding to space aspects such as:
 %%% - space,
 %%% - views,
 %%% - transfers.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_space).
+-module(space_middleware).
 -author("Bartosz Walkowicz").
 
--behaviour(op_logic_behaviour).
+-behaviour(middleware_plugin).
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
--export([op_logic_plugin/0]).
 -export([
     operation_supported/3,
     data_spec/1,
     fetch_entity/1,
-    exists/2,
     authorize/2,
     validate/2
 ]).
@@ -46,20 +44,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns the op logic plugin module that handles model logic.
+%% {@link middleware_plugin} callback operation_supported/3.
 %% @end
 %%--------------------------------------------------------------------
-op_logic_plugin() ->
-    op_space.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link op_logic_behaviour} callback operation_supported/3.
-%% @end
-%%--------------------------------------------------------------------
--spec operation_supported(op_logic:operation(), op_logic:aspect(),
-    op_logic:scope()) -> boolean().
+-spec operation_supported(middleware:operation(), gri:aspect(),
+    middleware:scope()) -> boolean().
 operation_supported(create, {view, _}, private) -> true;
 operation_supported(create, {view_reduce_function, _}, private) -> true;
 
@@ -72,6 +61,7 @@ operation_supported(get, eff_users, private) -> true;
 operation_supported(get, eff_groups, private) -> true;
 operation_supported(get, providers, private) -> true;
 operation_supported(get, transfers, private) -> true;
+operation_supported(get, transfers_active_channels, private) -> true;
 operation_supported(get, {transfers_throughput_charts, _}, private) -> true;
 
 operation_supported(update, {view, _}, private) -> true;
@@ -84,10 +74,10 @@ operation_supported(_, _, _) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback data_spec/1.
+%% {@link middleware_plugin} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
--spec data_spec(op_logic:req()) -> undefined | op_sanitizer:data_spec().
+-spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = {view, _}}}) -> #{
     required => #{
         <<"application/javascript">> => {binary, non_empty}
@@ -121,7 +111,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = views}}) -> #{
     optional => #{
-        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}},
         <<"page_token">> => {binary, non_empty}
     }
 };
@@ -164,10 +154,13 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = transfers}}) -> #{
             ?ENDED_TRANSFERS_STATE
         ]},
         <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 0, ?MAX_LIST_LIMIT}},
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}},
         <<"page_token">> => {page_token, any}
     }
 };
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = transfers_active_channels}}) ->
+    undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_charts, _}}}) -> #{
     required => #{
@@ -213,31 +206,21 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = {view_reduce_function,
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback fetch_entity/1.
+%% {@link middleware_plugin} callback fetch_entity/1.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_entity(op_logic:req()) ->
-    {ok, op_logic:versioned_entity()} | op_logic:error().
+-spec fetch_entity(middleware:req()) ->
+    {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(_) ->
     {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback exists/2.
+%% {@link middleware_plugin} callback authorize/2.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(op_logic:req(), op_logic:entity()) -> boolean().
-exists(_, _) ->
-    true.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link op_logic_behaviour} callback authorize/2.
-%% @end
-%%--------------------------------------------------------------------
--spec authorize(op_logic:req(), op_logic:entity()) -> boolean().
+-spec authorize(middleware:req(), middleware:entity()) -> boolean().
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
@@ -261,7 +244,7 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{
     id = SpaceId,
     aspect = instance
 }}, _) ->
-    op_logic_utils:is_eff_space_member(Auth, SpaceId);
+    middleware_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
@@ -293,8 +276,11 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = transfers
-}}, _) ->
+    aspect = As
+}}, _) when
+    As =:= transfers;
+    As =:= transfers_active_channels
+->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
@@ -324,15 +310,15 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback validate/2.
+%% {@link middleware_plugin} callback validate/2.
 %% @end
 %%--------------------------------------------------------------------
--spec validate(op_logic:req(), op_logic:entity()) -> ok | no_return().
+-spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
 validate(#op_req{operation = create, data = Data, gri = #gri{
     id = SpaceId,
     aspect = {view, _}
 }}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId),
+    middleware_utils:assert_space_supported_locally(SpaceId),
 
     % In case of undefined `providers[]` local provider is chosen instead
     case maps:get(<<"providers[]">>, Data, undefined) of
@@ -340,7 +326,7 @@ validate(#op_req{operation = create, data = Data, gri = #gri{
             ok;
         Providers ->
             lists:foreach(fun(ProviderId) ->
-                op_logic_utils:assert_space_supported_by(SpaceId, ProviderId)
+                middleware_utils:assert_space_supported_by(SpaceId, ProviderId)
             end, Providers)
     end;
 
@@ -348,7 +334,7 @@ validate(#op_req{operation = create, gri = #gri{
     id = SpaceId,
     aspect = {view_reduce_function, _}
 }}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     % User spaces are listed by fetching information from zone,
@@ -356,38 +342,41 @@ validate(#op_req{operation = get, gri = #gri{aspect = list}}, _) ->
     ok;
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = views}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {view, _}}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {query_view, _}}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
     As =:= eff_users;
     As =:= eff_groups;
     As =:= providers
 ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
+    As =:= transfers;
+    As =:= transfers_active_channels
+->
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{
     id = SpaceId,
     aspect = {transfers_throughput_charts, _}
 }}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = update, gri = #gri{
     id = SpaceId,
     aspect = {view, _}
 }} = Req, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId),
+    middleware_utils:assert_space_supported_locally(SpaceId),
 
     % In case of undefined `providers[]` local provider is chosen instead
     case maps:get(<<"providers[]">>, Req#op_req.data, undefined) of
@@ -395,26 +384,26 @@ validate(#op_req{operation = update, gri = #gri{
             ok;
         Providers ->
             lists:foreach(fun(ProviderId) ->
-                op_logic_utils:assert_space_supported_by(SpaceId, ProviderId)
+                middleware_utils:assert_space_supported_by(SpaceId, ProviderId)
         end, Providers)
     end;
 
 validate(#op_req{operation = delete, gri = #gri{id = SpaceId, aspect = {view, _}}}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId);
+    middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{
     id = SpaceId,
     aspect = {view_reduce_function, _}
 }}, _) ->
-    op_logic_utils:assert_space_supported_locally(SpaceId).
+    middleware_utils:assert_space_supported_locally(SpaceId).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback create/1.
+%% {@link middleware_plugin} callback create/1.
 %% @end
 %%--------------------------------------------------------------------
--spec create(op_logic:req()) -> op_logic:create_result().
+-spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
     index:save(
         SpaceId, ViewName,
@@ -436,10 +425,10 @@ create(#op_req{gri = #gri{id = SpaceId, aspect = {view_reduce_function, ViewName
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback get/2.
+%% {@link middleware_plugin} callback get/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get(op_logic:req(), op_logic:entity()) -> op_logic:get_result().
+-spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
     case user_logic:get_eff_spaces(SessionId, UserId) of
         {ok, EffSpaces} ->
@@ -550,6 +539,10 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
     end,
     {ok, value, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)};
 
+get(#op_req{gri = #gri{id = SpaceId, aspect = transfers_active_channels}}, _) ->
+    {ok, ActiveChannels} = space_transfer_stats_cache:get_active_channels(SpaceId),
+    {ok, value, #{<<"channelDestinations">> => ActiveChannels}};
+
 get(#op_req{data = Data, gri = #gri{
     id = SpaceId,
     aspect = {transfers_throughput_charts, ProviderId}
@@ -591,10 +584,10 @@ get(#op_req{data = Data, gri = #gri{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback update/1.
+%% {@link middleware_plugin} callback update/1.
 %% @end
 %%--------------------------------------------------------------------
--spec update(op_logic:req()) -> op_logic:update_result().
+-spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
     MapFunctionRaw = maps:get(<<"application/javascript">>, Data),
     MapFun = utils:ensure_defined(MapFunctionRaw, <<>>, undefined),
@@ -615,10 +608,10 @@ update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link op_logic_behaviour} callback delete/1.
+%% {@link middleware_plugin} callback delete/1.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(op_logic:req()) -> op_logic:delete_result().
+-spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
     case index:delete(SpaceId, ViewName) of
         {error, ?EINVAL} ->

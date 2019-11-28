@@ -228,6 +228,7 @@
     type :: undefined | session:type(),
     identity :: undefined | session:identity(),
     auth :: undefined | session:auth(),
+    data_constraints :: data_constraints:constraints(),
     node :: node(),
     supervisor :: undefined | pid(),
     event_manager :: undefined | pid(),
@@ -743,7 +744,7 @@
     % Mapping of providers to their data output and destinations
     stats_out = #{} :: #{od_provider:id() => histogram:histogram()},
     % Providers mapping to providers they recently sent data to
-    active_links = #{} :: undefined | #{od_provider:id() => [od_provider:id()]}
+    active_channels = #{} :: undefined | #{od_provider:id() => [od_provider:id()]}
 }).
 
 %% Model used for communication between providers during

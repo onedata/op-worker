@@ -28,7 +28,11 @@
 
 %% API
 -export([new/1]).
--export([get_user/1, get_user_id/1, get_session_id/1, get_auth/1]).
+-export([
+    get_user/1, get_user_id/1,
+    get_session_id/1,
+    get_auth/1, get_data_constraints/1
+]).
 -export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/1]).
 
 %%%===================================================================
@@ -92,6 +96,15 @@ get_session_id(#user_ctx{session = #document{key = SessId}}) ->
 -spec get_auth(ctx()) -> session:auth().
 get_auth(#user_ctx{session = Session}) ->
     session:get_auth(Session).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets session's data constraints from user context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_data_constraints(ctx()) -> data_constraints:constraints().
+get_data_constraints(#user_ctx{session = Session}) ->
+    session:get_data_constraints(Session).
 
 %%--------------------------------------------------------------------
 %% @doc

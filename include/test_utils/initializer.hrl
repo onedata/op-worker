@@ -13,7 +13,6 @@
 -ifndef(INITIALIZER_HRL).
 -define(INITIALIZER_HRL, 1).
 
--define(DUMMY_USER_TOKEN(__UserId), <<"DUMMY-USER-TOKEN-", __UserId/binary>>).
 -define(DUMMY_PROVIDER_IDENTITY_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-TOKEN-", __ProviderId/binary>>).
 -define(DUMMY_PROVIDER_ACCESS_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-ACCESS-TOKEN-", __ProviderId/binary>>).
 

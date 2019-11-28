@@ -259,19 +259,35 @@ rename_into_different_place_within_posix_space(_, _, _, _,
 %% @doc
 %% Renames file on storage with flat paths, i.e. only modifies
 %% file_meta and optionally removes the target file, if TargetGuid
-%% is not undefined, i.e. target file already exists, it will be removed
-%% first.
+%% is not undefined (e.g. if target file already exists) it will be
+%% removed first.
+%% TODO VFS-5935
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_file_on_flat_storage(UserCtx :: user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name(),
     TargetGuid :: undefined | fslogic_worker:file_guid()) -> #fuse_response{}.
-rename_file_on_flat_storage(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?delete, {?delete_subcontainer, parent},
-            {traverse_ancestors, 3}, {?traverse_container, 3}, {?add_subcontainer, 3}],
-        [UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, TargetGuid],
-        fun rename_file_on_flat_storage_insecure/5).
+rename_file_on_flat_storage(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName, TargetGuid) ->
+    {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
+        SourceFileCtx0, UserCtx
+    ),
+    SourceFileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, SourceFileCtx1,
+        [traverse_ancestors, ?delete]
+    ),
+    fslogic_authz:ensure_authorized(
+        UserCtx, SourceFileParentCtx,
+        [traverse_ancestors, ?delete_subcontainer]
+    ),
+    TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, TargetParentFileCtx0,
+        [traverse_ancestors, ?traverse_container, ?add_subcontainer]
+    ),
+    rename_file_on_flat_storage_insecure(
+        UserCtx, SourceFileCtx2,
+        TargetParentFileCtx1, TargetName, TargetGuid
+    ).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -369,13 +385,28 @@ rename_into_different_place_within_non_posix_space(_, _, _, _,
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_file(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
-    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
-rename_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?delete, {?delete_object, parent},
-            {traverse_ancestors, 3}, {?traverse_container, 3}, {?add_object, 3}],
-        [UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName],
-        fun rename_file_insecure/4).
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+    no_return() | #fuse_response{}.
+rename_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
+    {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
+        SourceFileCtx0, UserCtx
+    ),
+    SourceFileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, SourceFileCtx1,
+        [traverse_ancestors, ?delete]
+    ),
+    fslogic_authz:ensure_authorized(
+        UserCtx, SourceFileParentCtx,
+        [traverse_ancestors, ?delete_object]
+    ),
+    TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, TargetParentFileCtx0,
+        [traverse_ancestors, ?traverse_container, ?add_object]
+    ),
+    rename_file_insecure(
+        UserCtx, SourceFileCtx2, TargetParentFileCtx1, TargetName
+    ).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -384,13 +415,28 @@ rename_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_dir(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
-    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
-rename_dir(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?delete, {?delete_subcontainer, parent},
-            {traverse_ancestors, 3}, {?traverse_container, 3}, {?add_subcontainer, 3}],
-        [UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName],
-        fun rename_dir_insecure/4).
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+    no_return() | #fuse_response{}.
+rename_dir(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
+    {SourceFileParentCtx, SourceFileCtx1} = file_ctx:get_parent(
+        SourceFileCtx0, UserCtx
+    ),
+    SourceFileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, SourceFileCtx1,
+        [traverse_ancestors, ?delete]
+    ),
+    fslogic_authz:ensure_authorized(
+        UserCtx, SourceFileParentCtx,
+        [traverse_ancestors, ?delete_subcontainer]
+    ),
+    TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, TargetParentFileCtx0,
+        [traverse_ancestors, ?traverse_container, ?add_subcontainer]
+    ),
+    rename_dir_insecure(
+        UserCtx, SourceFileCtx2, TargetParentFileCtx1, TargetName
+    ).
+
 
 %%--------------------------------------------------------------------
 %% @private

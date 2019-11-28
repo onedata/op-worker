@@ -6,13 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides utils functions for op logic plugins.
+%%% This module provides utils functions for middleware plugins.
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_logic_utils).
+-module(middleware_utils).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -export([

@@ -6,14 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles translation of op logic results concerning
+%%% This module handles translation of middleware results concerning
 %%% transfer entities into GUI GRAPH SYNC responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfer_gui_gs_translator).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -99,12 +99,7 @@ translate_resource(#gri{aspect = instance, scope = private}, #transfer{
             <<"dataSourceId">> => DataSourceId,
             <<"dataSourceName">> => DataSourceName,
             <<"queryParams">> => QueryParams,
-            <<"user">> => gri:serialize(#gri{
-                type = op_user,
-                id = UserId,
-                aspect = instance,
-                scope = shared
-            }),
+            <<"userId">> => UserId,
             <<"startTime">> => StartTime,
             <<"scheduleTime">> => ScheduleTime,
             <<"finishTime">> => case IsOngoing of

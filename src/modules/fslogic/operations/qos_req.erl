@@ -26,22 +26,25 @@
 % For test purpose
 -export([get_space_storages/2]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv add_qos/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:raw(), qos_entry:replicas_num()) ->
-    fslogic_worker:provider_response().
-add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_metadata],
-        [UserCtx, FileCtx, Expression, ReplicasNum],
-        fun add_qos_entry_insecure/4
-    ).
+-spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:raw(),
+    qos_entry:replicas_num()) -> fslogic_worker:provider_response().
+add_qos_entry(UserCtx, FileCtx0, Expression, ReplicasNum) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_metadata]
+    ),
+    add_qos_entry_insecure(UserCtx, FileCtx1, Expression, ReplicasNum).
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_file_qos_insecure/2 with permission checks
@@ -49,12 +52,13 @@ add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum) ->
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
-get_effective_file_qos(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_metadata],
-        [UserCtx, FileCtx],
-        fun get_effective_file_qos_insecure/2
-    ).
+get_effective_file_qos(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_metadata]
+    ),
+    get_effective_file_qos_insecure(UserCtx, FileCtx1).
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_qos_details_insecure/3 with permission checks
@@ -62,12 +66,13 @@ get_effective_file_qos(UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
-get_qos_entry(UserCtx, FileCtx, QosEntryId) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_metadata],
-        [UserCtx, FileCtx, QosEntryId],
-        fun get_qos_entry_insecure/3
-    ).
+get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_metadata]
+    ),
+    get_qos_entry_insecure(UserCtx, FileCtx1, QosEntryId).
+
 
 %%--------------------------------------------------------------------
 %% @equiv remove_qos_insecure/3 with permission checks
@@ -75,12 +80,13 @@ get_qos_entry(UserCtx, FileCtx, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec remove_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
-remove_qos_entry(UserCtx, FileCtx, QosEntryId) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_metadata],
-        [UserCtx, FileCtx, QosEntryId],
-        fun remove_qos_entry_insecure/3
-    ).
+remove_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_metadata]
+    ),
+    remove_qos_entry_insecure(UserCtx, FileCtx1, QosEntryId).
+
 
 %%--------------------------------------------------------------------
 %% @equiv check_fulfillment_insecure/3 with permission checks
@@ -88,16 +94,18 @@ remove_qos_entry(UserCtx, FileCtx, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec check_fulfillment(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
-check_fulfillment(UserCtx, FileCtx, QosEntryId) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_metadata],
-        [UserCtx, FileCtx, QosEntryId],
-        fun check_fulfillment_insecure/3
-    ).
+check_fulfillment(UserCtx, FileCtx0, QosEntryId) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_metadata]
+    ),
+    check_fulfillment_insecure(UserCtx, FileCtx1, QosEntryId).
+
 
 %%%===================================================================
 %%% Insecure functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -162,6 +170,7 @@ get_effective_file_qos_insecure(_UserCtx, FileCtx) ->
             #provider_response{status = #status{code = ?EAGAIN}}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -225,6 +234,7 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosEntryId) ->
 %%% Internal functions
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -262,6 +272,7 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
             #provider_response{status = #status{code = ?EAGAIN}}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -287,6 +298,7 @@ add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
         _ ->
             #provider_response{status = #status{code = ?EAGAIN}}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

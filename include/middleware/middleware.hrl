@@ -8,24 +8,24 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% TODO VFS-5621
-%%% Common definitions concerning op logic.
+%%% Common definitions concerning middleware.
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(OP_LOGIC_HRL).
--define(OP_LOGIC_HRL, 1).
+-ifndef(MIDDLEWARE_HRL).
+-define(MIDDLEWARE_HRL, 1).
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
-% Record expressing op logic request
+% Record expressing middleware request
 -record(op_req, {
     auth = ?NOBODY :: aai:auth(),
-    gri :: op_logic:gri(),
-    operation = create :: op_logic:operation(),
-    data = #{} :: op_logic:data(),
-    auth_hint = undefined :: undefined | op_logic:auth_hint(),
+    gri :: gri:gri(),
+    operation = create :: middleware:operation(),
+    data = #{} :: middleware:data(),
+    auth_hint = undefined :: undefined | middleware:auth_hint(),
     % applicable for create/get requests - returns the revision of resource
     return_revision = false :: boolean()
 }).
