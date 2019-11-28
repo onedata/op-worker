@@ -277,8 +277,6 @@ authorize(Req, ?USER(UserId) = Auth) ->
                 GRI = #gri{type = op_metrics, id = SpaceId, aspect = changes},
                 api_auth:check_authorization(Auth, ?OP_WORKER, create, GRI)
             catch
-                throw:Error ->
-                    Error;
                 _:_ ->
                     ?ERROR_INTERNAL_SERVER_ERROR
             end;
