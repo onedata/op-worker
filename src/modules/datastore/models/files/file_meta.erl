@@ -142,37 +142,23 @@ create(Parent, FileDoc) ->
 %%--------------------------------------------------------------------
 -spec create({uuid, ParentUuid :: uuid()}, doc(), datastore:tree_ids()) ->
     {ok, uuid()} | {error, term()}.
-create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
-    name = FileName,
-    is_scope = IsScope
-}}, CheckTrees) ->
+create({uuid, ParentUuid}, FileDoc = #document{value = #file_meta{name = FileName}}, CheckTrees) ->
     ?run(begin
         true = is_valid_filename(FileName),
-        {ok, ParentDoc} = file_meta:get(ParentUuid),
-        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
-        {ok, ScopeId} = case IsScope of
-            true ->
-                case fslogic_uuid:is_space_dir_uuid(FileUuid) of
-                    true -> {ok, fslogic_uuid:space_dir_uuid_to_spaceid(FileUuid)};
-                    false -> {ok, ?ROOT_DIR_SCOPE}
-                end;
-            false ->
-                get_scope_id(ParentDoc)
-        end,
-        FileDoc3 = FileDoc2#document{
+        FileDoc2 = #document{key = FileUuid, value = FileMeta2} = fill_uuid(FileDoc, ParentUuid),
+        FileDoc3 = #document{value = FileMeta3} =
+            FileDoc2#document{value = FileMeta2#file_meta{parent_uuid = ParentUuid}},
+        {ok, ScopeId} = get_scope_id(FileDoc3),
+        FileDoc4 = FileDoc3#document{
             scope = ScopeId,
-            value = FileMeta#file_meta{
-                provider_id = oneprovider:get_id(),
-                parent_uuid = ParentUuid
-            }
+            value = FileMeta3#file_meta{provider_id = oneprovider:get_id()}
         },
-
         LocalTreeId = oneprovider:get_id(),
-        Ctx = ?CTX#{scope => ParentDoc#document.scope},
+        Ctx = ?CTX#{scope => ScopeId},
         Link = {FileName, FileUuid},
         case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
             {ok, #link{}} ->
-                case file_meta:save(FileDoc3) of
+                case file_meta:save(FileDoc4) of
                     {ok, FileUuid} -> {ok, FileUuid};
                     Error -> Error
                 end;
@@ -638,6 +624,15 @@ get_ancestors2(FileUuid, Acc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_scope_id(entry()) -> {ok, ScopeId :: od_space:id()} | {error, term()}.
+get_scope_id(#document{key = FileUuid, value = #file_meta{is_scope = true}, scope = <<>>}) ->
+    % scope has not been set yet
+    case fslogic_uuid:is_space_dir_uuid(FileUuid) of
+        true -> {ok, fslogic_uuid:space_dir_uuid_to_spaceid(FileUuid)};
+        false -> {ok, ?ROOT_DIR_SCOPE}
+    end;
+get_scope_id(#document{value = #file_meta{is_scope = false, parent_uuid = ParentUuid}, scope = <<>>}) ->
+    % scope has not been set yet
+    get_scope_id({uuid, ParentUuid});
 get_scope_id(#document{value = #file_meta{}, scope = Scope}) ->
     {ok, Scope};
 get_scope_id(Entry) ->
