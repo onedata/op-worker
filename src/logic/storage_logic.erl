@@ -32,6 +32,7 @@
 -export([set_qos_parameters/2, get_qos_parameters/2]).
 -export([describe/1]).
 -export([supports_any_space/1]).
+-export([support_critical_section/2]).
 
 -export([migrate_to_zone/0]).
 
@@ -112,7 +113,7 @@ get_shared_data(StorageId, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec safe_delete(od_storage:id()) -> ?ERROR_STORAGE_IN_USE | {error, term()}.
 safe_delete(StorageId) ->
-    critical_section:run({storage_support, StorageId}, fun() ->
+    support_critical_section(StorageId, fun() ->
         case supports_any_space(StorageId) of
             true ->
                 ?ERROR_STORAGE_IN_USE;
@@ -149,7 +150,7 @@ delete_in_zone(StorageId) ->
 -spec support_space(od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SerializedToken, SupportSize) ->
-    critical_section:run({storage_support, StorageId}, fun() ->
+    support_critical_section(StorageId, fun() ->
         support_space_insecure(StorageId, SerializedToken, SupportSize)
     end).
 
@@ -323,6 +324,11 @@ on_space_unsupported(SpaceId, StorageId) ->
     space_strategies:delete(SpaceId, StorageId),
     main_harvesting_stream:space_unsupported(SpaceId).
 
+
+-spec support_critical_section(od_storage:id(), fun(() -> Result :: term())) ->
+    Result :: term().
+support_critical_section(StorageId, Fun) ->
+    critical_section:run({storage_support, StorageId}, Fun).
 
 %%%===================================================================
 %%% Upgrade from 19.02.*
