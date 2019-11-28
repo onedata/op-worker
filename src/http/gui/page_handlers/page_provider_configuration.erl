@@ -8,8 +8,7 @@
 %%% @doc
 %%% This module implements dynamic_page_behaviour and is called
 %%% when provider configuration page is visited.
-%%% This is the legacy configuration endpoint,
-%%% not documented in swagger.
+%%% This is the legacy configuration endpoint, not documented in swagger.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(page_provider_configuration).
@@ -21,13 +20,13 @@
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 
--define(to_binaries(__List), [list_to_binary(V) || V <- __List]).
-
 -export([handle/2]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
