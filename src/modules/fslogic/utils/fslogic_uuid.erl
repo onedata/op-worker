@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_root_dir_uuid/1, is_user_root_dir_uuid/1, is_space_dir_uuid/1, is_space_dir_guid/1]).
+-export([is_root_dir_uuid/1, is_space_dir_uuid/1, is_space_dir_guid/1]).
 -export([user_root_dir_uuid/1, user_root_dir_guid/1, root_dir_guid/0]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, spaceid_to_space_dir_guid/1]).
@@ -31,22 +31,13 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns true if given uuid represents root dir.
-%% @end
-%%--------------------------------------------------------------------
--spec is_root_dir_uuid(FileUuid :: file_meta:uuid()) -> boolean().
-is_root_dir_uuid(?ROOT_DIR_UUID) -> true;
-is_root_dir_uuid(_) -> false.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns true if given uuid represents user root dir.
 %% @end
 %%--------------------------------------------------------------------
--spec is_user_root_dir_uuid(FileUuid :: file_meta:uuid()) -> boolean().
-is_user_root_dir_uuid(?ROOT_DIR_UUID) ->
+-spec is_root_dir_uuid(FileUuid :: file_meta:uuid()) -> boolean().
+is_root_dir_uuid(?ROOT_DIR_UUID) ->
     true;
-is_user_root_dir_uuid(FileUuid) ->
+is_root_dir_uuid(FileUuid) ->
     case FileUuid of
         <<?USER_ROOT_PREFIX, _UserId/binary>> ->
             true;
@@ -60,7 +51,7 @@ is_user_root_dir_uuid(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec root_dir_guid() -> fslogic_worker:file_guid().
 root_dir_guid() ->
-    file_id:pack_guid(?ROOT_DIR_UUID, ?ROOT_DIR_SCOPE).
+    file_id:pack_guid(?ROOT_DIR_UUID, ?ROOT_DIR_VIRTUAL_SPACE_ID).
 
 %%--------------------------------------------------------------------
 %% @doc Returns Uuid of user's root directory.
@@ -76,7 +67,7 @@ user_root_dir_uuid(UserId) ->
 %%--------------------------------------------------------------------
 -spec user_root_dir_guid(UserId :: od_user:id()) -> fslogic_worker:file_guid().
 user_root_dir_guid(UserId) ->
-    file_id:pack_guid(user_root_dir_uuid(UserId), ?USER_ROOT_DIR_SCOPE).
+    file_id:pack_guid(user_root_dir_uuid(UserId), ?ROOT_DIR_VIRTUAL_SPACE_ID).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -179,12 +170,10 @@ gen_path(Entry, SessionId, Tokens) ->
 %%--------------------------------------------------------------------
 -spec uuid_to_space_id(file_meta:uuid()) -> SpaceId :: od_space:id().
 uuid_to_space_id(FileUuid) ->
-    case {is_root_dir_uuid(FileUuid), is_user_root_dir_uuid(FileUuid)} of
-        {true, _} ->
-            ?ROOT_DIR_SCOPE;
-        {false, true} ->
-            ?USER_ROOT_DIR_SCOPE;
-        {false, false} ->
+    case is_root_dir_uuid(FileUuid) of
+        true ->
+            ?ROOT_DIR_VIRTUAL_SPACE_ID;
+        false ->
             {ok, Doc} = file_meta:get_including_deleted(FileUuid),
             {ok, SpaceId} = file_meta:get_scope_id(Doc),
             SpaceId

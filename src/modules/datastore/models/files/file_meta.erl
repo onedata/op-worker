@@ -63,6 +63,8 @@
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
 -type permissions_type() :: posix | acl.
+
+%% @formatter:off
 % Listing options (see datastore_links_iter.erl in cluster_worker for more information about link listing options)
 -type list_opts() :: #{
     token => datastore_links_iter:token() | undefined,
@@ -75,6 +77,7 @@
     token => datastore_links_iter:token(),
     last_name => name(),
     last_tree => od_provider:id()}.
+%% @formatter:on
 
 -export_type([
     doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
@@ -89,6 +92,12 @@
     mutator => oneprovider:get_id_or_undefined(),
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
+
+% For each "normal" file (including spaces) scope is id of a space to
+% which the file belongs.
+% For root directory and users' root directories we use "special" scope
+% as they don't belong to any space
+-define(ROOT_DIR_SCOPE, <<>>).
 
 %%%===================================================================
 %%% API
@@ -142,8 +151,13 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
         {ok, ParentDoc} = file_meta:get(ParentUuid),
         FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
         {ok, ScopeId} = case IsScope of
-            true -> get_scope_id(FileDoc2);
-            false -> get_scope_id(ParentDoc)
+            true ->
+                case fslogic_uuid:is_space_dir_uuid(FileUuid) of
+                    true -> {ok, fslogic_uuid:space_dir_uuid_to_spaceid(FileUuid)};
+                    false -> {ok, ?ROOT_DIR_SCOPE}
+                end;
+            false ->
+                get_scope_id(ParentDoc)
         end,
         FileDoc3 = FileDoc2#document{
             scope = ScopeId,
@@ -241,7 +255,6 @@ get_including_deleted(?ROOT_DIR_UUID) ->
             owner = ?ROOT_USER_ID,
             parent_uuid = ?ROOT_DIR_UUID
         }
-        % we do not set scope intentionally
     }};
 get_including_deleted(FileUuid) ->
     datastore_model:get(?CTX#{include_deleted => true}, FileUuid).
@@ -621,8 +634,7 @@ get_ancestors2(FileUuid, Acc) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets "scope" id of given document. "Scope" document is the nearest ancestor
-%% with #file_meta.is_scope == true.
+%% Gets "scope" id of given document.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_scope_id(entry()) -> {ok, ScopeId :: od_space:id()} | {error, term()}.
@@ -653,7 +665,6 @@ setup_onedata_user(UserId, EffSpaces) ->
             end, EffSpaces),
 
             FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
-            ScopeId = <<>>, % TODO - do we need scope for user dir
             case create({uuid, ?ROOT_DIR_UUID},
                 #document{
                     key = FileUuid,
@@ -665,14 +676,13 @@ setup_onedata_user(UserId, EffSpaces) ->
                         is_scope = true,
                         parent_uuid = ?ROOT_DIR_UUID
                     }
-                % we do not set scope intentionally
                 })
             of
                 {ok, _RootUuid} ->
                     {ok, _} = times:save(#document{
                         key = FileUuid,
                         value = #times{mtime = CTime, atime = CTime, ctime = CTime},
-                        scope = ScopeId
+                        scope = ?ROOT_DIR_SCOPE
                     }),
                     ok;
                 {error, already_exists} ->
@@ -731,8 +741,7 @@ make_space_exist(SpaceId) ->
             mode = ?DEFAULT_SPACE_DIR_MODE,
             owner = ?ROOT_USER_ID, is_scope = true,
             parent_uuid = ?ROOT_DIR_UUID
-        },
-        scope = SpaceId
+        }
     },
     case file_meta:create({uuid, ?ROOT_DIR_UUID}, FileDoc) of
         {ok, _} ->
@@ -1199,8 +1208,6 @@ get_record_struct(8) ->
         {owner, string},
         {group_owner, string},
         {is_scope, boolean},
-        % todo below field is deprecated, it shall not be used
-        % todo remember to delete it when releasing version without backward compatibility
         {scope, string},
         {provider_id, string},
         {shares, [string]},

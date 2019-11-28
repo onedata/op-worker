@@ -238,7 +238,7 @@ get_share_id_const(#file_ctx{guid = Guid}) ->
 %% Returns file's space ID.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id_const(ctx()) -> od_space:id() | undefined.
+-spec get_space_id_const(ctx()) -> od_space:id().
 get_space_id_const(#file_ctx{guid = Guid}) ->
     file_id:guid_to_space_id(Guid).
 
@@ -401,7 +401,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
     {Doc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
     ParentGuid =
-        case fslogic_uuid:is_user_root_dir_uuid(ParentUuid) of
+        case fslogic_uuid:is_root_dir_uuid(ParentUuid) of
             true ->
                 case ParentUuid =:= ?ROOT_DIR_UUID
                     andalso UserCtx =/= undefined
@@ -1098,7 +1098,7 @@ is_root_dir_const(#file_ctx{canonical_path = <<"/">>}) ->
     true;
 is_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}) ->
     Uuid = file_id:guid_to_uuid(Guid),
-    fslogic_uuid:is_user_root_dir_uuid(Uuid);
+    fslogic_uuid:is_root_dir_uuid(Uuid);
 is_root_dir_const(#file_ctx{}) ->
     false.
 
@@ -1175,7 +1175,7 @@ new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
 -spec generate_canonical_path(ctx()) -> {[file_meta:name()], ctx()}.
 generate_canonical_path(FileCtx) ->
     Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}, scope = SpaceId}, ParentValue, CalculationInfo]) ->
-        case fslogic_uuid:is_user_root_dir_uuid(Uuid) of
+        case fslogic_uuid:is_root_dir_uuid(Uuid) of
             true ->
                 {ok, [<<"/">>], CalculationInfo};
             false ->

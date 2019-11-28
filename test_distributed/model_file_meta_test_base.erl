@@ -50,9 +50,10 @@ basic_operations_test_core(Config, LastLevel) ->
     % Test
     RootUuid = <<>>,
     SpaceId = <<"Space 1">>,
+    Space1Uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     {{ok, Space1Uuid}, CreateLevel1} = ?assertMatch(
         {{ok, _}, _},
-        ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{key = <<"space basic 1">>,
+        ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{key = Space1Uuid,
             value = #file_meta{name = SpaceId, is_scope = true}, scope = SpaceId}])
     ),
     {{ok, Dir1Uuid}, CreateLevel2} = ?assertMatch(
@@ -126,7 +127,7 @@ basic_operations_test_core(Config, LastLevel) ->
     test_utils:mock_unload(Workers, [space_logic, fslogic_uuid]),
 
     {_, GetScopeLevel0} = ?assertMatch(
-        {{ok, ?ROOT_DIR_SCOPE}, _},
+        {{ok, <<>>}, _},
         ?call_with_time(Worker1, get_scope_id, [U14])
     ),
     {_, GetScopeLevel2} = ?assertMatch(
