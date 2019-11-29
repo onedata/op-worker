@@ -142,26 +142,27 @@ create(Parent, FileDoc) ->
 %%--------------------------------------------------------------------
 -spec create({uuid, ParentUuid :: uuid()}, doc(), datastore:tree_ids()) ->
     {ok, uuid()} | {error, term()}.
-create({uuid, ParentUuid}, FileDoc = #document{value = #file_meta{name = FileName}}, CheckTrees) ->
+create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{name = FileName}}, CheckTrees) ->
     ?run(begin
         true = is_valid_filename(FileName),
-        FileDoc2 = #document{key = FileUuid, value = FileMeta2} = fill_uuid(FileDoc, ParentUuid),
+        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
         {ok, ParentDoc} = file_meta:get({uuid, ParentUuid}),
         {ok, ParentScopeId} = get_scope_id(ParentDoc),
-        FileDoc3 = #document{value = FileMeta3} =
-            FileDoc2#document{value = FileMeta2#file_meta{parent_uuid = ParentUuid}},
-        {ok, ScopeId} = get_scope_id(FileDoc3),
+        {ok, ScopeId} = get_scope_id(FileDoc2),
         ScopeId2 = utils:ensure_defined(ScopeId, undefined, ParentScopeId),
-        FileDoc4 = FileDoc3#document{
-            scope = ScopeId2    ,
-            value = FileMeta3#file_meta{provider_id = oneprovider:get_id()}
+        FileDoc3 = FileDoc2#document{
+            scope = ScopeId2,
+            value = FileMeta#file_meta{
+                provider_id = oneprovider:get_id(),
+                parent_uuid = ParentUuid
+            }
         },
         LocalTreeId = oneprovider:get_id(),
         Ctx = ?CTX#{scope => ParentScopeId},
         Link = {FileName, FileUuid},
         case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
             {ok, #link{}} ->
-                case file_meta:save(FileDoc4) of
+                case file_meta:save(FileDoc3) of
                     {ok, FileUuid} -> {ok, FileUuid};
                     Error -> Error
                 end;

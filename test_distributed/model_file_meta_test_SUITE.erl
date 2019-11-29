@@ -123,9 +123,11 @@ list_test(Config) ->
 
     % create file tree
     RootUuid = <<>>,
+    SpaceId = <<"Space list 1">>,
+    Space1DirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     {ok, Space1DirUuid} = ?assertMatch({ok, _},
-        rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{key = <<"space list 1">>,
-            value = #file_meta{name = <<"Space list 1">>, is_scope = true}}])),
+        rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{key = Space1DirUuid,
+            value = #file_meta{name = SpaceId , is_scope = true}}])),
     {ok, D1DirUuid} = ?assertMatch({ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, Space1DirUuid}, #document{value = #file_meta{name = <<"list_test_d1">>}}])),
     ?assertMatch({ok, _},
