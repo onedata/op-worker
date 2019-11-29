@@ -324,7 +324,6 @@
     owner :: undefined | od_user:id(),
     group_owner :: undefined | od_group:id(),
     is_scope = false :: boolean(),
-    scope :: datastore:key(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),

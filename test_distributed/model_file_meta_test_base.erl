@@ -49,10 +49,12 @@ basic_operations_test_core(Config, LastLevel) ->
 
     % Test
     RootUuid = <<>>,
+    SpaceId = <<"Space 1">>,
+    Space1Uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
     {{ok, Space1Uuid}, CreateLevel1} = ?assertMatch(
         {{ok, _}, _},
-        ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{key = <<"space basic 1">>,
-            value = #file_meta{name = <<"Space 1">>, is_scope = true}}])
+        ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{key = Space1Uuid,
+            value = #file_meta{name = SpaceId, is_scope = true}, scope = SpaceId}])
     ),
     {{ok, Dir1Uuid}, CreateLevel2} = ?assertMatch(
         {{ok, _}, _},
@@ -129,14 +131,14 @@ basic_operations_test_core(Config, LastLevel) ->
         ?call_with_time(Worker1, get_scope_id, [U14])
     ),
     {_, GetScopeLevel2} = ?assertMatch(
-        {{ok, Space1Uuid}, _},
+        {{ok, SpaceId}, _},
         ?call_with_time(Worker2, get_scope_id, [U6])
     ),
-    ?assertEqual({ok, Space1Uuid}, rpc:call(Worker1, file_meta, get_scope_id, [U7])),
-    ?assertEqual({ok, Space1Uuid}, rpc:call(Worker2, file_meta, get_scope_id, [U8])),
+    ?assertEqual({ok, SpaceId}, rpc:call(Worker1, file_meta, get_scope_id, [U7])),
+    ?assertEqual({ok, SpaceId}, rpc:call(Worker2, file_meta, get_scope_id, [U8])),
 
     {_, GetScopeLevel20} = ?assertMatch(
-        {{ok, Space1Uuid}, _},
+        {{ok, SpaceId}, _},
         ?call_with_time(Worker2, get_scope_id, [UL20])
     ),
 

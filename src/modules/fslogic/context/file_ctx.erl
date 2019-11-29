@@ -99,7 +99,7 @@
 %%--------------------------------------------------------------------
 -spec new_root_ctx() -> ctx().
 new_root_ctx() ->
-    new_by_guid(file_id:pack_guid(?ROOT_DIR_UUID, undefined)).
+    new_by_guid(fslogic_uuid:root_dir_guid()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -239,7 +239,7 @@ get_share_id_const(#file_ctx{guid = Guid}) ->
 %% Returns file's space ID.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id_const(ctx()) -> od_space:id() | undefined.
+-spec get_space_id_const(ctx()) -> od_space:id().
 get_space_id_const(#file_ctx{guid = Guid}) ->
     file_id:guid_to_space_id(Guid).
 
@@ -412,7 +412,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
                         UserId = user_ctx:get_user_id(UserCtx),
                         fslogic_uuid:user_root_dir_guid(UserId);
                     _ ->
-                        file_id:pack_guid(ParentUuid, undefined)
+                        fslogic_uuid:root_dir_guid()
                 end;
             false ->
                 SpaceId = get_space_id_const(FileCtx2),
@@ -1103,8 +1103,7 @@ is_file_ctx_const(_) ->
 %%--------------------------------------------------------------------
 -spec is_space_dir_const(ctx()) -> boolean().
 is_space_dir_const(#file_ctx{guid = Guid}) ->
-    SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(file_id:guid_to_uuid(Guid))),
-    is_binary(SpaceId).
+    fslogic_uuid:is_space_dir_guid(Guid).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1207,13 +1206,12 @@ new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
 %%--------------------------------------------------------------------
 -spec generate_canonical_path(ctx()) -> {[file_meta:name()], ctx()}.
 generate_canonical_path(FileCtx) ->
-    Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}}, ParentValue, CalculationInfo]) ->
+    Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}, scope = SpaceId}, ParentValue, CalculationInfo]) ->
         case fslogic_uuid:is_root_dir_uuid(Uuid) of
             true ->
                 {ok, [<<"/">>], CalculationInfo};
             false ->
-                SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(Uuid)),
-                case is_binary(SpaceId) of
+                case fslogic_uuid:is_space_dir_uuid(Uuid) of
                     true ->
                         {ok, [<<"/">>, SpaceId], CalculationInfo};
                     false ->
