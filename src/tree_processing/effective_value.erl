@@ -116,8 +116,8 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCa
         {ok, Value} ->
             {ok, Value, InitialCalculationInfo};
         {error, not_found} ->
-            case fslogic_uuid:space_dir_uuid_to_spaceid_no_error(Key) of % is space?
-                <<>> -> % not a space
+            case fslogic_uuid:is_space_dir_uuid(Key) of
+                false ->
                     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
                     case file_meta:get_including_deleted(ParentUuid) of
                         {ok, ParentDoc} ->
@@ -136,7 +136,7 @@ get_or_calculate(Cache, #document{key = Key} = Doc, CalculateCallback, InitialCa
                         _ ->
                             {error, {file_meta_missing, ParentUuid}}
                     end;
-                _ -> % space
+                true ->
                     bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
                         [Doc, undefined, InitialCalculationInfo | Args], Timestamp)
             end

@@ -107,9 +107,11 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
     FileCtx = file_ctx:new_by_guid(Guid),
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
-    SpaceId = case file_ctx:get_space_id_const(FileCtx) of
-        undefined -> throw(?ENOENT);
-        <<_/binary>> = Id -> Id
+    SpaceId = try
+        file_ctx:get_space_id_const(FileCtx)
+    catch
+        _:_ ->
+            throw(?ENOENT)
     end,
 
     {ok, StorageConfig} = storage_config:get(StorageId),
