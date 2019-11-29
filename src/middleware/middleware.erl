@@ -13,20 +13,19 @@
 %%%     1) assert operation is supported.
 %%%     2) sanitize request data.
 %%%     3) fetch resource the request refers to.
-%%%     4) check existence of relations.
-%%%     5) check authorization.
-%%%     6) check validity of request (e.g. whether space is locally supported).
-%%%     7) process request.
-%%% All this operations are carried out by op_logic plugins (modules
-%%% implementing `op_logic_behaviour`). Each such module is responsible
+%%%     4) check authorization.
+%%%     5) check validity of request (e.g. whether space is locally supported).
+%%%     6) process request.
+%%% All this operations are carried out by middleware plugins (modules
+%%% implementing `middleware_plugin` behaviour). Each such module is responsible
 %%% for handling all request pointing to the same entity type (#gri.type field).
 %%% @end
 %%%-------------------------------------------------------------------
--module(op_logic).
+-module(middleware).
 -author("Lukasz Opiola").
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -35,38 +34,29 @@
 % for better readability of logic modules.
 % TODO VFS-5621
 -type req() :: #op_req{}.
--type op_plugin() :: module().
 -type operation() :: gs_protocol:operation().
 % The resource the request operates on (creates, gets, updates or deletes).
 -type entity() :: undefined | #od_share{} | #transfer{} | #od_user{} | #od_group{}.
--type entity_id() :: undefined | od_share:id() | transfer:id() | od_user:id() | od_group:id().
 -type revision() :: gs_protocol:revision().
 -type versioned_entity() :: gs_protocol:versioned_entity().
--type aspect() :: gs_protocol:aspect().
 -type scope() :: gs_protocol:scope().
 -type data_format() :: gs_protocol:data_format().
 -type data() :: gs_protocol:data().
--type gri() :: gri:gri().
 -type auth_hint() :: gs_protocol:auth_hint().
 
 -type create_result() :: gs_protocol:graph_create_result().
--type get_result() :: gs_protocol:graph_get_result() | {ok, term()} | {ok, gri(), term()}.
+-type get_result() :: gs_protocol:graph_get_result() | {ok, term()} | {ok, gri:gri(), term()}.
 -type delete_result() :: gs_protocol:graph_delete_result().
 -type update_result() :: gs_protocol:graph_update_result().
 -type result() :: create_result() | get_result() | update_result() | delete_result().
--type error() :: errors:error().
 
 -export_type([
     req/0,
-    op_plugin/0,
     operation/0,
-    entity_id/0,
     entity/0,
     revision/0,
     versioned_entity/0,
-    aspect/0,
     scope/0,
-    gri/0,
     data_format/0,
     data/0,
     auth_hint/0,
@@ -74,14 +64,13 @@
     get_result/0,
     update_result/0,
     delete_result/0,
-    error/0,
     result/0
 ]).
 
 % Internal record containing the request data and state.
 -record(req_ctx, {
     req = #op_req{} :: req(),
-    plugin = undefined :: op_plugin(),
+    plugin = undefined :: module(),
     versioned_entity = {undefined, 1} :: versioned_entity()
 }).
 -type req_ctx() :: #req_ctx{}.
@@ -108,7 +97,7 @@ handle(OpReq) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles an op logic request expressed by a #op_req{} record.
+%% Handles an middleware request expressed by a #op_req{} record.
 %% Entity can be provided if it was prefetched.
 %% @end
 %%--------------------------------------------------------------------
@@ -117,16 +106,13 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
     try
         ReqCtx0 = #req_ctx{
             req = OpReq,
-            plugin = EntityType:op_logic_plugin(),
+            plugin = get_plugin(EntityType),
             versioned_entity = VersionedEntity
         },
         ensure_operation_supported(ReqCtx0),
         ReqCtx1 = sanitize_request(ReqCtx0),
         ReqCtx2 = maybe_fetch_entity(ReqCtx1),
 
-        % TODO VFS-5621 exists callback is used only in entity_logic,
-        % here is left for compatibility
-        ensure_exists(ReqCtx2),
         ensure_authorized(ReqCtx2),
         validate_request(ReqCtx2),
         process_request(ReqCtx2)
@@ -138,8 +124,8 @@ handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
         % Unexpected errors are logged and internal server error is returned
         % to client instead
         Type:Reason ->
-            ?error_stacktrace("Unexpected error in op_logic - ~p:~p", [
-                Type, Reason
+            ?error_stacktrace("Unexpected error in ~p - ~p:~p", [
+                ?MODULE, Type, Reason
             ]),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
@@ -157,7 +143,7 @@ is_authorized(#op_req{gri = #gri{type = EntityType} = GRI} = OpReq, VersionedEnt
     try
         ensure_authorized(#req_ctx{
             req = OpReq,
-            plugin = EntityType:op_logic_plugin(),
+            plugin = get_plugin(EntityType),
             versioned_entity = VersionedEntity
         }),
         {true, GRI}
@@ -183,11 +169,26 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 %%%===================================================================
 
 
+%% @private
+-spec get_plugin(gri:entity_type()) -> module() | no_return().
+get_plugin(op_file) -> file_middleware;
+get_plugin(op_group) -> group_middleware;
+get_plugin(op_metrics) -> metrics_middleware;
+get_plugin(op_provider) -> provider_middleware;
+get_plugin(op_qos) -> qos_middleware;
+get_plugin(op_replica) -> replica_middleware;
+get_plugin(op_share) -> share_middleware;
+get_plugin(op_space) -> space_middleware;
+get_plugin(op_transfer) -> transfer_middleware;
+get_plugin(op_user) -> user_middleware;
+get_plugin(_) -> throw(?ERROR_NOT_SUPPORTED).
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Ensures requested operation is supported by calling back
-%% proper op logic plugin, throws a proper error if not.
+%% proper middleware plugin, throws a proper error if not.
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_operation_supported(req_ctx()) -> ok | no_return().
@@ -220,8 +221,9 @@ sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
         undefined ->
             ReqCtx;
         DataSpec ->
-            DataWithAspect = RawData#{aspect => Aspect},
-            SanitizedData = op_sanitizer:sanitize_data(DataWithAspect, DataSpec),
+            SanitizedData = middleware_sanitizer:sanitize_data(
+                RawData#{aspect => Aspect}, DataSpec
+            ),
             ReqCtx#req_ctx{req = Req#op_req{
                 data = maps:remove(aspect, SanitizedData)
             }}
@@ -231,8 +233,8 @@ sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Retrieves the entity specified in request by calling back proper op
-%% logic plugin. Does nothing if the entity is prefetched, GRI of the
+%% Retrieves the entity specified in request by calling back proper
+%% middleware plugin. Does nothing if the entity is prefetched, GRI of the
 %% request is not related to any entity or callback is not
 %% implemented by plugin.
 %% @end
@@ -255,30 +257,6 @@ maybe_fetch_entity(#req_ctx{plugin = Plugin, req = Req} = ReqCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Ensures aspect of entity specified in request exists, throws on error.
-%% @end
-%%--------------------------------------------------------------------
--spec ensure_exists(req_ctx()) -> ok | no_return().
-ensure_exists(#req_ctx{req = #op_req{operation = create}}) ->
-    % No need to check for create operations.
-    ok;
-ensure_exists(#req_ctx{req = #op_req{gri = #gri{id = undefined}}}) ->
-    % Aspects where entity id is undefined always exist.
-    ok;
-ensure_exists(#req_ctx{plugin = Plugin, req = OpReq, versioned_entity = {Entity, _}}) ->
-    try Plugin:exists(OpReq, Entity) of
-        true -> ok;
-        false -> throw(?ERROR_NOT_FOUND)
-    catch _:_ ->
-        % No need for log here, 'exists' may crash depending on what the
-        % request contains and this is expected.
-        throw(?ERROR_NOT_FOUND)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
 %% Ensures client specified in request is authorized to perform the request,
 %% throws on error.
 %% @end
@@ -288,7 +266,16 @@ ensure_authorized(#req_ctx{req = #op_req{auth = ?ROOT}}) ->
     % Root client is authorized to do everything (that client is only available
     % internally).
     ok;
-ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, versioned_entity = {Entity, _}}) ->
+ensure_authorized(#req_ctx{
+    plugin = Plugin,
+    versioned_entity = {Entity, _},
+    req = #op_req{operation = Operation, auth = Auth, gri = GRI} = OpReq
+}) ->
+    case api_auth:check_authorization(Auth, ?OP_WORKER, Operation, GRI) of
+        ok -> ok;
+        {error, _} = Error -> throw(Error)
+    end,
+
     Result = try
         Plugin:authorize(OpReq, Entity)
     catch _:_ ->
@@ -300,7 +287,7 @@ ensure_authorized(#req_ctx{plugin = Plugin, req = OpReq, versioned_entity = {Ent
         true ->
             ok;
         false ->
-            case OpReq#op_req.auth of
+            case Auth of
                 ?NOBODY ->
                     % The client was not authenticated -> unauthorized
                     throw(?ERROR_UNAUTHORIZED);
@@ -325,7 +312,7 @@ validate_request(#req_ctx{plugin = Plugin, versioned_entity = {Entity, _}, req =
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Handles an op logic request based on operation,
+%% Handles an middleware request based on operation,
 %% should be wrapped in a try-catch.
 %% @end
 %%--------------------------------------------------------------------

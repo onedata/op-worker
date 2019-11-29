@@ -144,7 +144,7 @@ get_read_body_opts() ->
 -spec write_chunk(cowboy_req:req(), session:id(), map(),
     cowboy_req:read_body_opts()) -> cowboy_req:req().
 write_chunk(Req, SessionId, Params, ReadBodyOpts) ->
-    SanitizedParams = op_sanitizer:sanitize_data(Params, #{
+    SanitizedParams = middleware_sanitizer:sanitize_data(Params, #{
         required => #{
             <<"guid">> => {binary, non_empty},
             <<"resumableChunkNumber">> => {integer, {not_lower_than, 0}},

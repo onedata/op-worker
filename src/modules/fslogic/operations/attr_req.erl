@@ -18,13 +18,17 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
+-export([
+    get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
     get_file_attr_insecure/4, get_child_attr/3, chmod/3, update_times/5,
-    chmod_attrs_only_insecure/2]).
+    chmod_attrs_only_insecure/2
+]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_file_attr_insecure/2 with permission checks
@@ -32,11 +36,12 @@
 %%--------------------------------------------------------------------
 -spec get_file_attr(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
-get_file_attr(UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [UserCtx, FileCtx],
-        fun get_file_attr_insecure/2).
+get_file_attr(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+    ),
+    get_file_attr_insecure(UserCtx, FileCtx1).
+
 
 %%--------------------------------------------------------------------
 %% @equiv get_file_attr_insecure(UserCtx, FileCtx, false).
@@ -46,6 +51,7 @@ get_file_attr(UserCtx, FileCtx) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx) ->
     get_file_attr_insecure(UserCtx, FileCtx, false).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -58,6 +64,7 @@ get_file_attr_insecure(UserCtx, FileCtx) ->
 fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
     get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, true).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -117,17 +124,20 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
         }
     }.
 
+
 %%--------------------------------------------------------------------
 %% @equiv get_child_attr_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
     Name :: file_meta:name()) -> fslogic_worker:fuse_response().
-get_child_attr(UserCtx, ParentFileCtx, Name) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?traverse_container],
-        [UserCtx, ParentFileCtx, Name],
-        fun get_child_attr_insecure/3).
+get_child_attr(UserCtx, ParentFileCtx0, Name) ->
+    ParentFileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, ParentFileCtx0,
+        [traverse_ancestors, ?traverse_container]
+    ),
+    get_child_attr_insecure(UserCtx, ParentFileCtx1, Name).
+
 
 %%--------------------------------------------------------------------
 %% @equiv chmod_insecure/3 with permission checks
@@ -135,11 +145,13 @@ get_child_attr(UserCtx, ParentFileCtx, Name) ->
 %%--------------------------------------------------------------------
 -spec chmod(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
-chmod(UserCtx, FileCtx, Mode) ->
-    check_permissions:execute(
-        [traverse_ancestors, owner],
-        [UserCtx, FileCtx, Mode],
-        fun chmod_insecure/3).
+chmod(UserCtx, FileCtx0, Mode) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, owner]
+    ),
+    chmod_insecure(UserCtx, FileCtx1, Mode).
+
 
 %%--------------------------------------------------------------------
 %% @equiv update_times_insecure/5 with permission checks
@@ -149,15 +161,18 @@ chmod(UserCtx, FileCtx, Mode) ->
     ATime :: file_meta:time() | undefined,
     MTime :: file_meta:time() | undefined,
     CTime :: file_meta:time() | undefined) -> fslogic_worker:fuse_response().
-update_times(_UserCtx, FileCtx, ATime, MTime, CTime) ->
-    check_permissions:execute(
-        [traverse_ancestors, {owner, 'or', ?write_attributes}],
-        [_UserCtx, FileCtx, ATime, MTime, CTime],
-        fun update_times_insecure/5).
+update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, {owner, 'or', ?write_attributes}]
+    ),
+    update_times_insecure(UserCtx, FileCtx1, ATime, MTime, CTime).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -171,6 +186,7 @@ get_child_attr_insecure(UserCtx, ParentFileCtx, Name) ->
     Response = attr_req:get_file_attr(UserCtx, ChildFileCtx),
     ensure_proper_file_name(Response, Name).
 
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -183,9 +199,8 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
     status = #status{code = ?OK},
     fuse_response = FileAttr
 }, Name) ->
-    FuseResponse#fuse_response{fuse_response = FileAttr#file_attr{name = Name}};
-ensure_proper_file_name(FuseResponse, _Name) ->
-    FuseResponse.
+    FuseResponse#fuse_response{fuse_response = FileAttr#file_attr{name = Name}}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -201,6 +216,7 @@ chmod_insecure(UserCtx, FileCtx, Mode) ->
 
     #fuse_response{status = #status{code = ?OK}}.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Changes file permissions (only file_attrs, not on storage)
@@ -213,6 +229,7 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
     ok = file_meta:update_mode(FileUuid, Mode),
     ok = permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx).
+
 
 %%--------------------------------------------------------------------
 %% @doc

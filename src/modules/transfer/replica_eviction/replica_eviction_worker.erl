@@ -77,7 +77,7 @@ process_replica_deletion_result(Error, FileUuid, TransferId) ->
 %% {@link transfer_worker_behaviour} callback required_permissions/0.
 %% @end
 %%--------------------------------------------------------------------
--spec required_permissions() -> [check_permissions:raw_access_definition()].
+-spec required_permissions() -> [data_access_rights:requirement()].
 required_permissions() ->
     []. % todo VFS-4844
 

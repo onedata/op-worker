@@ -1,4 +1,5 @@
 %%%-------------------------------------------------------------------
+%%% @author Lukasz Opiola
 %%% @author Bartosz Walkowicz
 %%% @copyright (C) 2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -6,14 +7,15 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles translation of op logic results concerning
+%%% This module handles translation of middleware results concerning
 %%% replica entities into GUI GRAPH SYNC responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_gui_gs_translator).
+-author("Lukasz Opiola").
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").

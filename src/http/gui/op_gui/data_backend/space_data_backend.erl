@@ -437,7 +437,7 @@ space_transfer_time_stat_record(StatId) ->
 -spec space_transfer_active_links_record(StatId :: binary()) ->
     proplists:proplist().
 space_transfer_active_links_record(SpaceId) ->
-    {ok, ActiveLinks} = space_transfer_stats_cache:get_active_links(SpaceId),
+    {ok, ActiveLinks} = space_transfer_stats_cache:get_active_channels(SpaceId),
 
     [
         {<<"id">>, SpaceId},

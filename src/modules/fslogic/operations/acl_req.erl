@@ -21,6 +21,7 @@
 %% API
 -export([get_acl/2, set_acl/3, remove_acl/2]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -31,12 +32,13 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
-get_acl(_UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_acl],
-        [_UserCtx, FileCtx],
-        fun get_acl_insecure/2).
+    fslogic_worker:provider_response() | no_return().
+get_acl(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_acl]
+    ),
+    get_acl_insecure(UserCtx, FileCtx1).
 
 
 %%--------------------------------------------------------------------
@@ -45,11 +47,12 @@ get_acl(_UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec set_acl(user_ctx:ctx(), file_ctx:ctx(), acl:acl()) ->
     fslogic_worker:provider_response().
-set_acl(_UserCtx, FileCtx, Acl) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_acl],
-        [_UserCtx, FileCtx, Acl],
-        fun set_acl_insecure/3).
+set_acl(UserCtx, FileCtx0, Acl) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_acl]
+    ),
+    set_acl_insecure(UserCtx, FileCtx1, Acl).
 
 
 %%--------------------------------------------------------------------
@@ -58,11 +61,12 @@ set_acl(_UserCtx, FileCtx, Acl) ->
 %%--------------------------------------------------------------------
 -spec remove_acl(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
-remove_acl(_UserCtx, FileCtx) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_acl],
-        [_UserCtx, FileCtx],
-        fun remove_acl_insecure/2).
+remove_acl(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_acl]
+    ),
+    remove_acl_insecure(UserCtx, FileCtx1).
 
 
 %%%===================================================================

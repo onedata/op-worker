@@ -20,7 +20,7 @@
 -define(GS_CLIENT_WORKER_GLOBAL_NAME, graph_sync_client_worker).
 
 % Not configurable as it depends on current implementation in OP.
--define(GS_PROTOCOL_VERSION, 5).
+-define(GS_PROTOCOL_VERSION, 4).
 
 % Graph Sync config
 -define(GS_CHANNEL_PORT, application:get_env(?APP_NAME,

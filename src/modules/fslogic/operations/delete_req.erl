@@ -18,9 +18,11 @@
 %% API
 -export([delete/3, delete/4]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -32,6 +34,7 @@
 delete(UserCtx, FileCtx, Silent) ->
     delete(UserCtx, FileCtx, Silent, true).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes file, and check permissions.
@@ -40,37 +43,41 @@ delete(UserCtx, FileCtx, Silent) ->
 %% deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean(), RemoveStorageFile :: boolean()) ->
-fslogic_worker:fuse_response().
+-spec delete(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean(),
+    RemoveStorageFile :: boolean()) -> fslogic_worker:fuse_response().
 delete(UserCtx, FileCtx, Silent, RemoveStorageFile) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [UserCtx, FileCtx, Silent],
-        fun(UserCtx_, FileCtx_, Silent_) ->
-            case file_ctx:is_dir(FileCtx_) of
-                {true, FileCtx2} ->
-                    delete_dir(UserCtx_, FileCtx2, Silent_, RemoveStorageFile);
-                {false, FileCtx2} ->
-                    delete_file(UserCtx_, FileCtx2, Silent_, RemoveStorageFile)
-            end
-        end).
+    case file_ctx:is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            delete_dir(UserCtx, FileCtx2, Silent, RemoveStorageFile);
+        {false, FileCtx2} ->
+            delete_file(UserCtx, FileCtx2, Silent, RemoveStorageFile)
+    end.
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
 %% @equiv check_if_empty_and_delete/3 with permission check.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_dir(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean(), RemoveStorageFile :: boolean()) ->
-    fslogic_worker:fuse_response().
-delete_dir(UserCtx, FileCtx, Silent, RemoveStorageFile) ->
-    check_permissions:execute(
-        [{?delete_subcontainer, parent}, ?delete, ?list_container],
-        [UserCtx, FileCtx, Silent, RemoveStorageFile],
-        fun check_if_empty_and_delete/4).
+-spec delete_dir(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean(),
+    RemoveStorageFile :: boolean()) -> fslogic_worker:fuse_response().
+delete_dir(UserCtx, FileCtx0, Silent, RemoveStorageFile) ->
+    {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+    FileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx1,
+        [traverse_ancestors, ?delete, ?list_container]
+    ),
+    fslogic_authz:ensure_authorized(
+        UserCtx, FileParentCtx,
+        [traverse_ancestors, ?delete_subcontainer]
+    ),
+    check_if_empty_and_delete(UserCtx, FileCtx2, Silent, RemoveStorageFile).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -79,11 +86,18 @@ delete_dir(UserCtx, FileCtx, Silent, RemoveStorageFile) ->
 %%--------------------------------------------------------------------
 -spec delete_file(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean(), RemoveStorageFile :: boolean()) ->
     fslogic_worker:fuse_response().
-delete_file(UserCtx, FileCtx, Silent, RemoveStorageFile) ->
-    check_permissions:execute(
-        [{?delete_object, parent}, ?delete],
-        [UserCtx, FileCtx, Silent, RemoveStorageFile],
-        fun delete_insecure/4).
+delete_file(UserCtx, FileCtx0, Silent, RemoveStorageFile) ->
+    {FileParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+    FileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx1,
+        [traverse_ancestors, ?delete]
+    ),
+    fslogic_authz:ensure_authorized(
+        UserCtx, FileParentCtx,
+        [traverse_ancestors, ?delete_object]
+    ),
+    delete_insecure(UserCtx, FileCtx2, Silent, RemoveStorageFile).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -100,6 +114,7 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent, RemoveStorageFile) ->
         {_, _FileCtx2} ->
             #fuse_response{status = #status{code = ?ENOTEMPTY}}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private

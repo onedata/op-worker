@@ -12,7 +12,7 @@
 -module(file_gs_rpc).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -33,7 +33,7 @@
 
 -spec ls(aai:auth(), gs_protocol:rpc_args()) -> gs_protocol:rpc_result().
 ls(?USER(_UserId, SessionId) = Auth, Data) ->
-    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
         required => #{
             <<"guid">> => {binary, non_empty},
             <<"limit">> => {integer, {not_lower_than, 1}}
@@ -78,7 +78,7 @@ ls(?USER(_UserId, SessionId) = Auth, Data) ->
 
 -spec move(aai:auth(), gs_protocol:rpc_args()) -> gs_protocol:rpc_result().
 move(?USER(_UserId, SessionId) = Auth, Data) ->
-    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
         required => #{
             <<"guid">> => {binary, non_empty},
             <<"targetParentGuid">> => {binary, non_empty},
@@ -107,7 +107,7 @@ move(?USER(_UserId, SessionId) = Auth, Data) ->
 
 -spec copy(aai:auth(), gs_protocol:rpc_args()) -> gs_protocol:rpc_result().
 copy(?USER(_UserId, SessionId) = Auth, Data) ->
-    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
         required => #{
             <<"guid">> => {binary, non_empty},
             <<"targetParentGuid">> => {binary, non_empty},
@@ -137,7 +137,7 @@ copy(?USER(_UserId, SessionId) = Auth, Data) ->
 -spec register_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
 register_file_upload(?USER(UserId, SessionId), Data) ->
-    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
         required => #{<<"guid">> => {binary, non_empty}}
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
@@ -156,7 +156,7 @@ register_file_upload(?USER(UserId, SessionId), Data) ->
 -spec deregister_file_upload(aai:auth(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
 deregister_file_upload(?USER(UserId), Data) ->
-    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
         required => #{<<"guid">> => {binary, non_empty}}
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
@@ -167,7 +167,7 @@ deregister_file_upload(?USER(UserId), Data) ->
 -spec get_file_download_url(aai:auth(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
 get_file_download_url(?USER(_UserId, SessId) = Auth, Data) ->
-    SanitizedData = op_sanitizer:sanitize_data(Data, #{
+    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
         required => #{<<"guid">> => {binary, non_empty}}
     }),
     FileGuid = maps:get(<<"guid">>, SanitizedData),
@@ -196,9 +196,9 @@ get_file_download_url(?USER(_UserId, SessId) = Auth, Data) ->
     ok | no_return().
 assert_space_membership_and_local_support(Auth, Guid) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    case op_logic_utils:is_eff_space_member(Auth, SpaceId) of
+    case middleware_utils:is_eff_space_member(Auth, SpaceId) of
         true ->
-            op_logic_utils:assert_space_supported_locally(SpaceId);
+            middleware_utils:assert_space_supported_locally(SpaceId);
         false ->
             throw(?ERROR_UNAUTHORIZED)
     end.

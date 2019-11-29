@@ -183,6 +183,7 @@ get_local_storage_id(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec get_local_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
 get_local_storage_ids(SpaceId) ->
+    %% @TODO VFS-5942 modify od_space record so this get will not be needed
     {ok, ProviderStorageIds} = provider_logic:get_storage_ids(),
     case get_all_storage_ids(SpaceId) of
         {ok, AllStorageIds} ->

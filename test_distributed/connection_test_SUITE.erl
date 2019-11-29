@@ -23,13 +23,14 @@
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("clproto/include/messages.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/graph_sync/gri.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% export for ct
 -export([
@@ -138,15 +139,19 @@ client_connection_test(Config) ->
     {ok, [CompatibleVersion | _]} = rpc:call(
         Worker1, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
-    Macaroon = #'Macaroon'{
-        macaroon = ?TOKEN
-    },
+
+    UserId = <<"user">>,
+    SerializedToken = initializer:create_token(UserId),
+
+    ValidMacaroon = #'Macaroon'{macaroon = SerializedToken},
+    InvalidMacaroon = #'Macaroon'{macaroon = <<"invaldi">>},
 
     lists:foreach(fun({M, Version, ExpStatus}) ->
         ?assertMatch(ExpStatus, handshake_as_client(Worker1, M, Version))
     end, [
-        {Macaroon, <<"16.07-rc2">>, 'INCOMPATIBLE_VERSION'},
-        {Macaroon, binary_to_list(CompatibleVersion), 'OK'}
+        {ValidMacaroon, <<"16.07-rc2">>, 'INCOMPATIBLE_VERSION'},
+        {ValidMacaroon, binary_to_list(CompatibleVersion), 'OK'},
+        {InvalidMacaroon, binary_to_list(CompatibleVersion), 'INVALID_MACAROON'}
     ]).
 
 
@@ -180,10 +185,13 @@ python_client_test_base(Config) ->
         Worker1, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
 
+    UserId = <<"user">>,
+    SerializedToken = initializer:create_token(UserId),
+
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
             session_id = <<"session_id">>,
-            macaroon = #'Macaroon'{macaroon = ?TOKEN},
+            macaroon = #'Macaroon'{macaroon = SerializedToken},
             version = Version
         }
     }},
@@ -743,8 +751,12 @@ send_sync_msg(Node, SessId, Msg) ->
 mock_identity(Workers) ->
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = ?TOKEN}) ->
-            {ok, #document{value = #user_identity{}}}
+        fun(#token_auth{token = SerializedToken}) ->
+            {ok, #token{
+                subject = ?SUB(user, UserId)
+            }} = tokens:deserialize(SerializedToken),
+
+            {ok, #document{value = #user_identity{user_id = UserId}}}
         end
     ).
 
