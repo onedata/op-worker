@@ -20,7 +20,9 @@
     %% when a client (FUSE, REST, GUI) connects and associated with his
     %% auth / session. It is utilized in gs_client_worker when adding
     %% an auth override to the request.
-    peer_ip = undefined :: undefined | ip_utils:ip()
+    peer_ip = undefined :: undefined | ip_utils:ip(),
+    interface = undefined :: undefined | cv_interface:interface(),
+    data_access_caveats_policy = disallow_data_access_caveats :: data_access_caveats:policy()
 }).
 
 -endif.

@@ -52,25 +52,23 @@ authenticate(ReqOrTokenAuth, Interface, DataCaveatsPolicy) ->
 -spec authenticate_insecure(#token_auth{} | cowboy_req:req(), rest | gui,
     data_access_caveats:policy()) -> {ok, aai:auth()} | no_return().
 authenticate_insecure(#token_auth{
-    token = SerializedToken,
-    peer_ip = PeerIp
+    token = SerializedToken
 } = Credentials, Interface, DataCaveatsPolicy) ->
     Caveats = get_caveats(SerializedToken),
     ensure_valid_caveats(Caveats, Interface, DataCaveatsPolicy),
 
-    % TODO VFS-5895 - return api errors from user_identity
-    {ok, #document{value = Iden}} = user_identity:get_or_fetch(Credentials),
-    case create_or_reuse_session(Iden, Credentials, Interface) of
-        {ok, SessionId} ->
-            {ok, #auth{
-                subject = ?SUB(user, Iden#user_identity.user_id),
-                caveats = Caveats,
-                peer_ip = PeerIp,
-                session_id = SessionId
-            }};
-        {error, {invalid_identity, _}} ->
-            user_identity:delete(Credentials),
-            authenticate_insecure(Credentials, Interface, DataCaveatsPolicy)
+    case auth_manager:verify(Credentials) of
+        {ok, ?USER(UserId) = Auth, _TTL} ->
+            Iden = #user_identity{user_id = UserId},
+            case create_or_reuse_session(Iden, Credentials, Interface) of
+                {ok, SessionId} ->
+                    {ok, Auth#auth{session_id = SessionId}};
+                {error, {invalid_identity, _}} ->
+                    user_identity:delete(Credentials),
+                    authenticate_insecure(Credentials, Interface, DataCaveatsPolicy)
+            end;
+        {error, _} = Error ->
+            Error
     end;
 authenticate_insecure(Req, Interface, DataCaveatsPolicy) ->
     case tokens:parse_access_token_header(Req) of
@@ -80,7 +78,8 @@ authenticate_insecure(Req, Interface, DataCaveatsPolicy) ->
             {PeerIp, _} = cowboy_req:peer(Req),
             TokenAuth = #token_auth{
                 token = AccessToken,
-                peer_ip = PeerIp
+                peer_ip = PeerIp,
+                interface = Interface
             },
             authenticate_insecure(TokenAuth, Interface, DataCaveatsPolicy)
     end.

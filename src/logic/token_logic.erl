@@ -49,12 +49,12 @@ verify_access_token(#token_auth{token = SerializedToken, peer_ip = PeerIp}) ->
     case Result of
         {error, _} = Error ->
             Error;
-        {ok, #{<<"subject">> := Subject}} ->
+        {ok, #{<<"subject">> := Subject, <<"ttl">> := TTL}} ->
             {ok, Token} = tokens:deserialize(SerializedToken),
             {ok, #auth{
                 subject = aai:deserialize_subject(Subject),
                 caveats = tokens:get_caveats(Token)
-            }}
+            }, TTL}
     end.
 
 

@@ -96,17 +96,19 @@ handle_client_handshake(#client_handshake_request{
     end,
 
     Auth1 = Auth0#token_auth{peer_ip = IpAddress},
-    case user_identity:get_or_fetch(Auth1) of
+    case auth_manager:verify(Auth1) of
+        {ok, ?USER(UserId), _TTL} ->
+            {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
+                Nonce, #user_identity{user_id = UserId}, Auth1
+            ),
+            {UserId, SessionId};
         ?ERROR_FORBIDDEN ->
             throw(invalid_provider);
         {error, _} = Error ->
-            ?debug("Cannot authorize user based on token ~s due to ~w", [Token, Error]),
-            throw(invalid_token);
-        {ok, #document{value = Iden = #user_identity{user_id = UserId}}} ->
-            {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
-                Nonce, Iden, Auth1
-            ),
-            {UserId, SessionId}
+            ?debug("Cannot authorize user based on token ~s due to ~w", [
+                Token, Error
+            ]),
+            throw(invalid_token)
     end.
 
 
