@@ -47,7 +47,7 @@
     is_space_synced :: undefined | boolean(),
     extended_direct_io = false :: boolean(),
     storage_path_type :: undefined | helpers:storage_path_type(),
-    is_space_mounted_in_root :: undefined | boolean()
+    is_imported_storage :: undefined | boolean()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -61,7 +61,7 @@
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_guid_const/1, get_uuid_const/1, get_extended_direct_io_const/1,
-    set_storage_path_type/2, get_storage_path_type_const/1, is_space_mounted_in_root/1
+    set_storage_path_type/2, get_storage_path_type_const/1, is_imported_storage/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
     is_root_dir_const/1, file_exists_const/1, is_in_user_space_const/2]).
@@ -343,16 +343,16 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks whether space is mounted in root.
+%% Checks whether space is supported by imported storage.
 %% @end
 %%--------------------------------------------------------------------
--spec is_space_mounted_in_root(ctx()) -> {boolean(), ctx()}.
-is_space_mounted_in_root(FileCtx = #file_ctx{is_space_mounted_in_root = undefined}) ->
+-spec is_imported_storage(ctx()) -> {boolean(), ctx()}.
+is_imported_storage(FileCtx = #file_ctx{is_imported_storage = undefined}) ->
     {StorageConfig, FileCtx2} = get_storage_doc(FileCtx),
-    MiR = storage_config:is_mounted_in_root(StorageConfig),
-    {MiR, FileCtx2#file_ctx{is_space_mounted_in_root = MiR}};
-is_space_mounted_in_root(FileCtx = #file_ctx{is_space_mounted_in_root = IsSpaceMountedInRoot}) ->
-    {IsSpaceMountedInRoot, FileCtx}.
+    ImportedStorage = storage_config:is_imported_storage(StorageConfig),
+    {ImportedStorage, FileCtx2#file_ctx{is_imported_storage = ImportedStorage}};
+is_imported_storage(FileCtx = #file_ctx{is_imported_storage = ImportedStorage}) ->
+    {ImportedStorage, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc

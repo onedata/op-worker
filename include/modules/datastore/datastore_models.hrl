@@ -104,6 +104,9 @@
 
     storages = #{} :: #{od_storage:id() => Size :: integer()},
 
+    % This value is calculated after fetch from zone for performance reasons.
+    local_storages = [] :: [od_storage:id()],
+
     providers = #{} :: #{od_provider:id() => Size :: integer()},
 
     shares = [] :: [od_share:id()],
@@ -185,6 +188,7 @@
 
 -record(od_storage, {
     provider :: od_provider:id() | undefined,
+    spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
     cache_state = #{} :: cache_state()
 }).
@@ -331,7 +335,16 @@
     helpers = [] :: [storage_config:helper()],
     readonly = false :: boolean(),
     luma_config = undefined :: undefined | luma_config:config(),
-    mount_in_root = false :: boolean()
+    imported_storage = false :: boolean()
+}).
+
+
+%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
+-record(storage, {
+    name = <<>> :: storage_config:name(),
+    helpers = [] :: [storage_config:helper()],
+    readonly = false :: boolean(),
+    luma_config = undefined :: undefined | luma_config:config()
 }).
 
 -record(luma_config, {
