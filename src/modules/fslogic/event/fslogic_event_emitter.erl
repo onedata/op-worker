@@ -76,7 +76,7 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
         {#document{}, FileCtx2} ->
             #fuse_response{fuse_response = #file_attr{} = FileAttr} =
                 attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID),
-                    FileCtx2, true, false),
+                    FileCtx2, true, true),
             {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx2, undefined),
             event:get_subscribers_and_emit(#file_attr_changed_event{
                 file_attr = FileAttr
