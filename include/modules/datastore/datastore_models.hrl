@@ -105,7 +105,7 @@
     storages = #{} :: #{od_storage:id() => Size :: integer()},
 
     % This value is calculated after fetch from zone for performance reasons.
-    local_storages = #{} :: [od_storage:id()],
+    local_storages = [] :: [od_storage:id()],
 
     providers = #{} :: #{od_provider:id() => Size :: integer()},
 
