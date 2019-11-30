@@ -62,7 +62,7 @@ add_subscriber(Sub, SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_subscribers(Key :: key() | event:base() | event:aggregated() | event:type(),
-    RoutingBase :: fslogic_worker:file_guid() | undefined) ->
+    RoutingBase :: fslogic_worker:file_guid() | [fslogic_worker:file_guid()] | undefined) ->
     {ok, SessIds :: [session:id()]} | {error, Reason :: term()}.
 get_subscribers(<<_/binary>> = Key, _RoutingBase) ->
     case file_subscription:get(Key) of
@@ -76,6 +76,20 @@ get_subscribers(<<_/binary>> = Key, _RoutingBase) ->
 
 get_subscribers({aggregated, [Evt | _]}, RoutingBase) ->
     get_subscribers(Evt, RoutingBase);
+get_subscribers(_Evt, []) ->
+    {ok, []};
+get_subscribers(Evt, [RoutingBase | RoutingList]) ->
+    case get_subscribers(Evt, RoutingBase) of
+        {ok, SessIds} ->
+            case get_subscribers(Evt, RoutingList) of
+                {ok, SessIds2} ->
+                    {ok, SessIds2 ++ (SessIds -- SessIds2)};
+                Other2 ->
+                    Other2
+            end;
+        Other ->
+            Other
+    end;
 get_subscribers(Evt, RoutingBase) ->
     case event_type:get_routing_key(Evt, RoutingBase) of
         {ok, Key} -> get_subscribers(Key, RoutingBase);

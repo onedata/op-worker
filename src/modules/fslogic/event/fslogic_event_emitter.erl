@@ -22,7 +22,7 @@
     emit_file_location_changed/2, emit_file_location_changed/3,
     emit_file_location_changed/4, emit_file_locations_changed/2,
     emit_file_perm_changed/1, emit_file_removed/2,
-    emit_file_renamed_to_client/3, emit_quota_exceeded/0,
+    emit_file_renamed_to_client/4, emit_quota_exceeded/0,
     emit_helper_params_changed/1]).
 
 %%%===================================================================
@@ -168,18 +168,18 @@ emit_file_removed(FileCtx, ExcludedSessions) ->
 %% Sends an event informing given client about file rename.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_file_renamed_to_client(file_ctx:ctx(), file_meta:name(),
+-spec emit_file_renamed_to_client(file_ctx:ctx(), fslogic_worker:file_guid(), file_meta:name(),
     user_ctx:ctx()) -> ok | {error, Reason :: term()}.
-emit_file_renamed_to_client(FileCtx, NewName, UserCtx) ->
+emit_file_renamed_to_client(FileCtx, NewParentGuid, NewName, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx),
-    {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+    {OldParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
         old_guid = Guid,
         new_guid = Guid,
-        new_parent_guid = ParentGuid,
+        new_parent_guid = NewParentGuid,
         new_name = NewName
-    }}, ParentGuid, [SessionId]).
+    }}, [OldParentGuid, NewParentGuid], [SessionId]).
 
 %%--------------------------------------------------------------------
 %% @doc
