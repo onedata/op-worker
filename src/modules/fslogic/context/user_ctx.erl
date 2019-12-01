@@ -127,6 +127,8 @@ is_normal_user(#user_ctx{session = #document{key = SessId}}) ->
 %%--------------------------------------------------------------------
 -spec is_direct_io(ctx(), od_space:id()) -> boolean().
 is_direct_io(#user_ctx{session = #document{
-    value = #session{direct_io = DirectIO}
+    value = #session{direct_io = DirectIO, type = fuse}
 }}, SpaceID) ->
-    maps:get(SpaceID, DirectIO, true).
+    maps:get(SpaceID, DirectIO, true);
+is_direct_io(_, _) ->
+    false.

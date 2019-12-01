@@ -88,7 +88,7 @@ emit(Evt, MgrRef) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_subscribers_and_emit(Evt :: base() | aggregated() | type(),
- RoutingBase :: fslogic_worker:file_guid() | undefined,
+ RoutingBase :: fslogic_worker:file_guid() | [fslogic_worker:file_guid()] | undefined,
  ExcludedRef :: pid() | session:id() | [pid() | session:id()]) ->
     ok | {error, Reason :: term()}.
 get_subscribers_and_emit(Evt, RoutingBase, []) ->
