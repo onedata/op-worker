@@ -146,7 +146,8 @@ client_connection_test(Config) ->
     ValidMacaroon = #'Macaroon'{macaroon = SerializedToken},
     InvalidMacaroon = #'Macaroon'{macaroon = <<"invaldi">>},
 
-    lists:foreach(fun({Macaroon, Version, ExpStatus}) ->
+    lists:foreach(fun({Macaroon, Version, ExpStatus} = A) ->
+        ct:pal("~p", [A]),
         ?assertMatch(ExpStatus, handshake_as_client(Worker1, Macaroon, Version))
     end, [
         {ValidMacaroon, <<"16.07-rc2">>, 'INCOMPATIBLE_VERSION'},

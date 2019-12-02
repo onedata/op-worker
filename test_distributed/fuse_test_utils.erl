@@ -102,8 +102,8 @@
 %% and registers connection for it.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_fuse_session(Nonce :: binary(), session:identity(),
-    session:auth() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
+-spec reuse_or_create_fuse_session(Nonce :: binary(), session:auth(),
+    session:credentials() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
 reuse_or_create_fuse_session(Nonce, Iden, Auth, Conn) ->
     {ok, SessId} = session_manager:reuse_or_create_fuse_session(Nonce, Iden, Auth),
     session_connections:register(SessId, Conn),
@@ -115,8 +115,8 @@ reuse_or_create_fuse_session(Nonce, Iden, Auth, Conn) ->
 %% Calls reuse_or_create_fuse_session/4 on specified Worker.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_fuse_session(node(), Nonce :: binary(), session:identity(),
-    session:auth() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
+-spec reuse_or_create_fuse_session(node(), Nonce :: binary(), session:auth(),
+    session:credentials() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
 reuse_or_create_fuse_session(Worker, Nonce, Iden, Auth, Conn) ->
     ?assertMatch({ok, _}, rpc:call(Worker, ?MODULE,
         reuse_or_create_fuse_session, [Nonce, Iden, Auth, Conn]

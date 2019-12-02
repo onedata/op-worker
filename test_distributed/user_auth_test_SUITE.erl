@@ -56,7 +56,7 @@ token_authentication(Config) ->
 
     % then
     ?assertMatch(
-        {ok, #document{value = #session{identity = #user_identity{user_id = ?USER_ID}}}},
+        {ok, #document{value = #session{auth = #user_identity{user_id = ?USER_ID}}}},
         rpc:call(Worker1, session, get, [SessionId])
     ),
     ?assertMatch(

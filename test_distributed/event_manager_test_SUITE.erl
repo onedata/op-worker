@@ -208,7 +208,7 @@ stop_event_manager(Mgr) ->
 -spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
 session_setup(Worker) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session, create, [#document{
-        key = <<"session_id">>, value = #session{identity = #user_identity{}}
+        key = <<"session_id">>, value = #session{auth = #user_identity{}}
     }])).
 
 %%--------------------------------------------------------------------

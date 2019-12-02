@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([verify/1]).
+-export([verify/1, invalidate/1]).
 -export([start_link/0, spec/0]).
 
 %% gen_server callbacks
@@ -46,7 +46,7 @@
 
 -record(cache_item, {
     key :: #token_auth{},
-    value :: {ok, aai:auth()} | errors:error(),
+    value :: {ok, aai:auth(), pos_integer()} | errors:error(),
     expiration :: non_neg_integer()
 }).
 
@@ -58,15 +58,16 @@
 %%%===================================================================
 
 
--spec verify(#token_auth{}) -> {ok, aai:auth()} | errors:error().
-verify(#token_auth{} = Credentials) ->
+-spec verify(#token_auth{}) ->
+    {ok, aai:auth(), pos_integer()} | errors:error().
+verify(#token_auth{} = TokenAuth) ->
     Now = ?NOW,
-    case ets:lookup(?CACHE_NAME, Credentials) of
+    case ets:lookup(?CACHE_NAME, TokenAuth) of
         [#cache_item{value = Value, expiration = Expiration}] when Now < Expiration ->
             Value;
         _ ->
             try
-                Result = fetch(Credentials),
+                Result = fetch(TokenAuth),
                 CacheItemTTL = case Result of
                     {ok, _Auth, TokenTTL} ->
                         min(TokenTTL, ?CACHE_ITEM_DEFAULT_TTL);
@@ -74,7 +75,7 @@ verify(#token_auth{} = Credentials) ->
                         ?CACHE_ITEM_DEFAULT_TTL
                 end,
                 ets:insert(?CACHE_NAME, #cache_item{
-                    key = Credentials,
+                    key = TokenAuth,
                     value = Result,
                     expiration = Now + CacheItemTTL
                 }),
@@ -86,6 +87,12 @@ verify(#token_auth{} = Credentials) ->
                 ?ERROR_UNAUTHORIZED
             end
     end.
+
+
+-spec invalidate(#token_auth{}) -> ok.
+invalidate(TokenAuth) ->
+    ets:delete(?CACHE_NAME, TokenAuth),
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -225,7 +232,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec fetch(#token_auth{}) -> {ok, aai:auth()} | errors:error().
+-spec fetch(#token_auth{}) -> {ok, aai:auth(), pos_integer()} | errors:error().
 fetch(Credentials) ->
     case token_logic:verify_access_token(Credentials) of
         {ok, #auth{subject = ?SUB(user, UserId)}, _TTL} = Result ->
