@@ -146,8 +146,7 @@ client_connection_test(Config) ->
     ValidMacaroon = #'Macaroon'{macaroon = SerializedToken},
     InvalidMacaroon = #'Macaroon'{macaroon = <<"invaldi">>},
 
-    lists:foreach(fun({Macaroon, Version, ExpStatus} = A) ->
-        ct:pal("~p", [A]),
+    lists:foreach(fun({Macaroon, Version, ExpStatus}) ->
         ?assertMatch(ExpStatus, handshake_as_client(Worker1, Macaroon, Version))
     end, [
         {ValidMacaroon, <<"16.07-rc2">>, 'INCOMPATIBLE_VERSION'},
@@ -674,8 +673,7 @@ init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     initializer:remove_pending_messages(),
-    mock_identity(Workers),
-
+    initializer:mock_auth_manager(Config),
     initializer:mock_provider_id(
         Workers, <<"providerId">>, <<"access-token">>, <<"identity-token">>
     ),
@@ -710,7 +708,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:unmock_provider_ids(Workers),
-    test_utils:mock_validate_and_unload(Workers, [user_identity]),
+    initializer:unmock_auth_manager(Config),
     ssl:stop().
 
 
@@ -742,24 +740,11 @@ handshake_as_client(Node, Token, Version) ->
 
 send_sync_msg(Node, SessId, Msg) ->
     {ok, #document{value = #session{connections = [Conn | _]}}} = ?assertMatch(
-        {ok, #document{value = #session{connections = [Conn | _]}}},
+        {ok, #document{value = #session{connections = [_ | _]}}},
         rpc:call(Node, session, get, [SessId]),
         ?ATTEMPTS
     ),
     rpc:call(Node, connection, send_msg, [Conn, Msg]).
-
-
-mock_identity(Workers) ->
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = SerializedToken}) ->
-            {ok, #token{
-                subject = ?SUB(user, UserId)
-            }} = tokens:deserialize(SerializedToken),
-
-            {ok, #document{value = #user_identity{user_id = UserId}}}
-        end
-    ).
 
 
 mock_client_msg_decoding(Node) ->

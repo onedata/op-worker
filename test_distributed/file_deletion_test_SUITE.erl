@@ -463,20 +463,10 @@ init_per_testcase(Case, Config) when
 
 
 init_per_testcase(remove_file_on_ceph_using_client, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     ssl:start(),
 
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = SerializedToken}) ->
-            {ok, #token{
-                subject = ?SUB(user, UserId)
-            }} = tokens:deserialize(SerializedToken),
-
-            {ok, #document{value = #user_identity{user_id = UserId}}}
-        end
-    ),
+    initializer:mock_auth_manager(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo);

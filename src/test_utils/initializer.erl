@@ -37,6 +37,7 @@
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1
 ]).
+-export([mock_auth_manager/1, unmock_auth_manager/1]).
 -export([mock_provider_ids/1, mock_provider_id/4, unmock_provider_ids/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
@@ -274,7 +275,12 @@ setup_session(Worker, [{_, #user_config{
     Nonce = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_nonce", UserId),
 
     Identity = #user_identity{user_id = UserId},
-    Auth = #token_auth{token = Token, peer_ip = local_ip_v4()},
+    Auth = #token_auth{
+        token = Token,
+        peer_ip = local_ip_v4(),
+        interface = oneclient,
+        data_access_caveats_policy = allow_data_access_caveats
+    },
     {ok, SessId} = ?assertMatch({ok, _}, rpc:call(
         Worker,
         session_manager,
@@ -314,7 +320,7 @@ teardown_session(Worker, Config) ->
         ({{session_id, _}, SessId}, Acc) ->
             case rpc:call(Worker, session, get_auth, [SessId]) of
                 {ok, Auth} ->
-                    rpc:call(Worker, user_identity, delete, [Auth]),
+                    rpc:call(Worker, auth_manager, invalidate, [Auth]),
                     ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId]));
                 {error, not_found} ->
                     ok
@@ -476,6 +482,54 @@ mock_test_file_context(Config, UuidPrefix) ->
 unmock_test_file_context(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, file_ctx).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks auth_manager:verify for all providers in given environment.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_auth_manager(proplists:proplist()) -> ok.
+mock_auth_manager(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, auth_manager),
+    test_utils:mock_expect(Workers, auth_manager, verify,
+        fun(#token_auth{
+            token = SerializedToken,
+            data_access_caveats_policy = DataAccessCaveatsPolicy
+        }) ->
+            case tokens:deserialize(SerializedToken) of
+                {ok, Token} ->
+                    Caveats = tokens:get_caveats(Token),
+                    Auth = #auth{
+                        subject = Token#token.subject,
+                        caveats = Caveats
+                    },
+                    case DataAccessCaveatsPolicy of
+                        allow_data_access_caveats ->
+                            {ok, Auth, undefined};
+                        disallow_data_access_caveats ->
+                            case data_access_caveats:find_any(Caveats) of
+                                false ->
+                                    {ok, Auth, undefined};
+                                {true, Caveat} ->
+                                    ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)
+                            end
+                    end;
+                {error, _} = Error ->
+                    Error
+            end
+        end
+    ).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Unmocks auth manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec unmock_auth_manager(proplists:proplist()) -> ok.
+unmock_auth_manager(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, auth_manager).
 
 %%--------------------------------------------------------------------
 %% @doc

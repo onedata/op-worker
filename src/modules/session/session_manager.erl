@@ -17,6 +17,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -83,8 +84,9 @@ reuse_or_create_outgoing_provider_session(SessId, Iden) ->
     session:auth(), SessionType :: atom()) ->
     {ok, session:id()} | error().
 reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
-    case user_identity:get_or_fetch(Auth) of
-        {ok, #document{value = #user_identity{} = Iden}} ->
+    case auth_manager:verify(Auth) of
+        {ok, ?USER(UserId), _TTL} ->
+            Iden = #user_identity{user_id = UserId},
             reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia);
         Error ->
             Error

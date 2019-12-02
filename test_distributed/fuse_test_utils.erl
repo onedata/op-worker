@@ -280,7 +280,11 @@ connect_via_token(Node, SocketOpts, Nonce, #token_auth{token = Token} = Auth) ->
 
     SessId = datastore_utils:gen_key(
         <<"">>,
-        term_to_binary({fuse, Nonce, Auth#token_auth{peer_ip = initializer:local_ip_v4()}})
+        term_to_binary({fuse, Nonce, Auth#token_auth{
+            peer_ip = initializer:local_ip_v4(),
+            interface = oneclient,
+            data_access_caveats_policy = allow_data_access_caveats
+        }})
     ),
     ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.

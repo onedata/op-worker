@@ -249,7 +249,7 @@ mock_user_logic(Config) ->
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(Auth) ->
         case GetUserFun(Auth, ?USER_ID) of
-            {ok, #document{key = UserId}} -> {ok, ?USER(UserId)};
+            {ok, #document{key = UserId}} -> {ok, ?USER(UserId), undefined};
             {error, _} = Error -> Error
         end
     end),

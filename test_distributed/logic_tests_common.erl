@@ -84,7 +84,7 @@ mock_gs_client(Config) ->
         {ok, #auth{
             subject = ?SUB(user, UserId),
             caveats = []
-        }}
+        }, undefined}
     end),
 
     % gs_client requires successful setting of subdomain delegation IPs, but it cannot
@@ -133,9 +133,15 @@ create_user_session(Config, UserId) ->
     [Node | _] = ?NODES(Config),
 
     SerializedToken = initializer:create_token(UserId),
-    Auth = #token_auth{token = SerializedToken},
-    {ok, #document{value = Identity}} = rpc:call(Node, user_identity, get_or_fetch, [Auth]),
-    {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [Identity, Auth]),
+    Auth = #token_auth{
+        token = SerializedToken,
+        interface = graphsync,
+        data_access_caveats_policy = disallow_data_access_caveats
+    },
+    {ok, ?USER(UserId), _} = rpc:call(Node, auth_manager, verify, [Auth]),
+    {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [
+        #user_identity{user_id = UserId}, Auth
+    ]),
     % Make sure private user data is fetched (if user identity was cached, it might
     % not happen).
     rpc:call(Node, user_logic, get, [SessionId, ?SELF]),

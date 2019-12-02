@@ -48,11 +48,13 @@ verify_handshake_auth(undefined, _) ->
 verify_handshake_auth(nobody, _) ->
     {ok, ?NOBODY};
 verify_handshake_auth({token, SerializedToken}, PeerIp) ->
-    Credentials = #token_auth{
+    TokenAuth = #token_auth{
         token = SerializedToken,
-        peer_ip = PeerIp
+        peer_ip = PeerIp,
+        interface = graphsync,
+        data_access_caveats_policy = disallow_data_access_caveats
     },
-    case http_auth:authenticate(Credentials, gui, disallow_data_access_caveats) of
+    case http_auth:authenticate(TokenAuth) of
         {ok, ?USER = Auth} ->
             {ok, Auth};
         {ok, ?NOBODY} ->

@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -51,12 +52,17 @@ authenticate(Req) ->
             false;
         Token ->
             {PeerIp, _} = cowboy_req:peer(Req),
-            Auth = #token_auth{token = Token, peer_ip = PeerIp},
-            case user_identity:get_or_fetch(Auth) of
+            TokenAuth = #token_auth{
+                token = Token,
+                peer_ip = PeerIp,
+                interface = graphsync,
+                data_access_caveats_policy = disallow_data_access_caveats
+            },
+            case auth_manager:verify(TokenAuth) of
+                {ok, ?USER(UserId), _TTL} ->
+                    {ok, #user_identity{user_id = UserId}, TokenAuth};
                 {error, _} ->
-                    ?ERROR_UNAUTHORIZED;
-                {ok, #document{value = Identity}} ->
-                    {ok, Identity, Auth}
+                    ?ERROR_UNAUTHORIZED
             end
     end.
 

@@ -85,21 +85,19 @@ get_handshake_error_msg(_) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     nonce = Nonce,
-    auth = #token_auth{token = Token} = Auth0
+    auth = #token_auth{token = Token} = TokenAuth0
 } = Req, IpAddress) when is_binary(Nonce) ->
 
     assert_client_compatibility(Req, IpAddress),
-    %% @TODO VFS-5914 Use auth override for that, remove token_utils
-    case catch token_utils:assert_interface_allowed(Token, oneclient) of
-        ok -> ok;
-        _ -> throw(invalid_token)
-    end,
-
-    Auth1 = Auth0#token_auth{peer_ip = IpAddress},
-    case auth_manager:verify(Auth1) of
+    TokenAuth1 = TokenAuth0#token_auth{
+        peer_ip = IpAddress,
+        interface = oneclient,
+        data_access_caveats_policy = allow_data_access_caveats
+    },
+    case auth_manager:verify(TokenAuth1) of
         {ok, ?USER(UserId), _TTL} ->
             {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
-                Nonce, #user_identity{user_id = UserId}, Auth1
+                Nonce, #user_identity{user_id = UserId}, TokenAuth1
             ),
             {UserId, SessionId};
         ?ERROR_FORBIDDEN ->
@@ -122,7 +120,12 @@ handle_provider_handshake(#provider_handshake_request{
 
     case token_logic:verify_identity_token(Token) of
         {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
-            ok;
+            Identity = #user_identity{provider_id = ProviderId},
+            SessId = session_utils:get_provider_session_id(incoming, ProviderId),
+            {ok, _} = session_manager:reuse_or_create_incoming_provider_session(
+                SessId, Identity
+            ),
+            {ProviderId, SessId};
         {ok, _} ->
             throw(invalid_provider);
         {error, _} = Error ->
@@ -132,14 +135,7 @@ handle_provider_handshake(#provider_handshake_request{
                 inet_parse:ntoa(IpAddress), Error
             ]),
             throw(invalid_token)
-    end,
-
-    Identity = #user_identity{provider_id = ProviderId},
-    SessionId = session_utils:get_provider_session_id(incoming, ProviderId),
-    {ok, _} = session_manager:reuse_or_create_incoming_provider_session(
-        SessionId, Identity
-    ),
-    {ProviderId, SessionId}.
+    end.
 
 
 %% @private
