@@ -85,10 +85,11 @@ get_handshake_error_msg(_) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     nonce = Nonce,
-    auth = #token_auth{token = Token} = TokenAuth0
+    auth = TokenAuth0
 } = Req, IpAddress) when is_binary(Nonce) ->
 
     assert_client_compatibility(Req, IpAddress),
+
     TokenAuth1 = TokenAuth0#token_auth{
         peer_ip = IpAddress,
         interface = oneclient,
@@ -104,7 +105,7 @@ handle_client_handshake(#client_handshake_request{
             throw(invalid_provider);
         {error, _} = Error ->
             ?debug("Cannot authorize user based on token ~s due to ~w", [
-                Token, Error
+                TokenAuth0, Error
             ]),
             throw(invalid_token)
     end.
@@ -118,7 +119,7 @@ handle_provider_handshake(#provider_handshake_request{
     token = Token
 }, IpAddress) when is_binary(ProviderId) andalso is_binary(Token) ->
 
-    case token_logic:verify_identity_token(Token) of
+    case token_logic:verify_provider_identity_token(Token) of
         {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
             Identity = #user_identity{provider_id = ProviderId},
             SessId = session_utils:get_provider_session_id(incoming, ProviderId),

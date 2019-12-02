@@ -952,7 +952,7 @@ binaries_to_strings(List) ->
 -spec verify_provider_identity(od_provider:id(), IdentityToken :: binary()) ->
     ok | errors:error().
 verify_provider_identity(ProviderId, IdentityToken) ->
-    case token_logic:verify_identity_token(IdentityToken) of
+    case token_logic:verify_provider_identity_token(IdentityToken) of
         {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
             ok;
         {ok, _} ->
