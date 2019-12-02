@@ -153,7 +153,7 @@
 -type req_id() :: {reference(), clproto_message_id:id()}.
 -type server_message() :: #server_message{}.
 
--type worker_ref() :: proc | module() | {module(), node()}.
+-type worker_ref() :: proc | {proc, datastore:key()} | module() | {module(), node()}.
 -type respond_via() :: {Conn :: pid(), AsyncReqManager :: pid(), session:id()}.
 
 -type error() :: {error, Reason :: term()}.
@@ -396,6 +396,9 @@ delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->
             Error
     end.
 
+%% @private
+-spec delegate_proc_request_insecure(node(), term(), req_id(), respond_via()) ->
+    ok | error().
 delegate_proc_request_insecure(Node, HandlerFun, ReqId, RespondVia) ->
     Pid = spawn(Node, fun() ->
         Response = try

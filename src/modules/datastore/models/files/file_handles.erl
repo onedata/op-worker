@@ -31,8 +31,9 @@
 -type doc() :: datastore_doc:doc(record()).
 
 -define(CTX, #{
-    model => ?MODULE
-%%    fold_enabled => true % TODO - wystarczy jak bedziemy robic liste na kazdym node
+    model => ?MODULE,
+    fold_enabled => true,
+    local_fold => true
 }).
 
 %%%===================================================================
@@ -65,8 +66,21 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [doc()]} | {error, term()}.
 list() ->
-    {ok, []}.
-%%    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+    {AnsList, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(), datastore_model, fold,
+        [?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []]),
+    case BadNodes of
+        [] ->
+            lists:foldl(fun
+                ({ok, List}, {ok, Acc}) ->
+                    {ok, List ++ Acc};
+                (Error, {ok, _}) ->
+                    Error;
+                (_, Error) ->
+                    Error
+            end, {ok, []}, AnsList);
+        _ ->
+            {error, {bad_nodes, BadNodes}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

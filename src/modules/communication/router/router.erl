@@ -169,13 +169,8 @@ route_direct_message(#server_message{message_id = #message_id{
 route_and_ignore_answer(#client_message{
     message_body = FuseRequest = #fuse_request{fuse_request = #file_request{context_guid = ContextGuid}}
 } = Msg) ->
-    Uuid = file_id:guid_to_uuid(ContextGuid),
     Req = {fuse_request, effective_session_id(Msg), FuseRequest},
-
-    case fslogic_uuid:is_space_dir_guid(ContextGuid) of
-        true -> ok = worker_proxy:cast(fslogic_worker, Req);
-        _ -> ok = worker_proxy:cast({id, fslogic_worker, Uuid}, Req)
-    end;
+    worker_proxy:cast(get_worker_ref(ContextGuid), Req);
 route_and_ignore_answer(#client_message{
     message_body = #fuse_request{} = FuseRequest
 } = Msg) ->
@@ -288,12 +283,8 @@ answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
     message_body = FuseRequest = #fuse_request{fuse_request = #file_request{context_guid = ContextGuid}}
 }, RIB) ->
-    Uuid = file_id:guid_to_uuid(ContextGuid),
     Req = {fuse_request, effective_session_id(Msg), FuseRequest},
-    case fslogic_uuid:is_space_dir_guid(ContextGuid) of
-        true -> delegate_request(fslogic_worker, Req, MsgId, RIB);
-        _ -> ok = delegate_request({id, fslogic_worker, Uuid}, Req, MsgId, RIB)
-    end;
+    delegate_request(get_worker_ref(ContextGuid), Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
@@ -306,12 +297,8 @@ answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
     message_body = ProviderRequest = #provider_request{context_guid = ContextGuid}
 }, RIB) ->
-    Uuid = file_id:guid_to_uuid(ContextGuid),
     Req = {provider_request, effective_session_id(Msg), ProviderRequest},
-    case fslogic_uuid:is_space_dir_guid(ContextGuid) of
-        true -> delegate_request(fslogic_worker, Req, MsgId, RIB);
-        _ -> ok = delegate_request({id, fslogic_worker, Uuid}, Req, MsgId, RIB)
-    end;
+    delegate_request(get_worker_ref(ContextGuid), Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = Id,
@@ -331,7 +318,6 @@ answer_or_delegate(Msg = #client_message{
     delegate_request(dbsync_worker, Req, MsgId, RIB);
 
 answer_or_delegate(Msg, _) ->
-    % TODO - rutowanie na wlasciwy node, sesja na wlasciwym node?
     event_router:route_message(Msg).
 
 
@@ -342,3 +328,11 @@ delegate_request(WorkerRef, Req, MsgId, RIB) ->
     async_request_manager:delegate_and_supervise(
         WorkerRef, Req, MsgId, RIB#rib.respond_via
     ).
+
+%% @private
+-spec get_worker_ref(file_id:file_guid()) -> module() | {id, module(), datastore:key()}.
+get_worker_ref(ContextGuid) ->
+    case fslogic_uuid:is_space_dir_guid(ContextGuid) of
+        true -> fslogic_worker;
+        _ -> {id, fslogic_worker, file_id:guid_to_uuid(ContextGuid)}
+    end.
