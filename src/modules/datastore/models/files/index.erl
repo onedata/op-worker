@@ -15,6 +15,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/file_popularity_view.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -289,7 +290,7 @@ delete_db_view(ViewId) ->
 -spec query(od_space:id(), name(), options()) ->
     {ok, json_utils:json_term()} | {error, term()}.
 query(SpaceId, <<"file-popularity">>, Options) ->
-    query(<<"file-popularity-", SpaceId/binary>>, Options);
+    query(?FILE_POPULARITY_VIEW(SpaceId), Options);
 query(SpaceId, ViewName, Options) ->
     ?get_view_id_and_run(ViewName, SpaceId, fun(ViewId) ->
         query(ViewId, Options)

@@ -56,13 +56,13 @@ create(SpaceId, TimestampWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay
 
     Ctx = datastore_model_default:get_ctx(file_popularity),
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
-    ok = couchbase_driver:save_view_doc(DiscCtx, ?VIEW_NAME(SpaceId), ViewFunction).
+    ok = couchbase_driver:save_view_doc(DiscCtx, ?FILE_POPULARITY_VIEW(SpaceId), ViewFunction).
 
 -spec delete(od_space:id()) -> ok | {error, term()}.
 delete(SpaceId) ->
     Ctx = datastore_model_default:get_ctx(file_popularity),
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
-    couchbase_driver:delete_design_doc(DiscCtx, ?VIEW_NAME(SpaceId)).
+    couchbase_driver:delete_design_doc(DiscCtx, ?FILE_POPULARITY_VIEW(SpaceId)).
 
 -spec modify(od_space:id(), number(), number(), number()) -> ok | {error, term()}.
 modify(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay) ->
@@ -81,7 +81,7 @@ query(SpaceId, IndexToken, Limit) ->
     Options = token_to_opts(IndexToken, Limit),
     Ctx = datastore_model_default:get_ctx(file_popularity),
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
-    ViewName = ?VIEW_NAME(SpaceId),
+    ViewName = ?FILE_POPULARITY_VIEW(SpaceId),
     case couchbase_driver:query_view(DiscCtx, ViewName, ViewName, Options) of
         {ok, #{<<"rows">> := []}} ->
             {[], IndexToken};

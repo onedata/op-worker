@@ -9,7 +9,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
--define(VIEW_NAME(SpaceId), <<"file-popularity-", SpaceId/binary>>).
+-ifndef(FILE_POPULARITY_VIEW_HRL).
+-define(FILE_POPULARITY_VIEW_HRL, 1).
+
+-define(FILE_POPULARITY_VIEW(SpaceId), <<"file-popularity-", SpaceId/binary>>).
 
 % this record is used to define the starting row for a query on the
 % file-popularity view
@@ -23,3 +26,5 @@
     % from the previously finished row
     start_key :: undefined | [non_neg_integer()]
 }).
+
+-endif.

@@ -74,9 +74,7 @@ get_configuration(SpaceId) ->
                 example_query => file_popularity_view:example_query(SpaceId)
             }};
         {error, not_found} ->
-            {ok, #{
-                enabled => false
-            }};
+            {ok, #{enabled => false}};
         Error ->
             Error
     end.
