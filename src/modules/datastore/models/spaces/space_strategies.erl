@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get/1, delete/2]).
+-export([get/1, delete/1]).
 -export([
     get_import_details/1, get_import_details/2,
     get_update_details/1, get_update_details/2,
@@ -89,9 +89,8 @@ get(Key) ->
 %% Deletes space strategies.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(key(), od_storage:id()) -> ok | {error, term()}.
-delete(Key, StorageId) ->
-    storage_sync_monitoring:delete(Key, StorageId),
+-spec delete(key()) -> ok | {error, term()}.
+delete(Key) ->
     datastore_model:delete(?CTX, Key).
 
 -spec is_any_storage_imported(od_space:id()) -> boolean().

@@ -41,7 +41,7 @@
 -export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0]).
+-export([get_ctx/0]).
 -export([get_posthooks/0]).
 
 %%%===================================================================
@@ -101,15 +101,6 @@ run_after(Doc = #document{key = SpaceId}) ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_version() -> datastore_model:record_version().
-get_record_version() ->
-    4.
 
 %%--------------------------------------------------------------------
 %% @doc

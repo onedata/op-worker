@@ -321,7 +321,7 @@ on_space_unsupported(SpaceId, StorageId) ->
     autocleaning_api:delete_config(SpaceId),
     file_popularity_api:disable(SpaceId),
     file_popularity_api:delete_config(SpaceId),
-    space_strategies:delete(SpaceId, StorageId),
+    storage_sync:space_unsupported(SpaceId, StorageId),
     main_harvesting_stream:space_unsupported(SpaceId).
 
 
