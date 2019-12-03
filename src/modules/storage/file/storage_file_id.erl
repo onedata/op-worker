@@ -31,10 +31,9 @@
 %% Returns space directory storage file id.
 %% @end
 %%-------------------------------------------------------------------
--spec space_id(od_space:id(), storage:id()) -> helpers:file_id().
+-spec space_id(od_space:id(), od_storage:id()) -> helpers:file_id().
 space_id(SpaceId, StorageId) ->
-    MountedInRoot = space_storage:get_mounted_in_root(SpaceId),
-    case lists:member(StorageId, MountedInRoot) of
+    case storage_config:is_imported_storage(StorageId) of
         true ->
             ?DIRECTORY_SEPARATOR_BINARY;
         false ->
@@ -58,7 +57,7 @@ flat(FileCtx) ->
             {?DIRECTORY_SEPARATOR_BINARY, FileCtx};
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {IsSpaceMountedInRoot, FileCtx2} = file_ctx:is_space_mounted_in_root(FileCtx),
+            {IsSpaceMountedInRoot, FileCtx2} = file_ctx:is_imported_storage(FileCtx),
             PathTokens = case IsSpaceMountedInRoot of
                 true -> [?DIRECTORY_SEPARATOR_BINARY, SpaceId];
                 false -> [?DIRECTORY_SEPARATOR_BINARY]
@@ -96,7 +95,7 @@ flat(FileCtx) ->
 -spec canonical(file_ctx:ctx()) -> {helpers:file_id(), file_ctx:ctx()}.
 canonical(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {IsSpaceMountedInRoot, FileCtx2} = file_ctx:is_space_mounted_in_root(FileCtx),
+    {IsSpaceMountedInRoot, FileCtx2} = file_ctx:is_imported_storage(FileCtx),
     {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
     case IsSpaceMountedInRoot of
         true ->

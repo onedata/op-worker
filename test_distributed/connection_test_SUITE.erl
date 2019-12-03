@@ -146,8 +146,8 @@ client_connection_test(Config) ->
     ValidMacaroon = #'Macaroon'{macaroon = SerializedToken},
     InvalidMacaroon = #'Macaroon'{macaroon = <<"invaldi">>},
 
-    lists:foreach(fun({Macaroon, Version, ExpStatus}) ->
-        ?assertMatch(ExpStatus, handshake_as_client(Worker1, Macaroon, Version))
+    lists:foreach(fun({M, Version, ExpStatus}) ->
+        ?assertMatch(ExpStatus, handshake_as_client(Worker1, M, Version))
     end, [
         {ValidMacaroon, <<"16.07-rc2">>, 'INCOMPATIBLE_VERSION'},
         {ValidMacaroon, binary_to_list(CompatibleVersion), 'OK'},
@@ -741,7 +741,7 @@ handshake_as_client(Node, Token, Version) ->
 
 send_sync_msg(Node, SessId, Msg) ->
     {ok, #document{value = #session{connections = [Conn | _]}}} = ?assertMatch(
-        {ok, #document{value = #session{connections = [Conn | _]}}},
+        {ok, #document{value = #session{connections = [_ | _]}}},
         rpc:call(Node, session, get, [SessId]),
         ?ATTEMPTS
     ),

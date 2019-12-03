@@ -29,9 +29,10 @@
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3]).
--export([get_eff_groups/2, get_shares/2]).
+-export([get_eff_groups/2, get_shares/2, get_local_storage_ids/1, get_local_storage_id/1]).
 -export([get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
+-export([is_supported_by_storage/2]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
@@ -161,6 +162,44 @@ get_shares(SessionId, SpaceId) ->
             Error
     end.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% @TODO VFS-5497 Remove after allowing to support one space with many storages on one provider
+%% This function returns StorageId for given SpaceId.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_local_storage_id(od_space:id()) -> {ok, od_storage:id()} | errors:error().
+get_local_storage_id(SpaceId) ->
+    case get_local_storage_ids(SpaceId) of
+        {ok, []} -> {error, space_not_supported};
+        {ok, [StorageId | _]} -> {ok, StorageId};
+        Other -> Other
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of storage ids supporting given space under this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
+get_local_storage_ids(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{local_storages = LocalStorages}}} ->
+            {ok, LocalStorages};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_all_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
+get_all_storage_ids(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{storages = AllStorages}}} ->
+            {ok, maps:keys(AllStorages)};
+        {error, _} = Error ->
+            Error
+    end.
+
 
 -spec get_provider_ids(gs_client_worker:client(), od_space:id()) ->
     {ok, [od_provider:id()]} | errors:error().
@@ -189,6 +228,14 @@ is_supported(SessionId, SpaceId, ProviderId) ->
             is_supported(SpaceDoc, ProviderId);
         _ ->
             false
+    end.
+
+
+-spec is_supported_by_storage(od_space:id(), od_storage:id()) -> boolean().
+is_supported_by_storage(SpaceId, StorageId) ->
+    case get_all_storage_ids(SpaceId) of
+        {ok, AllStorageIds} -> lists:member(StorageId, AllStorageIds);
+        _ -> false
     end.
 
 

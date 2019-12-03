@@ -552,7 +552,24 @@ mock_graph_get(GRI = #gri{type = od_handle, id = HandleId, aspect = instance}, A
             ?ERROR_FORBIDDEN
     end;
 
-mock_graph_get(GRI = #gri{type = od_harvester, id = SpaceId, aspect = instance}, AuthOverride, _) ->
+mock_graph_get(GRI = #gri{type = od_harvester, id = HarvesterId, aspect = instance}, AuthOverride, _) ->
+    Authorized = case {AuthOverride, GRI#gri.scope} of
+        {undefined, private} ->
+            true;
+        {?USER_GS_TOKEN_AUTH(_), _} ->
+            false
+    end,
+    case Authorized of
+        true ->
+            Data = case GRI#gri.scope of
+                private -> ?HARVESTER_PRIVATE_DATA_VALUE(HarvesterId)
+            end,
+            {ok, #gs_resp_graph{data_format = resource, data = Data}};
+        false ->
+            ?ERROR_FORBIDDEN
+    end;
+
+mock_graph_get(GRI = #gri{type = od_storage, id = StorageId, aspect = instance}, AuthOverride, _) ->
     Authorized = case {AuthOverride, GRI#gri.scope} of
         {undefined, private} ->
             true;
@@ -562,7 +579,7 @@ mock_graph_get(GRI = #gri{type = od_harvester, id = SpaceId, aspect = instance},
     case Authorized of
         true ->
             Data = case GRI#gri.scope of
-                private -> ?HARVESTER_PRIVATE_DATA_VALUE(SpaceId)
+                private -> ?STORAGE_PRIVATE_DATA_VALUE(StorageId)
             end,
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->

@@ -36,8 +36,8 @@
             "   Perms per file: ~p~n",
             [
                 __ScenarioName,
-                maps:fold(fun(Guid, SetPerms, Acc) ->
-                    Acc#{get_file_path(Node, OwnerSessId, Guid) => SetPerms}
+                maps:fold(fun(G, SetPerms, Acc) ->
+                    Acc#{get_file_path(Node, OwnerSessId, G) => SetPerms}
                 end, #{}, __PermsPerGuid)
             ]
         ),

@@ -76,8 +76,8 @@ fslogic_get_file_attr_test(Config) ->
     {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    UserRootGuid1 = file_id:pack_guid(fslogic_uuid:user_root_dir_uuid(UserId1), undefined),
-    UserRootGuid2 = file_id:pack_guid(fslogic_uuid:user_root_dir_uuid(UserId2), undefined),
+    UserRootGuid1 = fslogic_uuid:user_root_dir_guid(UserId1),
+    UserRootGuid2 = fslogic_uuid:user_root_dir_guid(UserId2),
 
     lists:foreach(fun({SessId, Name, Mode, UID, Path, ParentGuid}) ->
         #fuse_response{fuse_response = #guid{guid = Guid}} =
@@ -129,10 +129,10 @@ fslogic_get_file_children_attrs_test(Config) ->
     {SessId3, UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
     {SessId4, UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
-    UserRootGuid1 = file_id:pack_guid(fslogic_uuid:user_root_dir_uuid(UserId1), undefined),
-    UserRootGuid2 = file_id:pack_guid(fslogic_uuid:user_root_dir_uuid(UserId2), undefined),
-    UserRootGuid3 = file_id:pack_guid(fslogic_uuid:user_root_dir_uuid(UserId3), undefined),
-    UserRootGuid4 = file_id:pack_guid(fslogic_uuid:user_root_dir_uuid(UserId4), undefined),
+    UserRootGuid1 = fslogic_uuid:user_root_dir_guid(UserId1),
+    UserRootGuid2 = fslogic_uuid:user_root_dir_guid(UserId2),
+    UserRootGuid3 = fslogic_uuid:user_root_dir_guid(UserId3),
+    UserRootGuid4 = fslogic_uuid:user_root_dir_guid(UserId4),
 
     ValidateReadDirPlus = fun({SessId, Path, AttrsList}) ->
         #fuse_response{fuse_response = #guid{guid = FileGuid}} =
@@ -186,16 +186,16 @@ fslogic_get_file_children_attrs_test(Config) ->
             end, lists:seq(1, length(AttrsList) + 1))
     end,
 
-    TestFun = fun({SessId, Path, NameList, UserRootGuid}) ->
+    TestFun = fun({SessionId, Path, NameList, UserRootGuid}) ->
         Files = lists:map(fun(Name) ->
-            {SessId, Name, 8#775, 0, <<"/", Name/binary>>, UserRootGuid}
+            {SessionId, Name, 8#775, 0, <<"/", Name/binary>>, UserRootGuid}
         end, NameList),
 
-        FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, Path, ParentGuid}) ->
+        FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, P, ParentGuid}) ->
             #fuse_response{fuse_response = #guid{guid = Guid}} =
                 ?assertMatch(
                     #fuse_response{status = #status{code = ?OK}},
-                    ?req(Worker, SessId, #resolve_guid{path = Path})
+                    ?req(Worker, SessId, #resolve_guid{path = P})
                 ),
 
             #file_attr{
@@ -205,7 +205,7 @@ fslogic_get_file_children_attrs_test(Config) ->
             }
         end, Files),
 
-        ValidateReadDirPlus({SessId, Path, FilesAttrs})
+        ValidateReadDirPlus({SessionId, Path, FilesAttrs})
     end,
 
     lists:foreach(TestFun, [
@@ -229,8 +229,8 @@ fslogic_get_child_attr_test(Config) ->
     {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    UserRootGuid1 = file_id:pack_guid(fslogic_uuid:user_root_dir_uuid(UserId1), undefined),
-    UserRootGuid2 = file_id:pack_guid(fslogic_uuid:user_root_dir_uuid(UserId2), undefined),
+    UserRootGuid1 = fslogic_uuid:user_root_dir_guid(UserId1),
+    UserRootGuid2 = fslogic_uuid:user_root_dir_guid(UserId2),
 
     lists:foreach(fun({SessId, Name, Mode, UID, ParentGuid, ChildName}) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK},

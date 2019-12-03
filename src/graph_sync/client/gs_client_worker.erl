@@ -651,7 +651,9 @@ put_cache_state(HService = #od_handle_service{}, CacheState) ->
 put_cache_state(Handle = #od_handle{}, CacheState) ->
     Handle#od_handle{cache_state = CacheState};
 put_cache_state(Harvester = #od_harvester{}, CacheState) ->
-    Harvester#od_harvester{cache_state = CacheState}.
+    Harvester#od_harvester{cache_state = CacheState};
+put_cache_state(Storage = #od_storage{}, CacheState) ->
+    Storage#od_storage{cache_state = CacheState}.
 
 
 -spec get_cache_state(Record :: tuple() | doc()) -> cache_state().
@@ -672,6 +674,8 @@ get_cache_state(#od_handle_service{cache_state = CacheState}) ->
 get_cache_state(#od_handle{cache_state = CacheState}) ->
     CacheState;
 get_cache_state(#od_harvester{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#od_storage{cache_state = CacheState}) ->
     CacheState.
 
 
@@ -710,6 +714,18 @@ is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected},
 
 is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private}, _) ->
     true;
+
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_storage, id = StorageId, scope = private}, _) ->
+    provider_logic:has_storage(StorageId);
+
+is_authorized_to_get(?ROOT_SESS_ID, AuthHint, #gri{type = od_storage, id = StorageId, scope = shared}, _) ->
+    case AuthHint of
+        ?THROUGH_SPACE(SpaceId) ->
+            space_logic:is_supported_by_storage(SpaceId, StorageId)
+                andalso provider_logic:supports_space(SpaceId);
+        _ ->
+            false
+    end;
 
 % Provider can access shares of spaces that it supports
 is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_share, scope = private}, CachedDoc) ->
