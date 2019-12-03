@@ -30,10 +30,12 @@
 ]).
 
 -export([
-    token_authentication/1
+    token_authentication/1,
+    auth_cache_test/1
 ]).
 
 all() -> ?ALL([
+    auth_cache_test,
     token_authentication
 ]).
 
@@ -45,6 +47,64 @@ all() -> ?ALL([
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+
+auth_cache_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+
+    clear_auth_cache(Worker1),
+    ?assertEqual(0, get_auth_cache_size(Worker1)),
+
+    SerializedToken = initializer:create_token(?USER_ID),
+
+    TokenAuth1 = #token_auth{
+        token = SerializedToken,
+        peer_ip = initializer:local_ip_v4(),
+        interface = undefined
+    },
+    TokenAuth2 = #token_auth{
+        token = SerializedToken,
+        peer_ip = initializer:local_ip_v4(),
+        interface = graphsync,
+        data_access_caveats_policy = allow_data_access_caveats
+    },
+    TokenAuth3 = #token_auth{
+        token = SerializedToken,
+        peer_ip = initializer:local_ip_v4(),
+        interface = rest,
+        data_access_caveats_policy = disallow_data_access_caveats
+    },
+
+    lists:foreach(fun({TokenAuth, ExpCacheSize}) ->
+        ?assertMatch(
+            {ok, ?USER(?USER_ID), undefined},
+            verify_auth(Worker1, TokenAuth)
+        ),
+        ?assertEqual(ExpCacheSize, get_auth_cache_size(Worker1))
+    end, [
+        {TokenAuth1, 1},
+        {TokenAuth2, 2},
+        {TokenAuth3, 3}
+    ]),
+
+    % Default cache size limit is big enough so that 3 entries will not be purged
+    timer:sleep(timer:seconds(5)),
+    ?assertEqual(3, get_auth_cache_size(Worker1)),
+
+    % After setting auth cache size limit to 2 entries should be purged during
+    % next checkup (since they exceed limit)
+    rpc:call(Worker1, application, set_env, [?APP_NAME, auth_cache_size_limit, 2]),
+    timer:sleep(timer:seconds(5)),
+    ?assertEqual(0, get_auth_cache_size(Worker1)),
+
+    % Filling entries up to limit will should not cause cache purge
+    verify_auth(Worker1, TokenAuth1),
+    verify_auth(Worker1, TokenAuth2),
+    ?assertEqual(2, get_auth_cache_size(Worker1)),
+    timer:sleep(timer:seconds(5)),
+    ?assertEqual(2, get_auth_cache_size(Worker1)),
+
+    clear_auth_cache(Worker1).
 
 
 token_authentication(Config) ->
@@ -85,6 +145,7 @@ init_per_testcase(_Case, Config) ->
     mock_provider_logic(Config),
     mock_space_logic(Config),
     mock_user_logic(Config),
+    mock_token_logic(Config),
     Config.
 
 
@@ -92,6 +153,7 @@ end_per_testcase(_Case, Config) ->
     unmock_provider_logic(Config),
     unmock_space_logic(Config),
     unmock_user_logic(Config),
+    unmock_token_logic(Config),
     ssl:stop().
 
 
@@ -141,7 +203,17 @@ mock_user_logic(Config) ->
             end;
         (_, _) ->
             {error, not_found}
-    end),
+    end).
+
+
+unmock_user_logic(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, user_logic).
+
+
+mock_token_logic(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, token_logic, []),
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun
         (#token_auth{token = SerializedToken}) ->
             case tokens:deserialize(SerializedToken) of
@@ -153,6 +225,18 @@ mock_user_logic(Config) ->
     end).
 
 
-unmock_user_logic(Config) ->
+unmock_token_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, user_logic).
+    test_utils:mock_validate_and_unload(Workers, token_logic).
+
+
+verify_auth(Worker, TokenAuth) ->
+    rpc:call(Worker, auth_manager, verify, [TokenAuth]).
+
+
+clear_auth_cache(Worker) ->
+    rpc:call(Worker, ets, delete_all_objects, [auth_manager]).
+
+
+get_auth_cache_size(Worker) ->
+    rpc:call(Worker, ets, info, [auth_manager, size]).
