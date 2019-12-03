@@ -44,7 +44,7 @@
 
 -record(proxyio_request, {
     parameters = #{} :: proxyio_request_parameters(),
-    storage_id :: storage:id(),
+    storage_id :: od_storage:id(),
     file_id :: helpers:file_id(),
     proxyio_request :: proxyio_request_type()
 }).

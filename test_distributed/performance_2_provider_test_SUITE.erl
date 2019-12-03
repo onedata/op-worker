@@ -222,7 +222,9 @@ init_per_testcase(synchronizer_test, Config) ->
     test_utils:mock_expect(Workers, rtransfer_config, fetch,
         fun(#{offset := O, size := S} = _Request, NotifyFun, CompleteFun,
             TransferId, SpaceId, FileGuid) ->
-            _TransferData = erlang:term_to_binary({TransferId, SpaceId, FileGuid}),
+            % below call is intentional and must not be deleted
+            % this is to pretend behaviour of the mocked function except of call to rtransfer
+            (fun() -> _TransferData = erlang:term_to_binary({TransferId, SpaceId, FileGuid}) end)(),
             Ref = make_ref(),
             NotifyFun(Ref, O, S),
             CompleteFun(Ref, {ok, ok}),

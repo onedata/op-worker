@@ -145,11 +145,11 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st1",
-                        "mounted_in_root": "true"
+                        "imported_storage": "true"
                     },
                     "p2": {
                         "storage": "/mnt/synced_storage",
-                        "mounted_in_root": "true"
+                        "imported_storage": "true"
                     }
                 }
             }

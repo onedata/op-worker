@@ -321,7 +321,7 @@ new_child_master_job(Job = #storage_traverse_master{
 %% suitable functions.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_delete_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(),
+-spec maybe_delete_file_and_update_counters(file_ctx:ctx(), od_space:id(), od_storage:id(),
     boolean()) -> ok.
 maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -348,7 +348,7 @@ maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCou
 %% If true, this function deletes it and updates sync counters.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_delete_dir_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(), boolean()) -> ok.
+-spec maybe_delete_dir_and_update_counters(file_ctx:ctx(), od_space:id(), od_storage:id(), boolean()) -> ok.
 maybe_delete_dir_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
     {DirLocation, FileCtx2} = file_ctx:get_dir_location_doc(FileCtx),
     case dir_location:is_storage_file_created(DirLocation) of
@@ -368,7 +368,7 @@ maybe_delete_dir_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCoun
 %% If true, this function deletes it and updates sync counters.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_delete_regular_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(),
+-spec maybe_delete_regular_file_and_update_counters(file_ctx:ctx(), od_space:id(), od_storage:id(),
     boolean()) -> ok.
 maybe_delete_regular_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
     {FileLocation, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx, false),
@@ -390,7 +390,7 @@ maybe_delete_regular_file_and_update_counters(FileCtx, SpaceId, StorageId, Updat
 %% It deleted directory recursively.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_dir(file_ctx:ctx(), od_space:id(), storage:id(), boolean()) -> ok.
+-spec delete_dir(file_ctx:ctx(), od_space:id(), od_storage:id(), boolean()) -> ok.
 delete_dir(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
@@ -404,7 +404,7 @@ delete_dir(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec delete_children(file_ctx:ctx(), user_ctx:ctx(), non_neg_integer(), non_neg_integer(),
-    od_space:id(), storage:id(), boolean()) -> {ok, file_ctx:ctx()}.
+    od_space:id(), od_storage:id(), boolean()) -> {ok, file_ctx:ctx()}.
 delete_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId, UpdateSyncCounters) ->
     try
         {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, ChunkSize),
@@ -444,25 +444,25 @@ delete_file(FileCtx) ->
     end.
 
 
--spec maybe_mark_failed_file(od_space:id(), storage:id(), boolean()) -> ok.
+-spec maybe_mark_failed_file(od_space:id(), od_storage:id(), boolean()) -> ok.
 maybe_mark_failed_file(SpaceId, StorageId, true) ->
     storage_sync_monitoring:mark_failed_file(SpaceId, StorageId);
 maybe_mark_failed_file(_SpaceId, _StorageId, false) ->
     ok.
 
--spec maybe_mark_processed_file(od_space:id(), storage:id(), boolean()) -> ok.
+-spec maybe_mark_processed_file(od_space:id(), od_storage:id(), boolean()) -> ok.
 maybe_mark_processed_file(SpaceId, StorageId, true) ->
     storage_sync_monitoring:mark_processed_file(SpaceId, StorageId);
 maybe_mark_processed_file(_SpaceId, _StorageId, false) ->
     ok.
 
--spec maybe_mark_deleted_file(od_space:id(), storage:id(), boolean()) -> ok.
+-spec maybe_mark_deleted_file(od_space:id(), od_storage:id(), boolean()) -> ok.
 maybe_mark_deleted_file(SpaceId, StorageId, true) ->
     storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId);
 maybe_mark_deleted_file(_SpaceId, _StorageId, false) ->
     ok.
 
--spec maybe_increase_to_process_counter(od_space:id(), storage:id(), non_neg_integer(), boolean()) -> ok.
+-spec maybe_increase_to_process_counter(od_space:id(), od_storage:id(), non_neg_integer(), boolean()) -> ok.
 maybe_increase_to_process_counter(SpaceId, StorageId, ToProcessNum, true) ->
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, ToProcessNum);
 maybe_increase_to_process_counter(_SpaceId, _StorageId, _ToProcessNum, false) ->

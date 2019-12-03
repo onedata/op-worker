@@ -62,7 +62,7 @@ handle_qos_entry_change(SpaceId, #document{
 %% is executed.
 %% @end
 %%--------------------------------------------------------------------
--spec reconcile_qos_on_storage(file_meta:uuid(), od_space:id(), storage:id()) -> ok.
+-spec reconcile_qos_on_storage(file_meta:uuid(), od_space:id(), od_storage:id()) -> ok.
 reconcile_qos_on_storage(FileUuid, SpaceId, StorageId) ->
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
     reconcile_qos_on_storage(FileCtx, StorageId).
@@ -74,7 +74,7 @@ reconcile_qos_on_storage(FileUuid, SpaceId, StorageId) ->
 %% effective_file_qos. Uses QoS traverse pool.
 %% @end
 %%--------------------------------------------------------------------
--spec reconcile_qos_on_storage(file_ctx:ctx(), storage:id()) -> ok.
+-spec reconcile_qos_on_storage(file_ctx:ctx(), od_storage:id()) -> ok.
 reconcile_qos_on_storage(FileCtx, StorageId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -104,7 +104,7 @@ reconcile_qos_on_storage(FileCtx, StorageId) ->
 %% Starts QoS traverse and updates file_qos accordingly.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_start_traverse(file_ctx:ctx(), qos_entry:id(), storage:id(), traverse:id()) -> ok.
+-spec maybe_start_traverse(file_ctx:ctx(), qos_entry:id(), od_storage:id(), traverse:id()) -> ok.
 maybe_start_traverse(FileCtx, QosEntryId, Storage, TaskId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),

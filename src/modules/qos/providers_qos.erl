@@ -44,7 +44,7 @@
     <<"lisbon">> => ?P3_QOS}).
 
 
-get_storage_qos(StorageId, StorageSet) ->
+get_storage_qos(StorageId, _StorageSet) ->
     ?MODULE:get_provider_qos(StorageId).
 
 

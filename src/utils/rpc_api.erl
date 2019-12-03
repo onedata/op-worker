@@ -18,35 +18,75 @@
 
 -export([apply/2]).
 -export([
-    storage_new/4, storage_create/1, storage_safe_remove/1,
-    storage_supports_any_space/1, storage_list_ids/0, storage_get_helpers/1,
-    storage_get_luma_config_map/1, storage_select_helper/2,
-    storage_update_admin_ctx/3, storage_update_helper_args/3,
-    storage_set_insecure/3, storage_set_readonly/2, storage_set_luma_config/2,
-    storage_update_luma_config/2, storage_update_name/2, get_storage_by_name/1,
-    get_storage/1, storage_exists/1, storage_describe/1, get_space_storage/1,
-    space_storage_get_storage_ids/1, space_storage_get_mounted_in_root/1,
-    file_popularity_api_configure/2, file_popularity_api_get_configuration/1,
-    invalidate_luma_cache/1, new_helper/5, new_luma_config/2,
-    verify_storage_on_all_nodes/1, prepare_helper_args/2,
-    prepare_user_ctx_params/2, autocleaning_configure/2,
-    autocleaning_get_configuration/1, get_provider_id/0, get_access_token/0,
-    is_connected_to_oz/0, is_registered/0, on_deregister/0,
-    get_op_worker_version/0, provider_logic_update/1, support_space/2,
-    space_storage_add/3, space_storage_delete/1, get_spaces/0,
-    supports_space/1, get_space_details/1, get_provider_details/0,
-    is_subdomain_delegated/0, set_delegated_subdomain/1, set_domain/1,
-    space_quota_current_size/1, update_space_support_size/2,
-    update_subdomain_delegation_ips/0, autocleaning_list_reports/4,
-    autocleaning_get_run_report/1, autocleaning_status/1,
-    autocleaning_force_start/1, force_oz_connection_start/0,
-    provider_auth_save/2, get_root_token_file_path/0,
-    get_storage_import_details/2, get_storage_update_details/2,
-    configure_storage_import/3, configure_storage_update/3,
+    storage_config_new/5,
+    storage_create/1,
+    storage_safe_remove/1,
+    storage_supports_any_space/1,
+    storage_list_ids/0,
+    storage_get_helpers/1,
+    storage_get_luma_config_map/1,
+    storage_select_helper/2,
+    storage_update_admin_ctx/3,
+    storage_update_helper_args/3,
+    storage_set_insecure/3,
+    storage_set_readonly/2,
+    storage_set_imported_storage/2,
+    storage_set_luma_config/2,
+    storage_set_qos_parameters/2,
+    storage_update_luma_config/2,
+    storage_update_name/2,
+    get_storage_config/1,
+    get_storage_config_by_name/1,
+    storage_exists/1,
+    storage_describe/1,
+    storage_is_imported_storage/1,
+    invalidate_luma_cache/1,
+    new_helper/5,
+    new_luma_config/2,
+    verify_storage_on_all_nodes/1,
+    prepare_helper_args/2,
+    prepare_user_ctx_params/2,
+    space_logic_get_storage_ids/1,
+    file_popularity_api_configure/2,
+    file_popularity_api_get_configuration/1,
+    autocleaning_configure/2,
+    autocleaning_get_configuration/1,
+    autocleaning_list_reports/4,
+    autocleaning_get_run_report/1,
+    autocleaning_status/1,
+    autocleaning_force_start/1,
+    get_provider_id/0,
+    get_access_token/0,
+    is_connected_to_oz/0,
+    is_registered/0,
+    on_deregister/0,
+    get_op_worker_version/0,
+    provider_logic_update/1,
+    support_space/3,
+    revoke_space_support/1,
+    get_spaces/0,
+    supports_space/1,
+    get_space_details/1,
+    get_provider_details/0,
+    is_subdomain_delegated/0,
+    set_delegated_subdomain/1,
+    set_domain/1,
+    space_quota_current_size/1,
+    update_space_support_size/2,
+    update_subdomain_delegation_ips/0,
+    force_oz_connection_start/0,
+    provider_auth_save/2,
+    get_root_token_file_path/0,
+    get_storage_import_details/2,
+    get_storage_update_details/2,
+    configure_storage_import/3,
+    configure_storage_update/3,
     storage_sync_monitoring_get_metric/3,
     storage_sync_monitoring_get_import_status/1,
-    storage_sync_monitoring_get_update_status/1, restart_rtransfer_link/0,
-    set_txt_record/3, remove_txt_record/1
+    storage_sync_monitoring_get_update_status/1,
+    restart_rtransfer_link/0,
+    set_txt_record/3,
+    remove_txt_record/1
 ]).
 
 
@@ -77,147 +117,129 @@ apply(Function, Args) ->
 %%% Exposed functions
 %%%===================================================================
 
--spec storage_new(storage:name(), [storage:helper()], boolean(),
-    undefined | luma_config:config()) -> storage:doc().
-storage_new(Name, Helpers, ReadOnly, LumaConfig) ->
-    storage:new(Name, Helpers, ReadOnly, LumaConfig).
+-spec storage_config_new(storage_config:name(), [storage_config:helper()], boolean(),
+    undefined | luma_config:config(), boolean()) -> storage_config:doc().
+storage_config_new(Name, Helpers, ReadOnly, LumaConfig, ImportedStorage) ->
+    storage_config:new(Name, Helpers, ReadOnly, LumaConfig, ImportedStorage).
 
 
--spec storage_create(storage:doc()) -> ok | {error, term()}.
-storage_create(StorageDoc) ->
-    case storage:create(StorageDoc) of
-        {ok, _} -> ok;
-        {error, _} = Error -> Error
-    end.
+-spec storage_create(storage_config:doc()) -> {ok, od_storage:id()} | {error, term()}.
+storage_create(StorageConfig) ->
+    storage_logic:create(StorageConfig).
 
 
--spec storage_safe_remove(storage:id()) -> ok | {error, storage_in_use | term()}.
+-spec storage_safe_remove(od_storage:id()) -> ok | {error, storage_in_use | term()}.
 storage_safe_remove(StorageId) ->
-    storage:safe_remove(StorageId).
+    storage_logic:safe_delete(StorageId).
 
 
--spec storage_supports_any_space(storage:id()) -> boolean().
+-spec storage_supports_any_space(od_storage:id()) -> boolean().
 storage_supports_any_space(StorageId) ->
-    storage:supports_any_space(StorageId).
+    storage_logic:supports_any_space(StorageId).
 
 
--spec storage_list_ids() -> {ok, [storage:id()]} | {error, term()}.
+-spec storage_list_ids() -> {ok, [od_storage:id()]} | {error, term()}.
 storage_list_ids() ->
-    case storage:list() of
-        {ok, Docs} -> {ok, lists:map(fun storage:get_id/1, Docs)};
-        Error -> Error
-    end.
+    provider_logic:get_storage_ids().
 
 
--spec storage_get_helpers(storage:doc()) -> [helpers:helper()].
-storage_get_helpers(StorageDoc) ->
-    storage:get_helpers(StorageDoc).
+-spec storage_get_helpers(storage_config:doc()) -> [helpers:helper()].
+storage_get_helpers(StorageConfig) ->
+    storage_config:get_helpers(StorageConfig).
 
 
--spec storage_get_luma_config_map(storage:doc()) -> map().
-storage_get_luma_config_map(StorageDoc) ->
-    storage:get_luma_config_map(StorageDoc).
+-spec storage_get_luma_config_map(storage_config:doc()) -> map().
+storage_get_luma_config_map(StorageConfig) ->
+    storage_config:get_luma_config_map(StorageConfig).
 
 
--spec storage_select_helper(storage:id(), helper:name()) ->
+-spec storage_select_helper(od_storage:id(), helper:name()) ->
     {ok, helpers:helper()} | {error, Reason :: term()}.
 storage_select_helper(StorageId, HelperName) ->
-    storage:select_helper(StorageId, HelperName).
+    storage_config:select_helper(StorageId, HelperName).
 
 
--spec storage_update_admin_ctx(storage:id(), helper:name(), helper:user_ctx()) ->
+-spec storage_update_admin_ctx(od_storage:id(), helper:name(), helper:user_ctx()) ->
     ok | {error, term()}.
 storage_update_admin_ctx(StorageId, HelperName, Changes) ->
-    storage:update_admin_ctx(StorageId, HelperName, Changes).
+    storage_config:update_admin_ctx(StorageId, HelperName, Changes).
 
 
--spec storage_update_helper_args(storage:id(), helper:name(), helper:args()) ->
+-spec storage_update_helper_args(od_storage:id(), helper:name(), helper:args()) ->
     ok | {error, term()}.
 storage_update_helper_args(StorageId, HelperName, Changes) ->
-    storage:update_helper_args(StorageId, HelperName, Changes).
+    storage_config:update_helper_args(StorageId, HelperName, Changes).
 
 
--spec storage_set_insecure(storage:id(), helper:name(), Insecure :: boolean()) ->
+-spec storage_set_insecure(od_storage:id(), helper:name(), Insecure :: boolean()) ->
     ok | {error, term()}.
 storage_set_insecure(StorageId, HelperName, Insecure) ->
-    storage:set_insecure(StorageId, HelperName, Insecure).
+    storage_config:set_insecure(StorageId, HelperName, Insecure).
 
 
--spec storage_set_readonly(storage:id(), Readonly :: boolean()) ->
+-spec storage_set_readonly(od_storage:id(), Readonly :: boolean()) ->
     ok | {error, term()}.
 storage_set_readonly(StorageId, Readonly) ->
-    storage:set_readonly(StorageId, Readonly).
+    storage_config:set_readonly(StorageId, Readonly).
 
 
--spec storage_set_luma_config(storage:id(), luma_config:config() | undefined) ->
+-spec storage_set_imported_storage(od_storage:id(), boolean()) ->
+    ok | {error, term()}.
+storage_set_imported_storage(StorageId, Value) ->
+    storage_config:set_imported_storage(StorageId, Value).
+
+
+-spec storage_set_luma_config(od_storage:id(), luma_config:config() | undefined) ->
     ok | {error, term()}.
 storage_set_luma_config(StorageId, LumaConfig) ->
-    storage:set_luma_config(StorageId, LumaConfig).
+    storage_config:set_luma_config(StorageId, LumaConfig).
 
 
--spec storage_update_luma_config(storage:id(), Changes) -> ok | {error, term()}
+-spec storage_set_qos_parameters(od_storage:id(), od_storage:qos_parameters()) ->
+    ok | errors:error().
+storage_set_qos_parameters(StorageId, QosParameters) ->
+    storage_logic:set_qos_parameters(StorageId, QosParameters).
+
+
+-spec storage_update_luma_config(od_storage:id(), Changes) -> ok | {error, term()}
     when Changes :: #{url => luma_config:url(), api_key => luma_config:api_key()}.
 storage_update_luma_config(StorageId, Changes) ->
-    storage:update_luma_config(StorageId, Changes).
+    storage_config:update_luma_config(StorageId, Changes).
 
 
--spec storage_update_name(storage:id(), NewName :: storage:name()) ->
+-spec storage_update_name(od_storage:id(), NewName :: storage_config:name()) ->
     ok.
 storage_update_name(StorageId, NewName) ->
-    storage:update_name(StorageId, NewName).
+    storage_config:update_name(StorageId, NewName).
 
 
--spec get_storage(storage:id()) -> {ok, storage:doc()} | {error, term()}.
-get_storage(Key) ->
-    storage:get(Key).
+-spec get_storage_config(od_storage:id()) -> {ok, storage_config:doc()} | {error, term()}.
+get_storage_config(Key) ->
+    storage_config:get(Key).
 
 
--spec get_storage_by_name(storage:name()) ->
-    {ok, storage:doc()} | {error, term()}.
-get_storage_by_name(Name) ->
-    storage:select(Name).
+-spec get_storage_config_by_name(storage_config:name()) ->
+    {ok, storage_config:doc()} | {error, term()}.
+get_storage_config_by_name(Name) ->
+    storage_config:select(Name).
 
 
--spec storage_exists(storage:id()) -> boolean().
+-spec storage_exists(od_storage:id()) -> boolean().
 storage_exists(StorageId) ->
-    storage:exists(StorageId).
+    storage_config:exists(StorageId).
 
 
--spec storage_describe(storage:id()) ->
+-spec storage_describe(od_storage:id()) ->
     {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.
 storage_describe(StorageId) ->
-    storage:describe(StorageId).
+    storage_logic:describe(StorageId).
 
 
--spec get_space_storage(space_storage:id()) ->
-    {ok, space_storage:doc()} | {error, term()}.
-get_space_storage(Key) ->
-    space_storage:get(Key).
+-spec storage_is_imported_storage(od_storage:id()) -> boolean().
+storage_is_imported_storage(StorageId) ->
+    storage_config:is_imported_storage(StorageId).
 
-
--spec space_storage_get_storage_ids(space_storage:id()) -> {ok, [storage:id()]}.
-space_storage_get_storage_ids(SpaceId) ->
-    space_storage:get_storage_ids(SpaceId).
-
-
--spec space_storage_get_mounted_in_root(space_storage:id()) -> [storage:id()].
-space_storage_get_mounted_in_root(SpaceId) ->
-    space_storage:get_mounted_in_root(SpaceId).
-
-
--spec file_popularity_api_configure(file_popularity_config:id(), map()) ->
-    ok | {error, term()}.
-file_popularity_api_configure(SpaceId, NewConfiguration) ->
-    file_popularity_api:configure(SpaceId, NewConfiguration).
-
-
--spec file_popularity_api_get_configuration(file_popularity_config:id()) ->
-    {ok, map()} | {error, term()}.
-file_popularity_api_get_configuration(SpaceId) ->
-    file_popularity_api:get_configuration(SpaceId).
-
-
--spec invalidate_luma_cache(storage:id()) -> ok.
+-spec invalidate_luma_cache(od_storage:id()) -> ok.
 invalidate_luma_cache(StorageId) ->
     luma_cache:invalidate(StorageId).
 
@@ -248,6 +270,23 @@ prepare_helper_args(HelperName, Params) ->
 -spec prepare_user_ctx_params(helper:name(), helper:user_ctx()) -> helper:user_ctx().
 prepare_user_ctx_params(HelperName, Params) ->
     helper_params:prepare_user_ctx_params(HelperName, Params).
+
+
+-spec space_logic_get_storage_ids(od_space:id()) -> {ok, [od_storage:id()]}.
+space_logic_get_storage_ids(SpaceId) ->
+    space_logic:get_local_storage_ids(SpaceId).
+
+
+-spec file_popularity_api_configure(file_popularity_config:id(), map()) ->
+    ok | {error, term()}.
+file_popularity_api_configure(SpaceId, NewConfiguration) ->
+    file_popularity_api:configure(SpaceId, NewConfiguration).
+
+
+-spec file_popularity_api_get_configuration(file_popularity_config:id()) ->
+    {ok, map()} | {error, term()}.
+file_popularity_api_get_configuration(SpaceId) ->
+    file_popularity_api:get_configuration(SpaceId).
 
 
 -spec get_provider_id() -> {ok, od_provider:id()} | {error, term()}.
@@ -286,22 +325,17 @@ provider_logic_update(Data) ->
     provider_logic:update(Data).
 
 
--spec support_space(tokens:serialized(), SupportSize :: integer()) ->
+-spec support_space(od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | errors:error().
-support_space(Token, SupportSize) ->
-    provider_logic:support_space(Token, SupportSize).
+support_space(StorageId, Token, SupportSize) ->
+    storage_logic:support_space(StorageId, Token, SupportSize).
 
 
--spec space_storage_add(od_space:id(), storage:id(), boolean()) ->
-    {ok, od_space:id()} | {error, term()}.
-space_storage_add(SpaceId, StorageId, MountInRoot) ->
-    space_storage:add(SpaceId, StorageId, MountInRoot).
-
-
--spec space_storage_delete(space_storage:id()) -> ok | {error, term()}.
-space_storage_delete(SpaceId) ->
-    space_storage:delete(SpaceId).
-
+-spec revoke_space_support(od_space:id()) -> ok | {error, term()}.
+revoke_space_support(SpaceId) ->
+    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
+    StorageId = hd(StorageIds),
+    storage_logic:revoke_support(StorageId, SpaceId).
 
 -spec get_spaces() -> {ok, [od_space:id()]} | errors:error().
 get_spaces() ->
@@ -386,7 +420,9 @@ space_quota_current_size(SpaceId) ->
 -spec update_space_support_size(od_space:id(), NewSupportSize :: integer()) ->
     ok | errors:error().
 update_space_support_size(SpaceId, NewSupportSize) ->
-    provider_logic:update_space_support_size(SpaceId, NewSupportSize).
+    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
+    StorageId = hd(StorageIds),
+    storage_logic:update_space_support_size(StorageId, SpaceId, NewSupportSize).
 
 
 -spec update_subdomain_delegation_ips() -> ok | error.
@@ -402,7 +438,6 @@ autocleaning_configure(SpaceId, Configuration) ->
 -spec autocleaning_get_configuration(od_space:id()) -> map().
 autocleaning_get_configuration(SpaceId) ->
     autocleaning_api:get_configuration(SpaceId).
-
 
 
 -spec autocleaning_list_reports(od_space:id(), autocleaning:run_id() | undefined,
@@ -444,13 +479,13 @@ get_root_token_file_path() ->
     provider_auth:get_root_token_file_path().
 
 
--spec get_storage_import_details(od_space:id(), storage:id()) ->
+-spec get_storage_import_details(od_space:id(), od_storage:id()) ->
     space_strategies:sync_details().
 get_storage_import_details(SpaceId, StorageId) ->
     storage_sync:get_import_details(SpaceId, StorageId).
 
 
--spec get_storage_update_details(od_space:id(), storage:id()) ->
+-spec get_storage_update_details(od_space:id(), od_storage:id()) ->
     space_strategies:sync_details().
 get_storage_update_details(SpaceId, StorageId) ->
     storage_sync:get_update_details(SpaceId, StorageId).

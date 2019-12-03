@@ -35,7 +35,7 @@
 % This can be used to e.g. move models between services.
 % Oldest known generation is the lowest one that can be directly upgraded to newest.
 % Human readable version is included to for logging purposes.
--define(INSTALLED_CLUSTER_GENERATION, 1).
+-define(INSTALLED_CLUSTER_GENERATION, 2).
 -define(OLDEST_KNOWN_CLUSTER_GENERATION, {1, <<"19.02.*">>}).
 
 %%%===================================================================
@@ -162,7 +162,9 @@ filter_disabled_workers(WorkersSpecs) ->
 %%--------------------------------------------------------------------
 -spec renamed_models() -> #{{record_version(), model()} => model()}.
 renamed_models() ->
-    #{{1, open_file} => file_handles}.
+    #{
+        {1, open_file} => file_handles
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -188,9 +190,11 @@ before_init([]) ->
 %% This callback is executed only on one cluster node.
 %% @end
 %%--------------------------------------------------------------------
--spec upgrade_cluster(node_manager:cluster_generation()) -> no_return().
-upgrade_cluster(_CurrentGeneration) ->
-    error(not_supported).
+-spec upgrade_cluster(node_manager:cluster_generation()) ->
+    {ok, node_manager:cluster_generation()}.
+upgrade_cluster(1) ->
+    storage_logic:migrate_to_zone(),
+    {ok, 2}.
 
 %%--------------------------------------------------------------------
 %% @doc

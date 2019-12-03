@@ -73,19 +73,19 @@ all() -> ?ALL(?TEST_CASES).
 -define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
 
 -define(SPACE_CTX(SpaceId), file_ctx:new_by_guid(?SPACE_GUID(SpaceId))).
--define(SPACE_STORAGE_CTX(Worker, SpaceId, MountInRoot), begin
-    storage_file_ctx:new(space_storage_file_id(SpaceId, MountInRoot), SpaceId, get_storage_id(W, SpaceId))
+-define(SPACE_STORAGE_CTX(Worker, SpaceId, ImportedStorage), begin
+    storage_file_ctx:new(space_storage_file_id(SpaceId, ImportedStorage), SpaceId, get_storage_id(W, SpaceId))
 end).
 -define(SESSION_ID(Config, Worker), ?config({session_id, {?USER, ?GET_DOMAIN(Worker)}}, Config)).
 
-% {StorageType, MountInRoot}
+% {StorageType, ImportedStorage}
 -define(BLOCK_STORAGE_CONFIGS, [{block_storage, false}, {block_storage, true}]).
 -define(OBJECT_STORAGE_CONFIGS, [{object_storage, false}, {object_storage, true}]).
 
 -define(STORAGE_CONFIGS, ?BLOCK_STORAGE_CONFIGS ++ ?OBJECT_STORAGE_CONFIGS).
 
--define(STORAGE_TO_SPACE_ID(StorageType, MountInRoot),
-    case {StorageType, MountInRoot} of
+-define(STORAGE_TO_SPACE_ID(StorageType, ImportedStorage),
+    case {StorageType, ImportedStorage} of
         {block_storage, false} -> ?SPACE_ID1;
         {object_storage, false} -> ?SPACE_ID2;
         {block_storage, true} -> ?SPACE_ID3;
@@ -151,10 +151,10 @@ delete_children6_test(Config) ->
 delete_child_file_basic_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    MountInRoot = ?config(mount_in_root, Config),
+    ImportedStorage = ?config(imported_storage, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
-    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
+    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
     Child = <<"child1">>,
 
     {ok, Guid} = lfm_proxy:create(W, SessionId, SpaceGuid, Child, 8#664),
@@ -168,10 +168,10 @@ delete_child_file_basic_test_base(Config) ->
 empty_child_dir_should_not_be_deleted_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    MountInRoot = ?config(mount_in_root, Config),
+    ImportedStorage = ?config(imported_storage, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
-    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
+    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
     Child = <<"child">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessionId, SpaceGuid, Child, 8#775),
 
@@ -182,10 +182,10 @@ empty_child_dir_should_not_be_deleted_test_base(Config) ->
 delete_child_subtree_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    MountInRoot = ?config(mount_in_root, Config),
+    ImportedStorage = ?config(imported_storage, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
-    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
+    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
     ChildDir1 = <<"child_dir1">>,
     ChildDir2 = <<"child_dir1">>,
     ChildDir3 = <<"child_dir3">>,
@@ -208,7 +208,7 @@ delete_child_subtree_test_base(Config) ->
 delete_nested_child_on_object_storage_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    MountInRoot = ?config(mount_in_root, Config),
+    ImportedStorage = ?config(imported_storage, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = get_storage_id(W, SpaceId),
@@ -217,7 +217,7 @@ delete_nested_child_on_object_storage_test_base(Config) ->
     ChildDir3 = <<"child_dir3">>,
     ChildFile1 = <<"child_file1">>,
     ChildFile2 = <<"child_file2">>,
-    SpaceStorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
+    SpaceStorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
     SpaceStorageFileId = storage_file_ctx:get_storage_file_id_const(SpaceStorageFileCtx),
 
     ct:pal("SpaceStorageFIleId: ~p", [SpaceStorageFileId]),
@@ -247,10 +247,10 @@ delete_nested_child_on_object_storage_test_base(Config) ->
 delete_nested_child_on_block_storage_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    MountInRoot = ?config(mount_in_root, Config),
+    ImportedStorage = ?config(imported_storage, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
-    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
+    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
     ChildDir = <<"child_dir">>,
     ChildFile = <<"child_file">>,
     DirStorageFileCtx = storage_file_ctx:get_child_ctx_const(StorageFileCtx, ChildDir),
@@ -271,13 +271,13 @@ do_not_delete_child_file_basic_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     StorageType = ?config(storage_type, Config),
-    MountInRoot = ?config(mount_in_root, Config),
+    ImportedStorage = ?config(imported_storage, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = get_storage_id(W, SpaceId),
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
-    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
+    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
     Child = <<"child1">>,
     {ok, Guid} = lfm_proxy:create(W, SessionId, SpaceGuid, Child, 8#664),
     {ok, H} = lfm_proxy:open(W, SessionId, {guid, Guid}, write),
@@ -292,13 +292,13 @@ do_not_delete_child_file_without_location_test_base(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     StorageType = ?config(storage_type, Config),
-    MountInRoot = ?config(mount_in_root, Config),
+    ImportedStorage = ?config(imported_storage, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = get_storage_id(W, SpaceId),
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
-    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
+    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
     Child = <<"child1">>,
     {ok, _} = lfm_proxy:create(W, SessionId, SpaceGuid, Child, 8#664),
 
@@ -311,13 +311,13 @@ delete_children_files_test_base(Config, ChildrenToStayNum, ChildrenToDeleteNum) 
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
     StorageType = ?config(storage_type, Config),
-    MountInRoot = ?config(mount_in_root, Config),
+    ImportedStorage = ?config(imported_storage, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = get_storage_id(W, SpaceId),
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
-    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
+    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
 
     lists:foldl(fun(N, {ToStayIn, ToDeleteIn})->
         Child = <<"child", (integer_to_binary(N))/binary>>,
@@ -343,14 +343,14 @@ delete_children_files_test_base(Config, ChildrenToStayNum, ChildrenToDeleteNum) 
 delete_children_files_test_base2(Config, ChildrenToStayNum, ChildrenToDeleteNum) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?config(space_id, Config),
-    MountInRoot = ?config(mount_in_root, Config),
+    ImportedStorage = ?config(imported_storage, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     StorageType = ?config(storage_type, Config),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
     StorageId = get_storage_id(W, SpaceId),
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
-    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
+    StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
 
     lists:foldl(fun(N, {ToStayIn, ToDeleteIn})->
         Child = <<"child", (integer_to_binary(N))/binary>>,
@@ -418,7 +418,7 @@ space_storage_file_id(SpaceId, false) ->
     <<"/", SpaceId/binary>>.
 
 get_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId | _]} = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.
 
 run_deletion(Worker, StorageFileCtx, FileCtx) ->
@@ -481,11 +481,11 @@ run_test_for_all_storage_configs(Testcase, TestFun, Args, StorageConfigs) ->
         true -> ok
     end.
 
-run_test(TestFun, StorageConfig = {StorageType, MountInRoot}, [Config | OtherArgs]) ->
+run_test(TestFun, StorageConfig = {StorageType, ImportedStorage}, [Config | OtherArgs]) ->
     try
         FinalConfig = [
-            {storage_type, StorageType}, {mount_in_root, MountInRoot},
-            {space_id, ?STORAGE_TO_SPACE_ID(StorageType, MountInRoot)} | Config
+            {storage_type, StorageType}, {imported_storage, ImportedStorage},
+            {space_id, ?STORAGE_TO_SPACE_ID(StorageType, ImportedStorage)} | Config
         ],
         FinalArgs = [FinalConfig | OtherArgs],
         apply(TestFun, FinalArgs),

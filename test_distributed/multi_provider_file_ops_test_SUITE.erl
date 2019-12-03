@@ -189,9 +189,9 @@ concurrent_create_test(Config) ->
             maps:put(ProvId, [Worker | maps:get(ProvId, Acc, [])], Acc)
         end, #{}, ProvIDs),
 
-    W = fun(N) ->
-        [Worker | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
-        Worker
+    Worker = fun(N) ->
+        [W | _] = maps:get(lists:nth(N, lists:usort(ProvIDs0)), ProvMap),
+        W
     end,
 
     User = <<"user1">>,
@@ -227,13 +227,13 @@ concurrent_create_test(Config) ->
                 (_, _) ->
                     lists:foreach(
                         fun(WId) ->
-                            lfm_proxy:unlink(W(WId), SessId(W(WId)), {path, DirName(N)})
+                            lfm_proxy:unlink(Worker(WId), SessId(Worker(WId)), {path, DirName(N)})
                         end, lists:seq(1, ProvIdCount)),
 
                     lists:foreach(
                         fun(WId) ->
                             spawn(fun() ->
-                                TestMaster ! {WId, lfm_proxy:mkdir(W(WId), SessId(W(WId)), DirName(N), 8#755)}
+                                TestMaster ! {WId, lfm_proxy:mkdir(Worker(WId), SessId(Worker(WId)), DirName(N), 8#755)}
                             end)
                         end, lists:seq(1, ProvIdCount)),
 
@@ -265,10 +265,10 @@ concurrent_create_test(Config) ->
     lists:foreach(
         fun(WId) ->
             Check = fun() ->
-                {ok, CL} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
-                _ExpectedChildCount = ProvIdCount * FileCount,
+                {ok, CL} = lfm_proxy:ls(Worker(WId), SessId(Worker(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
                 {FetchedIds, FetchedNames} = lists:unzip(CL),
 
+%%                ExpectedChildCount = ProvIdCount * FileCount,
 %%                ct:print("Check ~p", [{lists:usort(Ids), lists:usort(FetchedIds)}]),
 %%                ct:print("Check ~p", [{ExpectedChildCount, CL}]),
 
@@ -276,7 +276,7 @@ concurrent_create_test(Config) ->
             end,
             ?assertMatch({ExpectedChildCount, ExpectedChildCount, ExpectedIds}, Check(), 15),
 
-            {ok, ChildList} = lfm_proxy:ls(W(WId), SessId(W(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
+            {ok, ChildList} = lfm_proxy:ls(Worker(WId), SessId(Worker(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
             lists:foreach(
                 fun(FileNo) ->
                     LocalIdsPerWorker = proplists:get_value(FileNo, AllFiles),
@@ -574,8 +574,8 @@ remove_file_during_transfers_test(Config0) ->
     [Worker1 | _] = ?config(workers1, Config),
     [Worker2 | _] = ?config(workers_not1, Config),
     % Create file
-    SessId = fun(User, W) ->
-        ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) 
+    SessId = fun(U, W) ->
+        ?config({session_id, {U, ?GET_DOMAIN(W)}}, Config)
     end,
     SpaceName = <<"space6">>,
     FilePath = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>, 

@@ -217,7 +217,7 @@ get_params(#helper{name = Name, extended_direct_io = DS} = Helper, UserCtx) ->
 %% Returns proxy helper parameters.
 %% @end
 %%--------------------------------------------------------------------
--spec get_proxy_params(helpers:helper() | undefined, storage:id()) -> params().
+-spec get_proxy_params(helpers:helper() | undefined, od_storage:id()) -> params().
 get_proxy_params(Helper, StorageId) ->
     Timeout = get_timeout(Helper),
     {ok, Latency} = application:get_env(?APP_NAME, proxy_helper_latency_milliseconds),

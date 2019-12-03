@@ -64,6 +64,7 @@
 -type posix_permissions() :: non_neg_integer().
 -type permissions_type() :: posix | acl.
 
+%% @formatter:off
 % Listing options (see datastore_links_iter.erl in cluster_worker for more information about link listing options)
 -type offset() :: integer().
 -type non_neg_offset() :: non_neg_integer().
@@ -79,6 +80,7 @@
     token => datastore_links_iter:token(),
     last_name => name(),
     last_tree => od_provider:id()}.
+%% @formatter:on
 
 -export_type([
     doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
@@ -93,6 +95,12 @@
     mutator => oneprovider:get_id_or_undefined(),
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
+
+% For each "normal" file (including spaces) scope is id of a space to
+% which the file belongs.
+% For root directory and users' root directories we use "special" scope
+% as they don't belong to any space
+-define(ROOT_DIR_SCOPE, <<>>).
 
 %%%===================================================================
 %%% API
@@ -137,33 +145,23 @@ create(Parent, FileDoc) ->
 %%--------------------------------------------------------------------
 -spec create({uuid, ParentUuid :: uuid()}, doc(), datastore:tree_ids()) ->
     {ok, uuid()} | {error, term()}.
-create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
-    name = FileName,
-    is_scope = IsScope
-}}, CheckTrees) ->
+create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{name = FileName}}, CheckTrees) ->
     ?run(begin
         true = is_valid_filename(FileName),
-        {ok, ParentDoc} = file_meta:get(ParentUuid),
         FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
-        SpaceDirUuid = case IsScope of
-            true ->
-                FileDoc2#document.key;
-            false ->
-                {ok, ScopeId} = get_scope_id(ParentDoc),
-                ScopeId
-        end,
-        SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(SpaceDirUuid),
+        {ok, ParentDoc} = file_meta:get({uuid, ParentUuid}),
+        {ok, ParentScopeId} = get_scope_id(ParentDoc),
+        {ok, ScopeId} = get_scope_id(FileDoc2),
+        ScopeId2 = utils:ensure_defined(ScopeId, undefined, ParentScopeId),
         FileDoc3 = FileDoc2#document{
-            scope = SpaceId,
+            scope = ScopeId2,
             value = FileMeta#file_meta{
-                scope = SpaceDirUuid,
                 provider_id = oneprovider:get_id(),
                 parent_uuid = ParentUuid
             }
         },
-
         LocalTreeId = oneprovider:get_id(),
-        Ctx = ?CTX#{scope => ParentDoc#document.scope},
+        Ctx = ?CTX#{scope => ParentScopeId},
         Link = {FileName, FileUuid},
         case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
             {ok, #link{}} ->
@@ -668,14 +666,20 @@ get_ancestors2(FileUuid, Acc) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets "scope" id of given document. "Scope" document is the nearest ancestor
-%% with #file_meta.is_scope == true.
+%% Gets "scope" id of given document.
 %% @end
 %%--------------------------------------------------------------------
--spec get_scope_id(entry()) -> {ok, ScopeId :: datastore:key()} | {error, term()}.
-get_scope_id(#document{key = FileUuid, value = #file_meta{is_scope = true}}) ->
-    {ok, FileUuid};
-get_scope_id(#document{value = #file_meta{is_scope = false, scope = Scope}}) ->
+-spec get_scope_id(entry()) -> {ok, ScopeId :: od_space:id() | undefined} | {error, term()}.
+get_scope_id(#document{key = FileUuid, value = #file_meta{is_scope = true}, scope = <<>>}) ->
+    % scope has not been set yet
+    case fslogic_uuid:is_space_dir_uuid(FileUuid) of
+        true -> {ok, fslogic_uuid:space_dir_uuid_to_spaceid(FileUuid)};
+        false -> {ok, ?ROOT_DIR_SCOPE}
+    end;
+get_scope_id(#document{value = #file_meta{is_scope = false}, scope = <<>>}) ->
+    % scope has not been set yet
+    {ok, undefined};
+get_scope_id(#document{value = #file_meta{}, scope = Scope}) ->
     {ok, Scope};
 get_scope_id(Entry) ->
     ?run(begin
@@ -702,20 +706,25 @@ setup_onedata_user(UserId, EffSpaces) ->
             end, EffSpaces),
 
             FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
-            ScopeId = <<>>, % TODO - do we need scope for user dir
             case create({uuid, ?ROOT_DIR_UUID},
-                #document{key = FileUuid,
+                #document{
+                    key = FileUuid,
                     value = #file_meta{
-                        name = UserId, type = ?DIRECTORY_TYPE,
+                        name = UserId,
+                        type = ?DIRECTORY_TYPE,
                         mode = 8#1755,
-                        owner = ?ROOT_USER_ID, is_scope = true,
+                        owner = ?ROOT_USER_ID,
+                        is_scope = true,
                         parent_uuid = ?ROOT_DIR_UUID
                     }
-                }) of
+                })
+            of
                 {ok, _RootUuid} ->
-                    {ok, _} = times:save(#document{key = FileUuid, value =
-                    #times{mtime = CTime, atime = CTime, ctime = CTime},
-                        scope = ScopeId}),
+                    {ok, _} = times:save(#document{
+                        key = FileUuid,
+                        value = #times{mtime = CTime, atime = CTime, ctime = CTime},
+                        scope = ?ROOT_DIR_SCOPE
+                    }),
                     ok;
                 {error, already_exists} ->
                     ok
@@ -798,9 +807,7 @@ make_space_exist(SpaceId) ->
 -spec new_doc(undefined | uuid(), undefined | name(), undefined | type(),
     posix_permissions(), undefined | od_user:id(), undefined | od_group:id(),
     uuid(), od_space:id()) -> doc().
-new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, ParentUuid,
-    SpaceId
-) ->
+new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, ParentUuid, SpaceId) ->
     #document{
         key = FileUuid,
         value = #file_meta{
@@ -810,8 +817,7 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, ParentUuid,
             owner = Owner,
             group_owner = GroupOwner,
             parent_uuid = ParentUuid,
-            provider_id = oneprovider:get_id(),
-            scope = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)
+            provider_id = oneprovider:get_id()
         },
         scope = SpaceId
     }.
@@ -1098,7 +1104,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    8.
+    9.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1248,6 +1254,27 @@ get_record_struct(8) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string}
+    ]};
+get_record_struct(9) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {owner, string},
+        {group_owner, string},
+        {is_scope, boolean},
+        % scope field has been deleted in this version
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -1297,5 +1324,12 @@ upgrade_record(7, {
 }) ->
     {8, {?MODULE, Name, Type, Mode, [],
         Owner, GroupOwner, IsScope, Scope,
+        ProviderId, Shares, Deleted, ParentUuid
+    }};
+upgrade_record(8, {
+    ?MODULE, Name, Type, Mode, ACL, Owner, GroupOwner, IsScope,
+    _Scope, ProviderId, Shares, Deleted, ParentUuid
+}) ->
+    {9, {?MODULE, Name, Type, Mode, ACL, Owner, GroupOwner, IsScope,
         ProviderId, Shares, Deleted, ParentUuid
     }}.
