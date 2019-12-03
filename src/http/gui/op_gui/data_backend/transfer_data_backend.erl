@@ -250,7 +250,7 @@ cancel_transfer(SessionId, StateAndTransferId) ->
     Result = middleware:handle(#op_req{
         operation = delete,
         auth = ?USER(UserId, SessionId),
-        gri = #gri{type = op_transfer, id = TransferId, aspect = instance}
+        gri = #gri{type = op_transfer, id = TransferId, aspect = cancel}
     }),
 
     case Result of

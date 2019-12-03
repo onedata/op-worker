@@ -36,7 +36,7 @@ routes() -> [
         b_gri = #b_gri{
             type = op_transfer, 
             id = ?BINDING(tid), 
-            aspect = instance, 
+            aspect = cancel, 
             scope = private
         }
     }},
