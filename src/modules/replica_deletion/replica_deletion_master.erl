@@ -67,10 +67,9 @@
 -record(state, {
     space_id :: od_space:id(),
     active_tasks = 0 :: non_neg_integer(),
-    queues = #{} :: #{replica_deletion:report_id() => queue:queue()},
-    ids_queue = queue:new() :: queue:queue(),
+    max_active_tasks = ?MAX_ACTIVE_TASKS,
     ids_to_cancel = gb_sets:new() :: gb_sets:set(),
-    max_active_tasks = ?MAX_ACTIVE_TASKS
+    queue = queue:new() :: queue:queue()
 }).
 
 -record(deletion_task, {
@@ -87,11 +86,8 @@
     id :: replica_deletion:report_id()
 }).
 
-
 -type task() :: #task{}.
 -type deletion_task() :: #deletion_task{}.
-
-%%TODO VFS-4625 handle too long queue of tasks and return error
 
 %%%===================================================================
 %%% API
@@ -121,8 +117,7 @@ enqueue_task(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
     fslogic_blocks:blocks(), version_vector:version_vector(),
     replica_deletion:report_id(), replica_deletion:type(), od_space:id()) -> ok.
 enqueue_task_internal(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
-    call(SpaceId, ?TASK(?DELETE(FileUuid, ProviderId,
-        Blocks, Version, Type), ReportId)).
+    call(SpaceId, ?TASK(?DELETE(FileUuid, ProviderId, Blocks, Version, Type), ReportId), infinity).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -309,10 +304,18 @@ init([SpaceId]) ->
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}).
+handle_call(Task = ?TASK(#deletion_task{}, _ReportId), From, State = #state{
+    active_tasks = ActiveTasks,
+    max_active_tasks = MaxActiveTasks
+}) when ActiveTasks < MaxActiveTasks ->
+    gen_server2:reply(From, ok),
+    handle_cast(Task, State);
+handle_call(Task = ?TASK(#deletion_task{}, _ReportId), From, State = #state{queue = Queue}) ->
+    % queue is full, don't reply so that the calling process is blocked
+    {noreply, State#state{queue = queue:in({From, Task}, Queue)}};
 handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
     handle_cast(Request, State).
-
 
 %%--------------------------------------------------------------------
 %% @private
@@ -324,8 +327,9 @@ handle_call(Request, From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_cast(check, State = #state{ids_queue = IdsQueue, active_tasks = Active}) ->
-    ?critical("~nQueue: ~p~nActive: ~p~n", [queue:len(IdsQueue), Active]),
+handle_cast(check, State = #state{queue = Queue, active_tasks = Active}) ->
+    % TODO wywalić ten clause przed końcem ticketa !!!
+    ?critical("~nQueue: ~p~nActive: ~p~n", [queue:len(Queue), Active]),
     {noreply, State, ?DIE_AFTER};
 handle_cast(Task = #task{id = ReportId}, State = #state{
     active_tasks = ActiveTasks,
@@ -341,34 +345,18 @@ handle_cast(Task = #task{id = ReportId}, State = #state{
             ok = handle_task(Task, SpaceId)
     end,
     {noreply, State#state{active_tasks = ActiveTasks + 1}, ?DIE_AFTER};
-handle_cast(Task = #task{id = ReportId}, State = #state{
-    queues = Queues,
-    ids_queue = IdsQueue
-}) ->
-    % there are too many active requests, add this one to queue
-    QueuePerId = maps:get(ReportId, Queues, queue:new()),
-    QueuePerId2 = queue:in(Task, QueuePerId),
-    {noreply, State#state{
-        queues = Queues#{ReportId => QueuePerId2},
-        ids_queue = queue:in(ReportId, IdsQueue)
-    }, ?DIE_AFTER};
 handle_cast(?FINISHED, State = #state{
-    queues = Queues,
-    ids_queue = IdsQueue,
-    active_tasks = ActiveTasks
+    active_tasks = ActiveTasks,
+    queue = Queue
 }) ->
-    case queue:out(IdsQueue) of
-        {empty, IdsQueue} ->
-            State2 = State#state{
-                active_tasks = ActiveTasks - 1
-            },
+    case queue:out(Queue) of
+        {empty, Queue} ->
+            State2 = State#state{active_tasks = ActiveTasks - 1},
             {noreply, State2, ?DIE_AFTER};
-        {{value, ReportId}, IdsQueue2} ->
-            QueuePerId = maps:get(ReportId, Queues),
-            {{value, Task}, QueuePerId2} = queue:out(QueuePerId),
+        {{value, {From, Task}}, Queue2} ->
+            gen_server2:reply(From, ok),
             State2 = State#state{
-                ids_queue = IdsQueue2,
-                queues = Queues#{ReportId => QueuePerId2},
+                queue = Queue2,
                 active_tasks = ActiveTasks - 1
             },
             handle_cast(Task, State2)
@@ -424,6 +412,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
+-spec call(od_space:id(), term()) -> ok.
+call(SpaceId, Request) ->
+    call(SpaceId, Request, 5000).
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -432,10 +425,10 @@ code_change(_OldVsn, State, _Extra) ->
 %% call one more time.
 %% @end
 %%-------------------------------------------------------------------
--spec call(od_space:id(), term()) -> ok.
-call(SpaceId, Request) ->
+-spec call(od_space:id(), term(), non_neg_integer() | infinity) -> ok.
+call(SpaceId, Request, Timeout) ->
     try
-        gen_server2:call(?SERVER(SpaceId), Request)
+        gen_server2:call(?SERVER(SpaceId), Request, Timeout)
     catch
         exit:{noproc, _} ->
             start_link(SpaceId),
@@ -469,8 +462,7 @@ handle_task(#task{
     StorageId = oneprovider:get_id(),
     case file_qos:is_replica_protected(FileUuid, StorageId) of
         false ->
-            {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
-                Type, SpaceId),
+            {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId),
             ok;
         true ->
             % This is needed to avoid deadlock as cancel_task
