@@ -954,7 +954,7 @@ user_logic_mock_setup(Workers, Users) ->
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(#token_auth{token = UserToken}) ->
         case proplists:get_value(UserToken, UsersByToken, undefined) of
             undefined -> {error, not_found};
-            UserId -> {ok, ?USER(UserId)}
+            UserId -> {ok, ?USER(UserId), undefined}
         end
     end),
 
@@ -1323,7 +1323,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity, fun(_) -> ok end),
 
-    test_utils:mock_expect(AllWorkers, token_logic, verify_identity_token, VerifyProviderIdentityFun).
+    test_utils:mock_expect(AllWorkers, token_logic, verify_provider_identity_token, VerifyProviderIdentityFun).
 
 %%--------------------------------------------------------------------
 %% @private

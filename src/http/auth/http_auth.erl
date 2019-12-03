@@ -28,21 +28,6 @@
 %%%===================================================================
 
 
--spec authenticate(#token_auth{}) -> {ok, aai:auth()} | errors:error().
-authenticate(TokenAuth) ->
-    try
-        authenticate_insecure(TokenAuth)
-    catch
-        throw:Error ->
-            Error;
-        Type:Message ->
-            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
-                ?MODULE, ?FUNCTION_NAME, Type, Message
-            ]),
-            ?ERROR_INTERNAL_SERVER_ERROR
-    end.
-
-
 -spec authenticate(cowboy_req:req(), cv_interface:interface(),
     data_access_caveats:policy()) -> {ok, aai:auth()} | errors:error().
 authenticate(Req, Interface, DataCaveatsPolicy) ->
@@ -57,6 +42,21 @@ authenticate(Req, Interface, DataCaveatsPolicy) ->
                 interface = Interface,
                 data_access_caveats_policy = DataCaveatsPolicy
             })
+    end.
+
+
+-spec authenticate(#token_auth{}) -> {ok, aai:auth()} | errors:error().
+authenticate(TokenAuth) ->
+    try
+        authenticate_insecure(TokenAuth)
+    catch
+        throw:Error ->
+            Error;
+        Type:Message ->
+            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
+                ?MODULE, ?FUNCTION_NAME, Type, Message
+            ]),
+            ?ERROR_INTERNAL_SERVER_ERROR
     end.
 
 
@@ -75,6 +75,7 @@ authenticate_insecure(TokenAuth) ->
                 {ok, SessionId} ->
                     {ok, Auth#auth{session_id = SessionId}};
                 {error, {invalid_identity, _}} ->
+                    %% TODO VFS-5895
                     ?ERROR_UNAUTHORIZED
             end;
         {error, _} = Error ->
