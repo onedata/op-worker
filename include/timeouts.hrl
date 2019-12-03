@@ -10,6 +10,9 @@
 %%% @end
 -author("Jakub Kudzia").
 
+-ifndef(TIMEOUTS_HRL).
+-define(OP_GUI_HRL, 1).
+
 -include("global_definitions.hrl").
 
 %%lfm_files.erl
@@ -26,3 +29,5 @@
 % Uncomment to use connection_test_SUITE:socket_timeout_test
 %%-define(PROTO_CONNECTION_TIMEOUT, application:get_env(?APP_NAME,
 %%  proto_connection_timeout, timer:hours(24))).
+
+-endif.
