@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME.
+%%% Manages ets cache for user auth. That includes periodic checks of
+%%% cache size and clearing it if it exceeds max size.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(auth_manager).
@@ -38,19 +39,21 @@
     application:get_env(?APP_NAME, auth_cache_size_limit, 5000)
 ).
 -define(CACHE_SIZE_CHECK_INTERVAL,
-    application:get_env(?APP_NAME, auth_cache_size_check_interval, 224)
+    application:get_env(?APP_NAME, auth_cache_size_check_interval, timer:seconds(2))
 ).
 
 -define(CACHE_ITEM_DEFAULT_TTL, 10).                %% in seconds
 -define(NOW, time_utils:system_time_seconds()).
 
+
 -record(cache_item, {
     key :: #token_auth{},
-    value :: {ok, aai:auth(), pos_integer()} | errors:error(),
-    expiration :: non_neg_integer()
+    value :: {ok, aai:auth(), ValidUntil :: undefined | timestamp()} | errors:error(),
+    expiration :: timestamp()
 }).
 
 -type state() :: undefined.
+-type timestamp() :: non_neg_integer().  %% in s
 
 
 %%%===================================================================
@@ -58,8 +61,15 @@
 %%%===================================================================
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Verifies identity of subject identified by specified #token_auth{}
+%% and returns time this auth will be valid until. Nevertheless this
+%% auth should be confirmed periodically as tokens can be revoked.
+%% @end
+%%--------------------------------------------------------------------
 -spec verify(#token_auth{}) ->
-    {ok, aai:auth(), pos_integer()} | errors:error().
+    {ok, aai:auth(), ValidUntil :: undefined | timestamp()} | errors:error().
 verify(#token_auth{} = TokenAuth) ->
     Now = ?NOW,
     case ets:lookup(?CACHE_NAME, TokenAuth) of
@@ -67,19 +77,23 @@ verify(#token_auth{} = TokenAuth) ->
             Value;
         _ ->
             try
-                Result = fetch(TokenAuth),
-                CacheItemTTL = case Result of
-                    {ok, _Auth, TokenTTL} ->
-                        min(TokenTTL, ?CACHE_ITEM_DEFAULT_TTL);
-                    {error, _} ->
-                        ?CACHE_ITEM_DEFAULT_TTL
+                {CacheValue, CacheItemTTL} = case fetch(TokenAuth) of
+                    {ok, _Auth, undefined} = Result ->
+                        {Result, ?CACHE_ITEM_DEFAULT_TTL};
+                    {ok, Auth, TokenTTL} ->
+                        {
+                            {ok, Auth, Now + TokenTTL},
+                            min(TokenTTL, ?CACHE_ITEM_DEFAULT_TTL)
+                        };
+                    {error, _} = Error ->
+                        {Error, ?CACHE_ITEM_DEFAULT_TTL}
                 end,
                 ets:insert(?CACHE_NAME, #cache_item{
                     key = TokenAuth,
-                    value = Result,
+                    value = CacheValue,
                     expiration = Now + CacheItemTTL
                 }),
-                Result
+                CacheValue
             catch _:Reason ->
                 ?error_stacktrace("Cannot establish user identity due to: ~p", [
                     Reason
@@ -186,7 +200,7 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(check_size, State) ->
+handle_info(?CHECK_SIZE_MSG, State) ->
     case ets:info(?CACHE_NAME, size) > ?CACHE_SIZE_LIMIT of
         true -> ets:delete_all_objects(?CACHE_NAME);
         false -> ok
@@ -232,9 +246,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec fetch(#token_auth{}) -> {ok, aai:auth(), pos_integer()} | errors:error().
-fetch(Credentials) ->
-    case token_logic:verify_access_token(Credentials) of
+-spec fetch(#token_auth{}) ->
+    {ok, aai:auth(), TTL :: undefined | timestamp()} | errors:error().
+fetch(TokenAuth) ->
+    case token_logic:verify_access_token(TokenAuth) of
         {ok, #auth{subject = ?SUB(user, UserId)}, _TTL} = Result ->
             case provider_logic:has_eff_user(UserId) of
                 false ->
@@ -242,7 +257,7 @@ fetch(Credentials) ->
                 true ->
                     % Fetch the user doc to trigger user setup
                     % (od_user:run_after/3)
-                    {ok, _} = user_logic:get(Credentials, UserId),
+                    {ok, _} = user_logic:get(TokenAuth, UserId),
                     Result
             end;
         {error, _} = Error ->
