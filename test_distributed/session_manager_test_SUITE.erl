@@ -130,7 +130,7 @@ session_manager_supervision_tree_structure_test(Config) ->
 
         ?assertMatch({ok, #document{key = SessId, value = #session{}}}, Doc),
         {ok, #document{value = #session{
-            auth = Iden,
+            identity = Iden,
             node = Node,
             supervisor = SessSup,
             event_manager = EvtMan,
@@ -173,7 +173,7 @@ session_manager_session_removal_test(Config) ->
 
         ?assertMatch({ok, #document{key = SessId, value = #session{}}}, Doc),
         {ok, #document{value = #session{
-            auth = Iden,
+            identity = Iden,
             node = Node,
             supervisor = SessSup,
             event_manager = EvtMan,
@@ -389,7 +389,7 @@ get_child(Sup, ChildId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec basic_session_setup(node(), Nonce :: binary(),
-    session:auth(), Con :: pid(), Config :: term()) -> NewConfig :: term().
+    session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
 basic_session_setup(Worker, Nonce, Iden, Con, Config) ->
     {ok, SessId} = fuse_test_utils:reuse_or_create_fuse_session(
         Worker, Nonce, Iden, undefined, Con
