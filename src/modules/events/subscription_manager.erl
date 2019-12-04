@@ -92,8 +92,21 @@ get_subscribers(Evt, [RoutingBase | RoutingList]) ->
     end;
 get_subscribers(Evt, RoutingBase) ->
     case event_type:get_routing_key(Evt, RoutingBase) of
-        {ok, Key} -> get_subscribers(Key, RoutingBase);
-        {error, session_only} -> {ok, []}
+        {ok, Key} ->
+            get_subscribers(Key, RoutingBase);
+        {ok, Key, SpaceIDFilter} ->
+            case get_subscribers(Key, RoutingBase) of
+                {ok, SessIds} ->
+                    {ok, lists:filter(fun(SessId) ->
+                        UserCtx = user_ctx:new(SessId),
+                        #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
+                        lists:member(SpaceIDFilter, Spaces)
+                    end, SessIds)};
+                Other ->
+                    Other
+            end;
+        {error, session_only} ->
+            {ok, []}
     end.
 
 %%--------------------------------------------------------------------

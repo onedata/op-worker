@@ -736,7 +736,8 @@ make_space_exist(SpaceId) ->
             case times:save(TimesDoc) of
                 {ok, _} -> ok;
                 {error, already_exists} -> ok
-            end;
+            end,
+            emit_space_dir_created(SpaceDirUuid, SpaceId);
         {error, already_exists} ->
             ok
     end.
@@ -995,6 +996,20 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends event about space dir creation
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: datastore:key()) -> ok | no_return().
+emit_space_dir_created(DirUuid, SpaceId) ->
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
+    #fuse_response{fuse_response = FileAttr} =
+        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_USER_ID), FileCtx, false, false),
+    FileAttr2 = FileAttr#file_attr{size = 0},
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
 
 %%%===================================================================
 %%% datastore_model callbacks

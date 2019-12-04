@@ -218,8 +218,11 @@ init_per_testcase(Config) ->
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
-            {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
+        fun
+            (#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+                {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
+            (#macaroon_auth{macaroon = ?MACAROON2, disch_macaroons = ?DISCH_MACAROONS2}) ->
+                {ok, #document{value = #user_identity{user_id = <<"user2">>}}}
         end
     ),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config2, "env_desc.json"),

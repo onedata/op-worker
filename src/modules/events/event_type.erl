@@ -35,7 +35,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_routing_key(Evt :: event:base() | event:type(), RoutingBase :: fslogic_worker:file_guid() | undefined) ->
-    {ok, Key :: subscription_manager:key()} | {error, session_only}.
+    {ok, Key :: subscription_manager:key()} |
+    {ok, Key :: subscription_manager:key(), SpaceIDFilter :: od_space:id()} | {error, session_only}.
 get_routing_key(#event{type = Type}, RoutingBase) ->
     get_routing_key(Type, RoutingBase);
 get_routing_key(#file_attr_changed_event{file_attr = FileAttr}, RoutingBase) ->
@@ -195,13 +196,19 @@ update_context(Evt, _Ctx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_routing_key_with_parent(binary(), fslogic_worker:file_guid(), fslogic_worker:file_guid() | undefined) ->
-    {ok, Key :: subscription_manager:key()} | {error, session_only}.
+    {ok, Key :: subscription_manager:key()} |
+    {ok, Key :: subscription_manager:key(), SpaceIDFilter :: od_space:id()} | {error, session_only}.
 get_routing_key_with_parent(Base, FileGuid, undefined) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx, undefined),
-    case ParentGuid of
-        undefined -> {ok, <<Base/binary, FileGuid/binary>>}; % user's dir
+    case {ParentGuid, file_ctx:is_space_dir_const(FileCtx)} of
+        {undefined, _} -> {ok, <<Base/binary, FileGuid/binary>>}; % user's dir
+        {_, true} -> {ok, <<Base/binary, ParentGuid/binary>>, file_ctx:get_space_id_const(FileCtx)};
         _ -> {ok, <<Base/binary, ParentGuid/binary>>}
     end;
-get_routing_key_with_parent(Base, _FileGuid, ParentGUID) ->
-    {ok, <<Base/binary, ParentGUID/binary>>}.
+get_routing_key_with_parent(Base, FileGuid, ParentGUID) ->
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    case file_ctx:is_space_dir_const(FileCtx) of
+        true -> {ok, <<Base/binary, ParentGUID/binary>>, file_ctx:get_space_id_const(FileCtx)};
+        _ -> {ok, <<Base/binary, ParentGUID/binary>>}
+    end.
