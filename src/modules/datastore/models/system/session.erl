@@ -42,7 +42,9 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type ttl() :: non_neg_integer().
+-type grace_period() :: non_neg_integer().
 -type auth() :: #token_auth{} | ?ROOT_AUTH | ?GUEST_AUTH.
+-type identity() :: #user_identity{}.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
@@ -50,9 +52,13 @@
 % meaning entire supervision tree finished getting up, it will set session
 % status to active.
 -type status() :: initializing | active | inactive.
--type identity() :: #user_identity{}.
 
--export_type([id/0, record/0, doc/0, ttl/0, auth/0, type/0, status/0, identity/0]).
+-export_type([
+    id/0, record/0, doc/0,
+    ttl/0, grace_period/0,
+    auth/0, identity/0,
+    type/0, status/0
+]).
 
 -define(CTX, #{
     model => ?MODULE,
