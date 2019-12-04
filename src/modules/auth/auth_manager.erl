@@ -51,9 +51,9 @@
 
 
 -record(cache_item, {
-    key :: #token_auth{},
-    value :: {ok, aai:auth(), ValidUntil :: undefined | timestamp()} | errors:error(),
-    expiration :: timestamp()
+    token_auth :: #token_auth{},
+    verification_result :: {ok, aai:auth(), ValidUntil :: undefined | timestamp()} | errors:error(),
+    cache_expiration :: timestamp()
 }).
 
 -type state() :: undefined.
@@ -77,11 +77,11 @@
 verify(#token_auth{} = TokenAuth) ->
     Now = ?NOW(),
     case ets:lookup(?CACHE_NAME, TokenAuth) of
-        [#cache_item{value = Value, expiration = Expiration}] when Now < Expiration ->
-            Value;
+        [#cache_item{cache_expiration = Expiration} = Item] when Now < Expiration ->
+            Item#cache_item.verification_result;
         _ ->
             try
-                {CacheValue, CacheItemTTL} = case fetch(TokenAuth) of
+                {VerificationResult, CacheItemTTL} = case verify_in_onezone(TokenAuth) of
                     {ok, _Auth, undefined} = Result ->
                         {Result, ?CACHE_ITEM_DEFAULT_TTL};
                     {ok, Auth, TokenTTL} ->
@@ -93,14 +93,14 @@ verify(#token_auth{} = TokenAuth) ->
                         {Error, ?CACHE_ITEM_DEFAULT_TTL}
                 end,
                 ets:insert(?CACHE_NAME, #cache_item{
-                    key = TokenAuth,
-                    value = CacheValue,
-                    expiration = Now + CacheItemTTL
+                    token_auth = TokenAuth,
+                    verification_result = VerificationResult,
+                    cache_expiration = Now + CacheItemTTL
                 }),
-                CacheValue
-            catch _:Reason ->
-                ?error_stacktrace("Cannot establish user identity due to: ~p", [
-                    Reason
+                VerificationResult
+            catch Type:Reason ->
+                ?error_stacktrace("Cannot verify user auth due to ~p:~p", [
+                    Type, Reason
                 ]),
                 ?ERROR_UNAUTHORIZED
             end
@@ -155,7 +155,7 @@ spec() -> #{
     {stop, Reason :: term()} | ignore.
 init(_) ->
     ets:new(?CACHE_NAME, [
-        set, public, named_table, {keypos, #cache_item.key}
+        set, public, named_table, {keypos, #cache_item.token_auth}
     ]),
     schedule_cache_size_checkup(),
     {ok, undefined, hibernate}.
@@ -250,11 +250,11 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec fetch(#token_auth{}) ->
-    {ok, aai:auth(), TTL :: undefined | timestamp()} | errors:error().
-fetch(TokenAuth) ->
+-spec verify_in_onezone(#token_auth{}) ->
+    {ok, aai:auth(), TokenTTL :: undefined | timestamp()} | errors:error().
+verify_in_onezone(TokenAuth) ->
     case token_logic:verify_access_token(TokenAuth) of
-        {ok, ?USER(UserId), _TTL} = Result ->
+        {ok, ?USER(UserId), _TokenTTL} = Result ->
             case provider_logic:has_eff_user(UserId) of
                 false ->
                     ?ERROR_FORBIDDEN;

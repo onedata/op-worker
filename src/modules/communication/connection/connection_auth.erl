@@ -85,7 +85,7 @@ get_handshake_error_msg(_) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     nonce = Nonce,
-    auth = TokenAuth0
+    auth = #token_auth{token = SerializedToken} = TokenAuth0
 } = Req, IpAddress) when is_binary(Nonce) ->
 
     assert_client_compatibility(Req, IpAddress),
@@ -104,9 +104,20 @@ handle_client_handshake(#client_handshake_request{
         ?ERROR_FORBIDDEN ->
             throw(invalid_provider);
         {error, _} = Error ->
-            ?debug("Cannot authorize user based on token ~s due to ~w", [
-                TokenAuth0, Error
-            ]),
+            case tokens:deserialize(SerializedToken) of
+                {ok, #token{subject = Subject, id = TokenId} = Token} ->
+                    ?debug("Cannot authorize user (id: ~p) based on token (id: ~p) "
+                           "with caveats: ~p due to ~w", [
+                        Subject,
+                        TokenId,
+                        tokens:get_caveats(Token),
+                        Error
+                    ]);
+                _ ->
+                    ?debug("Cannot authorize user based on token due to ~w", [
+                        Error
+                    ])
+            end,
             throw(invalid_token)
     end.
 
