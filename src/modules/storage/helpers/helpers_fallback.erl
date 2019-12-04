@@ -38,7 +38,7 @@ apply_and_maybe_handle_ekeyexpired(#sd_handle{
 }, Operation, HelperOrFileHandle) ->
     case Operation() of
         Result = {error, ?EKEYEXPIRED} ->
-            Helper = storage:get_helper(StorageId),
+            Helper = storage_config:get_helper(StorageId),
             case helper:get_name(Helper) of
                 ?WEBDAV_HELPER_NAME ->
                     % called by module for CT tests

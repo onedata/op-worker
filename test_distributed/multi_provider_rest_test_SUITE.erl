@@ -1500,18 +1500,19 @@ init_per_testcase(list_transfers, Config) ->
     OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [<<"space4">>, <<"user1">>]),
     init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
-init_per_testcase(Case, Config) when Case =:= create_share orelse
-        Case =:= create_share_id orelse
-        Case =:= get_share orelse
-        Case =:= get_share_id orelse
-        Case =:= get_share_public_id orelse
-        Case =:= delete_share orelse
-        Case =:= delete_share_id orelse
-        Case =:= delete_share_public_id orelse
-        Case =:= update_share_name orelse
-        Case =:= update_share_name_id orelse
-        Case =:= update_share_name_public_id->
-    Workers = ?config(op_worker_nodes, Config),
+init_per_testcase(Case, Config) when
+    Case =:= create_share orelse
+    Case =:= create_share_id orelse
+    Case =:= get_share orelse
+    Case =:= get_share_id orelse
+    Case =:= get_share_public_id orelse
+    Case =:= delete_share orelse
+    Case =:= delete_share_id orelse
+    Case =:= delete_share_public_id orelse
+    Case =:= update_share_name orelse
+    Case =:= update_share_name_id orelse
+    Case =:= update_share_name_public_id
+->
     initializer:mock_share_logic(Config),
     init_per_testcase(all, Config);
 
@@ -1538,18 +1539,19 @@ end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     test_utils:mock_unload(Workers, changes),
     end_per_testcase(all, Config);
 
-end_per_testcase(Case, Config)  when Case =:= create_share orelse
-            Case =:= create_share_id orelse
-            Case =:= get_share orelse
-            Case =:= get_share_id orelse
-            Case =:= get_share_public_id orelse
-            Case =:= delete_share orelse
-            Case =:= delete_share_id orelse
-            Case =:= delete_share_public_id orelse
-            Case =:= update_share_name orelse
-            Case =:= update_share_name_id orelse
-            Case =:= update_share_name_public_id ->
-    Workers = ?config(op_worker_nodes, Config),
+end_per_testcase(Case, Config) when
+    Case =:= create_share orelse
+    Case =:= create_share_id orelse
+    Case =:= get_share orelse
+    Case =:= get_share_id orelse
+    Case =:= get_share_public_id orelse
+    Case =:= delete_share orelse
+    Case =:= delete_share_id orelse
+    Case =:= delete_share_public_id orelse
+    Case =:= update_share_name orelse
+    Case =:= update_share_name_id orelse
+    Case =:= update_share_name_public_id
+->
     initializer:unmock_share_logic(Config),
     end_per_testcase(all, Config);
 
@@ -1784,7 +1786,7 @@ mock_get_share_on_other_node(OtherProviderNode, SupportingProviderNode, SessId, 
         true ->
             Res = rpc:call(SupportingProviderNode, share_logic, get, [SessId, ShareId]),
             test_utils:mock_expect(OtherProviderNode, share_logic, get,
-                fun (SessId, ShareId2) when ShareId2 == ShareId ->
+                fun (_SessId, ShareId2) when ShareId2 == ShareId ->
                     Res
                 end);
         false ->

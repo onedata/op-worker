@@ -194,10 +194,10 @@ start_link(SessionId) ->
 %%--------------------------------------------------------------------
 -spec delegate_and_supervise(worker_ref(), term(), clproto_message_id:id(),
     respond_via()) -> ok | {ok, server_message()}.
-delegate_and_supervise(WorkerRef, Req, MsgId, RespondVia) ->
+delegate_and_supervise(WorkerRef, ReqOrHandlerFun, MsgId, RespondVia) ->
     try
         ReqId = {make_ref(), MsgId},
-        ok = delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia)
+        ok = delegate_request_insecure(WorkerRef, ReqOrHandlerFun, ReqId, RespondVia)
     catch
         Type:Error ->
             ?error_stacktrace("Failed to delegate request (~p) due to: ~p:~p", [

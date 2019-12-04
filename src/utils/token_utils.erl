@@ -18,8 +18,7 @@
 %% API
 -export([
     assert_interface_allowed/2,
-    assert_no_data_caveats/1,
-    verify_api_caveats/3
+    assert_no_data_caveats/1
 ]).
 
 -type interface() :: gui | rest | oneclient.
@@ -58,14 +57,3 @@ assert_no_data_caveats(Caveats) when is_list(Caveats) ->
         [DataCaveat | _] ->
             throw(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat))
     end.
-
-
--spec verify_api_caveats([caveats:caveat()], middleware:operation(), gri:gri()) ->
-    ok | no_return().
-verify_api_caveats(Caveats, Operation, GRI) ->
-    lists:foreach(fun(ApiCaveat) ->
-        case cv_api:verify(ApiCaveat, ?OP_WORKER, Operation, GRI) of
-            true -> ok;
-            false -> throw(?ERROR_TOKEN_CAVEAT_UNVERIFIED(ApiCaveat))
-        end
-    end, caveats:filter([cv_api], Caveats)).

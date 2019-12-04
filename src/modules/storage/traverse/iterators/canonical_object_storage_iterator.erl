@@ -97,6 +97,6 @@ is_dir(StorageFileCtx) ->
 depth(ChildId, ParentIdTokens) ->
     % ParentId is always storage file id of space
     % depending whether space is mounted in root, to calculate file depth
-    % we have to subtract 1 (in case of mount_in_root) or 2 from length of ChildTokens.
+    % we have to subtract 1 (in case of imported_storage) or 2 from length of ChildTokens.
     ChildTokens = filename:split(ChildId),
     length(ChildTokens) - length(ParentIdTokens).

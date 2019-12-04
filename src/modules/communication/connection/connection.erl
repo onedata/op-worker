@@ -547,7 +547,7 @@ connect_with_provider(ProviderId, SessionId, Domain,
         _ -> str_utils:format("@ ~s:~b (~s)", [Host, Port, Domain])
     end,
     ?info("Connecting to provider ~ts ~s", [
-        provider_logic:to_string(ProviderId), DomainAndIpInfo
+        provider_logic:to_printable(ProviderId), DomainAndIpInfo
     ]),
 
     try
@@ -687,18 +687,18 @@ handle_handshake_response(#state{
     try clproto_serializer:deserialize_server_message(Data, SessionId) of
         {ok, #server_message{message_body = #handshake_response{status = 'OK'}}} ->
             ?info("Successfully connected to provider ~ts", [
-                provider_logic:to_string(ProviderId)
+                provider_logic:to_printable(ProviderId)
             ]),
             outgoing_connection_manager:report_successful_handshake(ConnManager),
             {ok, State};
         {ok, #server_message{message_body = #handshake_response{status = Error}}} ->
             ?error("Handshake refused by provider ~ts due to ~p, closing connection.", [
-                provider_logic:to_string(ProviderId), Error
+                provider_logic:to_printable(ProviderId), Error
             ]),
             {error, handshake_failed};
         _ ->
             ?error("Received invalid handshake response from provider ~ts, closing connection.", [
-                provider_logic:to_string(ProviderId)
+                provider_logic:to_printable(ProviderId)
             ]),
             {error, handshake_failed}
     catch _:Error ->

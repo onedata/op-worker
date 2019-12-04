@@ -36,8 +36,8 @@
             "   Perms per file: ~p~n",
             [
                 __ScenarioName,
-                maps:fold(fun(Guid, SetPerms, Acc) ->
-                    Acc#{get_file_path(Node, OwnerSessId, Guid) => SetPerms}
+                maps:fold(fun(G, SetPerms, Acc) ->
+                    Acc#{get_file_path(Node, OwnerSessId, G) => SetPerms}
                 end, #{}, __PermsPerGuid)
             ]
         ),
@@ -98,7 +98,7 @@ run_scenarios(#perms_test_spec{
     ),
 
     run_space_privs_scenarios(ScenariosRootDirPath, Spec, Config),
-    run_data_caveats_scenarios(ScenariosRootDirPath, Spec, Config),
+    run_data_access_caveats_scenarios(ScenariosRootDirPath, Spec, Config),
     run_posix_perms_scenarios(ScenariosRootDirPath, Spec, Config),
     run_acl_perms_scenarios(ScenariosRootDirPath, Spec, Config).
 
@@ -284,7 +284,7 @@ space_privs_test(
 %% allow it.
 %% @end
 %%--------------------------------------------------------------------
-run_data_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
+run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
     test_node = Node,
     space_id = SpaceId,
     owner_user = Owner,

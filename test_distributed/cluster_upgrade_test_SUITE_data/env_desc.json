@@ -7,10 +7,6 @@
         "op_worker": {
             "input_dir": "_build/default/rel/op_worker",
             "target_dir": "_build/default/rel/test_cluster"
-        },
-        "appmock": {
-            "input_dir": "_build/default/rel/appmock",
-            "target_dir": "_build/default/rel/test_cluster"
         }
     },
     "os_configs": {
@@ -49,7 +45,7 @@
                         "db_nodes": [
                             "127.0.0.1:49161"
                         ],
-                        "oz_domain": "oz"
+                        "graph_sync_healthcheck_interval": 999999999
                     }
                 }
             }

@@ -190,10 +190,10 @@ rename_into_itself(FileGuid) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx,
     TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
-    {StorageDoc, SourceFileCtx2} =
+    {StorageConfig, SourceFileCtx2} =
         file_ctx:get_storage_doc(SourceFileCtx), #document{
-        value = #storage{helpers = [#helper{name = HelperName} | _]}
-    } = StorageDoc,
+        value = #storage_config{helpers = [#helper{name = HelperName} | _]}
+    } = StorageConfig,
     case lists:member(HelperName,
         [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
          ?WEBDAV_HELPER_NAME]) of
@@ -342,7 +342,7 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
 ) ->
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx),
     {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    #document{value = #storage{helpers = [#helper{storage_path_type = StoragePathType}|_]}} = Storage,
+    #document{value = #storage_config{helpers = [#helper{storage_path_type = StoragePathType}|_]}} = Storage,
 
     case StoragePathType of
       ?FLAT_STORAGE_PATH ->
@@ -359,7 +359,7 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx),
     {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    #document{value = #storage{helpers = [#helper{storage_path_type = StoragePathType}|_]}} = Storage,
+    #document{value = #storage_config{helpers = [#helper{storage_path_type = StoragePathType}|_]}} = Storage,
 
     case StoragePathType of
       ?FLAT_STORAGE_PATH ->
@@ -511,12 +511,10 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
         _ -> ok
     end,
 
-    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    #document{
-        key = StorageId,
-        value = #storage{helpers = [#helper{storage_path_type = StoragePathType}|_]}
-    } = Storage,
-    case StoragePathType of
+    {ok, StorageConfig} = fslogic_storage:select_storage(SpaceId),
+    Helper = storage_config:get_helper(StorageConfig),
+    StorageId = storage_config:get_id(StorageConfig),
+    case helper:get_storage_path_type(Helper) of
       ?FLAT_STORAGE_PATH ->
         ok;
       _ ->

@@ -137,7 +137,7 @@ content_types_provided(Req, #state{rest_req = #rest_req{produces = Produces}} = 
 is_authorized(Req, State) ->
     % The data access caveats policy depends on requested resource,
     % which is not known yet - it is checked later in middleware.
-    case http_auth:authenticate(Req, rest, allow_data_caveats) of
+    case http_auth:authenticate(Req, rest, allow_data_access_caveats) of
         {ok, Auth} ->
             % Always return true - authorization is checked by internal logic later.
             {true, Req, State#state{auth = Auth}};

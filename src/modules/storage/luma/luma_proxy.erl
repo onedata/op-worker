@@ -33,15 +33,15 @@
 %% Queries third party LUMA service for the storage user context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_ctx(session:id(), od_user:id(), od_space:id(), storage:doc(), storage:helper()) ->
+-spec get_user_ctx(session:id(), od_user:id(), od_space:id(), storage_config:doc(), storage_config:helper()) ->
     {ok, luma:user_ctx()} | {error, Reason :: term()}.
-get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
-    value = #storage{
+get_user_ctx(SessionId, UserId, SpaceId, StorageConfig = #document{
+    value = #storage_config{
         luma_config = LumaConfig = #luma_config{url = LumaUrl}
 }}, Helper) ->
     Url = str_utils:format_bin("~s/map_user_credentials", [LumaUrl]),
     ReqHeaders = get_request_headers(LumaConfig),
-    ReqBody = get_request_body(SessionId, UserId, SpaceId, StorageDoc),
+    ReqBody = get_request_body(SessionId, UserId, SpaceId, StorageConfig),
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode(RespBody),
@@ -62,23 +62,23 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageDoc = #document{
 %% Queries third party LUMA service for the storage GID for given GroupId.
 %% @end
 %%-------------------------------------------------------------------
--spec get_group_ctx(od_group:id() | undefined, od_space:id(), storage:doc(), storage:helper()) ->
+-spec get_group_ctx(od_group:id() | undefined, od_space:id(), storage_config:doc(), storage_config:helper()) ->
     {ok, luma:group_ctx()} | {error, term()}.
-get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?CEPH_HELPER_NAME}) ->
+get_group_ctx(_GroupId, _SpaceId, _StorageConfig, #helper{name = ?CEPH_HELPER_NAME}) ->
     undefined;
-get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?CEPHRADOS_HELPER_NAME}) ->
+get_group_ctx(_GroupId, _SpaceId, _StorageConfig, #helper{name = ?CEPHRADOS_HELPER_NAME}) ->
     undefined;
-get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?S3_HELPER_NAME}) ->
+get_group_ctx(_GroupId, _SpaceId, _StorageConfig, #helper{name = ?S3_HELPER_NAME}) ->
     undefined;
-get_group_ctx(_GroupId, _SpaceId, _StorageDoc, #helper{name = ?SWIFT_HELPER_NAME}) ->
+get_group_ctx(_GroupId, _SpaceId, _StorageConfig, #helper{name = ?SWIFT_HELPER_NAME}) ->
     undefined;
-get_group_ctx(GroupId, SpaceId, StorageDoc = #document{
-    value = #storage{
+get_group_ctx(GroupId, SpaceId, StorageConfig = #document{
+    value = #storage_config{
         luma_config = LumaConfig = #luma_config{url = LumaUrl}
 }}, Helper) ->
     Url = str_utils:format_bin("~s/map_group", [LumaUrl]),
     ReqHeaders = get_request_headers(LumaConfig),
-    ReqBody = get_group_request_body(GroupId, SpaceId, StorageDoc),
+    ReqBody = get_group_request_body(GroupId, SpaceId, StorageConfig),
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             GroupCtx = json_utils:decode(RespBody),
@@ -133,12 +133,12 @@ http_client_post(Url, ReqHeaders, ReqBody) ->
 %% Constructs user context request that will be sent to the external LUMA service.
 %% @end
 %%--------------------------------------------------------------------
--spec get_request_body(session:id(), od_user:id(), od_space:id(), storage:doc()) ->
+-spec get_request_body(session:id(), od_user:id(), od_space:id(), storage_config:doc()) ->
     Body :: binary().
-get_request_body(SessionId, UserId, SpaceId, StorageDoc) ->
+get_request_body(SessionId, UserId, SpaceId, StorageConfig) ->
     Body = #{
-        <<"storageId">> => storage:get_id(StorageDoc),
-        <<"storageName">> => storage:get_name(StorageDoc),
+        <<"storageId">> => storage_config:get_id(StorageConfig),
+        <<"storageName">> => storage_config:get_name(StorageConfig),
         <<"spaceId">> => SpaceId,
         <<"userDetails">> => get_user_details(SessionId, UserId)
     },
@@ -150,11 +150,11 @@ get_request_body(SessionId, UserId, SpaceId, StorageDoc) ->
 %% Constructs user context request that will be sent to the external LUMA service.
 %% @end
 %%--------------------------------------------------------------------
--spec get_group_request_body(od_group:id() | undefined, od_space:id(), storage:doc()) ->
+-spec get_group_request_body(od_group:id() | undefined, od_space:id(), storage_config:doc()) ->
     Body :: binary().
 get_group_request_body(undefined, SpaceId, #document{
     key = StorageId,
-    value = #storage{name = StorageName}
+    value = #storage_config{name = StorageName}
 }) ->
     Body = #{
         <<"spaceId">> => SpaceId,
@@ -164,7 +164,7 @@ get_group_request_body(undefined, SpaceId, #document{
     json_utils:encode(filter_null_and_undefined_values(Body));
 get_group_request_body(GroupId, SpaceId, #document{
     key = StorageId,
-    value = #storage{name = StorageName}
+    value = #storage_config{name = StorageName}
 }) ->
     Body = #{
         <<"groupId">> => GroupId,
@@ -186,25 +186,29 @@ get_user_details(SessionId, UserId) ->
         {ok, #document{value = User}} ->
             #{
                 <<"id">> => UserId,
-                <<"fullName">> => User#od_user.full_name,
                 <<"username">> => User#od_user.username,
-                <<"linkedAccounts">> => User#od_user.linked_accounts,
                 <<"emails">> => User#od_user.emails,
+                <<"linkedAccounts">> => User#od_user.linked_accounts,
 
-                % TODO VFS-4506 deprecated field, included for backward compatibility
-                <<"name">> => User#od_user.full_name,
+                %% @TODO VFS-4506 deprecated fields, included for backward compatibility
+                %% @TODO VFS-4506 fullName and linkedAccounts.entitlements are no longer
+                %% sent to LUMA as they are ambiguous and inconclusive for user mapping
+                <<"fullName">> => <<>>,
+                <<"name">> => <<>>,
                 <<"login">> => User#od_user.username,
                 <<"emailList">> => User#od_user.emails
             };
         {error, _} ->
             #{
                 <<"id">> => UserId,
-                <<"fullName">> => <<>>,
                 <<"username">> => <<>>,
-                <<"linkedAccounts">> => [],
                 <<"emails">> => [],
+                <<"linkedAccounts">> => [],
 
-                % TODO VFS-4506 deprecated field, included for backward compatibility
+                %% @TODO VFS-4506 deprecated fields, included for backward compatibility
+                %% @TODO VFS-4506 fullName and linkedAccounts.entitlements are no longer
+                %% sent to LUMA as they are ambiguous and inconclusive for user mapping
+                <<"fullName">> => <<>>,
                 <<"name">> => <<>>,
                 <<"login">> => <<>>,
                 <<"emailList">> => []

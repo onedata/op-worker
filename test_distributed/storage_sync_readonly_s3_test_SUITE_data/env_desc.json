@@ -145,7 +145,7 @@
                     },
                     "p2": {
                         "storage": "synced_storage",
-                        "mounted_in_root": "true"
+                        "imported_storage": "true"
                     }
                 }
             }

@@ -28,13 +28,13 @@
 -include_lib("ctool/include/onedata.hrl").
 
 -export([get/0, get/1, get/2, get_protected_data/2, get_protected_data/3]).
--export([to_string/1]).
+-export([to_printable/1]).
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
+-export([get_storage_ids/0, get_storage_ids/1]).
+-export([has_storage/1]).
 -export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
--export([support_space/2, support_space/3]).
--export([update_space_support_size/2]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
 -export([get_support_size/1]).
 -export([map_idp_group_to_onedata/2]).
@@ -52,6 +52,7 @@
 -export([provider_connection_ssl_opts/1]).
 -export([assert_provider_compatibility/1]).
 -export([verify_provider_identity/1]).
+
 
 -define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
 
@@ -136,8 +137,8 @@ get_protected_data(SessionId, ProviderId, AuthHint) ->
     }).
 
 
--spec to_string(od_provider:id()) -> string().
-to_string(ProviderId) ->
+-spec to_printable(od_provider:id()) -> string().
+to_printable(ProviderId) ->
     case provider_logic:get_name(ProviderId) of
         {ok, Name} -> str_utils:format("'~ts' (~s)", [Name, ProviderId]);
         _ -> str_utils:format("'~s' (name unknown)", [ProviderId])
@@ -237,10 +238,42 @@ get_spaces(ProviderId) ->
     {ok, [od_space:id()]} | errors:error().
 get_spaces(SessionId, ProviderId) ->
     case get(SessionId, ProviderId) of
-        {ok, #document{value = #od_provider{spaces = Spaces}}} ->
+        {ok, #document{value = #od_provider{eff_spaces = Spaces}}} ->
             {ok, maps:keys(Spaces)};
         {error, _} = Error ->
             Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves storage_ids of this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_ids() -> {ok, [od_storage:id()]} | errors:error().
+get_storage_ids() ->
+    get_storage_ids(?SELF).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves storage_ids of provider by given ProviderId using current provider's auth.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_storage_ids(od_provider:id()) -> {ok, [od_storage:id()]} | errors:error().
+get_storage_ids(ProviderId) ->
+    case get(?ROOT_SESS_ID, ProviderId) of
+        {ok, #document{value = #od_provider{storages = Storages}}} ->
+            {ok, Storages};
+        {error, _} = Error ->
+            Error
+    end.
+
+-spec has_storage(od_storage:id()) -> boolean().
+has_storage(StorageId) ->
+    case get_storage_ids() of
+        {ok, StorageIds} -> lists:member(StorageId, StorageIds);
+        _ -> false
     end.
 
 
@@ -262,33 +295,6 @@ has_eff_user(SessionId, ProviderId, UserId) ->
             false
     end.
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Supports a space based on support_space_token and support size.
-%% @end
-%%--------------------------------------------------------------------
--spec support_space(tokens:serialized(), SupportSize :: integer()) ->
-    {ok, od_space:id()} | errors:error().
-support_space(Token, SupportSize) ->
-    support_space(?ROOT_SESS_ID, Token, SupportSize).
-
--spec support_space(SessionId :: gs_client_worker:client(),
-    tokens:serialized(), SupportSize :: integer()) ->
-    {ok, od_space:id()} | errors:error().
-support_space(SessionId, Token, SupportSize) ->
-    Data = #{<<"token">> => Token, <<"size">> => SupportSize},
-    Result = gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_provider, id = ?SELF, aspect = support},
-        data = Data
-    }),
-
-    ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
-    end)).
-
-
 -spec supports_space(od_space:id()) -> boolean().
 supports_space(SpaceId) ->
     supports_space(?ROOT_SESS_ID, ?SELF, SpaceId).
@@ -296,7 +302,7 @@ supports_space(SpaceId) ->
 
 -spec supports_space(od_provider:doc(), od_space:id()) ->
     boolean().
-supports_space(#document{value = #od_provider{spaces = Spaces}}, SpaceId) ->
+supports_space(#document{value = #od_provider{eff_spaces = Spaces}}, SpaceId) ->
     maps:is_key(SpaceId, Spaces).
 
 
@@ -314,47 +320,13 @@ supports_space(SessionId, ProviderId, SpaceId) ->
 -spec get_support_size(od_space:id()) -> {ok, integer()} | errors:error().
 get_support_size(SpaceId) ->
     case get(?ROOT_SESS_ID, ?SELF) of
-        {ok, #document{value = #od_provider{spaces = #{SpaceId := SupportSize}}}} ->
+        {ok, #document{value = #od_provider{eff_spaces = #{SpaceId := SupportSize}}}} ->
             {ok, SupportSize};
         {ok, #document{value = #od_provider{}}} ->
             ?ERROR_NOT_FOUND;
         {error, _} = Error ->
             Error
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Changes support size of this provider towards given space,
-%% given that data stored on this provider is not larger than
-%% the intended size.
-%% @end
-%%--------------------------------------------------------------------
--spec update_space_support_size(SpaceId :: od_space:id(), NewSupportSize :: integer()) ->
-    ok | errors:error().
-update_space_support_size(SpaceId, NewSupportSize) ->
-    OccupiedSize = space_quota:current_size(SpaceId),
-    update_space_support_size(SpaceId, NewSupportSize, OccupiedSize).
-
-
-%% @private
--spec update_space_support_size(SpaceId :: od_space:id(), NewSupportSize :: integer(),
-    CurrentOccupiedSize :: non_neg_integer()) ->
-    ok | errors:error().
-update_space_support_size(_SpaceId, NewSupportSize, CurrentOccupiedSize)
-    when NewSupportSize < CurrentOccupiedSize ->
-    ?ERROR_BAD_VALUE_TOO_LOW(<<"size">>, CurrentOccupiedSize);
-
-update_space_support_size(SpaceId, NewSupportSize, _CurrentOccupiedSize) ->
-    Data = #{<<"size">> => NewSupportSize},
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = update, data = Data,
-        gri = #gri{type = od_provider, id = ?SELF, aspect = {space, SpaceId}}
-    }),
-    ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_space, SpaceId),
-        gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
-    end).
 
 
 %%--------------------------------------------------------------------
@@ -416,8 +388,8 @@ get_nodes(ProviderId) ->
 get_nodes(ProviderId, Domain) ->
     case inet:parse_ipv4_address(binary_to_list(Domain)) of
         {ok, _} ->
-            ?warning("Provider ~ts is using an IP address instead of domain", [to_string(ProviderId)]),
-            ?info("Resolved 1 node for connection to provider ~ts: ~s", [to_string(ProviderId), Domain]),
+            ?warning("Provider ~ts is using an IP address instead of domain", [to_printable(ProviderId)]),
+            ?info("Resolved 1 node for connection to provider ~ts: ~s", [to_printable(ProviderId), Domain]),
             [Domain];
         {error, einval} ->
             {ok, IPsAtoms} = inet:getaddrs(binary_to_list(Domain), inet),
@@ -430,14 +402,14 @@ get_nodes(ProviderId, Domain) ->
             case lists:all(ConfigMatches, IPs) of
                 true ->
                     ?info("Resolved ~B node(s) for connection to provider ~ts: ~s", [
-                        length(IPs), to_string(ProviderId), IpsString
+                        length(IPs), to_printable(ProviderId), IpsString
                     ]),
                     IPs;
                 false ->
                     ?info(
                         "Falling back to domain '~ts' for connection to provider ~ts as "
                         "IP addresses failed the connectivity check (~s)", [
-                            Domain, to_string(ProviderId), IpsString
+                            Domain, to_printable(ProviderId), IpsString
                         ]),
                     [Domain]
             end
@@ -458,7 +430,7 @@ get_rtransfer_port(ProviderId) ->
                 RtransferPort;
             _ ->
                 ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~p", 
-                    [to_string(ProviderId), ?RTRANSFER_PORT]),
+                    [to_printable(ProviderId), ?RTRANSFER_PORT]),
                 ?RTRANSFER_PORT
         end,
         {true, Port, ?PROVIDER_NODES_CACHE_TTL}
@@ -749,7 +721,7 @@ verify_provider_identity(ProviderId) ->
         end
     catch Type:Reason ->
         ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
-            provider_logic:to_string(ProviderId),
+            provider_logic:to_printable(ProviderId),
             Type, Reason
         ]),
         ?ERROR_UNAUTHORIZED

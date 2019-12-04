@@ -288,7 +288,7 @@ renew_connections_insecure(#state{
             Error2 ->
                 ?warning("Failed to connect to host ~p of provider ~ts "
                          "due to ~p. ", [
-                    Host, provider_logic:to_string(ProviderId), Error2
+                    Host, provider_logic:to_printable(ProviderId), Error2
                 ]),
                 schedule_next_renewal(AccState)
         end
@@ -321,7 +321,7 @@ log_error(State, throw, {cannot_verify_peer_op_identity, Reason}) ->
     ?warning("Discarding connections renewal to provider ~ts because "
              "its identity cannot be verified due to ~p. ~n"
              "Next retry not sooner than ~p s. ~n", [
-        provider_logic:to_string(State#state.peer_id),
+        provider_logic:to_printable(State#state.peer_id),
         Reason,
         State#state.renewal_interval / 1000
     ]);
@@ -329,7 +329,7 @@ log_error(State, throw, {cannot_check_peer_op_version, HTTPErrorCode}) ->
     ?warning("Discarding connections renewal to provider ~ts because "
              "its version cannot be determined (HTTP ~b). ~n"
              "Next retry not sooner than ~p s. ~n", [
-        provider_logic:to_string(State#state.peer_id),
+        provider_logic:to_printable(State#state.peer_id),
         HTTPErrorCode,
         State#state.renewal_interval / 1000
     ]);
@@ -343,7 +343,7 @@ log_error(State, throw, {incompatible_peer_op_version, PeerOpVersion, PeerCompOp
              "Local version: ~s, supports providers: ~p~n"
              "Remote version: ~s, supports providers: ~p~n"
              "Next retry not sooner than ~p s. ~n", [
-        provider_logic:to_string(State#state.peer_id),
+        provider_logic:to_printable(State#state.peer_id),
         Version,
         [binary_to_list(B) || B <- CompatibleOpVersions],
         PeerOpVersion, PeerCompOpVersions,
@@ -353,7 +353,7 @@ log_error(State, Type, Reason) ->
     ?warning("Failed to renew connections to provider ~ts "
              "because of ~p:~p. ~n"
              "Next retry not sooner than ~p s. ~n", [
-        provider_logic:to_string(State#state.peer_id),
+        provider_logic:to_printable(State#state.peer_id),
         Type, Reason,
         State#state.renewal_interval / 1000
     ]).

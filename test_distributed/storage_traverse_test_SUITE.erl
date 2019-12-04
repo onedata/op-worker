@@ -29,47 +29,47 @@
 %% tests
 -export([
     posix_files_only_test/1,
-    posix_files_only_mount_in_root_test/1,
+    posix_files_only_imported_storage_test/1,
     canonical_s3_files_only_test/1,
-    canonical_s3_files_only_mount_in_root_test/1,
+    canonical_s3_files_only_imported_storage_test/1,
     posix_files_and_dirs_test/1,
-    posix_files_and_dirs_mount_in_root_test/1,
+    posix_files_and_dirs_imported_storage_test/1,
     posix_files_only_async_master_jobs_test/1,
-    posix_files_only_async_master_jobs_mount_in_root_test/1,
+    posix_files_only_async_master_jobs_imported_storage_test/1,
     canonical_s3_files_only_async_master_jobs_test/1,
-    canonical_s3_files_only_async_master_jobs_mount_in_root_test/1,
+    canonical_s3_files_only_async_master_jobs_imported_storage_test/1,
     posix_files_and_dirs_async_master_jobs_test/1,
-    posix_files_and_dirs_async_master_jobs_mount_in_root_test/1,
+    posix_files_and_dirs_async_master_jobs_imported_storage_test/1,
     posix_files_only_max_depth0_test/1,
     posix_files_only_max_depth1_test/1,
     posix_files_only_max_depth2_test/1,
     posix_files_only_max_depth3_test/1,
-    posix_files_only_mount_in_root_max_depth0_test/1,
-    posix_files_only_mount_in_root_max_depth1_test/1,
-    posix_files_only_mount_in_root_max_depth2_test/1,
-    posix_files_only_mount_in_root_max_depth3_test/1,
+    posix_files_only_imported_storage_max_depth0_test/1,
+    posix_files_only_imported_storage_max_depth1_test/1,
+    posix_files_only_imported_storage_max_depth2_test/1,
+    posix_files_only_imported_storage_max_depth3_test/1,
     canonical_s3_files_only_max_depth0_test/1,
     canonical_s3_files_only_max_depth1_test/1,
     canonical_s3_files_only_max_depth2_test/1,
     canonical_s3_files_only_max_depth3_test/1,
-    canonical_s3_files_only_mount_in_root_max_depth0_test/1,
-    canonical_s3_files_only_mount_in_root_max_depth1_test/1,
-    canonical_s3_files_only_mount_in_root_max_depth2_test/1,
-    canonical_s3_files_only_mount_in_root_max_depth3_test/1,
+    canonical_s3_files_only_imported_storage_max_depth0_test/1,
+    canonical_s3_files_only_imported_storage_max_depth1_test/1,
+    canonical_s3_files_only_imported_storage_max_depth2_test/1,
+    canonical_s3_files_only_imported_storage_max_depth3_test/1,
     posix_files_and_dirs_max_depth0_test/1,
     posix_files_and_dirs_max_depth1_test/1,
     posix_files_and_dirs_max_depth2_test/1,
     posix_files_and_dirs_max_depth3_test/1,
-    posix_files_and_dirs_mount_in_root_max_depth0_test/1,
-    posix_files_and_dirs_mount_in_root_max_depth1_test/1,
-    posix_files_and_dirs_mount_in_root_max_depth2_test/1,
-    posix_files_and_dirs_mount_in_root_max_depth3_test/1,
+    posix_files_and_dirs_imported_storage_max_depth0_test/1,
+    posix_files_and_dirs_imported_storage_max_depth1_test/1,
+    posix_files_and_dirs_imported_storage_max_depth2_test/1,
+    posix_files_and_dirs_imported_storage_max_depth3_test/1,
     posix_files_only_synchronous_next_batch_test/1,
-    posix_files_only_synchronous_next_batch_mount_in_root_test/1,
+    posix_files_only_synchronous_next_batch_imported_storage_test/1,
     canonical_s3_files_only_synchronous_next_batch_test/1,
-    canonical_s3_files_only_synchronous_next_batch_mount_in_root_test/1,
+    canonical_s3_files_only_synchronous_next_batch_imported_storage_test/1,
     posix_files_and_dirs_synchronous_next_batch_test/1,
-    posix_files_and_dirs_synchronous_next_batch_mount_in_root_test/1,
+    posix_files_and_dirs_synchronous_next_batch_imported_storage_test/1,
     posix_custom_compute_test/1,
     canonical_s3_custom_compute_test/1]).
 
@@ -79,47 +79,47 @@
 
 all() -> ?ALL([
     posix_files_only_test,
-    posix_files_only_mount_in_root_test,
+    posix_files_only_imported_storage_test,
     canonical_s3_files_only_test,
-    canonical_s3_files_only_mount_in_root_test,
+    canonical_s3_files_only_imported_storage_test,
     posix_files_and_dirs_test,
-    posix_files_and_dirs_mount_in_root_test,
+    posix_files_and_dirs_imported_storage_test,
     posix_files_only_async_master_jobs_test,
-    posix_files_only_async_master_jobs_mount_in_root_test,
+    posix_files_only_async_master_jobs_imported_storage_test,
     canonical_s3_files_only_async_master_jobs_test,
-    canonical_s3_files_only_async_master_jobs_mount_in_root_test,
+    canonical_s3_files_only_async_master_jobs_imported_storage_test,
     posix_files_and_dirs_async_master_jobs_test,
-    posix_files_and_dirs_async_master_jobs_mount_in_root_test,
+    posix_files_and_dirs_async_master_jobs_imported_storage_test,
     posix_files_only_max_depth0_test,
     posix_files_only_max_depth1_test,
     posix_files_only_max_depth2_test,
     posix_files_only_max_depth3_test,
-    posix_files_only_mount_in_root_max_depth0_test,
-    posix_files_only_mount_in_root_max_depth1_test,
-    posix_files_only_mount_in_root_max_depth2_test,
-    posix_files_only_mount_in_root_max_depth3_test,
+    posix_files_only_imported_storage_max_depth0_test,
+    posix_files_only_imported_storage_max_depth1_test,
+    posix_files_only_imported_storage_max_depth2_test,
+    posix_files_only_imported_storage_max_depth3_test,
     canonical_s3_files_only_max_depth0_test,
     canonical_s3_files_only_max_depth1_test,
     canonical_s3_files_only_max_depth2_test,
     canonical_s3_files_only_max_depth3_test,
-    canonical_s3_files_only_mount_in_root_max_depth0_test,
-    canonical_s3_files_only_mount_in_root_max_depth1_test,
-    canonical_s3_files_only_mount_in_root_max_depth2_test,
-    canonical_s3_files_only_mount_in_root_max_depth3_test,
+    canonical_s3_files_only_imported_storage_max_depth0_test,
+    canonical_s3_files_only_imported_storage_max_depth1_test,
+    canonical_s3_files_only_imported_storage_max_depth2_test,
+    canonical_s3_files_only_imported_storage_max_depth3_test,
     posix_files_and_dirs_max_depth0_test,
     posix_files_and_dirs_max_depth1_test,
     posix_files_and_dirs_max_depth2_test,
     posix_files_and_dirs_max_depth3_test,
-    posix_files_and_dirs_mount_in_root_max_depth0_test,
-    posix_files_and_dirs_mount_in_root_max_depth1_test,
-    posix_files_and_dirs_mount_in_root_max_depth2_test,
-    posix_files_and_dirs_mount_in_root_max_depth3_test,
+    posix_files_and_dirs_imported_storage_max_depth0_test,
+    posix_files_and_dirs_imported_storage_max_depth1_test,
+    posix_files_and_dirs_imported_storage_max_depth2_test,
+    posix_files_and_dirs_imported_storage_max_depth3_test,
     posix_files_only_synchronous_next_batch_test,
-    posix_files_only_synchronous_next_batch_mount_in_root_test,
+    posix_files_only_synchronous_next_batch_imported_storage_test,
     canonical_s3_files_only_synchronous_next_batch_test,
-    canonical_s3_files_only_synchronous_next_batch_mount_in_root_test,
+    canonical_s3_files_only_synchronous_next_batch_imported_storage_test,
     posix_files_and_dirs_synchronous_next_batch_test,
-    posix_files_and_dirs_synchronous_next_batch_mount_in_root_test,
+    posix_files_and_dirs_synchronous_next_batch_imported_storage_test,
     posix_custom_compute_test,
     canonical_s3_custom_compute_test
 ]).
@@ -135,38 +135,38 @@ all() -> ?ALL([
 posix_files_only_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{}).
 
-posix_files_only_mount_in_root_test(Config) ->
+posix_files_only_imported_storage_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{}).
 
 canonical_s3_files_only_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{}).
 
-canonical_s3_files_only_mount_in_root_test(Config) ->
+canonical_s3_files_only_imported_storage_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{}).
 
 posix_files_and_dirs_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{}).
 
-posix_files_and_dirs_mount_in_root_test(Config) ->
+posix_files_and_dirs_imported_storage_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{}).
 
 
 posix_files_only_async_master_jobs_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{async_children_master_jobs => true}).
 
-posix_files_only_async_master_jobs_mount_in_root_test(Config) ->
+posix_files_only_async_master_jobs_imported_storage_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{async_children_master_jobs => true}).
 
 canonical_s3_files_only_async_master_jobs_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{async_children_master_jobs => true}).
 
-canonical_s3_files_only_async_master_jobs_mount_in_root_test(Config) ->
+canonical_s3_files_only_async_master_jobs_imported_storage_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{async_children_master_jobs => true}).
 
 posix_files_and_dirs_async_master_jobs_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{async_children_master_jobs => true}).
 
-posix_files_and_dirs_async_master_jobs_mount_in_root_test(Config) ->
+posix_files_and_dirs_async_master_jobs_imported_storage_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{async_children_master_jobs => true}).
 
 
@@ -182,16 +182,16 @@ posix_files_only_max_depth2_test(Config) ->
 posix_files_only_max_depth3_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{max_depth => 3}).
 
-posix_files_only_mount_in_root_max_depth0_test(Config) ->
+posix_files_only_imported_storage_max_depth0_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{max_depth => 0}).
 
-posix_files_only_mount_in_root_max_depth1_test(Config) ->
+posix_files_only_imported_storage_max_depth1_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{max_depth => 1}).
 
-posix_files_only_mount_in_root_max_depth2_test(Config) ->
+posix_files_only_imported_storage_max_depth2_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{max_depth => 2}).
 
-posix_files_only_mount_in_root_max_depth3_test(Config) ->
+posix_files_only_imported_storage_max_depth3_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{max_depth => 3}).
 
 canonical_s3_files_only_max_depth0_test(Config) ->
@@ -206,16 +206,16 @@ canonical_s3_files_only_max_depth2_test(Config) ->
 canonical_s3_files_only_max_depth3_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{max_depth => 3}).
 
-canonical_s3_files_only_mount_in_root_max_depth0_test(Config) ->
+canonical_s3_files_only_imported_storage_max_depth0_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{max_depth => 0}).
 
-canonical_s3_files_only_mount_in_root_max_depth1_test(Config) ->
+canonical_s3_files_only_imported_storage_max_depth1_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{max_depth => 1}).
 
-canonical_s3_files_only_mount_in_root_max_depth2_test(Config) ->
+canonical_s3_files_only_imported_storage_max_depth2_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{max_depth => 2}).
 
-canonical_s3_files_only_mount_in_root_max_depth3_test(Config) ->
+canonical_s3_files_only_imported_storage_max_depth3_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{max_depth => 3}).
 
 posix_files_and_dirs_max_depth0_test(Config) ->
@@ -230,35 +230,35 @@ posix_files_and_dirs_max_depth2_test(Config) ->
 posix_files_and_dirs_max_depth3_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{max_depth => 3}).
 
-posix_files_and_dirs_mount_in_root_max_depth0_test(Config) ->
+posix_files_and_dirs_imported_storage_max_depth0_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{max_depth => 0}).
 
-posix_files_and_dirs_mount_in_root_max_depth1_test(Config) ->
+posix_files_and_dirs_imported_storage_max_depth1_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{max_depth => 1}).
 
-posix_files_and_dirs_mount_in_root_max_depth2_test(Config) ->
+posix_files_and_dirs_imported_storage_max_depth2_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{max_depth => 2}).
 
-posix_files_and_dirs_mount_in_root_max_depth3_test(Config) ->
+posix_files_and_dirs_imported_storage_max_depth3_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{max_depth => 3}).
 
 
 posix_files_only_synchronous_next_batch_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space1">>, #{async_next_batch_job => false}).
 
-posix_files_only_synchronous_next_batch_mount_in_root_test(Config) ->
+posix_files_only_synchronous_next_batch_imported_storage_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space2">>, #{async_next_batch_job => false}).
 
 canonical_s3_files_only_synchronous_next_batch_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space3">>, #{async_next_batch_job => false}).
 
-canonical_s3_files_only_synchronous_next_batch_mount_in_root_test(Config) ->
+canonical_s3_files_only_synchronous_next_batch_imported_storage_test(Config) ->
     traverse_and_execute_jobs_only_on_files_test_base(Config, <<"space4">>, #{async_next_batch_job => false}).
 
 posix_files_and_dirs_synchronous_next_batch_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space1">>, #{async_next_batch_job => false}).
 
-posix_files_and_dirs_synchronous_next_batch_mount_in_root_test(Config) ->
+posix_files_and_dirs_synchronous_next_batch_imported_storage_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{async_next_batch_job => false}).
 
 posix_custom_compute_test(Config) ->
@@ -446,7 +446,7 @@ run_traverse(Worker, SpaceId, StorageId, TraversInfo, TraverseOpts) ->
     rpc:call(Worker, storage_traverse, run, [?MODULE, SpaceId, StorageId, TraversInfo, TraverseOpts]).
 
 get_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId]} = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
+    {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.
 
 space_dir(Worker, SpaceId, StorageId) ->

@@ -194,7 +194,7 @@ allowed_methods(Req, State) ->
 -spec is_authorized(cowboy_req:req(), map()) ->
     {true | {false, binary()} | halt, cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
-    case http_auth:authenticate(Req, rest, disallow_data_caveats) of
+    case http_auth:authenticate(Req, rest, disallow_data_access_caveats) of
         {ok, ?USER(UserId, SessionId) = Auth} ->
             case authorize(Req, Auth) of
                 ok ->
@@ -275,10 +275,8 @@ authorize(Req, ?USER(UserId) = Auth) ->
         true ->
             try
                 GRI = #gri{type = op_metrics, id = SpaceId, aspect = changes},
-                token_utils:verify_api_caveats(Auth#auth.caveats, create, GRI)
+                api_auth:check_authorization(Auth, ?OP_WORKER, create, GRI)
             catch
-                throw:Error ->
-                    Error;
                 _:_ ->
                     ?ERROR_INTERNAL_SERVER_ERROR
             end;

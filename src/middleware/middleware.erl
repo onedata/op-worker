@@ -271,16 +271,10 @@ ensure_authorized(#req_ctx{
     versioned_entity = {Entity, _},
     req = #op_req{operation = Operation, auth = Auth, gri = GRI} = OpReq
 }) ->
-    Caveats = Auth#auth.caveats,
-
-    case Plugin of
-        file_middleware ->
-            % Only file_middleware endpoints allow data caveats
-            ok;
-        _ ->
-            token_utils:assert_no_data_caveats(Caveats)
+    case api_auth:check_authorization(Auth, ?OP_WORKER, Operation, GRI) of
+        ok -> ok;
+        {error, _} = Error -> throw(Error)
     end,
-    token_utils:verify_api_caveats(Caveats, Operation, GRI),
 
     Result = try
         Plugin:authorize(OpReq, Entity)
