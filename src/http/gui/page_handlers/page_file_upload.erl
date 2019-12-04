@@ -61,20 +61,20 @@ handle(<<"POST">>, InitialReq) ->
                 cowboy_req:reply(?HTTP_200_OK, Req2)
             catch
                 throw:upload_not_registered ->
-                    send_error(?ERROR_FORBIDDEN, Req);
+                    reply_with_error(?ERROR_FORBIDDEN, Req);
                 throw:Error ->
-                    send_error(Error, Req);
+                    reply_with_error(Error, Req);
                 Type:Message ->
                     ?error_stacktrace("Error while processing file upload "
                                       "from user ~p - ~p:~p", [
                         UserId, Type, Message
                     ]),
-                    send_error(?ERROR_INTERNAL_SERVER_ERROR, Req)
+                    reply_with_error(?ERROR_INTERNAL_SERVER_ERROR, Req)
             end;
         {ok, ?NOBODY} ->
-            send_error(?ERROR_UNAUTHORIZED, Req);
+            reply_with_error(?ERROR_UNAUTHORIZED, Req);
         {error, _} = Error ->
-            send_error(Error, Req)
+            reply_with_error(Error, Req)
     end.
 
 
@@ -107,7 +107,7 @@ handle_multipart_req(Req, Auth, Params) ->
 %% @private
 -spec write_chunk(cowboy_req:req(), aai:auth(), map()) -> cowboy_req:req().
 write_chunk(Req, ?USER(UserId, SessionId), Params) ->
-    ReadBodyOpts = get_read_body_opts(),
+    ReadBodyOpts = read_body_opts(),
     SanitizedParams = middleware_sanitizer:sanitize_data(Params, #{
         required => #{
             <<"guid">> => {binary, non_empty},
@@ -158,8 +158,8 @@ assert_file_upload_registered(UserId, FileGuid) ->
 
 
 %% @private
--spec get_read_body_opts() -> cowboy_req:read_body_opts().
-get_read_body_opts() ->
+-spec read_body_opts() -> cowboy_req:read_body_opts().
+read_body_opts() ->
     {ok, UploadWriteSize} = application:get_env(?APP_NAME, upload_write_size),
     {ok, UploadReadTimeout} = application:get_env(?APP_NAME, upload_read_timeout),
     {ok, UploadPeriod} = application:get_env(?APP_NAME, upload_read_period),
@@ -180,8 +180,8 @@ get_read_body_opts() ->
 
 
 %% @private
--spec send_error(errors:error(), cowboy_req:req()) -> cowboy_req:req().
-send_error(Error, Req) ->
+-spec reply_with_error(errors:error(), cowboy_req:req()) -> cowboy_req:req().
+reply_with_error(Error, Req) ->
     ErrorResp = rest_translator:error_response(Error),
     cowboy_req:reply(
         ErrorResp#rest_resp.code,
