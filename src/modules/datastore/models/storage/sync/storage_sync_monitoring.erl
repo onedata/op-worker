@@ -29,7 +29,8 @@
     mark_updated_file/2,
     mark_deleted_file/2,
     mark_processed_file/2,
-    mark_failed_file/2, mark_finished_scan/2]).
+    mark_failed_file/2,
+    mark_finished_scan/2]).
 
 -export([get/2,
     get_import_status/1, get_import_status/2,
@@ -74,7 +75,7 @@
 %% Ensures that document for given SpaceId exists.
 %% @end
 %%-------------------------------------------------------------------
--spec ensure_created(od_space:id(), storage:id()) -> {ok, doc()} | {error, term()}.
+-spec ensure_created(od_space:id(), od_storage:id()) -> {ok, doc()} | {error, term()}.
 ensure_created(SpaceId, StorageId) ->
     case datastore_model:exists(?CTX, id(SpaceId, StorageId)) of
         {ok, true} ->
@@ -99,7 +100,7 @@ ensure_created(SpaceId, StorageId) ->
 %% This function also sets scan start_time.
 %% @end
 %%-------------------------------------------------------------------
--spec prepare_new_import_scan(od_space:id(), storage:id(), non_neg_integer()) -> {ok, doc()}.
+-spec prepare_new_import_scan(od_space:id(), od_storage:id(), non_neg_integer()) -> {ok, doc()}.
 prepare_new_import_scan(SpaceId, StorageId, Timestamp) ->
     {ok, _} = update(SpaceId, StorageId, fun(SSM) ->
         SSM2 = reset_queue_length_histograms(SSM, Timestamp),
@@ -121,7 +122,7 @@ prepare_new_import_scan(SpaceId, StorageId, Timestamp) ->
 %% This function also sets scan start_time.
 %% @end
 %%-------------------------------------------------------------------
--spec prepare_new_update_scan(od_space:id(), storage:id(), non_neg_integer()) -> {ok, doc()}.
+-spec prepare_new_update_scan(od_space:id(), od_storage:id(), non_neg_integer()) -> {ok, doc()}.
 prepare_new_update_scan(SpaceId, StorageId, Timestamp) ->
     {ok, _} = update(SpaceId, StorageId, fun(SSM) ->
         SSM2 = reset_queue_length_histograms(SSM, Timestamp),
@@ -139,8 +140,7 @@ prepare_new_update_scan(SpaceId, StorageId, Timestamp) ->
 %% It increases suitable counters and histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec increase_to_process_counter(od_space:id(), storage:id(),
-    non_neg_integer()) -> ok.
+-spec increase_to_process_counter(od_space:id(), od_storage:id(), non_neg_integer()) -> ok.
 increase_to_process_counter(SpaceId, StorageId, Value) ->
     ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         to_process = FilesToProcess
@@ -157,7 +157,7 @@ increase_to_process_counter(SpaceId, StorageId, Value) ->
 %% queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_imported_file(od_space:id(), storage:id()) -> ok.
+-spec mark_imported_file(od_space:id(), od_storage:id()) -> ok.
 mark_imported_file(SpaceId, StorageId) ->
     ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         imported = ImportedFiles,
@@ -185,7 +185,7 @@ mark_imported_file(SpaceId, StorageId) ->
 %% queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_updated_file(od_space:id(), storage:id()) -> ok.
+-spec mark_updated_file(od_space:id(), od_storage:id()) -> ok.
 mark_updated_file(SpaceId, StorageId) ->
     ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         updated = UpdatedFiles,
@@ -213,7 +213,7 @@ mark_updated_file(SpaceId, StorageId) ->
 %% queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_deleted_file(od_space:id(), storage:id()) -> ok.
+-spec mark_deleted_file(od_space:id(), od_storage:id()) -> ok.
 mark_deleted_file(SpaceId, StorageId) ->
     ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         deleted = DeletedFiles,
@@ -243,7 +243,7 @@ mark_deleted_file(SpaceId, StorageId) ->
 %% queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_processed_file(od_space:id(), storage:id()) -> ok.
+-spec mark_processed_file(od_space:id(), od_storage:id()) -> ok.
 mark_processed_file(SpaceId, StorageId) ->
     ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         other_processed = FilesProcessed
@@ -261,7 +261,7 @@ mark_processed_file(SpaceId, StorageId) ->
 %% decreases queue_length histograms.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_failed_file(od_space:id(), storage:id()) -> ok.
+-spec mark_failed_file(od_space:id(), od_storage:id()) -> ok.
 mark_failed_file(SpaceId, StorageId) ->
     ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         failed = FilesFailed
@@ -277,7 +277,7 @@ mark_failed_file(SpaceId, StorageId) ->
 %% Deletes document associated with given SpaceId and StorageId.
 %% @end
 %%-------------------------------------------------------------------
--spec delete(od_space:id(), storage:id()) -> ok | error().
+-spec delete(od_space:id(), od_storage:id()) -> ok | error().
 delete(SpaceId, StorageId) ->
     datastore_model:delete(?CTX, id(SpaceId, StorageId)).
 
@@ -286,7 +286,7 @@ delete(SpaceId, StorageId) ->
 %% Returns
 %% @end
 %%-------------------------------------------------------------------
--spec get(od_space:id(), storage:id()) -> {ok, doc()}  | error().
+-spec get(od_space:id(), od_storage:id()) -> {ok, doc()}  | error().
 get(SpaceId, StorageId) ->
     datastore_model:get(?CTX, id(SpaceId, StorageId)).
 
@@ -370,10 +370,10 @@ get_info(SpaceId, StorageId) ->
 %%-------------------------------------------
 -spec get_import_status(od_space:id()) -> storage_sync_traverse:scan_status().
 get_import_status(SpaceId) ->
-    StorageId = space_storage:get_storage_id(SpaceId),
+    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
     get_import_status(SpaceId, StorageId).
 
--spec get_import_status(od_space:id(), storage:id()) -> storage_sync_traverse:scan_status().
+-spec get_import_status(od_space:id(), od_storage:id()) -> storage_sync_traverse:scan_status().
 get_import_status(SpaceId, StorageId) ->
     case get(SpaceId, StorageId) of
         {ok, #document{
@@ -421,10 +421,10 @@ get_update_status(#storage_sync_monitoring{
 }) when (LastUpdateStartTime =/= undefined) ->
     finished;
 get_update_status(SpaceId) when is_binary(SpaceId) ->
-    StorageId = space_storage:get_storage_id(SpaceId),
+    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
     get_update_status(SpaceId, StorageId).
 
--spec get_update_status(od_space:id(), storage:id()) -> storage_sync_traverse:scan_status().
+-spec get_update_status(od_space:id(), od_storage:id()) -> storage_sync_traverse:scan_status().
 get_update_status(SpaceId, StorageId) ->
     case get(SpaceId, StorageId) of
         {ok, Doc} -> get_update_status(Doc);
@@ -437,7 +437,7 @@ get_finished_scans_num(#storage_sync_monitoring{scans = Scans}) ->
 get_finished_scans_num(#document{value = SSM}) ->
     get_finished_scans_num(SSM).
 
--spec get_finished_scans_num(od_space:id(), storage:id()) -> {ok, non_neg_integer()} | error().
+-spec get_finished_scans_num(od_space:id(), od_storage:id()) -> {ok, non_neg_integer()} | error().
 get_finished_scans_num(SpaceId, StorageId) ->
     case get(SpaceId, StorageId) of
         {ok, Doc} ->
@@ -465,7 +465,7 @@ get_last_update_finish_time(#document{value = SSM}) ->
 %%-------------------------------------------------------------------
 -spec get_metric(od_space:id(), plot_counter_type(), window()) -> proplists:proplist().
 get_metric(SpaceId, Type, Window) ->
-    StorageId = space_storage:get_storage_id(SpaceId),
+    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
     case ?MODULE:get(SpaceId, StorageId) of
         {ok, #document{value = SSM}} ->
             return_histogram_and_timestamp(SSM, Type, Window);
@@ -477,7 +477,7 @@ get_metric(SpaceId, Type, Window) ->
             return_empty_histogram_and_timestamp()
     end.
 
--spec reset(od_space:id(), storage:id()) -> ok.
+-spec reset(od_space:id(), od_storage:id()) -> ok.
 reset(SpaceId, StorageId) ->
     ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM) ->
         case is_scan_in_progress(SSM) of
@@ -495,7 +495,7 @@ reset(SpaceId, StorageId) ->
     end)).
 
 
--spec mark_finished_scan(od_space:id(), storage:id()) -> ok | {error, term()}.
+-spec mark_finished_scan(od_space:id(), od_storage:id()) -> ok | {error, term()}.
 mark_finished_scan(SpaceId, StorageId) ->
     ?extract_ok(update(SpaceId, StorageId, fun(SSM) -> {ok, mark_finished_scan(SSM)} end)).
 
@@ -510,20 +510,20 @@ mark_finished_scan(SpaceId, StorageId) ->
 %% and StorageId.
 %% @end
 %%-------------------------------------------------------------------
--spec id(od_space:id(), storage:id()) -> id().
+-spec id(od_space:id(), od_storage:id()) -> id().
 id(SpaceId, StorageId) ->
     datastore_utils:gen_key(SpaceId, StorageId).
 
--spec update(od_space:id(), storage:id(), diff()) -> {ok, doc()} | error().
+-spec update(od_space:id(), od_storage:id(), diff()) -> {ok, doc()} | error().
 update(SpaceId, StorageId, Diff) ->
     datastore_model:update(?CTX, id(SpaceId, StorageId), Diff).
 
 
--spec new_doc(od_space:id(), storage:id()) -> doc().
+-spec new_doc(od_space:id(), od_storage:id()) -> doc().
 new_doc(SpaceId, StorageId) ->
     new_doc(SpaceId, StorageId, time_utils:cluster_time_seconds()).
 
--spec new_doc(od_space:id(), storage:id(), non_neg_integer()) -> doc().
+-spec new_doc(od_space:id(), od_storage:id(), non_neg_integer()) -> doc().
 new_doc(SpaceId, StorageId, Timestamp) ->
     EmptyMinHist = time_slot_histogram:new(Timestamp, ?MIN_HIST_SLOT, ?HISTOGRAM_LENGTH),
     EmptyHourHist = time_slot_histogram:new(Timestamp, ?HOUR_HIST_SLOT, ?HISTOGRAM_LENGTH),
@@ -668,7 +668,7 @@ is_scan_in_progress(SSM = #storage_sync_monitoring{
 }) ->
     LastUpdateStartTime > LastUpdateFinishTime orelse get_unhandled_jobs_value(SSM) > 0.
 
--spec is_scan_in_progress(od_space:id(), storage:id()) -> boolean().
+-spec is_scan_in_progress(od_space:id(), od_storage:id()) -> boolean().
 is_scan_in_progress(SpaceId, StorageId) ->
     case get(SpaceId, StorageId) of
         {error, not_found} ->

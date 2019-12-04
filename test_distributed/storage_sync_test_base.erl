@@ -979,10 +979,10 @@ import_nfs_acl_test(Config, MountSpaceInRoot) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
 
-import_nfs_acl_with_disabled_luma_should_fail_test(Config, MountSpaceInRoot) ->
+import_nfs_acl_with_disabled_luma_should_fail_test(Config, ImportedStorage) ->
     [W1, _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, ImportedStorage),
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
 
     %% Create file on storage
@@ -3607,8 +3607,8 @@ create_init_file(Config, Readonly) ->
     end.
 
 is_empty(Worker, SDHandle = #sd_handle{storage_id = StorageId}) ->
-    {ok, Storage} = rpc:call(Worker, storage, get, [StorageId]),
-    Helper = storage:get_helper(Storage),
+    {ok, Storage} = rpc:call(Worker, storage_config, get, [StorageId]),
+    Helper = storage_config:get_helper(Storage),
     HelperName = helper:get_name(Helper),
     case HelperName of
         ?POSIX_HELPER_NAME ->
@@ -3758,7 +3758,7 @@ verify_file_deleted(Worker, FileGuid, Master, Attempts) ->
     end.
 
 clean_reverse_luma_cache(Worker) ->
-    {ok, Storages} = rpc:call(Worker, storage, list, []),
+    {ok, Storages} = rpc:call(Worker, storage_config, list, []),
     lists:foreach(fun(#document{key = StorageId}) ->
         ok = rpc:call(Worker, luma_cache, invalidate, [StorageId])
     end, Storages).
@@ -3766,7 +3766,7 @@ clean_reverse_luma_cache(Worker) ->
 add_synced_storages(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     SyncedStorages = lists:foldl(fun(W, AccIn) ->
-        {ok, Storages} = rpc:call(W, storage, list, []),
+        {ok, Storages} = rpc:call(W, storage_config, list, []),
         case find_synced_storage(Storages) of
             undefined -> AccIn;
             SyncedStorage -> AccIn#{W => SyncedStorage}
@@ -3777,7 +3777,7 @@ add_synced_storages(Config) ->
 add_rdwr_storages(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     RDWRStorages = lists:foldl(fun(W, AccIn) ->
-        {ok, Storages} = rpc:call(W, storage, list, []),
+        {ok, Storages} = rpc:call(W, storage_config, list, []),
         case find_rdwr_storage(Storages) of
             undefined -> AccIn;
             RDWRStorage -> AccIn#{W => RDWRStorage}
@@ -3811,9 +3811,9 @@ find_rdwr_storage(Storages) ->
             RDWRStorage
     end, undefined, Storages).
 
-is_rdwr(#storage{name = MountPoint, helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}) ->
+is_rdwr(#storage_config{name = MountPoint, helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}) ->
     <<"rdwr_storage">> =:= filename:basename(MountPoint);
-is_rdwr(#storage{name = <<"rdwr_storage">>, helpers = [#helper{name = ?S3_HELPER_NAME} | _]}) ->
+is_rdwr(#storage_config{name = <<"rdwr_storage">>, helpers = [#helper{name = ?S3_HELPER_NAME} | _]}) ->
     true;
 is_rdwr(_) ->
     false.
@@ -3829,14 +3829,14 @@ find_synced_storage(Storages) ->
             RDWRStorageIn
     end, undefined, Storages).
 
-is_synced(#storage{name = MountPoint, helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}) ->
+is_synced(#storage_config{name = MountPoint, helpers = [#helper{name = ?POSIX_HELPER_NAME} | _]}) ->
     <<"synced_storage">> =:= filename:basename(MountPoint);
-is_synced(#storage{name = <<"synced_storage">>, helpers = [#helper{name = ?S3_HELPER_NAME} | _]}) ->
+is_synced(#storage_config{name = <<"synced_storage">>, helpers = [#helper{name = ?S3_HELPER_NAME} | _]}) ->
     true.
 
 get_mount_point(Storage) ->
     % works only on POSIX storages!!!
-    Helper = storage:get_helper(Storage),
+    Helper = storage_config:get_helper(Storage),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
 
@@ -3845,13 +3845,13 @@ get_host_mount_point(Config, Storage) ->
     MountPoint = get_mount_point(Storage),
     get_storage_path(Config, MountPoint).
 
-get_host_storage_file_id(Config, CanonicalPath, Storage, MountInRoot) ->
-    Helper = storage:get_helper(Storage),
+get_host_storage_file_id(Config, CanonicalPath, Storage, ImportedStorage) ->
+    Helper = storage_config:get_helper(Storage),
     case helper:get_name(Helper) of
         ?POSIX_HELPER_NAME ->
-            get_host_posix_storage_file_id(Config, CanonicalPath, Storage, MountInRoot);
+            get_host_posix_storage_file_id(Config, CanonicalPath, Storage, ImportedStorage);
         ?S3_HELPER_NAME ->
-            get_host_s3_storage_file_id(CanonicalPath, MountInRoot)
+            get_host_s3_storage_file_id(CanonicalPath, ImportedStorage)
     end.
 
 get_host_posix_storage_file_id(Config, CanonicalPath, Storage, true) ->

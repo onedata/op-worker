@@ -187,7 +187,7 @@ emit_quota_exceeded() ->
 %% Sends event indicating storage helper params have changed.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_helper_params_changed(StorageId :: storage:id()) ->
+-spec emit_helper_params_changed(StorageId :: od_storage:id()) ->
     ok | {error, Reason :: term()}.
 emit_helper_params_changed(StorageId) ->
     event:emit(#helper_params_changed_event{

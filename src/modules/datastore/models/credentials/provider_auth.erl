@@ -122,8 +122,9 @@ clear_provider_id_cache() ->
 -spec is_registered() -> boolean().
 is_registered() ->
     case get_provider_id() of
-        {error, _} -> false;
-        {ok, _ProviderId} -> true
+        {ok, _ProviderId} -> true;
+        ?ERROR_UNREGISTERED_ONEPROVIDER -> false;
+        {error, _} = Error -> error(Error)
     end.
 
 

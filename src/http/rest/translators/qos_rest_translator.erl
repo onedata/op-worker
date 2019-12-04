@@ -33,7 +33,7 @@
     middleware:data_format(), Result :: term() | {gri:gri(), term()} |
     {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = instance}, _, value, QosEntryId) ->
-    PathTokens = [<<"qos-id">>, QosEntryId],
+    PathTokens = [<<"qos-entry">>, QosEntryId],
     ?CREATED_REPLY(PathTokens, #{<<"qosEntryId">> => QosEntryId}).
 
 

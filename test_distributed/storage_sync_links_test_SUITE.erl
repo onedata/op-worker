@@ -20,51 +20,51 @@
 
 %% tests
 -export([
-    add_child_link_test/1, add_child_link_mount_in_root_test/1, add_child_link_and_mark_leave_test/1,
-    add_existing_child_link_test/1, add_existing_child_link_mount_in_root_test/1,
-    add_existing_child_link_mount_in_root_mark_leaves_test/1,
-    add_children_links_test/1, add_children_links_mount_in_root_test/1,
+    add_child_link_test/1, add_child_link_imported_storage_test/1, add_child_link_and_mark_leave_test/1,
+    add_existing_child_link_test/1, add_existing_child_link_imported_storage_test/1,
+    add_existing_child_link_imported_storage_mark_leaves_test/1,
+    add_children_links_test/1, add_children_links_imported_storage_test/1,
     add_children_links_mark_leaves_test/1,
-    add_children_links_recursive_test/1, add_children_links_recursive_mount_in_root_test/1,
+    add_children_links_recursive_test/1, add_children_links_recursive_imported_storage_test/1,
     add_children_links_recursive_mark_leaves_test/1,
-    list_children_links_test/1, list_children_links_mount_in_root_test/1,
-    list_children_links_token_test/1, list_children_links_token_mount_in_root_test/1,
-    delete_link_test/1, delete_link_mount_in_root_test/1,
-    delete_links_test/1, delete_links_mount_in_root_test/1,
-    delete_links_recursive_test/1, delete_links_recursive_mount_in_root_test/1,
+    list_children_links_test/1, list_children_links_imported_storage_test/1,
+    list_children_links_token_test/1, list_children_links_token_imported_storage_test/1,
+    delete_link_test/1, delete_link_imported_storage_test/1,
+    delete_links_test/1, delete_links_imported_storage_test/1,
+    delete_links_recursive_test/1, delete_links_recursive_imported_storage_test/1,
     add_many_children_links_recursive_test/1,
-    add_many_children_links_recursive_mount_in_root_test/1,
+    add_many_children_links_recursive_imported_storage_test/1,
     delete_many_children_links_recursive_test/1,
-    delete_many_children_links_recursive_mount_in_root_test/1]).
+    delete_many_children_links_recursive_imported_storage_test/1]).
 
 
 -define(TEST_CASES, [
     add_child_link_test,
-    add_child_link_mount_in_root_test,
+    add_child_link_imported_storage_test,
     add_child_link_and_mark_leave_test,
     add_existing_child_link_test,
-    add_existing_child_link_mount_in_root_test,
-    add_existing_child_link_mount_in_root_mark_leaves_test,
+    add_existing_child_link_imported_storage_test,
+    add_existing_child_link_imported_storage_mark_leaves_test,
     add_children_links_test,
-    add_children_links_mount_in_root_test,
+    add_children_links_imported_storage_test,
     add_children_links_mark_leaves_test,
     add_children_links_recursive_test,
-    add_children_links_recursive_mount_in_root_test,
+    add_children_links_recursive_imported_storage_test,
     add_children_links_recursive_mark_leaves_test,
     list_children_links_test,
-    list_children_links_mount_in_root_test,
+    list_children_links_imported_storage_test,
     list_children_links_token_test,
-    list_children_links_token_mount_in_root_test,
+    list_children_links_token_imported_storage_test,
     delete_link_test,
-    delete_link_mount_in_root_test,
+    delete_link_imported_storage_test,
     delete_links_test,
-    delete_links_mount_in_root_test,
+    delete_links_imported_storage_test,
     delete_links_recursive_test,
-    delete_links_recursive_mount_in_root_test,
+    delete_links_recursive_imported_storage_test,
     add_many_children_links_recursive_test,
-    add_many_children_links_recursive_mount_in_root_test,
+    add_many_children_links_recursive_imported_storage_test,
     delete_many_children_links_recursive_test,
-    delete_many_children_links_recursive_mount_in_root_test
+    delete_many_children_links_recursive_imported_storage_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -83,7 +83,7 @@ all() -> ?ALL(?TEST_CASES).
 add_child_link_test(Config) ->
     add_child_link_test_base(Config, false).
 
-add_child_link_mount_in_root_test(Config) ->
+add_child_link_imported_storage_test(Config) ->
     add_child_link_test_base(Config, true).
 
 add_child_link_and_mark_leave_test(Config) ->
@@ -92,16 +92,16 @@ add_child_link_and_mark_leave_test(Config) ->
 add_existing_child_link_test(Config) ->
     add_existing_child_link_test_base(Config, false).
 
-add_existing_child_link_mount_in_root_test(Config) ->
+add_existing_child_link_imported_storage_test(Config) ->
     add_existing_child_link_test_base(Config, true).
 
-add_existing_child_link_mount_in_root_mark_leaves_test(Config) ->
+add_existing_child_link_imported_storage_mark_leaves_test(Config) ->
     add_existing_child_link_test_base(Config, true, true).
 
 add_children_links_test(Config) ->
     add_children_links_test_base(Config, false).
 
-add_children_links_mount_in_root_test(Config) ->
+add_children_links_imported_storage_test(Config) ->
     add_children_links_test_base(Config, true).
 
 add_children_links_mark_leaves_test(Config) ->
@@ -110,7 +110,7 @@ add_children_links_mark_leaves_test(Config) ->
 add_children_links_recursive_test(Config) ->
     add_children_links_recursive_test_base(Config, false).
 
-add_children_links_recursive_mount_in_root_test(Config) ->
+add_children_links_recursive_imported_storage_test(Config) ->
     add_children_links_recursive_test_base(Config, true).
 
 add_children_links_recursive_mark_leaves_test(Config) ->
@@ -119,31 +119,31 @@ add_children_links_recursive_mark_leaves_test(Config) ->
 list_children_links_test(Config) ->
     list_children_links_test_base(Config, false).
 
-list_children_links_mount_in_root_test(Config) ->
+list_children_links_imported_storage_test(Config) ->
     list_children_links_test_base(Config, true).
 
 list_children_links_token_test(Config) ->
     list_children_links_token_test_base(Config, false).
 
-list_children_links_token_mount_in_root_test(Config) ->
+list_children_links_token_imported_storage_test(Config) ->
     list_children_links_token_test_base(Config, true).
 
 delete_link_test(Config) ->
     delete_link_test_base(Config, false).
 
-delete_link_mount_in_root_test(Config) ->
+delete_link_imported_storage_test(Config) ->
     delete_link_test_base(Config, true).
 
 delete_links_test(Config) ->
     delete_links_test_base(Config, false).
 
-delete_links_mount_in_root_test(Config) ->
+delete_links_imported_storage_test(Config) ->
     delete_links_test_base(Config, true).
 
 delete_links_recursive_test(Config) ->
     delete_links_recursive_test_base(Config, false).
 
-delete_links_recursive_mount_in_root_test(Config) ->
+delete_links_recursive_imported_storage_test(Config) ->
     delete_links_test_base(Config, true).
 
 add_many_children_links_recursive_test(Config) ->
@@ -152,24 +152,24 @@ add_many_children_links_recursive_test(Config) ->
 delete_many_children_links_recursive_test(Config) ->
     delete_many_children_links_recursive_test_base(Config, false).
 
-add_many_children_links_recursive_mount_in_root_test(Config) ->
+add_many_children_links_recursive_imported_storage_test(Config) ->
     add_many_children_links_recursive_test_base(Config, true).
 
-delete_many_children_links_recursive_mount_in_root_test(Config) ->
+delete_many_children_links_recursive_imported_storage_test(Config) ->
     delete_many_children_links_recursive_test_base(Config, true).
 
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
 
-add_child_link_test_base(Config, MountInRoot) ->
-    add_child_link_test_base(Config, MountInRoot, false).
+add_child_link_test_base(Config, ImportedStorage) ->
+    add_child_link_test_base(Config, ImportedStorage, false).
 
-add_child_link_test_base(Config, MountInRoot, MarkLeaves) ->
+add_child_link_test_base(Config, ImportedStorage, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     ChildName = <<"child1">>,
     ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
     ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId, MarkLeaves),
@@ -183,14 +183,14 @@ add_child_link_test_base(Config, MountInRoot, MarkLeaves) ->
             ?assertNotEqual(undefined, ChildRootId)
     end.
 
-add_existing_child_link_test_base(Config, MountInRoot) ->
-    add_existing_child_link_test_base(Config, MountInRoot, false).
+add_existing_child_link_test_base(Config, ImportedStorage) ->
+    add_existing_child_link_test_base(Config, ImportedStorage, false).
 
-add_existing_child_link_test_base(Config, MountInRoot, MarkLeaves) ->
+add_existing_child_link_test_base(Config, ImportedStorage, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     ChildName = <<"child1">>,
     ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
     ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId, MarkLeaves),
@@ -204,14 +204,14 @@ add_existing_child_link_test_base(Config, MountInRoot, MarkLeaves) ->
             ?assertNotEqual(undefined, ChildRootId)
     end.
 
-add_children_links_test_base(Config, MountInRoot) ->
-    add_children_links_test_base(Config, MountInRoot, false).
+add_children_links_test_base(Config, ImportedStorage) ->
+    add_children_links_test_base(Config, ImportedStorage, false).
 
-add_children_links_test_base(Config, MountInRoot, MarkLeaves) ->
+add_children_links_test_base(Config, ImportedStorage, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     ChildrenNum = 5,
     ChildrenNames = [<<"child", (integer_to_binary(N))/binary>> || N <- lists:seq(1, ChildrenNum)],
     ChildStorageFileIds = [filename:join([RootStorageFileId, CN]) || CN <- ChildrenNames],
@@ -231,14 +231,14 @@ add_children_links_test_base(Config, MountInRoot, MarkLeaves) ->
         end
     end, ChildrenNames).
 
-add_children_links_recursive_test_base(Config, MountInRoot) ->
-    add_children_links_recursive_test_base(Config, MountInRoot, false).
+add_children_links_recursive_test_base(Config, ImportedStorage) ->
+    add_children_links_recursive_test_base(Config, ImportedStorage, false).
 
-add_children_links_recursive_test_base(Config, MountInRoot, MarkLeaves) ->
+add_children_links_recursive_test_base(Config, ImportedStorage, MarkLeaves) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     ChildName1 = <<"child1">>,
     ChildName2 = <<"child2">>,
     ChildName3 = <<"child3">>,
@@ -288,11 +288,11 @@ add_children_links_recursive_test_base(Config, MountInRoot, MarkLeaves) ->
                 storage_sync_links_test_utils:get_link(W, RootId4, ChildName5))
     end.
 
-list_children_links_test_base(Config, MountInRoot) ->
+list_children_links_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     ChildrenNum = 5,
     ChildrenNames = [<<"child", (integer_to_binary(N))/binary>> || N <- lists:seq(1, ChildrenNum)],
     ChildStorageFileIds = [filename:join([RootStorageFileId, CN]) || CN <- ChildrenNames],
@@ -304,11 +304,11 @@ list_children_links_test_base(Config, MountInRoot) ->
         storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, 10)),
     ?assertEqual(ChildrenNames, [C || {C, _} <- Children]).
 
-list_children_links_token_test_base(Config, MountInRoot) ->
+list_children_links_token_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     ChildName1 = <<"child1">>,
     ChildName2 = <<"child2">>,
     ChildName3 = <<"child3">>,
@@ -331,11 +331,11 @@ list_children_links_token_test_base(Config, MountInRoot) ->
         storage_sync_links_test_utils:list(W, RootStorageFileId, StorageId, T4, 1)),
     ?assertEqual(true, T5#link_token.is_last).
 
-delete_link_test_base(Config, MountInRoot) ->
+delete_link_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     ChildName = <<"child1">>,
     ChildStorageFileId = filename:join([RootStorageFileId, ChildName]),
     ok = storage_sync_links_test_utils:add_link(W, RootStorageFileId, StorageId, ChildStorageFileId),
@@ -347,11 +347,11 @@ delete_link_test_base(Config, MountInRoot) ->
     ?assertMatch({{ok, []}, #link_token{}}, storage_sync_links_test_utils:list(
         W, RootStorageFileId, StorageId, 10)).
 
-delete_links_test_base(Config, MountInRoot) ->
+delete_links_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     ChildrenNum = 5,
     ChildrenNames = [<<"child", (integer_to_binary(N))/binary>> || N <- lists:seq(1, ChildrenNum)],
     ChildStorageFileIds = [filename:join([RootStorageFileId, CN]) || CN <- ChildrenNames],
@@ -370,11 +370,11 @@ delete_links_test_base(Config, MountInRoot) ->
             storage_sync_links_test_utils:get_link(W, RootStorageFileId, StorageId, ChildName))
     end, ChildrenNames).
 
-delete_links_recursive_test_base(Config, MountInRoot) ->
+delete_links_recursive_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     ChildName1 = <<"child1">>,
     ChildName2 = <<"child2">>,
     ChildName3 = <<"child3">>,
@@ -418,11 +418,11 @@ delete_links_recursive_test_base(Config, MountInRoot) ->
             storage_sync_links_test_utils:list(W, ChildStorageFileId, StorageId, 10))
     end, ChildStorageFileIds).
 
-add_many_children_links_recursive_test_base(Config, MountInRoot) ->
+add_many_children_links_recursive_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     FilesStructure = [10, 10, 10, 10],
     StorageFileIds = generate_storage_file_ids(RootStorageFileId, FilesStructure),
     lists:foreach(fun(StorageFileId) ->
@@ -431,11 +431,11 @@ add_many_children_links_recursive_test_base(Config, MountInRoot) ->
 
     ?assertList(StorageFileIds, W, RootStorageFileId, StorageId).
 
-delete_many_children_links_recursive_test_base(Config, MountInRoot) ->
+delete_many_children_links_recursive_test_base(Config, ImportedStorage) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SpaceId = ?SPACE_ID,
     StorageId = ?STORAGE_ID,
-    RootStorageFileId = space_storage_file_id(SpaceId, MountInRoot),
+    RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     FilesStructure = [10, 10, 10, 10],
     StorageFileIds = generate_storage_file_ids(RootStorageFileId, FilesStructure),
     lists:foreach(fun(StorageFileId) ->

@@ -84,8 +84,8 @@
 
 
 -define(STORAGE_ID(Worker), begin
-  {ok, [__Storage]} = rpc:call(Worker, storage, list, []),
-  storage:get_id(__Storage)
+  {ok, [__Storage]} = rpc:call(Worker, storage_config, list, []),
+  storage_config:get_id(__Storage)
   end
 ).
 
@@ -311,9 +311,7 @@ lfm_open_in_direct_mode(Config) ->
   },
   {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
 
-  {ok, Handle} = ?assertMatch({ok, Handle}, lfm_proxy:open(
-    W, SessId1, {guid, FileGuid}, rdwr)
-  ),
+  {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
 
   Context = rpc:call(W, ets, lookup_element, [lfm_handles, Handle, 2]),
   HandleId = lfm_context:get_handle_id(Context),

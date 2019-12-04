@@ -288,7 +288,7 @@ get_file_block(Off, S) ->
     {#file_block{offset = Off, size = S}, #'FileBlock'{offset = Off, size = S}}.
 
 get_file_block_list(Num, MaxS) ->
-    lists:unzip([get_file_block(random:uniform(MaxS), random:uniform(MaxS)) || _ <- lists:seq(1, Num)]).
+    lists:unzip([get_file_block(rand:uniform(MaxS), rand:uniform(MaxS)) || _ <- lists:seq(1, Num)]).
 
 get_events(N) ->
     {InternalEvt, ProtobufEvt} = get_event(),

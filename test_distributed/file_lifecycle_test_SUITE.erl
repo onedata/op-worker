@@ -294,8 +294,8 @@ create_delete_race_test(Config) ->
 rename_to_opened_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
+    {ok, [WorkerStorage | _]} = rpc:call(W, storage_config, list, []),
+    #document{value = #storage_config{helpers = [Helpers]}} = WorkerStorage,
     #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
     StorageSpacePath = filename:join([MountPoint, "space_id1"]),
     Dirs1Length = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
@@ -326,8 +326,8 @@ create_file_existing_on_disk_test(Config) ->
     FilePath0 = <<"/space_name1/", (generator:gen_name())/binary>>,
     lfm_proxy:create_and_open(W, SessId1, FilePath0, 8#777), % To create storage dirs
 
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
+    {ok, [WorkerStorage | _]} = rpc:call(W, storage_config, list, []),
+    #document{value = #storage_config{helpers = [Helpers]}} = WorkerStorage,
     #{<<"mountPoint">> := MountPoint} = helper:get_args(Helpers),
     StoragePath = filename:join([MountPoint, "space_id1", binary_to_list(FileName)]),
 
@@ -414,8 +414,8 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 check_dir_init(W) ->
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
+    {ok, [WorkerStorage | _]} = rpc:call(W, storage_config, list, []),
+    #document{value = #storage_config{helpers = [Helpers]}} = WorkerStorage,
     #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
     StorageSpacePath = filename:join([MountPoint, "space_id1"]),
 

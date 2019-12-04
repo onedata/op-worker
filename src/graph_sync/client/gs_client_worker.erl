@@ -585,8 +585,11 @@ coalesce_cache(ConnRef, GRI = #gri{aspect = instance}, Doc = #document{value = R
 
             _ when Rev == CachedRev ->
                 % Discard updates in case the fetched scope or rev are not
-                % greater than those in cache
-                {ok, CachedRecord}
+                % greater than those in cache. However, update the connection
+                % ref in case it has changed so that the cache can be reused.
+                {ok, put_cache_state(CachedRecord, CacheState#{
+                    connection_ref => ConnRef
+                })}
         end
     end,
     Type:update_cache(Id, CacheUpdateFun, Doc#document{value = put_cache_state(Record, #{
@@ -651,7 +654,9 @@ put_cache_state(HService = #od_handle_service{}, CacheState) ->
 put_cache_state(Handle = #od_handle{}, CacheState) ->
     Handle#od_handle{cache_state = CacheState};
 put_cache_state(Harvester = #od_harvester{}, CacheState) ->
-    Harvester#od_harvester{cache_state = CacheState}.
+    Harvester#od_harvester{cache_state = CacheState};
+put_cache_state(Storage = #od_storage{}, CacheState) ->
+    Storage#od_storage{cache_state = CacheState}.
 
 
 -spec get_cache_state(Record :: tuple() | doc()) -> cache_state().
@@ -672,6 +677,8 @@ get_cache_state(#od_handle_service{cache_state = CacheState}) ->
 get_cache_state(#od_handle{cache_state = CacheState}) ->
     CacheState;
 get_cache_state(#od_harvester{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#od_storage{cache_state = CacheState}) ->
     CacheState.
 
 
@@ -710,6 +717,18 @@ is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected},
 
 is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private}, _) ->
     true;
+
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_storage, id = StorageId, scope = private}, _) ->
+    provider_logic:has_storage(StorageId);
+
+is_authorized_to_get(?ROOT_SESS_ID, AuthHint, #gri{type = od_storage, id = StorageId, scope = shared}, _) ->
+    case AuthHint of
+        ?THROUGH_SPACE(SpaceId) ->
+            space_logic:is_supported_by_storage(SpaceId, StorageId)
+                andalso provider_logic:supports_space(SpaceId);
+        _ ->
+            false
+    end;
 
 % Provider can access shares of spaces that it supports
 is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_share, scope = private}, CachedDoc) ->

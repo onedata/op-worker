@@ -20,8 +20,8 @@
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -54,39 +54,27 @@ handle(<<"OPTIONS">>, Req) ->
     );
 handle(<<"POST">>, InitialReq) ->
     Req = gui_cors:allow_origin(oneprovider:get_oz_url(), InitialReq),
-    case op_gui_session:authenticate(Req) of
-        ?ERROR_UNAUTHORIZED ->
-            cowboy_req:reply(?HTTP_401_UNAUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
-        false ->
-            cowboy_req:reply(?HTTP_401_UNAUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
-        {ok, Identity, Auth} ->
-            Host = cowboy_req:host(Req),
-            SessionId = op_gui_session:initialize(Identity, Auth, Host),
+    case http_auth:authenticate(Req, gui, disallow_data_access_caveats) of
+        {ok, ?USER(UserId) = Auth} ->
             try
-                Req2 = handle_multipart_req(Req, SessionId, #{}),
+                Req2 = handle_multipart_req(Req, Auth, #{}),
                 cowboy_req:reply(?HTTP_200_OK, Req2)
             catch
                 throw:upload_not_registered ->
-                    cowboy_req:reply(?HTTP_403_FORBIDDEN, ?CONN_CLOSE_HEADERS, Req);
+                    reply_with_error(?ERROR_FORBIDDEN, Req);
                 throw:Error ->
-                    ErrorResp = rest_translator:error_response(Error),
-                    cowboy_req:reply(
-                        ErrorResp#rest_resp.code,
-                        maps:merge(ErrorResp#rest_resp.headers, ?CONN_CLOSE_HEADERS),
-                        json_utils:encode(ErrorResp#rest_resp.body),
-                        Req
-                    );
+                    reply_with_error(Error, Req);
                 Type:Message ->
-                    UserId = op_gui_session:get_user_id(),
                     ?error_stacktrace("Error while processing file upload "
                                       "from user ~p - ~p:~p", [
                         UserId, Type, Message
                     ]),
-                    cowboy_req:reply(
-                        ?HTTP_500_INTERNAL_SERVER_ERROR,
-                        ?CONN_CLOSE_HEADERS, Req
-                    )
-            end
+                    reply_with_error(?ERROR_INTERNAL_SERVER_ERROR, Req)
+            end;
+        {ok, ?NOBODY} ->
+            reply_with_error(?ERROR_UNAUTHORIZED, Req);
+        {error, _} = Error ->
+            reply_with_error(Error, Req)
     end.
 
 
@@ -96,22 +84,20 @@ handle(<<"POST">>, InitialReq) ->
 
 
 %% @private
--spec handle_multipart_req(cowboy_req:req(), session:id(), map()) ->
+-spec handle_multipart_req(cowboy_req:req(), aai:auth(), map()) ->
     cowboy_req:req().
-handle_multipart_req(Req, SessionId, Params) ->
-    ReadBodyOpts = get_read_body_opts(),
-
+handle_multipart_req(Req, Auth, Params) ->
     case cowboy_req:read_part(Req) of
         {ok, Headers, Req2} ->
             case cow_multipart:form_data(Headers) of
                 {data, FieldName} ->
                     {ok, FieldValue, Req3} = cowboy_req:read_part_body(Req2),
-                    handle_multipart_req(Req3, SessionId, Params#{
+                    handle_multipart_req(Req3, Auth, Params#{
                         FieldName => FieldValue
                     });
                 {file, _FieldName, _Filename, _CType} ->
-                    Req3 = write_chunk(Req2, SessionId, Params, ReadBodyOpts),
-                    handle_multipart_req(Req3, SessionId, Params)
+                    Req3 = write_chunk(Req2, Auth, Params),
+                    handle_multipart_req(Req3, Auth, Params)
             end;
         {done, Req2} ->
             Req2
@@ -119,31 +105,9 @@ handle_multipart_req(Req, SessionId, Params) ->
 
 
 %% @private
--spec get_read_body_opts() -> cowboy_req:read_body_opts().
-get_read_body_opts() ->
-    {ok, UploadWriteSize} = application:get_env(?APP_NAME, upload_write_size),
-    {ok, UploadReadTimeout} = application:get_env(?APP_NAME, upload_read_timeout),
-    {ok, UploadPeriod} = application:get_env(?APP_NAME, upload_read_period),
-
-    #{
-        % length is chunk size - how much the cowboy read
-        % function returns at once.
-        length => UploadWriteSize,
-        % Maximum timeout after which body read from request
-        % is passed to upload handler process.
-        % Note that the body is returned immediately
-        % if its size reaches the buffer size (length above).
-        period => UploadPeriod,
-        % read timeout - the read will fail if read_length
-        % is not satisfied within this time.
-        timeout => UploadReadTimeout
-    }.
-
-
-%% @private
--spec write_chunk(cowboy_req:req(), session:id(), map(),
-    cowboy_req:read_body_opts()) -> cowboy_req:req().
-write_chunk(Req, SessionId, Params, ReadBodyOpts) ->
+-spec write_chunk(cowboy_req:req(), aai:auth(), map()) -> cowboy_req:req().
+write_chunk(Req, ?USER(UserId, SessionId), Params) ->
+    ReadBodyOpts = read_body_opts(),
     SanitizedParams = middleware_sanitizer:sanitize_data(Params, #{
         required => #{
             <<"guid">> => {binary, non_empty},
@@ -151,13 +115,13 @@ write_chunk(Req, SessionId, Params, ReadBodyOpts) ->
             <<"resumableChunkSize">> => {integer, {not_lower_than, 0}}
         }
     }),
-
     FileGuid = maps:get(<<"guid">>, SanitizedParams),
-    assert_file_upload_registered(FileGuid),
-    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, FileGuid}, write)),
-
-    ChunkNumber = maps:get(<<"resumableChunkNumber">>, SanitizedParams),
     ChunkSize = maps:get(<<"resumableChunkSize">>, SanitizedParams),
+    ChunkNumber = maps:get(<<"resumableChunkNumber">>, SanitizedParams),
+
+    assert_file_upload_registered(UserId, FileGuid),
+
+    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, FileGuid}, write)),
     Offset = ChunkSize * (ChunkNumber - 1),
 
     try
@@ -184,10 +148,44 @@ write_binary(Req, FileHandle, Offset, ReadBodyOpts) ->
 
 
 %% @private
--spec assert_file_upload_registered(file_id:file_guid()) -> ok | no_return().
-assert_file_upload_registered(FileGuid) ->
-    UserId = op_gui_session:get_user_id(),
+-spec assert_file_upload_registered(od_user:id(), file_id:file_guid()) ->
+    ok | no_return().
+assert_file_upload_registered(UserId, FileGuid) ->
     case file_upload_manager:is_upload_registered(UserId, FileGuid) of
         true -> ok;
         false -> throw(upload_not_registered)
     end.
+
+
+%% @private
+-spec read_body_opts() -> cowboy_req:read_body_opts().
+read_body_opts() ->
+    {ok, UploadWriteSize} = application:get_env(?APP_NAME, upload_write_size),
+    {ok, UploadReadTimeout} = application:get_env(?APP_NAME, upload_read_timeout),
+    {ok, UploadPeriod} = application:get_env(?APP_NAME, upload_read_period),
+
+    #{
+        % length is chunk size - how much the cowboy read
+        % function returns at once.
+        length => UploadWriteSize,
+        % Maximum timeout after which body read from request
+        % is passed to upload handler process.
+        % Note that the body is returned immediately
+        % if its size reaches the buffer size (length above).
+        period => UploadPeriod,
+        % read timeout - the read will fail if read_length
+        % is not satisfied within this time.
+        timeout => UploadReadTimeout
+    }.
+
+
+%% @private
+-spec reply_with_error(errors:error(), cowboy_req:req()) -> cowboy_req:req().
+reply_with_error(Error, Req) ->
+    ErrorResp = rest_translator:error_response(Error),
+    cowboy_req:reply(
+        ErrorResp#rest_resp.code,
+        maps:merge(ErrorResp#rest_resp.headers, ?CONN_CLOSE_HEADERS),
+        json_utils:encode(ErrorResp#rest_resp.body),
+        Req
+    ).

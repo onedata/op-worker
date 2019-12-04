@@ -99,7 +99,7 @@ init_pool() ->
 stop_pool() ->
     storage_traverse:stop(?POOL).
 
--spec run_import(od_space:id(), storage:id(), space_strategies:import_config()) -> ok.
+-spec run_import(od_space:id(), od_storage:id(), space_strategies:import_config()) -> ok.
 run_import(SpaceId, StorageId, ImportConfig) ->
     CurrentTimestamp = time_utils:cluster_time_seconds(),
     {ok, SSM} = storage_sync_monitoring:prepare_new_import_scan(SpaceId, StorageId, CurrentTimestamp),
@@ -107,7 +107,7 @@ run_import(SpaceId, StorageId, ImportConfig) ->
     ?debug("Starting storage_sync scan no. 1 for space: ~p and storage: ~p", [SpaceId, StorageId]),
     run(SpaceId, StorageId, ScansNum + 1, ImportConfig).
 
--spec run_update(od_space:id(), storage:id(), space_strategies:update_config()) -> ok.
+-spec run_update(od_space:id(), od_storage:id(), space_strategies:update_config()) -> ok.
 run_update(SpaceId, StorageId, UpdateConfig) ->
     CurrentTimestamp = time_utils:cluster_time_seconds(),
     {ok, SSM} = storage_sync_monitoring:prepare_new_update_scan(SpaceId, StorageId, CurrentTimestamp),
@@ -115,7 +115,7 @@ run_update(SpaceId, StorageId, UpdateConfig) ->
     ?debug("Starting storage_sync scan no. ~p for space: ~p and storage: ~p", [ScansNum + 1, SpaceId, StorageId]),
     run(SpaceId, StorageId, ScansNum + 1, UpdateConfig).
 
--spec cancel(od_space:id(), storage:id()) -> ok.
+-spec cancel(od_space:id(), od_storage:id()) -> ok.
 cancel(SpaceId, StorageId) ->
     case storage_sync_monitoring:get_finished_scans_num(SpaceId, StorageId) of
         {ok, ScansNum} ->
@@ -276,7 +276,7 @@ run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx, UpdateSyncCounters) 
     TraverseInfo = Config2#{
         scan_num => ScanNum,
         parent_ctx => file_ctx:new_root_ctx(),
-        storage_type => storage:get_type(StorageId),
+        storage_type => storage_config:get_type(StorageId),
         space_storage_file_id => SpaceStorageFileId,
         file_ctx => FileCtx,
         detect_deletions => true,
@@ -303,7 +303,7 @@ run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx, UpdateSyncCounters) 
 %%% Internal functions
 %%%===================================================================
 
--spec run(od_space:id(), storage:id(), non_neg_integer(), space_strategies:config()) -> ok.
+-spec run(od_space:id(), od_storage:id(), non_neg_integer(), space_strategies:config()) -> ok.
 run(SpaceId, StorageId, ScanNum, Config) ->
     SpaceStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
     storage_sync_info:init_batch_counters(SpaceStorageFileId, SpaceId),
@@ -312,7 +312,7 @@ run(SpaceId, StorageId, ScanNum, Config) ->
     TraverseInfo = Config2#{
         scan_num => ScanNum,
         parent_ctx => file_ctx:new_root_ctx(),
-        storage_type => storage:get_type(StorageId),
+        storage_type => storage_config:get_type(StorageId),
         space_storage_file_id => SpaceStorageFileId
     },
     RunOpts = #{
@@ -575,11 +575,11 @@ schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{
     end,
     {ok, MasterJobMap#{finish_callback => FinishCallback}}.
 
--spec encode_task_id(od_space:id(), storage:id(), non_neg_integer()) -> traverse:id().
+-spec encode_task_id(od_space:id(), od_storage:id(), non_neg_integer()) -> traverse:id().
 encode_task_id(SpaceId, StorageId, ScanNum) ->
     str_utils:join_binary([?TASK_ID_PREFIX, SpaceId, StorageId, integer_to_binary(ScanNum)], ?TASK_ID_SEP).
 
--spec decode_task_id(traverse:id()) -> {od_space:id(), storage:id(), non_neg_integer()}.
+-spec decode_task_id(traverse:id()) -> {od_space:id(), od_storage:id(), non_neg_integer()}.
 decode_task_id(TaskId) ->
     [_Prefix, SpaceId, StorageId, ScanNum] = binary:split(TaskId, ?TASK_ID_SEP, [global]),
     {SpaceId, StorageId, binary_to_integer(ScanNum)}.
@@ -633,7 +633,7 @@ process_storage_file(StorageFileCtx, Info) ->
             {error, {Error2, Reason2}}
     end.
 
--spec increase_counter(storage_sync_engine:result(), od_space:id(), storage:id()) -> ok.
+-spec increase_counter(storage_sync_engine:result(), od_space:id(), od_storage:id()) -> ok.
 increase_counter(imported, SpaceId, StorageId) ->
     storage_sync_monitoring:mark_imported_file(SpaceId, StorageId);
 increase_counter(updated, SpaceId, StorageId) ->
@@ -686,7 +686,7 @@ maybe_add_deletion_detection_link(StorageFileCtx, Info = #{space_storage_file_id
             ok
     end.
 
--spec scan_finished(od_space:id(), storage:id()) -> ok.
+-spec scan_finished(od_space:id(), od_storage:id()) -> ok.
 scan_finished(SpaceId, StorageId) ->
     SpaceStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
     ok = storage_sync_links:delete_recursive(SpaceStorageFileId, StorageId),

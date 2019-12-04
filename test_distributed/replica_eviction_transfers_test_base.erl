@@ -54,7 +54,7 @@
 ]).
 
 -define(SPACE_ID, <<"space1">>).
--define(assertQuota(Worker, SpaceId, ExpectedSize), {
+-define(assertQuota(Worker, SpaceId, ExpectedSize),
     ?assertEqual(ExpectedSize, case rpc:call(Worker, space_quota, get, [SpaceId]) of
         {ok, #document{
             value = #space_quota{
@@ -63,7 +63,7 @@
         }} -> CurrentSize;
         Error -> Error
     end
-    )}).
+    )).
 
 %%%===================================================================
 %%% API

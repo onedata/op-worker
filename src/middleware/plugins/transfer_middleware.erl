@@ -94,11 +94,10 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = cancel}}) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{gri = #gri{id = TransferId}}) ->
     case transfer:get(TransferId) of
-        {ok, #document{value = Transfer, revs = [DbRev | _]}} ->
+        {ok, #document{value = Transfer}} ->
             % Transfer doc is synchronized only with providers supporting space
             % so if it was fetched then space must be supported locally
-            {Revision, _Hash} = datastore_utils:parse_rev(DbRev),
-            {ok, {Transfer, Revision}};
+            {ok, {Transfer, 1}};
         _ ->
             ?ERROR_NOT_FOUND
     end.

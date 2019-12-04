@@ -521,11 +521,13 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
 quota_updated_on_gui_upload(Config) ->
     #env{p1 = P1, p2 = P2, file1 = File1, file2 = File2} =
         gen_test_env(Config),
-    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    UserId = <<"user1">>,
+    SessId = fun(Worker) -> ?config({session_id, {UserId, ?GET_DOMAIN(Worker)}}, Config) end,
 
-    {ok, #file_attr{guid = Guid}} = lfm_proxy:stat(P1, SessId(P1), {path, <<"/space3">>}),
+    {ok, #file_attr{guid = DirGuid}} = lfm_proxy:stat(P1, SessId(P1), {path, <<"/space3">>}),
+    {ok, FileGuid} = lfm_proxy:create(P1, SessId(P1), DirGuid, File1, 8#777),
 
-    do_multipart(P1, SessId(P1), 1, 20, 1, Guid, File1),
+    upload_file(P1, ?USER(UserId, SessId(P1)), 1, 20, 1, FileGuid),
 
     {ok, _} = lfm_proxy:stat(P1, SessId(P1), f(<<"space3">>, File1)),
     {ok, FileHandle} = lfm_proxy:open(P1, SessId(P1), f(<<"space3">>, File1), rdwr),
@@ -541,21 +543,24 @@ quota_updated_on_gui_upload(Config) ->
 failed_gui_upload_test(Config) ->
     #env{p1 = P1, user1 = User1, file1 = File1, file2 = File2} =
         gen_test_env(Config),
+    SessId = fun(Worker) -> ?config({session_id, {User1, ?GET_DOMAIN(Worker)}}, Config) end,
 
-    {ok, #file_attr{guid = Guid}} = lfm_proxy:stat(P1, User1, {path, <<"/space4">>}),
+    {ok, #file_attr{guid = DirGuid}} = lfm_proxy:stat(P1, User1, {path, <<"/space4">>}),
 
     FileSize = 500*1024*1024, % 500 MB
 
     ProviderId = initializer:domain_to_provider_id(?GET_DOMAIN(P1)),
     % Upload File1 500MB to space4
-    do_multipart(P1, User1, 100, 1048576, 5, Guid, File1),
+    {ok, File1Guid} = lfm_proxy:create(P1, SessId(P1), DirGuid, File1, 8#777),
+    upload_file(P1, ?USER(User1, SessId(P1)), 100, 1048576, 5, File1Guid),
 
     {ok, FileHandle} = lfm_proxy:open(P1, User1, f(<<"space4">>, File1), rdwr),
     ok = lfm_proxy:fsync(P1, FileHandle),
     ?assertMatch(FileSize, current_size(P1, <<"space_id4">>)),
 
     % Upload File2 800MB to space4
-    do_multipart(P1, User1, 160, 1048576, 5, Guid, File2),
+    {ok, File2Guid} = lfm_proxy:create(P1, SessId(P1), DirGuid, File2, 8#777),
+    upload_file(P1, ?USER(User1, SessId(P1)), 160, 1048576, 5, File2Guid),
     ok = lfm_proxy:fsync(P1, User1, f(<<"space4">>, File2), ProviderId),
 
     StorageFilePath1 = storage_file_path(P1, <<"space_id4">>, File2),
@@ -766,14 +771,42 @@ current_size(Worker, SpaceId) ->
 available_size(Worker, SpaceId) ->
     rpc:call(Worker, space_quota, available_size, [SpaceId]).
 
-do_multipart(Worker, SessionId, PartsNumber, PartSize, ChunksNumber, ParentGuid, FileName) ->
-    ChunkSize = PartsNumber*PartSize,
-    ParamsProp = [{<<"resumableIdentifier">>, <<"id">>}, {<<"parentId">>, ParentGuid},
-        {<<"resumableFilename">>, FileName}, {<<"resumableChunkSize">>, integer_to_binary(ChunkSize)}],
+upload_file(Worker, ?USER(UserId) = Auth, PartsNumber, PartSize, ChunksNumber, FileGuid) ->
+    ?assertMatch(
+        {ok, _},
+        rpc:call(Worker, gs_rpc, handle, [
+            Auth, <<"initializeFileUpload">>, #{<<"guid">> => FileGuid}
+        ])
+    ),
+    ?assertMatch(
+        true,
+        rpc:call(Worker, file_upload_manager, is_upload_registered, [UserId, FileGuid])
+    ),
 
+    do_multipart(Worker, Auth, PartsNumber, PartSize, ChunksNumber, FileGuid),
+
+    ?assertMatch(
+        {ok, _},
+        rpc:call(Worker, gs_rpc, handle, [
+            Auth, <<"finalizeFileUpload">>, #{<<"guid">> => FileGuid}
+        ])
+    ),
+    ?assertMatch(
+        false,
+        rpc:call(Worker, file_upload_manager, is_upload_registered, [UserId, FileGuid]), ?ATTEMPTS
+    ).
+
+do_multipart(Worker, ?USER(UserId) = Auth, PartsNumber, PartSize, ChunksNumber, FileGuid) ->
+    Params = #{
+        <<"guid">> => FileGuid,
+        <<"resumableChunkSize">> => integer_to_binary(PartsNumber*PartSize)
+    },
     utils:pforeach(fun(Chunk) ->
-        rpc:call(Worker, page_file_upload_deprecated, multipart, [#{size => PartSize, left => PartsNumber}, SessionId,
-            [{<<"resumableChunkNumber">>, integer_to_binary(Chunk)} | ParamsProp]])
+        rpc:call(Worker, page_file_upload, handle_multipart_req, [
+            #{size => PartSize, left => PartsNumber},
+            Auth,
+            Params#{<<"resumableChunkNumber">> => integer_to_binary(Chunk)}
+        ])
     end, lists:seq(1,ChunksNumber)).
 
 open_storage_file(Worker, FilePath) ->
@@ -788,11 +821,11 @@ get_space_mount_point(Worker, SpaceId) ->
     storage_mount_point(Worker, StorageId).
 
 get_supporting_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId]} = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
+    {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.
 
 storage_mount_point(Worker, StorageId) ->
-    [Helper | _] = rpc:call(Worker, storage, get_helpers, [StorageId]),
+    [Helper | _] = rpc:call(Worker, storage_config, get_helpers, [StorageId]),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
 

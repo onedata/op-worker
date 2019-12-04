@@ -64,8 +64,8 @@ raw_to_rpn(Expression) ->
 %% Takes into consideration actual file locations.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_storages(rpn(), pos_integer(), [storage:id()], [#file_location{}]) ->
-    {ture, [storage:id()]} | false | ?ERROR_INVALID_QOS_EXPRESSION.
+-spec calculate_storages(rpn(), pos_integer(), [od_storage:id()], [#file_location{}]) ->
+    {ture, [od_storage:id()]} | false | ?ERROR_INVALID_QOS_EXPRESSION.
 calculate_storages(_Expression, _ReplicasNum, [], _FileLocations) ->
     false;
 
@@ -164,7 +164,7 @@ handle_operator(ParsedOperator, Stack, RPNExpression) ->
 %% fulfilling QoS left.
 %% @end
 %%--------------------------------------------------------------------
--spec eval_rpn(rpn(), [storage:id()]) -> [storage:id()].
+-spec eval_rpn(rpn(), [od_storage:id()]) -> [od_storage:id()].
 eval_rpn(RPNExpression, StorageList) ->
     StorageSet = sets:from_list(StorageList),
     [ResSet] = lists:foldl(
@@ -173,8 +173,8 @@ eval_rpn(RPNExpression, StorageList) ->
         end , [], RPNExpression),
     sets:to_list(ResSet).
 
--spec eval_rpn(binary(), operand_stack(), sets:set(storage:id())) ->
-    [sets:set(storage:id())] | no_return().
+-spec eval_rpn(binary(), operand_stack(), sets:set(od_storage:id())) ->
+    [sets:set(od_storage:id())] | no_return().
 eval_rpn(?UNION, [Operand1, Operand2 | StackTail], _AvailableStorage) ->
     [sets:union(Operand1, Operand2)| StackTail];
 eval_rpn(?INTERSECTION, [Operand1, Operand2 | StackTail], _AvailableStorage) ->
@@ -196,7 +196,7 @@ eval_rpn(Operand, Stack, AvailableStorage) ->
 %% to value are left.
 %% @end
 %%--------------------------------------------------------------------
--spec filter_storage(binary(), binary(), sets:set(storage:id())) -> sets:set(storage:id()).
+-spec filter_storage(binary(), binary(), sets:set(od_storage:id())) -> sets:set(od_storage:id()).
 filter_storage(Key, Val, StorageSet) ->
     sets:filter(fun (StorageId) ->
         StorageQos = providers_qos:get_storage_qos(StorageId, StorageSet),
@@ -218,8 +218,8 @@ filter_storage(Key, Val, StorageSet) ->
 %% {true, StorageList}.
 %% @end
 %%--------------------------------------------------------------------
--spec select([storage:id()], pos_integer(), [#file_location{}]) ->
-    {true, [storage:id()]} | false.
+-spec select([od_storage:id()], pos_integer(), [#file_location{}]) ->
+    {true, [od_storage:id()]} | false.
 select([], _ReplicasNum, _FileLocations) ->
     false;
 select(StorageList, ReplicasNum, FileLocations) ->
@@ -244,7 +244,7 @@ select(StorageList, ReplicasNum, FileLocations) ->
 %% Returns blocks sum for given storage according to file_locations.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_blocks_size(storage:id(), [#file_location{}]) -> integer().
+-spec get_storage_blocks_size(od_storage:id(), [#file_location{}]) -> integer().
 get_storage_blocks_size(StorageId, FileLocations) ->
     lists:foldl(fun (FileLocation, PartialStorageBlockSize) ->
         % TODO: VFS-5573 use storage qos

@@ -30,11 +30,11 @@
 %%%===================================================================
 
 get_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId | _]} = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
+    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.
 
 get_storage_doc(Worker, StorageId) ->
-    rpc:call(Worker, storage, get, [StorageId]).
+    rpc:call(Worker, storage_config, get, [StorageId]).
 
 new_handle(Worker, SpaceId, StorageFileId, #document{key = StorageId}) ->
     new_handle(Worker, SpaceId, StorageFileId, StorageId);
@@ -157,8 +157,8 @@ recursive_rm(Worker, SDHandle = #sd_handle{storage_id = StorageId}, DoNotDeleteR
                     unlink(Worker, SDHandle, Size)
             end;
         ?DIRECTORY_TYPE ->
-            {ok, Storage} = rpc:call(Worker, storage, get, [StorageId]),
-            Helper = storage:get_helper(Storage),
+            {ok, Storage} = rpc:call(Worker, storage_config, get, [StorageId]),
+            Helper = storage_config:get_helper(Storage),
             HelperName = helper:get_name(Helper),
             case HelperName of
                 ?POSIX_HELPER_NAME ->

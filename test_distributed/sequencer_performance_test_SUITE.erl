@@ -68,17 +68,17 @@ all() -> ?ALL(?TEST_CASES, ?TEST_CASES).
 
 manager_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    StmId = 1,
+    StreamId = 1,
     {ok, SessId} = session_setup(Worker),
     MsgNum = 2000,
     ProcNum = 100,
 
-    InitMessage = client_message(SessId, StmId, 0),
+    InitMessage = client_message(SessId, StreamId, 0),
     ?assertEqual(ok, rpc:call(Worker, sequencer,
         communicate_with_sequencer_manager, [InitMessage, SessId, true])),
 
     Messages = lists:map(fun(SeqNum) ->
-        client_message(SessId, StmId, SeqNum)
+        client_message(SessId, StreamId, SeqNum)
     end, lists:seq(1, MsgNum)),
 
     {ok, Manager} = ?assertMatch({ok, _},

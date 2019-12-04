@@ -5,11 +5,13 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model for holding storage configuration.
-%%%      @todo: rewrite without "ROOT_STORAGE" when implementation of persistent_store:list will be ready
+%%% @doc
+%%% Model for holding storage configuration. It contains provider specific
+%%% information and private storage data. It should not be shared with other providers.
+%%% To share storage data with other providers(through onezone) od_storage model is used.
 %%% @end
 %%%-------------------------------------------------------------------
--module(storage).
+-module(storage_config).
 -author("Rafal Slota").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -18,30 +20,31 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([new/2, new/4]).
--export([get_id/1, get_name/1, is_readonly/1, get_helpers/1, get_luma_config_map/1, get_helper/1]).
+-export([new/2, new/4, new/5]).
+-export([get_id/1, get_name/1, is_readonly/1, is_imported_storage/1,
+    get_helpers/1, get_luma_config_map/1, get_helper/1, get_type/1]).
 -export([select_helper/2, select/1]).
--export([get/1, exists/1, delete/1, update/2, create/1, list/0]).
--export([supports_any_space/1]).
+-export([get/1, exists/1, delete/1, update/2, save_doc/1, list/0]).
+-export([on_storage_created/1]).
+-export([delete_all/0]).
 
 %% Exports for onepanel RPC
 -export([update_name/2, update_helper_args/3, update_admin_ctx/3,
-    update_luma_config/2, set_luma_config/2, set_insecure/3,
-    set_readonly/2, safe_remove/1, describe/1]).
--export([get_luma_config/1, is_luma_enabled/1, get_type/1]).
+    update_luma_config/2, set_luma_config/2, set_insecure/3, set_readonly/2,
+    set_imported_storage/2, set_imported_storage_insecure/2, describe/1]).
+-export([get_luma_config/1, is_luma_enabled/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_record_version/0, get_record_struct/1]).
 
--type id() :: datastore:key().
--type record() :: #storage{}.
+-type record() :: #storage_config{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type name() :: binary().
 -type helper() :: helpers:helper().
 
--export_type([id/0, record/0, doc/0, name/0, helper/0]).
+-export_type([record/0, doc/0, name/0, helper/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -58,31 +61,25 @@
 %% Updates storage.
 %% @end
 %%--------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
+-spec update(od_storage:id(), diff()) -> {ok, doc()} | {error, term()}.
 update(Key, Diff) ->
     datastore_model:update(?CTX, Key, Diff).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates storage.
+%% Saves storage document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec create(doc()) -> {ok, id()} | {error, term()}.
-create(#document{value = #storage{}} = Doc) ->
-    case ?extract_key(datastore_model:create(?CTX, Doc)) of
-        {ok, StorageId} ->
-            rtransfer_put_storage(Doc#document{key = StorageId}),
-            {ok, StorageId};
-        Other ->
-            Other
-    end.
+-spec save_doc(doc()) -> {ok, od_storage:id()} | {error, term()}.
+save_doc(#document{value = #storage_config{}} = Doc) ->
+    ?extract_key(datastore_model:create(?CTX, Doc)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns storage.
 %% @end
 %%--------------------------------------------------------------------
--spec get(id()) -> {ok, doc()} | {error, term()}.
+-spec get(od_storage:id()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
     datastore_model:get(?CTX, Key).
 
@@ -91,16 +88,16 @@ get(Key) ->
 %% Deletes storage.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(id()) -> ok | {error, term()}.
-delete(Key) ->
-    datastore_model:delete(?CTX, Key).
+-spec delete(od_storage:id()) -> ok | {error, term()}.
+delete(StorageId) ->
+    datastore_model:delete(?CTX, StorageId).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks whether storage exists.
 %% @end
 %%--------------------------------------------------------------------
--spec exists(id()) -> boolean().
+-spec exists(od_storage:id()) -> boolean().
 exists(Key) ->
     {ok, Exists} = datastore_model:exists(?CTX, Key),
     Exists.
@@ -120,7 +117,7 @@ list() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv new(Name, Helpers, false).
+%% @equiv new(Name, Helpers, false, undefined).
 %% @end
 %%--------------------------------------------------------------------
 -spec new(name(), [helper()]) -> doc().
@@ -130,16 +127,27 @@ new(Name, Helpers) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Constructs storage record.
+%% @equiv new(Name, Helpers, ReadOnly, LumaConfig, false).
 %% @end
 %%--------------------------------------------------------------------
 -spec new(name(), [helper()], boolean(), undefined | luma_config:config()) -> doc().
 new(Name, Helpers, ReadOnly, LumaConfig) ->
-    #document{value = #storage{
+    new(Name, Helpers, ReadOnly, LumaConfig, false).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Constructs storage record.
+%% @end
+%%--------------------------------------------------------------------
+-spec new(name(), [helper()], boolean(), undefined | luma_config:config(), boolean()) -> doc().
+new(Name, Helpers, ReadOnly, LumaConfig, ImportedStorage) ->
+    #document{value = #storage_config{
         name = Name,
         helpers = Helpers,
         readonly = ReadOnly,
-        luma_config = LumaConfig
+        luma_config = LumaConfig,
+        imported_storage = ImportedStorage
     }}.
 
 
@@ -148,10 +156,10 @@ new(Name, Helpers, ReadOnly, LumaConfig) ->
 %% Returns storage ID.
 %% @end
 %%--------------------------------------------------------------------
--spec get_id(id() | doc()) -> id().
+-spec get_id(od_storage:id() | doc()) -> od_storage:id().
 get_id(<<_/binary>> = StorageId) ->
     StorageId;
-get_id(#document{key = StorageId, value = #storage{}}) ->
+get_id(#document{key = StorageId, value = #storage_config{}}) ->
     StorageId.
 
 
@@ -161,9 +169,9 @@ get_id(#document{key = StorageId, value = #storage{}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_name(record() | doc()) -> name().
-get_name(#storage{name = Name}) ->
+get_name(#storage_config{name = Name}) ->
     Name;
-get_name(#document{value = #storage{} = Value}) ->
+get_name(#document{value = #storage_config{} = Value}) ->
     get_name(Value).
 
 
@@ -173,35 +181,43 @@ get_name(#document{value = #storage{} = Value}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec is_readonly(record() | doc()) -> boolean().
-is_readonly(#storage{readonly = ReadOnly}) ->
+is_readonly(#storage_config{readonly = ReadOnly}) ->
     ReadOnly;
-is_readonly(#document{value = #storage{} = Value}) ->
+is_readonly(#document{value = #storage_config{} = Value}) ->
     is_readonly(Value).
 
 
--spec get_helper(record() | doc() | id()) -> helper().
-get_helper(#storage{helpers = [Helper | _]}) ->
-    Helper;
-get_helper(#document{value = #storage{} = Value}) ->
-    get_helper(Value);
-get_helper(StorageId) ->
-    {ok, StorageDoc} = ?MODULE:get(StorageId),
-    get_helper(StorageDoc).
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether imported storage value is set for given storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_imported_storage(record() | doc() | od_storage:id()) -> boolean().
+is_imported_storage(#storage_config{imported_storage = ImportedStorage}) ->
+    ImportedStorage;
+is_imported_storage(#document{value = #storage_config{} = Value}) ->
+    is_imported_storage(Value);
+is_imported_storage(StorageId) ->
+    {ok, #document{value = Value}} = ?MODULE:get(StorageId),
+    is_imported_storage(Value).
 
+-spec get_helper(record() | doc() | od_storage:id()) -> helper().
+get_helper(Storage) ->
+    hd(get_helpers(Storage)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of storage helpers.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helpers(record() | doc() | id()) -> [helper()].
-get_helpers(#storage{helpers = Helpers}) ->
+-spec get_helpers(record() | doc() | od_storage:id()) -> [helper()].
+get_helpers(#storage_config{helpers = Helpers}) ->
     Helpers;
-get_helpers(#document{value = #storage{} = Value}) ->
+get_helpers(#document{value = #storage_config{} = Value}) ->
     get_helpers(Value);
 get_helpers(StorageId) ->
-    {ok, StorageDoc} = ?MODULE:get(StorageId),
-    get_helpers(StorageDoc).
+    {ok, StorageConfig} = ?MODULE:get(StorageId),
+    get_helpers(StorageConfig).
 
 
 %%-------------------------------------------------------------------
@@ -210,9 +226,9 @@ get_helpers(StorageId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get_luma_config_map(record() | doc()) -> map().
-get_luma_config_map(#storage{luma_config = undefined}) ->
+get_luma_config_map(#storage_config{luma_config = undefined}) ->
     #{enabled => false};
-get_luma_config_map(#storage{luma_config = #luma_config{url = URL}}) ->
+get_luma_config_map(#storage_config{luma_config = #luma_config{url = URL}}) ->
     #{
         enabled => true,
         url => URL
@@ -220,7 +236,7 @@ get_luma_config_map(#storage{luma_config = #luma_config{url = URL}}) ->
 get_luma_config_map(#document{value = Storage}) ->
     get_luma_config_map(Storage).
 
--spec get_type(id() | record() | doc()) -> helper:type().
+-spec get_type(od_storage:id() | record() | doc()) -> helper:type().
 get_type(Storage) ->
     Helper = get_helper(Storage),
     helper:get_type(Helper).
@@ -232,9 +248,9 @@ get_type(Storage) ->
 %%--------------------------------------------------------------------
 %% @formatter:off
 -spec select_helper
-    (record() | doc() | id(), [helper:name()]) ->
+    (record() | doc() | od_storage:id(), [helper:name()]) ->
         {ok, [helper()]} | {error, Reason :: term()};
-    (record() | doc() | id(), helper:name()) ->
+    (record() | doc() | od_storage:id(), helper:name()) ->
         {ok, helper()} | {error, Reason :: term()}.
 %% @formatter:on
 select_helper(Storage, HelperNames) when is_list(HelperNames) ->
@@ -253,9 +269,9 @@ select_helper(Storage, HelperName) ->
     end.
 
 
--spec update_name(StorageId :: id(), NewName :: name()) -> ok.
+-spec update_name(StorageId :: od_storage:id(), NewName :: name()) -> ok.
 update_name(StorageId, NewName) ->
-    UpdateFun = fun(Storage) -> {ok, Storage#storage{name = NewName}} end,
+    UpdateFun = fun(Storage) -> {ok, Storage#storage_config{name = NewName}} end,
     case update(StorageId, UpdateFun) of
         {ok, _} -> rtransfer_put_storage(StorageId);
         Error -> Error
@@ -267,7 +283,7 @@ update_name(StorageId, NewName) ->
 %% Updates storage helper arguments.
 %% @end
 %%--------------------------------------------------------------------
--spec update_helper_args(storage:id(), helper:name(), helper:args()) ->
+-spec update_helper_args(od_storage:id(), helper:name(), helper:args()) ->
     ok | {error, term()}.
 update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
     UpdateFun = fun(Helper) -> helper:update_args(Helper, Changes) end,
@@ -279,7 +295,7 @@ update_helper_args(StorageId, HelperName, Changes) when is_map(Changes) ->
 %% Updates storage helper admin ctx.
 %% @end
 %%--------------------------------------------------------------------
--spec update_admin_ctx(storage:id(), helper:name(), helper:user_ctx()) ->
+-spec update_admin_ctx(od_storage:id(), helper:name(), helper:user_ctx()) ->
     ok | {error, term()}.
 update_admin_ctx(StorageId, HelperName, Changes) when is_map(Changes) ->
     UpdateFun = fun(Helper) -> helper:update_admin_ctx(Helper, Changes) end,
@@ -292,18 +308,18 @@ update_admin_ctx(StorageId, HelperName, Changes) when is_map(Changes) ->
 %% LUMA cannot be enabled or disabled, only its parameters may be changed.
 %% @end
 %%--------------------------------------------------------------------
--spec update_luma_config(storage:id(), Changes) -> ok | {error, term()}
+-spec update_luma_config(od_storage:id(), Changes) -> ok | {error, term()}
     when Changes :: #{url => luma_config:url(), api_key => luma_config:api_key()}.
 update_luma_config(StorageId, Changes) when is_map(Changes) ->
     ?extract_ok(update(StorageId, fun
-        (#storage{luma_config = undefined}) ->
+        (#storage_config{luma_config = undefined}) ->
             {error, luma_disabled};
-        (#storage{luma_config = #luma_config{url = Url, api_key = ApiKey}} = Storage) ->
+        (#storage_config{luma_config = #luma_config{url = Url, api_key = ApiKey}} = Storage) ->
             NewConfig = luma_config:new(
                 maps:get(url, Changes, Url),
                 maps:get(api_key, Changes, ApiKey)
             ),
-            {ok, Storage#storage{luma_config = NewConfig}}
+            {ok, Storage#storage_config{luma_config = NewConfig}}
     end)).
 
 
@@ -313,11 +329,11 @@ update_luma_config(StorageId, Changes) when is_map(Changes) ->
 %% LUMA cannot be enabled or disabled, only its parameters may be changed.
 %% @end
 %%--------------------------------------------------------------------
--spec set_luma_config(storage:id(), LumaConfig :: luma_config:config() | undefined) ->
+-spec set_luma_config(od_storage:id(), LumaConfig :: luma_config:config() | undefined) ->
     ok | {error, term()}.
 set_luma_config(StorageId, LumaConfig) ->
-    ?extract_ok(update(StorageId, fun(#storage{} = Storage) ->
-        {ok, Storage#storage{luma_config = LumaConfig}}
+    ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
+        {ok, Storage#storage_config{luma_config = LumaConfig}}
     end)).
 
 
@@ -326,7 +342,7 @@ set_luma_config(StorageId, LumaConfig) ->
 %% Updates storage helper 'insecure' setting.
 %% @end
 %%--------------------------------------------------------------------
--spec set_insecure(storage:id(), helper:name(), Insecure :: boolean()) ->
+-spec set_insecure(od_storage:id(), helper:name(), Insecure :: boolean()) ->
     ok | {error, term()}.
 set_insecure(StorageId, HelperName, Insecure) when is_boolean(Insecure) ->
     UpdateFun = fun(Helper) -> helper:update_insecure(Helper, Insecure) end,
@@ -338,49 +354,41 @@ set_insecure(StorageId, HelperName, Insecure) when is_boolean(Insecure) ->
 %% Updates storage's 'readonly' setting.
 %% @end
 %%--------------------------------------------------------------------
--spec set_readonly(StorageId :: storage:id(), Readonly :: boolean()) ->
+-spec set_readonly(StorageId :: od_storage:id(), Readonly :: boolean()) ->
     ok | {error, term()}.
 set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
-    ?extract_ok(update(StorageId, fun(#storage{} = Storage) ->
-        {ok, Storage#storage{readonly = Readonly}}
+    ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
+        {ok, Storage#storage_config{readonly = Readonly}}
     end)).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes storage. Fails with an error if the storage supports
-%% any space.
+%% Sets imported storage value if storage is not supporting any space.
 %% @end
 %%--------------------------------------------------------------------
--spec safe_remove(id()) -> ok | {error, storage_in_use | term()}.
-safe_remove(StorageId) ->
-    critical_section:run({storage_to_space, StorageId}, fun() ->
-        case supports_any_space(StorageId) of
+-spec set_imported_storage(od_storage:id(), boolean()) -> ok | ?ERROR_STORAGE_IN_USE.
+set_imported_storage(StorageId, Value) when is_boolean(Value)->
+    storage_logic:support_critical_section(StorageId, fun() ->
+        case storage_logic:supports_any_space(StorageId) of
             true ->
-                {error, storage_in_use};
+                ?ERROR_STORAGE_IN_USE;
             false ->
-                % TODO VFS-5124 Remove from rtransfer
-                delete(StorageId)
+                set_imported_storage_insecure(StorageId, Value)
         end
     end).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks if given storage supports any space.
+%% Sets imported storage value.
 %% @end
 %%--------------------------------------------------------------------
--spec supports_any_space(StorageId :: id()) -> boolean().
-supports_any_space(StorageId) ->
-    case provider_logic:get_spaces() of
-        {ok, Spaces} ->
-            lists:any(fun(SpaceId) ->
-                {ok, StorageIds} = space_storage:get_storage_ids(SpaceId),
-                lists:member(StorageId, StorageIds)
-            end, Spaces);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            false
-    end.
+-spec set_imported_storage_insecure(od_storage:id(), boolean()) -> ok.
+set_imported_storage_insecure(StorageId, Value) ->
+    ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
+        {ok, Storage#storage_config{imported_storage = Value}}
+    end)).
 
 
 %%--------------------------------------------------------------------
@@ -390,7 +398,7 @@ supports_any_space(StorageId) ->
 %%--------------------------------------------------------------------
 -spec select(name()) -> {ok, doc()} | {error, term()}.
 select(Name) ->
-    case storage:list() of
+    case list() of
         {ok, Docs} ->
             Docs2 = lists:filter(fun(Doc) ->
                 get_name(Doc) =:= Name
@@ -408,9 +416,9 @@ select(Name) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get_luma_config(record() | doc()) -> undefined | luma_config:config().
-get_luma_config(#storage{luma_config = LumaConfig}) ->
+get_luma_config(#storage_config{luma_config = LumaConfig}) ->
     LumaConfig;
-get_luma_config(#document{value = Storage = #storage{}}) ->
+get_luma_config(#document{value = Storage = #storage_config{}}) ->
     get_luma_config(Storage).
 
 
@@ -420,11 +428,11 @@ get_luma_config(#document{value = Storage = #storage{}}) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec is_luma_enabled(record() | doc()) -> boolean().
-is_luma_enabled(#storage{luma_config = undefined}) ->
+is_luma_enabled(#storage_config{luma_config = undefined}) ->
     false;
-is_luma_enabled(#storage{luma_config = #luma_config{}}) ->
+is_luma_enabled(#storage_config{luma_config = #luma_config{}}) ->
     true;
-is_luma_enabled(#document{value = #storage{} = Storage}) ->
+is_luma_enabled(#document{value = #storage_config{} = Storage}) ->
     is_luma_enabled(Storage).
 
 
@@ -434,7 +442,7 @@ is_luma_enabled(#document{value = #storage{} = Storage}) ->
 %% remove sensitive information.
 %% @end
 %%-------------------------------------------------------------------
--spec describe(id()) ->
+-spec describe(od_storage:id()) ->
     {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.
 describe(StorageId) ->
     case ?MODULE:get(StorageId) of
@@ -452,10 +460,22 @@ describe(StorageId) ->
                 <<"insecure">> => helper:is_insecure(Helper),
                 <<"storagePathType">> => helper:get_storage_path_type(Helper),
                 <<"lumaEnabled">> => maps:get(enabled, LumaConfigMap, false),
-                <<"lumaUrl">> => maps:get(url, LumaConfigMap, undefined)
+                <<"lumaUrl">> => maps:get(url, LumaConfigMap, undefined),
+                <<"importedStorage">> => is_imported_storage(Storage)
             }};
         {error, _} = Error -> Error
     end.
+
+-spec on_storage_created(od_storage:id()) -> ok.
+on_storage_created(StorageId) ->
+    ok = rtransfer_put_storage(StorageId).
+
+-spec delete_all() -> ok.
+delete_all() ->
+    {ok, Storages} = list(),
+    lists:foreach(fun(#document{key = Id, value = #storage_config{}}) ->
+        delete(Id)
+    end, Storages).
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -478,7 +498,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    5.
+    1.
 
 
 %%--------------------------------------------------------------------
@@ -489,58 +509,6 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(1) ->
-    {record, [
-        {name, binary},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}}
-        ]}]}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean}
-        ]}]},
-        {readonly, boolean}
-    ]};
-get_record_struct(3) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean}
-        ]}]},
-        {readonly, boolean},
-        {luma_config, {record, [
-            {url, string},
-            {cache_timeout, integer},
-            {api_key, string}
-        ]}}
-    ]};
-get_record_struct(4) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean},
-            {extended_direct_io, boolean}
-        ]}]},
-        {readonly, boolean},
-        {luma_config, {record, [
-            {url, string},
-            {cache_timeout, integer},
-            {api_key, string}
-        ]}}
-    ]};
-get_record_struct(5) ->
     {record, [
         {name, string},
         {helpers, [{record, [
@@ -555,67 +523,9 @@ get_record_struct(5) ->
         {luma_config, {record, [
             {url, string},
             {api_key, string}
-        ]}}
+        ]}},
+        {imported_storage, boolean}
     ]}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades model's record from provided version to the next one.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {?MODULE, Name, Helpers}) ->
-    {2, #storage{
-        name = Name,
-        helpers = [{
-            helper,
-            helper:translate_name(HelperName),
-            maps:fold(fun(K, V, Args) ->
-                maps:put(helper:translate_arg_name(K), V, Args)
-            end, #{}, HelperArgs),
-            #{},
-            false
-        } || {_, HelperName, HelperArgs} <- Helpers]
-    }};
-upgrade_record(2, {?MODULE, Name, Helpers, Readonly}) ->
-    {3, #storage{
-        name = Name,
-        helpers = Helpers,
-        readonly = Readonly,
-        luma_config = undefined
-    }};
-upgrade_record(3, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
-    {4, #storage{
-        name = Name,
-        helpers = [{
-            helper,
-            HelperName,
-            HelperArgs,
-            AdminCtx,
-            Insecure,
-            false
-        } || {_, HelperName, HelperArgs, AdminCtx, Insecure} <- Helpers],
-        readonly = Readonly,
-        luma_config = LumaConfig
-    }};
-upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
-    {5, #storage{
-        name = Name,
-        helpers = [
-            #helper{
-                name = HelperName,
-                args = HelperArgs,
-                admin_ctx = AdminCtx,
-                insecure = Insecure,
-                extended_direct_io = ExtendedDirectIO,
-                storage_path_type = ?CANONICAL_STORAGE_PATH
-            } || {_, HelperName, HelperArgs, AdminCtx, Insecure,
-                ExtendedDirectIO} <- Helpers
-        ],
-        readonly = Readonly,
-        luma_config = LumaConfig
-    }}.
 
 
 %%%===================================================================
@@ -628,7 +538,7 @@ upgrade_record(4, {?MODULE, Name, Helpers, Readonly, LumaConfig}) ->
 %% Updates selected storage helper in the datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec update_helper(StorageId :: storage:id(), helper:name(), DiffFun) ->
+-spec update_helper(StorageId :: od_storage:id(), helper:name(), DiffFun) ->
     ok | {error, term()} when
     DiffFun :: fun((helper()) -> {ok, helper()} | {error, term()}).
 update_helper(StorageId, HelperName, DiffFun) ->
@@ -660,7 +570,7 @@ update_helper(StorageId, HelperName, DiffFun) ->
 %% Handles actions necessary after helper params have been changed.
 %% @end
 %%--------------------------------------------------------------------
--spec on_helper_changed(StorageId :: storage:id()) -> ok.
+-spec on_helper_changed(StorageId :: od_storage:id()) -> ok.
 on_helper_changed(StorageId) ->
     {ok, Nodes} = node_manager:get_cluster_nodes(),
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
@@ -677,9 +587,9 @@ on_helper_changed(StorageId) ->
 %%--------------------------------------------------------------------
 -spec replace_helper(record(), helper:name(), NewHelper :: helpers:helper()) ->
     record().
-replace_helper(#storage{helpers = OldHelpers} = Storage, HelperName, NewHelper) ->
+replace_helper(#storage_config{helpers = OldHelpers} = Storage, HelperName, NewHelper) ->
     NewHelpers = lists:keyreplace(HelperName, #helper.name, OldHelpers, NewHelper),
-    Storage#storage{helpers = NewHelpers}.
+    Storage#storage_config{helpers = NewHelpers}.
 
 
 %%--------------------------------------------------------------------
@@ -688,11 +598,9 @@ replace_helper(#storage{helpers = OldHelpers} = Storage, HelperName, NewHelper) 
 %% Adds or updates storage in rtransfer config.
 %% @end
 %%--------------------------------------------------------------------
--spec rtransfer_put_storage(doc() | id()) -> ok.
-rtransfer_put_storage(#document{} = Doc) ->
-    rtransfer_config:add_storage(Doc),
-    ok;
-
+-spec rtransfer_put_storage(od_storage:id()) -> ok.
 rtransfer_put_storage(StorageId) ->
     {ok, Doc} = ?MODULE:get(StorageId),
-    rtransfer_put_storage(Doc).
+    rtransfer_config:add_storage(Doc),
+    ok.
+
