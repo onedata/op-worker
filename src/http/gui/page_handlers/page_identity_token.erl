@@ -43,8 +43,8 @@ handle(<<"GET">>, Req) ->
             throw(?ERROR_UNAUTHORIZED);
         PeerAccessToken ->
             case token_logic:verify_identity_token(PeerAccessToken) of
-                {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
-                    Audience = ?AUD(?OP_WORKER, ProviderId),
+                {ok, ?SUB(?ONEPROVIDER, PeerProviderId)} ->
+                    Audience = ?AUD(?OP_WORKER, PeerProviderId),
                     {ok, IdentityToken} = provider_auth:get_identity_token(Audience),
                     cowboy_req:reply(
                         ?HTTP_200_OK,

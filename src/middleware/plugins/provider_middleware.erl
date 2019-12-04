@@ -116,9 +116,8 @@ fetch_entity(#op_req{auth = ?USER(_UserId, SessionId), auth_hint = AuthHint, gri
     scope = protected
 }}) ->
     case provider_logic:get_protected_data(SessionId, ProviderId, AuthHint) of
-        {ok, #document{value = Provider, revs = [DbRev | _]}} ->
-            {Revision, _Hash} = datastore_utils:parse_rev(DbRev),
-            {ok, {Provider, Revision}};
+        {ok, #document{value = Provider}} ->
+            {ok, {Provider, 1}};
         {error, _} = Error ->
             Error
     end;

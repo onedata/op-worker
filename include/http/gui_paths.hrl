@@ -49,6 +49,9 @@
 %% All requests to this endpoint will be proxied to onepanel.
 -define(PANEL_REST_PROXY_PATH, "/api/v3/onepanel/").
 
+% Graph Sync websocket endpoint
+-define(GUI_GRAPH_SYNC_WS_PATH, "/graph_sync/gui").
+
 -endif.
 
 

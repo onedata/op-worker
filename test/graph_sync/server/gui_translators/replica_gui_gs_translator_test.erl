@@ -9,7 +9,7 @@
 %%% Unit tests for file_distribution_data_backend module.
 %%% @end
 %%%--------------------------------------------------------------------
--module(replica_gui_gs_test).
+-module(replica_gui_gs_translator_test).
 -author("Lukasz Opiola").
 
 -ifdef(TEST).

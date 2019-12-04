@@ -73,9 +73,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = eff_spaces}}) ->
     {ok, middleware:versioned_entity()} | errors:error().
 fetch_entity(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{id = UserId}}) ->
     case user_logic:get(SessionId, UserId) of
-        {ok, #document{value = User, revs = [DbRev | _]}} ->
-            {Revision, _Hash} = datastore_utils:parse_rev(DbRev),
-            {ok, {User, Revision}};
+        {ok, #document{value = User}} ->
+            {ok, {User, 1}};
         {error, _} = Error ->
             Error
     end;
@@ -85,9 +84,8 @@ fetch_entity(#op_req{auth = ?USER(_ClientId, SessionId), auth_hint = AuthHint, g
     scope = shared
 }}) ->
     case user_logic:get_shared_data(SessionId, UserId, AuthHint) of
-        {ok, #document{value = User, revs = [DbRev | _]}} ->
-            {Revision, _Hash} = datastore_utils:parse_rev(DbRev),
-            {ok, {User, Revision}};
+        {ok, #document{value = User}} ->
+            {ok, {User, 1}};
         {error, _} = Error ->
             Error
     end;
