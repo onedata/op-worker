@@ -84,9 +84,9 @@ get_handshake_error_msg(_) ->
 -spec handle_client_handshake(#client_handshake_request{}, inet:ip_address()) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
-    nonce = Nonce,
+    session_id = SessionId,
     auth = #token_auth{token = SerializedToken} = TokenAuth0
-} = Req, IpAddress) when is_binary(Nonce) ->
+} = Req, IpAddress) when is_binary(SessionId) ->
 
     assert_client_compatibility(Req, IpAddress),
 
@@ -98,7 +98,7 @@ handle_client_handshake(#client_handshake_request{
     case auth_manager:verify(TokenAuth1) of
         {ok, ?USER(UserId), _TTL} ->
             {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
-                Nonce, #user_identity{user_id = UserId}, TokenAuth1
+                SessionId, #user_identity{user_id = UserId}, TokenAuth1
             ),
             {UserId, SessionId};
         ?ERROR_FORBIDDEN ->

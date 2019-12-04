@@ -281,7 +281,7 @@ setup_session(Worker, [{_, #user_config{
         list_to_binary(Text ++ "_" ++ binary_to_list(User))
     end,
 
-    Nonce = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_nonce", UserId),
+    SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
 
     Identity = #user_identity{user_id = UserId},
     Auth = #token_auth{
@@ -290,11 +290,11 @@ setup_session(Worker, [{_, #user_config{
         interface = oneclient,
         data_access_caveats_policy = allow_data_access_caveats
     },
-    {ok, SessId} = ?assertMatch({ok, _}, rpc:call(
+    {ok, SessId} = ?assertMatch({ok, SessId}, rpc:call(
         Worker,
         session_manager,
         reuse_or_create_fuse_session,
-        [Nonce, Identity, Auth])
+        [SessId, Identity, Auth])
     ),
 
     lists:foreach(fun({_, SpaceName}) ->
@@ -313,7 +313,6 @@ setup_session(Worker, [{_, #user_config{
         {{user_name, UserId}, UserName},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
         {{auth_token, {UserId, ?GET_DOMAIN(Worker)}}, Token},
-        {{session_nonce, {UserId, ?GET_DOMAIN(Worker)}}, Nonce},
         {{fslogic_ctx, UserId}, Ctx}
         | setup_session(Worker, R, Config)
     ].

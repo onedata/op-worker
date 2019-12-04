@@ -123,8 +123,8 @@ all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
 provider_connection_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    lists:foreach(fun({ProviderId, Nonce, ExpStatus}) ->
-        ?assertMatch(ExpStatus, handshake_as_provider(Worker1, ProviderId, Nonce))
+    lists:foreach(fun({ProviderId, Token, ExpStatus}) ->
+        ?assertMatch(ExpStatus, handshake_as_provider(Worker1, ProviderId, Token))
     end, [
         {?INCORRECT_PROVIDER_ID, ?CORRECT_TOKEN, 'INVALID_PROVIDER'},
         {?INCORRECT_PROVIDER_ID, ?INCORRECT_TOKEN, 'INVALID_MACAROON'},
@@ -717,8 +717,8 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
-handshake_as_provider(Node, ProviderId, Nonce) ->
-    case fuse_test_utils:connect_as_provider(Node, ProviderId, Nonce) of
+handshake_as_provider(Node, ProviderId, Token) ->
+    case fuse_test_utils:connect_as_provider(Node, ProviderId, Token) of
         {ok, Sock} ->
             ssl:close(Sock),
             'OK';
@@ -728,8 +728,8 @@ handshake_as_provider(Node, ProviderId, Nonce) ->
 
 
 handshake_as_client(Node, Token, Version) ->
-    Nonce = crypto:strong_rand_bytes(10),
-    case fuse_test_utils:connect_as_client(Node, Nonce, Token, Version) of
+    SessId = crypto:strong_rand_bytes(10),
+    case fuse_test_utils:connect_as_client(Node, SessId, Token, Version) of
         {ok, Sock} ->
             ssl:close(Sock),
             'OK';

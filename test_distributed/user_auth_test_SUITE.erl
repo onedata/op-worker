@@ -111,7 +111,7 @@ auth_cache_test(Config) ->
 token_authentication(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    Nonce = <<"nonce">>,
+    SessId = <<"session_id">>,
     SerializedToken = initializer:create_token(?USER_ID),
 
     TokenAuth = #token_auth{
@@ -122,12 +122,12 @@ token_authentication(Config) ->
     },
 
     % when
-    {ok, {Sock, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [], Nonce, TokenAuth),
+    {ok, {Sock, SessId}} = fuse_test_utils:connect_via_token(Worker1, [], SessId, TokenAuth),
 
     % then
     ?assertMatch(
         {ok, #document{value = #session{identity = #user_identity{user_id = ?USER_ID}}}},
-        rpc:call(Worker1, session, get, [SessionId])
+        rpc:call(Worker1, session, get, [SessId])
     ),
     ?assertMatch(
         {ok, ?USER(?USER_ID), undefined},
