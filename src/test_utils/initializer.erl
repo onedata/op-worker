@@ -134,6 +134,15 @@
     ]}
 ]).
 
+-define(TOKENS_SECRET, <<"secret">>).
+
+-define(SUPPORTED_ACCESS_TOKEN_CAVEATS, [
+    cv_time, cv_audience,
+    cv_ip, cv_asn, cv_country, cv_region,
+    cv_interface, cv_api,
+    cv_data_readonly, cv_data_path, cv_data_objectid
+]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -247,7 +256,7 @@ create_token(UserId, Caveats) ->
             id = UserId,
             type = ?ACCESS_TOKEN,
             persistent = false
-        }, UserId, Caveats))
+        }, ?TOKENS_SECRET, Caveats))
     ),
     SerializedToken.
 
@@ -495,28 +504,28 @@ mock_auth_manager(Config) ->
     test_utils:mock_expect(Workers, auth_manager, verify,
         fun(#token_auth{
             token = SerializedToken,
+            peer_ip = PeerIp,
+            interface = Interface,
             data_access_caveats_policy = DataAccessCaveatsPolicy
         }) ->
             case tokens:deserialize(SerializedToken) of
                 {ok, Token} ->
-                    Caveats = tokens:get_caveats(Token),
-                    Auth = #auth{
-                        subject = Token#token.subject,
-                        caveats = Caveats
+                    AuthCtx = #auth_ctx{
+                        current_timestamp = time_utils:cluster_time_seconds(),
+                        ip = PeerIp,
+                        interface = Interface,
+                        audience = ?AUD(?OP_WORKER, oneprovider:get_id()),
+                        data_access_caveats_policy = DataAccessCaveatsPolicy,
+                        group_membership_checker = fun(_, _) -> false end
                     },
-                    case DataAccessCaveatsPolicy of
-                        allow_data_access_caveats ->
+                    case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx, ?SUPPORTED_ACCESS_TOKEN_CAVEATS) of
+                        {ok, Auth} ->
                             {ok, Auth, undefined};
-                        disallow_data_access_caveats ->
-                            case data_access_caveats:find_any(Caveats) of
-                                false ->
-                                    {ok, Auth, undefined};
-                                {true, Caveat} ->
-                                    ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)
-                            end
+                        {error, _} = Err1 ->
+                            Err1
                     end;
-                {error, _} = Error ->
-                    Error
+                {error, _} = Err2 ->
+                    Err2
             end
         end
     ).

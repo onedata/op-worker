@@ -5,7 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
-%%% @doc This module tests user authentication
+%%% @doc
+%%% This module tests user auth cache and token authentication.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(user_auth_test_SUITE).
@@ -30,8 +31,8 @@
 ]).
 
 -export([
-    token_authentication/1,
-    auth_cache_test/1
+    auth_cache_test/1,
+    token_authentication/1
 ]).
 
 all() -> ?ALL([

@@ -31,9 +31,9 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Verifies given access token in Onezone, and upon success, returns the
-%% auth object, including subject's identity and caveats, and ttl (the
-%% remaining time the token will be valid or 'undefined' if no time
-%% constraints were set) that were inscribed in the token.
+%% auth object, which includes subject's identity and caveats, and its ttl.
+%% Ttl is the remaining time for which token (and so auth) is valid or
+%% 'undefined' if no time constraints were set for token.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_access_token(#token_auth{}) ->
@@ -47,7 +47,7 @@ verify_access_token(#token_auth{token = SerializedToken} = TokenAuth) ->
             aspect = verify_access_token,
             scope = public
         },
-        data = token_auth_to_json(TokenAuth)
+        data = build_verification_payload(TokenAuth)
     }),
     case Result of
         {error, _} = Error ->
@@ -95,8 +95,8 @@ verify_provider_identity_token(SerializedToken) ->
 
 
 %% @private
--spec token_auth_to_json(#token_auth{}) -> map().
-token_auth_to_json(#token_auth{
+-spec build_verification_payload(#token_auth{}) -> map().
+build_verification_payload(#token_auth{
     token = SerializedToken,
     peer_ip = PeerIp,
     interface = Interface,

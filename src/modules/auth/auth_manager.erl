@@ -6,8 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Manages ets cache for user auth. That includes periodic checks of
-%%% cache size and clearing it if it exceeds max size.
+%%% Verifies subject identity in Onezone service. Resolved auth objects
+%%% (or errors in case of invalid tokens) are cached in its ets cache.
+%%% Also, to avoid exhausting memory, performs periodic checks and
+%%% clears cache if size limit is breached.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(auth_manager).
@@ -41,9 +43,11 @@
 -define(CACHE_SIZE_CHECK_INTERVAL,
     application:get_env(?APP_NAME, auth_cache_size_check_interval, timer:seconds(2))
 ).
+-define(CACHE_ITEM_DEFAULT_TTL,
+    application:get_env(?APP_NAME, auth_cache_item_default_ttl, 10)
+).
 
--define(CACHE_ITEM_DEFAULT_TTL, 10).                %% in seconds
--define(NOW, time_utils:system_time_seconds()).
+-define(NOW(), time_utils:system_time_seconds()).
 
 
 -record(cache_item, {
@@ -53,7 +57,7 @@
 }).
 
 -type state() :: undefined.
--type timestamp() :: non_neg_integer().  %% in s
+-type timestamp() :: time_utils:seconds().
 
 
 %%%===================================================================
@@ -71,7 +75,7 @@
 -spec verify(#token_auth{}) ->
     {ok, aai:auth(), ValidUntil :: undefined | timestamp()} | errors:error().
 verify(#token_auth{} = TokenAuth) ->
-    Now = ?NOW,
+    Now = ?NOW(),
     case ets:lookup(?CACHE_NAME, TokenAuth) of
         [#cache_item{value = Value, expiration = Expiration}] when Now < Expiration ->
             Value;
@@ -250,7 +254,7 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, aai:auth(), TTL :: undefined | timestamp()} | errors:error().
 fetch(TokenAuth) ->
     case token_logic:verify_access_token(TokenAuth) of
-        {ok, #auth{subject = ?SUB(user, UserId)}, _TTL} = Result ->
+        {ok, ?USER(UserId), _TTL} = Result ->
             case provider_logic:has_eff_user(UserId) of
                 false ->
                     ?ERROR_FORBIDDEN;
