@@ -40,7 +40,6 @@
 -define(SESSION_REMOVAL_RETRY_DELAY, 15).   % in seconds
 
 -type state() :: #state{}.
--type seconds() :: non_neg_integer().
 
 
 %%%===================================================================
@@ -151,7 +150,7 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
         {ok, #document{value = #session{connections = [_ | _]}}} ->
             {false, GracePeriod};
         {ok, #document{value = #session{status = active}}} ->
-            has_grace_period_passed(SessionId, GracePeriod);
+            maybe_mark_inactive(SessionId, GracePeriod);
         {error, _} = Error ->
             {false, Error}
     end,
@@ -236,9 +235,9 @@ get_session_grace_period(_) ->
 %% exceed grace period and true for inactive session that exceeded it.
 %% @end
 %%--------------------------------------------------------------------
--spec has_grace_period_passed(session:id(), session:grace_period()) ->
-    true | {false, RemainingTime :: seconds()}.
-has_grace_period_passed(SessionId, GracePeriod) ->
+-spec maybe_mark_inactive(session:id(), session:grace_period()) ->
+    true | {false, RemainingTime :: time_utils:seconds()}.
+maybe_mark_inactive(SessionId, GracePeriod) ->
     Diff = fun
         (#session{status = active, accessed = Accessed} = Sess) ->
             InactivityPeriod = time_utils:cluster_time_seconds() - Accessed,
@@ -262,14 +261,14 @@ has_grace_period_passed(SessionId, GracePeriod) ->
 
 
 %% @private
--spec schedule_session_activity_checkup(Delay :: seconds()) ->
+-spec schedule_session_activity_checkup(Delay :: time_utils:seconds()) ->
     TimeRef :: reference().
 schedule_session_activity_checkup(Delay) ->
     erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_ACTIVITY).
 
 
 %% @private
--spec schedule_session_removal(Delay :: seconds()) ->
+-spec schedule_session_removal(Delay :: time_utils:seconds()) ->
     TimeRef :: reference().
 schedule_session_removal(Delay) ->
     erlang:send_after(timer:seconds(Delay), self(), ?REMOVE_SESSION).
