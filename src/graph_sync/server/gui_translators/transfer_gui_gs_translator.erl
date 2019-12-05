@@ -36,6 +36,13 @@
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = rerun}, TransferId) ->
+    #{<<"transferId">> => gri:serialize(#gri{
+        type = op_transfer,
+        id = TransferId,
+        aspect = instance,
+        scope = private
+    })};
 translate_value(#gri{aspect = throughput_charts}, Charts) ->
     Charts.
 
