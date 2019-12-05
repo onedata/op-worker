@@ -581,7 +581,7 @@ init_per_testcase(socket_timeout_test, Config) ->
 
 init_per_testcase(closing_last_connection_should_cancel_all_session_transfers_test, Config) ->
     % Shorten ttl to force quicker client session removal
-    init_per_testcase(heartbeats_test, [{fuse_session_ttl_seconds, 10} | Config]);
+    init_per_testcase(heartbeats_test, [{fuse_session_grace_period_seconds, 10} | Config]);
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),

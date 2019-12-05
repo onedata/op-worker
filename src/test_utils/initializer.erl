@@ -809,13 +809,13 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     end, SpacesSetup),
 
     %% Set expiration time for session to value specified in Config or to 1d.
-    FuseSessionTTL = case ?config(fuse_session_ttl_seconds, Config) of
+    FuseSessionTTL = case ?config(fuse_session_grace_period_seconds, Config) of
         undefined ->
             240 * 60 * 60;
         Val ->
             Val
     end,
-    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, FuseSessionTTL]),
+    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_grace_period_seconds, FuseSessionTTL]),
 
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),

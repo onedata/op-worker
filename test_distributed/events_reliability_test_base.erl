@@ -124,7 +124,7 @@ events_aggregation_manager_error_test2(_Config) ->
     %TODO VFS-5383 - test event manager test other way
     ok.
 %%    Workers = ?config(op_worker_nodes, Config),
-%%    test_utils:set_env(Workers, ?APP_NAME, fuse_session_ttl_seconds, 5),
+%%    test_utils:set_env(Workers, ?APP_NAME, fuse_session_grace_period_seconds, 5),
 %%    test_utils:mock_new(Workers, event_manager, [passthrough]),
 %%
 %%    test_utils:mock_expect(Workers, event_manager, handle_call, fun
@@ -143,7 +143,7 @@ events_aggregation_manager_error_test2(_Config) ->
 %%    {ConnectionWorker, AssertionWorker} = get_nodes(Config),
 %%    events_aggregation_failed_test_base(Config, ConnectionWorker, AssertionWorker),
 %%    test_utils:mock_unload(Workers, event_manager),
-%%    test_utils:set_env(Workers, ?APP_NAME, fuse_session_ttl_seconds, 300).
+%%    test_utils:set_env(Workers, ?APP_NAME, fuse_session_grace_period_seconds, 300).
 
 events_aggregation_test(Config) ->
     {ConnectionWorker, AssertionWorker} = get_nodes(Config),

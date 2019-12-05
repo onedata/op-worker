@@ -219,7 +219,7 @@ init_per_testcase(Config) ->
     initializer:mock_auth_manager(Config),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config2, "env_desc.json"),
         % Shorten ttl to force quicker client session removal
-        [{fuse_session_ttl_seconds, 10} | Config2]).
+        [{fuse_session_grace_period_seconds, 10} | Config2]).
 
 end_per_testcase(Config) ->
     lfm_proxy:teardown(Config),
