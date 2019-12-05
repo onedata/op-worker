@@ -40,6 +40,7 @@ authenticate(Req, Interface, DataCaveatsPolicy) ->
                 token = AccessToken,
                 peer_ip = PeerIp,
                 interface = Interface,
+                audience_token = tokens:parse_audience_token_header(Req),
                 data_access_caveats_policy = DataCaveatsPolicy
             })
     end.

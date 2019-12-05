@@ -389,11 +389,13 @@ check_api_authorization(?ROOT_AUTH, _) ->
     ok;
 check_api_authorization(?GUEST_AUTH, _) ->
     ok;
-check_api_authorization(#token_auth{token = Serialized}, #gs_req_graph{operation = Operation, gri = GRI}) ->
-    %% @TODO VFS-5914 can we keep a deserialized token not to unpack it every time?
-    {ok, Token = #token{subject = Subject}} = tokens:deserialize(Serialized),
-    Auth = #auth{subject = Subject, caveats = tokens:get_caveats(Token)},
-    api_auth:check_authorization(Auth, ?OZ_WORKER, Operation, GRI).
+check_api_authorization(TokenAuth, #gs_req_graph{operation = Operation, gri = GRI}) ->
+    case auth_manager:verify(TokenAuth) of
+        {ok, Auth, _TokenValidUntil} ->
+            api_auth:check_authorization(Auth, ?OZ_WORKER, Operation, GRI);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec do_request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req(), timeout()) ->
@@ -630,11 +632,19 @@ resolve_auth_override(?ROOT_AUTH) ->
     undefined;
 resolve_auth_override(?GUEST_AUTH) ->
     #auth_override{client_auth = nobody};
-resolve_auth_override(#token_auth{token = Token, peer_ip = PeerIp}) ->
-    %% @TODO VFS-5914 add full auth_ctx information
+resolve_auth_override(#token_auth{
+    token = Token,
+    peer_ip = PeerIp,
+    interface = Interface,
+    audience_token = AudienceToken,
+    data_access_caveats_policy = DataAccessCaveatsPolicy
+}) ->
     #auth_override{
         client_auth = {token, Token},
-        peer_ip = PeerIp
+        peer_ip = PeerIp,
+        interface = Interface,
+        audience_token = AudienceToken,
+        data_access_caveats_policy = DataAccessCaveatsPolicy
     }.
 
 
