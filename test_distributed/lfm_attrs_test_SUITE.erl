@@ -637,11 +637,8 @@ query_index(Worker, SpaceId, ViewName, Options) ->
     rpc:call(Worker, index, query, [SpaceId, ViewName, Options]).
 
 extract_query_values(QueryResult) ->
-    {Rows} = QueryResult,
-    lists:map(fun(Row) ->
-        {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
-        Value
-    end, Rows).
+    #{<<"rows">> := Rows} = QueryResult,
+    [maps:get(<<"value">>, Row) || Row <- Rows].
 
 cache_proc(Options) ->
     bounded_cache:init_cache(?CACHE, Options),

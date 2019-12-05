@@ -508,8 +508,15 @@ create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
     ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
     case ExtDIO of
         true ->
-            {FL, FileCtx2, _} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
-            {FL, FileCtx2};
+            case location_and_link_utils:get_new_file_location_doc(FileCtx, false, true) of
+                {{ok, FL}, FileCtx2} ->
+                    {FL, FileCtx2};
+                {{error, already_exists}, FileCtx2} ->
+                    case file_ctx:get_local_file_location_doc(FileCtx2) of
+                        {#document{value = Location}, FileCtx3} -> {Location, FileCtx3};
+                        {undefined, FileCtx3} -> throw(aborted)
+                    end
+            end;
         _ ->
             {#document{value = FL}, FileCtx2} =
                 sfm_utils:create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
