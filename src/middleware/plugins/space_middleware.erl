@@ -485,9 +485,8 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = {view, ViewName}}}, _) ->
 get(#op_req{gri = #gri{id = SpaceId, aspect = {query_view, ViewName}}} = Req, _) ->
     Options = view_utils:sanitize_query_options(Req#op_req.data),
     case index:query(SpaceId, ViewName, Options) of
-        {ok, {Rows}} ->
-            QueryResult = lists:map(fun(Row) -> maps:from_list(Row) end, Rows),
-            {ok, QueryResult};
+        {ok, #{<<"rows">> := Rows}} ->
+            {ok, Rows};
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
         {error, _} = Error ->
