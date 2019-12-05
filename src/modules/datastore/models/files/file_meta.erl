@@ -45,7 +45,7 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
 
 -type doc() :: datastore:doc().
 -type diff() :: datastore_doc:diff(file_meta()).
@@ -1202,3 +1202,25 @@ upgrade_record(6, {?MODULE, Name, Type, Mode, Owner, GroupOwner, _Size, _Version
     {7, {?MODULE, Name, Type, Mode, Owner, GroupOwner, IsScope,
         Scope, ProviderId, Shares, Deleted, ParentUuid}
     }.
+
+%%--------------------------------------------------------------------
+%% @doc
+
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve_conflict(datastore_model:ctx(), doc(), doc()) -> default.
+resolve_conflict(_Ctx, #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}},
+    #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}) ->
+    case NewName =/= PrevName of
+        true ->
+            spawn(fun() ->
+                FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid)),
+                OldParentGuid = fslogic_uuid:uuid_to_guid(PrevParentUuid),
+                NewParentGuid = fslogic_uuid:uuid_to_guid(NewParentUuid),
+                fslogic_event_emitter:emit_file_renamed_no_exclude(FileCtx, OldParentGuid, NewParentGuid, NewName)
+            end);
+        _ ->
+            ok
+    end,
+
+    default.
