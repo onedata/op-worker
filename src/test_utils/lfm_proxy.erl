@@ -384,7 +384,7 @@ fsync(Worker, SessId, FileKey, OneproviderId) ->
 -spec rm_recursive(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
     ok | lfm:error_reply().
 rm_recursive(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:rm_recursive(SessId, uuid_to_guid(Worker, FileKey))).
+    ?EXEC_TIMEOUT(Worker, lfm:rm_recursive(SessId, uuid_to_guid(Worker, FileKey)), timer:minutes(5)).
 
 -spec get_metadata(node(), session:id(), lfm:file_key(),
     custom_metadata:type(), custom_metadata:filter(), boolean()) ->
