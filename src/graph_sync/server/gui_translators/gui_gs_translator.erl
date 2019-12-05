@@ -54,6 +54,8 @@ handshake_attributes(_Client) ->
 %%--------------------------------------------------------------------
 -spec translate_value(gs_protocol:protocol_version(), gri:gri(),
     Value :: term()) -> no_return().
+translate_value(_, #gri{type = op_provider} = GRI, Value) ->
+    provider_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_space} = GRI, Value) ->
     space_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_file} = GRI, Value) ->

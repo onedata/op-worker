@@ -174,10 +174,10 @@ create(_) ->
 get(#op_req{gri = #gri{aspect = instance, scope = protected}}, Provider) ->
     {ok, Provider};
 get(#op_req{gri = #gri{aspect = configuration}}, _) ->
-    {ok, gather_configuration()};
+    {ok, value, gather_configuration()};
 get(#op_req{gri = #gri{aspect = test_image}}, _) ->
     % Dummy image in png format. Used by gui to check connectivity.
-    {ok, {binary, <<
+    {ok, value, {binary, <<
         137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0,
         0, 1, 0, 0, 0, 1, 1, 3, 0, 0, 0, 37, 219, 86, 202, 0, 0, 0, 6, 80,
         76, 84, 69, 0, 0, 0, 255, 255, 255, 165, 217, 159, 221, 0, 0, 0, 9,
