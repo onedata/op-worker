@@ -14,9 +14,8 @@
 -behaviour(listener_behaviour).
 
 -include("global_definitions.hrl").
--include("http/gui_paths.hrl").
--include("http/op_gui.hrl").
 -include("http/cdmi.hrl").
+-include("http/gui_paths.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("gui/include/gui.hrl").
 
@@ -67,7 +66,6 @@ start() ->
         {?NAGIOS_PATH, nagios_handler, []},
         {?CLIENT_PROTOCOL_PATH, connection, []},
         {?PANEL_REST_PROXY_PATH ++ "[...]", http_port_forwarder, [9443, ?ONEPANEL_CONNECT_OPTS]},
-        {?WEBSOCKET_PREFIX_PATH ++ "[...]", op_gui_ws_handler, []},
         {?GUI_GRAPH_SYNC_WS_PATH, gs_ws_handler, [gui_gs_translator]},
         {?CDMI_ID_PATH, cdmi_handler, by_id},
         {?CDMI_PATH, cdmi_handler, by_path},
@@ -84,9 +82,6 @@ start() ->
         {?PUBLIC_SHARE_COWBOY_ROUTE, [<<"GET">>], page_public_share},
         {"/", [<<"GET">>], page_redirect_to_onezone}
     ],
-
-    % Call gui init, which will call init on all modules that might need state.
-    op_gui:init(),
 
     gui:start(#gui_config{
         port = port(),
@@ -108,9 +103,6 @@ start() ->
 %%--------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: term()}.
 stop() ->
-    % Call gui cleanup, which will call cleanup on all modules that
-    % were previously set up with op_gui:init/0.
-    op_gui:cleanup(),
     gui:stop().
 
 

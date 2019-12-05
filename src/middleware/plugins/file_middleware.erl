@@ -219,7 +219,7 @@ authorize_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
-    ->
+->
     has_access_to_file(Auth, Guid).
 
 
@@ -234,7 +234,7 @@ validate_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) whe
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
-    ->
+->
     assert_file_managed_locally(Auth, Guid).
 
 
@@ -366,7 +366,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata;
     As =:= acl
-    ->
+->
     has_access_to_file(Auth, Guid);
 
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = transfers}}, _) ->
@@ -385,7 +385,7 @@ validate_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= rdf_metadata;
     As =:= acl;
     As =:= transfers
-    ->
+->
     assert_file_managed_locally(Auth, Guid).
 
 
@@ -551,7 +551,7 @@ data_spec_update(#gri{aspect = acl}) -> #{
 authorize_update(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= acl
-    ->
+->
     SpaceId = file_id:guid_to_space_id(Guid),
     middleware_utils:is_eff_space_member(Auth, SpaceId).
 
@@ -561,7 +561,7 @@ authorize_update(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
 validate_update(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= acl
-    ->
+->
     SpaceId = file_id:guid_to_space_id(Guid),
     middleware_utils:assert_space_supported_locally(SpaceId).
 

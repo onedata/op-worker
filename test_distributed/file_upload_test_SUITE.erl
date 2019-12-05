@@ -118,7 +118,7 @@ not_registered_upload_should_fail(Config) ->
         upload_not_registered,
         rpc:call(WorkerP1, page_file_upload, handle_multipart_req, [
             #{size => 20, left => 1},
-            SessionId,
+            ?USER(UserId, SessionId),
             #{
                 <<"guid">> => Guid,
                 <<"resumableChunkNumber">> => 1,
@@ -144,7 +144,7 @@ upload_test(Config) ->
     ),
     ?assertMatch(true, rpc:call(WorkerP1, file_upload_manager, is_upload_registered, [UserId, Guid])),
 
-    do_multipart(WorkerP1, SessionId, 5, 10, 5, Guid),
+    do_multipart(WorkerP1, ?USER(UserId, SessionId), 5, 10, 5, Guid),
 
     ?assertMatch(
         {ok, _},
@@ -244,10 +244,6 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, cow_multipart),
     ok = test_utils:mock_new(Workers, cowboy_req),
-    ok = test_utils:mock_new(Workers, op_gui_session),
-    ok = test_utils:mock_expect(Workers, op_gui_session, get_user_id,
-        fun() -> <<"user1">> end
-    ),
     ok = test_utils:mock_expect(Workers, cow_multipart, form_data,
         fun(_) -> {file, ok, ok, ok} end
     ),
@@ -281,7 +277,6 @@ end_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, cowboy_req),
     test_utils:mock_unload(Workers, cow_multipart),
-    test_utils:mock_unload(Workers, op_gui_session),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->
@@ -301,14 +296,15 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
-do_multipart(Worker, SessionId, PartsNumber, PartSize, ChunksNumber, FileGuid) ->
-    ChunkSize = PartsNumber*PartSize,
-    Params = #{<<"guid">> => FileGuid, <<"resumableChunkSize">> => integer_to_binary(ChunkSize)},
-
+do_multipart(Worker, Auth, PartsNumber, PartSize, ChunksNumber, FileGuid) ->
+    Params = #{
+        <<"guid">> => FileGuid,
+        <<"resumableChunkSize">> => integer_to_binary(PartsNumber*PartSize)
+    },
     utils:pforeach(fun(Chunk) ->
         rpc:call(Worker, page_file_upload, handle_multipart_req, [
             #{size => PartSize, left => PartsNumber},
-            SessionId,
+            Auth,
             Params#{<<"resumableChunkNumber">> => integer_to_binary(Chunk)}
         ])
     end, lists:seq(1,ChunksNumber)).

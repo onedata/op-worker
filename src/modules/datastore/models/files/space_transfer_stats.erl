@@ -46,6 +46,7 @@
     mutator => oneprovider:get_id_or_undefined()
 }).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -71,7 +72,7 @@ key(TransferType, SpaceId) ->
 -spec key(ProviderId :: od_provider:id(), TransferType :: binary(),
     SpaceId :: od_space:id()) -> binary().
 key(ProviderId, TransferType, SpaceId) ->
-    RecordId = op_gui_utils:ids_to_association(TransferType, SpaceId),
+    RecordId = <<TransferType/binary, "|", SpaceId/binary>>,
     datastore_utils:gen_key(ProviderId, RecordId).
 
 
