@@ -90,7 +90,7 @@ reuse_or_create_proxied_session(SessId, ProxyVia, Auth0, SessionType) ->
         data_access_caveats_policy = allow_data_access_caveats
     },
     case auth_manager:verify(Auth1) of
-        {ok, ?USER(UserId), _TTL} ->
+        {ok, ?USER(UserId), _TokenValidUntil} ->
             Iden = #user_identity{user_id = UserId},
             reuse_or_create_session(SessId, SessionType, Iden, Auth1, ProxyVia);
         Error ->

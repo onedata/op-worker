@@ -96,7 +96,7 @@ handle_client_handshake(#client_handshake_request{
         data_access_caveats_policy = allow_data_access_caveats
     },
     case auth_manager:verify(TokenAuth1) of
-        {ok, ?USER(UserId), _TTL} ->
+        {ok, ?USER(UserId), _TokenValidUntil} ->
             {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
                 SessionId, #user_identity{user_id = UserId}, TokenAuth1
             ),

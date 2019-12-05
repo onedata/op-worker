@@ -69,7 +69,7 @@ authenticate(TokenAuth) ->
 -spec authenticate_insecure(#token_auth{}) -> {ok, aai:auth()} | no_return().
 authenticate_insecure(TokenAuth) ->
     case auth_manager:verify(TokenAuth) of
-        {ok, ?USER(UserId) = Auth, _TTL} ->
+        {ok, ?USER(UserId) = Auth, _TokenValidUntil} ->
             Identity = #user_identity{user_id = UserId},
             case create_or_reuse_session(Identity, TokenAuth) of
                 {ok, SessionId} ->
