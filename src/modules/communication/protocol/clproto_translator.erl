@@ -271,7 +271,7 @@ translate_from_protobuf(#'ClientHandshakeRequest'{
     compatible_oneprovider_versions = CompOpVersions
 }) ->
     #client_handshake_request{
-        auth = translate_from_protobuf(Macaroon),
+        credentials = translate_from_protobuf(Macaroon),
         session_id = SessionId,
         version = Version,
         compatible_oneprovider_versions = CompOpVersions
@@ -287,7 +287,7 @@ translate_from_protobuf(#'ProviderHandshakeRequest'{
 translate_from_protobuf(#'Macaroon'{
     macaroon = SubjectToken
 }) ->
-    auth_manager:pack_token_bin(SubjectToken, undefined);
+    #credentials{subject_token = SubjectToken};
 translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
 
@@ -1319,7 +1319,7 @@ translate_to_protobuf(#handshake_response{
     {handshake_response, #'HandshakeResponse'{
         status = Status
     }};
-translate_to_protobuf(#token_bin{
+translate_to_protobuf(#credentials{
     subject_token = SerializedToken
 }) ->
     #'Macaroon'{

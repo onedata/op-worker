@@ -25,8 +25,8 @@
 
 %% API
 -export([
-    pack_token_bin/1, pack_token_bin/2, unpack_token_bin/1,
-    build_token_auth/4, build_token_auth/5,
+    get_credentials/1,
+    build_token_auth/5,
 
     verify/1,
     invalidate/1
@@ -68,13 +68,9 @@
 -type subject_token() :: tokens:serialized().
 -type audience_token() :: undefined | tokens:serialized().
 
--type token_bin() :: #token_bin{}.
 -type token_auth() :: #token_auth{}.
 
--export_type([
-    subject_token/0, audience_token/0,
-    token_bin/0, token_auth/0
-]).
+-export_type([subject_token/0, audience_token/0, token_auth/0]).
 
 
 %%%===================================================================
@@ -82,40 +78,15 @@
 %%%===================================================================
 
 
--spec pack_token_bin(token_auth()) -> token_bin().
-pack_token_bin(#token_auth{
+-spec get_credentials(token_auth()) -> #credentials{}.
+get_credentials(#token_auth{
     subject_token = SubjectToken,
     audience_token = AudienceToken
 }) ->
-    pack_token_bin(SubjectToken, AudienceToken).
-
-
--spec pack_token_bin(subject_token(), audience_token()) -> token_bin().
-pack_token_bin(SubjectToken, AudienceToken) ->
-    #token_bin{
+    #credentials{
         subject_token = SubjectToken,
         audience_token = AudienceToken
     }.
-
-
--spec unpack_token_bin(token_bin()) -> {subject_token(), audience_token()}.
-unpack_token_bin(#token_bin{
-    subject_token = SubjectToken,
-    audience_token = AudienceToken
-}) ->
-    {SubjectToken, AudienceToken}.
-
-
--spec build_token_auth(token_bin(),
-    undefined | ip_utils:ip(), undefined | cv_interface:interface(),
-    data_access_caveats:policy()
-) ->
-    token_auth().
-build_token_auth(TokenBin, PeerIp, Interface, DataAccessCaveatsPolicy) ->
-    build_token_auth(
-        TokenBin#token_bin.subject_token, TokenBin#token_bin.audience_token,
-        PeerIp, Interface, DataAccessCaveatsPolicy
-    ).
 
 
 -spec build_token_auth(subject_token(), audience_token(),

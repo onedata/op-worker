@@ -179,7 +179,7 @@ route_and_ignore_answer(ClientMsg = #client_message{
 % Message that updates the #token_auth{} record in given session
 % (originates from #'Macaroon' client message).
 route_and_ignore_answer(#client_message{
-    message_body = #token_bin{
+    message_body = #credentials{
         subject_token = SerializedToken,
         audience_token = AudienceToken
     }

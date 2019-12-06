@@ -21,7 +21,7 @@
     session_id :: undefined | session:id(),
     % session id on behalf which operations should be carried
     effective_session_id :: undefined | session:id(),
-    effective_session_auth :: undefined | auth_manager:token_bin(),
+    effective_session_credentials :: undefined | #credentials{},
     message_stream :: undefined | #message_stream{},
     message_body :: tuple()
 }).

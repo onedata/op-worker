@@ -320,14 +320,14 @@ get_write_event(FileGuid, Size, FileSize, Num, MaxS) ->
 
 get_token_auth(Val) ->
     {
-        auth_manager:pack_token_bin(Val, undefined),
+        #credentials{subject_token = Val},
         #'Macaroon'{macaroon = Val}
     }.
 
 get_client_handshake_request(Token, SessionId, CompOpVersions) ->
     {Internal, Protobuf} = get_token_auth(Token),
     {
-        #client_handshake_request{auth = Internal, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions},
+        #client_handshake_request{credentials = Internal, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions},
         #'ClientHandshakeRequest'{macaroon = Protobuf, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions}
     }.
 

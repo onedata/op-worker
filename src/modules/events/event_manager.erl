@@ -423,7 +423,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
         message_stream = #message_stream{stream_id = StreamId},
         message_body = Request,
         effective_session_id = SessId,
-        effective_session_auth = auth_manager:pack_token_bin(Auth)
+        effective_session_credentials = auth_manager:get_credentials(Auth)
     },
     Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
@@ -450,7 +450,7 @@ handle_remotely(Request, ProviderId, SessId) ->
         #client_message{
             message_body = Request,
             effective_session_id = SessId,
-            effective_session_auth = auth_manager:pack_token_bin(Auth)
+            effective_session_credentials = auth_manager:get_credentials(Auth)
         },
         StreamId, undefined
     ),

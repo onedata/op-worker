@@ -85,19 +85,18 @@ get_handshake_error_msg(_) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     session_id = SessionId,
-    auth = TokenBin
+    credentials = #credentials{
+        subject_token = SubjectToken,
+        audience_token = AudienceToken
+    }
 } = Req, IpAddress) when is_binary(SessionId) ->
 
     assert_client_compatibility(Req, IpAddress),
 
-    {SubjectToken, AudienceToken} = auth_manager:unpack_token_bin(TokenBin),
-    TokenAuth = #token_auth{
-        subject_token = SubjectToken,
-        peer_ip = IpAddress,
-        interface = oneclient,
-        audience_token = AudienceToken,
-        data_access_caveats_policy = allow_data_access_caveats
-    },
+    TokenAuth = auth_manager:build_token_auth(
+        SubjectToken, AudienceToken,
+        IpAddress, oneclient, allow_data_access_caveats
+    ),
     case auth_manager:verify(TokenAuth) of
         {ok, ?USER(UserId), _TokenValidUntil} ->
             {ok, SessionId} = session_manager:reuse_or_create_fuse_session(

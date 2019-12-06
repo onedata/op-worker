@@ -13,7 +13,7 @@
 -ifndef(CREDENTIALS_HRL).
 -define(CREDENTIALS_HRL, 1).
 
--record(token_bin, {
+-record(credentials, {
     subject_token :: tokens:serialized(),
     audience_token = undefined :: undefined | tokens:serialized()
 }).
