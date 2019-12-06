@@ -320,7 +320,7 @@ get_write_event(FileGuid, Size, FileSize, Num, MaxS) ->
 
 get_token_auth(Val) ->
     {
-        #token_auth{token = Val},
+        auth_manager:pack_token_bin(Val, undefined),
         #'Macaroon'{macaroon = Val}
     }.
 

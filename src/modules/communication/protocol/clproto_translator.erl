@@ -285,11 +285,9 @@ translate_from_protobuf(#'ProviderHandshakeRequest'{
         token = Token
     };
 translate_from_protobuf(#'Macaroon'{
-    macaroon = Macaroon
+    macaroon = SubjectToken
 }) ->
-    #token_auth{
-        token = Macaroon
-    };
+    auth_manager:pack_token_bin(SubjectToken, undefined);
 translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
 
@@ -1321,11 +1319,11 @@ translate_to_protobuf(#handshake_response{
     {handshake_response, #'HandshakeResponse'{
         status = Status
     }};
-translate_to_protobuf(#token_auth{
-    token = Macaroon
+translate_to_protobuf(#token_bin{
+    subject_token = SerializedToken
 }) ->
     #'Macaroon'{
-        macaroon = Macaroon
+        macaroon = SerializedToken
     };
 
 

@@ -24,7 +24,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([verify/1, invalidate/1]).
+-export([
+    pack_token_bin/1, pack_token_bin/2, unpack_token_bin/1,
+
+    verify/1,
+    invalidate/1
+]).
 -export([start_link/0, spec/0]).
 
 %% gen_server callbacks
@@ -59,10 +64,45 @@
 -type state() :: undefined.
 -type timestamp() :: time_utils:seconds().
 
+-type subject_token() :: tokens:serialized().
+-type audience_token() :: undefined | tokens:serialized().
+
+-type token_bin() :: #token_bin{}.
+-type token_auth() :: #token_auth{}.
+
+-export_type([
+    subject_token/0, audience_token/0,
+    token_bin/0, token_auth/0
+]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec pack_token_bin(token_auth()) -> token_bin().
+pack_token_bin(#token_auth{
+    token = SubjectToken,
+    audience_token = AudienceToken
+}) ->
+    pack_token_bin(SubjectToken, AudienceToken).
+
+
+-spec pack_token_bin(subject_token(), audience_token()) -> token_bin().
+pack_token_bin(SubjectToken, AudienceToken) ->
+    #token_bin{
+        subject_token = SubjectToken,
+        audience_token = AudienceToken
+    }.
+
+
+-spec unpack_token_bin(token_bin()) -> {subject_token(), audience_token()}.
+unpack_token_bin(#token_bin{
+    subject_token = SubjectToken,
+    audience_token = AudienceToken
+}) ->
+    {SubjectToken, AudienceToken}.
 
 
 %%--------------------------------------------------------------------
@@ -72,9 +112,9 @@
 %% auth should be confirmed periodically as tokens can be revoked.
 %% @end
 %%--------------------------------------------------------------------
--spec verify(#token_auth{}) ->
+-spec verify(token_auth()) ->
     {ok, aai:auth(), ValidUntil :: undefined | timestamp()} | errors:error().
-verify(#token_auth{} = TokenAuth) ->
+verify(TokenAuth) ->
     Now = ?NOW(),
     case ets:lookup(?CACHE_NAME, TokenAuth) of
         [#cache_item{cache_expiration = Expiration} = Item] when Now < Expiration ->
@@ -107,7 +147,7 @@ verify(#token_auth{} = TokenAuth) ->
     end.
 
 
--spec invalidate(#token_auth{}) -> ok.
+-spec invalidate(token_auth()) -> ok.
 invalidate(TokenAuth) ->
     ets:delete(?CACHE_NAME, TokenAuth),
     ok.
@@ -250,7 +290,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec verify_in_onezone(#token_auth{}) ->
+-spec verify_in_onezone(token_auth()) ->
     {ok, aai:auth(), TokenTTL :: undefined | timestamp()} | errors:error().
 verify_in_onezone(TokenAuth) ->
     case token_logic:verify_access_token(TokenAuth) of

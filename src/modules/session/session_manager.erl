@@ -82,17 +82,11 @@ reuse_or_create_outgoing_provider_session(SessId, Iden) ->
     ProxyVia :: oneprovider:id(),
     session:auth(), SessionType :: atom()) ->
     {ok, session:id()} | error().
-reuse_or_create_proxied_session(SessId, ProxyVia, Auth0, SessionType) ->
-    Auth1 = Auth0#token_auth{
-        peer_ip = oneprovider:get_node_ip(),
-        % Only oneclient requests can be proxied (gui and rest blocks proxy)
-        interface = oneclient,
-        data_access_caveats_policy = allow_data_access_caveats
-    },
-    case auth_manager:verify(Auth1) of
+reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
+    case auth_manager:verify(Auth) of
         {ok, ?USER(UserId), _TokenValidUntil} ->
             Iden = #user_identity{user_id = UserId},
-            reuse_or_create_session(SessId, SessionType, Iden, Auth1, ProxyVia);
+            reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia);
         Error ->
             Error
     end.

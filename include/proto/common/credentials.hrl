@@ -13,6 +13,11 @@
 -ifndef(CREDENTIALS_HRL).
 -define(CREDENTIALS_HRL, 1).
 
+-record(token_bin, {
+    subject_token :: tokens:serialized(),
+    audience_token = undefined :: undefined | tokens:serialized()
+}).
+
 % Record containing access token for user authorization in OZ.
 -record(token_auth, {
     token :: tokens:serialized(),

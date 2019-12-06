@@ -85,26 +85,29 @@ get_handshake_error_msg(_) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     session_id = SessionId,
-    auth = #token_auth{token = SerializedToken} = TokenAuth0
+    auth = TokenBin
 } = Req, IpAddress) when is_binary(SessionId) ->
 
     assert_client_compatibility(Req, IpAddress),
 
-    TokenAuth1 = TokenAuth0#token_auth{
+    {SubjectToken, AudienceToken} = auth_manager:unpack_token_bin(TokenBin),
+    TokenAuth = #token_auth{
+        token = SubjectToken,
         peer_ip = IpAddress,
         interface = oneclient,
+        audience_token = AudienceToken,
         data_access_caveats_policy = allow_data_access_caveats
     },
-    case auth_manager:verify(TokenAuth1) of
+    case auth_manager:verify(TokenAuth) of
         {ok, ?USER(UserId), _TokenValidUntil} ->
             {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
-                SessionId, #user_identity{user_id = UserId}, TokenAuth1
+                SessionId, #user_identity{user_id = UserId}, TokenAuth
             ),
             {UserId, SessionId};
         ?ERROR_FORBIDDEN ->
             throw(invalid_provider);
         {error, _} = Error ->
-            case tokens:deserialize(SerializedToken) of
+            case tokens:deserialize(SubjectToken) of
                 {ok, #token{subject = Subject, id = TokenId} = Token} ->
                     ?debug("Cannot authorize user (id: ~p) based on token (id: ~p) "
                            "with caveats: ~p due to ~w", [
