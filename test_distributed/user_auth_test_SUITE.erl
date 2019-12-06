@@ -212,8 +212,8 @@ mock_token_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, token_logic, []),
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun
-        (#token_auth{access_token = SerializedToken}) ->
-            case tokens:deserialize(SerializedToken) of
+        (AccessToken, _, _, _) ->
+            case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     {ok, ?USER(?USER_ID), undefined};
                 {error, _} = Error ->
