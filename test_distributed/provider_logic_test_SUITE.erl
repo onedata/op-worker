@@ -335,14 +335,18 @@ confined_access_token_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     Caveat = #cv_api{whitelist = [{?OP_PANEL, all, ?GRI_PATTERN('*', '*', '*', '*')}]},
-    Auth = #token_auth{subject_token = initializer:create_token(?USER_1, [Caveat])},
+    AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
+    ),
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
     % Request should be denied before contacting Onezone because of the
     % API caveat
     ?assertMatch(
         ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
-        rpc:call(Node, provider_logic, get_protected_data, [Auth, ?PROVIDER_1])
+        rpc:call(Node, provider_logic, get_protected_data, [TokenAuth, ?PROVIDER_1])
     ),
     ?assertEqual(GraphCalls, logic_tests_common:count_reqs(Config, graph)).
 

@@ -49,12 +49,12 @@ request(Node, URL, Method, Headers, Body, Opts) ->
     end.
 
 user_token_header(Config, User) ->
-    #token_auth{subject_token = Token} = ?config({auth, User}, Config),
+    AccessToken = ?config({access_token, User}, Config),
     case rand:uniform(3) of
-        1 -> {?HDR_X_AUTH_TOKEN, Token};
-        2 -> {?HDR_AUTHORIZATION, <<"Bearer ", Token/binary>>};
+        1 -> {?HDR_X_AUTH_TOKEN, AccessToken};
+        2 -> {?HDR_AUTHORIZATION, <<"Bearer ", AccessToken/binary>>};
         %% @todo VFS-5554 Deprecated, included for backward compatibility
-        3 -> {?HDR_MACAROON, Token}
+        3 -> {?HDR_MACAROON, AccessToken}
     end.
 
 assert_request_error(ExpectedError = {error, _}, RequestParams) ->

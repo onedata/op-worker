@@ -165,14 +165,18 @@ confined_access_token_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     Caveat = #cv_data_path{whitelist = [<<"/spaceid/file/dir.txt">>]},
-    Auth = #token_auth{subject_token = initializer:create_token(?USER_1, [Caveat])},
+    AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), rest, allow_data_access_caveats
+    ),
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
     % Request should be denied before contacting Onezone because of
     % data access caveat presence
     ?assertMatch(
         ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
-        rpc:call(Node, group_logic, get_shared_data, [Auth, ?GROUP_1, undefined])
+        rpc:call(Node, group_logic, get_shared_data, [TokenAuth, ?GROUP_1, undefined])
     ),
     ?assertEqual(GraphCalls, logic_tests_common:count_reqs(Config, graph)).
 

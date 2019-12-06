@@ -132,15 +132,14 @@ wait_for_mocked_connection(Config) ->
 create_user_session(Config, UserId) ->
     [Node | _] = ?NODES(Config),
 
-    SerializedToken = initializer:create_token(UserId),
-    Auth = #token_auth{
-        subject_token = SerializedToken,
-        interface = graphsync,
-        data_access_caveats_policy = disallow_data_access_caveats
-    },
-    {ok, ?USER(UserId), _} = rpc:call(Node, auth_manager, verify, [Auth]),
+    AccessToken = initializer:create_access_token(UserId),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
+    ),
+    {ok, ?USER(UserId), _} = rpc:call(Node, auth_manager, verify, [TokenAuth]),
     {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [
-        #user_identity{user_id = UserId}, Auth
+        #user_identity{user_id = UserId}, TokenAuth
     ]),
     % Make sure private user data is fetched (if user identity was cached, it might
     % not happen).

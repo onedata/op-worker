@@ -36,14 +36,19 @@
 
 -spec create_session(node(), #user_identity{}, tokens:serialized()) ->
     session:id().
-create_session(Node, UserId, Token) ->
+create_session(Node, UserId, AccessToken) ->
+    Nonce = crypto:strong_rand_bytes(10),
     Identity = #user_identity{user_id = UserId},
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
     {ok, SessionId} = ?assertMatch({ok, _}, rpc:call(
         Node,
         session_manager,
-        reuse_or_create_gui_session,
-        [Identity, #token_auth{subject_token = Token}])
-    ),
+        reuse_or_create_fuse_session,
+        [Nonce, Identity, TokenAuth]
+    )),
     SessionId.
 
 

@@ -56,7 +56,7 @@ token_auth(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
 
-    SerializedToken = initializer:create_token(?USER_ID),
+    SerializedToken = initializer:create_access_token(?USER_ID),
 
     % when
     AuthFail = do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => <<"invalid">>}),

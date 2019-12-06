@@ -232,20 +232,23 @@ connect_via_token(Node, SocketOpts) ->
 %% @end
 %%--------------------------------------------------------------------
 connect_via_token(Node, SocketOpts, SessId) ->
-    UserId = <<"user">>,
-    SerializedToken = initializer:create_token(UserId),
-    connect_via_token(Node, SocketOpts, SessId, #token_auth{
-        subject_token = SerializedToken
-    }).
+    UserId = <<"default_user">>,
+    AccessToken = initializer:create_access_token(UserId),
+    connect_via_token(Node, SocketOpts, SessId, AccessToken).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Connect to given node using a token, with custom socket opts and session id.
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_token(Node :: node(), SocketOpts :: list(), SessId :: session:id(), #token_auth{}) ->
+-spec connect_via_token(
+    Node :: node(),
+    SocketOpts :: list(),
+    SessId :: session:id(),
+    AccessToken :: tokens:serialized()
+) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_token(Node, SocketOpts, SessId, #token_auth{subject_token = Token}) ->
+connect_via_token(Node, SocketOpts, SessId, AccessToken) ->
     % given
     OpVersion = rpc:call(Node, oneprovider, get_version, []),
     {ok, [Version | _]} = rpc:call(
@@ -255,7 +258,7 @@ connect_via_token(Node, SocketOpts, SessId, #token_auth{subject_token = Token}) 
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
             session_id = SessId,
-            macaroon = #'Macaroon'{macaroon = Token},
+            macaroon = #'Macaroon'{macaroon = AccessToken},
             version = Version
         }
     }},
@@ -305,12 +308,11 @@ connect_and_upgrade_proto(Hostname, Port) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
 connect_as_user(Config, Node, User, SocketOpts) ->
     SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
-    Token = ?config({auth_token, {User, ?GET_DOMAIN(Node)}}, Config),
-    Auth = #token_auth{subject_token = Token},
+    AccessToken = ?config({access_token, {User, ?GET_DOMAIN(Node)}}, Config),
 
     ?assertMatch(
         {ok, {_, SessId}},
-        fuse_test_utils:connect_via_token(Node, SocketOpts, SessId, Auth)
+        fuse_test_utils:connect_via_token(Node, SocketOpts, SessId, AccessToken)
     ).
 
 

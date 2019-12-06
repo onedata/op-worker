@@ -294,7 +294,7 @@ run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
     operation = Operation
 }, Config) ->
     OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
-    MainToken = initializer:create_token(User),
+    MainToken = initializer:create_access_token(User),
     initializer:testmaster_mock_space_user_privileges(
         [Node], SpaceId, User, privileges:space_admin()
     ),

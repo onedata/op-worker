@@ -28,7 +28,7 @@
 
 %% API
 -export([
-    create_token/1, create_token/2,
+    create_access_token/1, create_access_token/2,
     setup_session/3, teardown_session/2,
     setup_storage/1, setup_storage/2, teardown_storage/1,
     clean_test_users_and_spaces/1,
@@ -241,13 +241,13 @@ clear_subscriptions(Worker) ->
     end, Docs).
 
 
--spec create_token(od_user:id()) -> tokens:serialized().
-create_token(UserId) ->
-    create_token(UserId, []).
+-spec create_access_token(od_user:id()) -> tokens:serialized().
+create_access_token(UserId) ->
+    create_access_token(UserId, []).
 
 
--spec create_token(od_user:id(), [caveats:caveat()]) -> tokens:serialized().
-create_token(UserId, Caveats) ->
+-spec create_access_token(od_user:id(), [caveats:caveat()]) -> tokens:serialized().
+create_access_token(UserId, Caveats) ->
     {ok, SerializedToken} = ?assertMatch(
         {ok, _},
         tokens:serialize(tokens:construct(#token{
@@ -272,7 +272,7 @@ setup_session(_Worker, [], Config) ->
 setup_session(Worker, [{_, #user_config{
     id = UserId,
     spaces = Spaces,
-    token = Token,
+    token = AccessToken,
     groups = Groups,
     name = UserName
 }} | R], Config) ->
@@ -284,17 +284,15 @@ setup_session(Worker, [{_, #user_config{
     SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
 
     Identity = #user_identity{user_id = UserId},
-    Auth = #token_auth{
-        subject_token = Token,
-        peer_ip = local_ip_v4(),
-        interface = oneclient,
-        data_access_caveats_policy = allow_data_access_caveats
-    },
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
     {ok, SessId} = ?assertMatch({ok, SessId}, rpc:call(
         Worker,
         session_manager,
         reuse_or_create_fuse_session,
-        [SessId, Identity, Auth])
+        [SessId, Identity, TokenAuth])
     ),
 
     lists:foreach(fun({_, SpaceName}) ->
@@ -309,10 +307,10 @@ setup_session(Worker, [{_, #user_config{
         {{spaces, UserId}, Spaces},
         {{groups, UserId}, Groups},
         {{user_id, UserId}, UserId},
-        {{auth, UserId}, Auth},
         {{user_name, UserId}, UserName},
+        {{access_token, UserId}, AccessToken},
+        {{token_auth, UserId}, TokenAuth},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
-        {{auth_token, {UserId, ?GET_DOMAIN(Worker)}}, Token},
         {{fslogic_ctx, UserId}, Ctx}
         | setup_session(Worker, R, Config)
     ].
@@ -764,7 +762,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
             id = UserId,
             name = Name("name", UserId),
             spaces = SpacesList,
-            token = create_token(UserId),
+            token = create_access_token(UserId),
             default_space = DefaultSpaceId,
             groups = maps:get(UserId, UserToGroups, [])
         }}

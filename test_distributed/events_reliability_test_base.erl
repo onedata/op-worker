@@ -186,7 +186,7 @@ events_flush_test(Config) ->
 
 events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     UserId = <<"user1">>,
-    TokenAuth = ?config({auth, UserId}, Config),
+    AccessToken = ?config({access_token, UserId}, Config),
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
@@ -199,7 +199,7 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     mock_handle_file_read_events(AssertionWorker),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(
-        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), TokenAuth
+        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), AccessToken
     ),
 
     % Send 2 event with some delay and assert correct aggregation
@@ -230,7 +230,7 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
 %%events_aggregation_failed_test_base(Config, ConnectionWorker, AssertionWorker) ->
 %TODO VFS-5383 - test event manager test other way
 %%    UserId = <<"user1">>,
-%%    TokenAuth = ?config({auth, UserId}, Config),
+%%    AccessToken = ?config({access_token, UserId}, Config),
 %%    SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
 %%    [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 %%
@@ -238,7 +238,7 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
 %%    {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 %%
 %%    {ok, {Sock, TestSessionID}} = fuse_test_utils:connect_via_token(
-%%        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), TokenAuth
+%%        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), AccessToken
 %%    ),
 %%
 %%    ?assertMatch({ok, _}, rpc:call(ConnectionWorker, session, get, [TestSessionID])),
@@ -252,7 +252,7 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
 
 events_flush_test_base(Config, ConnectionWorker, AssertionWorker, MockError, FlushCode) ->
     UserId = <<"user1">>,
-    TokenAuth = ?config({auth, UserId}, Config),
+    AccessToken = ?config({access_token, UserId}, Config),
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
@@ -265,7 +265,7 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker, MockError, Flu
     mock_handle_file_written_events(AssertionWorker, MockError),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(
-        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), TokenAuth
+        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), AccessToken
     ),
 
     [#'Subscription'{id = SubscriptionId}] = fuse_test_utils:get_subscriptions(Sock, [file_written]),

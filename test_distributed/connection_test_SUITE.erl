@@ -141,7 +141,7 @@ client_connection_test(Config) ->
     ),
 
     UserId = <<"user">>,
-    SerializedToken = initializer:create_token(UserId),
+    SerializedToken = initializer:create_access_token(UserId),
 
     ValidMacaroon = #'Macaroon'{macaroon = SerializedToken},
     InvalidMacaroon = #'Macaroon'{macaroon = <<"invaldi">>},
@@ -186,7 +186,7 @@ python_client_test_base(Config) ->
     ),
 
     UserId = <<"user">>,
-    SerializedToken = initializer:create_token(UserId),
+    SerializedToken = initializer:create_access_token(UserId),
 
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{

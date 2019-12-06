@@ -56,25 +56,20 @@ auth_cache_test(Config) ->
     clear_auth_cache(Worker1),
     ?assertEqual(0, get_auth_cache_size(Worker1)),
 
-    SerializedToken = initializer:create_token(?USER_ID),
+    AccessToken = initializer:create_access_token(?USER_ID),
 
-    TokenAuth1 = #token_auth{
-        subject_token = SerializedToken,
-        peer_ip = initializer:local_ip_v4(),
-        interface = undefined
-    },
-    TokenAuth2 = #token_auth{
-        subject_token = SerializedToken,
-        peer_ip = initializer:local_ip_v4(),
-        interface = graphsync,
-        data_access_caveats_policy = allow_data_access_caveats
-    },
-    TokenAuth3 = #token_auth{
-        subject_token = SerializedToken,
-        peer_ip = initializer:local_ip_v4(),
-        interface = rest,
-        data_access_caveats_policy = disallow_data_access_caveats
-    },
+    TokenAuth1 = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), undefined, disallow_data_access_caveats
+    ),
+    TokenAuth2 = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), graphsync, allow_data_access_caveats
+    ),
+    TokenAuth3 = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), rest, disallow_data_access_caveats
+    ),
 
     lists:foreach(fun({TokenAuth, ExpCacheSize}) ->
         ?assertMatch(
@@ -112,22 +107,23 @@ token_authentication(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessId = <<"session_id">>,
-    SerializedToken = initializer:create_token(?USER_ID),
-
-    TokenAuth = #token_auth{
-        subject_token = SerializedToken,
-        peer_ip = initializer:local_ip_v4(),
-        interface = oneclient,
-        data_access_caveats_policy = allow_data_access_caveats
-    },
+    AccessToken = initializer:create_access_token(?USER_ID),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
 
     % when
-    {ok, {Sock, SessId}} = fuse_test_utils:connect_via_token(Worker1, [], SessId, TokenAuth),
+    {ok, {Sock, SessId}} = fuse_test_utils:connect_via_token(Worker1, [], SessId, AccessToken),
 
     % then
-    ?assertMatch(
+    {ok, Doc} = ?assertMatch(
         {ok, #document{value = #session{identity = #user_identity{user_id = ?USER_ID}}}},
         rpc:call(Worker1, session, get, [SessId])
+    ),
+    ?assertMatch(
+        TokenAuth,
+        session:get_auth(Doc)
     ),
     ?assertMatch(
         {ok, ?USER(?USER_ID), undefined},
