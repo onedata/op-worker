@@ -235,7 +235,7 @@ connect_via_token(Node, SocketOpts, SessId) ->
     UserId = <<"user">>,
     SerializedToken = initializer:create_token(UserId),
     connect_via_token(Node, SocketOpts, SessId, #token_auth{
-        token = SerializedToken
+        subject_token = SerializedToken
     }).
 
 %%--------------------------------------------------------------------
@@ -245,7 +245,7 @@ connect_via_token(Node, SocketOpts, SessId) ->
 %%--------------------------------------------------------------------
 -spec connect_via_token(Node :: node(), SocketOpts :: list(), SessId :: session:id(), #token_auth{}) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_token(Node, SocketOpts, SessId, #token_auth{token = Token}) ->
+connect_via_token(Node, SocketOpts, SessId, #token_auth{subject_token = Token}) ->
     % given
     OpVersion = rpc:call(Node, oneprovider, get_version, []),
     {ok, [Version | _]} = rpc:call(
@@ -306,7 +306,7 @@ connect_and_upgrade_proto(Hostname, Port) ->
 connect_as_user(Config, Node, User, SocketOpts) ->
     SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
     Token = ?config({auth_token, {User, ?GET_DOMAIN(Node)}}, Config),
-    Auth = #token_auth{token = Token},
+    Auth = #token_auth{subject_token = Token},
 
     ?assertMatch(
         {ok, {_, SessId}},

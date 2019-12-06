@@ -38,7 +38,7 @@
 %%--------------------------------------------------------------------
 -spec verify_access_token(auth_manager:token_auth()) ->
     {ok, aai:auth(), TTL :: undefined | non_neg_integer()} | errors:error().
-verify_access_token(#token_auth{token = SerializedToken} = TokenAuth) ->
+verify_access_token(#token_auth{subject_token = SerializedToken} = TokenAuth) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{
@@ -97,7 +97,7 @@ verify_provider_identity_token(SerializedToken) ->
 %% @private
 -spec build_verification_payload(auth_manager:token_auth()) -> map().
 build_verification_payload(#token_auth{
-    token = SerializedToken,
+    subject_token = SerializedToken,
     peer_ip = PeerIp,
     interface = Interface,
     data_access_caveats_policy = DataAccessCaveatsPolicy

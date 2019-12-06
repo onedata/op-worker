@@ -79,7 +79,7 @@ mock_gs_client(Config) ->
         Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_ACCESS_TOKEN(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_TOKEN(?PROVIDER_1)
     ),
 
-    ok = test_utils:mock_expect(Nodes, token_logic, verify_access_token, fun(#token_auth{token = UserToken}) ->
+    ok = test_utils:mock_expect(Nodes, token_logic, verify_access_token, fun(#token_auth{subject_token = UserToken}) ->
         {ok, #token{subject = ?SUB(user, UserId)}} = tokens:deserialize(UserToken),
         {ok, #auth{
             subject = ?SUB(user, UserId),
@@ -134,7 +134,7 @@ create_user_session(Config, UserId) ->
 
     SerializedToken = initializer:create_token(UserId),
     Auth = #token_auth{
-        token = SerializedToken,
+        subject_token = SerializedToken,
         interface = graphsync,
         data_access_caveats_policy = disallow_data_access_caveats
     },

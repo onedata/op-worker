@@ -49,7 +49,7 @@ request(Node, URL, Method, Headers, Body, Opts) ->
     end.
 
 user_token_header(Config, User) ->
-    #token_auth{token = Token} = ?config({auth, User}, Config),
+    #token_auth{subject_token = Token} = ?config({auth, User}, Config),
     case rand:uniform(3) of
         1 -> {?HDR_X_AUTH_TOKEN, Token};
         2 -> {?HDR_AUTHORIZATION, <<"Bearer ", Token/binary>>};

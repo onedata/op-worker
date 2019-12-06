@@ -38,7 +38,7 @@ all() ->
     ]).
 
 -define(ONEDATA_TOKEN, <<"ONEDATA_ACCESS_TOKEN">>).
--define(ADMIN_AUTH, #token_auth{token = ?ONEDATA_TOKEN}).
+-define(ADMIN_AUTH, #token_auth{subject_token = ?ONEDATA_TOKEN}).
 
 -define(IDP_ACCESS_TOKEN1, <<"IDP_ACCESS_TOKEN1">>).
 -define(IDP_ACCESS_TOKEN2, <<"IDP_ACCESS_TOKEN2">>).

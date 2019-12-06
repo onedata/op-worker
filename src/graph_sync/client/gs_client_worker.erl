@@ -389,7 +389,7 @@ check_api_authorization(?ROOT_AUTH, _) ->
     ok;
 check_api_authorization(?GUEST_AUTH, _) ->
     ok;
-check_api_authorization(#token_auth{token = Serialized}, #gs_req_graph{operation = Operation, gri = GRI}) ->
+check_api_authorization(#token_auth{subject_token = Serialized}, #gs_req_graph{operation = Operation, gri = GRI}) ->
     %% @TODO VFS-5914 can we keep a deserialized token not to unpack it every time?
     {ok, Token = #token{subject = Subject}} = tokens:deserialize(Serialized),
     Auth = #auth{subject = Subject, caveats = tokens:get_caveats(Token)},
@@ -631,7 +631,7 @@ resolve_auth_override(?ROOT_AUTH) ->
 resolve_auth_override(?GUEST_AUTH) ->
     #auth_override{client_auth = nobody};
 resolve_auth_override(#token_auth{
-    token = Token,
+    subject_token = Token,
     peer_ip = PeerIp,
     interface = Interface,
     audience_token = AudienceToken,

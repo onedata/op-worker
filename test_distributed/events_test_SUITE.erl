@@ -267,7 +267,7 @@ session_setup(Worker, SessId) ->
     Iden = #user_identity{user_id = UserId},
     SerializedToken = initializer:create_token(UserId),
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, SessId, Iden, #token_auth{token = SerializedToken}, self()
+        Worker, SessId, Iden, #token_auth{subject_token = SerializedToken}, self()
     ).
 
 %%--------------------------------------------------------------------

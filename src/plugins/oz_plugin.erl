@@ -97,7 +97,7 @@ get_cacerts_dir() ->
 auth_to_rest_client(none) ->
     none;
 
-auth_to_rest_client(#token_auth{token = Token}) ->
+auth_to_rest_client(#token_auth{subject_token = Token}) ->
     {user, token, Token};
 
 auth_to_rest_client(provider) ->

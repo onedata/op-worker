@@ -84,7 +84,7 @@
 
 -spec pack_token_bin(token_auth()) -> token_bin().
 pack_token_bin(#token_auth{
-    token = SubjectToken,
+    subject_token = SubjectToken,
     audience_token = AudienceToken
 }) ->
     pack_token_bin(SubjectToken, AudienceToken).
@@ -125,7 +125,7 @@ build_token_auth(TokenBin, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     token_auth().
 build_token_auth(SubjectToken, AudienceToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     #token_auth{
-        token = SubjectToken,
+        subject_token = SubjectToken,
         audience_token = AudienceToken,
         peer_ip = PeerIp,
         interface = Interface,

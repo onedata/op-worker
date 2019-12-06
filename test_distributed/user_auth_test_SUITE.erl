@@ -59,18 +59,18 @@ auth_cache_test(Config) ->
     SerializedToken = initializer:create_token(?USER_ID),
 
     TokenAuth1 = #token_auth{
-        token = SerializedToken,
+        subject_token = SerializedToken,
         peer_ip = initializer:local_ip_v4(),
         interface = undefined
     },
     TokenAuth2 = #token_auth{
-        token = SerializedToken,
+        subject_token = SerializedToken,
         peer_ip = initializer:local_ip_v4(),
         interface = graphsync,
         data_access_caveats_policy = allow_data_access_caveats
     },
     TokenAuth3 = #token_auth{
-        token = SerializedToken,
+        subject_token = SerializedToken,
         peer_ip = initializer:local_ip_v4(),
         interface = rest,
         data_access_caveats_policy = disallow_data_access_caveats
@@ -115,7 +115,7 @@ token_authentication(Config) ->
     SerializedToken = initializer:create_token(?USER_ID),
 
     TokenAuth = #token_auth{
-        token = SerializedToken,
+        subject_token = SerializedToken,
         peer_ip = initializer:local_ip_v4(),
         interface = oneclient,
         data_access_caveats_policy = allow_data_access_caveats
@@ -195,7 +195,7 @@ mock_user_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, user_logic, []),
     test_utils:mock_expect(Workers, user_logic, get, fun
-        (#token_auth{token = SerializedToken}, ?USER_ID) ->
+        (#token_auth{subject_token = SerializedToken}, ?USER_ID) ->
             case tokens:deserialize(SerializedToken) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     {ok, #document{key = ?USER_ID, value = #od_user{}}};
@@ -216,7 +216,7 @@ mock_token_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, token_logic, []),
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun
-        (#token_auth{token = SerializedToken}) ->
+        (#token_auth{subject_token = SerializedToken}) ->
             case tokens:deserialize(SerializedToken) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     {ok, ?USER(?USER_ID), undefined};

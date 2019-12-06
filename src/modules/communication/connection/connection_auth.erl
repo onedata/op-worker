@@ -92,7 +92,7 @@ handle_client_handshake(#client_handshake_request{
 
     {SubjectToken, AudienceToken} = auth_manager:unpack_token_bin(TokenBin),
     TokenAuth = #token_auth{
-        token = SubjectToken,
+        subject_token = SubjectToken,
         peer_ip = IpAddress,
         interface = oneclient,
         audience_token = AudienceToken,

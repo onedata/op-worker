@@ -42,7 +42,7 @@ create_session(Node, UserId, Token) ->
         Node,
         session_manager,
         reuse_or_create_gui_session,
-        [Identity, #token_auth{token = Token}])
+        [Identity, #token_auth{subject_token = Token}])
     ),
     SessionId.
 

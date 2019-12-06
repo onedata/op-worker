@@ -235,7 +235,7 @@ mock_user_logic(Config) ->
     }}},
 
     GetUserFun = fun
-        (#token_auth{token = SerializedToken}, ?USER_ID) ->
+        (#token_auth{subject_token = SerializedToken}, ?USER_ID) ->
             case tokens:deserialize(SerializedToken) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     UserDoc;

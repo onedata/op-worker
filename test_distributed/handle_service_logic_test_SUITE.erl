@@ -178,7 +178,7 @@ confined_access_token_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     Caveat = #cv_data_path{whitelist = [<<"/spaceid/path">>]},
-    Auth = #token_auth{token = initializer:create_token(?USER_1, [Caveat])},
+    Auth = #token_auth{subject_token = initializer:create_token(?USER_1, [Caveat])},
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
     % Request should be denied before contacting Onezone because of the

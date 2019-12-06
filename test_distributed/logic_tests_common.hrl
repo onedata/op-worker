@@ -58,7 +58,7 @@
 
 % User authorizations
 % Token auth is translated to {token, Token} before graph sync request.
--define(USER_INTERNAL_TOKEN_AUTH(Token), #token_auth{token = Token}).
+-define(USER_INTERNAL_TOKEN_AUTH(Token), #token_auth{subject_token = Token}).
 -define(USER_GS_TOKEN_AUTH(Token), {token, Token}).
 
 

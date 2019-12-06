@@ -600,5 +600,5 @@ get_file_guid(FileCtx) ->
 %% @private
 -spec get_serialized_token(user_ctx:ctx()) -> tokens:serialized().
 get_serialized_token(UserCtx) ->
-    #token_auth{token = SerializedToken} = user_ctx:get_auth(UserCtx),
+    #token_auth{subject_token = SerializedToken} = user_ctx:get_auth(UserCtx),
     SerializedToken.

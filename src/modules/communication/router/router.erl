@@ -188,7 +188,7 @@ route_and_ignore_answer(#client_message{
     % This function performs an async call to session manager worker.
     {ok, _} = session:update(EffSessionId, fun(Session = #session{auth = TokenAuth}) ->
         {ok, Session#session{auth = TokenAuth#token_auth{
-            token = SerializedToken,
+            subject_token = SerializedToken,
             audience_token = AudienceToken
         }}}
     end),

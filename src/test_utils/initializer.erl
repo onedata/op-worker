@@ -285,7 +285,7 @@ setup_session(Worker, [{_, #user_config{
 
     Identity = #user_identity{user_id = UserId},
     Auth = #token_auth{
-        token = Token,
+        subject_token = Token,
         peer_ip = local_ip_v4(),
         interface = oneclient,
         data_access_caveats_policy = allow_data_access_caveats
@@ -487,7 +487,7 @@ mock_auth_manager(Config) ->
     test_utils:mock_new(Workers, auth_manager),
     test_utils:mock_expect(Workers, auth_manager, verify,
         fun(#token_auth{
-            token = SerializedToken,
+            subject_token = SerializedToken,
             peer_ip = PeerIp,
             interface = Interface,
             data_access_caveats_policy = DataAccessCaveatsPolicy
@@ -915,7 +915,7 @@ user_logic_mock_setup(Workers, Users) ->
                 UserConfig2 ->
                     UserConfigToUserDoc(UserConfig2)
             end;
-        (_, #token_auth{token = Token}, UserId) ->
+        (_, #token_auth{subject_token = Token}, UserId) ->
             case proplists:get_value(Token, UsersByToken, undefined) of
                 undefined ->
                     {error, not_found};
@@ -946,7 +946,7 @@ user_logic_mock_setup(Workers, Users) ->
             end
     end,
 
-    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(#token_auth{token = UserToken}) ->
+    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(#token_auth{subject_token = UserToken}) ->
         case proplists:get_value(UserToken, UsersByToken, undefined) of
             undefined -> {error, not_found};
             UserId -> {ok, ?USER(UserId), undefined}

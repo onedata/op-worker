@@ -416,7 +416,7 @@ confined_access_token_test(Config) ->
 
     {ok, Objectid} = file_id:guid_to_objectid(file_id:pack_guid(<<"123">>, ?SPACE_1)),
     Caveat = #cv_data_objectid{whitelist = [Objectid]},
-    Auth = #token_auth{token = initializer:create_token(?USER_1, [Caveat])},
+    Auth = #token_auth{subject_token = initializer:create_token(?USER_1, [Caveat])},
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
     % Request should be denied before contacting Onezone because the space in
