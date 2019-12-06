@@ -335,15 +335,9 @@ end).
 %%% storage macros
 %%%===================================================================
 
--define(STORAGE_RECORD(Id, Name, Helper, LumaConfig), {new_storage,
-    Id,
-    Name,
-    Helper,
-    false, % readonly
-    LumaConfig,
-    false, % imported storage
-    #{} % QoS parameters
-}).
+-define(STORAGE_RECORD(Id, Name, Helper, LumaConfig), storage:create_record(
+    Id, Name, Helper, false, LumaConfig, false, #{}
+)).
 
 -define(SECURE_POSIX_STORAGE_CONFIG, #{
     name => "secure POSIX storage",

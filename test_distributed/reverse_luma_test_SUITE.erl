@@ -96,15 +96,9 @@ all() ->
 -define(STORAGE, ?STORAGE(?STORAGE_ID, ?POSIX_HELPER_NAME, ?LUMA_CONFIG)).
 -define(STORAGE(LumaConfig), ?STORAGE(?STORAGE_ID, ?POSIX_HELPER_NAME, LumaConfig)).
 -define(STORAGE(HelperName, LumaConfig), ?STORAGE(?STORAGE_ID, HelperName, LumaConfig)).
--define(STORAGE(StorageId, HelperName, LumaConfig), {storage,
-    StorageId,
-    <<"test_storage">>,
-    #helper{name = HelperName},
-    false, %readonly
-    LumaConfig,
-    false, % imported storage
-    #{} % QoS parameters
-}).
+-define(STORAGE(StorageId, HelperName, LumaConfig), storage:create_record(
+    StorageId, <<"test_storage">>, #helper{name = HelperName}, false, LumaConfig, false, #{}
+)).
 
 -define(SPACE_ID, <<"test_space_id">>).
 

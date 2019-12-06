@@ -46,13 +46,18 @@
 %%% Upgrade from 19.02.*
 -export([migrate_to_zone/0]).
 
-%% datastore_model callbacks
+%%% Tests utils
+-export([create_record/7]).
+
+%% Legacy datastore_model callbacks
 -export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 % exported for initializer
 -export([on_storage_created/1]).
 
+% Virtual storage record containing combined fields from `storage_config` and `od_storage` records.
+% This record is NOT stored in datastore.
 -record(storage_record, {
     id :: od_storage:id(),
     name :: storage_config:name(),
@@ -63,7 +68,7 @@
     qos_parameters :: od_storage:qos_parameters()
 }).
 
--type record() :: #storage_record{}.
+-opaque record() :: #storage_record{}.
 -type name() :: storage_config:name().
 -type qos_parameters() :: od_storage:qos_parameters().
 
@@ -101,7 +106,8 @@ create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParamete
                     case storage_logic:delete_in_zone(Id) of
                         ok -> ok;
                         {error, _} = Error1 ->
-                            ?warning("Could not revert storage creation in Onezone: ~p", [Error1])
+                            ?warning("Could not revert creation of storage ~p in Onezone: ~p",
+                                [Id, Error1])
                     end,
                     Error
             end;
@@ -180,6 +186,7 @@ delete_all() ->
 %% remove sensitive information.
 %% @end
 %%-------------------------------------------------------------------
+-spec describe(od_storage:id()) -> {ok, json_utils:json_term()} | {error, term()}.
 describe(StorageId) ->
     case get(StorageId) of
         {ok, StorageRecord} ->
@@ -288,14 +295,14 @@ update_name(StorageId, NewName) ->
 -spec update_luma_config(od_storage:id(), Changes) -> ok | {error, term()}
     when Changes :: #{url => luma_config:url(), api_key => luma_config:api_key()}.
 update_luma_config(StorageId, Changes) ->
-    UpdateFun = fun(undefined) ->
-        {error, luma_disabled};
-           (PreviousConfig) ->
-               {ok, luma_config:new(
-                   maps:get(url, Changes, luma_config:get_url(PreviousConfig)),
-                   maps:get(api_key, Changes, luma_config:get_api_key(PreviousConfig))
-               )}
-       end,
+    UpdateFun = fun
+        (undefined) -> {error, luma_disabled};
+        (PreviousConfig) ->
+            {ok, luma_config:new(
+                maps:get(url, Changes, luma_config:get_url(PreviousConfig)),
+                maps:get(api_key, Changes, luma_config:get_api_key(PreviousConfig))
+            )}
+        end,
     storage_config:update_luma_config(StorageId, UpdateFun).
 
 
@@ -442,6 +449,18 @@ support_critical_section(StorageId, Fun) ->
     critical_section:run({storage_support, StorageId}, Fun).
 
 %%%===================================================================
+%%% Tests utils
+%%%===================================================================
+
+-spec create_record(od_storage:id(), name(), helpers:helper(), boolean(), luma_config:config(),
+    boolean(), qos_parameters()) -> record().
+create_record(Id, Name, Helper, ReadOnly, LumaConfig, ImportedStorage, QosParameters) ->
+    #storage_record{
+        id = Id, name = Name, is_readonly = ReadOnly, luma_config = LumaConfig,
+        helper = Helper, is_imported_storage = ImportedStorage, qos_parameters = QosParameters
+    }.
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -539,7 +558,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            {ok, StorageId} = storage_logic:create_in_zone(Name, StorageId),
+            {ok, StorageId} = storage_logic:create_in_zone(#{}, StorageId),
             ?notice("Storage ~p created in Onezone", [StorageId])
     end,
     ok = delete_deprecated(StorageId).
