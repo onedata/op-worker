@@ -26,6 +26,7 @@
 %% API
 -export([
     pack_token_bin/1, pack_token_bin/2, unpack_token_bin/1,
+    build_token_auth/4, build_token_auth/5,
 
     verify/1,
     invalidate/1
@@ -56,7 +57,7 @@
 
 
 -record(cache_item, {
-    token_auth :: #token_auth{},
+    token_auth :: token_auth(),
     verification_result :: {ok, aai:auth(), ValidUntil :: undefined | timestamp()} | errors:error(),
     cache_expiration :: timestamp()
 }).
@@ -105,9 +106,36 @@ unpack_token_bin(#token_bin{
     {SubjectToken, AudienceToken}.
 
 
+-spec build_token_auth(token_bin(),
+    undefined | ip_utils:ip(), undefined | cv_interface:interface(),
+    data_access_caveats:policy()
+) ->
+    token_auth().
+build_token_auth(TokenBin, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+    build_token_auth(
+        TokenBin#token_bin.subject_token, TokenBin#token_bin.audience_token,
+        PeerIp, Interface, DataAccessCaveatsPolicy
+    ).
+
+
+-spec build_token_auth(subject_token(), audience_token(),
+    undefined | ip_utils:ip(), undefined | cv_interface:interface(),
+    data_access_caveats:policy()
+) ->
+    token_auth().
+build_token_auth(SubjectToken, AudienceToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+    #token_auth{
+        token = SubjectToken,
+        audience_token = AudienceToken,
+        peer_ip = PeerIp,
+        interface = Interface,
+        data_access_caveats_policy = DataAccessCaveatsPolicy
+    }.
+
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies identity of subject identified by specified #token_auth{}
+%% Verifies identity of subject identified by specified token_auth()
 %% and returns time this auth will be valid until. Nevertheless this
 %% auth should be confirmed periodically as tokens can be revoked.
 %% @end

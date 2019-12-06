@@ -43,7 +43,7 @@
 -type diff() :: datastore_doc:diff(record()).
 -type ttl() :: non_neg_integer().
 -type grace_period() :: non_neg_integer().
--type auth() :: #token_auth{} | ?ROOT_AUTH | ?GUEST_AUTH.
+-type auth() :: auth_manager:token_auth() | ?ROOT_AUTH | ?GUEST_AUTH.
 -type identity() :: #user_identity{}.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 % All sessions, beside root and guest (they start with active status),

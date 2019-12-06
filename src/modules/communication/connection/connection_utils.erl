@@ -45,14 +45,10 @@ maybe_create_proxied_session(ProviderId, ProviderIp, #client_message{
     effective_session_id = EffSessionId,
     effective_session_auth = TokenBin
 }) when EffSessionId =/= undefined ->
-    {SubjectToken, AudienceToken} = auth_manager:unpack_token_bin(TokenBin),
-    TokenAuth = #token_auth{
-        token = SubjectToken,
-        peer_ip = ProviderIp,
-        interface = oneclient,
-        audience_token = AudienceToken,
-        data_access_caveats_policy = allow_data_access_caveats
-    },
+    TokenAuth = auth_manager:build_token_auth(
+        TokenBin, ProviderIp,
+        oneclient, allow_data_access_caveats
+    ),
     Res = session_manager:reuse_or_create_proxied_session(
         EffSessionId, ProviderId, TokenAuth, fuse
     ),

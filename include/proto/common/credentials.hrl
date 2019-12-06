@@ -21,9 +21,9 @@
 % Record containing access token for user authorization in OZ.
 -record(token_auth, {
     token :: tokens:serialized(),
+    audience_token = undefined :: undefined | tokens:serialized(),
     peer_ip = undefined :: undefined | ip_utils:ip(),
     interface = undefined :: undefined | cv_interface:interface(),
-    audience_token = undefined :: undefined | tokens:serialized(),
     data_access_caveats_policy = disallow_data_access_caveats :: data_access_caveats:policy()
 }).
 
