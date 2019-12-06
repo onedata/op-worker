@@ -191,7 +191,7 @@ mock_user_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, user_logic, []),
     test_utils:mock_expect(Workers, user_logic, get, fun
-        (#token_auth{subject_token = SerializedToken}, ?USER_ID) ->
+        (#token_auth{access_token = SerializedToken}, ?USER_ID) ->
             case tokens:deserialize(SerializedToken) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     {ok, #document{key = ?USER_ID, value = #od_user{}}};
@@ -212,7 +212,7 @@ mock_token_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, token_logic, []),
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun
-        (#token_auth{subject_token = SerializedToken}) ->
+        (#token_auth{access_token = SerializedToken}) ->
             case tokens:deserialize(SerializedToken) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     {ok, ?USER(?USER_ID), undefined};

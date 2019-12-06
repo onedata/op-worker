@@ -65,12 +65,16 @@
 -type state() :: undefined.
 -type timestamp() :: time_utils:seconds().
 
--type subject_token() :: tokens:serialized().
+-type access_token() :: tokens:serialized().
 -type audience_token() :: undefined | tokens:serialized().
 
+-type credentials() :: #credentials{}.
 -type token_auth() :: #token_auth{}.
 
--export_type([subject_token/0, audience_token/0, token_auth/0]).
+-export_type([
+    access_token/0, audience_token/0,
+    credentials/0, token_auth/0
+]).
 
 
 %%%===================================================================
@@ -78,13 +82,28 @@
 %%%===================================================================
 
 
--spec get_credentials(token_auth()) -> #credentials{}.
+-spec build_token_auth(access_token(), audience_token(),
+    undefined | ip_utils:ip(), undefined | cv_interface:interface(),
+    data_access_caveats:policy()
+) ->
+    token_auth().
+build_token_auth(AccessToken, AudienceToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+    #token_auth{
+        access_token = AccessToken,
+        audience_token = AudienceToken,
+        peer_ip = PeerIp,
+        interface = Interface,
+        data_access_caveats_policy = DataAccessCaveatsPolicy
+    }.
+
+
+-spec get_credentials(token_auth()) -> credentials().
 get_credentials(#token_auth{
-    subject_token = SubjectToken,
+    access_token = AccessToken,
     audience_token = AudienceToken
 }) ->
     #credentials{
-        subject_token = SubjectToken,
+        access_token = AccessToken,
         audience_token = AudienceToken
     }.
 

@@ -320,7 +320,7 @@ get_write_event(FileGuid, Size, FileSize, Num, MaxS) ->
 
 get_token_auth(Val) ->
     {
-        #credentials{subject_token = Val},
+        #credentials{access_token = Val},
         #'Macaroon'{macaroon = Val}
     }.
 

@@ -180,7 +180,7 @@ route_and_ignore_answer(ClientMsg = #client_message{
 % (originates from #'Macaroon' client message).
 route_and_ignore_answer(#client_message{
     message_body = #credentials{
-        subject_token = SerializedToken,
+        access_token = SerializedToken,
         audience_token = AudienceToken
     }
 } = Msg) ->
@@ -188,7 +188,7 @@ route_and_ignore_answer(#client_message{
     % This function performs an async call to session manager worker.
     {ok, _} = session:update(EffSessionId, fun(Session = #session{auth = TokenAuth}) ->
         {ok, Session#session{auth = TokenAuth#token_auth{
-            subject_token = SerializedToken,
+            access_token = SerializedToken,
             audience_token = AudienceToken
         }}}
     end),

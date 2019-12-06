@@ -285,9 +285,9 @@ translate_from_protobuf(#'ProviderHandshakeRequest'{
         token = Token
     };
 translate_from_protobuf(#'Macaroon'{
-    macaroon = SubjectToken
+    macaroon = AccessToken
 }) ->
-    #credentials{subject_token = SubjectToken};
+    #credentials{access_token = AccessToken};
 translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
 
@@ -1320,7 +1320,7 @@ translate_to_protobuf(#handshake_response{
         status = Status
     }};
 translate_to_protobuf(#credentials{
-    subject_token = SerializedToken
+    access_token = SerializedToken
 }) ->
     #'Macaroon'{
         macaroon = SerializedToken

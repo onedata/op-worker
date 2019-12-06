@@ -86,7 +86,7 @@ get_handshake_error_msg(_) ->
 handle_client_handshake(#client_handshake_request{
     session_id = SessionId,
     credentials = #credentials{
-        subject_token = SubjectToken,
+        access_token = AccessToken,
         audience_token = AudienceToken
     }
 } = Req, IpAddress) when is_binary(SessionId) ->
@@ -94,7 +94,7 @@ handle_client_handshake(#client_handshake_request{
     assert_client_compatibility(Req, IpAddress),
 
     TokenAuth = auth_manager:build_token_auth(
-        SubjectToken, AudienceToken,
+        AccessToken, AudienceToken,
         IpAddress, oneclient, allow_data_access_caveats
     ),
     case auth_manager:verify(TokenAuth) of
@@ -106,7 +106,7 @@ handle_client_handshake(#client_handshake_request{
         ?ERROR_FORBIDDEN ->
             throw(invalid_provider);
         {error, _} = Error ->
-            case tokens:deserialize(SubjectToken) of
+            case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = Subject, id = TokenId} = Token} ->
                     ?debug("Cannot authorize user (id: ~p) based on token (id: ~p) "
                            "with caveats: ~p due to ~w", [
