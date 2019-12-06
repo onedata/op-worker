@@ -83,6 +83,14 @@ change_replicated_internal(SpaceId, #document{
     ok = replica_dbsync_hook:on_file_location_change(FileCtx, Doc);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
+    value = #times{},
+    deleted = true
+}) ->
+    ?debug("change_replicated_internal: deleted times ~p", [FileUuid]),
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
+    (catch fslogic_event_emitter:emit_file_removed(FileCtx, []));
+change_replicated_internal(SpaceId, #document{
+    key = FileUuid,
     value = #times{}
 }) ->
     ?debug("change_replicated_internal: changed times ~p", [FileUuid]),
