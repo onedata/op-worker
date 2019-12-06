@@ -68,6 +68,7 @@ routes() -> [
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
+        produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_share, 
             id = ?PATH_BINDING, 
@@ -75,7 +76,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Unshare a folder by ID
+    %% Unshare a folder by Id
     {<<"/shares-id/:id">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{
@@ -108,11 +109,12 @@ routes() -> [
             scope = private
         }
     }},
-    %% Share a folder by ID
+    %% Share a folder by Id
     {<<"/shares-id/:id">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
+        produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_share, 
             id = ?OBJECTID_BINDING(id), 
@@ -120,7 +122,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Unshare a folder by public share ID
+    %% Unshare a folder by public share Id
     {<<"/shares-public-id/:shid">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{
@@ -130,7 +132,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get share info by public share ID
+    %% Get share info by public share Id
     {<<"/shares-public-id/:shid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -141,7 +143,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Rename share by public share ID
+    %% Rename share by public share Id
     {<<"/shares-public-id/:shid">>, rest_handler, #rest_req{
         method = 'PATCH',
         parse_body = as_json_params,

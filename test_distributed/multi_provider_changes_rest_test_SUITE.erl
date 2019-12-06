@@ -542,17 +542,7 @@ end_per_suite(Config) ->
 
 
 init_per_testcase(token_auth_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = SerializedToken}) ->
-            {ok, #token{
-                subject = ?SUB(user, UserId)
-            }} = tokens:deserialize(SerializedToken),
-
-            {ok, #document{value = #user_identity{user_id = UserId}}}
-        end
-    ),
+    initializer:mock_auth_manager(Config),
     init_per_testcase(all, Config);
 
 init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
@@ -588,8 +578,7 @@ init_per_testcase(_Case, Config) ->
 
 
 end_per_testcase(token_auth_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [user_identity]),
+    initializer:unmock_auth_manager(Config),
     end_per_testcase(all, Config);
 
 end_per_testcase(changes_stream_closed_on_disconnection, Config) ->

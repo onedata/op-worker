@@ -37,6 +37,7 @@
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1
 ]).
+-export([mock_auth_manager/1, unmock_auth_manager/1]).
 -export([mock_provider_ids/1, mock_provider_id/4, unmock_provider_ids/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
@@ -131,6 +132,15 @@
             ]}
         ]}
     ]}
+]).
+
+-define(TOKENS_SECRET, <<"secret">>).
+
+-define(SUPPORTED_ACCESS_TOKEN_CAVEATS, [
+    cv_time, cv_audience,
+    cv_ip, cv_asn, cv_country, cv_region,
+    cv_interface, cv_api,
+    cv_data_readonly, cv_data_path, cv_data_objectid
 ]).
 
 %%%===================================================================
@@ -246,7 +256,7 @@ create_token(UserId, Caveats) ->
             id = UserId,
             type = ?ACCESS_TOKEN,
             persistent = false
-        }, UserId, Caveats))
+        }, ?TOKENS_SECRET, Caveats))
     ),
     SerializedToken.
 
@@ -271,15 +281,20 @@ setup_session(Worker, [{_, #user_config{
         list_to_binary(Text ++ "_" ++ binary_to_list(User))
     end,
 
-    Nonce = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_nonce", UserId),
+    SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
 
     Identity = #user_identity{user_id = UserId},
-    Auth = #token_auth{token = Token, peer_ip = local_ip_v4()},
-    {ok, SessId} = ?assertMatch({ok, _}, rpc:call(
+    Auth = #token_auth{
+        token = Token,
+        peer_ip = local_ip_v4(),
+        interface = oneclient,
+        data_access_caveats_policy = allow_data_access_caveats
+    },
+    {ok, SessId} = ?assertMatch({ok, SessId}, rpc:call(
         Worker,
         session_manager,
         reuse_or_create_fuse_session,
-        [Nonce, Identity, Auth])
+        [SessId, Identity, Auth])
     ),
 
     lists:foreach(fun({_, SpaceName}) ->
@@ -298,7 +313,6 @@ setup_session(Worker, [{_, #user_config{
         {{user_name, UserId}, UserName},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
         {{auth_token, {UserId, ?GET_DOMAIN(Worker)}}, Token},
-        {{session_nonce, {UserId, ?GET_DOMAIN(Worker)}}, Nonce},
         {{fslogic_ctx, UserId}, Ctx}
         | setup_session(Worker, R, Config)
     ].
@@ -314,7 +328,7 @@ teardown_session(Worker, Config) ->
         ({{session_id, _}, SessId}, Acc) ->
             case rpc:call(Worker, session, get_auth, [SessId]) of
                 {ok, Auth} ->
-                    rpc:call(Worker, user_identity, delete, [Auth]),
+                    rpc:call(Worker, auth_manager, invalidate, [Auth]),
                     ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId]));
                 {error, not_found} ->
                     ok
@@ -461,6 +475,54 @@ mock_test_file_context(Config, UuidPrefix) ->
 unmock_test_file_context(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(Workers, file_ctx).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks auth_manager:verify for all providers in given environment.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_auth_manager(proplists:proplist()) -> ok.
+mock_auth_manager(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, auth_manager),
+    test_utils:mock_expect(Workers, auth_manager, verify,
+        fun(#token_auth{
+            token = SerializedToken,
+            peer_ip = PeerIp,
+            interface = Interface,
+            data_access_caveats_policy = DataAccessCaveatsPolicy
+        }) ->
+            case tokens:deserialize(SerializedToken) of
+                {ok, Token} ->
+                    AuthCtx = #auth_ctx{
+                        current_timestamp = time_utils:cluster_time_seconds(),
+                        ip = PeerIp,
+                        interface = Interface,
+                        audience = ?AUD(?OP_WORKER, oneprovider:get_id()),
+                        data_access_caveats_policy = DataAccessCaveatsPolicy,
+                        group_membership_checker = fun(_, _) -> false end
+                    },
+                    case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx, ?SUPPORTED_ACCESS_TOKEN_CAVEATS) of
+                        {ok, Auth} ->
+                            {ok, Auth, undefined};
+                        {error, _} = Err1 ->
+                            Err1
+                    end;
+                {error, _} = Err2 ->
+                    Err2
+            end
+        end
+    ).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Unmocks auth manager.
+%% @end
+%%--------------------------------------------------------------------
+-spec unmock_auth_manager(proplists:proplist()) -> ok.
+unmock_auth_manager(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(Workers, auth_manager).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -747,13 +809,13 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     end, SpacesSetup),
 
     %% Set expiration time for session to value specified in Config or to 1d.
-    FuseSessionTTL = case ?config(fuse_session_ttl_seconds, Config) of
+    FuseSessionTTL = case ?config(fuse_session_grace_period_seconds, Config) of
         undefined ->
             240 * 60 * 60;
         Val ->
             Val
     end,
-    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_ttl_seconds, FuseSessionTTL]),
+    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_grace_period_seconds, FuseSessionTTL]),
 
     lists:foreach(fun(Worker) ->
         test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
@@ -887,7 +949,7 @@ user_logic_mock_setup(Workers, Users) ->
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(#token_auth{token = UserToken}) ->
         case proplists:get_value(UserToken, UsersByToken, undefined) of
             undefined -> {error, not_found};
-            UserId -> {ok, ?USER(UserId)}
+            UserId -> {ok, ?USER(UserId), undefined}
         end
     end),
 
@@ -1270,7 +1332,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
 
     test_utils:mock_expect(AllWorkers, provider_logic, verify_provider_identity, fun(_) -> ok end),
 
-    test_utils:mock_expect(AllWorkers, token_logic, verify_identity_token, VerifyProviderIdentityFun).
+    test_utils:mock_expect(AllWorkers, token_logic, verify_provider_identity_token, VerifyProviderIdentityFun).
 
 %%--------------------------------------------------------------------
 %% @private

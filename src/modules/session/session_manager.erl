@@ -17,6 +17,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -44,10 +45,9 @@
 %% Creates FUSE session or if session exists reuses it.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_fuse_session(Nonce :: binary(), session:identity(),
+-spec reuse_or_create_fuse_session(SessId :: session:id(), session:identity(),
     session:auth()) -> {ok, session:id()} | error().
-reuse_or_create_fuse_session(Nonce, Iden, Auth) ->
-    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({fuse, Nonce, Auth})),
+reuse_or_create_fuse_session(SessId, Iden, Auth) ->
     reuse_or_create_session(SessId, fuse, Iden, Auth).
 
 
@@ -82,10 +82,17 @@ reuse_or_create_outgoing_provider_session(SessId, Iden) ->
     ProxyVia :: oneprovider:id(),
     session:auth(), SessionType :: atom()) ->
     {ok, session:id()} | error().
-reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
-    case user_identity:get_or_fetch(Auth) of
-        {ok, #document{value = #user_identity{} = Iden}} ->
-            reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia);
+reuse_or_create_proxied_session(SessId, ProxyVia, Auth0, SessionType) ->
+    Auth1 = Auth0#token_auth{
+        peer_ip = oneprovider:get_node_ip(),
+        % Only oneclient requests can be proxied (gui and rest blocks proxy)
+        interface = oneclient,
+        data_access_caveats_policy = allow_data_access_caveats
+    },
+    case auth_manager:verify(Auth1) of
+        {ok, ?USER(UserId), _TokenValidUntil} ->
+            Iden = #user_identity{user_id = UserId},
+            reuse_or_create_session(SessId, SessionType, Iden, Auth1, ProxyVia);
         Error ->
             Error
     end.

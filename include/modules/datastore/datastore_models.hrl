@@ -211,6 +211,7 @@
     file_guid :: fslogic_worker:file_guid()
 }).
 
+%% TODO VFS-5895 rm
 %% Identity containing user_id
 -record(user_identity, {
     user_id :: undefined | od_user:id(),

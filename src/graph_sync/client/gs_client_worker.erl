@@ -630,11 +630,19 @@ resolve_auth_override(?ROOT_AUTH) ->
     undefined;
 resolve_auth_override(?GUEST_AUTH) ->
     #auth_override{client_auth = nobody};
-resolve_auth_override(#token_auth{token = Token, peer_ip = PeerIp}) ->
-    %% @TODO VFS-5914 add full auth_ctx information
+resolve_auth_override(#token_auth{
+    token = Token,
+    peer_ip = PeerIp,
+    interface = Interface,
+    audience_token = AudienceToken,
+    data_access_caveats_policy = DataAccessCaveatsPolicy
+}) ->
     #auth_override{
         client_auth = {token, Token},
-        peer_ip = PeerIp
+        peer_ip = PeerIp,
+        interface = Interface,
+        audience_token = AudienceToken,
+        data_access_caveats_policy = DataAccessCaveatsPolicy
     }.
 
 

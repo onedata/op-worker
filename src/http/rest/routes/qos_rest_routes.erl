@@ -46,6 +46,7 @@ routes() -> [
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
+        produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_qos, 
             id = ?PATH_BINDING, 
@@ -69,6 +70,7 @@ routes() -> [
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
+        produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_qos, 
             id = ?OBJECTID_BINDING(id), 

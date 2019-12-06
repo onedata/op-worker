@@ -36,7 +36,6 @@ get_models() -> [
     subscription,
     file_subscription,
     session,
-    user_identity,
     file_meta,
     storage_config,
     file_location,

@@ -111,6 +111,8 @@ get_client_user_ctx(SessionId, UserId, SpaceId, StorageConfig) ->
 %%--------------------------------------------------------------------
 -spec get_posix_user_ctx(session:id(), od_user:id(), od_space:id()) ->
     posix_user_ctx().
+get_posix_user_ctx(?ROOT_SESS_ID, ?ROOT_USER_ID, _SpaceId) ->
+    {0, 0};
 get_posix_user_ctx(SessionId, UserId, SpaceId) ->
     {ok, UserCtx} = case select_posix_compatible_storage(SpaceId) of
         {ok, StorageConfig} ->

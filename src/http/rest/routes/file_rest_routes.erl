@@ -224,7 +224,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Set file rdf metadata by ID
+    %% Set file rdf metadata by Id
     {<<"/metadata-id/rdf/:id">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = as_is,
