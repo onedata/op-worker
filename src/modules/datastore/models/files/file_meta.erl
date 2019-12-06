@@ -1205,7 +1205,8 @@ upgrade_record(6, {?MODULE, Name, Type, Mode, Owner, GroupOwner, _Size, _Version
 
 %%--------------------------------------------------------------------
 %% @doc
-
+%% Function called when saving changes from other providers (checks conflicts: local doc vs. remote changes).
+%% It is used to check if file has been renamed remotely to send appropriate event.
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) -> default.
