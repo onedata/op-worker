@@ -443,7 +443,7 @@ verify_file_exists(FileCtx, _HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_and_register_open(file_ctx:ctx(), session:id(), handle_id(), boolean()) ->
-    ok | no_return().
+    storage_file_manager:handle_id() | no_return().
 check_and_register_open(FileCtx, SessId, undefined, true) ->
     HandleId = ?NEW_HANDLE_ID,
     ok = file_handles:register_open(FileCtx, SessId, 1, HandleId),

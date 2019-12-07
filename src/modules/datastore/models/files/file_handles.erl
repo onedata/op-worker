@@ -218,10 +218,10 @@ invalidate_session_entry(FileCtx, SessId) ->
 %% Returns handle connected with file creation.
 %% @end
 %%--------------------------------------------------------------------
--spec get_creation_handle(key()) -> file_req:handle_id().
+-spec get_creation_handle(key()) -> {ok, storage_file_manager:handle_id()} | {error, term()}.
 get_creation_handle(Key) ->
     case datastore_model:get(?CTX, Key) of
-        {ok, #document{value = #file_handles{creation_handle = Handle}}} -> Handle;
+        {ok, #document{value = #file_handles{creation_handle = Handle}}} -> {ok, Handle};
         Other -> Other
     end.
 

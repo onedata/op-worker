@@ -113,7 +113,7 @@ create_handle(UserCtx, FileCtx, HandleId, Operation) ->
     catch
         _:?EACCES ->
             case file_handles:get_creation_handle(file_ctx:get_uuid_const(FileCtx)) of
-                HandleId -> create_handle_helper(UserCtx, FileCtx, HandleId, rdwr, open_file_insecure);
+                {ok, HandleId} -> create_handle_helper(UserCtx, FileCtx, HandleId, rdwr, open_file_insecure);
                 _ -> create_handle_helper(UserCtx, FileCtx, HandleId, Operation, open_file)
             end
     end.
