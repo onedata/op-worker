@@ -519,7 +519,8 @@
 %% Model that stores file handles
 -record(file_handles, {
     is_removed = false :: boolean(),
-    descriptors = #{} :: file_descriptors()
+    descriptors = #{} :: file_descriptors(),
+    creation_handle :: file_req:handle_id()
 }).
 
 %% Model that holds file's custom metadata
