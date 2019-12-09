@@ -62,10 +62,10 @@ gather_configuration() ->
     {ok, CompOcVersions} = compatibility:get_compatible_versions(?ONEPROVIDER, Version, ?ONECLIENT),
 
     #{
-        <<"providerId">> => gs_protocol:undefined_to_null(ProviderId),
-        <<"name">> => gs_protocol:undefined_to_null(Name),
-        <<"domain">> => gs_protocol:undefined_to_null(Domain),
-        <<"onezoneDomain">> => gs_protocol:undefined_to_null(OnezoneDomain),
+        <<"providerId">> => utils:undefined_to_null(ProviderId),
+        <<"name">> => utils:undefined_to_null(Name),
+        <<"domain">> => utils:undefined_to_null(Domain),
+        <<"onezoneDomain">> => utils:undefined_to_null(OnezoneDomain),
         <<"version">> => Version,
         <<"build">> => oneprovider:get_build(),
         <<"rtransferPort">> => ?RTRANSFER_PORT,

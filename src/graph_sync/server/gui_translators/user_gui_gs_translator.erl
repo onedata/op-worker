@@ -32,7 +32,7 @@ translate_resource(GRI = #gri{aspect = instance, scope = private}, #od_user{
 }) ->
     #{
         <<"fullName">> => FullName,
-        <<"username">> => gs_protocol:undefined_to_null(Username),
+        <<"username">> => utils:undefined_to_null(Username),
         <<"spaceList">> => gri:serialize(GRI#gri{
             aspect = eff_spaces,
             scope = private
@@ -44,7 +44,7 @@ translate_resource(#gri{aspect = instance, scope = shared}, #{
 }) ->
     #{
         <<"fullName">> => FullName,
-        <<"username">> => gs_protocol:undefined_to_null(Username)
+        <<"username">> => utils:undefined_to_null(Username)
     };
 translate_resource(#gri{aspect = eff_spaces, scope = private}, Spaces) ->
     #{
