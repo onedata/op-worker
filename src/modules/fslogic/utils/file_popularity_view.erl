@@ -82,15 +82,15 @@ query(SpaceId, IndexToken, Limit) ->
     Ctx = datastore_model_default:get_ctx(file_popularity),
     DiscCtx = maps:get(disc_driver_ctx, Ctx),
     ViewName = ?VIEW_NAME(SpaceId),
-    case query([DiscCtx, ViewName, ViewName, Options]) of
-        {ok, {[]}} ->
+    case couchbase_driver:query_view(DiscCtx, ViewName, ViewName, Options) of
+        {ok, #{<<"rows">> := []}} ->
             {[], IndexToken};
-        {ok, {Rows}} ->
+        {ok, #{<<"rows">> := Rows}} ->
             TokenDefined = utils:ensure_defined(IndexToken, undefined, #index_token{}),
             {RevertedFileIds, NewToken} = lists:foldl(fun(Row, {RevertedFileIdsIn, TokenIn}) ->
-                {<<"key">>, Key} = lists:keyfind(<<"key">>, 1, Row),
-                {<<"value">>, FileId} = lists:keyfind(<<"value">>, 1, Row),
-                {<<"id">>, DocId} = lists:keyfind(<<"id">>, 1, Row),
+                Key = maps:get(<<"key">>, Row),
+                FileId = maps:get(<<"value">>, Row),
+                DocId = maps:get(<<"id">>, Row),
                 {[FileId | RevertedFileIdsIn], TokenIn#index_token{
                     start_key = Key,
                     last_doc_id = DocId
@@ -144,16 +144,6 @@ token_to_opts(#index_token{
         {limit, Limit},
         {skip, 1}
     ].
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc This function silences dialyzer "no local return" errors.
-%% @equiv apply(fun couchbase_driver:query_view/4, Args).
-%% @end
-%%--------------------------------------------------------------------
--spec query(datastore_json:ejson()) -> {ok, term()} | {error, term()}.
-query(Args) ->
-    apply(fun couchbase_driver:query_view/4, Args).
 
 %%-------------------------------------------------------------------
 %% @private

@@ -148,9 +148,9 @@ end).
 -define(assertViewQuery(ExpectedValues, Worker, SpaceId, ViewName, Options, Attempts),
     ?assertEqual(lists:sort(ExpectedValues), begin
         try
-            {ok, {Rows}} = rpc:call(Worker, index, query, [SpaceId, ViewName, Options]),
+            {ok, #{<<"rows">> := Rows}} = rpc:call(Worker, index, query, [SpaceId, ViewName, Options]),
             lists:sort(lists:flatmap(fun(Row) ->
-                {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
+                Value = maps:get(<<"value">>, Row),
                 lists:flatten([Value])
             end, Rows))
         catch

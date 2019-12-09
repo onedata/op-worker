@@ -62,8 +62,8 @@ end).
 
 -define(assertQuery(ExpectedRows, Worker, SpaceId, ViewName, Options, Attempts),
     ?assertMatch(ExpectedRows, begin
-        {ok, QueryResult} = query_view(Worker, SpaceId, ViewName, Options),
-        query_result_to_map(QueryResult)
+        {ok, #{<<"rows">> := Rows}} = query_view(Worker, SpaceId, ViewName, Options),
+        Rows
     end, Attempts)).
 
 
@@ -112,8 +112,8 @@ query_simple_empty_view_test(Config) ->
         }
     ">>,
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
-    {ok, Result} = query_view(Worker, SpaceId, ViewName, []),
-    ?assertMatch([], query_result_to_map(Result)).
+    ?assertMatch({ok, #{<<"total_rows">> := 0, <<"rows">> := []}},
+        query_view(Worker, SpaceId, ViewName, [])).
 
 query_view_using_file_meta(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -345,11 +345,3 @@ query_view(Worker, SpaceId, ViewName, Options) ->
 
 list_views(Worker, SpaceId) ->
     rpc:call(Worker, index, list, [SpaceId]).
-
-query_result_to_map(QueryResult) ->
-    {Rows} = QueryResult,
-    lists:map(fun(Row) ->
-        {<<"value">>, {Value}} = lists:keyfind(<<"value">>, 1, Row),
-        Row2 = lists:keyreplace(<<"value">>, 1, Row, {<<"value">>, maps:from_list(Value)}),
-        maps:from_list(Row2)
-    end, Rows).
