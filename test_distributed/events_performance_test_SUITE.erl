@@ -306,9 +306,9 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
 
     initializer:remove_pending_messages(),
     Sessions = lists:map(fun(N) ->
-        Nonce = <<"nonce_", (integer_to_binary(N))/binary>>,
+        SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
         Iden = #user_identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
-        {ok, SessId} = session_setup(Worker, Nonce, Iden, Self),
+        {ok, SessId} = session_setup(Worker, SessId, Iden, Self),
         SubId = subscribe(Worker, SessId,
             fun(Meta) -> Meta >= CtrThr end,
             forward_events_handler(Self)
@@ -400,8 +400,8 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
         {ok, [oneprovider:get_id()]}
     end),
-    Nonce = <<"nonce">>,
-    {ok, SessId} = session_setup(Worker, Nonce, Iden, Self),
+    SessId = <<"session_id">>,
+    {ok, SessId} = session_setup(Worker, SessId, Iden, Self),
     initializer:mock_test_file_context(Config, <<"file_id">>),
     initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"),
@@ -440,7 +440,7 @@ end_per_testcase(_Case, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:identity(), Conn :: pid()) -> ok.
+    Iden :: session:auth(), Conn :: pid()) -> ok.
 session_setup(Worker, SessId, #user_identity{user_id = UserId} = Iden, Conn) ->
     SerializedToken = initializer:create_token(UserId),
     fuse_test_utils:reuse_or_create_fuse_session(

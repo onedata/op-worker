@@ -186,12 +186,12 @@ end_per_testcase(Case, Config) when
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv session_setup(Worker, <<"nonce">>
+%% @equiv session_setup(Worker, <<"session_id">>
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(node()) -> {ok, session:id()}.
 session_setup(Worker) ->
-    session_setup(Worker, <<"nonce">>).
+    session_setup(Worker, <<"session_id">>).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -199,11 +199,11 @@ session_setup(Worker) ->
 %% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(node(), Nonce :: binary()) -> {ok, session:id()}.
-session_setup(Worker, Nonce) ->
+-spec session_setup(node(), SessId :: session:id()) -> {ok, session:id()}.
+session_setup(Worker, SessId) ->
     fuse_test_utils:reuse_or_create_fuse_session(
         Worker,
-        Nonce,
+        SessId,
         #user_identity{user_id = <<"user_id">>},
         undefined,
         self()

@@ -123,8 +123,8 @@ all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
 provider_connection_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    lists:foreach(fun({ProviderId, Nonce, ExpStatus}) ->
-        ?assertMatch(ExpStatus, handshake_as_provider(Worker1, ProviderId, Nonce))
+    lists:foreach(fun({ProviderId, Token, ExpStatus}) ->
+        ?assertMatch(ExpStatus, handshake_as_provider(Worker1, ProviderId, Token))
     end, [
         {?INCORRECT_PROVIDER_ID, ?CORRECT_TOKEN, 'INVALID_PROVIDER'},
         {?INCORRECT_PROVIDER_ID, ?INCORRECT_TOKEN, 'INVALID_MACAROON'},
@@ -647,7 +647,7 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, token_logic, [passthrough]),
 
-    test_utils:mock_expect(Workers, token_logic, verify_identity_token, fun
+    test_utils:mock_expect(Workers, token_logic, verify_provider_identity_token, fun
         (?CORRECT_TOKEN) ->
             {ok, ?SUB(?ONEPROVIDER, ?CORRECT_PROVIDER_ID)};
         (?INCORRECT_TOKEN) ->
@@ -673,8 +673,7 @@ init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     initializer:remove_pending_messages(),
-    mock_identity(Workers),
-
+    initializer:mock_auth_manager(Config),
     initializer:mock_provider_id(
         Workers, <<"providerId">>, <<"access-token">>, <<"identity-token">>
     ),
@@ -709,7 +708,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:unmock_provider_ids(Workers),
-    test_utils:mock_validate_and_unload(Workers, [user_identity]),
+    initializer:unmock_auth_manager(Config),
     ssl:stop().
 
 
@@ -718,8 +717,8 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
-handshake_as_provider(Node, ProviderId, Nonce) ->
-    case fuse_test_utils:connect_as_provider(Node, ProviderId, Nonce) of
+handshake_as_provider(Node, ProviderId, Token) ->
+    case fuse_test_utils:connect_as_provider(Node, ProviderId, Token) of
         {ok, Sock} ->
             ssl:close(Sock),
             'OK';
@@ -729,8 +728,8 @@ handshake_as_provider(Node, ProviderId, Nonce) ->
 
 
 handshake_as_client(Node, Token, Version) ->
-    Nonce = crypto:strong_rand_bytes(10),
-    case fuse_test_utils:connect_as_client(Node, Nonce, Token, Version) of
+    SessId = crypto:strong_rand_bytes(10),
+    case fuse_test_utils:connect_as_client(Node, SessId, Token, Version) of
         {ok, Sock} ->
             ssl:close(Sock),
             'OK';
@@ -746,19 +745,6 @@ send_sync_msg(Node, SessId, Msg) ->
         ?ATTEMPTS
     ),
     rpc:call(Node, connection, send_msg, [Conn, Msg]).
-
-
-mock_identity(Workers) ->
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = SerializedToken}) ->
-            {ok, #token{
-                subject = ?SUB(user, UserId)
-            }} = tokens:deserialize(SerializedToken),
-
-            {ok, #document{value = #user_identity{user_id = UserId}}}
-        end
-    ).
 
 
 mock_client_msg_decoding(Node) ->

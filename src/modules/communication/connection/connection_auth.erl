@@ -84,29 +84,41 @@ get_handshake_error_msg(_) ->
 -spec handle_client_handshake(#client_handshake_request{}, inet:ip_address()) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
-    nonce = Nonce,
-    auth = #token_auth{token = Token} = Auth0
-} = Req, IpAddress) when is_binary(Nonce) ->
+    session_id = SessionId,
+    auth = #token_auth{token = SerializedToken} = TokenAuth0
+} = Req, IpAddress) when is_binary(SessionId) ->
 
     assert_client_compatibility(Req, IpAddress),
-    %% @TODO VFS-5914 Use auth override for that, remove token_utils
-    case catch token_utils:assert_interface_allowed(Token, oneclient) of
-        ok -> ok;
-        _ -> throw(invalid_token)
-    end,
 
-    Auth1 = Auth0#token_auth{peer_ip = IpAddress},
-    case user_identity:get_or_fetch(Auth1) of
+    TokenAuth1 = TokenAuth0#token_auth{
+        peer_ip = IpAddress,
+        interface = oneclient,
+        data_access_caveats_policy = allow_data_access_caveats
+    },
+    case auth_manager:verify(TokenAuth1) of
+        {ok, ?USER(UserId), _TokenValidUntil} ->
+            {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
+                SessionId, #user_identity{user_id = UserId}, TokenAuth1
+            ),
+            {UserId, SessionId};
         ?ERROR_FORBIDDEN ->
             throw(invalid_provider);
         {error, _} = Error ->
-            ?debug("Cannot authorize user based on token ~s due to ~w", [Token, Error]),
-            throw(invalid_token);
-        {ok, #document{value = Iden = #user_identity{user_id = UserId}}} ->
-            {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
-                Nonce, Iden, Auth1
-            ),
-            {UserId, SessionId}
+            case tokens:deserialize(SerializedToken) of
+                {ok, #token{subject = Subject, id = TokenId} = Token} ->
+                    ?debug("Cannot authorize user (id: ~p) based on token (id: ~p) "
+                           "with caveats: ~p due to ~w", [
+                        Subject,
+                        TokenId,
+                        tokens:get_caveats(Token),
+                        Error
+                    ]);
+                _ ->
+                    ?debug("Cannot authorize user based on token due to ~w", [
+                        Error
+                    ])
+            end,
+            throw(invalid_token)
     end.
 
 
@@ -118,9 +130,14 @@ handle_provider_handshake(#provider_handshake_request{
     token = Token
 }, IpAddress) when is_binary(ProviderId) andalso is_binary(Token) ->
 
-    case token_logic:verify_identity_token(Token) of
+    case token_logic:verify_provider_identity_token(Token) of
         {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
-            ok;
+            Identity = #user_identity{provider_id = ProviderId},
+            SessId = session_utils:get_provider_session_id(incoming, ProviderId),
+            {ok, _} = session_manager:reuse_or_create_incoming_provider_session(
+                SessId, Identity
+            ),
+            {ProviderId, SessId};
         {ok, _} ->
             throw(invalid_provider);
         {error, _} = Error ->
@@ -130,14 +147,7 @@ handle_provider_handshake(#provider_handshake_request{
                 inet_parse:ntoa(IpAddress), Error
             ]),
             throw(invalid_token)
-    end,
-
-    Identity = #user_identity{provider_id = ProviderId},
-    SessionId = session_utils:get_provider_session_id(incoming, ProviderId),
-    {ok, _} = session_manager:reuse_or_create_incoming_provider_session(
-        SessionId, Identity
-    ),
-    {ProviderId, SessionId}.
+    end.
 
 
 %% @private

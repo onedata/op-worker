@@ -287,8 +287,8 @@ end_per_testcase(_Case, Config) ->
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
 session_setup(Worker) ->
-    Nonce = base64:encode(crypto:strong_rand_bytes(20)),
-    session_setup(Worker, Nonce).
+    SessId = base64:encode(crypto:strong_rand_bytes(20)),
+    session_setup(Worker, SessId).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -296,11 +296,12 @@ session_setup(Worker) ->
 %% Creates session document in datastore with given ID.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), Nonce :: binary()) -> {ok, session:id()}.
-session_setup(Worker, Nonce) ->
+-spec session_setup(Worker :: node(), SessId) -> {ok, SessId} when
+    SessId :: session:id().
+session_setup(Worker, SessId) ->
     Iden = #user_identity{user_id = <<"user_id">>},
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, Iden, undefined, self()
+        Worker, SessId, Iden, undefined, self()
     ).
 
 %%--------------------------------------------------------------------

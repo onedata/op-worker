@@ -98,9 +98,9 @@ all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
 response_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    Nonce = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
-    {ok, {_Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
+    SessId = crypto:strong_rand_bytes(10),
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessId),
+    {ok, {_Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
 
     MsgId = <<"1">>,
     Ping = fuse_test_utils:generate_ping_message(MsgId),
@@ -118,13 +118,13 @@ fallback_during_sending_response_because_of_connection_close_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    Nonce = crypto:strong_rand_bytes(10),
+    SessId = crypto:strong_rand_bytes(10),
     % Create a couple of connections within the same session
-    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce),
-    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
-    {ok, {Sock3, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
-    {ok, {Sock4, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
-    {ok, {Sock5, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessId),
+    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
+    {ok, {Sock3, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
+    {ok, {Sock4, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
+    {ok, {Sock5, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
 
     Ping = fuse_test_utils:generate_ping_message(),
 
@@ -149,9 +149,9 @@ fallback_during_sending_response_because_of_connection_close_test(Config) ->
 fallback_during_sending_response_because_of_connection_error_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    Nonce = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
-    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
+    SessId = crypto:strong_rand_bytes(10),
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
+    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessId),
 
     mock_ranch_ssl_to_fail_once(Worker1),
     MsgId = <<"1">>,
@@ -265,9 +265,9 @@ fulfill_promises_after_connection_error_test(Config) ->
 send_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    Nonce = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
-    {ok, {Sock2, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
+    SessId = crypto:strong_rand_bytes(10),
+    {ok, {Sock1, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessId),
+    {ok, {Sock2, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessId),
 
     % In case of errors send_sync should try sending via other connections
     mock_ranch_ssl_to_fail_once(Workers),
@@ -326,10 +326,10 @@ communicate_test(Config) ->
 
 client_keepalive_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    Nonce = crypto:strong_rand_bytes(10),
+    SessId = crypto:strong_rand_bytes(10),
 
     initializer:remove_pending_messages(),
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessId),
     % send keepalive msg and assert it will not end in decoding error
     % on provider side (following communication should succeed)
     ok = ssl:send(Sock, ?CLIENT_KEEPALIVE_MSG),
@@ -520,7 +520,7 @@ init_per_testcase(Case, Config) when
     ssl:start(),
     initializer:remove_pending_messages(),
 
-    mock_user_identity(Workers),
+    mock_auth_manager(Config),
 
     % Artificially prolong message handling to avoid races between response from
     % the server and connection close.
@@ -544,7 +544,7 @@ init_per_testcase(heartbeats_test, Config) ->
     initializer:remove_pending_messages(),
     ssl:start(),
 
-    mock_user_identity(Workers),
+    mock_auth_manager(Config),
     CP_Pid = spawn_control_proc(),
 
     test_utils:mock_new(Workers, helpers),
@@ -581,13 +581,13 @@ init_per_testcase(socket_timeout_test, Config) ->
 
 init_per_testcase(closing_last_connection_should_cancel_all_session_transfers_test, Config) ->
     % Shorten ttl to force quicker client session removal
-    init_per_testcase(heartbeats_test, [{fuse_session_ttl_seconds, 10} | Config]);
+    init_per_testcase(heartbeats_test, [{fuse_session_grace_period_seconds, 10} | Config]);
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     initializer:remove_pending_messages(),
-    mock_user_identity(Workers),
+    mock_auth_manager(Config),
 
     initializer:mock_provider_id(
         Workers, <<"providerId">>, <<"access-token">>, <<"identity-token">>
@@ -602,7 +602,8 @@ end_per_testcase(Case, Config) when
     Case =:= fulfill_promises_after_connection_error_test
 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [user_identity, router, guid_req]),
+    initializer:unmock_auth_manager(Config),
+    test_utils:mock_validate_and_unload(Workers, [router, guid_req]),
     ssl:stop(),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config);
@@ -615,8 +616,9 @@ end_per_testcase(Case, Config) when
     CP_Pid = ?config(control_proc, Config),
     ssl:stop(),
     stop_control_proc(CP_Pid),
+    initializer:unmock_auth_manager(Config),
     test_utils:mock_validate_and_unload(Workers, [
-        user_identity, helpers, attr_req, fslogic_event_handler
+        helpers, attr_req, fslogic_event_handler
     ]),
     initializer:clean_test_users_and_spaces_no_validate(Config);
 
@@ -631,7 +633,7 @@ end_per_testcase(socket_timeout_test, Config) ->
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:unmock_provider_ids(Workers),
-    test_utils:mock_validate_and_unload(Workers, [user_identity]),
+    initializer:unmock_auth_manager(Config),
     ssl:stop().
 
 
@@ -660,17 +662,8 @@ unmock_ranch_ssl(Node) ->
     test_utils:mock_unload(Node, [ranch_ssl]).
 
 
-mock_user_identity(Workers) ->
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = SerializedToken}) ->
-            {ok, #token{
-                subject = ?SUB(user, UserId)
-            }} = tokens:deserialize(SerializedToken),
-
-            {ok, #document{value = #user_identity{user_id = UserId}}}
-        end
-    ).
+mock_auth_manager(Config) ->
+    initializer:mock_auth_manager(Config).
 
 
 prolong_msg_routing(Workers) ->

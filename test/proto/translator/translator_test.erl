@@ -324,11 +324,11 @@ get_token_auth(Val) ->
         #'Macaroon'{macaroon = Val}
     }.
 
-get_client_handshake_request(Token, Nonce, CompOpVersions) ->
+get_client_handshake_request(Token, SessionId, CompOpVersions) ->
     {Internal, Protobuf} = get_token_auth(Token),
     {
-        #client_handshake_request{auth = Internal, nonce = Nonce, compatible_oneprovider_versions = CompOpVersions},
-        #'ClientHandshakeRequest'{macaroon = Protobuf, session_id = Nonce, compatible_oneprovider_versions = CompOpVersions}
+        #client_handshake_request{auth = Internal, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions},
+        #'ClientHandshakeRequest'{macaroon = Protobuf, session_id = SessionId, compatible_oneprovider_versions = CompOpVersions}
     }.
 
 get_provider_handshake_request(ProviderId, Token) ->
