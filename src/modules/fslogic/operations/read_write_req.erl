@@ -113,7 +113,10 @@ create_handle(UserCtx, FileCtx, HandleId, Operation) ->
     catch
         _:?EACCES ->
             case file_handles:get_creation_handle(file_ctx:get_uuid_const(FileCtx)) of
+                % opening file with handle received from creation procedure
+                % (should open even if the user does not have permissions)
                 {ok, HandleId} -> create_handle_helper(UserCtx, FileCtx, HandleId, rdwr, open_file_insecure);
+                % try opening for limited usage (read or write only)
                 _ -> create_handle_helper(UserCtx, FileCtx, HandleId, Operation, open_file)
             end
     end.
