@@ -312,7 +312,7 @@ on_connect_to_oz() ->
 on_deregister() ->
     ?info("Provider has been deregistered"),
     provider_auth:delete(),
-    storage:delete_all(),
+    storage:force_delete_all(),
     % kill the connection to prevent 'unauthorized' errors due
     % to older authorization when immediately registering anew
     terminate_oz_connection().

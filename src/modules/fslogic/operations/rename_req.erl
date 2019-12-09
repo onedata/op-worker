@@ -190,8 +190,8 @@ rename_into_itself(FileGuid) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx,
     TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
-    {StorageRecord, SourceFileCtx2} = file_ctx:get_storage_record(SourceFileCtx),
-    Helper = storage:get_helper(StorageRecord),
+    {Storage, SourceFileCtx2} = file_ctx:get_storage(SourceFileCtx),
+    Helper = storage:get_helper(Storage),
     HelperName = helper:get_name(Helper),
     case lists:member(HelperName,
         [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
@@ -339,8 +339,8 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
 rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, _, undefined, _
 ) ->
-    {StorageRecord, SourceFileCtx1} = file_ctx:get_storage_record(SourceFileCtx),
-    Helper = storage:get_helper(StorageRecord),
+    {Storage, SourceFileCtx1} = file_ctx:get_storage(SourceFileCtx),
+    Helper = storage:get_helper(Storage),
     StoragePathType = helper:get_storage_path_type(Helper),
 
     case StoragePathType of
@@ -356,8 +356,8 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetGuid = file_ctx:get_guid_const(TargetFileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
 
-    {StorageRecord, SourceFileCtx1} = file_ctx:get_storage_record(SourceFileCtx),
-    Helper = storage:get_helper(StorageRecord),
+    {Storage, SourceFileCtx1} = file_ctx:get_storage(SourceFileCtx),
+    Helper = storage:get_helper(Storage),
     StoragePathType = helper:get_storage_path_type(Helper),
 
     case StoragePathType of
@@ -510,9 +510,9 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
         _ -> ok
     end,
 
-    {StorageRecord, SourceFileCtx3} = file_ctx:get_storage_record(SourceFileCtx2),
-    Helper = storage:get_helper(StorageRecord),
-    StorageId = storage:get_id(StorageRecord),
+    {Storage, SourceFileCtx3} = file_ctx:get_storage(SourceFileCtx2),
+    Helper = storage:get_helper(Storage),
+    StorageId = storage:get_id(Storage),
     case helper:get_storage_path_type(Helper) of
       ?FLAT_STORAGE_PATH ->
         ok;

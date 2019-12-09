@@ -41,7 +41,6 @@
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
 -export([mock_share_logic/1, unmock_share_logic/1]).
--export([storage_logic_mock_setup/1, storage_logic_mock_teardown/1]).
 -export([put_into_cache/1]).
 -export([local_ip_v4/0]).
 
@@ -344,6 +343,8 @@ teardown_session(Worker, Config) ->
 -spec setup_storage(Config :: list()) -> list().
 setup_storage(Config) ->
     DomainWorkers = get_different_domain_workers(Config),
+    Workers = ?config(op_worker_nodes, Config),
+    storage_logic_mock_setup(Workers),
     setup_storage(DomainWorkers, Config).
 
 %%--------------------------------------------------------------------
@@ -382,6 +383,8 @@ setup_storage([Worker | Rest], Config) ->
 -spec teardown_storage(Config :: list()) -> ok.
 teardown_storage(Config) ->
     DomainWorkers = get_different_domain_workers(Config),
+    Workers = ?config(op_worker_nodes, Config),
+    storage_logic_mock_teardown(Workers),
     lists:foreach(fun(Worker) ->
         teardown_storage(Worker, Config) end, DomainWorkers).
 
@@ -564,17 +567,6 @@ put_into_cache(Doc = #document{key = Id, value = Record}) ->
     Type = element(1, Record),
     Type:update_cache(Id, fun(_) -> {ok, Record} end, Doc).
 
-
--spec storage_logic_mock_setup(Workers :: node() | [node()]) -> ok.
-storage_logic_mock_setup(Workers) ->
-    ok = test_utils:mock_new(Workers, storage_logic),
-    ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters, fun(_,_) -> {ok, #{}} end),
-    ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters, fun(_) -> {ok, #{}} end).
-
-
--spec storage_logic_mock_teardown(Workers :: node() | [node()]) -> ok.
-storage_logic_mock_teardown(Workers) ->
-    test_utils:mock_unload(Workers, storage_logic).
 
 %%%===================================================================
 %%% Internal functions
@@ -1337,6 +1329,17 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
     end).
 
 
+-spec storage_logic_mock_setup(Workers :: node() | [node()]) -> ok.
+storage_logic_mock_setup(Workers) ->
+    ok = test_utils:mock_new(Workers, storage_logic),
+    ok = test_utils:mock_expect(Workers, storage_logic, get_local_qos_parameters, fun(_) -> #{} end),
+    ok = test_utils:mock_expect(Workers, storage_logic, get_remote_qos_parameters, fun(_,_) -> #{} end).
+
+
+-spec storage_logic_mock_teardown(Workers :: node() | [node()]) -> ok.
+storage_logic_mock_teardown(Workers) ->
+    test_utils:mock_unload(Workers, storage_logic).
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -1388,7 +1391,7 @@ setup_storage(Worker, Domain, ProviderConfig, Config, StorageMapping) ->
 -spec on_space_supported(atom(), od_storage:id(), boolean()) -> any().
 on_space_supported(Worker, StorageId, ImportedStorage) ->
     case ImportedStorage of
-        true -> ok = rpc:call(Worker, storage_config, set_imported_storage_insecure, [StorageId, true]);
+        true -> ok = rpc:call(Worker, storage_config, set_imported_storage, [StorageId, true]);
         false -> ok
     end.
 

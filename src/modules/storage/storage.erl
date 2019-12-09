@@ -12,6 +12,9 @@
 %%% local storage configuration and `storage_logic` that is responsible
 %%% for management of storage data shared via GraphSync.
 %%% Functions from those two modules should not be called directly.
+%%%
+%%% This module operates on opaque record representing storage structure.
+%%% This record is NOT stored in datastore.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage).
@@ -25,18 +28,17 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/6, get/1, safe_delete/1, exists/1, delete_all/0]).
--export([describe/1]).
+-export([create/6, get/1, describe/1, exists/1, safe_delete/1, force_delete_all/0]).
 
 %%% Functions to retrieve storage data
 -export([get_id/1, get_name/1, get_helper/1, get_type/1, get_luma_config/1,
-    get_qos_parameters/1, get_qos_parameters/2]).
+    get_local_qos_parameters/1, get_remote_qos_parameters/2]).
 -export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
 
 %%% Functions to modify storage data
 -export([update_name/2, update_luma_config/2]).
--export([set_readonly_value/2, set_luma_config/2,
-    set_imported_storage_value/2, set_qos_parameters/2]).
+-export([set_readonly/2, set_luma_config/2,
+    set_imported_storage/2, set_qos_parameters/2]).
 -export([set_helper_insecure/2, update_helper_args/2, update_helper_admin_ctx/2, update_helper/2]).
 
 %%% Support related functions
@@ -56,15 +58,16 @@
 % exported for initializer
 -export([on_storage_created/1]).
 
-% Virtual storage record containing combined fields from `storage_config` and `od_storage` records.
+% Structure that hold information about storage.
+% Contains combined fields from `storage_config` and `od_storage` records.
 % This record is NOT stored in datastore.
 -record(storage_record, {
     id :: od_storage:id(),
     name :: storage_config:name(),
     helper :: helpers:helper(),
     is_readonly :: boolean(),
-    luma_config :: luma_config:config() | undefined,
     is_imported_storage :: boolean(),
+    luma_config :: luma_config:config() | undefined,
     qos_parameters :: od_storage:qos_parameters()
 }).
 
@@ -83,8 +86,8 @@
 -spec create(name(), helpers:helper(), boolean(), luma_config:config(),
     boolean(), qos_parameters()) -> {ok, od_storage:id()} | {error, term()}.
 create(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
-    critical_section:run({storage_create, Name}, fun() ->
-        case exists_with_name(Name) of
+    lock_on_storage(Name, fun() ->
+        case is_name_occupied(Name) of
             true ->
                 ?ERROR_ALREADY_EXISTS;
             false ->
@@ -106,7 +109,7 @@ create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParamete
                     case storage_logic:delete_in_zone(Id) of
                         ok -> ok;
                         {error, _} = Error1 ->
-                            ?warning("Could not revert creation of storage ~p in Onezone: ~p",
+                            ?error("Could not revert creation of storage ~p in Onezone: ~p",
                                 [Id, Error1])
                     end,
                     Error
@@ -120,7 +123,7 @@ create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParamete
 get(StorageId) when is_binary(StorageId) ->
     case storage_config:get(StorageId) of
         {ok, #document{value = StorageConfig}} ->
-            {ok, QosParameters} = storage_logic:get_qos_parameters(StorageId),
+            QosParameters = get_local_qos_parameters(StorageId),
             {ok, #storage_record{
                 id = StorageId,
                 name = storage_config:get_name(StorageConfig),
@@ -134,6 +137,46 @@ get(StorageId) when is_binary(StorageId) ->
     end.
 
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns map describing the storage. The data is redacted to
+%% remove sensitive information.
+%% @end
+%%-------------------------------------------------------------------
+-spec describe(od_storage:id()) -> {ok, json_utils:json_term()} | {error, term()}.
+describe(StorageId) ->
+    case get(StorageId) of
+        {ok, Storage} ->
+            Helper = get_helper(Storage),
+            LumaConfig = get_luma_config(Storage),
+            LumaUrl = case LumaConfig of
+                undefined -> undefined;
+                _ -> luma_config:get_url(LumaConfig)
+            end,
+            AdminCtx = helper:get_redacted_admin_ctx(Helper),
+            HelperArgs = helper:get_args(Helper),
+            Base = maps:merge(HelperArgs, AdminCtx),
+            {ok, Base#{
+                <<"id">> => StorageId,
+                <<"name">> => get_name(Storage),
+                <<"type">> => helper:get_name(Helper),
+                <<"readonly">> => is_readonly(Storage),
+                <<"insecure">> => helper:is_insecure(Helper),
+                <<"storagePathType">> => helper:get_storage_path_type(Helper),
+                <<"lumaEnabled">> => is_luma_enabled(Storage),
+                <<"lumaUrl">> => LumaUrl,
+                <<"importedStorage">> => is_imported_storage(Storage),
+                <<"qosParameters">> => get_local_qos_parameters(Storage)
+            }};
+        {error, _} = Error -> Error
+    end.
+
+
+-spec exists(od_storage:id()) -> boolean().
+exists(StorageId) ->
+    storage_config:exists(StorageId).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes storage. Fails with an error if the storage supports
@@ -142,7 +185,7 @@ get(StorageId) when is_binary(StorageId) ->
 %%--------------------------------------------------------------------
 -spec safe_delete(od_storage:id()) -> ok | ?ERROR_STORAGE_IN_USE | {error, term()}.
 safe_delete(StorageId) ->
-    support_critical_section(StorageId, fun() ->
+    lock_on_storage(StorageId, fun() ->
         case supports_any_space(StorageId) of
             true ->
                 ?ERROR_STORAGE_IN_USE;
@@ -157,62 +200,16 @@ safe_delete(StorageId) ->
 delete(StorageId) ->
     case storage_logic:delete_in_zone(StorageId) of
         ok ->
-            ok = storage_config:delete(StorageId);
+            storage_config:delete(StorageId);
         Error ->
             Error
     end.
 
 
--spec exists(od_storage:id()) -> boolean().
-exists(StorageId) ->
-    storage_config:exists(StorageId).
-
-%% @private
--spec exists_with_name(name()) -> boolean().
-exists_with_name(Name) ->
-    {ok, StorageConfigs} = storage_config:list(),
-    lists:member(Name, lists:map(fun storage_config:get_name/1, StorageConfigs)).
-
-
--spec delete_all() -> ok.
-delete_all() ->
+-spec force_delete_all() -> ok.
+force_delete_all() ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
     lists:foreach(fun(Id) -> delete(Id) end, StorageIds).
-
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns map describing the storage. The data is redacted to
-%% remove sensitive information.
-%% @end
-%%-------------------------------------------------------------------
--spec describe(od_storage:id()) -> {ok, json_utils:json_term()} | {error, term()}.
-describe(StorageId) ->
-    case get(StorageId) of
-        {ok, StorageRecord} ->
-            Helper = get_helper(StorageRecord),
-            LumaConfig = get_luma_config(StorageRecord),
-            LumaUrl = case LumaConfig of
-                undefined -> undefined;
-                _ -> luma_config:get_url(LumaConfig)
-            end,
-            AdminCtx = helper:get_redacted_admin_ctx(Helper),
-            HelperArgs = helper:get_args(Helper),
-            Base = maps:merge(HelperArgs, AdminCtx),
-            {ok, Base#{
-                <<"id">> => StorageId,
-                <<"name">> => get_name(StorageRecord),
-                <<"type">> => helper:get_name(Helper),
-                <<"readonly">> => is_readonly(StorageRecord),
-                <<"insecure">> => helper:is_insecure(Helper),
-                <<"storagePathType">> => helper:get_storage_path_type(Helper),
-                <<"lumaEnabled">> => is_luma_enabled(StorageRecord),
-                <<"lumaUrl">> => LumaUrl,
-                <<"importedStorage">> => is_imported_storage(StorageRecord),
-                <<"qosParameters">> => get_qos_parameters(StorageRecord)
-            }};
-        {error, _} = Error -> Error
-    end.
 
 %%%===================================================================
 %%% Functions to retrieve storage data
@@ -230,6 +227,7 @@ get_name(#storage_record{name = Name}) ->
 get_helper(#storage_record{helper = Helper}) ->
     Helper;
 get_helper(StorageId) when is_binary(StorageId) ->
+    % direct call to storage_config to avoid additional call to datastore to get od_storage
     storage_config:get_helper(StorageId).
 
 -spec get_luma_config(record()) -> luma_config:config() | undefined.
@@ -243,8 +241,11 @@ get_type(StorageId) when is_binary(StorageId) ->
     Helper = storage_config:get_helper(StorageId),
     helper:get_type(Helper).
 
--spec get_qos_parameters(record()) -> qos_parameters().
-get_qos_parameters(#storage_record{qos_parameters = QoSParameters}) ->
+-spec get_local_qos_parameters(record()) -> qos_parameters().
+get_local_qos_parameters(StorageId) when is_binary(StorageId) ->
+    % direct call to storage_logic to avoid additional call to datastore to get storage_config
+    storage_logic:get_local_qos_parameters(StorageId);
+get_local_qos_parameters(#storage_record{qos_parameters = QoSParameters}) ->
     QoSParameters.
 
 %%--------------------------------------------------------------------
@@ -253,29 +254,27 @@ get_qos_parameters(#storage_record{qos_parameters = QoSParameters}) ->
 %% through given SpaceId.
 %% @end
 %%--------------------------------------------------------------------
--spec get_qos_parameters(od_storage:id(), od_space:id()) -> qos_parameters().
-get_qos_parameters(StorageId, SpaceId) when is_binary(StorageId) ->
-    {ok, QosParameters} = storage_logic:get_qos_parameters(StorageId, SpaceId),
-    QosParameters.
+-spec get_remote_qos_parameters(od_storage:id(), od_space:id()) -> qos_parameters().
+get_remote_qos_parameters(StorageId, SpaceId) when is_binary(StorageId) ->
+    storage_logic:get_remote_qos_parameters(StorageId, SpaceId).
 
 -spec is_readonly(record() | od_storage:id()) -> boolean().
 is_readonly(#storage_record{is_readonly = Readonly}) ->
     Readonly;
 is_readonly(StorageId) when is_binary(StorageId) ->
+    % direct call to storage_config to avoid additional call to datastore to get od_storage
     storage_config:is_readonly(StorageId).
 
 -spec is_imported_storage(record() | od_storage:id()) -> boolean().
 is_imported_storage(#storage_record{is_imported_storage = ImportedStorage}) ->
     ImportedStorage;
 is_imported_storage(StorageId) when is_binary(StorageId) ->
+    % direct call to storage_config to avoid additional call to datastore to get od_storage
     storage_config:is_imported_storage(StorageId).
 
 -spec is_luma_enabled(record()) -> boolean().
-is_luma_enabled(StorageRecord) ->
-    case get_luma_config(StorageRecord) of
-        undefined -> false;
-        _LumaConfig -> true
-    end.
+is_luma_enabled(Storage) ->
+    get_luma_config(Storage) =/= undefined.
 
 
 %%%===================================================================
@@ -312,18 +311,18 @@ set_luma_config(StorageId, LumaConfig) ->
     UpdateFun = fun(_) -> {ok, LumaConfig} end,
     storage_config:update_luma_config(StorageId, UpdateFun).
 
--spec set_readonly_value(od_storage:id(), boolean()) -> ok | {error, term()}.
-set_readonly_value(StorageId, Readonly) ->
-    storage_config:set_readonly_value(StorageId, Readonly).
+-spec set_readonly(od_storage:id(), boolean()) -> ok | {error, term()}.
+set_readonly(StorageId, Readonly) ->
+    storage_config:set_readonly(StorageId, Readonly).
 
--spec set_imported_storage_value(od_storage:id(), boolean()) -> ok | {error, term()}.
-set_imported_storage_value(StorageId, ImportedStorage) ->
-    support_critical_section(StorageId, fun() ->
+-spec set_imported_storage(od_storage:id(), boolean()) -> ok | {error, term()}.
+set_imported_storage(StorageId, ImportedStorage) ->
+    lock_on_storage(StorageId, fun() ->
         case supports_any_space(StorageId) of
             true ->
                 ?ERROR_STORAGE_IN_USE;
             false ->
-                storage_config:set_imported_storage_insecure(StorageId, ImportedStorage)
+                storage_config:set_imported_storage(StorageId, ImportedStorage)
         end
     end).
 
@@ -363,24 +362,24 @@ update_helper(StorageId, UpdateFun) ->
 %%% Support related functions
 %%%===================================================================
 
--spec support_space(od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
+-spec support_space(od_storage:id(), tokens:serialized(), od_space:support_size()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SerializedToken, SupportSize) ->
-    support_critical_section(StorageId, fun() ->
+    lock_on_storage(StorageId, fun() ->
         support_space_insecure(StorageId, SerializedToken, SupportSize)
     end).
 
 %% @private
--spec support_space_insecure(od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
+-spec support_space_insecure(od_storage:id(), tokens:serialized(), od_space:support_size()) ->
     {ok, od_space:id()} | errors:error().
-support_space_insecure(StorageId, SerializedToken, SupportSize) ->
-    case check_support_token(SerializedToken) of
+support_space_insecure(StorageId, SpaceSupportToken, SupportSize) ->
+    case validate_support_request(SpaceSupportToken) of
         ok ->
-            case storage_config:is_imported_storage(StorageId) andalso supports_any_space(StorageId) of
+            case is_imported_storage(StorageId) andalso supports_any_space(StorageId) of
                 true ->
                     ?ERROR_STORAGE_IN_USE;
                 false ->
-                    storage_logic:create_support(StorageId, SerializedToken, SupportSize)
+                    storage_logic:support_space(StorageId, SpaceSupportToken, SupportSize)
             end;
         Error ->
             Error
@@ -394,8 +393,8 @@ support_space_insecure(StorageId, SerializedToken, SupportSize) ->
 %% @TODO VFS-5497 This check will not be needed when multisupport is implemented
 %% @end
 %%--------------------------------------------------------------------
--spec check_support_token(tokens:serialized()) -> ok | errors:error().
-check_support_token(SerializedToken) ->
+-spec validate_support_request(tokens:serialized()) -> ok | errors:error().
+validate_support_request(SerializedToken) ->
     case tokens:deserialize(SerializedToken) of
         {ok, #token{type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId)}} ->
             case provider_logic:supports_space(SpaceId) of
@@ -415,13 +414,7 @@ check_support_token(SerializedToken) ->
 -spec update_space_support_size(od_storage:id(), od_space:id(), NewSupportSize :: integer()) ->
     ok | errors:error().
 update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
-    OccupiedSize = space_quota:current_size(SpaceId),
-    update_space_support_size(StorageId, SpaceId, NewSupportSize, OccupiedSize).
-
-%% @private
--spec update_space_support_size(od_storage:id(), od_space:id(), NewSupportSize :: integer(),
-    CurrentOccupiedSize :: non_neg_integer()) -> ok | errors:error().
-update_space_support_size(StorageId, SpaceId, NewSupportSize, CurrentOccupiedSize) ->
+    CurrentOccupiedSize = space_quota:current_size(SpaceId),
     case NewSupportSize < CurrentOccupiedSize of
         true -> ?ERROR_BAD_VALUE_TOO_LOW(<<"size">>, CurrentOccupiedSize);
         false -> storage_logic:update_space_support_size(StorageId, SpaceId, NewSupportSize)
@@ -429,24 +422,18 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize, CurrentOccupiedSiz
 
 -spec revoke_space_support(od_storage:id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
-    case storage_logic:revoke_support(StorageId, SpaceId) of
+    case storage_logic:revoke_space_support(StorageId, SpaceId) of
         ok -> on_space_unsupported(SpaceId, StorageId);
         Error -> Error
     end.
 
--spec supports_any_space(od_storage:id()) -> boolean().
+-spec supports_any_space(od_storage:id()) -> boolean() | errors:error().
 supports_any_space(StorageId) ->
     case storage_logic:get_spaces(StorageId) of
         {ok, []} -> false;
         {ok, _Spaces} -> true;
         {error, _} = Error -> Error
     end.
-
-%% @private
--spec support_critical_section(od_storage:id(), fun(() -> Result :: term())) ->
-    Result :: term().
-support_critical_section(StorageId, Fun) ->
-    critical_section:run({storage_support, StorageId}, Fun).
 
 %%%===================================================================
 %%% Tests utils
@@ -479,12 +466,7 @@ on_space_unsupported(SpaceId, StorageId) ->
     storage_sync:space_unsupported(SpaceId, StorageId),
     main_harvesting_stream:space_unsupported(SpaceId).
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Handles actions necessary after helper params have been changed.
-%% @end
-%%--------------------------------------------------------------------
 -spec on_helper_changed(StorageId :: od_storage:id()) -> ok.
 on_helper_changed(StorageId) ->
     {ok, Nodes} = node_manager:get_cluster_nodes(),
@@ -492,6 +474,18 @@ on_helper_changed(StorageId) ->
     rtransfer_config:add_storage(StorageId),
     rpc:multicall(Nodes, rtransfer_config, restart_link, []),
     helpers_reload:refresh_helpers_by_storage(StorageId).
+
+%% @private
+-spec is_name_occupied(name()) -> boolean().
+is_name_occupied(Name) ->
+    {ok, StorageConfigs} = storage_config:list(),
+    lists:member(Name, lists:map(fun storage_config:get_name/1, StorageConfigs)).
+
+%% @private
+-spec lock_on_storage(od_storage:id() | name(), fun(() -> Result :: term())) ->
+    Result :: term().
+lock_on_storage(Identifier, Fun) ->
+    critical_section:run({storage, Identifier}, Fun).
 
 %%%===================================================================
 %%% Upgrade from 19.02.*
@@ -583,7 +577,7 @@ migrate_space_support(SpaceId) ->
                     end
             end,
             case lists:member(StorageId, MiR) of
-                true -> ok = storage_config:set_imported_storage_insecure(StorageId, true);
+                true -> ok = storage_config:set_imported_storage(StorageId, true);
                 false -> ok
             end,
             case space_storage:delete(SpaceId) of
@@ -596,9 +590,13 @@ migrate_space_support(SpaceId) ->
     end,
     ?notice("Support of space: ~p successfully migrated", [SpaceId]).
 
-%%%===================================================================
 %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
+%%%===================================================================
 %% Deprecated API and datastore_model callbacks
+%%
+%% All functions below are deprecated. Previous `storage` model have
+%% been renamed to `storage_config` and this functions are needed to
+%% properly perform upgrade procedure.
 %%%===================================================================
 
 -define(CTX, #{

@@ -160,13 +160,13 @@ storage_set_insecure(StorageId, Insecure) ->
 -spec storage_set_readonly(od_storage:id(), Readonly :: boolean()) ->
     ok | {error, term()}.
 storage_set_readonly(StorageId, Readonly) ->
-    storage:set_readonly_value(StorageId, Readonly).
+    storage:set_readonly(StorageId, Readonly).
 
 
 -spec storage_set_imported_storage(od_storage:id(), boolean()) ->
     ok | {error, term()}.
 storage_set_imported_storage(StorageId, Value) ->
-    storage:set_imported_storage_value(StorageId, Value).
+    storage:set_imported_storage(StorageId, Value).
 
 
 -spec storage_set_luma_config(od_storage:id(), luma_config:config() | undefined) ->

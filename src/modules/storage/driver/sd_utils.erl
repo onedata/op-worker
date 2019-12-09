@@ -188,8 +188,8 @@ create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
             files_to_chown:chown_or_schedule_chowning(ParentCtx),
             {storage_driver:create(SDHandle, Mode), FileCtx4};
         ok ->
-            {StorageRecord, FileCtx4} = file_ctx:get_storage_record(FileCtx3),
-            FileCtx6 = case storage_sync_worker:is_syncable_object_storage(StorageRecord) of
+            {Storage, FileCtx4} = file_ctx:get_storage(FileCtx3),
+            FileCtx6 = case storage_sync_worker:is_syncable_object_storage(Storage) of
                 true ->
                     {ParentCtx, FileCtx5} = file_ctx:get_parent(FileCtx4, UserCtx),
                     mark_parent_dirs_created_on_storage(ParentCtx, UserCtx),
@@ -314,9 +314,9 @@ retry_dir_deletion(SDHandle = #sd_handle{
 -spec create_parent_dirs(file_ctx:ctx()) -> file_ctx:ctx().
 create_parent_dirs(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {StorageRecord, FileCtx3} = file_ctx:get_storage_record(FileCtx),
+    {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx),
     {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, undefined),
-    create_parent_dirs(ParentCtx, [], SpaceId, storage:get_id(StorageRecord)),
+    create_parent_dirs(ParentCtx, [], SpaceId, StorageId),
     FileCtx4.
 
 

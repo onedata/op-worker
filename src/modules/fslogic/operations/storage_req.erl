@@ -69,8 +69,8 @@ get_configuration(SessId) ->
     od_space:id(), atom()) -> #fuse_response{}.
 get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
     Helper = case storage:get(StorageId) of
-        {ok, StorageRecord} ->
-            storage:get_helper(StorageRecord);
+        {ok, Storage} ->
+            storage:get_helper(Storage);
         {error, not_found} ->
             {ok, undefined}
     end,
@@ -78,8 +78,8 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
         ?FORCE_DIRECT_HELPER_MODE ->
             SessionId = user_ctx:get_session_id(UserCtx),
             UserId = user_ctx:get_user_id(UserCtx),
-            {ok, StorageRecord2} = storage:get(StorageId),
-            case luma:get_client_user_ctx(SessionId, UserId, SpaceId, StorageRecord2) of
+            {ok, Storage2} = storage:get(StorageId),
+            case luma:get_client_user_ctx(SessionId, UserId, SpaceId, Storage2) of
                 {ok, ClientStorageUserCtx} ->
                     HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
                     #fuse_response{
@@ -114,12 +114,12 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             throw(?ENOENT)
     end,
 
-    {ok, StorageRecord} = storage:get(StorageId),
-    Helper = storage:get_helper(StorageRecord),
+    {ok, Storage} = storage:get(StorageId),
+    Helper = storage:get_helper(Storage),
 
-    case luma:get_client_user_ctx(SessionId, UserId, SpaceId, StorageRecord) of
+    case luma:get_client_user_ctx(SessionId, UserId, SpaceId, Storage) of
         {ok, ClientStorageUserCtx} ->
-            {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageRecord),
+            {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, Storage),
             HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
             {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx, true),
             Dirname = filename:dirname(StorageFileId),
@@ -154,9 +154,9 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
 verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
-    {ok, StorageRecord} = storage:get(StorageId),
-    Helper = storage:get_helper(StorageRecord),
-    {ok, StorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageRecord),
+    {ok, Storage} = storage:get(StorageId),
+    Helper = storage:get_helper(Storage),
+    {ok, StorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, Storage),
     verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 

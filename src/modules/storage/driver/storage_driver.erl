@@ -61,8 +61,7 @@ new_handle(SessionId, FileCtx) ->
 new_handle(SessionId, FileCtx, Generate) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {StorageRecord, FileCtx2} = file_ctx:get_storage_record(FileCtx),
-    StorageId = storage:get_id(StorageRecord),
+    {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
     case file_ctx:get_storage_file_id(FileCtx2, Generate) of
         {undefined, FileCtx3} ->
             {undefined, FileCtx3};

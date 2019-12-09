@@ -7,8 +7,11 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Model for holding storage configuration. It contains provider specific
-%%% information and private storage data. It should not be shared with other providers.
-%%% To share storage data with other providers(through onezone) od_storage model is used.
+%%% information and private storage data. It should not be shared with
+%%% other providers. To share storage data with other providers(through onezone)
+%%% module `storage_logic` and `od_storage` model are used.
+%%%
+%%% Module `storage` is an overlay to this module and `storage_logic`.
 %%%
 %%% NOTE: Functions from this module should not be called directly.
 %%% Use module `storage` instead.
@@ -23,13 +26,12 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/6]).
+-export([create/6, get/1, exists/1, delete/1, list/0]).
 -export([get_id/1, get_name/1, get_helper/1, get_luma_config/1,
     is_readonly/1, is_imported_storage/1]).
--export([get/1, exists/1, delete/1, update/2, list/0]).
 
--export([update_name/2, update_luma_config/2, update_helper/2,
-    set_readonly_value/2, set_imported_storage_insecure/2]).
+-export([update_name/2, update_helper/2, update_luma_config/2,
+    set_readonly/2, set_imported_storage/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -68,44 +70,24 @@ create(StorageId, Name, Helper, Readonly, LumaConfig, ImportedStorage) ->
         }
     })).
 
-
--spec update(od_storage:id(), diff()) -> {ok, doc()} | {error, term()}.
-update(Key, Diff) ->
-    datastore_model:update(?CTX, Key, Diff).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns storage.
-%% @end
-%%--------------------------------------------------------------------
 -spec get(od_storage:id()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
     datastore_model:get(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes storage.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(od_storage:id()) -> ok | {error, term()}.
-delete(StorageId) ->
-    datastore_model:delete(?CTX, StorageId).
+%% @private
+-spec update(od_storage:id(), diff()) -> {ok, doc()} | {error, term()}.
+update(Key, Diff) ->
+    datastore_model:update(?CTX, Key, Diff).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether storage exists.
-%% @end
-%%--------------------------------------------------------------------
 -spec exists(od_storage:id()) -> boolean().
 exists(Key) ->
     {ok, Exists} = datastore_model:exists(?CTX, Key),
     Exists.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
+-spec delete(od_storage:id()) -> ok | {error, term()}.
+delete(StorageId) ->
+    datastore_model:delete(?CTX, StorageId).
+
 -spec list() -> {ok, [doc()]} | {error, term()}.
 list() ->
     datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
@@ -114,14 +96,7 @@ list() ->
 %%% API functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns storage ID.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_id(od_storage:id() | doc()) -> od_storage:id().
-get_id(<<_/binary>> = StorageId) ->
-    StorageId;
 get_id(#document{key = StorageId, value = #storage_config{}}) ->
     StorageId.
 
@@ -143,22 +118,13 @@ get_helper(StorageId) ->
     get_helper(StorageDoc).
 
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns luma_config field for given storage.
-%% @end
-%%-------------------------------------------------------------------
 -spec get_luma_config(record() | doc()) -> undefined | luma_config:config().
 get_luma_config(#storage_config{luma_config = LumaConfig}) ->
     LumaConfig;
 get_luma_config(#document{value = Storage = #storage_config{}}) ->
     get_luma_config(Storage).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether storage is readonly.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec is_readonly(od_storage:id() | record() | doc()) -> boolean().
 is_readonly(#storage_config{readonly = ReadOnly}) ->
     ReadOnly;
@@ -169,11 +135,6 @@ is_readonly(StorageId) ->
     is_readonly(StorageConfigDoc).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether imported storage value is set for given storage.
-%% @end
-%%--------------------------------------------------------------------
 -spec is_imported_storage(record() | od_storage:id()) -> boolean().
 is_imported_storage(#storage_config{imported_storage = ImportedStorage}) ->
     ImportedStorage;
@@ -225,26 +186,16 @@ update_luma_config(StorageId, UpdateFun) ->
     end)).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates storage's 'readonly' setting.
-%% @end
-%%--------------------------------------------------------------------
--spec set_readonly_value(StorageId :: od_storage:id(), Readonly :: boolean()) ->
+-spec set_readonly(StorageId :: od_storage:id(), Readonly :: boolean()) ->
     ok | {error, term()}.
-set_readonly_value(StorageId, Readonly) when is_boolean(Readonly) ->
+set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
     ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
         {ok, Storage#storage_config{readonly = Readonly}}
     end)).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets imported storage value.
-%% @end
-%%--------------------------------------------------------------------
--spec set_imported_storage_insecure(od_storage:id(), boolean()) -> ok.
-set_imported_storage_insecure(StorageId, Value) ->
+-spec set_imported_storage(od_storage:id(), boolean()) -> ok.
+set_imported_storage(StorageId, Value) ->
     ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
         {ok, Storage#storage_config{imported_storage = Value}}
     end)).

@@ -217,7 +217,7 @@ maybe_handle_monitoring_event(Evt = #monitoring_event{
 -spec maybe_handle_monitoring_event(od_space:id(), Evt :: event:type()) ->
     ok | {error, Reason :: term()}.
 maybe_handle_monitoring_event(SpaceId, Evt) ->
-    case all_supporting_storages_are_readonly(SpaceId) of
+    case are_all_storages_readonly(SpaceId) of
         true -> ok;
         _ -> handle_monitoring_event(Evt)
     end.
@@ -321,17 +321,7 @@ get_monitoring_id(SpaceId, UserId) ->
 %% Checks if all storages supporting given space are readonly.
 %% @end
 %%--------------------------------------------------------------------
--spec all_supporting_storages_are_readonly(od_space:id()) -> boolean().
-all_supporting_storages_are_readonly(SpaceId) ->
+-spec are_all_storages_readonly(od_space:id()) -> boolean().
+are_all_storages_readonly(SpaceId) ->
     {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
-    all_storages_are_readonly(StorageIds).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks if all storages from StorageIds list are readonly.
-%% @end
-%%--------------------------------------------------------------------
--spec all_storages_are_readonly([od_storage:id()]) -> boolean().
-all_storages_are_readonly(StorageIds) ->
     lists:all(fun storage:is_readonly/1, StorageIds).

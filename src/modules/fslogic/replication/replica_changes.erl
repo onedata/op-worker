@@ -163,12 +163,12 @@ rename_or_delete(FileCtx,
                 {error, ?ENOENT} -> ok
             end,
             NewFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, TargetSpaceId)),
-            {TargetStorageRecord, NewFileCtx2} = file_ctx:get_storage_record(NewFileCtx),
+            {TargetStorage, NewFileCtx2} = file_ctx:get_storage(NewFileCtx),
 
             RenamedDoc = Doc#document{value = Loc#file_location{
                 file_id = RemoteTargetFileId,
                 space_id = TargetSpaceId,
-                storage_id = storage:get_id(TargetStorageRecord),
+                storage_id = storage:get_id(TargetStorage),
                 last_rename = LastRename
             }},
             {{renamed, RenamedDoc, FileUuid, TargetSpaceId}, NewFileCtx2};

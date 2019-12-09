@@ -38,8 +38,8 @@ get_storage_record(Worker, StorageId) ->
 new_handle(Worker, SpaceId, StorageFileId, StorageId) when is_binary(StorageId) ->
     rpc:call(Worker, storage_driver, new_handle,
         [?ROOT_SESS_ID, SpaceId, undefined, StorageId, StorageFileId, undefined]);
-new_handle(Worker, SpaceId, StorageFileId, StorageRecord) ->
-    StorageId = storage:get_id(StorageRecord),
+new_handle(Worker, SpaceId, StorageFileId, Storage) ->
+    StorageId = storage:get_id(Storage),
     new_handle(Worker, SpaceId, StorageFileId, StorageId).
 
 new_child_handle(ParentHandle, ChildName) ->
@@ -157,8 +157,8 @@ recursive_rm(Worker, SDHandle = #sd_handle{storage_id = StorageId}, DoNotDeleteR
                     unlink(Worker, SDHandle, Size)
             end;
         ?DIRECTORY_TYPE ->
-            {ok, StorageRecord} = rpc:call(Worker, storage, get, [StorageId]),
-            Helper = storage:get_helper(StorageRecord),
+            {ok, Storage} = rpc:call(Worker, storage, get, [StorageId]),
+            Helper = storage:get_helper(Storage),
             HelperName = helper:get_name(Helper),
             case HelperName of
                 ?POSIX_HELPER_NAME ->

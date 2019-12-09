@@ -103,9 +103,8 @@ custom_error_when_handler_throws_error(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        [Worker | _] = Workers = ?config(op_worker_nodes, NewConfig),
+        [Worker | _] = ?config(op_worker_nodes, NewConfig),
         initializer:clear_subscriptions(Worker),
-        ok = initializer:storage_logic_mock_setup(Workers),
         initializer:setup_storage(NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
@@ -137,7 +136,6 @@ end_per_testcase(Case, Config) when
 ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, space_middleware),
-    ok = initializer:storage_logic_mock_teardown(Workers),
     unmock_provider_id(Config),
     hackney:stop(),
     ssl:stop();
