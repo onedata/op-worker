@@ -281,7 +281,7 @@ setup_session(Worker, [{_, #user_config{
         list_to_binary(Text ++ "_" ++ binary_to_list(User))
     end,
 
-    SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
+    Nonce = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_nonce", UserId),
 
     Identity = #user_identity{user_id = UserId},
     TokenAuth = auth_manager:build_token_auth(
@@ -292,7 +292,7 @@ setup_session(Worker, [{_, #user_config{
         Worker,
         session_manager,
         reuse_or_create_fuse_session,
-        [SessId, Identity, TokenAuth])
+        [Nonce, Identity, TokenAuth])
     ),
 
     lists:foreach(fun({_, SpaceName}) ->
@@ -310,6 +310,7 @@ setup_session(Worker, [{_, #user_config{
         {{user_name, UserId}, UserName},
         {{access_token, UserId}, AccessToken},
         {{token_auth, UserId}, TokenAuth},
+        {{session_nonce, {UserId, ?GET_DOMAIN(Worker)}}, Nonce},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
         {{fslogic_ctx, UserId}, Ctx}
         | setup_session(Worker, R, Config)

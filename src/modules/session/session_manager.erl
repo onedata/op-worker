@@ -45,9 +45,10 @@
 %% Creates FUSE session or if session exists reuses it.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_fuse_session(SessId :: session:id(), session:identity(),
+-spec reuse_or_create_fuse_session(Nonce :: binary(), session:identity(),
     session:auth()) -> {ok, session:id()} | error().
-reuse_or_create_fuse_session(SessId, Iden, Auth) ->
+reuse_or_create_fuse_session(Nonce, Iden, Auth) ->
+    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({fuse, Nonce})),
     reuse_or_create_session(SessId, fuse, Iden, Auth).
 
 

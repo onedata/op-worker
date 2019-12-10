@@ -106,7 +106,7 @@ auth_cache_test(Config) ->
 token_authentication(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessId = <<"session_id">>,
+    Nonce = <<"nonce">>,
     AccessToken = initializer:create_access_token(?USER_ID),
     TokenAuth = auth_manager:build_token_auth(
         AccessToken, undefined,
@@ -114,7 +114,7 @@ token_authentication(Config) ->
     ),
 
     % when
-    {ok, {Sock, SessId}} = fuse_test_utils:connect_via_token(Worker1, [], SessId, AccessToken),
+    {ok, {Sock, SessId}} = fuse_test_utils:connect_via_token(Worker1, [], Nonce, AccessToken),
 
     % then
     {ok, Doc} = ?assertMatch(

@@ -728,8 +728,8 @@ handshake_as_provider(Node, ProviderId, Token) ->
 
 
 handshake_as_client(Node, Token, Version) ->
-    SessId = crypto:strong_rand_bytes(10),
-    case fuse_test_utils:connect_as_client(Node, SessId, Token, Version) of
+    Nonce = crypto:strong_rand_bytes(10),
+    case fuse_test_utils:connect_as_client(Node, Nonce, Token, Version) of
         {ok, Sock} ->
             ssl:close(Sock),
             'OK';

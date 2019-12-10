@@ -56,15 +56,15 @@ all() ->
 session_manager_session_creation_and_reuse_test(Config) ->
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
-    SessId1 = <<"session_id_1">>,
-    SessId2 = <<"session_id_2">>,
+    Nonce1 = <<"nonce_1">>,
+    Nonce2 = <<"nonce_2">>,
     Iden1 = #user_identity{user_id = <<"user_id_1">>},
     Iden2 = #user_identity{user_id = <<"user_id_2">>},
 
-    [SessId1, SessId2] = lists:map(fun({SessId, Iden, Workers}) ->
+    [SessId1, SessId2] = lists:map(fun({Nonce, Iden, Workers}) ->
         Answers = [{ok, SessId} | _] = utils:pmap(fun(Worker) ->
             fuse_test_utils:reuse_or_create_fuse_session(
-                Worker, SessId, Iden, undefined, self()
+                Worker, Nonce, Iden, undefined, self()
             )
         end, Workers),
 
@@ -74,8 +74,8 @@ session_manager_session_creation_and_reuse_test(Config) ->
         ?assertEqual(length(Answers), length(Cons)),
         SessId
     end, [
-        {SessId1, Iden1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
-        {SessId2, Iden2, lists:duplicate(2, Worker2) ++ lists:duplicate(2, Worker1)}
+        {Nonce1, Iden1, lists:duplicate(2, Worker1) ++ lists:duplicate(2, Worker2)},
+        {Nonce2, Iden2, lists:duplicate(2, Worker2) ++ lists:duplicate(2, Worker1)}
     ]),
 
     ?assertEqual(ok, rpc:call(Worker1, session_manager, remove_session, [SessId1])),
@@ -233,12 +233,12 @@ session_getters_test(Config) ->
 %% sequencer manager supervisor or session watcher.
 session_supervisor_child_crash_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = <<"session_id">>,
+    Nonce = <<"nonce">>,
     Iden = #user_identity{user_id = <<"user_id">>},
 
     lists:foreach(fun({ChildId, Fun, Args}) ->
         {ok, SessId} = fuse_test_utils:reuse_or_create_fuse_session(
-            Worker, SessId, Iden, undefined, self()
+            Worker, Nonce, Iden, undefined, self()
         ),
 
         {ok, {SessSup, Node}} = rpc:call(Worker, session,
@@ -298,20 +298,21 @@ init_per_testcase(session_supervisor_child_crash_test, Config) ->
 init_per_testcase(Case, Config) when
     Case =:= session_manager_session_components_running_test;
     Case =:= session_manager_supervision_tree_structure_test;
-    Case =:= session_manager_session_removal_test ->
+    Case =:= session_manager_session_removal_test
+->
     Workers = ?config(op_worker_nodes, Config),
     Self = self(),
-    SessId1 = <<"session_id_1">>,
-    SessId2 = <<"session_id_2">>,
+    Nonce1 = <<"nonce_1">>,
+    Nonce2 = <<"nonce_2">>,
     Iden1 = #user_identity{user_id = <<"user_id_1">>},
     Iden2 = #user_identity{user_id = <<"user_id_2">>},
 
     initializer:communicator_mock(Workers),
     {ok, SessId1} = fuse_test_utils:reuse_or_create_fuse_session(
-        hd(Workers), SessId1, Iden1, undefined, Self
+        hd(Workers), Nonce1, Iden1, undefined, Self
     ),
     {ok, SessId2} = fuse_test_utils:reuse_or_create_fuse_session(
-        hd(Workers), SessId2, Iden2, undefined, Self
+        hd(Workers), Nonce2, Iden2, undefined, Self
     ),
     ?assertEqual(ok, rpc:call(hd(Workers), session_manager,
         remove_session, [?ROOT_SESS_ID])),
@@ -388,11 +389,11 @@ get_child(Sup, ChildId) ->
 %% Creates basic test session.
 %% @end
 %%--------------------------------------------------------------------
--spec basic_session_setup(node(), SessId :: session:id(),
+-spec basic_session_setup(node(), Nonce :: binary(),
     session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
-basic_session_setup(Worker, SessId, Iden, Con, Config) ->
+basic_session_setup(Worker, Nonce, Iden, Con, Config) ->
     {ok, SessId} = fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, SessId, Iden, undefined, Con
+        Worker, Nonce, Iden, undefined, Con
     ),
     [{session_id, SessId}, {identity, Iden} | Config].
 

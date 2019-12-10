@@ -306,9 +306,9 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
 
     initializer:remove_pending_messages(),
     Sessions = lists:map(fun(N) ->
-        SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
+        Nonce = <<"nonce_", (integer_to_binary(N))/binary>>,
         Iden = #user_identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
-        {ok, SessId} = session_setup(Worker, SessId, Iden, Self),
+        {ok, SessId} = session_setup(Worker, Nonce, Iden, Self),
         SubId = subscribe(Worker, SessId,
             fun(Meta) -> Meta >= CtrThr end,
             forward_events_handler(Self)
@@ -400,8 +400,8 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
         {ok, [oneprovider:get_id()]}
     end),
-    SessId = <<"session_id">>,
-    {ok, SessId} = session_setup(Worker, SessId, Iden, Self),
+    Nonce = <<"nonce">>,
+    {ok, SessId} = session_setup(Worker, Nonce, Iden, Self),
     initializer:mock_test_file_context(Config, <<"file_id">>),
     initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"),
