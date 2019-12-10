@@ -36,6 +36,7 @@
 
     connect_via_macaroon/1, connect_via_macaroon/2,
     connect_via_macaroon/3, connect_via_macaroon/4,
+    connect_via_custom_macaroon/4,
 
     generate_msg_id/0
 ]).
@@ -194,14 +195,21 @@ connect_via_macaroon(Node, SocketOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using macaroon, with custom socket opts
-%% @equiv connect_via_macaroon(Node, SocketOpts, crypto:strong_rand_bytes(10))
+%% @equiv connect_via_custom_macaroon(Node, SocketOpts, SessionId, 1)
 %% @end
 %%--------------------------------------------------------------------
 connect_via_macaroon(Node, SocketOpts, SessionId) ->
+    connect_via_custom_macaroon(Node, SocketOpts, SessionId, 1).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Connect to given node using predefined macaroon, with custom socket opts
+%% @end
+connect_via_custom_macaroon(Node, SocketOpts, SessionId, MacaroonNum) ->
+    {Macaroon, DischMacaroon} = lists:nth(MacaroonNum, ?TEST_MACAROONS),
     connect_via_macaroon(Node, SocketOpts, SessionId, #macaroon_auth{
-        macaroon = ?MACAROON,
-        disch_macaroons = ?DISCH_MACAROONS
+        macaroon = Macaroon,
+        disch_macaroons = DischMacaroon
     }).
 
 %%--------------------------------------------------------------------
@@ -271,14 +279,18 @@ receive_server_message(IgnoredMsgList) ->
     receive_server_message(IgnoredMsgList, ?TIMEOUT).
 
 receive_server_message(IgnoredMsgList, Timeout) ->
+    Now = os:timestamp(),
     receive
         {_, _, Data} ->
             % ignore listed messages
             Msg = messages:decode_msg(Data, 'ServerMessage'),
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
-                true -> receive_server_message(IgnoredMsgList);
-                false -> Msg
+                true ->
+                    NewTimeout = max(0, Timeout - timer:now_diff(os:timestamp(), Now) div 1000),
+                    receive_server_message(IgnoredMsgList, NewTimeout);
+                false ->
+                    Msg
             end
     after Timeout ->
         {error, timeout}

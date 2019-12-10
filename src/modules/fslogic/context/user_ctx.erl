@@ -29,7 +29,7 @@
 %% API
 -export([new/1]).
 -export([get_user/1, get_user_id/1, get_session_id/1, get_auth/1]).
--export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/1]).
+-export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/2]).
 
 %%%===================================================================
 %%% API functions
@@ -125,8 +125,10 @@ is_normal_user(#user_ctx{session = #document{key = SessId}}) ->
 %% Checks if session uses direct_io.
 %% @end
 %%--------------------------------------------------------------------
--spec is_direct_io(ctx()) -> boolean().
+-spec is_direct_io(ctx(), od_space:id()) -> boolean().
 is_direct_io(#user_ctx{session = #document{
-    value = #session{direct_io = DirectIO}
-}}) ->
-    DirectIO.
+    value = #session{direct_io = DirectIO, type = fuse}
+}}, SpaceID) ->
+    maps:get(SpaceID, DirectIO, true);
+is_direct_io(_, _) ->
+    false.

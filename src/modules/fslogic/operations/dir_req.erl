@@ -110,6 +110,12 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         scope = SpaceId
     }),
     fslogic_times:update_mtime_ctime(ParentFileCtx),
+
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
+    #fuse_response{fuse_response = FileAttr} =
+        attr_req:get_file_attr_insecure(UserCtx, FileCtx, false, false),
+    FileAttr2 = FileAttr#file_attr{size = 0},
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #dir{guid = file_id:pack_guid(DirUuid, SpaceId)}
     }.
@@ -200,7 +206,7 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
         (error) -> false;
         (_Attrs) -> true
     end,
-    MaxProcs = application:get_env(?APP_NAME, max_read_dir_plus_procs, 200),
+    MaxProcs = application:get_env(?APP_NAME, max_read_dir_plus_procs, 20),
     ChildrenAttrs = filtermap(MapFun, FilterFun, Children, MaxProcs, length(Children)),
 
     fslogic_times:update_atime(FileCtx2),

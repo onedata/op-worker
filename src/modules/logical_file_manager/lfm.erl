@@ -52,7 +52,7 @@
     schedule_replication_by_view/6, schedule_replica_eviction_by_view/6
 ]).
 %% Functions operating on files
--export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3,
+-export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3, check_size_and_read/3,
     silent_read/3, truncate/3, release/1, get_file_distribution/2,
     create_and_open/4, create_and_open/5]).
 %% Functions concerning file permissions
@@ -426,6 +426,16 @@ write(FileHandle, Offset, Buffer) ->
     {ok, NewHandle :: handle(), binary()} | error_reply().
 read(FileHandle, Offset, MaxSize) ->
     ?run(fun() -> lfm_files:read(FileHandle, Offset, MaxSize) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Reads requested part of a file with size check.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_size_and_read(FileHandle :: handle(), Offset :: integer(), MaxSize :: integer()) ->
+    {ok, NewHandle :: handle(), binary()} | error_reply().
+check_size_and_read(FileHandle, Offset, MaxSize) ->
+    ?run(fun() -> lfm_files:check_size_and_read(FileHandle, Offset, MaxSize) end).
 
 %%--------------------------------------------------------------------
 %% @doc

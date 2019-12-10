@@ -224,7 +224,7 @@
     % Key-value in-session memory
     memory = #{} :: map(),
     open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
-    direct_io = false :: boolean()
+    direct_io = #{} :: #{od_space:id() => boolean()}
 }).
 
 % Model used to cache idp access tokens
@@ -519,7 +519,8 @@
 %% Model that stores file handles
 -record(file_handles, {
     is_removed = false :: boolean(),
-    descriptors = #{} :: file_descriptors()
+    descriptors = #{} :: file_descriptors(),
+    creation_handle :: file_req:handle_id()
 }).
 
 %% Model that holds file's custom metadata

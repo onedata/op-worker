@@ -216,6 +216,7 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
         {ok, FileMeta#file_meta{mode = Mode}}
     end),
     ok = permissions_cache:invalidate(),
+    fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx),
     fslogic_event_emitter:emit_file_perm_changed(FileCtx).
 
 %%--------------------------------------------------------------------

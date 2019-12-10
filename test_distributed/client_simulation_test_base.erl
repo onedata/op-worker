@@ -23,6 +23,7 @@
 -export([init_per_suite/1, init_per_testcase/1, end_per_testcase/1]).
 -export([simulate_client/5, verify_streams/1, verify_streams/2, get_guid/3]).
 -export([prepare_file/2, use_file/4]).
+-export([create_new_file_subscriptions/3, cancel_subscriptions/3]).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
@@ -217,8 +218,11 @@ init_per_testcase(Config) ->
 
     test_utils:mock_new(Workers, user_identity),
     test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
-            {ok, #document{value = #user_identity{user_id = <<"user1">>}}}
+        fun
+            (#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+                {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
+            (#macaroon_auth{macaroon = ?MACAROON2, disch_macaroons = ?DISCH_MACAROONS2}) ->
+                {ok, #document{value = #user_identity{user_id = <<"user2">>}}}
         end
     ),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config2, "env_desc.json"),

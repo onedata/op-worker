@@ -243,16 +243,18 @@ setup_session(Worker, [{_, #user_config{id = UserId, spaces = Spaces,
     SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
     Iden = #user_identity{user_id = UserId},
 
-    lists:foreach(fun({_, SpaceName}) ->
-        case get(SpaceName) of
-            undefined -> put(SpaceName, [SessId]);
-            SessIds -> put(SpaceName, [SessId | SessIds])
-        end
-    end, Spaces),
-
     Auth = #macaroon_auth{macaroon = Macaroon},
     ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
         reuse_or_create_session, [SessId, fuse, Iden, Auth])),
+
+    lists:foreach(fun({SpaceId, SpaceName}) ->
+        case get(SpaceName) of
+            undefined -> put(SpaceName, [SessId]);
+            SessIds -> put(SpaceName, [SessId | SessIds])
+        end,
+        ok = rpc:call(Worker, session, set_direct_io, [SessId, SpaceId, false])
+    end, Spaces),
+
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
     [
         {{spaces, UserId}, Spaces},

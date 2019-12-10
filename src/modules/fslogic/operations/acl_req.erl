@@ -127,6 +127,7 @@ remove_acl_insecure(_UserCtx, FileCtx) ->
                 user_ctx:new(?ROOT_SESS_ID),
                 FileCtx2, Mode
             ),
+            ok = fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx2),
             ok = fslogic_event_emitter:emit_file_perm_changed(FileCtx2),
             fslogic_times:update_ctime(FileCtx2),
             #provider_response{status = #status{code = ?OK}};

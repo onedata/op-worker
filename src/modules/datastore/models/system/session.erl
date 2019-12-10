@@ -30,7 +30,7 @@
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
 -export([get_auth/1, get_user_id/1]).
--export([set_direct_io/2]).
+-export([set_direct_io/3]).
 
 % exometer callbacks
 -export([init_counters/0, init_report/0]).
@@ -338,10 +338,10 @@ get_auth(#document{value = Session}) ->
 %% Sets direct_io property of session.
 %% @end
 %%--------------------------------------------------------------------
--spec set_direct_io(id(), boolean()) -> ok | {error, term()}.
-set_direct_io(SessId, DirectIO) ->
-    Diff = fun(Sess) ->
-        {ok, Sess#session{direct_io = DirectIO}}
+-spec set_direct_io(id(), od_space:id(), boolean()) -> ok | {error, term()}.
+set_direct_io(SessId, SpaceId, Value) ->
+    Diff = fun(Sess = #session{direct_io = DirectIO}) ->
+        {ok, Sess#session{direct_io = DirectIO#{SpaceId => Value}}}
     end,
     case session:update(SessId, Diff) of
         {ok, SessId} -> ok;
