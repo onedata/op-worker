@@ -24,7 +24,7 @@
 -export([
     reuse_or_create_fuse_session/3,
     reuse_or_create_rest_session/2,
-    reuse_or_create_incoming_provider_session/2,
+    reuse_or_create_incoming_provider_session/1,
     reuse_or_create_outgoing_provider_session/2,
     reuse_or_create_proxied_session/4,
     reuse_or_create_gui_session/2,
@@ -57,9 +57,9 @@ reuse_or_create_fuse_session(Nonce, Identity, Auth) ->
 %% Creates incoming provider's session or if session exists reuses it.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_incoming_provider_session(od_provider:id(),
-    aai:subject()) -> {ok, session:id()} | error().
-reuse_or_create_incoming_provider_session(ProviderId, Identity) ->
+-spec reuse_or_create_incoming_provider_session(aai:subject()) ->
+    {ok, session:id()} | error().
+reuse_or_create_incoming_provider_session(?SUB(?ONEPROVIDER, ProviderId) = Identity) ->
     SessId = session_utils:get_provider_session_id(incoming, ProviderId),
     reuse_or_create_session(SessId, provider_incoming, Identity, undefined).
 

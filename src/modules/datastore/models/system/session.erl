@@ -221,11 +221,11 @@ get_user_id(<<_/binary>> = SessId) ->
         {ok, Doc} -> get_user_id(Doc);
         {error, Reason} -> {error, Reason}
     end;
-get_user_id(#session{identity = ?SUB(Type, UserId)}) when
-    Type =:= root;
-    Type =:= nobody;
-    Type =:= user
-->
+get_user_id(#session{identity = ?SUB(root, ?ROOT_USER_ID)}) ->
+    {ok, ?ROOT_USER_ID};
+get_user_id(#session{identity = ?SUB(nobody, ?GUEST_USER_ID)}) ->
+    {ok, ?GUEST_USER_ID};
+get_user_id(#session{identity = ?SUB(user, UserId)}) ->
     {ok, UserId};
 get_user_id(#document{value = #session{} = Value}) ->
     get_user_id(Value).

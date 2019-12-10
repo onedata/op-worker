@@ -135,7 +135,7 @@ handle_provider_handshake(#provider_handshake_request{
     case token_logic:verify_provider_identity_token(Token) of
         {ok, ?SUB(?ONEPROVIDER, ProviderId) = Subject} ->
             {ok, SessId} = session_manager:reuse_or_create_incoming_provider_session(
-                ProviderId, Subject
+                Subject
             ),
             {ProviderId, SessId};
         {ok, _} ->

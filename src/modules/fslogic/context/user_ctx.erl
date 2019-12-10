@@ -61,8 +61,8 @@ new(SessId) ->
 get_user(#user_ctx{session = #document{key = SessId, value = #session{
     identity = ?SUB(Type, UserId)
 }}}) when
-    Type =:= root;
-    Type =:= nobody;
+    (Type =:= root andalso UserId =:= ?ROOT_USER_ID);
+    (Type =:= nobody andalso UserId =:= ?GUEST_USER_ID);
     Type =:= user
 ->
     case get(user_ctx_cache) of
