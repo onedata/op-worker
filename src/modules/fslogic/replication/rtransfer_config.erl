@@ -403,8 +403,8 @@ fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storages(non_neg_integer()) -> [od_storage:id()] | {error, term()}.
-get_storages(Num) ->
-    case {provider_logic:get_storage_ids(), Num} of
+get_storages(Retries) ->
+    case {provider_logic:get_storage_ids(), Retries} of
         {{ok, StorageIds}, _} ->
             StorageIds;
         {?ERROR_UNREGISTERED_ONEPROVIDER, 0} ->
@@ -413,5 +413,5 @@ get_storages(Num) ->
             Error;
         _ ->
             timer:sleep(500),
-            get_storages(Num - 1)
+            get_storages(Retries - 1)
     end.

@@ -70,23 +70,28 @@ create(StorageId, Name, Helper, Readonly, LumaConfig, ImportedStorage) ->
         }
     })).
 
+
 -spec get(od_storage:id()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
     datastore_model:get(?CTX, Key).
+
 
 %% @private
 -spec update(od_storage:id(), diff()) -> {ok, doc()} | {error, term()}.
 update(Key, Diff) ->
     datastore_model:update(?CTX, Key, Diff).
 
+
 -spec exists(od_storage:id()) -> boolean().
 exists(Key) ->
     {ok, Exists} = datastore_model:exists(?CTX, Key),
     Exists.
 
+
 -spec delete(od_storage:id()) -> ok | {error, term()}.
 delete(StorageId) ->
     datastore_model:delete(?CTX, StorageId).
+
 
 -spec list() -> {ok, [doc()]} | {error, term()}.
 list() ->

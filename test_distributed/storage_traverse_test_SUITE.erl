@@ -273,7 +273,7 @@ canonical_s3_custom_compute_test(Config) ->
 
 traverse_and_execute_jobs_only_on_files_test_base(Config, SpaceId, Opts) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StorageId = get_storage_id(W, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(W, SpaceId),
     SpaceDir = space_dir(W, SpaceId, StorageId),
     Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
@@ -295,7 +295,7 @@ traverse_and_execute_jobs_only_on_files_test_base(Config, SpaceId, Opts) ->
 
 traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, SpaceId, Opts) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StorageId = get_storage_id(W, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(W, SpaceId),
     SpaceDir = space_dir(W, SpaceId, StorageId),
     Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
@@ -322,7 +322,7 @@ traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, SpaceId, Opts) ->
 
 custom_compute_test_base(Config, SpaceId, Opts, ExpectedComputeValue) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StorageId = get_storage_id(W, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(W, SpaceId),
     SpaceDir = space_dir(W, SpaceId, StorageId),
     Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
@@ -376,7 +376,7 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     lists:foreach(fun(SpaceId) ->
-        StorageId = get_storage_id(W, SpaceId),
+        StorageId = initializer:get_supporting_storage_id(W, SpaceId),
         SpaceDir = space_dir(W, SpaceId, StorageId),
         Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
         sd_test_utils:recursive_rm(W, Handle, true)
@@ -444,10 +444,6 @@ stop_pool(Worker) ->
 
 run_traverse(Worker, SpaceId, StorageId, TraversInfo, TraverseOpts) ->
     rpc:call(Worker, storage_traverse, run, [?MODULE, SpaceId, StorageId, TraversInfo, TraverseOpts]).
-
-get_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
-    StorageId.
 
 space_dir(Worker, SpaceId, StorageId) ->
     rpc:call(Worker, storage_file_id, space_id, [SpaceId, StorageId]).

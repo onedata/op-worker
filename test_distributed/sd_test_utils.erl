@@ -18,7 +18,7 @@
 
 
 %% API
--export([get_storage_id/2, get_storage_record/2, new_handle/4, new_child_handle/2,
+-export([get_storage_record/2, new_handle/4, new_child_handle/2,
     setup_test_files_structure/3, setup_test_files_structure/4, recursive_rm/3]).
 -export([mkdir/3, create_file/3, write_file/4, read_file/4, unlink/3, chown/4,
     chmod/3, stat/2, ls/4, rmdir/2, truncate/4, recursive_rm/2, open/3, listobjects/5]).
@@ -28,10 +28,6 @@
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-get_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
-    StorageId.
 
 get_storage_record(Worker, StorageId) ->
     rpc:call(Worker, storage, get, [StorageId]).

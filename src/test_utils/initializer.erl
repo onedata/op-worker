@@ -42,6 +42,7 @@
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
 -export([mock_share_logic/1, unmock_share_logic/1]).
 -export([put_into_cache/1]).
+-export([get_storage_id/1, get_supporting_storage_id/2]).
 -export([local_ip_v4/0]).
 
 
@@ -567,6 +568,15 @@ put_into_cache(Doc = #document{key = Id, value = Record}) ->
     Type = element(1, Record),
     Type:update_cache(Id, fun(_) -> {ok, Record} end, Doc).
 
+
+get_storage_id(Worker) ->
+    {ok, [StorageId]} = rpc:call(Worker, provider_logic, get_storage_ids, []),
+    StorageId.
+
+
+get_supporting_storage_id(Worker, SpaceId) ->
+    {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
+    StorageId.
 
 %%%===================================================================
 %%% Internal functions

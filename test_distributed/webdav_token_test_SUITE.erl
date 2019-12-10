@@ -52,11 +52,6 @@ all() -> [
 ].
 
 -define(SPACE_ID, <<"space1">>).
--define(STORAGE_ID(Worker), begin
-    {ok, [__Storage]} = rpc:call(Worker, provider_logic, get_storage_ids, []),
-    __Storage
-    end
-).
 -define(STORAGE_FILE_ID, filename:join(["/", ?SPACE_ID, <<"dummyFile">>])).
 -define(USER, <<"user1">>).
 -define(SESSION(Worker, Config), ?SESSION(?USER, Worker, Config)).
@@ -105,7 +100,7 @@ root_operation_succeeds_with_refreshed_token_on_insecure_storage(Config) ->
 user_operation_fails_with_expired_token_on_secure_storage(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessionId = ?SESSION(W, Config),
-    StorageId = ?STORAGE_ID(W),
+    StorageId = initializer:get_storage_id(W),
     TTL = 0,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
@@ -126,7 +121,7 @@ root_operation_fails_with_expired_token_on_secure_storage(Config) ->
 user_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessionId = ?SESSION(W, Config),
-    StorageId = ?STORAGE_ID(W),
+    StorageId = initializer:get_storage_id(W),
     TTL = 5,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
@@ -156,7 +151,7 @@ root_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
 
 operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StorageId = ?STORAGE_ID(W),
+    StorageId = initializer:get_storage_id(W),
     TTL = 0,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
@@ -174,7 +169,7 @@ operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
 
 operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StorageId = ?STORAGE_ID(W),
+    StorageId = initializer:get_storage_id(W),
     TTL = 5,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
@@ -214,7 +209,7 @@ init_per_testcase(Case, Config) when
     Case =:= root_operation_succeeds_with_refreshed_token_on_insecure_storage
     ->
     [W | _] = ?config(op_worker_nodes, Config),
-    enable_webdav_test_mode_insecure_storage(W, ?STORAGE_ID(W)),
+    enable_webdav_test_mode_insecure_storage(W, initializer:get_storage_id(W)),
     test_utils:mock_new(W, [helpers, helpers_fallback, helpers_reload], [passthrough]),
     Config;
 
@@ -225,7 +220,7 @@ init_per_testcase(Case, Config) when
     Case =:= root_operation_succeeds_with_refreshed_token_on_secure_storage
     ->
     [W | _] = ?config(op_worker_nodes, Config),
-    enable_webdav_test_mode_secure_storage(W, ?STORAGE_ID(W)),
+    enable_webdav_test_mode_secure_storage(W, initializer:get_storage_id(W)),
     test_utils:mock_new(W, [helpers, helpers_fallback, helpers_reload], [passthrough]),
     mock_luma(W),
     Config.

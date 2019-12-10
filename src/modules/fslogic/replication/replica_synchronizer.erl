@@ -119,7 +119,7 @@
 %%--------------------------------------------------------------------
 -spec synchronize(user_ctx:ctx(), file_ctx:ctx(), block(),
     Prefetch :: boolean(), transfer:id() | undefined, non_neg_integer()) ->
-    {ok, #file_location_changed{}} | {error, Reason :: any()}.
+    ok | {ok, #file_location_changed{}} | {error, Reason :: any()}.
 synchronize(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     request_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId,
         Priority, sync).

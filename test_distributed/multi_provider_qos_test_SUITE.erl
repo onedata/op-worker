@@ -959,13 +959,8 @@ storage_file_path(Worker, SpaceId, FilePath) ->
 
 
 get_space_mount_point(Worker, SpaceId) ->
-    StorageId = get_supporting_storage_id(Worker, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
     storage_mount_point(Worker, StorageId).
-
-
-get_supporting_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
-    StorageId.
 
 
 storage_mount_point(Worker, StorageId) ->

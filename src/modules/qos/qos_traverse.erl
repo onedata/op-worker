@@ -177,6 +177,8 @@ synchronize_file(UserCtx, FileCtx) ->
         UserCtx, FileCtx2, FileBlock, false, undefined, ?QOS_SYNCHRONIZATION_PRIORITY
     ),
     case SyncResult of
+        ok ->
+            ok;
         {ok, _} ->
             ok;
         {error, cancelled} ->

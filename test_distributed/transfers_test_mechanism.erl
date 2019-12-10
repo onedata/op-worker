@@ -207,7 +207,7 @@ change_storage_params(Config, #scenario{
     end, ReplicatingNodes),
 
     lists:foreach(fun(Node) ->
-        {ok, [StorageId | _]} = rpc:call(Node, space_logic, get_local_storage_ids, [SpaceId]),
+        StorageId = initializer:get_supporting_storage_id(Node, SpaceId),
         modify_storage_timeout(Node, StorageId, <<"100000">>)
     end, ReplicatingNodes),
 

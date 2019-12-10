@@ -1365,7 +1365,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
 
     ?assertEqual(true, 10 =< rpc:call(W1, storage_sync_monitoring, get_unhandled_jobs_value,
-        [?SPACE_ID, sd_test_utils:get_storage_id(W1, ?SPACE_ID)]), ?ATTEMPTS),
+        [?SPACE_ID, initializer:get_supporting_storage_id(W1, ?SPACE_ID)]), ?ATTEMPTS),
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
     ?assertMatch({error, ?ENOENT}, sd_test_utils:ls(W1, SDHandle, 0, 100)),
@@ -3654,14 +3654,14 @@ enable_update(Config, SpaceId, Storage) ->
 
 disable_import(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
-    StorageId = sd_test_utils:get_storage_id(W1, ?SPACE_ID),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     ok = rpc:call(W1, storage_sync, disable_import, [?SPACE_ID, StorageId]),
     ?assertMatch({false, _}, get_import_details(W1, ?SPACE_ID, StorageId), ?ATTEMPTS),
     assertNoImportInProgress(W1, ?SPACE_ID, 600),
     ok.
 
 cleanup_storage_sync_monitoring_model(Worker, SpaceId) ->
-    StorageId = sd_test_utils:get_storage_id(Worker, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
     rpc:call(Worker, storage_sync_monitoring, delete, [SpaceId, StorageId]).
 
 get_import_details(Worker, SpaceId, StorageId) ->
@@ -3672,7 +3672,7 @@ get_update_details(Worker, SpaceId, StorageId) ->
 
 disable_update(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
-    StorageId = sd_test_utils:get_storage_id(W1, ?SPACE_ID),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
     rpc:call(W1, storage_sync, disable_update, [?SPACE_ID, StorageId]),
     ?assertMatch({false, _}, get_update_details(W1, ?SPACE_ID, StorageId), ?ATTEMPTS),
     assertNoUpdateInProgress(W1, ?SPACE_ID, 600),
@@ -3825,7 +3825,7 @@ get_synced_storage(Config, Worker) ->
     maps:get(Worker, ?config(synced_storages, Config), undefined).
 
 get_supporting_storage(Worker, SpaceId) ->
-    StorageId = sd_test_utils:get_storage_id(Worker, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
     {ok, Storage} = sd_test_utils:get_storage_record(Worker, StorageId),
     Storage.
 
@@ -3992,7 +3992,7 @@ assertImportTimes(Worker, SpaceId) ->
     assertImportTimes(Worker, SpaceId, ?ATTEMPTS).
 
 assertImportTimes(Worker, SpaceId, Attempts) ->
-    StorageId = sd_test_utils:get_storage_id(Worker, ?SPACE_ID),
+    StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     ?assertEqual(true, try
         {ok, #document{
             value = #storage_sync_monitoring{
@@ -4009,7 +4009,7 @@ assertUpdateTimes(Worker, SpaceId) ->
     assertUpdateTimes(Worker, SpaceId, ?ATTEMPTS).
 
 assertUpdateTimes(Worker, SpaceId, Attempts) ->
-    StorageId = sd_test_utils:get_storage_id(Worker, ?SPACE_ID),
+    StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     ?assertEqual(true, try
         {ok, #document{
             value = #storage_sync_monitoring{
@@ -4023,7 +4023,7 @@ assertUpdateTimes(Worker, SpaceId, Attempts) ->
     end, Attempts).
 
 assertNoImportInProgress(Worker, SpaceId, Attempts) ->
-    StorageId = sd_test_utils:get_storage_id(Worker, ?SPACE_ID),
+    StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     ?assertEqual(true, try
         Result = rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId]),
         case Result of
@@ -4044,7 +4044,7 @@ assertNoImportInProgress(Worker, SpaceId, Attempts) ->
     end, Attempts).
 
 assertNoUpdateInProgress(Worker, SpaceId, Attempts) ->
-    StorageId = sd_test_utils:get_storage_id(Worker, ?SPACE_ID),
+    StorageId = initializer:get_supporting_storage_id(Worker, ?SPACE_ID),
     ?assertEqual(true, try
         Result = rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId]),
         case Result of
@@ -4075,7 +4075,7 @@ get_last_stat_timestamp(Worker, FilePath, SpaceId) ->
     StatTime.
 
 assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
-    StorageId = sd_test_utils:get_storage_id(Worker, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
     SSM = rpc:call(Worker, storage_sync_monitoring, get_info, [SpaceId, StorageId]),
     SSM2 = flatten_histograms(SSM),
     try

@@ -28,9 +28,10 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns space directory storage file id.
-%% When storage is imported, then space data is located directly in
-%% storage mount path. Otherwise data is stored in directory for this space.
+%% Returns storage file id of space directory.
+%% If storage is marked as "imported", space data is located directly in
+%% storage root directory. Otherwise data of each space is stored
+%% in a dedicated subdirectory.
 %% @end
 %%-------------------------------------------------------------------
 -spec space_id(od_space:id(), od_storage:id()) -> helpers:file_id().

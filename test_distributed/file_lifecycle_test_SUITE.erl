@@ -431,7 +431,7 @@ get_file_id(W, OpenAns) ->
     lfm_context:get_file_id(rpc:call(W, ets, lookup_element, [lfm_handles, OpenAns, 2])).
 
 get_mount_point(W) ->
-    {ok, [WorkerStorageId | _]} = rpc:call(W, provider_logic, get_storage_ids, []),
+    WorkerStorageId = initializer:get_storage_id(W),
     Helper = rpc:call(W, storage, get_helper, [WorkerStorageId]),
     #{<<"mountPoint">> := MountPoint} = helper:get_args(Helper),
     MountPoint.

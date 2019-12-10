@@ -31,7 +31,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([create_in_zone/1, create_in_zone/2, delete_in_zone/1]).
+-export([create_in_zone/2, create_in_zone/3, delete_in_zone/1]).
 -export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_space_support/2]).
@@ -51,22 +51,26 @@
 %%--------------------------------------------------------------------
 %% @equiv create_in_zone(StorageName, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(storage:qos_parameters()) -> {ok, od_storage:id()} | errors:error().
-create_in_zone(QosParameters) ->
-    create_in_zone(QosParameters, undefined).
+-spec create_in_zone(storage:name(), storage:qos_parameters()) -> {ok, od_storage:id()} | errors:error().
+create_in_zone(Name, QosParameters) ->
+    create_in_zone(Name, QosParameters, undefined).
+
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates document containing storage public information in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_in_zone(storage:qos_parameters(), od_storage:id() | undefined) ->
+-spec create_in_zone(storage:name(), storage:qos_parameters(), od_storage:id() | undefined) ->
     {ok, od_storage:id()} | errors:error().
-create_in_zone(QosParameters, StorageId) ->
+create_in_zone(Name, QosParameters, StorageId) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        data = #{<<"qos_parameters">> => QosParameters}
+        data = #{
+            <<"name">> => Name,
+            <<"qos_parameters">> => QosParameters
+        }
     }),
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
@@ -85,6 +89,7 @@ delete_in_zone(StorageId) ->
         % so no need to invalidate any od_space cache
         gs_client_worker:invalidate_cache(od_storage, StorageId)
     end).
+
 
 -spec support_space(od_storage:id(), tokens:serialized(), od_space:support_size()) ->
     {ok, od_space:id()}.
@@ -153,6 +158,7 @@ get_local_qos_parameters(StorageId) ->
     {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} = get(StorageId),
     QosParameters.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Get QoS parameters of storage supporting given space.
@@ -197,6 +203,7 @@ get(StorageId) ->
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
         subscribe = true
     }).
+
 
 %%--------------------------------------------------------------------
 %% @private

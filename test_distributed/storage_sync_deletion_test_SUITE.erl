@@ -74,7 +74,8 @@ all() -> ?ALL(?TEST_CASES).
 
 -define(SPACE_CTX(SpaceId), file_ctx:new_by_guid(?SPACE_GUID(SpaceId))).
 -define(SPACE_STORAGE_CTX(Worker, SpaceId, ImportedStorage), begin
-    storage_file_ctx:new(space_storage_file_id(SpaceId, ImportedStorage), SpaceId, get_storage_id(W, SpaceId))
+    storage_file_ctx:new(space_storage_file_id(SpaceId, ImportedStorage), SpaceId,
+        initializer:get_supporting_storage_id(W, SpaceId))
 end).
 -define(SESSION_ID(Config, Worker), ?config({session_id, {?USER, ?GET_DOMAIN(Worker)}}, Config)).
 
@@ -211,7 +212,7 @@ delete_nested_child_on_object_storage_test_base(Config) ->
     ImportedStorage = ?config(imported_storage, Config),
     SpaceGuid = ?SPACE_GUID(SpaceId),
     SessionId = ?SESSION_ID(Config, W),
-    StorageId = get_storage_id(W, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(W, SpaceId),
     ChildDir1 = <<"child_dir1">>,
     ChildDir2 = <<"child_dir2">>,
     ChildDir3 = <<"child_dir3">>,
@@ -275,7 +276,7 @@ do_not_delete_child_file_basic_test_base(Config) ->
     SpaceGuid = ?SPACE_GUID(SpaceId),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
-    StorageId = get_storage_id(W, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(W, SpaceId),
     RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
     Child = <<"child1">>,
@@ -296,7 +297,7 @@ do_not_delete_child_file_without_location_test_base(Config) ->
     SpaceGuid = ?SPACE_GUID(SpaceId),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
-    StorageId = get_storage_id(W, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(W, SpaceId),
     RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
     Child = <<"child1">>,
@@ -315,7 +316,7 @@ delete_children_files_test_base(Config, ChildrenToStayNum, ChildrenToDeleteNum) 
     SpaceGuid = ?SPACE_GUID(SpaceId),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
-    StorageId = get_storage_id(W, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(W, SpaceId),
     RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
 
@@ -348,7 +349,7 @@ delete_children_files_test_base2(Config, ChildrenToStayNum, ChildrenToDeleteNum)
     StorageType = ?config(storage_type, Config),
     MarkLeaves = should_mark_leaves(StorageType),
     SessionId = ?SESSION_ID(Config, W),
-    StorageId = get_storage_id(W, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(W, SpaceId),
     RootStorageFileId = space_storage_file_id(SpaceId, ImportedStorage),
     StorageFileCtx = ?SPACE_STORAGE_CTX(W, SpaceId, ImportedStorage),
 
@@ -417,10 +418,6 @@ space_storage_file_id(_SpaceId, true) ->
 space_storage_file_id(SpaceId, false) ->
     <<"/", SpaceId/binary>>.
 
-get_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId | _]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
-    StorageId.
-
 run_deletion(Worker, StorageFileCtx, FileCtx) ->
     ok = rpc:call(Worker, storage_sync_traverse, run_deletion_scan, [StorageFileCtx, 0, #{max_depth => 1000000000000000000000}, FileCtx, false]).
 
@@ -455,7 +452,7 @@ clean_storage_sync_links(Worker) ->
     end, ?SPACE_IDS).
 
 clean_storage_sync_links(Worker, SpaceId) ->
-    StorageId = get_storage_id(Worker, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
     storage_sync_links_test_utils:delete_recursive(Worker, space_storage_file_id(SpaceId, true), StorageId),
     storage_sync_links_test_utils:delete_recursive(Worker, space_storage_file_id(SpaceId, false), StorageId).
 

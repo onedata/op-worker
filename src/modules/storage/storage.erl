@@ -28,14 +28,14 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/6, get/1, describe/1, exists/1, safe_delete/1, force_delete_all/0]).
+-export([create/6, get/1, describe/1, exists/1, safe_delete/1, clear_storages/0]).
 
 %%% Functions to retrieve storage data
 -export([get_id/1, get_name/1, get_helper/1, get_type/1, get_luma_config/1,
     get_local_qos_parameters/1, get_remote_qos_parameters/2]).
 -export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
 
-%%% Functions to modify storage data
+%%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
 -export([set_readonly/2, set_luma_config/2,
     set_imported_storage/2, set_qos_parameters/2]).
@@ -86,7 +86,7 @@
 -spec create(name(), helpers:helper(), boolean(), luma_config:config(),
     boolean(), qos_parameters()) -> {ok, od_storage:id()} | {error, term()}.
 create(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
-    lock_on_storage(Name, fun() ->
+    lock_on_storage_by_name(Name, fun() ->
         case is_name_occupied(Name) of
             true ->
                 ?ERROR_ALREADY_EXISTS;
@@ -99,7 +99,7 @@ create(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
 -spec create_insecure(name(), helpers:helper(), boolean(), luma_config:config(),
     boolean(), qos_parameters()) -> {ok, od_storage:id()} | {error, term()}.
 create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
-    case storage_logic:create_in_zone(QosParameters) of
+    case storage_logic:create_in_zone(Name, QosParameters) of
         {ok, Id} ->
             case storage_config:create(Id, Name, Helper, Readonly, LumaConfig, ImportedStorage) of
                 {ok, Id} ->
@@ -185,7 +185,7 @@ exists(StorageId) ->
 %%--------------------------------------------------------------------
 -spec safe_delete(od_storage:id()) -> ok | ?ERROR_STORAGE_IN_USE | {error, term()}.
 safe_delete(StorageId) ->
-    lock_on_storage(StorageId, fun() ->
+    lock_on_storage_by_id(StorageId, fun() ->
         case supports_any_space(StorageId) of
             true ->
                 ?ERROR_STORAGE_IN_USE;
@@ -206,10 +206,15 @@ delete(StorageId) ->
     end.
 
 
--spec force_delete_all() -> ok.
-force_delete_all() ->
+-spec clear_storages() -> ok.
+clear_storages() ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
-    lists:foreach(fun(Id) -> delete(Id) end, StorageIds).
+    lists:foreach(fun(Id) ->
+        ok = storage_config:delete(Id),
+        % all storages should have been deleted by Onezone after
+        % provider was deregistered, but try to remove them just in case
+        catch storage_logic:delete_in_zone(Id)
+    end, StorageIds).
 
 %%%===================================================================
 %%% Functions to retrieve storage data
@@ -224,21 +229,21 @@ get_name(#storage_record{name = Name}) ->
     Name.
 
 -spec get_helper(record() | od_storage:id()) -> helpers:helper().
-get_helper(#storage_record{helper = Helper}) ->
-    Helper;
 get_helper(StorageId) when is_binary(StorageId) ->
     % direct call to storage_config to avoid additional call to datastore to get od_storage
-    storage_config:get_helper(StorageId).
+    storage_config:get_helper(StorageId);
+get_helper(#storage_record{helper = Helper}) ->
+    Helper.
 
 -spec get_luma_config(record()) -> luma_config:config() | undefined.
 get_luma_config(#storage_record{luma_config = LumaConfig}) ->
     LumaConfig.
 
 -spec get_type(record() | od_storage:id()) -> helper:type().
-get_type(#storage_record{helper = Helper}) ->
-    helper:get_type(Helper);
 get_type(StorageId) when is_binary(StorageId) ->
     Helper = storage_config:get_helper(StorageId),
+    helper:get_type(Helper);
+get_type(#storage_record{helper = Helper}) ->
     helper:get_type(Helper).
 
 -spec get_local_qos_parameters(record()) -> qos_parameters().
@@ -259,18 +264,18 @@ get_remote_qos_parameters(StorageId, SpaceId) when is_binary(StorageId) ->
     storage_logic:get_remote_qos_parameters(StorageId, SpaceId).
 
 -spec is_readonly(record() | od_storage:id()) -> boolean().
-is_readonly(#storage_record{is_readonly = Readonly}) ->
-    Readonly;
 is_readonly(StorageId) when is_binary(StorageId) ->
     % direct call to storage_config to avoid additional call to datastore to get od_storage
-    storage_config:is_readonly(StorageId).
+    storage_config:is_readonly(StorageId);
+is_readonly(#storage_record{is_readonly = Readonly}) ->
+    Readonly.
 
 -spec is_imported_storage(record() | od_storage:id()) -> boolean().
-is_imported_storage(#storage_record{is_imported_storage = ImportedStorage}) ->
-    ImportedStorage;
 is_imported_storage(StorageId) when is_binary(StorageId) ->
     % direct call to storage_config to avoid additional call to datastore to get od_storage
-    storage_config:is_imported_storage(StorageId).
+    storage_config:is_imported_storage(StorageId);
+is_imported_storage(#storage_record{is_imported_storage = ImportedStorage}) ->
+    ImportedStorage.
 
 -spec is_luma_enabled(record()) -> boolean().
 is_luma_enabled(Storage) ->
@@ -317,7 +322,7 @@ set_readonly(StorageId, Readonly) ->
 
 -spec set_imported_storage(od_storage:id(), boolean()) -> ok | {error, term()}.
 set_imported_storage(StorageId, ImportedStorage) ->
-    lock_on_storage(StorageId, fun() ->
+    lock_on_storage_by_id(StorageId, fun() ->
         case supports_any_space(StorageId) of
             true ->
                 ?ERROR_STORAGE_IN_USE;
@@ -365,7 +370,7 @@ update_helper(StorageId, UpdateFun) ->
 -spec support_space(od_storage:id(), tokens:serialized(), od_space:support_size()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SerializedToken, SupportSize) ->
-    lock_on_storage(StorageId, fun() ->
+    lock_on_storage_by_id(StorageId, fun() ->
         support_space_insecure(StorageId, SerializedToken, SupportSize)
     end).
 
@@ -482,10 +487,14 @@ is_name_occupied(Name) ->
     lists:member(Name, lists:map(fun storage_config:get_name/1, StorageConfigs)).
 
 %% @private
--spec lock_on_storage(od_storage:id() | name(), fun(() -> Result :: term())) ->
-    Result :: term().
-lock_on_storage(Identifier, Fun) ->
-    critical_section:run({storage, Identifier}, Fun).
+-spec lock_on_storage_by_id(od_storage:id(), fun(() -> Result)) -> Result.
+lock_on_storage_by_id(Identifier, Fun) ->
+    critical_section:run({storage_id, Identifier}, Fun).
+
+%% @private
+-spec lock_on_storage_by_name(name(), fun(() -> Result)) -> Result.
+lock_on_storage_by_name(Identifier, Fun) ->
+    critical_section:run({storage_name, Identifier}, Fun).
 
 %%%===================================================================
 %%% Upgrade from 19.02.*
@@ -552,7 +561,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            {ok, StorageId} = storage_logic:create_in_zone(#{}, StorageId),
+            {ok, StorageId} = storage_logic:create_in_zone(Name, #{}, StorageId),
             ?notice("Storage ~p created in Onezone", [StorageId])
     end,
     ok = delete_deprecated(StorageId).
