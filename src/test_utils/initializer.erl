@@ -902,6 +902,8 @@ user_logic_mock_setup(Workers, Users) ->
             {ok, #document{key = ?ROOT_USER_ID, value = #od_user{full_name = <<"root">>}}};
         (_, _, ?GUEST_USER_ID) ->
             {ok, #document{key = ?GUEST_USER_ID, value = #od_user{full_name = <<"nobody">>}}};
+        (_, ?GUEST_SESS_ID, _) ->
+            {error, forbidden};
         (Scope, ?ROOT_SESS_ID, UserId) when Scope =:= shared orelse Scope =:= protected ->
             case proplists:get_value(UserId, Users) of
                 undefined ->
@@ -909,11 +911,11 @@ user_logic_mock_setup(Workers, Users) ->
                 UserConfig2 ->
                     UserConfigToUserDoc(UserConfig2)
             end;
-        (_, TokenAuth, UserId) when element(1, TokenAuth) == token_auth ->
-            AccessToken = auth_manager:get_access_token(TokenAuth),
-            case proplists:get_value(AccessToken, UsersByToken, undefined) of
-                undefined ->
-                    {error, not_found};
+        (_, SessionId, UserId) when is_binary(SessionId) ->
+            {ok, #document{value = #session{
+                identity = #user_identity{user_id = SessionUserId}
+            }}} = session:get(SessionId),
+            case SessionUserId of
                 UserId ->
                     case proplists:get_value(UserId, Users) of
                         undefined ->
@@ -924,11 +926,11 @@ user_logic_mock_setup(Workers, Users) ->
                 _ ->
                     {error, forbidden}
             end;
-        (_, SessionId, UserId) ->
-            {ok, #document{value = #session{
-                identity = #user_identity{user_id = SessionUserId}
-            }}} = session:get(SessionId),
-            case SessionUserId of
+        (_, TokenAuth, UserId) ->
+            AccessToken = auth_manager:get_access_token(TokenAuth),
+            case proplists:get_value(AccessToken, UsersByToken, undefined) of
+                undefined ->
+                    {error, not_found};
                 UserId ->
                     case proplists:get_value(UserId, Users) of
                         undefined ->

@@ -235,21 +235,23 @@ mock_user_logic(Config) ->
     }}},
 
     GetUserFun = fun
-        (TokenAuth, ?USER_ID) when element(1, TokenAuth) == token_auth ->
-            case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
-                {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
-                    UserDoc;
-                {error, _} = Error ->
-                    Error
-            end;
         (?ROOT_SESS_ID, ?USER_ID) ->
             UserDoc;
-        (UserSessId, ?USER_ID) ->
+        (?ROOT_AUTH, ?USER_ID) ->
+            UserDoc;
+        (UserSessId, ?USER_ID) when is_binary(UserSessId) ->
             try session:get_user_id(UserSessId) of
                 {ok, ?USER_ID} -> UserDoc;
                 _ -> ?ERROR_UNAUTHORIZED
             catch
                 _:_ -> ?ERROR_UNAUTHORIZED
+            end;
+        (TokenAuth, ?USER_ID) ->
+            case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
+                {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
+                    UserDoc;
+                {error, _} = Error ->
+                    Error
             end;
         (_, _) ->
             {error, not_found}

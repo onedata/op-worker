@@ -15,9 +15,11 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/handshake_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -189,9 +191,22 @@ unmock_space_logic(Config) ->
 
 mock_user_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    UserDoc = {ok, #document{key = ?USER_ID, value = #od_user{}}},
+
     test_utils:mock_new(Workers, user_logic, []),
     test_utils:mock_expect(Workers, user_logic, get, fun
-        (TokenAuth, ?USER_ID) when element(1, TokenAuth) == token_auth ->
+        (?ROOT_SESS_ID, ?USER_ID) ->
+            UserDoc;
+        (?ROOT_AUTH, ?USER_ID) ->
+            UserDoc;
+        (UserSessId, ?USER_ID) when is_binary(UserSessId) ->
+            try session:get_user_id(UserSessId) of
+                {ok, ?USER_ID} -> UserDoc;
+                _ -> ?ERROR_UNAUTHORIZED
+            catch
+                _:_ -> ?ERROR_UNAUTHORIZED
+            end;
+        (TokenAuth, ?USER_ID) ->
             case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     {ok, #document{key = ?USER_ID, value = #od_user{}}};
