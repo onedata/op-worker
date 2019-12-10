@@ -429,7 +429,9 @@ confined_access_token_test(Config) ->
         ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
         rpc:call(Node, space_logic, get, [TokenAuth, ?SPACE_2])
     ),
-    ?assertEqual(GraphCalls, logic_tests_common:count_reqs(Config, graph)).
+    % Nevertheless, GraphCalls should be increased as TokenAuth was verified to
+    % retrieve caveats
+    ?assertEqual(GraphCalls+1, logic_tests_common:count_reqs(Config, graph)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
