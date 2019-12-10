@@ -101,7 +101,7 @@ verify_provider_identity_token(IdentityToken) ->
 -spec verify_access_token(
     Subject :: aai:subject(),
     Caveats :: [caveats:caveat()],
-    VerificationPayload :: jiffy:json_value()
+    VerificationPayload :: json_utils:json_term()
 ) ->
     {ok, aai:auth(), TTL :: undefined | time_utils:seconds()} | errors:error().
 verify_access_token(Subject, Caveats, VerificationPayload) ->
@@ -134,7 +134,7 @@ verify_access_token(Subject, Caveats, VerificationPayload) ->
     Interface :: undefined | cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
-    jiffy:json_value().
+    json_utils:json_term().
 build_verification_payload(AccessToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     Json = #{
         <<"token">> => AccessToken,
