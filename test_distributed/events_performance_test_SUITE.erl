@@ -307,7 +307,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
     initializer:remove_pending_messages(),
     Sessions = lists:map(fun(N) ->
         Nonce = <<"nonce_", (integer_to_binary(N))/binary>>,
-        Iden = #user_identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
+        Iden = ?SUB(user, <<"user_id_", (integer_to_binary(N))/binary>>),
         {ok, SessId} = session_setup(Worker, Nonce, Iden, Self),
         SubId = subscribe(Worker, SessId,
             fun(Meta) -> Meta >= CtrThr end,
@@ -390,7 +390,7 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     Self = self(),
-    Iden = #user_identity{user_id = <<"user_id">>},
+    Iden = ?SUB(user, <<"user_id">>),
     initializer:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send_to_oneclient, fun
@@ -441,7 +441,7 @@ end_per_testcase(_Case, Config) ->
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), SessId :: session:id(),
     Iden :: session:auth(), Conn :: pid()) -> ok.
-session_setup(Worker, SessId, #user_identity{user_id = UserId} = Iden, Conn) ->
+session_setup(Worker, SessId, ?SUB(user, UserId) = Iden, Conn) ->
     AccessToken = initializer:create_access_token(UserId),
     TokenAuth = auth_manager:build_token_auth(
         AccessToken, undefined,

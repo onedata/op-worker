@@ -14,6 +14,7 @@
 
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -298,9 +299,8 @@ session_setup(Worker) ->
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), Nonce :: binary()) -> {ok, session:id()}.
 session_setup(Worker, Nonce) ->
-    Iden = #user_identity{user_id = <<"user_id">>},
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, Iden, undefined, self()
+        Worker, Nonce, ?SUB(user, <<"user_id">>), undefined, self()
     ).
 
 %%--------------------------------------------------------------------

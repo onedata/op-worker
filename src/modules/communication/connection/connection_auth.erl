@@ -98,9 +98,9 @@ handle_client_handshake(#client_handshake_request{
         IpAddress, oneclient, allow_data_access_caveats
     ),
     case auth_manager:verify(TokenAuth) of
-        {ok, ?USER(UserId), _TokenValidUntil} ->
+        {ok, #auth{subject = ?SUB(user, UserId) = Subject}, _} ->
             {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
-                Nonce, #user_identity{user_id = UserId}, TokenAuth
+                Nonce, Subject, TokenAuth
             ),
             {UserId, SessionId};
         ?ERROR_FORBIDDEN ->
@@ -133,11 +133,9 @@ handle_provider_handshake(#provider_handshake_request{
 }, IpAddress) when is_binary(ProviderId) andalso is_binary(Token) ->
 
     case token_logic:verify_provider_identity_token(Token) of
-        {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
-            Identity = #user_identity{provider_id = ProviderId},
-            SessId = session_utils:get_provider_session_id(incoming, ProviderId),
-            {ok, _} = session_manager:reuse_or_create_incoming_provider_session(
-                SessId, Identity
+        {ok, ?SUB(?ONEPROVIDER, ProviderId) = Subject} ->
+            {ok, SessId} = session_manager:reuse_or_create_incoming_provider_session(
+                ProviderId, Subject
             ),
             {ProviderId, SessId};
         {ok, _} ->

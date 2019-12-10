@@ -139,7 +139,7 @@ create_user_session(Config, UserId) ->
     ),
     {ok, ?USER(UserId), _} = rpc:call(Node, auth_manager, verify, [TokenAuth]),
     {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [
-        #user_identity{user_id = UserId}, TokenAuth
+        ?SUB(user, UserId), TokenAuth
     ]),
     % Make sure private user data is fetched (if user identity was cached, it might
     % not happen).

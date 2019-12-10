@@ -70,10 +70,9 @@ authenticate(TokenAuth) ->
     {ok, aai:auth()} | no_return().
 authenticate_insecure(TokenAuth) ->
     case auth_manager:verify(TokenAuth) of
-        {ok, ?USER(UserId) = Auth, _TokenValidUntil} ->
-            Identity = #user_identity{user_id = UserId},
+        {ok, Auth, _TokenValidUntil} ->
             Interface = auth_manager:get_interface(TokenAuth),
-            case create_or_reuse_session(Identity, TokenAuth, Interface) of
+            case create_or_reuse_session(Auth#auth.subject, TokenAuth, Interface) of
                 {ok, SessionId} ->
                     {ok, Auth#auth{session_id = SessionId}};
                 {error, {invalid_identity, _}} ->
@@ -86,7 +85,7 @@ authenticate_insecure(TokenAuth) ->
 
 
 %% @private
--spec create_or_reuse_session(session:identity(), auth_manager:token_auth(),
+-spec create_or_reuse_session(aai:subject(), auth_manager:token_auth(),
     Interface :: graphsync | rest) -> {ok, session:id()} | {error, term()}.
 create_or_reuse_session(Identity, TokenAuth, graphsync) ->
     session_manager:reuse_or_create_gui_session(Identity, TokenAuth);

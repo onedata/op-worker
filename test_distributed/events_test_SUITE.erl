@@ -264,14 +264,13 @@ session_setup(Worker) ->
 -spec session_setup(node(), Nonce :: binary()) -> {ok, session:id()}.
 session_setup(Worker, Nonce) ->
     UserId = <<"user1">>,
-    Iden = #user_identity{user_id = UserId},
     AccessToken = initializer:create_access_token(UserId),
     TokenAuth = auth_manager:build_token_auth(
         AccessToken, undefined,
         initializer:local_ip_v4(), oneclient, allow_data_access_caveats
     ),
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, Iden, TokenAuth, self()
+        Worker, Nonce, ?SUB(user, UserId), TokenAuth, self()
     ).
 
 %%--------------------------------------------------------------------
