@@ -58,7 +58,10 @@ verify_access_token(#token_auth{token = SerializedToken} = TokenAuth) ->
                 subject = aai:deserialize_subject(Subject),
                 caveats = tokens:get_caveats(Token)
             },
-            {ok, Auth, maps:get(<<"ttl">>, Ans, undefined)}
+            TokenTTL = gs_protocol:null_to_undefined(
+                maps:get(<<"ttl">>, Ans, null)
+            ),
+            {ok, Auth, TokenTTL}
     end.
 
 
