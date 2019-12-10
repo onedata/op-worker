@@ -26,11 +26,11 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/6, get/1, exists/1, delete/1, list/0]).
--export([get_id/1, get_name/1, get_helper/1, get_luma_config/1,
+-export([create/5, get/1, exists/1, delete/1]).
+-export([get_id/1, get_helper/1, get_luma_config/1,
     is_readonly/1, is_imported_storage/1]).
 
--export([update_name/2, update_helper/2, update_luma_config/2,
+-export([update_helper/2, update_luma_config/2,
     set_readonly/2, set_imported_storage/2]).
 
 %% datastore_model callbacks
@@ -56,13 +56,12 @@
 %%% API
 %%%===================================================================
 
--spec create(od_storage:id(), name(), helpers:helper(), boolean(),
+-spec create(od_storage:id(), helpers:helper(), boolean(),
     luma_config:config(), boolean()) -> {ok, od_storage:id()} | {error, term()}.
-create(StorageId, Name, Helper, Readonly, LumaConfig, ImportedStorage) ->
+create(StorageId, Helper, Readonly, LumaConfig, ImportedStorage) ->
     ?extract_key(datastore_model:create(?CTX, #document{
         key = StorageId,
         value = #storage_config{
-            name = Name,
             helper = Helper,
             readonly = Readonly,
             luma_config = LumaConfig,
@@ -92,11 +91,6 @@ exists(Key) ->
 delete(StorageId) ->
     datastore_model:delete(?CTX, StorageId).
 
-
--spec list() -> {ok, [doc()]} | {error, term()}.
-list() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -104,13 +98,6 @@ list() ->
 -spec get_id(od_storage:id() | doc()) -> od_storage:id().
 get_id(#document{key = StorageId, value = #storage_config{}}) ->
     StorageId.
-
-
--spec get_name(doc() | record()) -> name().
-get_name(#document{value = StorageConfig}) ->
-    get_name(StorageConfig);
-get_name(#storage_config{name = Name}) ->
-    Name.
 
 
 -spec get_helper(doc() | record() | od_storage:id()) -> helpers:helper().
@@ -146,13 +133,6 @@ is_imported_storage(#storage_config{imported_storage = ImportedStorage}) ->
 is_imported_storage(StorageId) ->
     {ok, #document{value = Value}} = get(StorageId),
     is_imported_storage(Value).
-
-
--spec update_name(StorageId :: od_storage:id(), NewName :: name()) -> ok.
-update_name(StorageId, NewName) ->
-    ?extract_ok(update(StorageId, fun(Storage) ->
-        {ok, Storage#storage_config{name = NewName}}
-    end)).
 
 
 -spec update_helper(od_storage:id(), fun((helpers:helper()) -> helpers:helper())) ->
@@ -239,7 +219,6 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {name, string},
         {helper, {record, [
             {name, string},
             {args, #{string => string}},

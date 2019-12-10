@@ -99,7 +99,7 @@ create(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
 create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
     case storage_logic:create_in_zone(Name, QosParameters) of
         {ok, Id} ->
-            case storage_config:create(Id, Name, Helper, Readonly, LumaConfig, ImportedStorage) of
+            case storage_config:create(Id, Helper, Readonly, LumaConfig, ImportedStorage) of
                 {ok, Id} ->
                     on_storage_created(Id),
                     {ok, Id};
@@ -121,15 +121,15 @@ create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParamete
 get(StorageId) when is_binary(StorageId) ->
     case storage_config:get(StorageId) of
         {ok, #document{value = StorageConfig}} ->
-            QosParameters = get_local_qos_parameters(StorageId),
+            {ok, StorageLogicDoc} = storage_logic:get(StorageId),
             {ok, #storage_record{
                 id = StorageId,
-                name = storage_config:get_name(StorageConfig),
+                name = storage_logic:get_name(StorageLogicDoc),
                 helper = storage_config:get_helper(StorageConfig),
                 is_readonly = storage_config:is_readonly(StorageConfig),
                 luma_config = storage_config:get_luma_config(StorageConfig),
                 is_imported_storage = storage_config:is_imported_storage(StorageConfig),
-                qos_parameters = QosParameters
+                qos_parameters = storage_logic:get_local_qos_parameters(StorageLogicDoc)
             }};
         {error, _} = Error -> Error
     end.
@@ -287,7 +287,7 @@ is_luma_enabled(Storage) ->
 
 -spec update_name(od_storage:id(), NewName :: name()) -> ok.
 update_name(StorageId, NewName) ->
-    storage_config:update_name(StorageId, NewName).
+    storage_logic:update_name(StorageId, NewName).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -470,8 +470,8 @@ on_helper_changed(StorageId) ->
 %% @private
 -spec is_name_occupied(name()) -> boolean().
 is_name_occupied(Name) ->
-    {ok, StorageConfigs} = storage_config:list(),
-    lists:member(Name, lists:map(fun storage_config:get_name/1, StorageConfigs)).
+    {ok, StorageIds} = provider_logic:get_storage_ids(),
+    lists:member(Name, lists:map(fun storage_logic:get_name/1, StorageIds)).
 
 %% @private
 -spec lock_on_storage_by_id(od_storage:id(), fun(() -> Result)) -> Result.
@@ -540,7 +540,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
         readonly = Readonly,
         luma_config = LumaConfig
     } = Storage,
-    case storage_config:create(StorageId, Name, Helper, Readonly, LumaConfig, false) of
+    case storage_config:create(StorageId, Helper, Readonly, LumaConfig, false) of
         {ok, _} -> ok;
         {error, already_exists} -> ok;
         Error -> throw(Error)

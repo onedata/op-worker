@@ -31,16 +31,16 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([create_in_zone/2, create_in_zone/3, delete_in_zone/1]).
+-export([create_in_zone/2, create_in_zone/3, get/1, delete_in_zone/1]).
 -export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_space_support/2]).
--export([set_qos_parameters/2, get_local_qos_parameters/1, get_remote_qos_parameters/2]).
+-export([get_name/1]).
+-export([get_local_qos_parameters/1, get_remote_qos_parameters/2]).
 -export([get_spaces/1]).
+-export([update_name/2]).
+-export([set_qos_parameters/2]).
 -export([upgrade_legacy_support/2]).
-
-% For tests purpose
--export([get/1]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -51,7 +51,7 @@
 %%--------------------------------------------------------------------
 %% @equiv create_in_zone(StorageName, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(storage:name(), storage:qos_parameters()) -> {ok, od_storage:id()} | errors:error().
+-spec create_in_zone(od_storage:name(), od_storage:qos_parameters()) -> {ok, od_storage:id()} | errors:error().
 create_in_zone(Name, QosParameters) ->
     create_in_zone(Name, QosParameters, undefined).
 
@@ -61,7 +61,7 @@ create_in_zone(Name, QosParameters) ->
 %% Creates document containing storage public information in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_in_zone(storage:name(), storage:qos_parameters(), od_storage:id() | undefined) ->
+-spec create_in_zone(od_storage:name(), od_storage:qos_parameters(), od_storage:id() | undefined) ->
     {ok, od_storage:id()} | errors:error().
 create_in_zone(Name, QosParameters, StorageId) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
@@ -75,6 +75,15 @@ create_in_zone(Name, QosParameters, StorageId) ->
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
     end)).
+
+
+-spec get(od_storage:id()) -> {ok, od_storage:doc()} | errors:error().
+get(StorageId) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
+        subscribe = true
+    }).
 
 
 -spec delete_in_zone(od_storage:id()) -> ok | errors:error().
@@ -136,16 +145,12 @@ revoke_space_support(StorageId, SpaceId) ->
     end).
 
 
--spec set_qos_parameters(od_storage:id(), od_storage:qos_parameters()) -> ok | errors:error().
-set_qos_parameters(StorageId, QosParameters) ->
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = update,
-        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        data = #{<<"qos_parameters">> => QosParameters}
-    }),
-    ?ON_SUCCESS(Result, fun(_) ->
-        gs_client_worker:invalidate_cache(od_storage, StorageId)
-    end).
+-spec get_name(od_storage:id() | od_storage:doc()) -> storage:name().
+get_name(#document{value = #od_storage{name = Name}}) ->
+    Name;
+get_name(StorageId) ->
+    {ok, Doc} = get(StorageId),
+    get_name(Doc).
 
 
 %%--------------------------------------------------------------------
@@ -153,10 +158,12 @@ set_qos_parameters(StorageId, QosParameters) ->
 %% Get own storage QoS parameters.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_qos_parameters(od_storage:id()) -> od_storage:qos_parameters().
+-spec get_local_qos_parameters(od_storage:id() | od_storage:doc()) -> od_storage:qos_parameters().
+get_local_qos_parameters(#document{value = #od_storage{qos_parameters = QosParameters}}) ->
+    QosParameters;
 get_local_qos_parameters(StorageId) ->
-    {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} = get(StorageId),
-    QosParameters.
+    {ok, Doc} = get(StorageId),
+    get_local_qos_parameters(Doc).
 
 
 %%--------------------------------------------------------------------
@@ -180,6 +187,30 @@ get_spaces(StorageId) ->
     end.
 
 
+-spec update_name(od_storage:id(), od_storage:name()) -> ok | errors:error().
+update_name(StorageId, NewName) ->
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
+        data = #{<<"name">> => NewName}
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_storage, StorageId)
+    end).
+
+
+-spec set_qos_parameters(od_storage:id(), od_storage:qos_parameters()) -> ok | errors:error().
+set_qos_parameters(StorageId, QosParameters) ->
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
+        data = #{<<"qos_parameters">> => QosParameters}
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_storage, StorageId)
+    end).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Upgrades legacy space support in Onezone to model with new storages.
@@ -191,16 +222,6 @@ upgrade_legacy_support(StorageId, SpaceId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_legacy_support, SpaceId}}
-    }).
-
-
-%% @private
--spec get(od_storage:id()) -> {ok, od_storage:doc()} | errors:error().
-get(StorageId) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        subscribe = true
     }).
 
 

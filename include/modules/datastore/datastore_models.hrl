@@ -187,6 +187,7 @@
 }).
 
 -record(od_storage, {
+    name :: binary(),
     provider :: od_provider:id() | undefined,
     spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
@@ -331,7 +332,6 @@
 }).
 
 -record(storage_config, {
-    name = <<>> :: storage_config:name(),
     helper :: helpers:helper(),
     readonly = false :: boolean(),
     luma_config = undefined :: undefined | luma_config:config(),

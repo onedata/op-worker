@@ -67,7 +67,6 @@ upgrade_from_19_02_x_storages(Config) ->
         luma_config = LumaConfig
     },
     ExpectedStorageConfig = #storage_config{
-        name = St,
         helper = Helper,
         readonly = false,
         luma_config = LumaConfig,
