@@ -442,9 +442,13 @@ end_per_testcase(_Case, Config) ->
 -spec session_setup(Worker :: node(), SessId :: session:id(),
     Iden :: session:auth(), Conn :: pid()) -> ok.
 session_setup(Worker, SessId, #user_identity{user_id = UserId} = Iden, Conn) ->
-    SerializedToken = initializer:create_access_token(UserId),
+    AccessToken = initializer:create_access_token(UserId),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, SessId, Iden, #token_auth{access_token = SerializedToken}, Conn
+        Worker, SessId, Iden, TokenAuth, Conn
     ).
 
 %%--------------------------------------------------------------------

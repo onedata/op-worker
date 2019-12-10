@@ -70,7 +70,11 @@ all() -> [
 -define(IDP, <<"IDP">>).
 -define(ONEDATA_ACCESS_TOKEN, <<"ONEDATA_ACCESS_TOKEN">>).
 -define(ADMIN_ID, <<"ADMIN_ID">>).
--define(ADMIN_AUTH, #token_auth{access_token = ?ONEDATA_ACCESS_TOKEN}).
+-define(ADMIN_AUTH,
+    auth_manager:build_token_auth(
+        ?ONEDATA_ACCESS_TOKEN, undefined,
+        undefined, undefined, disallow_data_access_caveats
+    )).
 
 -define(getFetchTokenCalls(Worker, Args),
     rpc:call(Worker, meck, num_calls, [user_logic, fetch_idp_access_token, Args])

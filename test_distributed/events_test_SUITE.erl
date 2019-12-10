@@ -265,9 +265,13 @@ session_setup(Worker) ->
 session_setup(Worker, SessId) ->
     UserId = <<"user1">>,
     Iden = #user_identity{user_id = UserId},
-    SerializedToken = initializer:create_access_token(UserId),
+    AccessToken = initializer:create_access_token(UserId),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, SessId, Iden, #token_auth{access_token = SerializedToken}, self()
+        Worker, SessId, Iden, TokenAuth, self()
     ).
 
 %%--------------------------------------------------------------------

@@ -235,8 +235,8 @@ mock_user_logic(Config) ->
     }}},
 
     GetUserFun = fun
-        (#token_auth{access_token = SerializedToken}, ?USER_ID) ->
-            case tokens:deserialize(SerializedToken) of
+        (#token_auth{} = TokenAuth, ?USER_ID) ->
+            case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     UserDoc;
                 {error, _} = Error ->
@@ -257,7 +257,11 @@ mock_user_logic(Config) ->
 
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(AccessToken, _, _, _) ->
-        case GetUserFun(#token_auth{access_token = AccessToken}, ?USER_ID) of
+        TokenAuth = auth_manager:build_token_auth(
+            AccessToken, undefined,
+            undefined, undefined, disallow_data_access_caveats
+        ),
+        case GetUserFun(TokenAuth, ?USER_ID) of
             {ok, #document{key = UserId}} -> {ok, ?USER(UserId), undefined};
             {error, _} = Error -> Error
         end
