@@ -485,20 +485,15 @@ mock_auth_manager(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, auth_manager),
     test_utils:mock_expect(Workers, auth_manager, verify,
-        fun(#token_auth{
-            access_token = SerializedToken,
-            peer_ip = PeerIp,
-            interface = Interface,
-            data_access_caveats_policy = DataAccessCaveatsPolicy
-        }) ->
-            case tokens:deserialize(SerializedToken) of
+        fun(TokenAuth) ->
+            case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
                 {ok, Token} ->
                     AuthCtx = #auth_ctx{
                         current_timestamp = time_utils:cluster_time_seconds(),
-                        ip = PeerIp,
-                        interface = Interface,
+                        ip = auth_manager:get_peer_ip(TokenAuth),
+                        interface = auth_manager:get_interface(TokenAuth),
                         audience = ?AUD(?OP_WORKER, oneprovider:get_id()),
-                        data_access_caveats_policy = DataAccessCaveatsPolicy,
+                        data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenAuth),
                         group_membership_checker = fun(_, _) -> false end
                     },
                     case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx, ?SUPPORTED_ACCESS_TOKEN_CAVEATS) of
@@ -914,8 +909,9 @@ user_logic_mock_setup(Workers, Users) ->
                 UserConfig2 ->
                     UserConfigToUserDoc(UserConfig2)
             end;
-        (_, #token_auth{access_token = Token}, UserId) ->
-            case proplists:get_value(Token, UsersByToken, undefined) of
+        (_, TokenAuth, UserId) when element(1, TokenAuth) == token_auth ->
+            AccessToken = auth_manager:get_access_token(TokenAuth),
+            case proplists:get_value(AccessToken, UsersByToken, undefined) of
                 undefined ->
                     {error, not_found};
                 UserId ->

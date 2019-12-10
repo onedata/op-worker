@@ -97,9 +97,6 @@ get_cacerts_dir() ->
 auth_to_rest_client(none) ->
     none;
 
-auth_to_rest_client(#token_auth{access_token = Token}) ->
-    {user, token, Token};
-
 auth_to_rest_client(provider) ->
     {ok, ProviderAccessToken} = provider_auth:get_access_token(),
     {provider, ProviderAccessToken};
@@ -123,4 +120,7 @@ auth_to_rest_client(SessId) when is_binary(SessId) ->
             auth_to_rest_client(provider);
         _ ->
             auth_to_rest_client(Auth)
-    end.
+    end;
+
+auth_to_rest_client(TokenAuth) ->
+    {user, token, auth_manager:get_access_token(TokenAuth)}.

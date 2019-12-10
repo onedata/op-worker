@@ -222,8 +222,8 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
         % Providers sessions are not constrained by any caveats
         undefined ->
             [];
-        #token_auth{access_token = SerializedToken} ->
-            {ok, Token} = tokens:deserialize(SerializedToken),
+        TokenAuth ->
+            {ok, Token} = tokens:deserialize(auth_manager:get_access_token(TokenAuth)),
             tokens:get_caveats(Token)
     end,
 

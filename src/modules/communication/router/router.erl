@@ -180,17 +180,17 @@ route_and_ignore_answer(ClientMsg = #client_message{
 % (originates from #'Macaroon' client message).
 route_and_ignore_answer(#client_message{
     message_body = #credentials{
-        access_token = SerializedToken,
+        access_token = AccessToken,
         audience_token = AudienceToken
     }
 } = Msg) ->
     EffSessionId = effective_session_id(Msg),
     % This function performs an async call to session manager worker.
+    % TODO VFS-5895 check identity, calc new data constraints
     {ok, _} = session:update(EffSessionId, fun(Session = #session{auth = TokenAuth}) ->
-        {ok, Session#session{auth = TokenAuth#token_auth{
-            access_token = SerializedToken,
-            audience_token = AudienceToken
-        }}}
+        {ok, Session#session{auth = auth_manager:update_credentials(
+            TokenAuth, AccessToken, AudienceToken
+        )}}
     end),
     ok;
 route_and_ignore_answer(ClientMsg) ->

@@ -26,18 +26,26 @@
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
-    get_credentials/1,
     build_token_auth/5,
-    get_access_token/1,
-    get_caveats/1,
 
+    get_access_token/1,
+    get_peer_ip/1,
+    get_interface/1,
+    get_data_access_caveats_policy/1,
+
+    get_credentials/1, update_credentials/3,
+    get_auth_override/1,
+
+    get_caveats/1,
     verify/1,
+
     invalidate/1
 ]).
 -export([start_link/0, spec/0]).
@@ -65,6 +73,15 @@
 -define(NOW(), time_utils:system_time_seconds()).
 
 
+% Record containing access token for user authorization in OZ.
+-record(token_auth, {
+    access_token :: tokens:serialized(),
+    audience_token = undefined :: undefined | tokens:serialized(),
+    peer_ip = undefined :: undefined | ip_utils:ip(),
+    interface = undefined :: undefined | cv_interface:interface(),
+    data_access_caveats_policy = disallow_data_access_caveats :: data_access_caveats:policy()
+}).
+
 -record(cache_item, {
     token_auth :: token_auth(),
     verification_result :: verification_result(),
@@ -78,7 +95,7 @@
 -type audience_token() :: undefined | tokens:serialized().
 
 -type credentials() :: #credentials{}.
--type token_auth() :: #token_auth{}.
+-opaque token_auth() :: #token_auth{}.
 
 -type verification_result() ::
     {ok, aai:auth(), TokenValidUntil :: undefined | timestamp()}
@@ -112,6 +129,27 @@ build_token_auth(AccessToken, AudienceToken, PeerIp, Interface, DataAccessCaveat
     }.
 
 
+-spec get_access_token(token_auth()) -> access_token().
+get_access_token(#token_auth{access_token = AccessToken}) ->
+    AccessToken.
+
+
+-spec get_peer_ip(token_auth()) -> undefined | ip_utils:ip().
+get_peer_ip(#token_auth{peer_ip = PeerIp}) ->
+    PeerIp.
+
+
+-spec get_interface(token_auth()) -> undefined | cv_interface:interface().
+get_interface(#token_auth{interface = Interface}) ->
+    Interface.
+
+
+-spec get_data_access_caveats_policy(token_auth()) ->
+    data_access_caveats:policy().
+get_data_access_caveats_policy(#token_auth{data_access_caveats_policy = DACP}) ->
+    DACP.
+
+
 -spec get_credentials(token_auth()) -> credentials().
 get_credentials(#token_auth{
     access_token = AccessToken,
@@ -123,9 +161,30 @@ get_credentials(#token_auth{
     }.
 
 
--spec get_access_token(token_auth()) -> access_token().
-get_access_token(#token_auth{access_token = AccessToken}) ->
-    AccessToken.
+-spec update_credentials(token_auth(), access_token(), audience_token()) ->
+    token_auth().
+update_credentials(TokenAuth, AccessToken, AudienceToken) ->
+    TokenAuth#token_auth{
+        access_token = AccessToken,
+        audience_token = AudienceToken
+    }.
+
+
+-spec get_auth_override(token_auth()) -> gs_protocol:auth_override().
+get_auth_override(#token_auth{
+    access_token = Token,
+    peer_ip = PeerIp,
+    interface = Interface,
+    audience_token = AudienceToken,
+    data_access_caveats_policy = DataAccessCaveatsPolicy
+}) ->
+    #auth_override{
+        client_auth = {token, Token},
+        peer_ip = PeerIp,
+        interface = Interface,
+        audience_token = AudienceToken,
+        data_access_caveats_policy = DataAccessCaveatsPolicy
+    }.
 
 
 -spec get_caveats(token_auth()) -> {ok, [caveats:caveat()]} | errors:error().

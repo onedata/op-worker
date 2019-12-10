@@ -235,7 +235,7 @@ mock_user_logic(Config) ->
     }}},
 
     GetUserFun = fun
-        (#token_auth{} = TokenAuth, ?USER_ID) ->
+        (TokenAuth, ?USER_ID) when element(1, TokenAuth) == token_auth ->
             case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     UserDoc;
