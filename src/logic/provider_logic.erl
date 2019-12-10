@@ -467,8 +467,7 @@ is_subdomain_delegated() ->
 %% Sets onezone subdomain pointing to this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec set_delegated_subdomain(binary()) ->
-    ok | {error, subdomain_exists} | errors:error().
+-spec set_delegated_subdomain(binary()) -> ok | errors:error().
 set_delegated_subdomain(Subdomain) ->
     IPs = node_manager:get_cluster_ips(),
     case set_subdomain_delegation(Subdomain, IPs) of

@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 
 %% API
@@ -32,18 +33,6 @@
     storage_test_file_name_size, 32)).
 -define(TEST_FILE_CONTENT_LEN, application:get_env(?APP_NAME,
     storage_test_file_content_size, 100)).
-
-% errors understood by Onepanel
--define(ERR_STORAGE_TEST_FILE_CREATE(Node, Reason),
-    {error, {storage_test_file_create, Node, Reason}}).
--define(ERR_STORAGE_TEST_FILE_CREATE(Node, Reason, Stacktrace),
-    {error, {storage_test_file_create, Node, Reason}, Stacktrace}).
--define(ERR_STORAGE_TEST_FILE_READ(Node, Reason),
-    {error, {storage_test_file_read, Node, Reason}}).
--define(ERR_STORAGE_TEST_FILE_READ(Node, Reason, Stacktrace),
-    {error, {storage_test_file_read, Node, Reason}, Stacktrace}).
--define(ERR_STORAGE_TEST_FILE_REMOVE(Node, Reason),
-    {error, {storage_test_file_remove, Node, Reason}}).
 
 %%%===================================================================
 %%% API
@@ -116,7 +105,8 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
         ok -> ok;
         {error, enoent} -> ok;
         {error, Reason} ->
-            throw(?ERR_STORAGE_TEST_FILE_REMOVE(node(), Reason))
+            ?error("Storage test file removal failed: ~tp", [Reason]),
+            throw(?ERROR_STORAGE_TEST_FAILED(remove))
     end.
 
 %%-------------------------------------------------------------------
@@ -126,7 +116,7 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec verify_storage_on_all_nodes(helpers:helper()) ->
-    ok | {error, term()} | {error, term(), Stacktrace :: list()}.
+    ok | ?ERROR_STORAGE_TEST_FAILED(_).
 verify_storage_on_all_nodes(Helper) ->
     {ok, AdminCtx} = luma:get_admin_ctx(?ROOT_USER_ID, Helper),
     {ok, AdminCtx2} = luma:add_helper_specific_fields(?ROOT_USER_ID,
@@ -139,8 +129,6 @@ verify_storage_on_all_nodes(Helper) ->
                 {ok, {FileId2, FileContent2}} ->
                     verify_test_file(Node, Helper, AdminCtx2, FileId2, FileContent2);
                 {error, _} = Error ->
-                    Error;
-                {error, _, _} = Error ->
                     Error
             end;
         Error ->
@@ -157,16 +145,16 @@ verify_storage_on_all_nodes(Helper) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_test_file(helpers:helper(), helper:user_ctx(), helpers:file_id(),
-    Content :: binary()) -> ok | {error, term()}.
+    Content :: binary()) -> ok | ?ERROR_STORAGE_TEST_FAILED(read).
 verify_test_file(Helper, UserCtx, FileId, ExpectedFileContent) ->
     try
         case read_test_file(Helper, UserCtx, FileId) of
             ExpectedFileContent ->
                 ok;
             UnexpectedFileContent ->
-                ?error("Unexpected test file content in ~tp", [FileId]),
-                ?ERR_STORAGE_TEST_FILE_READ(node(),
-                    {invalid_content, ExpectedFileContent, UnexpectedFileContent})
+                ?error("Unexpected storage test file content in ~tp~n" ++
+                "Expected: ~tp~nObtained: ~tp", [FileId, ExpectedFileContent, UnexpectedFileContent]),
+                ?ERROR_STORAGE_TEST_FAILED(read)
         end
     after
         remove_test_file(Helper, UserCtx, FileId, byte_size(ExpectedFileContent))
@@ -201,8 +189,7 @@ random_ascii_lowercase_sequence(Length) ->
 %%-------------------------------------------------------------------
 -spec verify_storage_internal(helpers:helper(), helper:user_ctx(), [node()],
     helpers:file_id(), Content :: binary()) ->
-    {ok, {helpers:file_id(), binary()}} |
-    {error, term()} | {error, term(), Stacktrace :: list()}.
+    {ok, {helpers:file_id(), binary()}} | ?ERROR_STORAGE_TEST_FAILED(_).
 verify_storage_internal(_Helper, _AdminCtx, [], FileId, FileContent) ->
     {ok, {FileId, FileContent}};
 verify_storage_internal(Helper, AdminCtx, [Node | Nodes], FileId, ExpectedFileContent) ->
@@ -221,23 +208,26 @@ verify_storage_internal(Helper, AdminCtx, [Node | Nodes], FileId, ExpectedFileCo
     end.
 
 -spec create_test_file(node(), helpers:helper(), helper:user_ctx(), helpers:file_id()) ->
-    {ok, Content :: binary()} | {error, Reason :: term(), Stacktrace :: list()}.
+    {ok, Content :: binary()} | ?ERROR_STORAGE_TEST_FAILED(write).
 create_test_file(Node, Helper, UserCtx, FileId) ->
     case rpc:call(Node, ?MODULE, create_test_file, [Helper, UserCtx, FileId]) of
         {badrpc, {'EXIT', {Reason, Stacktrace}}} ->
-            ?ERR_STORAGE_TEST_FILE_CREATE(Node, Reason, Stacktrace);
+            ?error("Storage test file creation failed: ~tp~n~tp", [Reason, Stacktrace]),
+            ?ERROR_STORAGE_TEST_FAILED(write);
         <<Content/binary>> ->
             {ok, Content}
     end.
 
 -spec verify_test_file(node(), helpers:helper(), helper:user_ctx(),
     helpers:file_id(), Content :: binary()) ->
-    ok | {error, term()} | {error, term(), Stacktrace :: list()}.
+    ok | ?ERROR_STORAGE_TEST_FAILED(read) | ?ERROR_STORAGE_TEST_FAILED(delete).
 verify_test_file(Node, Helper, UserCtx, FileId, ExpectedFileContent) ->
     case rpc:call(Node, ?MODULE, verify_test_file,
         [Helper, UserCtx, FileId, ExpectedFileContent]) of
         {badrpc, {'EXIT', {Reason, Stacktrace}}} ->
-            ?ERR_STORAGE_TEST_FILE_READ(Node, Reason, Stacktrace);
+            ?error("Storage test file read failed: ~tp~n~tp", [Reason, Stacktrace]),
+            ?ERROR_STORAGE_TEST_FAILED(read);
         Result ->
+            % either success or a thrown deletion error
             Result
     end.
