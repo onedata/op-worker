@@ -221,7 +221,7 @@ verify(TokenAuth) ->
                     cache_expiration = CacheExpiration
                 }),
                 %% Fetches user doc to trigger user setup if token verification
-                %% succeeded. Otherwise do nothing.
+                %% succeeded. Otherwise does nothing.
                 %% It must be called after caching verification result as to
                 %% avoid infinite loop (gs_client_worker would try to verify
                 %% given TokenAuth).
