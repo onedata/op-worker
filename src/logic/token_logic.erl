@@ -49,7 +49,7 @@ verify_access_token(AccessToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
         {ok, #token{subject = ?SUB(user, UserId) = Subject} = Token} ->
             case provider_logic:has_eff_user(UserId) of
                 false ->
-                    ?ERROR_FORBIDDEN;
+                    ?ERROR_USER_NOT_SUPPORTED;
                 true ->
                     VerificationPayload = build_verification_payload(
                         AccessToken, PeerIp, Interface,
