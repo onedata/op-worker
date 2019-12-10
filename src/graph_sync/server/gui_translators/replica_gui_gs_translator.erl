@@ -48,12 +48,7 @@ translate_value(#gri{aspect = As}, TransferId) when
     As =:= replicate_by_view;
     As =:= evict_by_view
 ->
-    #{<<"transferId">> => gri:serialize(#gri{
-        type = op_transfer,
-        id = TransferId,
-        aspect = instance,
-        scope = private
-    })}.
+    #{<<"transferId">> => TransferId}.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

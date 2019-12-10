@@ -50,7 +50,7 @@ translate_value(#gri{aspect = transfers}, TransfersForFile0) ->
                 <<"endedList">> => [?TRANSFER_GRI_ID(Tid) || Tid <- EndedIds]
             };
         error ->
-            TransfersForFile0
+            TransfersForFile1
     end.
 
 
