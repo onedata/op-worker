@@ -6,6 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc This module tests reverse LUMA
+%%%
+%%% This test suite uses record that is equivalent to an opaque record
+%%% defined in `storage` module. Any changes there should also be
+%%% applied here.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(reverse_luma_test_SUITE).
@@ -90,15 +94,33 @@ all() ->
     api_key = <<"test_api_key">>
 }).
 
+% This record is an equivalent of an opaque record in `storage` module.
+% Any changes there should also be applied here.
+-record(storage_record, {
+    id :: od_storage:id(),
+    name :: storage_config:name(),
+    helper :: helpers:helper(),
+    is_readonly :: boolean(),
+    is_imported_storage :: boolean(),
+    luma_config :: luma_config:config() | undefined,
+    qos_parameters :: od_storage:qos_parameters()
+}).
+
 -define(STORAGE_DISABLED_LUMA, ?STORAGE(?POSIX_HELPER_NAME, undefined)).
 -define(STORAGE_ID, <<"test_storage_id">>).
 
 -define(STORAGE, ?STORAGE(?STORAGE_ID, ?POSIX_HELPER_NAME, ?LUMA_CONFIG)).
 -define(STORAGE(LumaConfig), ?STORAGE(?STORAGE_ID, ?POSIX_HELPER_NAME, LumaConfig)).
 -define(STORAGE(HelperName, LumaConfig), ?STORAGE(?STORAGE_ID, HelperName, LumaConfig)).
--define(STORAGE(StorageId, HelperName, LumaConfig), storage:create_record(
-    StorageId, <<"test_storage">>, #helper{name = HelperName}, false, LumaConfig, false, #{}
-)).
+-define(STORAGE(StorageId, HelperName, LumaConfig), #storage_record{
+    id = StorageId,
+    name = <<"test_storage">>,
+    helper = #helper{name = HelperName},
+    is_readonly = false,
+    is_imported_storage = false,
+    luma_config = LumaConfig,
+    qos_parameters = #{}
+}).
 
 -define(SPACE_ID, <<"test_space_id">>).
 

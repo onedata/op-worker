@@ -335,9 +335,27 @@ end).
 %%% storage macros
 %%%===================================================================
 
--define(STORAGE_RECORD(Id, Name, Helper, LumaConfig), storage:create_record(
-    Id, Name, Helper, false, LumaConfig, false, #{}
-)).
+% This record is an equivalent of an opaque record in `storage` module.
+% Any changes there should also be applied here.
+-record(storage_record, {
+    id :: od_storage:id(),
+    name :: storage_config:name(),
+    helper :: helpers:helper(),
+    is_readonly :: boolean(),
+    is_imported_storage :: boolean(),
+    luma_config :: luma_config:config() | undefined,
+    qos_parameters :: od_storage:qos_parameters()
+}).
+
+-define(STORAGE_RECORD(Id, Name, Helper, LumaConfig), #storage_record{
+    id = Id,
+    name = Name,
+    helper = Helper,
+    is_readonly = false,
+    is_imported_storage = false,
+    luma_config = LumaConfig,
+    qos_parameters = #{}
+}).
 
 -define(SECURE_POSIX_STORAGE_CONFIG, #{
     name => "secure POSIX storage",

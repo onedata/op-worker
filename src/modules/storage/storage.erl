@@ -48,9 +48,6 @@
 %%% Upgrade from 19.02.*
 -export([migrate_to_zone/0]).
 
-%%% Tests utils
--export([create_record/7]).
-
 %% Legacy datastore_model callbacks
 -export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -94,6 +91,7 @@ create(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
                 create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters)
         end
     end).
+
 
 %% @private
 -spec create_insecure(name(), helpers:helper(), boolean(), luma_config:config(),
@@ -194,6 +192,7 @@ safe_delete(StorageId) ->
                 delete(StorageId)
         end
     end).
+
 
 %% @private
 -spec delete(od_storage:id()) -> ok | {error, term()}.
@@ -439,18 +438,6 @@ supports_any_space(StorageId) ->
         {ok, _Spaces} -> true;
         {error, _} = Error -> Error
     end.
-
-%%%===================================================================
-%%% Tests utils
-%%%===================================================================
-
--spec create_record(od_storage:id(), name(), helpers:helper(), boolean(), luma_config:config(),
-    boolean(), qos_parameters()) -> record().
-create_record(Id, Name, Helper, ReadOnly, LumaConfig, ImportedStorage, QosParameters) ->
-    #storage_record{
-        id = Id, name = Name, is_readonly = ReadOnly, luma_config = LumaConfig,
-        helper = Helper, is_imported_storage = ImportedStorage, qos_parameters = QosParameters
-    }.
 
 %%%===================================================================
 %%% Internal functions

@@ -164,8 +164,7 @@ get_local_qos_parameters(StorageId) ->
 %% Get QoS parameters of storage supporting given space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_remote_qos_parameters(od_storage:id(), od_space:id()) ->
-    {ok, od_storage:qos_parameters()} | errors:error().
+-spec get_remote_qos_parameters(od_storage:id(), od_space:id()) -> od_storage:qos_parameters().
 get_remote_qos_parameters(StorageId, SpaceId) ->
     {ok, #document{value = #od_storage{
         qos_parameters = QosParameters}}} = get_shared_data(StorageId, SpaceId),
