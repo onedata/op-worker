@@ -308,7 +308,7 @@ connect_and_upgrade_proto(Hostname, Port) ->
     {ok, {Sock :: term(), SessId :: session:id()}}.
 connect_as_user(Config, Node, User, SocketOpts) ->
     SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
-    AccessToken = ?config({access_token, {User, ?GET_DOMAIN(Node)}}, Config),
+    AccessToken = initializer:create_access_token(User),
 
     ?assertMatch(
         {ok, {_, SessId}},
