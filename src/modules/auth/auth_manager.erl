@@ -227,11 +227,15 @@ verify(TokenAuth) ->
                 %% given TokenAuth).
                 case Result of
                     {ok, ?USER(UserId), _} ->
-                        {ok, _} = user_logic:get(TokenAuth, UserId);
+                        case user_logic:get(TokenAuth, UserId) of
+                            {ok, _} ->
+                                Result;
+                            {error, _} = Error ->
+                                Error
+                        end;
                     _ ->
-                        ok
-                end,
-                Result
+                        Result
+                end
             catch Type:Reason ->
                 ?error_stacktrace("Cannot verify user auth due to ~p:~p", [
                     Type, Reason

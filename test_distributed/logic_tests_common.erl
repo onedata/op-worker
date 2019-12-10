@@ -79,11 +79,11 @@ mock_gs_client(Config) ->
         Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_ACCESS_TOKEN(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_TOKEN(?PROVIDER_1)
     ),
 
-    ok = test_utils:mock_expect(Nodes, token_logic, verify_access_token, fun(UserToken, _, _, _) ->
-        {ok, #token{subject = ?SUB(user, UserId)}} = tokens:deserialize(UserToken),
+    ok = test_utils:mock_expect(Nodes, token_logic, verify_access_token, fun(AccessToken, _, _, _) ->
+        {ok, #token{subject = ?SUB(user, UserId)} = Token} = tokens:deserialize(AccessToken),
         {ok, #auth{
             subject = ?SUB(user, UserId),
-            caveats = []
+            caveats = tokens:get_caveats(Token)
         }, undefined}
     end),
 
