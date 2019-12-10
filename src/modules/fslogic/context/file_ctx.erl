@@ -1224,7 +1224,7 @@ generate_canonical_path(FileCtx) ->
     end,
     {#document{value = #file_meta{name = FileName, type = FileType}, scope = Space} = Doc, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
-    CacheName = location_and_link_utils:get_cannonical_paths_cache_name(Space),
+    CacheName = location_and_link_utils:get_canonical_paths_cache_name(Space),
     case FileType of
         ?DIRECTORY_TYPE ->
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),

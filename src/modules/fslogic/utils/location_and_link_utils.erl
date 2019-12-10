@@ -23,8 +23,8 @@
 -export([get_new_file_location_doc/3, is_location_created/2,
     mark_location_created/3]).
 -export([create_imported_file_location/6, update_imported_file_location/2]).
--export([get_cannonical_paths_cache_name/1, invalidate_cannonical_paths_cache/1,
-    init_cannonical_paths_cache_group/0, init_cannonical_paths_cache/1]).
+-export([get_canonical_paths_cache_name/1, invalidate_canonical_paths_cache/1,
+    init_canonical_paths_cache_group/0, init_canonical_paths_cache/1]).
 
 %%%===================================================================
 %%% API
@@ -140,29 +140,29 @@ update_imported_file_location(FileCtx, StorageSize) ->
 %% Gets name of cache for particular space.
 %% @end
 %%-------------------------------------------------------------------
--spec get_cannonical_paths_cache_name(od_space:id()) -> atom().
-get_cannonical_paths_cache_name(Space) ->
-    binary_to_atom(<<"cannonical_paths_cache_", Space/binary>>, utf8).
+-spec get_canonical_paths_cache_name(od_space:id()) -> atom().
+get_canonical_paths_cache_name(Space) ->
+    binary_to_atom(<<"canonical_paths_cache_", Space/binary>>, utf8).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Invalidates cache for particular space.
 %% @end
 %%-------------------------------------------------------------------
--spec invalidate_cannonical_paths_cache(od_space:id()) -> ok.
-invalidate_cannonical_paths_cache(Space) ->
-    ok = bounded_cache:invalidate(get_cannonical_paths_cache_name(Space)).
+-spec invalidate_canonical_paths_cache(od_space:id()) -> ok.
+invalidate_canonical_paths_cache(Space) ->
+    ok = bounded_cache:invalidate(get_canonical_paths_cache_name(Space)).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Initializes caches' group.
 %% @end
 %%-------------------------------------------------------------------
--spec init_cannonical_paths_cache_group() -> ok.
-init_cannonical_paths_cache_group() ->
-    CheckFrequency = application:get_env(?APP_NAME, cannonical_paths_cache_frequency, 30000),
-    Size = application:get_env(?APP_NAME, cannonical_paths_cache_size, 20000),
-    ok = bounded_cache:init_group(<<"cannonical_paths_cache">>, #{
+-spec init_canonical_paths_cache_group() -> ok.
+init_canonical_paths_cache_group() ->
+    CheckFrequency = application:get_env(?APP_NAME, canonical_paths_cache_frequency, 30000),
+    Size = application:get_env(?APP_NAME, canonical_paths_cache_size, 20000),
+    ok = bounded_cache:init_group(<<"canonical_paths_cache">>, #{
         check_frequency => CheckFrequency,
         size => Size,
         worker => true
@@ -173,41 +173,41 @@ init_cannonical_paths_cache_group() ->
 %% Initializes cache for particular space or all spaces.
 %% @end
 %%-------------------------------------------------------------------
--spec init_cannonical_paths_cache(od_space:id() | all) -> ok.
-init_cannonical_paths_cache(all) ->
+-spec init_canonical_paths_cache(od_space:id() | all) -> ok.
+init_canonical_paths_cache(all) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
             lists:foreach(fun(Space) ->
-                ok = init_cannonical_paths_cache(Space)
+                ok = init_canonical_paths_cache(Space)
             end, SpaceIds);
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+            ?debug("Unable to initialize canonical_paths bounded caches due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize cannonical_paths bounded caches due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
+            ?debug("Unable to initialize canonical_paths bounded caches due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
         Error = {error, _} ->
-            ?critical("Unable to initialize cannonical_paths bounded caches due to: ~p", [Error])
+            ?critical("Unable to initialize canonical_paths bounded caches due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize cannonical_paths bounded caches due to: ~p", [{Error2, Reason}])
+            ?critical_stacktrace("Unable to initialize canonical_paths bounded caches due to: ~p", [{Error2, Reason}])
     end;
-init_cannonical_paths_cache(Space) ->
+init_canonical_paths_cache(Space) ->
     try
-        Name = get_cannonical_paths_cache_name(Space),
+        Name = get_canonical_paths_cache_name(Space),
         case bounded_cache:cache_exists(Name) of
             true ->
                 ok;
             _ ->
-                case bounded_cache:init_cache(Name, #{group => <<"cannonical_paths_cache">>}) of
+                case bounded_cache:init_cache(Name, #{group => <<"canonical_paths_cache">>}) of
                     ok ->
                         ok;
                     Error = {error, _} ->
-                        ?critical("Unable to initialize cannonical_paths bounded cache for space ~p due to: ~p",
+                        ?critical("Unable to initialize canonical_paths bounded cache for space ~p due to: ~p",
                             [Space, Error])
                 end
         end
     catch
         Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize cannonical_paths bounded cache for space ~p due to: ~p",
+            ?critical_stacktrace("Unable to initialize canonical_paths bounded cache for space ~p due to: ~p",
                 [Space, {Error2, Reason}])
     end.
 

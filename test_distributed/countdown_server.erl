@@ -22,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2, init_counter/2, decrease/2, decrease/3, decrease_by_value/3, await/3]).
+-export([start_link/2, init_counter/2, decrease/2, decrease/3, decrease_by_value/3, await/3, await_many/3, stop/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -61,6 +61,10 @@
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(Parent, Node) ->
     gen_server:start_link({local, ?COUNTDOWN_SERVER(Node)}, ?MODULE, [Parent, Node], []).
+
+-spec stop(node()) -> ok.
+stop(Node) ->
+    gen_server:stop(?COUNTDOWN_SERVER(Node)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -111,8 +115,19 @@ await(Node, Ref, Timeout) ->
             Data
     after
         Timeout ->
-            throw({?MODULE, timeout})
+            ct:print("Countdown server timeout"),
+            ct:fail("Countdown server timeout")
     end.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Awaits finish of counting down by counter associated with given Ref
+%% and returns saved Data.
+%% @end
+%%-------------------------------------------------------------------
+-spec await_many(node(), reference(), non_neg_integer()) -> #{reference() => term()}.
+await_many(Node, Refs, Timeout) ->
+    await_many(Node, Refs, Timeout, #{}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -277,3 +292,17 @@ decrease_and_save_data(Counter = #counter{value = Value, data = Data0}, Data) ->
         value = Value - 1,
         data = [Data | Data0]
     }.
+
+-spec await_many(node(), reference(), non_neg_integer(),
+    #{reference() => term()}) -> #{reference() => term()}.
+await_many(_Node, [], _Timeout, RefsToData) ->
+    RefsToData;
+await_many(Node, Refs, Timeout, RefsToData) ->
+    receive
+        {?COUNTDOWN_FINISHED, Ref, Node, Data} ->
+            await_many(Node, Refs -- [Ref], Timeout, RefsToData#{Ref => Data})
+    after
+        Timeout ->
+            ct:print("Countdown server timeout"),
+            ct:fail("Countdown server timeout")
+    end.

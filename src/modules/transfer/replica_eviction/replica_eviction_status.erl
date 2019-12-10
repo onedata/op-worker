@@ -120,7 +120,7 @@ handle_active(TransferId) ->
 -spec handle_aborting(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_aborting(TransferId) ->
     OnSuccessfulUpdate = fun(#document{value = #transfer{space_id = SpaceId}}) ->
-        replica_deletion_master:cancel(TransferId, SpaceId)
+        replica_deletion_master:cancel_eviction_request(SpaceId, TransferId)
     end,
 
     transfer:update_and_run(

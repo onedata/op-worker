@@ -38,6 +38,8 @@
 -record(state, {mod :: module()}).
 -type state() :: #state{}.
 
+-define(DOC_ID_MISSING, doc_id_missing).
+
 %%%===================================================================
 %%% Callbacks
 %%%===================================================================
@@ -407,7 +409,7 @@ transfer_dir(State, FileCtx, Offset, TransferParams = #transfer_params{
 
 %% @private
 -spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
-    file_meta:uuid() | undefined | doc_id_missing) -> ok | {error, term()}.
+    file_meta:uuid() | undefined | ?DOC_ID_MISSING) -> ok | {error, term()}.
 transfer_files_from_view(State = #state{mod = Mod}, FileCtx, Params, LastDocId) ->
     case transfer:is_ongoing(Params#transfer_params.transfer_id) of
         true ->
@@ -420,7 +422,7 @@ transfer_files_from_view(State = #state{mod = Mod}, FileCtx, Params, LastDocId) 
 
 %% @private
 -spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
-    non_neg_integer(), file_meta:uuid() | undefined | doc_id_missing) -> ok | {error, term()}.
+    non_neg_integer(), file_meta:uuid() | undefined | ?DOC_ID_MISSING) -> ok | {error, term()}.
 transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
     #transfer_params{
         transfer_id = TransferId,
@@ -431,7 +433,7 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
     QueryViewParams2 = case LastDocId of
         undefined ->
             [{skip, 0} | QueryViewParams];
-        doc_id_missing ->
+        ?DOC_ID_MISSING ->
             % doc_id is missing when view has reduce function defined
             % in such case we must iterate over results using limit and skip
             [{skip, Chunk} | QueryViewParams];
@@ -444,7 +446,7 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
         {ok, #{<<"rows">> := Rows}} ->
             {NewLastDocId, FileCtxs} = lists:foldl(fun(Row, {_LastDocId, FileCtxsIn}) ->
                 Value = maps:get(<<"value">>, Row),
-                DocId = maps:get(<<"id">>, Row, doc_id_missing),
+                DocId = maps:get(<<"id">>, Row, ?DOC_ID_MISSING),
                 ObjectIds = case is_list(Value) of
                     true -> lists:flatten(Value);
                     false -> [Value]

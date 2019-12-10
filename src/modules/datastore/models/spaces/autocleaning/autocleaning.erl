@@ -119,7 +119,7 @@ delete(SpaceId) ->
     case get_current_run(SpaceId) of
         undefined -> ok;
         ARId ->
-            autocleaning_controller:stop_cleaning(SpaceId),
+            autocleaning_controller:stop_cleaning(SpaceId, ARId),
             autocleaning_run:delete(ARId, SpaceId)
     end,
     datastore_model:delete(?CTX, SpaceId).

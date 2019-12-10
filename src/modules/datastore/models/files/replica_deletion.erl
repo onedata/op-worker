@@ -37,6 +37,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -58,13 +59,13 @@
 -type id() :: binary().
 -type record() :: #replica_deletion{}.
 -type doc() :: datastore_doc:doc(record()).
--type action() :: request | confirm | refuse | release_lock.
+-type action() :: ?REQUEST_DELETION_SUPPORT | ?CONFIRM_DELETION_SUPPORT | ?REFUSE_DELETION_SUPPORT | ?RELEASE_DELETION_LOCK.
 -type diff() :: datastore_doc:diff(record()).
--type type() :: autocleaning | eviction.
--type report_id() :: autocleaning_controller:batch_id() | transfer:id().
+-type job_type() :: ?AUTOCLEANING_JOB | ?EVICTION_JOB.
+-type job_id() :: autocleaning:run_id() | transfer:id().
 -type result() :: {ok, non_neg_integer()} | {error, term()}.
 
--export_type([id/0, record/0, doc/0, action/0, type/0, report_id/0, result/0]).
+-export_type([id/0, record/0, doc/0, action/0, job_type/0, job_id/0, result/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -83,9 +84,9 @@
 %%-------------------------------------------------------------------
 -spec request(file_meta:uuid(), fslogic_blocks:blocks(),
     version_vector:version_vector(), od_provider:id(), od_space:id(),
-    type(), report_id()) -> {ok, id()} | {error, term()}.
-request(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
-    NewDoc = new_doc(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id),
+    job_type(), job_id()) -> {ok, id()} | {error, term()}.
+request(FileUuid, FileBlocks, VV, Requestee, SpaceId, JobType, JobId) ->
+    NewDoc = new_doc(FileUuid, FileBlocks, VV, Requestee, SpaceId, JobType, JobId),
     ?extract_key(datastore_model:save(?CTX, NewDoc)).
 
 %%-------------------------------------------------------------------
@@ -97,7 +98,7 @@ request(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
 confirm(Id, Blocks) ->
     ok = ?extract_ok(update(Id, fun(ReplicaDeletion) ->
         {ok, ReplicaDeletion#replica_deletion{
-            action = confirm,
+            action = ?CONFIRM_DELETION_SUPPORT,
             supported_blocks = Blocks
         }}
     end)).
@@ -110,7 +111,7 @@ confirm(Id, Blocks) ->
 -spec refuse(id()) -> ok.
 refuse(Id) ->
     ok = ?extract_ok(update(Id, fun(ReplicaDeletion) ->
-        {ok, update_action(ReplicaDeletion, refuse)}
+        {ok, update_action(ReplicaDeletion, ?REFUSE_DELETION_SUPPORT)}
     end)).
 
 %%-------------------------------------------------------------------
@@ -121,14 +122,9 @@ refuse(Id) ->
 -spec release_supporting_lock(id()) -> ok.
 release_supporting_lock(Id) ->
     ok = ?extract_ok(update(Id, fun(ReplicaDeletion) ->
-        {ok, update_action(ReplicaDeletion, release_lock)}
+        {ok, update_action(ReplicaDeletion, ?RELEASE_DELETION_LOCK)}
     end)).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% @equiv datastore_model:delete(?CTX, Id).
-%% @end
-%%-------------------------------------------------------------------
 -spec delete(id()) -> ok.
 delete(Id) ->
     datastore_model:delete(?CTX, Id).
@@ -137,37 +133,25 @@ delete(Id) ->
 %%% Internal functions
 %%%===================================================================
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% @equiv datastore_model:update(?CTX, Id, Diff).
-%% @end
-%%-------------------------------------------------------------------
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(Id, Diff) ->
     datastore_model:update(?CTX, Id, Diff).
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% @equiv datastore_model:update(?CTX, Id, Diff).
-%% @end
-%%-------------------------------------------------------------------
 -spec new_doc(file_meta:uuid(), fslogic_blocks:blocks(),
     version_vector:version_vector(), od_provider:id(), od_space:id(),
-    type(), report_id()) -> doc().
-new_doc(FileUuid, FileBlocks, VV, Requestee, SpaceId, Type, Id) ->
+    job_type(), job_id()) -> doc().
+new_doc(FileUuid, FileBlocks, VV, Requestee, SpaceId, JobType, JobId) ->
     #document{
         value = #replica_deletion{
             file_uuid = FileUuid,
             space_id = SpaceId,
-            action = request,
+            action = ?REQUEST_DELETION_SUPPORT,
             requested_blocks = FileBlocks,
             version_vector = VV,
             requester = oneprovider:get_id(),
             requestee = Requestee,
-            type = Type,
-            report_id = Id
+            job_type = JobType,
+            job_id = JobId
         },
         scope = SpaceId
     }.
@@ -202,7 +186,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -235,7 +219,32 @@ get_record_struct(1) ->
         {type, atom}
     ]};
 get_record_struct(2) ->
-    get_record_struct(1).
+    get_record_struct(1);
+get_record_struct(3) ->
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        % rename field status to action
+        {action, atom},
+        {requested_blocks, [
+            {record, [
+                {offset, integer},
+                {size, integer}
+            ]}
+        ]},
+        {supported_blocks, [
+            {record, [
+                {offset, integer},
+                {size, integer}
+            ]}
+        ]},
+        {version_vector, #{{string, string} => integer}},
+        {requester, string},
+        {requestee, string},
+        % rename field doc_id to job_id
+        {job_id, string},
+        {job_type, atom}
+    ]}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -254,4 +263,19 @@ upgrade_record(1, {?MODULE, FileUuid, SpaceId, Status, RequestedBlocks,
 
     {2, {?MODULE, FileUuid, SpaceId, Status, RequestedBlocks,
         SupportedBlocks, VersionVector, Requester, Requestee, DocId, NewType
+    }};
+upgrade_record(2, {?MODULE, FileUuid, SpaceId, Status, RequestedBlocks,
+    SupportedBlocks, VersionVector, Requester, Requestee, DocId, Type}
+) ->
+    {3, #replica_deletion{
+        file_uuid = FileUuid,
+        space_id = SpaceId,
+        action = Status,
+        requested_blocks = RequestedBlocks,
+        supported_blocks = SupportedBlocks,
+        version_vector = VersionVector,
+        requester = Requester,
+        requestee = Requestee,
+        job_id = DocId,
+        job_type = Type
     }}.

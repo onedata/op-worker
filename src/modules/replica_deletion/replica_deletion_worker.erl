@@ -32,10 +32,11 @@
     terminate/2,
     code_change/3]).
 
+-export([custom_predicate/2]).
+
 -define(SERVER, ?MODULE).
--define(DELETE_REPLICA, delete_replica).
--define(DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, Type, Id),
-    {?DELETE_REPLICA, FileUuid, SpaceId, Blocks, VV, RDId, Type, Id}).
+-define(DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, Type, Ref),
+    {delete_replica, FileUuid, SpaceId, Blocks, VV, RDId, Type, Ref}).
 
 -record(state, {}).
 
@@ -59,8 +60,8 @@ start_link() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec cast(file_meta:uuid(), od_space:id(), fslogic_blocks:blocks(),
-    version_vector:version_vector(), replica_deletion:id(), replica_deletion:type(),
-    replica_deletion:report_id()) -> ok.
+    version_vector:version_vector(), replica_deletion:id(), replica_deletion:job_type(),
+    replica_deletion:job_id()) -> ok.
 cast(FileUuid, SpaceId, Blocks, VV, RDId, Type, Id) ->
     worker_pool:cast(?REPLICA_DELETION_WORKERS_POOL,
         ?DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, Type, Id)).
@@ -106,31 +107,35 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}).
-handle_cast(?DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, Type, Id), State) ->
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    FileCtx = file_ctx:new_by_guid(FileGuid),
-    case custom_precondition(Type, Id) of
-        true ->
-            Result = case replica_deletion_lock:acquire_write_lock(FileUuid) of
-                ok ->
-                    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-                    FileCtx = file_ctx:new_by_guid(FileGuid),
-                    DeletionResult = case replica_deletion_req:delete_blocks(FileCtx, Blocks, VV) of
-                        ok ->
-                            {ok, fslogic_blocks:size(Blocks)};
-                        Error ->
-                            Error
-                    end,
-                    replica_deletion_lock:release_write_lock(FileUuid),
-                    DeletionResult;
-                Error ->
-                    Error
-            end,
-            replica_deletion:release_supporting_lock(RDId),
-            replica_deletion_master:process_result(Type, SpaceId, FileUuid, Result, Id);
-        false ->
-            replica_deletion_master:process_result(Type, SpaceId, FileUuid,
-                {error, precondition_not_satisfied}, Id)
+handle_cast(?DELETE_REPLICA(FileUuid, SpaceId, Blocks, VV, RDId, Type, Ref), State) ->
+    try
+        FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+        FileCtx = file_ctx:new_by_guid(FileGuid),
+        case replica_deletion_worker:custom_predicate(Type, Ref) of
+            true ->
+                Result = case replica_deletion_lock:acquire_write_lock(FileUuid) of
+                    ok ->
+                        FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+                        FileCtx = file_ctx:new_by_guid(FileGuid),
+                        DeletionResult = case replica_deletion_req:delete_blocks(FileCtx, Blocks, VV) of
+                            ok ->
+                                {ok, fslogic_blocks:size(Blocks)};
+                            Error ->
+                                Error
+                        end,
+                        replica_deletion_lock:release_write_lock(FileUuid),
+                        DeletionResult;
+                    Error ->
+                        Error
+                end,
+                replica_deletion:release_supporting_lock(RDId),
+                replica_deletion_master:process_result(SpaceId, FileUuid, Result, Ref, Type);
+            false ->
+                replica_deletion_master:process_result(SpaceId, FileUuid, {error, precondition_not_satisfied}, Ref, Type)
+        end
+    catch
+        E:R ->
+            ?alert_stacktrace("ER: ~p", [{E, R}])
     end,
     {noreply, State};
 handle_cast(Request, State) ->
@@ -184,13 +189,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% This function allows each replica_deletion:type() to define
+%% This function allows each replica_deletion:job_type() to define
 %% its custom, additional precondition that must be satisfied
 %% to delete the file replica.
 %% @end
 %%-------------------------------------------------------------------
--spec custom_precondition(replica_deletion:type(), autocleaning:run_id()) -> boolean().
-custom_precondition(autocleaning, ARId) ->
-    autocleaning_controller:replica_deletion_predicate(ARId);
-custom_precondition(eviction, _) ->
+-spec custom_predicate(replica_deletion:job_type(), replica_deletion:job_id()) -> true | false.
+custom_predicate(autocleaning, AutocleaningRunId) ->
+    autocleaning_controller:replica_deletion_predicate(AutocleaningRunId);
+custom_predicate(eviction, _) ->
+    % TODO check whether eviction wasn't canceled
     true.

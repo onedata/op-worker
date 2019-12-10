@@ -27,6 +27,10 @@
 %%% API
 %%%===================================================================
 
+% TODO
+% TODO * wywalić wszystko co jest związane z querowaniem po widoku stąd
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates view on space files capable of ordering files by their popularity

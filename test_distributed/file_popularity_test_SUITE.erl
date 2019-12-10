@@ -364,8 +364,8 @@ end_per_suite(Config) ->
 %%%===================================================================
 
 process_row(Row, _Info, RowNum) ->
-    Popularity = proplists:get_value(<<"key">>, Row),
-    FileId = proplists:get_value(<<"value">>, Row),
+    Popularity = maps:get(<<"key">>, Row),
+    FileId = maps:get(<<"value">>, Row),
     ?COLLECTOR ! ?ROW(FileId, Popularity, RowNum),
     ok.
 
