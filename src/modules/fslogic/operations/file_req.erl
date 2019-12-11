@@ -19,7 +19,7 @@
 
 %% API
 -export([create_file/5, storage_file_created/2, make_file/4,
-    get_file_location/2, open_file/3, open_file/4,
+    get_file_location/2, open_file/3, open_file/4, open_file_insecure/4,
     open_file_with_extended_info/3, storage_file_created_insecure/2,
     fsync/4, release/3, flush_event_queue/2]).
 
@@ -30,6 +30,7 @@
 -export([create_file_doc/4]).
 
 -type handle_id() :: storage_driver:handle_id() | undefined.
+-export_type([handle_id/0]).
 
 -define(NEW_HANDLE_ID, base64:encode(crypto:strong_rand_bytes(20))).
 
@@ -204,14 +205,9 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true, false),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
 
-        #fuse_response{fuse_response = #file_attr{size = Size} = FileAttr} =
-            attr_req:get_file_attr_insecure(UserCtx, FileCtx2, false, false),
-        FileAttr2 = case Size of
-            undefined ->
-                FileAttr#file_attr{size = 0};
-            _ ->
-                FileAttr
-        end,
+        #fuse_response{fuse_response = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, FileCtx2, false, false),
+        FileAttr2 = FileAttr#file_attr{size = 0},
+        ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         #fuse_response{
         status = #status{code = ?OK},
             fuse_response = #file_created{
@@ -292,7 +288,10 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     try
         {_, FileCtx2, _} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
-        attr_req:get_file_attr_insecure(UserCtx, FileCtx2)
+        #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx2, false, false),
+        FileAttr2 = FileAttr#file_attr{size = 0},
+        ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
+        Ans#fuse_response{fuse_response = FileAttr2}
     catch
         Error:Reason ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -412,14 +411,16 @@ open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink) ->
 -spec open_file_internal(user_ctx:ctx(),
     FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), boolean(), boolean()) ->
     no_return() | {storage_driver:handle_id(), file_location:record(), file_ctx:ctx()}.
-open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink, CheckLocationExists) ->
+open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExists) ->
     FileCtx = verify_file_exists(FileCtx0, HandleId0),
+    SpaceID = file_ctx:get_space_id_const(FileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
-    check_and_register_open(FileCtx, SessId, HandleId0),
+    HandleId = check_and_register_open(FileCtx, SessId, HandleId0, NewFile),
     try
         {FileLocation, FileCtx2} =
-            create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
-        HandleId = open_on_storage(FileCtx2, SessId, Flag, user_ctx:is_direct_io(UserCtx), HandleId0),
+            create_location(FileCtx, UserCtx, NewFile, CheckLocationExists),
+         maybe_open_on_storage(FileCtx2, SessId, Flag,
+             user_ctx:is_direct_io(UserCtx, SpaceID) andalso HandleId0 =:= undefined, HandleId),
         {HandleId, FileLocation, FileCtx2}
     catch
         E1:E2 ->
@@ -436,17 +437,14 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, VerifyDeletionLink, Check
 %% Opens a file on storage if needed. Chooses appropriate node.
 %% @end
 %%--------------------------------------------------------------------
--spec open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(), boolean(),
-    handle_id()) -> storage_driver:handle_id().
-open_on_storage(_FileCtx, _SessId, _Flag, true, undefined) ->
-    ?NEW_HANDLE_ID;
-open_on_storage(FileCtx, SessId, Flag, false, undefined) ->
-    open_on_storage(FileCtx, SessId, Flag, false, ?NEW_HANDLE_ID);
-open_on_storage(FileCtx, SessId, Flag, _IsDirectIO, HandleId) ->
+-spec maybe_open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(), boolean(),
+    handle_id()) -> ok | no_return().
+maybe_open_on_storage(_FileCtx, _SessId, _Flag, true, _) ->
+    ok;
+maybe_open_on_storage(FileCtx, SessId, Flag, _ShouldOpen, HandleId) ->
     Node = read_write_req:get_proxyio_node(file_ctx:get_uuid_const(FileCtx)),
-    {ok, HandleId} = rpc:call(Node, ?MODULE, open_on_storage,
-        [FileCtx, SessId, Flag, HandleId]),
-    HandleId.
+    ok = rpc:call(Node, ?MODULE, open_on_storage,
+        [FileCtx, SessId, Flag, HandleId]).
 
 
 %%--------------------------------------------------------------------
@@ -456,13 +454,12 @@ open_on_storage(FileCtx, SessId, Flag, _IsDirectIO, HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
-    handle_id()) -> {ok, storage_driver:handle_id()} | no_return().
+    handle_id()) -> ok | no_return().
 open_on_storage(FileCtx, SessId, Flag, HandleId) ->
     {SDHandle, _FileCtx2} = storage_driver:new_handle(SessId, FileCtx),
     SDHandle2 = storage_driver:set_size(SDHandle),
     {ok, Handle} = storage_driver:open(SDHandle2, Flag),
-    session_handles:add(SessId, HandleId, Handle),
-    {ok, HandleId}.
+    ok = session_handles:add(SessId, HandleId, Handle).
 
 
 %%--------------------------------------------------------------------
@@ -486,12 +483,17 @@ verify_file_exists(FileCtx, _HandleId) ->
 %% Verifies handle id and registers it.
 %% @end
 %%--------------------------------------------------------------------
--spec check_and_register_open(file_ctx:ctx(), session:id(), handle_id()) ->
-    ok | no_return().
-check_and_register_open(FileCtx, SessId, undefined) ->
-    ok = file_handles:register_open(FileCtx, SessId, 1);
-check_and_register_open(_FileCtx, _SessId, _HandleId) ->
-    ok.
+-spec check_and_register_open(file_ctx:ctx(), session:id(), handle_id(), boolean()) ->
+    storage_driver:handle_id() | no_return().
+check_and_register_open(FileCtx, SessId, undefined, true) ->
+    HandleId = ?NEW_HANDLE_ID,
+    ok = file_handles:register_open(FileCtx, SessId, 1, HandleId),
+    HandleId;
+check_and_register_open(FileCtx, SessId, undefined, false) ->
+    ok = file_handles:register_open(FileCtx, SessId, 1, undefined),
+    ?NEW_HANDLE_ID;
+check_and_register_open(_FileCtx, _SessId, HandleId, _NewFile) ->
+    HandleId.
 
 
 %%--------------------------------------------------------------------

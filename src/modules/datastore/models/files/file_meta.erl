@@ -47,7 +47,7 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
 
 -type doc() :: datastore:doc().
 -type diff() :: datastore_doc:diff(file_meta()).
@@ -794,7 +794,8 @@ make_space_exist(SpaceId) ->
             case times:save(TimesDoc) of
                 {ok, _} -> ok;
                 {error, already_exists} -> ok
-            end;
+            end,
+            emit_space_dir_created(SpaceDirUuid, SpaceId);
         {error, already_exists} ->
             ok
     end.
@@ -1084,6 +1085,20 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
             {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends event about space dir creation
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: datastore:key()) -> ok | no_return().
+emit_space_dir_created(DirUuid, SpaceId) ->
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
+    #fuse_response{fuse_response = FileAttr} =
+        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_USER_ID), FileCtx, false, false),
+    FileAttr2 = FileAttr#file_attr{size = 0},
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -1333,3 +1348,27 @@ upgrade_record(8, {
     {9, {?MODULE, Name, Type, Mode, ACL, Owner, GroupOwner, IsScope,
         ProviderId, Shares, Deleted, ParentUuid
     }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function called when saving changes from other providers (checks conflicts: local doc vs. remote changes).
+%% It is used to check if file has been renamed remotely to send appropriate event.
+%% TODO - VFS-5962 - delete when event emission is possible in dbsync_events.
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve_conflict(datastore_model:ctx(), doc(), doc()) -> default.
+resolve_conflict(_Ctx, #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}},
+    #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}) ->
+    case NewName =/= PrevName of
+        true ->
+            spawn(fun() ->
+                FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid)),
+                OldParentGuid = fslogic_uuid:uuid_to_guid(PrevParentUuid),
+                NewParentGuid = fslogic_uuid:uuid_to_guid(NewParentUuid),
+                fslogic_event_emitter:emit_file_renamed_no_exclude(FileCtx, OldParentGuid, NewParentGuid, NewName)
+            end);
+        _ ->
+            ok
+    end,
+
+    default.

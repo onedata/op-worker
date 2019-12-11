@@ -27,7 +27,6 @@
 -spec enable_import(od_space:id(), od_storage:id(), space_strategies:import_config()) ->
     ok | {error, term()}.
 enable_import(SpaceId, StorageId, Config) ->
-    file_meta:make_space_exist(SpaceId),
     configure_import(SpaceId, StorageId, true, Config).
 
 -spec configure_import(od_space:id(), boolean(), space_strategies:import_config()) -> ok.
@@ -52,7 +51,6 @@ configure_update(SpaceId, Enabled, Config) ->
 -spec configure_update(od_space:id(), od_storage:id(), boolean(),
     space_strategies:update_config()) -> ok | {error, term()}.
 configure_update(SpaceId, StorageId, Enabled, Config) ->
-    file_meta:make_space_exist(SpaceId),
     {ImportEnabled, _} = get_import_details(SpaceId, StorageId),
     case {Enabled, ImportEnabled} of
         {true, false} ->

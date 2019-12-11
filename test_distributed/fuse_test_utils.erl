@@ -326,14 +326,18 @@ receive_server_message(IgnoredMsgList) ->
     receive_server_message(IgnoredMsgList, ?TIMEOUT).
 
 receive_server_message(IgnoredMsgList, Timeout) ->
+    Now = os:timestamp(),
     receive
         {_, _, Data} ->
             % ignore listed messages
             Msg = messages:decode_msg(Data, 'ServerMessage'),
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
-                true -> receive_server_message(IgnoredMsgList);
-                false -> Msg
+                true ->
+                    NewTimeout = max(0, Timeout - timer:now_diff(os:timestamp(), Now) div 1000),
+                    receive_server_message(IgnoredMsgList, NewTimeout);
+                false ->
+                    Msg
             end
     after Timeout ->
         {error, timeout}

@@ -433,7 +433,7 @@ get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
 %% Returns GUID of parent or undefined when the file is a root dir.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent_guid(ctx(), user_ctx:ctx()) -> {fslogic_worker:file_guid(), ctx()}.
+-spec get_parent_guid(ctx(), user_ctx:ctx() | undefined) -> {fslogic_worker:file_guid() | undefined, ctx()}.
 get_parent_guid(FileCtx, UserCtx) ->
     case is_root_dir_const(FileCtx) of
         true ->

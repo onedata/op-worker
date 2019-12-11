@@ -298,11 +298,12 @@ setup_session(Worker, [{_, #user_config{
         [Nonce, Identity, TokenAuth])
     ),
 
-    lists:foreach(fun({_, SpaceName}) ->
+    lists:foreach(fun({SpaceId, SpaceName}) ->
         case get(SpaceName) of
             undefined -> put(SpaceName, [SessId]);
             SessIds -> put(SpaceName, [SessId | SessIds])
-        end
+        end,
+        rpc:call(Worker, session, set_direct_io, [SessId, SpaceId, false])
     end, Spaces),
 
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),

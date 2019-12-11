@@ -65,6 +65,7 @@
     readdir_should_work_with_token2/1,
     readdir_should_work_with_startid/1,
     lfm_recreate_handle_test/1,
+    lfm_write_after_create_no_perms_test/1,
     lfm_open_failure_test/1,
     lfm_create_and_open_failure_test/1,
     lfm_open_in_direct_mode_test/1,
@@ -124,6 +125,7 @@
     readdir_should_work_with_token2,
     readdir_should_work_with_startid,
     lfm_recreate_handle_test,
+    lfm_write_after_create_no_perms_test,
     lfm_open_failure_test,
     lfm_create_and_open_failure_test,
     lfm_open_in_direct_mode_test,
@@ -153,7 +155,10 @@ lfm_rmdir_test(Config) ->
     lfm_files_test_base:lfm_rmdir(Config).
 
 lfm_recreate_handle_test(Config) ->
-    lfm_files_test_base:lfm_recreate_handle(Config).
+    lfm_files_test_base:lfm_recreate_handle(Config, 8#755).
+
+lfm_write_after_create_no_perms_test(Config) ->
+    lfm_files_test_base:lfm_recreate_handle(Config, 8#444).
 
 lfm_open_failure_test(Config) ->
     lfm_files_test_base:lfm_open_failure(Config).
@@ -325,11 +330,13 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 init_per_testcase(Case, Config) when
-    Case =:= lfm_open_in_direct_mode_test ->
+    Case =:= lfm_open_in_direct_mode_test orelse
+        Case =:= lfm_recreate_handle_test orelse
+        Case =:= lfm_write_after_create_no_perms_test ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, user_ctx, [passthrough]),
     test_utils:mock_expect(Workers, user_ctx, is_direct_io,
-        fun(_) ->
+        fun(_, _) ->
             true
         end),
     init_per_testcase(default, Config);
@@ -368,7 +375,9 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(Case, Config) when
-    Case =:= lfm_open_in_direct_mode_test ->
+    Case =:= lfm_open_in_direct_mode_test orelse
+        Case =:= lfm_recreate_handle_test orelse
+        Case =:= lfm_write_after_create_no_perms_test ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [user_ctx]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
