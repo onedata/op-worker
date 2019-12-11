@@ -38,7 +38,12 @@ all() ->
     ]).
 
 -define(ONEDATA_TOKEN, <<"ONEDATA_ACCESS_TOKEN">>).
--define(ADMIN_AUTH, #token_auth{token = ?ONEDATA_TOKEN}).
+-define(ADMIN_AUTH,
+    auth_manager:build_token_auth(
+        ?ONEDATA_TOKEN, undefined,
+        undefined, rest, disallow_data_access_caveats
+    )
+).
 
 -define(IDP_ACCESS_TOKEN1, <<"IDP_ACCESS_TOKEN1">>).
 -define(IDP_ACCESS_TOKEN2, <<"IDP_ACCESS_TOKEN2">>).

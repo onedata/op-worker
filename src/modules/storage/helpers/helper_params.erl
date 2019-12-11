@@ -100,10 +100,14 @@ clear_unused_webdav_credentials(Params) -> Params.
 
 %% @private
 -spec resolve_user_by_token(user_ctx()) -> user_ctx().
-resolve_user_by_token(#{<<"onedataAccessToken">> := Token} = Params) when
-    byte_size(Token) > 0
+resolve_user_by_token(#{<<"onedataAccessToken">> := AccessToken} = Params) when
+    byte_size(AccessToken) > 0
 ->
-    {ok, ?USER(UserId), _} = auth_manager:verify(#token_auth{token = Token}),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined, undefined,
+        undefined, disallow_data_access_caveats
+    ),
+    {ok, ?USER(UserId), _} = auth_manager:verify(TokenAuth),
     Params#{<<"adminId">> => UserId};
 resolve_user_by_token(Params) -> Params.
 

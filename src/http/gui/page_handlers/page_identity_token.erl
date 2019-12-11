@@ -41,8 +41,8 @@ handle(<<"GET">>, Req) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
             throw(?ERROR_UNAUTHORIZED);
-        PeerAccessToken ->
-            case token_logic:verify_provider_identity_token(PeerAccessToken) of
+        PeerIdentityToken ->
+            case token_logic:verify_provider_identity_token(PeerIdentityToken) of
                 {ok, ?SUB(?ONEPROVIDER, PeerProviderId)} ->
                     Audience = ?AUD(?OP_WORKER, PeerProviderId),
                     {ok, IdentityToken} = provider_auth:get_identity_token(Audience),

@@ -56,7 +56,7 @@ token_auth(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
 
-    SerializedToken = initializer:create_token(?USER_ID),
+    SerializedToken = initializer:create_access_token(?USER_ID),
 
     % when
     AuthFail = do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => <<"invalid">>}),
@@ -235,30 +235,36 @@ mock_user_logic(Config) ->
     }}},
 
     GetUserFun = fun
-        (#token_auth{token = SerializedToken}, ?USER_ID) ->
-            case tokens:deserialize(SerializedToken) of
-                {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
-                    UserDoc;
-                {error, _} = Error ->
-                    Error
-            end;
         (?ROOT_SESS_ID, ?USER_ID) ->
             UserDoc;
-        (UserSessId, ?USER_ID) ->
+        (?ROOT_AUTH, ?USER_ID) ->
+            UserDoc;
+        (UserSessId, ?USER_ID) when is_binary(UserSessId) ->
             try session:get_user_id(UserSessId) of
                 {ok, ?USER_ID} -> UserDoc;
                 _ -> ?ERROR_UNAUTHORIZED
             catch
                 _:_ -> ?ERROR_UNAUTHORIZED
             end;
+        (TokenAuth, ?USER_ID) ->
+            case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
+                {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
+                    UserDoc;
+                {error, _} = Error ->
+                    Error
+            end;
         (_, _) ->
             {error, not_found}
     end,
 
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
-    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(Auth) ->
-        case GetUserFun(Auth, ?USER_ID) of
-            {ok, #document{key = UserId}} -> {ok, ?USER(UserId), undefined};
+    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(AccessToken, _, _, _) ->
+        TokenAuth = auth_manager:build_token_auth(
+            AccessToken, undefined,
+            undefined, undefined, disallow_data_access_caveats
+        ),
+        case GetUserFun(TokenAuth, ?USER_ID) of
+            {ok, #document{key = UserId}} -> {ok, ?SUB(user, UserId), undefined};
             {error, _} = Error -> Error
         end
     end),

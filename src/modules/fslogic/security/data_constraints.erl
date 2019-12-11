@@ -258,7 +258,7 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
     guids = GuidConstraints
 }, AncestorPolicy) ->
     FileGuid = file_ctx:get_guid_const(FileCtx0),
-    SerializedToken = get_serialized_token(UserCtx),
+    SerializedToken = get_access_token(UserCtx),
     CacheKey = {data_constraint, SerializedToken, FileGuid},
     case permissions_cache:check_permission(CacheKey) of
         {ok, subpath} ->
@@ -598,7 +598,7 @@ get_file_guid(FileCtx) ->
 
 
 %% @private
--spec get_serialized_token(user_ctx:ctx()) -> tokens:serialized().
-get_serialized_token(UserCtx) ->
-    #token_auth{token = SerializedToken} = user_ctx:get_auth(UserCtx),
-    SerializedToken.
+-spec get_access_token(user_ctx:ctx()) -> tokens:serialized().
+get_access_token(UserCtx) ->
+    TokenAuth = user_ctx:get_auth(UserCtx),
+    auth_manager:get_access_token(TokenAuth).

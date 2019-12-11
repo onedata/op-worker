@@ -287,7 +287,7 @@ delete_db_view(ViewId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(od_space:id(), name(), options()) ->
-    {ok, datastore_json:ejson()} | {error, term()}.
+    {ok, json_utils:json_term()} | {error, term()}.
 query(SpaceId, <<"file-popularity">>, Options) ->
     query(<<"file-popularity-", SpaceId/binary>>, Options);
 query(SpaceId, ViewName, Options) ->
@@ -395,7 +395,7 @@ update(ViewName, Diff, SpaceId) ->
 
 
 %% @private
--spec query(id(), options()) -> {ok, datastore_json:ejson()} | {error, term()}.
+-spec query(id(), options()) -> {ok, json_utils:json_term()} | {error, term()}.
 query(ViewId, Options) ->
     case couchbase_driver:query_view(?DISK_CTX, ViewId, ViewId, Options) of
         {ok, _} = Ans ->

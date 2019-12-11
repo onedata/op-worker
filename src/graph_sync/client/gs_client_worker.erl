@@ -389,11 +389,13 @@ check_api_authorization(?ROOT_AUTH, _) ->
     ok;
 check_api_authorization(?GUEST_AUTH, _) ->
     ok;
-check_api_authorization(#token_auth{token = Serialized}, #gs_req_graph{operation = Operation, gri = GRI}) ->
-    %% @TODO VFS-5914 can we keep a deserialized token not to unpack it every time?
-    {ok, Token = #token{subject = Subject}} = tokens:deserialize(Serialized),
-    Auth = #auth{subject = Subject, caveats = tokens:get_caveats(Token)},
-    api_auth:check_authorization(Auth, ?OZ_WORKER, Operation, GRI).
+check_api_authorization(TokenAuth, #gs_req_graph{operation = Operation, gri = GRI}) ->
+    case auth_manager:verify(TokenAuth) of
+        {ok, Auth, _} ->
+            api_auth:check_authorization(Auth, ?OZ_WORKER, Operation, GRI);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec do_request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req(), timeout()) ->
@@ -621,7 +623,11 @@ client_to_auth(?GUEST_SESS_ID) ->
 client_to_auth(SessionId) when is_binary(SessionId) ->
     {ok, Auth} = session:get_auth(SessionId),
     client_to_auth(Auth);
-client_to_auth(#token_auth{} = TokenAuth) ->
+client_to_auth(?ROOT_AUTH) ->
+    ?ROOT_AUTH;
+client_to_auth(?GUEST_AUTH) ->
+    ?GUEST_AUTH;
+client_to_auth(TokenAuth) ->
     TokenAuth.
 
 
@@ -630,20 +636,8 @@ resolve_auth_override(?ROOT_AUTH) ->
     undefined;
 resolve_auth_override(?GUEST_AUTH) ->
     #auth_override{client_auth = nobody};
-resolve_auth_override(#token_auth{
-    token = Token,
-    peer_ip = PeerIp,
-    interface = Interface,
-    audience_token = AudienceToken,
-    data_access_caveats_policy = DataAccessCaveatsPolicy
-}) ->
-    #auth_override{
-        client_auth = {token, Token},
-        peer_ip = PeerIp,
-        interface = Interface,
-        audience_token = AudienceToken,
-        data_access_caveats_policy = DataAccessCaveatsPolicy
-    }.
+resolve_auth_override(TokenAuth) ->
+    auth_manager:to_auth_override(TokenAuth).
 
 
 -spec put_cache_state(Record :: tuple(), cache_state()) -> Record :: tuple().

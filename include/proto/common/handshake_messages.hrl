@@ -16,8 +16,8 @@
 -include("proto/common/credentials.hrl").
 
 -record(client_handshake_request, {
-    auth :: #token_auth{},
-    session_id :: binary(),
+    credentials :: auth_manager:credentials(),
+    nonce :: binary(),
     version :: binary(),
     compatible_oneprovider_versions :: [binary()]
 }).

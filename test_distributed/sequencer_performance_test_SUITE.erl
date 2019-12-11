@@ -14,6 +14,7 @@
 
 -include("modules/events/definitions.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -287,8 +288,8 @@ end_per_testcase(_Case, Config) ->
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
 session_setup(Worker) ->
-    SessId = base64:encode(crypto:strong_rand_bytes(20)),
-    session_setup(Worker, SessId).
+    Nonce = base64:encode(crypto:strong_rand_bytes(20)),
+    session_setup(Worker, Nonce).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -296,12 +297,10 @@ session_setup(Worker) ->
 %% Creates session document in datastore with given ID.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId) -> {ok, SessId} when
-    SessId :: session:id().
-session_setup(Worker, SessId) ->
-    Iden = #user_identity{user_id = <<"user_id">>},
+-spec session_setup(Worker :: node(), Nonce :: binary()) -> {ok, session:id()}.
+session_setup(Worker, Nonce) ->
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, SessId, Iden, undefined, self()
+        Worker, Nonce, ?SUB(user, <<"user_id">>), undefined, self()
     ).
 
 %%--------------------------------------------------------------------

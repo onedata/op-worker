@@ -79,7 +79,7 @@ all() -> ?ALL(?TEST_CASES).
 
 counting_file_open_and_release_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    {ok, SessId} = init_session(Worker, <<"session_id">>),
+    {ok, SessId} = init_session(Worker, <<"nonce">>),
     FileCtx = file_ctx:new_by_guid(?FILE_GUID),
 
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
@@ -124,7 +124,7 @@ invalidating_session_open_files_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     FileCtx = file_ctx:new_by_guid(?FILE_GUID),
 
-    {ok, SessId1} = init_session(Worker, <<"session_id_1">>),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     %% With one active session entry for UUID should be removed after its expiration.
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
@@ -135,8 +135,8 @@ invalidating_session_open_files_test(Config) ->
     ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    {ok, SessId1} = init_session(Worker, <<"session_id_1">>),
-    {ok, SessId2} = init_session(Worker, <<"session_id_2">>),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
+    {ok, SessId2} = init_session(Worker, <<"nonce_2">>),
     %% With few active sessions entry for UUID should be removed only after
     %% all of them expired.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
@@ -153,7 +153,7 @@ invalidating_session_open_files_test(Config) ->
     ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId2])),
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    {ok, SessId1} = init_session(Worker, <<"session_id_1">>),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     %% Last session expiration should trigger call to file deletion worker when
     %% file is marked to remove.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
@@ -170,7 +170,7 @@ invalidating_session_open_files_test(Config) ->
     ?assertEqual(ok, rpc:call(Worker, file_handles, invalidate_session_entry,
         [FileCtx, SessId1])),
 
-    {ok, SessId1} = init_session(Worker, <<"session_id_1">>),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
         [FileCtx, SessId1, 30])),
     ?assertEqual(ok, rpc:call(Worker, file_handles, invalidate_session_entry,
@@ -509,8 +509,8 @@ end_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_validate_and_unload(Worker, [fslogic_delete, file_ctx, file_meta]),
-    {ok, SessId1} = init_session(Worker, <<"session_id_1">>),
-    {ok, SessId2} = init_session(Worker, <<"session_id_2">>),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
+    {ok, SessId2} = init_session(Worker, <<"nonce_2">>),
     ?assertMatch(ok, rpc:call(Worker, session, delete, [SessId1])),
     ?assertMatch(ok, rpc:call(Worker, session, delete, [SessId2])),
 
@@ -550,10 +550,9 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-init_session(Worker, SessId) ->
-    Iden = #user_identity{user_id = <<"u1">>},
+init_session(Worker, Nonce) ->
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, SessId, Iden, undefined, self()
+        Worker, Nonce, ?SUB(user, <<"u1">>), undefined, self()
     ).
 
 create_test_file(Config, Worker, SessId, DelayedFileCreation) ->

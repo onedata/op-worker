@@ -15,9 +15,11 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/common/handshake_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -56,25 +58,20 @@ auth_cache_test(Config) ->
     clear_auth_cache(Worker1),
     ?assertEqual(0, get_auth_cache_size(Worker1)),
 
-    SerializedToken = initializer:create_token(?USER_ID),
+    AccessToken = initializer:create_access_token(?USER_ID),
 
-    TokenAuth1 = #token_auth{
-        token = SerializedToken,
-        peer_ip = initializer:local_ip_v4(),
-        interface = undefined
-    },
-    TokenAuth2 = #token_auth{
-        token = SerializedToken,
-        peer_ip = initializer:local_ip_v4(),
-        interface = graphsync,
-        data_access_caveats_policy = allow_data_access_caveats
-    },
-    TokenAuth3 = #token_auth{
-        token = SerializedToken,
-        peer_ip = initializer:local_ip_v4(),
-        interface = rest,
-        data_access_caveats_policy = disallow_data_access_caveats
-    },
+    TokenAuth1 = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), undefined, disallow_data_access_caveats
+    ),
+    TokenAuth2 = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), graphsync, allow_data_access_caveats
+    ),
+    TokenAuth3 = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), rest, disallow_data_access_caveats
+    ),
 
     lists:foreach(fun({TokenAuth, ExpCacheSize}) ->
         ?assertMatch(
@@ -111,23 +108,24 @@ auth_cache_test(Config) ->
 token_authentication(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessId = <<"session_id">>,
-    SerializedToken = initializer:create_token(?USER_ID),
-
-    TokenAuth = #token_auth{
-        token = SerializedToken,
-        peer_ip = initializer:local_ip_v4(),
-        interface = oneclient,
-        data_access_caveats_policy = allow_data_access_caveats
-    },
+    Nonce = <<"nonce">>,
+    AccessToken = initializer:create_access_token(?USER_ID),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
 
     % when
-    {ok, {Sock, SessId}} = fuse_test_utils:connect_via_token(Worker1, [], SessId, TokenAuth),
+    {ok, {Sock, SessId}} = fuse_test_utils:connect_via_token(Worker1, [], Nonce, AccessToken),
 
     % then
-    ?assertMatch(
-        {ok, #document{value = #session{identity = #user_identity{user_id = ?USER_ID}}}},
+    {ok, Doc} = ?assertMatch(
+        {ok, #document{value = #session{identity = ?SUB(user, ?USER_ID)}}},
         rpc:call(Worker1, session, get, [SessId])
+    ),
+    ?assertMatch(
+        TokenAuth,
+        session:get_auth(Doc)
     ),
     ?assertMatch(
         {ok, ?USER(?USER_ID), undefined},
@@ -193,10 +191,23 @@ unmock_space_logic(Config) ->
 
 mock_user_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    UserDoc = {ok, #document{key = ?USER_ID, value = #od_user{}}},
+
     test_utils:mock_new(Workers, user_logic, []),
     test_utils:mock_expect(Workers, user_logic, get, fun
-        (#token_auth{token = SerializedToken}, ?USER_ID) ->
-            case tokens:deserialize(SerializedToken) of
+        (?ROOT_SESS_ID, ?USER_ID) ->
+            UserDoc;
+        (?ROOT_AUTH, ?USER_ID) ->
+            UserDoc;
+        (UserSessId, ?USER_ID) when is_binary(UserSessId) ->
+            try session:get_user_id(UserSessId) of
+                {ok, ?USER_ID} -> UserDoc;
+                _ -> ?ERROR_UNAUTHORIZED
+            catch
+                _:_ -> ?ERROR_UNAUTHORIZED
+            end;
+        (TokenAuth, ?USER_ID) ->
+            case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     {ok, #document{key = ?USER_ID, value = #od_user{}}};
                 {error, _} = Error ->
@@ -216,10 +227,10 @@ mock_token_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, token_logic, []),
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun
-        (#token_auth{token = SerializedToken}) ->
-            case tokens:deserialize(SerializedToken) of
+        (AccessToken, _, _, _) ->
+            case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
-                    {ok, ?USER(?USER_ID), undefined};
+                    {ok, ?SUB(user, ?USER_ID), undefined};
                 {error, _} = Error ->
                     Error
             end

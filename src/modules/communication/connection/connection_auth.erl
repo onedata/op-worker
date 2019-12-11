@@ -84,27 +84,29 @@ get_handshake_error_msg(_) ->
 -spec handle_client_handshake(#client_handshake_request{}, inet:ip_address()) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
-    session_id = SessionId,
-    auth = #token_auth{token = SerializedToken} = TokenAuth0
-} = Req, IpAddress) when is_binary(SessionId) ->
+    nonce = Nonce,
+    credentials = #credentials{
+        access_token = AccessToken,
+        audience_token = AudienceToken
+    }
+} = Req, IpAddress) when is_binary(Nonce) ->
 
     assert_client_compatibility(Req, IpAddress),
 
-    TokenAuth1 = TokenAuth0#token_auth{
-        peer_ip = IpAddress,
-        interface = oneclient,
-        data_access_caveats_policy = allow_data_access_caveats
-    },
-    case auth_manager:verify(TokenAuth1) of
-        {ok, ?USER(UserId), _TokenValidUntil} ->
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, AudienceToken,
+        IpAddress, oneclient, allow_data_access_caveats
+    ),
+    case auth_manager:verify(TokenAuth) of
+        {ok, #auth{subject = ?SUB(user, UserId) = Subject}, _} ->
             {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
-                SessionId, #user_identity{user_id = UserId}, TokenAuth1
+                Nonce, Subject, TokenAuth
             ),
             {UserId, SessionId};
         ?ERROR_FORBIDDEN ->
             throw(invalid_provider);
         {error, _} = Error ->
-            case tokens:deserialize(SerializedToken) of
+            case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = Subject, id = TokenId} = Token} ->
                     ?debug("Cannot authorize user (id: ~p) based on token (id: ~p) "
                            "with caveats: ~p due to ~w", [
@@ -131,11 +133,9 @@ handle_provider_handshake(#provider_handshake_request{
 }, IpAddress) when is_binary(ProviderId) andalso is_binary(Token) ->
 
     case token_logic:verify_provider_identity_token(Token) of
-        {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
-            Identity = #user_identity{provider_id = ProviderId},
-            SessId = session_utils:get_provider_session_id(incoming, ProviderId),
-            {ok, _} = session_manager:reuse_or_create_incoming_provider_session(
-                SessId, Identity
+        {ok, ?SUB(?ONEPROVIDER, ProviderId) = Subject} ->
+            {ok, SessId} = session_manager:reuse_or_create_incoming_provider_session(
+                Subject
             ),
             {ProviderId, SessId};
         {ok, _} ->

@@ -178,8 +178,10 @@ support_space_insecure(StorageId, SerializedToken, SupportSize) ->
                         gs_client_worker:invalidate_cache(od_storage, StorageId)
                     end))
             end;
-        Error ->
-            Error
+        ?ERROR_RELATION_ALREADY_EXISTS(_, _, _, _) = Error ->
+            Error;
+        TokenError ->
+            ?ERROR_BAD_VALUE_TOKEN(<<"token">>, TokenError)
     end.
 
 

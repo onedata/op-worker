@@ -17,6 +17,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
@@ -43,8 +44,7 @@
 -type diff() :: datastore_doc:diff(record()).
 -type ttl() :: non_neg_integer().
 -type grace_period() :: non_neg_integer().
--type auth() :: #token_auth{} | ?ROOT_AUTH | ?GUEST_AUTH.
--type identity() :: #user_identity{}.
+-type auth() :: auth_manager:token_auth() | ?ROOT_AUTH | ?GUEST_AUTH.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
@@ -56,8 +56,7 @@
 -export_type([
     id/0, record/0, doc/0,
     ttl/0, grace_period/0,
-    auth/0, identity/0,
-    type/0, status/0
+    auth/0, type/0, status/0
 ]).
 
 -define(CTX, #{
@@ -222,7 +221,11 @@ get_user_id(<<_/binary>> = SessId) ->
         {ok, Doc} -> get_user_id(Doc);
         {error, Reason} -> {error, Reason}
     end;
-get_user_id(#session{identity = #user_identity{user_id = UserId}}) ->
+get_user_id(#session{identity = ?SUB(root, ?ROOT_USER_ID)}) ->
+    {ok, ?ROOT_USER_ID};
+get_user_id(#session{identity = ?SUB(nobody, ?GUEST_USER_ID)}) ->
+    {ok, ?GUEST_USER_ID};
+get_user_id(#session{identity = ?SUB(user, UserId)}) ->
     {ok, UserId};
 get_user_id(#document{value = #session{} = Value}) ->
     get_user_id(Value).

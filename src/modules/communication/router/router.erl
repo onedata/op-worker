@@ -179,12 +179,18 @@ route_and_ignore_answer(ClientMsg = #client_message{
 % Message that updates the #token_auth{} record in given session
 % (originates from #'Macaroon' client message).
 route_and_ignore_answer(#client_message{
-    message_body = #token_auth{} = Auth
+    message_body = #credentials{
+        access_token = AccessToken,
+        audience_token = AudienceToken
+    }
 } = Msg) ->
     EffSessionId = effective_session_id(Msg),
     % This function performs an async call to session manager worker.
-    {ok, _} = session:update(EffSessionId, fun(Session = #session{}) ->
-        {ok, Session#session{auth = Auth}}
+    % TODO VFS-5895 check identity, calc new data constraints
+    {ok, _} = session:update(EffSessionId, fun(Session = #session{auth = TokenAuth}) ->
+        {ok, Session#session{auth = auth_manager:update_credentials(
+            TokenAuth, AccessToken, AudienceToken
+        )}}
     end),
     ok;
 route_and_ignore_answer(ClientMsg) ->
