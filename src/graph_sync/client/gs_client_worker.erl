@@ -633,7 +633,7 @@ resolve_auth_override(?ROOT_AUTH) ->
 resolve_auth_override(?GUEST_AUTH) ->
     #auth_override{client_auth = nobody};
 resolve_auth_override(TokenAuth) ->
-    auth_manager:get_auth_override(TokenAuth).
+    auth_manager:to_auth_override(TokenAuth).
 
 
 -spec put_cache_state(Record :: tuple(), cache_state()) -> Record :: tuple().

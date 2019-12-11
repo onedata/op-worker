@@ -10,13 +10,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(token_logic).
--author("Lukasz Opiola").
+-author("Bartosz Walkowicz").
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/common/credentials.hrl").
--include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/errors.hrl").
 
 -export([
     verify_access_token/4,
@@ -32,9 +29,9 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Verifies given access token in Onezone, and upon success, returns the
-%% auth object, which includes subject's identity and caveats, and its ttl.
-%% Ttl is the remaining time for which token (and so auth) is valid or
-%% 'undefined' if no time constraints were set for token.
+%% subject's identity and token ttl.
+%% Ttl is the remaining time for which token will be valid or 'undefined'
+%% if no time constraints were set for token.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_access_token(
@@ -43,25 +40,27 @@
     Interface :: undefined | cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
-    {ok, aai:auth(), TTL :: undefined | time_utils:seconds()} | errors:error().
+    {ok, aai:subject(), TTL :: undefined | time_utils:seconds()} | errors:error().
 verify_access_token(AccessToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
-    case tokens:deserialize(AccessToken) of
-        {ok, #token{subject = ?SUB(user, UserId) = Subject} = Token} ->
-            case provider_logic:has_eff_user(UserId) of
-                false ->
-                    ?ERROR_USER_NOT_SUPPORTED;
-                true ->
-                    VerificationPayload = build_verification_payload(
-                        AccessToken, PeerIp, Interface,
-                        DataAccessCaveatsPolicy
-                    ),
-                    verify_access_token(
-                        Subject, tokens:get_caveats(Token),
-                        VerificationPayload
-                    )
-            end;
-        {error, _} = DeserializationError ->
-            DeserializationError
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{
+            type = od_token,
+            id = undefined,
+            aspect = verify_access_token,
+            scope = public
+        },
+        data = build_verification_payload(
+            AccessToken, PeerIp, Interface,
+            DataAccessCaveatsPolicy
+        )
+    }),
+    case Result of
+        {ok, #{<<"subject">> := Subject} = Ans} ->
+            TokenTTL = maps:get(<<"ttl">>, Ans, undefined),
+            {ok, aai:deserialize_subject(Subject), TokenTTL};
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -95,36 +94,6 @@ verify_provider_identity_token(IdentityToken) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec verify_access_token(
-    Subject :: aai:subject(),
-    Caveats :: [caveats:caveat()],
-    VerificationPayload :: json_utils:json_term()
-) ->
-    {ok, aai:auth(), TTL :: undefined | time_utils:seconds()} | errors:error().
-verify_access_token(Subject, Caveats, VerificationPayload) ->
-    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = create,
-        gri = #gri{
-            type = od_token,
-            id = undefined,
-            aspect = verify_access_token,
-            scope = public
-        },
-        data = VerificationPayload
-    }),
-    case Result of
-        {ok, #{<<"subject">> := AnsSubject} = Ans} ->
-            Auth = #auth{
-                subject = Subject = aai:deserialize_subject(AnsSubject),
-                caveats = Caveats
-            },
-            {ok, Auth, maps:get(<<"ttl">>, Ans, undefined)};
-        {error, _} = Error ->
-            Error
-    end.
 
 
 %% @private

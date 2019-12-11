@@ -6,7 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Credentials that can be exchanged for user identity in identity model
+%%% Credentials used to (together with context such as peer ip or
+%%% interface hr is connected on) create token_auth necessary to
+%%% verify user identity.
 %%% @end
 %%%-------------------------------------------------------------------
 

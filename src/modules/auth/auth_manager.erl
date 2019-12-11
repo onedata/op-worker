@@ -41,7 +41,7 @@
     get_data_access_caveats_policy/1,
 
     get_credentials/1, update_credentials/3,
-    get_auth_override/1,
+    to_auth_override/1,
 
     get_caveats/1,
     verify/1,
@@ -170,8 +170,8 @@ update_credentials(TokenAuth, AccessToken, AudienceToken) ->
     }.
 
 
--spec get_auth_override(token_auth()) -> gs_protocol:auth_override().
-get_auth_override(#token_auth{
+-spec to_auth_override(token_auth()) -> gs_protocol:auth_override().
+to_auth_override(#token_auth{
     access_token = Token,
     peer_ip = PeerIp,
     interface = Interface,
@@ -212,9 +212,7 @@ verify(TokenAuth) ->
             Item#cache_item.verification_result;
         _ ->
             try
-                {Result, CacheExpiration} = verify_in_onezone(
-                    TokenAuth, Now, ?CACHE_ITEM_DEFAULT_TTL
-                ),
+                {Result, CacheExpiration} = verify_internal(Now, TokenAuth),
                 ets:insert(?CACHE_NAME, #cache_item{
                     token_auth = TokenAuth,
                     verification_result = Result,
@@ -388,29 +386,45 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec verify_in_onezone(token_auth(), Now :: timestamp(),
-    DefaultVerificationResultTTL :: time_utils:seconds()
-) ->
+-spec verify_internal(Now :: timestamp(), token_auth()) ->
     {verification_result(), VerificationResultExpiration :: timestamp()}.
-verify_in_onezone(#token_auth{
+verify_internal(Now, #token_auth{
     access_token = AccessToken,
     peer_ip = PeerIp,
     interface = Interface,
     data_access_caveats_policy = DataAccessCaveatsPolicy
-}, Now, DefaultVerificationResultTTL) ->
+}) ->
+    CacheDefaultTTL = ?CACHE_ITEM_DEFAULT_TTL,
 
-    Result = token_logic:verify_access_token(
-        AccessToken, PeerIp,
-        Interface, DataAccessCaveatsPolicy
-    ),
-    case Result of
-        {ok, _Auth, undefined} ->
-            {Result, Now + DefaultVerificationResultTTL};
-        {ok, Auth, TokenTTL} ->
-            Expiration = Now + min(TokenTTL, DefaultVerificationResultTTL),
-            {{ok, Auth, Now + TokenTTL}, Expiration};
-        {error, _} ->
-            {Result, Now + DefaultVerificationResultTTL}
+    case tokens:deserialize(AccessToken) of
+        {ok, #token{subject = ?SUB(user, UserId) = Subject} = Token} ->
+            case provider_logic:has_eff_user(UserId) of
+                true ->
+                    case token_logic:verify_access_token(
+                        AccessToken, PeerIp, Interface,
+                        DataAccessCaveatsPolicy
+                    ) of
+                        {ok, Subject, undefined} ->
+                            Auth = #auth{
+                                subject = Subject,
+                                caveats = tokens:get_caveats(Token)
+                            },
+                            {{ok, Auth, undefined}, Now + CacheDefaultTTL};
+                        {ok, Subject, TokenTTL} ->
+                            Auth = #auth{
+                                subject = Subject,
+                                caveats = tokens:get_caveats(Token)
+                            },
+                            Expiration = Now + min(TokenTTL, CacheDefaultTTL),
+                            {{ok, Auth, Now + TokenTTL}, Expiration};
+                        {error, _} = VerificationError ->
+                            {VerificationError, Now + CacheDefaultTTL}
+                    end;
+                false ->
+                    {?ERROR_USER_NOT_SUPPORTED, Now + CacheDefaultTTL}
+            end;
+        {error, _} = DeserializationError ->
+            {DeserializationError, Now + CacheDefaultTTL}
     end.
 
 
