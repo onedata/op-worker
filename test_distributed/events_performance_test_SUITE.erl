@@ -386,7 +386,8 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     end),
     initializer:mock_test_file_context(Config, <<"file_id">>),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:mock_auth_manager(Config);
+    initializer:mock_auth_manager(Config),
+    Config;
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
@@ -443,17 +444,17 @@ end_per_testcase(_Case, Config) ->
 %% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:auth(), Conn :: pid()) -> ok.
-session_setup(Worker, SessId, ?SUB(user, UserId) = Iden, Conn) ->
+-spec session_setup(Worker :: node(), Nonce :: binary(),
+    Iden :: session:auth(), Conn :: pid()) -> {ok, session:id()}.
+session_setup(Worker, Nonce, ?SUB(user, UserId) = Iden, Conn) ->
     AccessToken = initializer:create_access_token(UserId),
     TokenAuth = auth_manager:build_token_auth(
         AccessToken, undefined,
         initializer:local_ip_v4(), oneclient, allow_data_access_caveats
     ),
-    fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, SessId, Iden, TokenAuth, Conn
-    ).
+    ?assertMatch({ok, _}, fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, Nonce, Iden, TokenAuth, Conn
+    )).
 
 %%--------------------------------------------------------------------
 %% @private
