@@ -61,10 +61,9 @@ add_subscriber(Sub, SessId) ->
 %% Returns list of event subscribers.
 %% @end
 %%--------------------------------------------------------------------
--spec get_subscribers(Key :: key() | event:base() | event:aggregated() | event:type(),
-    RoutingBase :: fslogic_worker:file_guid() | [fslogic_worker:file_guid()] | undefined) ->
+-spec get_subscribers(Key :: key() | event:base() | event:aggregated() | event:type(), event_type:routing_info()) ->
     {ok, SessIds :: [session:id()]} | {error, Reason :: term()}.
-get_subscribers(<<_/binary>> = Key, _RoutingBase) ->
+get_subscribers(<<_/binary>> = Key, _) ->
     case file_subscription:get(Key) of
         {ok, #document{value = #file_subscription{sessions = SessIds}}} ->
             {ok, gb_sets:to_list(SessIds)};
@@ -74,14 +73,14 @@ get_subscribers(<<_/binary>> = Key, _RoutingBase) ->
             {error, Reason}
     end;
 
-get_subscribers({aggregated, [Evt | _]}, RoutingBase) ->
-    get_subscribers(Evt, RoutingBase);
+get_subscribers({aggregated, [Evt | _]}, RoutingInfo) ->
+    get_subscribers(Evt, RoutingInfo);
 get_subscribers(_Evt, []) ->
     {ok, []};
-get_subscribers(Evt, [RoutingBase | RoutingList]) ->
-    case get_subscribers(Evt, RoutingBase) of
+get_subscribers(Evt, [RoutingCtx | RoutingInfo]) ->
+    case get_subscribers(Evt, RoutingCtx) of
         {ok, SessIds} ->
-            case get_subscribers(Evt, RoutingList) of
+            case get_subscribers(Evt, RoutingInfo) of
                 {ok, SessIds2} ->
                     {ok, SessIds2 ++ (SessIds -- SessIds2)};
                 Other2 ->
@@ -90,10 +89,23 @@ get_subscribers(Evt, [RoutingBase | RoutingList]) ->
         Other ->
             Other
     end;
-get_subscribers(Evt, RoutingBase) ->
-    case event_type:get_routing_key(Evt, RoutingBase) of
-        {ok, Key} -> get_subscribers(Key, RoutingBase);
-        {error, session_only} -> {ok, []}
+get_subscribers(Evt, RoutingCtx) ->
+    case event_type:get_routing_key(Evt, RoutingCtx) of
+        {ok, Key} ->
+            get_subscribers(Key, RoutingCtx);
+        {ok, Key, SpaceIDFilter} ->
+            case get_subscribers(Key, RoutingCtx) of
+                {ok, SessIds} ->
+                    {ok, lists:filter(fun(SessId) ->
+                        UserCtx = user_ctx:new(SessId),
+                        #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
+                        lists:member(SpaceIDFilter, Spaces)
+                    end, SessIds)};
+                Other ->
+                    Other
+            end;
+        {error, session_only} ->
+            {ok, []}
     end.
 
 %%--------------------------------------------------------------------

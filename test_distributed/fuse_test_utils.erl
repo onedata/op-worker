@@ -38,6 +38,7 @@
 
     connect_via_token/1, connect_via_token/2,
     connect_via_token/3, connect_via_token/4,
+    connect_via_custom_token/4,
 
     connect_as_user/4,
 
@@ -237,6 +238,17 @@ connect_via_token(Node, SocketOpts, Nonce) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Connect to given node using a custom token, with custom socket opts
+%% @equiv connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10))
+%% @end
+%%--------------------------------------------------------------------
+connect_via_custom_token(Node, SocketOpts, Nonce, TokenNum) ->
+    connect_via_token(Node, SocketOpts, Nonce, #token_auth{
+        token = lists:nth(TokenNum, ?TEST_TOKENS)
+    }).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Connect to given node using a token, with custom socket opts and session id.
 %% @end
 %%--------------------------------------------------------------------
@@ -324,14 +336,18 @@ receive_server_message(IgnoredMsgList) ->
     receive_server_message(IgnoredMsgList, ?TIMEOUT).
 
 receive_server_message(IgnoredMsgList, Timeout) ->
+    Now = os:timestamp(),
     receive
         {_, _, Data} ->
             % ignore listed messages
             Msg = messages:decode_msg(Data, 'ServerMessage'),
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
-                true -> receive_server_message(IgnoredMsgList);
-                false -> Msg
+                true ->
+                    NewTimeout = max(0, Timeout - timer:now_diff(os:timestamp(), Now) div 1000),
+                    receive_server_message(IgnoredMsgList, NewTimeout);
+                false ->
+                    Msg
             end
     after Timeout ->
         {error, timeout}
