@@ -42,10 +42,10 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Res
         key = Id,
         value = #od_user{
             full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
-            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
+            username = utils:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result),
-            default_space = gs_protocol:null_to_undefined(maps:get(<<"defaultSpaceId">>, Result)),
+            default_space = utils:null_to_undefined(maps:get(<<"defaultSpaceId">>, Result)),
             space_aliases = maps:get(<<"spaceAliases">>, Result),
 
             eff_groups = maps:get(<<"effectiveGroups">>, Result),
@@ -60,7 +60,7 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = protected}, R
         key = Id,
         value = #od_user{
             full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
-            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
+            username = utils:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result)
         }
@@ -71,7 +71,7 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = shared}, Resu
         key = Id,
         value = #od_user{
             full_name = maps:get(<<"fullName">>, Result, maps:get(<<"name">>, Result, undefined)),
-            username = gs_protocol:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null)))
+            username = utils:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null)))
         }
     };
 
@@ -127,7 +127,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = private}, Re
             name = maps:get(<<"name">>, Result),
             public_url = maps:get(<<"publicUrl">>, Result),
             space = maps:get(<<"spaceId">>, Result),
-            handle = gs_protocol:null_to_undefined(maps:get(<<"handleId">>, Result)),
+            handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result)),
             root_file = maps:get(<<"rootFileId">>, Result)
         }
     };
@@ -137,7 +137,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = public}, Res
         value = #od_share{
             name = maps:get(<<"name">>, Result),
             public_url = maps:get(<<"publicUrl">>, Result),
-            handle = gs_protocol:null_to_undefined(maps:get(<<"handleId">>, Result)),
+            handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result)),
             root_file = maps:get(<<"rootFileId">>, Result)
         }
     };

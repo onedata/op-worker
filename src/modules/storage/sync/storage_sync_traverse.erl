@@ -66,7 +66,7 @@
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, get_job/1, update_job_progress/5, to_string/1,
-    task_started/1, task_finished/1, task_canceled/1]).
+    task_started/2, task_finished/2, task_canceled/2]).
 
 %% storage_traverse callbacks
 -export([reset_info/1, get_next_batch_job_prehook/1, get_children_master_job_prehook/1, get_fold_children_fun/1]).
@@ -165,19 +165,19 @@ update_job_progress(ID, Job, Pool, TaskID, Status) ->
 get_job(DocOrID) ->
     storage_traverse:get_job(DocOrID).
 
--spec task_started(traverse:id()) -> ok.
-task_started(TaskId) ->
+-spec task_started(traverse:id(), traverse:pool()) -> ok.
+task_started(TaskId, _PoolName) ->
     {SpaceId, _StorageId, ScanNum} = decode_task_id(TaskId),
     storage_sync_logger:log_scan_started(SpaceId, ScanNum, TaskId).
 
--spec task_finished(traverse:id()) -> ok.
-task_finished(TaskId) ->
+-spec task_finished(traverse:id(), traverse:pool()) -> ok.
+task_finished(TaskId, _PoolName) ->
     {SpaceId, StorageId, ScanNum} = decode_task_id(TaskId),
     scan_finished(SpaceId, StorageId),
     storage_sync_logger:log_scan_finished(SpaceId, ScanNum, TaskId).
 
--spec task_canceled(traverse:id()) -> ok.
-task_canceled(TaskId) ->
+-spec task_canceled(traverse:id(), traverse:pool()) -> ok.
+task_canceled(TaskId, _PoolName) ->
     {SpaceId, StorageId, ScanNum} = decode_task_id(TaskId),
     scan_finished(SpaceId, StorageId),
     storage_sync_logger:log_scan_cancelled(SpaceId, ScanNum, TaskId).
