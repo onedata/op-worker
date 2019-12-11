@@ -24,7 +24,7 @@
 -export([init_per_suite/1, init_per_testcase/1, end_per_testcase/1]).
 -export([simulate_client/5, verify_streams/1, verify_streams/2, get_guid/3]).
 -export([prepare_file/2, use_file/4]).
--export([create_new_file_subscriptions/3]).
+-export([create_new_file_subscriptions/3, cancel_subscriptions/3]).
 
 -define(req(W, SessId, FuseRequest), element(2, rpc:call(W, worker_proxy, call,
     [fslogic_worker, {fuse_request, SessId, #fuse_request{fuse_request = FuseRequest}}]))).
@@ -222,6 +222,8 @@ init_per_testcase(Config) ->
         fun
             (#token_auth{token = ?TOKEN}) ->
                 {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
+            (#token_auth{token = ?TOKEN2}) ->
+                {ok, #document{value = #user_identity{user_id = <<"user2">>}}};
             (#token_auth{token = ?DUMMY_USER_TOKEN(UserId)}) ->
                 {ok, #document{value = #user_identity{user_id = UserId}}}
         end

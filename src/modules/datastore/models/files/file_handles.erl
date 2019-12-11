@@ -19,8 +19,8 @@
 
 %% API
 -export([delete/1, exists/1, list/0]).
--export([register_open/3, register_release/3, mark_to_remove/1,
-    invalidate_session_entry/2]).
+-export([register_open/4, register_release/3, mark_to_remove/1,
+    invalidate_session_entry/2, get_creation_handle/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -88,9 +88,9 @@ list() ->
 %% FileCtx and SessionId.
 %% @end
 %%--------------------------------------------------------------------
--spec register_open(file_ctx:ctx(), session:id(), pos_integer()) ->
+-spec register_open(file_ctx:ctx(), session:id(), pos_integer(), file_req:handle_id()) ->
     ok | {error, term()}.
-register_open(FileCtx, SessId, Count) ->
+register_open(FileCtx, SessId, Count, CreateHandleID) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Diff = fun
@@ -104,19 +104,30 @@ register_open(FileCtx, SessId, Count) ->
     end,
     Diff2 = fun
         (Handle = #file_handles{descriptors = Fds}) ->
-            case maps:get(SessId, Fds, 0) - Count of
-                0 ->
+            case {maps:get(SessId, Fds, 0) - Count, CreateHandleID} of
+                {0, undefined} ->
                     {ok, Handle#file_handles{
                         descriptors = maps:remove(SessId, Fds)
                     }};
-                FdCount ->
+                {0, _} ->
+                    {ok, Handle#file_handles{
+                        descriptors = maps:remove(SessId, Fds),
+                        creation_handle = CreateHandleID
+                    }};
+                {FdCount, undefined} ->
                     {ok, Handle#file_handles{
                         descriptors = maps:put(SessId, FdCount, Fds)
+                    }};
+                {FdCount, _} ->
+                    {ok, Handle#file_handles{
+                        descriptors = maps:put(SessId, FdCount, Fds),
+                        creation_handle = CreateHandleID
                     }}
             end
     end,
     Default = #document{key = FileUuid, value = #file_handles{
-        descriptors = #{SessId => Count}
+        descriptors = #{SessId => Count},
+        creation_handle = CreateHandleID
     }},
     case datastore_model:update(?CTX, FileUuid, Diff, Default) of
         {ok, _} ->
@@ -217,6 +228,18 @@ invalidate_session_entry(FileCtx, SessId) ->
         {error, Reason} -> {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns handle connected with file creation.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_creation_handle(key()) -> {ok, storage_file_manager:handle_id()} | {error, term()}.
+get_creation_handle(Key) ->
+    case datastore_model:get(?CTX, Key) of
+        {ok, #document{value = #file_handles{creation_handle = Handle}}} -> {ok, Handle};
+        Other -> Other
+    end.
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -237,7 +260,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -255,7 +278,13 @@ get_record_struct(2) ->
     {record, Struct} = get_record_struct(1),
     {record, lists:keyreplace(
         active_descriptors, 1, Struct, {descriptors, #{string => integer}}
-    )}.
+    )};
+get_record_struct(3) ->
+    {record, [
+        {is_removed, boolean},
+        {descriptors, #{string => integer}},
+        {creation_handle, binary}
+    ]}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -265,4 +294,6 @@ get_record_struct(2) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, IsRemoved, Descriptors}) ->
-    {2, #file_handles{is_removed = IsRemoved, descriptors = Descriptors}}.
+    {2, {?MODULE, IsRemoved, Descriptors}};
+upgrade_record(2, {?MODULE, IsRemoved, Descriptors}) ->
+    {3, {?MODULE, IsRemoved, Descriptors, undefined}}.

@@ -13,3 +13,5 @@
 
 -define(TIMEOUT, timer:minutes(1)).
 -define(TOKEN, <<"DUMMY-TOKEN">>).
+-define(TOKEN2, <<"DUMMY-TOKEN2">>).
+-define(TEST_TOKENS, [?TOKEN, ?TOKEN2]).

@@ -558,8 +558,11 @@ coalesce_cache(ConnRef, GRI = #gri{aspect = instance}, Doc = #document{value = R
 
             _ when Rev == CachedRev ->
                 % Discard updates in case the fetched scope or rev are not
-                % greater than those in cache
-                {ok, CachedRecord}
+                % greater than those in cache. However, update the connection
+                % ref in case it has changed so that the cache can be reused.
+                {ok, put_cache_state(CachedRecord, CacheState#{
+                    connection_ref => ConnRef
+                })}
         end
     end,
     Type:update_cache(Id, CacheUpdateFun, Doc#document{value = put_cache_state(Record, #{

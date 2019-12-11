@@ -13,6 +13,7 @@
 -author("Krzysztof Trzepla").
 
 -include("modules/events/definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([get_routing_key/1, get_stream_key/1, get_stream/1, is_remote/1]).
@@ -37,15 +38,15 @@
 get_routing_key(#subscription{type = Type}) ->
     get_routing_key(Type);
 get_routing_key(#file_attr_changed_subscription{file_guid = FileGuid}) ->
-    {ok, key_from_guid(<<"file_attr_changed.">>, FileGuid)};
+    {ok, get_routing_key_from_guid(<<"file_attr_changed.">>, FileGuid)};
 get_routing_key(#file_location_changed_subscription{file_guid = FileGuid}) ->
-    {ok, key_from_guid(<<"file_location_changed.">>, FileGuid)};
+    {ok, get_routing_key_from_guid(<<"file_location_changed.">>, FileGuid)};
 get_routing_key(#file_perm_changed_subscription{file_guid = FileGuid}) ->
-    {ok, key_from_guid(<<"file_perm_changed.">>, FileGuid)};
+    {ok, get_routing_key_from_guid(<<"file_perm_changed.">>, FileGuid)};
 get_routing_key(#file_removed_subscription{file_guid = FileGuid}) ->
-    {ok, key_from_guid(<<"file_removed.">>, FileGuid)};
+    {ok, get_routing_key_from_guid(<<"file_removed.">>, FileGuid)};
 get_routing_key(#file_renamed_subscription{file_guid = FileGuid}) ->
-    {ok, key_from_guid(<<"file_renamed.">>, FileGuid)};
+    {ok, get_routing_key_from_guid(<<"file_renamed.">>, FileGuid)};
 get_routing_key(#quota_exceeded_subscription{}) ->
     {ok, <<"quota_exceeded">>};
 get_routing_key(#helper_params_changed_subscription{storage_id = StorageId}) ->
@@ -153,7 +154,16 @@ update_context(Object, _Ctx) ->
 %%% Internal functions
 %%%===================================================================
 
--spec key_from_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
-key_from_guid(Prefix, Guid) ->
-    Uuid = file_id:guid_to_uuid(Guid),
-    <<Prefix/binary, Uuid/binary>>.
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Gets routing key for events where it bases on guid.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_routing_key_from_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
+get_routing_key_from_guid(Base, FileGuid) ->
+    Uuid = file_id:guid_to_uuid(FileGuid),
+    case fslogic_uuid:is_user_root_dir_uuid(Uuid) of
+        true -> <<Base/binary, ?ROOT_DIR_UUID>>;
+        _ -> <<Base/binary, Uuid/binary>>
+    end.

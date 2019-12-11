@@ -87,17 +87,16 @@ emit(Evt, MgrRef) ->
 %% Gets subscribers and sends an event to event managers that represent subscribers.
 %% @end
 %%--------------------------------------------------------------------
--spec get_subscribers_and_emit(Evt :: base() | aggregated() | type(),
- RoutingBase :: fslogic_worker:file_guid() | [fslogic_worker:file_guid()] | undefined,
- ExcludedRef :: pid() | session:id() | [pid() | session:id()]) ->
+-spec get_subscribers_and_emit(Evt :: base() | aggregated() | type(), event_type:routing_info(),
+    ExcludedRef :: pid() | session:id() | [pid() | session:id()]) ->
     ok | {error, Reason :: term()}.
-get_subscribers_and_emit(Evt, RoutingBase, []) ->
-    case subscription_manager:get_subscribers(Evt, RoutingBase) of
+get_subscribers_and_emit(Evt, RoutingInfo, []) ->
+    case subscription_manager:get_subscribers(Evt, RoutingInfo) of
         {ok, SessIds} -> emit(Evt, SessIds);
         {error, Reason} -> {error, Reason}
     end;
-get_subscribers_and_emit(Evt, RoutingBase, ExcludedRef) ->
-    case subscription_manager:get_subscribers(Evt, RoutingBase) of
+get_subscribers_and_emit(Evt, RoutingInfo, ExcludedRef) ->
+    case subscription_manager:get_subscribers(Evt, RoutingInfo) of
         {ok, SessIds} ->
             Excluded = get_event_managers(ExcludedRef),
             Subscribed = get_event_managers(SessIds),
