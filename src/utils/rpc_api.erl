@@ -121,7 +121,7 @@ storage_create(Name, Helpers, ReadOnly, LumaConfig, ImportedStorage, QosParamete
 
 -spec storage_safe_remove(od_storage:id()) -> ok | {error, storage_in_use | term()}.
 storage_safe_remove(StorageId) ->
-    storage:safe_delete(StorageId).
+    storage:delete(StorageId).
 
 
 -spec storage_supports_any_space(od_storage:id()) -> boolean().

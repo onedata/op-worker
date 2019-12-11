@@ -36,7 +36,8 @@
 -spec get_user_ctx(session:id(), od_user:id(), od_space:id(), storage:record(), helpers:helper()) ->
     {ok, luma:user_ctx()} | {error, Reason :: term()}.
 get_user_ctx(SessionId, UserId, SpaceId, Storage, Helper) ->
-    #luma_config{url = LumaUrl} = LumaConfig = storage:get_luma_config(Storage),
+    LumaConfig = storage:get_luma_config(Storage),
+    LumaUrl = luma_config:get_url(LumaConfig),
     Url = str_utils:format_bin("~s/map_user_credentials", [LumaUrl]),
     ReqHeaders = get_request_headers(LumaConfig),
     ReqBody = get_request_body(SessionId, UserId, SpaceId, Storage),
@@ -96,17 +97,20 @@ get_group_ctx(GroupId, SpaceId, Storage, Helper) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns LUMA request headers based on #luma_config.
+%% Returns LUMA request headers based on LumaConfig.
 %% @end
 %%-------------------------------------------------------------------
 -spec get_request_headers(luma_config:config()) -> map().
-get_request_headers(#luma_config{api_key = undefined}) ->
-    #{?HDR_CONTENT_TYPE => <<"application/json">>};
-get_request_headers(#luma_config{api_key = APIKey}) ->
-    #{
-        ?HDR_CONTENT_TYPE => <<"application/json">>,
-        ?HDR_X_AUTH_TOKEN => APIKey
-    }.
+get_request_headers(LumaConfig) ->
+    case luma_config:get_api_key(LumaConfig) of
+        undefined ->
+            #{?HDR_CONTENT_TYPE => <<"application/json">>};
+        APIKey ->
+            #{
+                ?HDR_CONTENT_TYPE => <<"application/json">>,
+                ?HDR_X_AUTH_TOKEN => APIKey
+            }
+    end.
 
 %%%===================================================================
 %%% Internal functions

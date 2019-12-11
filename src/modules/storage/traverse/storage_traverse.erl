@@ -120,7 +120,7 @@ run(Pool, SpaceId, StorageId, TraverseInfo, RunOpts) ->
 run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) when is_atom(Pool) ->
     run(atom_to_binary(Pool, utf8), TaskId, SpaceId, StorageId, TraverseInfo, RunOpts);
 run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
-    RootStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
+    RootStorageFileId = storage_file_id:space_dir_id(SpaceId, StorageId),
     RootStorageFileCtx = storage_file_ctx:new(RootStorageFileId, SpaceId, StorageId),
     StorageType = storage:get_type(StorageId),
     DefinedTaskId = case TaskId =:= undefined of

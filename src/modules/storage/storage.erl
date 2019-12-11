@@ -15,6 +15,10 @@
 %%%
 %%% This module operates on opaque record representing storage structure.
 %%% This record is NOT stored in datastore.
+%%%
+%%% This module contains deprecated functions. Previous `storage` model have
+%%% been renamed to `storage_config` and this functions are needed to
+%%% properly perform upgrade procedure.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage).
@@ -28,11 +32,11 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/6, get/1, describe/1, exists/1, safe_delete/1, clear_storages/0]).
+-export([create/6, get/1, describe/1, exists/1, delete/1, clear_storages/0]).
 
 %%% Functions to retrieve storage details
 -export([get_id/1, get_name/1, get_helper/1, get_type/1, get_luma_config/1,
-    get_local_qos_parameters/1, get_remote_qos_parameters/2]).
+    get_qos_parameters/1, get_qos_parameters_of_remote_storage/2]).
 -export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
 
 %%% Functions to modify storage details
@@ -130,7 +134,7 @@ get(StorageId) when is_binary(StorageId) ->
                 is_readonly = storage_config:is_readonly(StorageConfig),
                 luma_config = storage_config:get_luma_config(StorageConfig),
                 is_imported_storage = storage_config:is_imported_storage(StorageConfig),
-                qos_parameters = storage_logic:get_local_qos_parameters(StorageLogicDoc)
+                qos_parameters = storage_logic:get_qos_parameters(StorageLogicDoc)
             }};
         {error, _} = Error -> Error
     end.
@@ -165,7 +169,7 @@ describe(StorageId) ->
                 <<"lumaEnabled">> => is_luma_enabled(Storage),
                 <<"lumaUrl">> => LumaUrl,
                 <<"importedStorage">> => is_imported_storage(Storage),
-                <<"qosParameters">> => get_local_qos_parameters(Storage)
+                <<"qosParameters">> => get_qos_parameters(Storage)
             }};
         {error, _} = Error -> Error
     end.
@@ -182,22 +186,22 @@ exists(StorageId) ->
 %% any space.
 %% @end
 %%--------------------------------------------------------------------
--spec safe_delete(od_storage:id()) -> ok | ?ERROR_STORAGE_IN_USE | {error, term()}.
-safe_delete(StorageId) ->
+-spec delete(od_storage:id()) -> ok | ?ERROR_STORAGE_IN_USE | {error, term()}.
+delete(StorageId) ->
     lock_on_storage_by_id(StorageId, fun() ->
         case supports_any_space(StorageId) of
             true ->
                 ?ERROR_STORAGE_IN_USE;
             false ->
                 % TODO VFS-5124 Remove from rtransfer
-                delete(StorageId)
+                delete_insecure(StorageId)
         end
     end).
 
 
 %% @private
--spec delete(od_storage:id()) -> ok | {error, term()}.
-delete(StorageId) ->
+-spec delete_insecure(od_storage:id()) -> ok | {error, term()}.
+delete_insecure(StorageId) ->
     case storage_logic:delete_in_zone(StorageId) of
         ok ->
             storage_config:delete(StorageId);
@@ -206,6 +210,11 @@ delete(StorageId) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes all storages after provider have been deregistered.
+%% @end
+%%--------------------------------------------------------------------
 -spec clear_storages() -> ok.
 clear_storages() ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
@@ -246,22 +255,22 @@ get_type(StorageId) when is_binary(StorageId) ->
 get_type(#storage_record{helper = Helper}) ->
     helper:get_type(Helper).
 
--spec get_local_qos_parameters(record()) -> qos_parameters().
-get_local_qos_parameters(StorageId) when is_binary(StorageId) ->
+-spec get_qos_parameters(record()) -> qos_parameters().
+get_qos_parameters(StorageId) when is_binary(StorageId) ->
     % direct call to storage_logic to avoid additional call to datastore to get storage_config
-    storage_logic:get_local_qos_parameters(StorageId);
-get_local_qos_parameters(#storage_record{qos_parameters = QoSParameters}) ->
+    storage_logic:get_qos_parameters(StorageId);
+get_qos_parameters(#storage_record{qos_parameters = QoSParameters}) ->
     QoSParameters.
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Retrieves QoS parameters from storage data shared between providers
-%% through given SpaceId.
+%% through given space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_remote_qos_parameters(od_storage:id(), od_space:id()) -> qos_parameters().
-get_remote_qos_parameters(StorageId, SpaceId) when is_binary(StorageId) ->
-    storage_logic:get_remote_qos_parameters(StorageId, SpaceId).
+-spec get_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> qos_parameters().
+get_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
+    storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId).
 
 -spec is_readonly(record() | od_storage:id()) -> boolean().
 is_readonly(StorageId) when is_binary(StorageId) ->

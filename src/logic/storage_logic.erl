@@ -36,7 +36,7 @@
 -export([update_space_support_size/3]).
 -export([revoke_space_support/2]).
 -export([get_name/1]).
--export([get_local_qos_parameters/1, get_remote_qos_parameters/2]).
+-export([get_qos_parameters/1, get_qos_parameters_of_remote_storage/2]).
 -export([get_spaces/1]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
@@ -49,7 +49,7 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv create_in_zone(StorageName, undefined)
+%% @equiv create_in_zone(Name, QosParameters, undefined)
 %%--------------------------------------------------------------------
 -spec create_in_zone(od_storage:name(), od_storage:qos_parameters()) -> {ok, od_storage:id()} | errors:error().
 create_in_zone(Name, QosParameters) ->
@@ -158,12 +158,12 @@ get_name(StorageId) ->
 %% Get own storage QoS parameters.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_qos_parameters(od_storage:id() | od_storage:doc()) -> od_storage:qos_parameters().
-get_local_qos_parameters(#document{value = #od_storage{qos_parameters = QosParameters}}) ->
+-spec get_qos_parameters(od_storage:id() | od_storage:doc()) -> od_storage:qos_parameters().
+get_qos_parameters(#document{value = #od_storage{qos_parameters = QosParameters}}) ->
     QosParameters;
-get_local_qos_parameters(StorageId) ->
+get_qos_parameters(StorageId) ->
     {ok, Doc} = get(StorageId),
-    get_local_qos_parameters(Doc).
+    get_qos_parameters(Doc).
 
 
 %%--------------------------------------------------------------------
@@ -171,8 +171,8 @@ get_local_qos_parameters(StorageId) ->
 %% Get QoS parameters of storage supporting given space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_remote_qos_parameters(od_storage:id(), od_space:id()) -> od_storage:qos_parameters().
-get_remote_qos_parameters(StorageId, SpaceId) ->
+-spec get_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> od_storage:qos_parameters().
+get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
     {ok, #document{value = #od_storage{
         qos_parameters = QosParameters}}} = get_shared_data(StorageId, SpaceId),
     QosParameters.
@@ -228,7 +228,7 @@ upgrade_legacy_support(StorageId, SpaceId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Retrieves storage data shared between providers through given SpaceId.
+%% Retrieves storage data shared between providers through given space.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_shared_data(od_storage:id(), od_space:id()) -> {ok, od_storage:doc()} | errors:error().

@@ -269,7 +269,7 @@ has_mtime_changed(SSIDoc, StorageFileCtx) ->
 run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx, UpdateSyncCounters) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    SpaceStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
+    SpaceStorageFileId = storage_file_id:space_dir_id(SpaceId, StorageId),
     storage_sync_info:init_batch_counters(SpaceStorageFileId, SpaceId),
     TaskId = encode_task_id(SpaceId, StorageId, ScanNum),
     {MaxDepth, Config2} = maps:take(max_depth, Config),
@@ -305,7 +305,7 @@ run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx, UpdateSyncCounters) 
 
 -spec run(od_space:id(), od_storage:id(), non_neg_integer(), space_strategies:config()) -> ok.
 run(SpaceId, StorageId, ScanNum, Config) ->
-    SpaceStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
+    SpaceStorageFileId = storage_file_id:space_dir_id(SpaceId, StorageId),
     storage_sync_info:init_batch_counters(SpaceStorageFileId, SpaceId),
     TaskId = encode_task_id(SpaceId, StorageId, ScanNum),
     {MaxDepth, Config2} = maps:take(max_depth, Config),
@@ -368,7 +368,7 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
             end;
         {error, ?ENOENT} ->
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-            case storage_file_id:space_id(SpaceId, StorageId) of
+            case storage_file_id:space_dir_id(SpaceId, StorageId) of
                 StorageFileId ->
                     % space dir may have not been created on storage yet
                     storage_sync_monitoring:mark_updated_file(SpaceId, StorageId),
@@ -688,7 +688,7 @@ maybe_add_deletion_detection_link(StorageFileCtx, Info = #{space_storage_file_id
 
 -spec scan_finished(od_space:id(), od_storage:id()) -> ok.
 scan_finished(SpaceId, StorageId) ->
-    SpaceStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
+    SpaceStorageFileId = storage_file_id:space_dir_id(SpaceId, StorageId),
     ok = storage_sync_links:delete_recursive(SpaceStorageFileId, StorageId),
     storage_sync_monitoring:mark_finished_scan(SpaceId, StorageId),
     ok.

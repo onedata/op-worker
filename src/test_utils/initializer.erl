@@ -1096,14 +1096,14 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
                         end, #{}, Storages),
                         {SpaceId, maps:get(PID, ProvidersSupp)}
                     end, Spaces)),
-                    storages = lists:foldl(fun({_SpaceId, SupportMap}, AccOut) ->
+                    storages = lists:usort(lists:foldl(fun({_SpaceId, SupportMap}, AccOut) ->
                         AccOut ++ lists:foldl(fun({StorageName, P}, AccIn) when P == PID -> [StorageName | AccIn];
                                                  (_, AccIn) -> AccIn
                         end, [], maps:keys(SupportMap))
                     end, [], SpacesToStorages) ++
                     lists:filtermap(fun({StorageName, P}) when P == PID -> {true, StorageName};
                                        (_) -> false
-                    end, CustomStorages),
+                    end, CustomStorages)),
                     longitude = 0.0,
                     latitude = 0.0
                 }}}
@@ -1350,8 +1350,8 @@ storage_mock_setup(Workers) ->
         name = <<>>,
         qos_parameters = #{}
     }}} end),
-    ok = test_utils:mock_expect(Workers, storage_logic, get_local_qos_parameters, fun(_) -> #{} end),
-    ok = test_utils:mock_expect(Workers, storage_logic, get_remote_qos_parameters, fun(_,_) -> #{} end),
+    ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters, fun(_) -> #{} end),
+    ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(_,_) -> #{} end),
     ok = test_utils:mock_expect(Workers, storage_logic, get_name, fun(_) -> <<>> end).
 
 

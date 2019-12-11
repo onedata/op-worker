@@ -68,18 +68,13 @@ get_configuration(SessId) ->
 -spec get_helper_params(user_ctx:ctx(), od_storage:id(),
     od_space:id(), atom()) -> #fuse_response{}.
 get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
-    Helper = case storage:get(StorageId) of
-        {ok, Storage} ->
-            storage:get_helper(Storage);
-        {error, not_found} ->
-            {ok, undefined}
-    end,
+    {ok, Storage} = storage:get(StorageId),
+    Helper = storage:get_helper(Storage),
     case HelperMode of
         ?FORCE_DIRECT_HELPER_MODE ->
             SessionId = user_ctx:get_session_id(UserCtx),
             UserId = user_ctx:get_user_id(UserCtx),
-            {ok, Storage2} = storage:get(StorageId),
-            case luma:get_client_user_ctx(SessionId, UserId, SpaceId, Storage2) of
+            case luma:get_client_user_ctx(SessionId, UserId, SpaceId, Storage) of
                 {ok, ClientStorageUserCtx} ->
                     HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
                     #fuse_response{

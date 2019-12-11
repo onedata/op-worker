@@ -20,7 +20,7 @@
 %%%===================================================================
 
 %% API
--export([space_id/2, flat/1, canonical/1]).
+-export([space_dir_id/2, flat/1, canonical/1]).
 
 %%%===================================================================
 %%% API functions
@@ -34,8 +34,8 @@
 %% in a dedicated subdirectory.
 %% @end
 %%-------------------------------------------------------------------
--spec space_id(od_space:id(), od_storage:id()) -> helpers:file_id().
-space_id(SpaceId, StorageId) ->
+-spec space_dir_id(od_space:id(), od_storage:id()) -> helpers:file_id().
+space_dir_id(SpaceId, StorageId) ->
     case storage:is_imported_storage(StorageId) of
         true ->
             ?DIRECTORY_SEPARATOR_BINARY;

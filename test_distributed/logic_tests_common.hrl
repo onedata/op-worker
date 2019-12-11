@@ -184,6 +184,9 @@
     ?HARVESTER_INDEX3(__Harvester)
 ]).
 
+% Mocked storage data
+-define(STORAGE_NAME(__Storage), __Storage).
+
 
 -define(MOCK_JOIN_GROUP_TOKEN, <<"mockJoinGroupToken">>).
 -define(MOCK_JOINED_GROUP_ID, <<"mockJoinedGroupId">>).
@@ -339,6 +342,7 @@
 }}).
 
 -define(STORAGE_PRIVATE_DATA_MATCHER(__Storage), #document{key = __Storage, value = #od_storage{
+    name = ?STORAGE_NAME(__Storage),
     provider = ?PROVIDER_1,
     spaces = [],
     qos_parameters = #{}
@@ -497,6 +501,7 @@ end).
 -define(STORAGE_PRIVATE_DATA_VALUE(__StorageId), #{
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_storage, id = __StorageId, aspect = instance, scope = private}),
+    <<"name">> => ?STORAGE_NAME(__StorageId),
     <<"provider">> => ?PROVIDER_1,
     <<"spaces">> => [],
     <<"qos_parameters">> => #{}

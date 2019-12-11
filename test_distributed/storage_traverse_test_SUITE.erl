@@ -446,7 +446,7 @@ run_traverse(Worker, SpaceId, StorageId, TraversInfo, TraverseOpts) ->
     rpc:call(Worker, storage_traverse, run, [?MODULE, SpaceId, StorageId, TraversInfo, TraverseOpts]).
 
 space_dir(Worker, SpaceId, StorageId) ->
-    rpc:call(Worker, storage_file_id, space_id, [SpaceId, StorageId]).
+    rpc:call(Worker, storage_file_id, space_dir_id, [SpaceId, StorageId]).
 
 count_files_and_dirs(FilesStructure) ->
     count_files_and_dirs(FilesStructure, 0, 0, 1).
