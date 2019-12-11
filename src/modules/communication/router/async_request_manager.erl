@@ -153,7 +153,8 @@
 -type req_id() :: {reference(), clproto_message_id:id()}.
 -type server_message() :: #server_message{}.
 
--type worker_ref() :: proc | {proc, datastore:key()} | module() | {module(), node()}.
+-type worker_ref() :: proc | {proc, datastore:key()} |
+    module() | {id, module(), datastore:key()} | {module(), node()}.
 -type respond_via() :: {Conn :: pid(), AsyncReqManager :: pid(), session:id()}.
 
 -type error() :: {error, Reason :: term()}.

@@ -23,6 +23,7 @@
 -include("proto/oneprovider/remote_driver_messages.hrl").
 -include("proto/oneprovider/rtransfer_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
 -export([effective_session_id/1]).
@@ -336,9 +337,16 @@ delegate_request(WorkerRef, Req, MsgId, RIB) ->
     ).
 
 %% @private
+-ifndef(gen_local_keys).
+-spec get_worker_ref(file_id:file_guid()) -> {id, module(), datastore:key()}.
+get_worker_ref(ContextGuid) ->
+    {id, fslogic_worker, file_id:guid_to_uuid(ContextGuid)}.
+-endif.
+-ifdef(gen_local_keys).
 -spec get_worker_ref(file_id:file_guid()) -> module() | {id, module(), datastore:key()}.
 get_worker_ref(ContextGuid) ->
     case fslogic_uuid:is_space_dir_guid(ContextGuid) of
         true -> fslogic_worker;
         _ -> {id, fslogic_worker, file_id:guid_to_uuid(ContextGuid)}
     end.
+-endif.
