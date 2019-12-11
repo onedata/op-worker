@@ -623,8 +623,12 @@ client_to_auth(?GUEST_SESS_ID) ->
 client_to_auth(SessionId) when is_binary(SessionId) ->
     {ok, Auth} = session:get_auth(SessionId),
     client_to_auth(Auth);
-client_to_auth(SessionAuth) ->
-    SessionAuth.
+client_to_auth(?ROOT_AUTH) ->
+    ?ROOT_AUTH;
+client_to_auth(?GUEST_AUTH) ->
+    ?GUEST_AUTH;
+client_to_auth(TokenAuth) ->
+    TokenAuth.
 
 
 -spec resolve_auth_override(session:auth()) -> gs_protocol:auth_override().

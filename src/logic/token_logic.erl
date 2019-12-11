@@ -57,7 +57,9 @@ verify_access_token(AccessToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     }),
     case Result of
         {ok, #{<<"subject">> := Subject} = Ans} ->
-            TokenTTL = maps:get(<<"ttl">>, Ans, undefined),
+            TokenTTL = gs_protocol:null_to_undefined(
+                maps:get(<<"ttl">>, Ans, null)
+            ),
             {ok, aai:deserialize_subject(Subject), TokenTTL};
         {error, _} = Error ->
             Error
