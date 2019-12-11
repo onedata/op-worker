@@ -45,15 +45,16 @@
 get_routing_key(#event{type = Type}, RoutingBase) ->
     get_routing_key(Type, RoutingBase);
 get_routing_key(#file_attr_changed_event{file_attr = FileAttr}, RoutingBase) ->
-    get_file_connected_routing_key(<<"file_attr_changed.">>, FileAttr#file_attr.guid, RoutingBase);
+    get_parent_connected_routing_key(<<"file_attr_changed.">>, FileAttr#file_attr.guid, RoutingBase);
 get_routing_key(#file_location_changed_event{file_location = FileLocation}, _RoutingBase) ->
     {ok, <<"file_location_changed.", (FileLocation#file_location.uuid)/binary>>};
 get_routing_key(#file_perm_changed_event{file_guid = FileGuid}, _RoutingBase) ->
-    {ok, key_from_guid(<<"file_perm_changed.">>, FileGuid)};
+    Uuid = file_id:guid_to_uuid(FileGuid),
+    {ok, <<"file_perm_changed.", Uuid/binary>>};
 get_routing_key(#file_removed_event{file_guid = FileGuid}, RoutingBase) ->
-    get_file_connected_routing_key(<<"file_removed.">>, FileGuid, RoutingBase);
+    get_parent_connected_routing_key(<<"file_removed.">>, FileGuid, RoutingBase);
 get_routing_key(#file_renamed_event{top_entry = Entry}, RoutingBase) ->
-    get_file_connected_routing_key(<<"file_renamed.">>, Entry#file_renamed_entry.old_guid, RoutingBase);
+    get_parent_connected_routing_key(<<"file_renamed.">>, Entry#file_renamed_entry.old_guid, RoutingBase);
 get_routing_key(#quota_exceeded_event{}, _RoutingBase) ->
     {ok, <<"quota_exceeded">>};
 get_routing_key(#helper_params_changed_event{storage_id = StorageId}, _RoutingBase) ->
@@ -196,10 +197,10 @@ update_context(Evt, _Ctx) ->
 %% Gets routing key for events where it bases on file's parent guid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_connected_routing_key(binary(), fslogic_worker:file_guid(), routing_info()) ->
+-spec get_parent_connected_routing_key(binary(), fslogic_worker:file_guid(), routing_info()) ->
     {ok, Key :: subscription_manager:key()} |
     {ok, Key :: subscription_manager:key(), SpaceIDFilter :: od_space:id()} | {error, session_only}.
-get_file_connected_routing_key(Base, FileGuid, #{file_ctx := FileCtx, key_base := KeyBase}) ->
+get_parent_connected_routing_key(Base, FileGuid, #{file_ctx := FileCtx, key_base := KeyBase}) ->
     case {KeyBase, file_ctx:is_space_dir_const(FileCtx)} of
         {undefined, _} -> % user's dir
             Uuid = file_id:guid_to_uuid(FileGuid),
@@ -211,13 +212,13 @@ get_file_connected_routing_key(Base, FileGuid, #{file_ctx := FileCtx, key_base :
             Uuid = file_id:guid_to_uuid(KeyBase),
             {ok, <<Base/binary, Uuid/binary>>}
     end;
-get_file_connected_routing_key(Base, FileGuid, #{file_ctx := FileCtx}) ->
+get_parent_connected_routing_key(Base, FileGuid, #{file_ctx := FileCtx}) ->
     {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx, undefined),
-    get_file_connected_routing_key(Base, FileGuid, #{file_ctx => FileCtx, key_base => ParentGuid});
-get_file_connected_routing_key(Base, FileGuid, #{key_base := KeyBase}) ->
+    get_parent_connected_routing_key(Base, FileGuid, #{file_ctx => FileCtx, key_base => ParentGuid});
+get_parent_connected_routing_key(Base, FileGuid, #{key_base := KeyBase}) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    get_file_connected_routing_key(Base, FileGuid, #{file_ctx => FileCtx, key_base => KeyBase});
-get_file_connected_routing_key(Base, FileGuid, _) ->
+    get_parent_connected_routing_key(Base, FileGuid, #{file_ctx => FileCtx, key_base => KeyBase});
+get_parent_connected_routing_key(Base, FileGuid, _) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     {ParentGuid, _} = file_ctx:get_parent_guid(FileCtx, undefined),
-    get_file_connected_routing_key(Base, FileGuid, #{file_ctx => FileCtx, key_base => ParentGuid}).
+    get_parent_connected_routing_key(Base, FileGuid, #{file_ctx => FileCtx, key_base => ParentGuid}).
