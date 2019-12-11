@@ -90,7 +90,7 @@ subscribe_on_user_root_test_base(Config, UserNum, ExpectedAns) ->
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
     DirId = fslogic_uuid:user_root_dir_guid(UserId),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_custom_macaroon(Worker1, [{active, true}], SessionId, UserNum),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_custom_token(Worker1, [{active, true}], SessionId, UserNum),
 
     Seq1 = get_seq(Config, UserNum),
     ?assertEqual(ok, ssl:send(Sock,
@@ -123,7 +123,7 @@ subscribe_on_new_space_test_base(Config, UserNum, ExpectedAns) ->
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
     DirId = fslogic_uuid:user_root_dir_guid(UserId),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_custom_macaroon(Worker1, [{active, true}], SessionId, UserNum),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_custom_token(Worker1, [{active, true}], SessionId, UserNum),
 
     Seq1 = get_seq(Config, UserNum),
     ?assertEqual(ok, ssl:send(Sock,
@@ -148,9 +148,9 @@ init_per_suite(Config) ->
         test_utils:mock_new(Workers, user_identity),
         test_utils:mock_expect(Workers, user_identity, get_or_fetch,
             fun
-                (#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
+                (#token_auth{token = ?TOKEN}) ->
                     {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
-                (#macaroon_auth{macaroon = ?MACAROON2, disch_macaroons = ?DISCH_MACAROONS2}) ->
+                (#token_auth{token = ?TOKEN2}) ->
                     {ok, #document{value = #user_identity{user_id = <<"user2">>}}}
             end
         ),
