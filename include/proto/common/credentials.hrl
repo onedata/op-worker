@@ -6,9 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Credentials used to (together with context such as peer ip or
-%%% interface hr is connected on) create token_auth necessary to
-%%% verify user identity.
+%%% Credentials used to authenticate a user together with context
+%%% information such as peer IP or interface (see auth_manager).
 %%% @end
 %%%-------------------------------------------------------------------
 
