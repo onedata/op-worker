@@ -984,7 +984,7 @@ group_logic_mock_setup(Workers, Groups, _Users) ->
 %%--------------------------------------------------------------------
 -spec space_logic_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}],
-    [{binary(), [binary()]}], [binary()]) -> ok.
+    [{binary(), [binary()]}], [{binary(), binary()}]) -> ok.
 space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvesters, CustomStorages) ->
     test_utils:mock_new(Workers, space_logic),
 
@@ -994,7 +994,8 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         EffUsers = maps:from_list(lists:map(fun(UID) ->
             {UID, node_get_mocked_space_user_privileges(SpaceId, UID)}
         end, UserIds)),
-        Storages = proplists:get_value(SpaceId, SpacesToStorages, maps:from_list([{St, 1000000000} || St <- CustomStorages])),
+        Storages = proplists:get_value(SpaceId, SpacesToStorages,
+            maps:from_list([{St, 1000000000} || St <- CustomStorages])),
         {ok, #document{key = SpaceId, value = #od_space{
             name = SpaceName,
             providers = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
@@ -1062,7 +1063,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
     proplists:proplist(), proplists:proplist(),
-    [{binary(), [{binary(), non_neg_integer()}]}], binary()) -> ok.
+    [{binary(), [{binary(), non_neg_integer()}]}], [{binary(), binary()}]) -> ok.
 provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
     SpacesToStorages, CustomStorages
 ) ->
@@ -1088,7 +1089,8 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
                     subdomain_delegation = false,
                     domain = PID,  % domain is the same as Id
                     eff_spaces = maps:from_list(lists:map(fun(SpaceId) ->
-                        Storages = proplists:get_value(SpaceId, SpacesToStorages, maps:from_list([{St, 1000000000} || St <- CustomStorages])),
+                        Storages = proplists:get_value(SpaceId, SpacesToStorages,
+                            maps:from_list([{St, 1000000000} || St <- CustomStorages])),
                         ProvidersSupp = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
                             maps:update_with(ProviderId, fun(PrevSupport) -> PrevSupport + Support end, Support, Acc)
                         end, #{}, Storages),
@@ -1098,7 +1100,10 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
                         AccOut ++ lists:foldl(fun({StorageName, P}, AccIn) when P == PID -> [StorageName | AccIn];
                                                  (_, AccIn) -> AccIn
                         end, [], maps:keys(SupportMap))
-                    end, [], SpacesToStorages),
+                    end, [], SpacesToStorages) ++
+                    lists:filtermap(fun({StorageName, P}) when P == PID -> {true, StorageName};
+                                       (_) -> false
+                    end, CustomStorages),
                     longitude = 0.0,
                     latitude = 0.0
                 }}}

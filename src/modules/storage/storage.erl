@@ -30,7 +30,7 @@
 %% API
 -export([create/6, get/1, describe/1, exists/1, safe_delete/1, clear_storages/0]).
 
-%%% Functions to retrieve storage data
+%%% Functions to retrieve storage details
 -export([get_id/1, get_name/1, get_helper/1, get_type/1, get_luma_config/1,
     get_local_qos_parameters/1, get_remote_qos_parameters/2]).
 -export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
@@ -39,7 +39,8 @@
 -export([update_name/2, update_luma_config/2]).
 -export([set_readonly/2, set_luma_config/2,
     set_imported_storage/2, set_qos_parameters/2]).
--export([set_helper_insecure/2, update_helper_args/2, update_helper_admin_ctx/2, update_helper/2]).
+-export([set_helper_insecure/2, update_helper_args/2, update_helper_admin_ctx/2,
+    update_helper/2]).
 
 %%% Support related functions
 -export([support_space/3, update_space_support_size/3, revoke_space_support/2]).
@@ -60,16 +61,16 @@
 % This record is NOT stored in datastore.
 -record(storage_record, {
     id :: od_storage:id(),
-    name :: storage_config:name(),
+    name :: name(),
     helper :: helpers:helper(),
     is_readonly :: boolean(),
     is_imported_storage :: boolean(),
     luma_config :: luma_config:config() | undefined,
-    qos_parameters :: od_storage:qos_parameters()
+    qos_parameters :: qos_parameters()
 }).
 
 -opaque record() :: #storage_record{}.
--type name() :: storage_config:name().
+-type name() :: od_storage:name().
 -type qos_parameters() :: od_storage:qos_parameters().
 
 -export_type([record/0, name/0, qos_parameters/0]).
@@ -216,7 +217,7 @@ clear_storages() ->
     end, StorageIds).
 
 %%%===================================================================
-%%% Functions to retrieve storage data
+%%% Functions to retrieve storage details
 %%%===================================================================
 
 -spec get_id(record()) -> od_storage:id().
@@ -282,7 +283,7 @@ is_luma_enabled(Storage) ->
 
 
 %%%===================================================================
-%%% Functions to modify storage data
+%%% Functions to modify storage details
 %%%===================================================================
 
 -spec update_name(od_storage:id(), NewName :: name()) -> ok.

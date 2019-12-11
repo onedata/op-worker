@@ -187,7 +187,7 @@
 }).
 
 -record(od_storage, {
-    name :: binary(),
+    name = <<>> :: od_storage:name(),
     provider :: od_provider:id() | undefined,
     spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
