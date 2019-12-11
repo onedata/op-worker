@@ -164,6 +164,9 @@ update_context(Object, _Ctx) ->
 get_routing_key_from_guid(Base, FileGuid) ->
     Uuid = file_id:guid_to_uuid(FileGuid),
     case fslogic_uuid:is_user_root_dir_uuid(Uuid) of
-        true -> <<Base/binary, ?ROOT_DIR_UUID>>;
-        _ -> <<Base/binary, Uuid/binary>>
+        true ->
+            RootUuid = ?ROOT_DIR_UUID,
+            <<Base/binary, RootUuid/binary>>;
+        _ ->
+            <<Base/binary, Uuid/binary>>
     end.

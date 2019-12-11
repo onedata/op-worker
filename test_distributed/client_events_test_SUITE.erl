@@ -47,13 +47,14 @@ all() ->
 subscribe_on_dir_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    AccessToken = ?config({access_token, <<"user1">>}, Config),
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
 
     {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
         generator:gen_name(), 8#755)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     Filename = generator:gen_name(),
     Dirname = generator:gen_name(),
@@ -75,14 +76,15 @@ subscribe_on_dir_test(Config) ->
     ok.
 
 subscribe_on_user_root_test(Config) ->
-    subscribe_on_user_root_test_base(Config, 1, ok).
+    subscribe_on_user_root_test_base(Config, <<"user1">>, ok).
 
 subscribe_on_user_root_filter_test(Config) ->
-    subscribe_on_user_root_test_base(Config, 2, {error,timeout}).
+    subscribe_on_user_root_test_base(Config, <<"user2">>, {error,timeout}).
 
-subscribe_on_user_root_test_base(Config, UserNum, ExpectedAns) ->
+subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user", (integer_to_binary(UserNum))/binary>>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
+    AccessToken = ?config({access_token, User}, Config),
     EmmiterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmmiterSessionId, <<"/space_name1">>),
 
@@ -90,9 +92,9 @@ subscribe_on_user_root_test_base(Config, UserNum, ExpectedAns) ->
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
     DirId = fslogic_uuid:user_root_dir_guid(UserId),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
-    Seq1 = get_seq(Config, UserNum),
+    Seq1 = get_seq(Config, User),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirId, 500))),
     timer:sleep(2000), % there is no sync between subscription and unlink
@@ -100,19 +102,20 @@ subscribe_on_user_root_test_base(Config, UserNum, ExpectedAns) ->
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(SpaceGuid), []]),
     ?assertEqual(ExpectedAns, receive_file_attr_changed_event()),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, UserNum), -Seq1))),
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq1))),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
 subscribe_on_new_space_test(Config) ->
-    subscribe_on_new_space_test_base(Config, 1, ok).
+    subscribe_on_new_space_test_base(Config, <<"user1">>, ok).
 
 subscribe_on_new_space_filter_test(Config) ->
-    subscribe_on_new_space_test_base(Config, 2, {error,timeout}).
+    subscribe_on_new_space_test_base(Config, <<"user2">>, {error,timeout}).
 
-subscribe_on_new_space_test_base(Config, UserNum, ExpectedAns) ->
+subscribe_on_new_space_test_base(Config, User, ExpectedAns) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user", (integer_to_binary(UserNum))/binary>>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
+    AccessToken = ?config({access_token, User}, Config),
     EmmiterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
 
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmmiterSessionId, <<"/space_name1">>),
@@ -123,9 +126,9 @@ subscribe_on_new_space_test_base(Config, UserNum, ExpectedAns) ->
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
     DirId = fslogic_uuid:user_root_dir_guid(UserId),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
-    Seq1 = get_seq(Config, UserNum),
+    Seq1 = get_seq(Config, User),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirId, 500))),
     timer:sleep(2000), % there is no sync between subscription and unlink
@@ -133,7 +136,7 @@ subscribe_on_new_space_test_base(Config, UserNum, ExpectedAns) ->
     rpc:call(Worker1, file_meta, make_space_exist, [<<"space_id1">>]),
     ?assertEqual(ExpectedAns, receive_file_attr_changed_event()),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, UserNum), -Seq1))),
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq1))),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
@@ -160,9 +163,8 @@ end_per_testcase(_Case, Config) ->
     ssl:stop().
 
 end_per_suite(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [user_identity]),
-    initializer:clean_test_users_and_spaces_no_validate(Config).
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:unmock_auth_manager(Config).
 
 %%%===================================================================
 %%% Internal functions
