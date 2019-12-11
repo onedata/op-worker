@@ -211,13 +211,6 @@
     file_guid :: fslogic_worker:file_guid()
 }).
 
-%% TODO VFS-5895 rm
-%% Identity containing user_id
--record(user_identity, {
-    user_id :: undefined | od_user:id(),
-    provider_id :: undefined | oneprovider:id()
-}).
-
 -record(file_force_proxy, {
     provider_id :: undefined | oneprovider:id()
 }).
@@ -227,7 +220,7 @@
     status :: undefined | session:status(),
     accessed :: undefined | integer(),
     type :: undefined | session:type(),
-    identity :: undefined | session:identity(),
+    identity :: aai:subject(),
     auth :: undefined | session:auth(),
     data_constraints :: data_constraints:constraints(),
     node :: node(),
@@ -237,7 +230,7 @@
     sequencer_manager :: undefined | pid(),
     async_request_manager :: undefined | pid(),
     connections = [] :: [pid()],
-    proxy_via :: oneprovider:id() | undefined,
+    proxy_via :: undefined | oneprovider:id(),
     % Key-value in-session memory
     memory = #{} :: map(),
     direct_io = false :: boolean()

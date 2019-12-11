@@ -15,6 +15,7 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/events/definitions.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -127,7 +128,8 @@ init_per_testcase(Case, Config) when
     Case =:= event_manager_should_start_streams_on_init;
     Case =:= event_manager_should_unregister_event_stream;
     Case =:= event_manager_should_forward_events_to_event_streams;
-    Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
+    Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SessId} = session_setup(Worker),
     initializer:remove_pending_messages(),
@@ -157,7 +159,8 @@ end_per_testcase(Case, Config) when
     Case =:= event_manager_should_start_streams_on_init;
     Case =:= event_manager_should_unregister_event_stream;
     Case =:= event_manager_should_forward_events_to_event_streams;
-    Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation ->
+    Case =:= event_manager_should_terminate_event_stream_on_subscription_cancellation
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config),
     test_utils:mock_validate_and_unload(Worker, event_stream_sup);
@@ -208,7 +211,9 @@ stop_event_manager(Mgr) ->
 -spec session_setup(Worker :: node()) -> {ok, SessId :: session:id()}.
 session_setup(Worker) ->
     ?assertMatch({ok, _}, rpc:call(Worker, session, create, [#document{
-        key = <<"session_id">>, value = #session{auth = #user_identity{}}
+        key = <<"session_id">>, value = #session{
+            identity = ?SUB(user, <<"user">>)
+        }
     }])).
 
 %%--------------------------------------------------------------------

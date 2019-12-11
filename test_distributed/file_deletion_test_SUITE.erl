@@ -551,9 +551,8 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 init_session(Worker, Nonce) ->
-    Iden = #user_identity{user_id = <<"u1">>},
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, Iden, undefined, self()
+        Worker, Nonce, ?SUB(user, <<"u1">>), undefined, self()
     ).
 
 create_test_file(Config, Worker, SessId, DelayedFileCreation) ->

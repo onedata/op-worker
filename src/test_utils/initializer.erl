@@ -283,7 +283,7 @@ setup_session(Worker, [{_, #user_config{
 
     Nonce = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_nonce", UserId),
 
-    Identity = #user_identity{user_id = UserId},
+    Identity = ?SUB(user, UserId),
     TokenAuth = auth_manager:build_token_auth(
         AccessToken, undefined,
         local_ip_v4(), oneclient, allow_data_access_caveats
@@ -913,7 +913,7 @@ user_logic_mock_setup(Workers, Users) ->
             end;
         (_, SessionId, UserId) when is_binary(SessionId) ->
             {ok, #document{value = #session{
-                identity = #user_identity{user_id = SessionUserId}
+                identity = ?SUB(user, SessionUserId)
             }}} = session:get(SessionId),
             case SessionUserId of
                 UserId ->

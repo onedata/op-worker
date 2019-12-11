@@ -15,6 +15,7 @@
 -include("lfm_permissions_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/handshake_messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
 -export([
@@ -34,11 +35,11 @@
 %%%===================================================================
 
 
--spec create_session(node(), #user_identity{}, tokens:serialized()) ->
+-spec create_session(node(), od_user:id(), tokens:serialized()) ->
     session:id().
 create_session(Node, UserId, AccessToken) ->
     Nonce = crypto:strong_rand_bytes(10),
-    Identity = #user_identity{user_id = UserId},
+    Identity = ?SUB(user, UserId),
     TokenAuth = auth_manager:build_token_auth(
         AccessToken, undefined,
         initializer:local_ip_v4(), oneclient, allow_data_access_caveats

@@ -14,6 +14,7 @@
 
 
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -204,7 +205,7 @@ session_setup(Worker, Nonce) ->
     fuse_test_utils:reuse_or_create_fuse_session(
         Worker,
         Nonce,
-        #user_identity{user_id = <<"user_id">>},
+        ?SUB(user, <<"user_id">>),
         undefined,
         self()
     ).

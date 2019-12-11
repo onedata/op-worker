@@ -15,6 +15,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -58,8 +59,12 @@ new(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> od_user:doc().
 get_user(#user_ctx{session = #document{key = SessId, value = #session{
-    identity = #user_identity{user_id = UserId}
-}}}) ->
+    identity = ?SUB(Type, UserId)
+}}}) when
+    (Type =:= root andalso UserId =:= ?ROOT_USER_ID);
+    (Type =:= nobody andalso UserId =:= ?GUEST_USER_ID);
+    Type =:= user
+->
     case get(user_ctx_cache) of
         undefined ->
             {ok, User} = user_logic:get(SessId, UserId),
