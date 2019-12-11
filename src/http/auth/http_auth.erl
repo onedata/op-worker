@@ -34,19 +34,18 @@ authenticate(Req, Interface, DataCaveatsPolicy) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
             {ok, ?NOBODY};
-        AccessToken ->
+        SubjectAccessToken ->
             {PeerIp, _} = cowboy_req:peer(Req),
-            authenticate(#token_auth{
-                token = AccessToken,
-                peer_ip = PeerIp,
-                interface = Interface,
-                audience_token = tokens:parse_audience_token_header(Req),
-                data_access_caveats_policy = DataCaveatsPolicy
-            })
+            TokenAuth = auth_manager:build_token_auth(
+                SubjectAccessToken, tokens:parse_audience_token_header(Req),
+                PeerIp, Interface, DataCaveatsPolicy
+            ),
+            authenticate(TokenAuth)
     end.
 
 
--spec authenticate(#token_auth{}) -> {ok, aai:auth()} | errors:error().
+-spec authenticate(auth_manager:token_auth()) ->
+    {ok, aai:auth()} | errors:error().
 authenticate(TokenAuth) ->
     try
         authenticate_insecure(TokenAuth)
@@ -67,12 +66,13 @@ authenticate(TokenAuth) ->
 
 
 %% @private
--spec authenticate_insecure(#token_auth{}) -> {ok, aai:auth()} | no_return().
+-spec authenticate_insecure(auth_manager:token_auth()) ->
+    {ok, aai:auth()} | no_return().
 authenticate_insecure(TokenAuth) ->
     case auth_manager:verify(TokenAuth) of
-        {ok, ?USER(UserId) = Auth, _TokenValidUntil} ->
-            Identity = #user_identity{user_id = UserId},
-            case create_or_reuse_session(Identity, TokenAuth) of
+        {ok, Auth, _TokenValidUntil} ->
+            Interface = auth_manager:get_interface(TokenAuth),
+            case create_or_reuse_session(Auth#auth.subject, TokenAuth, Interface) of
                 {ok, SessionId} ->
                     {ok, Auth#auth{session_id = SessionId}};
                 {error, {invalid_identity, _}} ->
@@ -85,9 +85,9 @@ authenticate_insecure(TokenAuth) ->
 
 
 %% @private
--spec create_or_reuse_session(session:identity(), #token_auth{}) ->
-    {ok, session:id()} | {error, term()}.
-create_or_reuse_session(Identity, #token_auth{interface = graphsync} = TokenAuth) ->
+-spec create_or_reuse_session(aai:subject(), auth_manager:token_auth(),
+    Interface :: graphsync | rest) -> {ok, session:id()} | {error, term()}.
+create_or_reuse_session(Identity, TokenAuth, graphsync) ->
     session_manager:reuse_or_create_gui_session(Identity, TokenAuth);
-create_or_reuse_session(Identity, #token_auth{interface = rest} = TokenAuth) ->
+create_or_reuse_session(Identity, TokenAuth, rest) ->
     session_manager:reuse_or_create_rest_session(Identity, TokenAuth).

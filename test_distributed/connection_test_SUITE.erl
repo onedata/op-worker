@@ -141,7 +141,7 @@ client_connection_test(Config) ->
     ),
 
     UserId = <<"user">>,
-    SerializedToken = initializer:create_token(UserId),
+    SerializedToken = initializer:create_access_token(UserId),
 
     ValidMacaroon = #'Macaroon'{macaroon = SerializedToken},
     InvalidMacaroon = #'Macaroon'{macaroon = <<"invaldi">>},
@@ -186,7 +186,7 @@ python_client_test_base(Config) ->
     ),
 
     UserId = <<"user">>,
-    SerializedToken = initializer:create_token(UserId),
+    SerializedToken = initializer:create_access_token(UserId),
 
     HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
@@ -728,8 +728,8 @@ handshake_as_provider(Node, ProviderId, Token) ->
 
 
 handshake_as_client(Node, Token, Version) ->
-    SessId = crypto:strong_rand_bytes(10),
-    case fuse_test_utils:connect_as_client(Node, SessId, Token, Version) of
+    Nonce = crypto:strong_rand_bytes(10),
+    case fuse_test_utils:connect_as_client(Node, Nonce, Token, Version) of
         {ok, Sock} ->
             ssl:close(Sock),
             'OK';

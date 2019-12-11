@@ -28,7 +28,7 @@
 
 %% API
 -export([
-    create_token/1, create_token/2,
+    create_access_token/1, create_access_token/2,
     setup_session/3, teardown_session/2,
     setup_storage/1, setup_storage/2, teardown_storage/1,
     clean_test_users_and_spaces/1,
@@ -180,8 +180,11 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_session(W, Config)
     end, DomainWorkers),
 
-    test_utils:mock_validate_and_unload(Workers, [user_logic, group_logic,
-        space_logic, provider_logic, cluster_logic, harvester_logic]),
+    test_utils:mock_validate_and_unload(Workers, [
+        user_logic, group_logic,
+        space_logic, provider_logic, cluster_logic, harvester_logic,
+        auth_manager
+    ]),
     unmock_provider_ids(Workers).
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -241,13 +244,13 @@ clear_subscriptions(Worker) ->
     end, Docs).
 
 
--spec create_token(od_user:id()) -> tokens:serialized().
-create_token(UserId) ->
-    create_token(UserId, []).
+-spec create_access_token(od_user:id()) -> tokens:serialized().
+create_access_token(UserId) ->
+    create_access_token(UserId, []).
 
 
--spec create_token(od_user:id(), [caveats:caveat()]) -> tokens:serialized().
-create_token(UserId, Caveats) ->
+-spec create_access_token(od_user:id(), [caveats:caveat()]) -> tokens:serialized().
+create_access_token(UserId, Caveats) ->
     {ok, SerializedToken} = ?assertMatch(
         {ok, _},
         tokens:serialize(tokens:construct(#token{
@@ -272,7 +275,7 @@ setup_session(_Worker, [], Config) ->
 setup_session(Worker, [{_, #user_config{
     id = UserId,
     spaces = Spaces,
-    token = Token,
+    token = AccessToken,
     groups = Groups,
     name = UserName
 }} | R], Config) ->
@@ -281,20 +284,18 @@ setup_session(Worker, [{_, #user_config{
         list_to_binary(Text ++ "_" ++ binary_to_list(User))
     end,
 
-    SessId = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_session_id", UserId),
+    Nonce = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_nonce", UserId),
 
-    Identity = #user_identity{user_id = UserId},
-    Auth = #token_auth{
-        token = Token,
-        peer_ip = local_ip_v4(),
-        interface = oneclient,
-        data_access_caveats_policy = allow_data_access_caveats
-    },
+    Identity = ?SUB(user, UserId),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
     {ok, SessId} = ?assertMatch({ok, SessId}, rpc:call(
         Worker,
         session_manager,
         reuse_or_create_fuse_session,
-        [SessId, Identity, Auth])
+        [Nonce, Identity, TokenAuth])
     ),
 
     lists:foreach(fun({_, SpaceName}) ->
@@ -309,10 +310,11 @@ setup_session(Worker, [{_, #user_config{
         {{spaces, UserId}, Spaces},
         {{groups, UserId}, Groups},
         {{user_id, UserId}, UserId},
-        {{auth, UserId}, Auth},
         {{user_name, UserId}, UserName},
+        {{access_token, UserId}, AccessToken},
+        {{token_auth, UserId}, TokenAuth},
+        {{session_nonce, {UserId, ?GET_DOMAIN(Worker)}}, Nonce},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
-        {{auth_token, {UserId, ?GET_DOMAIN(Worker)}}, Token},
         {{fslogic_ctx, UserId}, Ctx}
         | setup_session(Worker, R, Config)
     ].
@@ -484,22 +486,17 @@ unmock_test_file_context(Config) ->
 -spec mock_auth_manager(proplists:proplist()) -> ok.
 mock_auth_manager(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, auth_manager),
+    test_utils:mock_new(Workers, auth_manager, [passthrough]),
     test_utils:mock_expect(Workers, auth_manager, verify,
-        fun(#token_auth{
-            token = SerializedToken,
-            peer_ip = PeerIp,
-            interface = Interface,
-            data_access_caveats_policy = DataAccessCaveatsPolicy
-        }) ->
-            case tokens:deserialize(SerializedToken) of
+        fun(TokenAuth) ->
+            case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
                 {ok, Token} ->
                     AuthCtx = #auth_ctx{
                         current_timestamp = time_utils:cluster_time_seconds(),
-                        ip = PeerIp,
-                        interface = Interface,
+                        ip = auth_manager:get_peer_ip(TokenAuth),
+                        interface = auth_manager:get_interface(TokenAuth),
                         audience = ?AUD(?OP_WORKER, oneprovider:get_id()),
-                        data_access_caveats_policy = DataAccessCaveatsPolicy,
+                        data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenAuth),
                         group_membership_checker = fun(_, _) -> false end
                     },
                     case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx, ?SUPPORTED_ACCESS_TOKEN_CAVEATS) of
@@ -512,7 +509,16 @@ mock_auth_manager(Config) ->
                     Err2
             end
         end
-    ).
+    ),
+    test_utils:mock_expect(Workers, auth_manager, get_caveats, fun(TokenAuth) ->
+        AccessToken = auth_manager:get_access_token(TokenAuth),
+        case tokens:deserialize(AccessToken) of
+            {ok, Token} ->
+                {ok, tokens:get_caveats(Token)};
+            {error, _} = Error ->
+                Error
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -764,7 +770,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
             id = UserId,
             name = Name("name", UserId),
             spaces = SpacesList,
-            token = create_token(UserId),
+            token = create_access_token(UserId),
             default_space = DefaultSpaceId,
             groups = maps:get(UserId, UserToGroups, [])
         }}
@@ -879,6 +885,7 @@ teardown_storage(Worker, Config) ->
     ok.
 user_logic_mock_setup(Workers, Users) ->
     test_utils:mock_new(Workers, user_logic, [passthrough]),
+    test_utils:mock_new(Workers, auth_manager, [passthrough]),
 
     UserConfigToUserDoc = fun(UserConfig) ->
         #user_config{
@@ -908,6 +915,8 @@ user_logic_mock_setup(Workers, Users) ->
             {ok, #document{key = ?ROOT_USER_ID, value = #od_user{full_name = <<"root">>}}};
         (_, _, ?GUEST_USER_ID) ->
             {ok, #document{key = ?GUEST_USER_ID, value = #od_user{full_name = <<"nobody">>}}};
+        (_, ?GUEST_SESS_ID, _) ->
+            {error, forbidden};
         (Scope, ?ROOT_SESS_ID, UserId) when Scope =:= shared orelse Scope =:= protected ->
             case proplists:get_value(UserId, Users) of
                 undefined ->
@@ -915,10 +924,11 @@ user_logic_mock_setup(Workers, Users) ->
                 UserConfig2 ->
                     UserConfigToUserDoc(UserConfig2)
             end;
-        (_, #token_auth{token = Token}, UserId) ->
-            case proplists:get_value(Token, UsersByToken, undefined) of
-                undefined ->
-                    {error, not_found};
+        (_, SessionId, UserId) when is_binary(SessionId) ->
+            {ok, #document{value = #session{
+                identity = ?SUB(user, SessionUserId)
+            }}} = session:get(SessionId),
+            case SessionUserId of
                 UserId ->
                     case proplists:get_value(UserId, Users) of
                         undefined ->
@@ -929,11 +939,11 @@ user_logic_mock_setup(Workers, Users) ->
                 _ ->
                     {error, forbidden}
             end;
-        (_, SessionId, UserId) ->
-            {ok, #document{value = #session{
-                identity = #user_identity{user_id = SessionUserId}
-            }}} = session:get(SessionId),
-            case SessionUserId of
+        (_, TokenAuth, UserId) ->
+            AccessToken = auth_manager:get_access_token(TokenAuth),
+            case proplists:get_value(AccessToken, UsersByToken, undefined) of
+                undefined ->
+                    {error, not_found};
                 UserId ->
                     case proplists:get_value(UserId, Users) of
                         undefined ->
@@ -946,10 +956,20 @@ user_logic_mock_setup(Workers, Users) ->
             end
     end,
 
-    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(#token_auth{token = UserToken}) ->
+    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(UserToken, _, _, _) ->
         case proplists:get_value(UserToken, UsersByToken, undefined) of
             undefined -> {error, not_found};
-            UserId -> {ok, ?USER(UserId), undefined}
+            UserId -> {ok, ?SUB(user, UserId), undefined}
+        end
+    end),
+
+    test_utils:mock_expect(Workers, auth_manager, get_caveats, fun(TokenAuth) ->
+        AccessToken = auth_manager:get_access_token(TokenAuth),
+        case tokens:deserialize(AccessToken) of
+            {ok, Token} ->
+                {ok, tokens:get_caveats(Token)};
+            {error, _} = Error ->
+                Error
         end
     end),
 

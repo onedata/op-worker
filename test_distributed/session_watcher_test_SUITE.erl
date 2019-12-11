@@ -87,12 +87,13 @@ incoming_session_watcher_should_retry_session_removal(Config) ->
 session_create_or_reuse_session_should_update_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
+    Nonce = ?config(session_nonce, Config),
     Accessed1 = get_session_access_time(Config),
     timer:sleep(timer:seconds(1)),
     ?assertMatch(
         {ok, SessId},
         fuse_test_utils:reuse_or_create_fuse_session(
-            Worker, SessId, undefined, undefined, self()
+            Worker, Nonce, undefined, undefined, self()
         )
     ),
     Accessed2 = get_session_access_time(Config),
@@ -141,11 +142,12 @@ init_per_suite(Config) ->
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = base64:encode(crypto:strong_rand_bytes(20)),
+    Nonce = crypto:strong_rand_bytes(20),
+    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({fuse, Nonce})),
     initializer:remove_pending_messages(),
     mock_session_manager(Worker),
     {ok, Pid} = start_incoming_session_watcher(Worker, SessId),
-    [{incoming_session_watcher, Pid}, {session_id, SessId} | Config].
+    [{incoming_session_watcher, Pid}, {session_id, SessId}, {session_nonce, Nonce} | Config].
 
 end_per_suite(_Config) ->
     ok.

@@ -206,7 +206,7 @@ data_access_caveats_test(Config) ->
         {FilePath, FileObjectId, {FileGuid, FileName}}
     end, lists:seq(1, 5)),
 
-    MainToken = initializer:create_token(UserId),
+    MainToken = initializer:create_access_token(UserId),
 
     LsWithConfinedToken = fun(Guid, Caveats) ->
         LsToken = tokens:confine(MainToken, Caveats),
@@ -387,7 +387,7 @@ data_access_caveats_ancestors_test(Config) ->
     {ok, FileInDeepestDirGuid} = lfm_proxy:create(W, UserSessId, LastDirGuid, FileInDeepestDirName, 8#777),
     {ok, FileInDeepestDirObjectId} = file_id:guid_to_objectid(FileInDeepestDirGuid),
 
-    Token = initializer:create_token(UserId, [
+    Token = initializer:create_access_token(UserId, [
         #cv_data_objectid{whitelist = [FileInDeepestDirObjectId]}
     ]),
     SessId = lfm_permissions_test_utils:create_session(W, UserId, Token),
@@ -476,7 +476,7 @@ data_access_caveats_ancestors_test2(Config) ->
         {DirGuid, DirName, FileObjectId, File}
     end, [<<"right">>, <<"left">>]),
 
-    MainToken = initializer:create_token(UserId),
+    MainToken = initializer:create_access_token(UserId),
 
     % All dirs leading to files allowed by caveat should be listed in ls
     Token1 = tokens:confine(MainToken, #cv_data_objectid{
@@ -543,7 +543,7 @@ data_access_caveats_cache_test(Config) ->
     {ok, FileGuid} = lfm_proxy:create(W, UserSessId, DirGuid, <<"file">>, 8#777),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    Token = initializer:create_token(UserId, [
+    Token = initializer:create_access_token(UserId, [
         #cv_data_objectid{whitelist = [DirObjectId]},
         #cv_data_objectid{whitelist = [FileObjectId]}
     ]),

@@ -6,10 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Verifies subject identity in Onezone service. Resolved auth objects
-%%% (or errors in case of invalid tokens) are cached in its ets cache.
+%%% Verifies subject identity in Onezone service and caches resolved auth
+%%% objects (or errors in case of invalid tokens) in its ets cache.
 %%% Also, to avoid exhausting memory, performs periodic checks and
 %%% clears cache if size limit is breached.
+%%%
+%%% NOTE !!!
+%%% Tokens can be revoked, which means that they will be invalid before their
+%%% actual expiration. That is why verification results are cached only for
+%%% limited amount of time.
+%%% To assert that tokens are valid (and not revoked) verification checks
+%%% should be performed periodically.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(auth_manager).
@@ -19,12 +26,28 @@
 
 -include("global_definitions.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([verify/1, invalidate/1]).
+-export([
+    build_token_auth/5,
+
+    get_access_token/1,
+    get_peer_ip/1,
+    get_interface/1,
+    get_data_access_caveats_policy/1,
+
+    get_credentials/1, update_credentials/3,
+    to_auth_override/1,
+
+    get_caveats/1,
+    verify/1,
+
+    invalidate/1
+]).
 -export([start_link/0, spec/0]).
 
 %% gen_server callbacks
@@ -50,14 +73,38 @@
 -define(NOW(), time_utils:system_time_seconds()).
 
 
+% Record containing access token for user authorization in OZ.
+-record(token_auth, {
+    access_token :: tokens:serialized(),
+    audience_token = undefined :: undefined | tokens:serialized(),
+    peer_ip = undefined :: undefined | ip_utils:ip(),
+    interface = undefined :: undefined | cv_interface:interface(),
+    data_access_caveats_policy = disallow_data_access_caveats :: data_access_caveats:policy()
+}).
+
 -record(cache_item, {
-    token_auth :: #token_auth{},
-    verification_result :: {ok, aai:auth(), ValidUntil :: undefined | timestamp()} | errors:error(),
+    token_auth :: token_auth(),
+    verification_result :: verification_result(),
     cache_expiration :: timestamp()
 }).
 
 -type state() :: undefined.
 -type timestamp() :: time_utils:seconds().
+
+-type access_token() :: tokens:serialized().
+-type audience_token() :: undefined | tokens:serialized().
+
+-type credentials() :: #credentials{}.
+-opaque token_auth() :: #token_auth{}.
+
+-type verification_result() ::
+    {ok, aai:auth(), TokenValidUntil :: undefined | timestamp()}
+    | errors:error().
+
+-export_type([
+    access_token/0, audience_token/0,
+    credentials/0, token_auth/0, verification_result/0
+]).
 
 
 %%%===================================================================
@@ -65,39 +112,128 @@
 %%%===================================================================
 
 
+-spec build_token_auth(
+    access_token(), audience_token(),
+    PeerIp :: undefined | ip_utils:ip(),
+    Interface :: undefined | cv_interface:interface(),
+    data_access_caveats:policy()
+) ->
+    token_auth().
+build_token_auth(AccessToken, AudienceToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+    #token_auth{
+        access_token = AccessToken,
+        audience_token = AudienceToken,
+        peer_ip = PeerIp,
+        interface = Interface,
+        data_access_caveats_policy = DataAccessCaveatsPolicy
+    }.
+
+
+-spec get_access_token(token_auth()) -> access_token().
+get_access_token(#token_auth{access_token = AccessToken}) ->
+    AccessToken.
+
+
+-spec get_peer_ip(token_auth()) -> undefined | ip_utils:ip().
+get_peer_ip(#token_auth{peer_ip = PeerIp}) ->
+    PeerIp.
+
+
+-spec get_interface(token_auth()) -> undefined | cv_interface:interface().
+get_interface(#token_auth{interface = Interface}) ->
+    Interface.
+
+
+-spec get_data_access_caveats_policy(token_auth()) ->
+    data_access_caveats:policy().
+get_data_access_caveats_policy(#token_auth{data_access_caveats_policy = DACP}) ->
+    DACP.
+
+
+-spec get_credentials(token_auth()) -> credentials().
+get_credentials(#token_auth{
+    access_token = AccessToken,
+    audience_token = AudienceToken
+}) ->
+    #credentials{
+        access_token = AccessToken,
+        audience_token = AudienceToken
+    }.
+
+
+-spec update_credentials(token_auth(), access_token(), audience_token()) ->
+    token_auth().
+update_credentials(TokenAuth, AccessToken, AudienceToken) ->
+    TokenAuth#token_auth{
+        access_token = AccessToken,
+        audience_token = AudienceToken
+    }.
+
+
+-spec to_auth_override(token_auth()) -> gs_protocol:auth_override().
+to_auth_override(#token_auth{
+    access_token = Token,
+    peer_ip = PeerIp,
+    interface = Interface,
+    audience_token = AudienceToken,
+    data_access_caveats_policy = DataAccessCaveatsPolicy
+}) ->
+    #auth_override{
+        client_auth = {token, Token},
+        peer_ip = PeerIp,
+        interface = Interface,
+        audience_token = AudienceToken,
+        data_access_caveats_policy = DataAccessCaveatsPolicy
+    }.
+
+
+-spec get_caveats(token_auth()) -> {ok, [caveats:caveat()]} | errors:error().
+get_caveats(TokenAuth) ->
+    case verify(TokenAuth) of
+        {ok, #auth{caveats = Caveats}, _} ->
+            {ok, Caveats};
+        {error, _} = Error ->
+            Error
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies identity of subject identified by specified #token_auth{}
+%% Verifies identity of subject identified by specified token_auth()
 %% and returns time this auth will be valid until. Nevertheless this
 %% auth should be confirmed periodically as tokens can be revoked.
 %% @end
 %%--------------------------------------------------------------------
--spec verify(#token_auth{}) ->
-    {ok, aai:auth(), ValidUntil :: undefined | timestamp()} | errors:error().
-verify(#token_auth{} = TokenAuth) ->
+-spec verify(token_auth()) -> verification_result().
+verify(TokenAuth) ->
     Now = ?NOW(),
     case ets:lookup(?CACHE_NAME, TokenAuth) of
         [#cache_item{cache_expiration = Expiration} = Item] when Now < Expiration ->
             Item#cache_item.verification_result;
         _ ->
             try
-                {VerificationResult, CacheItemTTL} = case verify_in_onezone(TokenAuth) of
-                    {ok, _Auth, undefined} = Result ->
-                        {Result, ?CACHE_ITEM_DEFAULT_TTL};
-                    {ok, Auth, TokenTTL} ->
-                        {
-                            {ok, Auth, Now + TokenTTL},
-                            min(TokenTTL, ?CACHE_ITEM_DEFAULT_TTL)
-                        };
-                    {error, _} = Error ->
-                        {Error, ?CACHE_ITEM_DEFAULT_TTL}
-                end,
+                {Result, CacheExpiration} = verify_internal(Now, TokenAuth),
                 ets:insert(?CACHE_NAME, #cache_item{
                     token_auth = TokenAuth,
-                    verification_result = VerificationResult,
-                    cache_expiration = Now + CacheItemTTL
+                    verification_result = Result,
+                    cache_expiration = CacheExpiration
                 }),
-                VerificationResult
+                %% Fetches user doc to trigger user setup if token verification
+                %% succeeded. Otherwise does nothing.
+                %% It must be called after caching verification result as to
+                %% avoid infinite loop (gs_client_worker would try to verify
+                %% given TokenAuth).
+                case Result of
+                    {ok, ?USER(UserId), _} ->
+                        case user_logic:get(TokenAuth, UserId) of
+                            {ok, _} ->
+                                Result;
+                            {error, _} = Error ->
+                                Error
+                        end;
+                    _ ->
+                        Result
+                end
             catch Type:Reason ->
                 ?error_stacktrace("Cannot verify user auth due to ~p:~p", [
                     Type, Reason
@@ -107,7 +243,7 @@ verify(#token_auth{} = TokenAuth) ->
     end.
 
 
--spec invalidate(#token_auth{}) -> ok.
+-spec invalidate(token_auth()) -> ok.
 invalidate(TokenAuth) ->
     ets:delete(?CACHE_NAME, TokenAuth),
     ok.
@@ -250,22 +386,45 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec verify_in_onezone(#token_auth{}) ->
-    {ok, aai:auth(), TokenTTL :: undefined | timestamp()} | errors:error().
-verify_in_onezone(TokenAuth) ->
-    case token_logic:verify_access_token(TokenAuth) of
-        {ok, ?USER(UserId), _TokenTTL} = Result ->
+-spec verify_internal(Now :: timestamp(), token_auth()) ->
+    {verification_result(), VerificationResultExpiration :: timestamp()}.
+verify_internal(Now, #token_auth{
+    access_token = AccessToken,
+    peer_ip = PeerIp,
+    interface = Interface,
+    data_access_caveats_policy = DataAccessCaveatsPolicy
+}) ->
+    CacheDefaultTTL = ?CACHE_ITEM_DEFAULT_TTL,
+
+    case tokens:deserialize(AccessToken) of
+        {ok, #token{subject = ?SUB(user, UserId) = Subject} = Token} ->
             case provider_logic:has_eff_user(UserId) of
-                false ->
-                    ?ERROR_FORBIDDEN;
                 true ->
-                    % Fetch the user doc to trigger user setup
-                    % (od_user:run_after/3)
-                    {ok, _} = user_logic:get(TokenAuth, UserId),
-                    Result
+                    case token_logic:verify_access_token(
+                        AccessToken, PeerIp, Interface,
+                        DataAccessCaveatsPolicy
+                    ) of
+                        {ok, Subject, undefined} ->
+                            Auth = #auth{
+                                subject = Subject,
+                                caveats = tokens:get_caveats(Token)
+                            },
+                            {{ok, Auth, undefined}, Now + CacheDefaultTTL};
+                        {ok, Subject, TokenTTL} ->
+                            Auth = #auth{
+                                subject = Subject,
+                                caveats = tokens:get_caveats(Token)
+                            },
+                            Expiration = Now + min(TokenTTL, CacheDefaultTTL),
+                            {{ok, Auth, Now + TokenTTL}, Expiration};
+                        {error, _} = VerificationError ->
+                            {VerificationError, Now + CacheDefaultTTL}
+                    end;
+                false ->
+                    {?ERROR_USER_NOT_SUPPORTED, Now + CacheDefaultTTL}
             end;
-        {error, _} = Error ->
-            Error
+        {error, _} = DeserializationError ->
+            {DeserializationError, Now + CacheDefaultTTL}
     end.
 
 

@@ -6,20 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Credentials that can be exchanged for user identity in identity model
+%%% Credentials used to authenticate a user together with context
+%%% information such as peer IP or interface (see auth_manager).
 %%% @end
 %%%-------------------------------------------------------------------
 
 -ifndef(CREDENTIALS_HRL).
 -define(CREDENTIALS_HRL, 1).
 
-% Record containing access token for user authorization in OZ.
--record(token_auth, {
-    token :: tokens:serialized(),
-    peer_ip = undefined :: undefined | ip_utils:ip(),
-    interface = undefined :: undefined | cv_interface:interface(),
-    audience_token = undefined :: undefined | tokens:serialized(),
-    data_access_caveats_policy = disallow_data_access_caveats :: data_access_caveats:policy()
+-record(credentials, {
+    access_token :: tokens:serialized(),
+    audience_token = undefined :: undefined | tokens:serialized()
 }).
 
 -endif.

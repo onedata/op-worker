@@ -98,9 +98,9 @@ all() -> ?ALL(?NORMAL_CASES, ?PERFORMANCE_CASES).
 response_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    SessId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessId),
-    {ok, {_Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
+    Nonce = crypto:strong_rand_bytes(10),
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
+    {ok, {_Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
 
     MsgId = <<"1">>,
     Ping = fuse_test_utils:generate_ping_message(MsgId),
@@ -118,13 +118,13 @@ fallback_during_sending_response_because_of_connection_close_test(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    SessId = crypto:strong_rand_bytes(10),
+    Nonce = crypto:strong_rand_bytes(10),
     % Create a couple of connections within the same session
-    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessId),
-    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
-    {ok, {Sock3, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
-    {ok, {Sock4, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
-    {ok, {Sock5, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce),
+    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
+    {ok, {Sock3, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
+    {ok, {Sock4, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
+    {ok, {Sock5, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
 
     Ping = fuse_test_utils:generate_ping_message(),
 
@@ -149,9 +149,9 @@ fallback_during_sending_response_because_of_connection_close_test(Config) ->
 fallback_during_sending_response_because_of_connection_error_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    SessId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], SessId),
-    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessId),
+    Nonce = crypto:strong_rand_bytes(10),
+    {ok, {Sock1, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, false}], Nonce),
+    {ok, {Sock2, SessId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
 
     mock_ranch_ssl_to_fail_once(Worker1),
     MsgId = <<"1">>,
@@ -265,9 +265,9 @@ fulfill_promises_after_connection_error_test(Config) ->
 send_test(Config) ->
     Workers = [Worker1 | _] = ?config(op_worker_nodes, Config),
 
-    SessId = crypto:strong_rand_bytes(10),
-    {ok, {Sock1, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessId),
-    {ok, {Sock2, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], SessId),
+    Nonce = crypto:strong_rand_bytes(10),
+    {ok, {Sock1, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
+    {ok, {Sock2, SessionId}} = fuse_test_utils:connect_via_token(Worker1, [{active, once}], Nonce),
 
     % In case of errors send_sync should try sending via other connections
     mock_ranch_ssl_to_fail_once(Workers),
@@ -326,10 +326,10 @@ communicate_test(Config) ->
 
 client_keepalive_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessId = crypto:strong_rand_bytes(10),
+    Nonce = crypto:strong_rand_bytes(10),
 
     initializer:remove_pending_messages(),
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], Nonce),
     % send keepalive msg and assert it will not end in decoding error
     % on provider side (following communication should succeed)
     ok = ssl:send(Sock, ?CLIENT_KEEPALIVE_MSG),
@@ -520,8 +520,6 @@ init_per_testcase(Case, Config) when
     ssl:start(),
     initializer:remove_pending_messages(),
 
-    mock_auth_manager(Config),
-
     % Artificially prolong message handling to avoid races between response from
     % the server and connection close.
     prolong_msg_routing(Workers),
@@ -537,6 +535,7 @@ init_per_testcase(Case, Config) when
     ),
 
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    mock_auth_manager(Config),
     lfm_proxy:init(NewConfig);
 
 init_per_testcase(heartbeats_test, Config) ->

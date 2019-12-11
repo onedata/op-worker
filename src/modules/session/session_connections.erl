@@ -14,6 +14,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -113,7 +114,7 @@ ensure_connected(SessId) ->
     end,
 
     session_manager:reuse_or_create_outgoing_provider_session(
-        SessId, #user_identity{provider_id = ProviderId}
+        SessId, ?SUB(?ONEPROVIDER, ProviderId)
     ),
     ok.
 

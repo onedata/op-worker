@@ -335,9 +335,13 @@ fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx = #{
     <<"onedataAccessToken">> := OnedataAccessToken,
     <<"adminId">> := AdminId
 }, _Helper, OAuth2IdP) ->
-    {ok, {IdPAccessToken, TTL}} =
-        idp_access_token:acquire(AdminId,
-            #token_auth{token = OnedataAccessToken}, OAuth2IdP),
+    TokenAuth = auth_manager:build_token_auth(
+        OnedataAccessToken, undefined, undefined,
+        undefined, disallow_data_access_caveats
+    ),
+    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(
+        AdminId, TokenAuth, OAuth2IdP
+    ),
     AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,
@@ -356,8 +360,13 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCtx = #{
     <<"onedataAccessToken">> := OnedataAccessToken,
     <<"adminId">> := AdminId
 }, #helper{insecure = true}, OAuth2IdP) ->
-    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(AdminId,
-        #token_auth{token = OnedataAccessToken}, OAuth2IdP),
+    TokenAuth = auth_manager:build_token_auth(
+        OnedataAccessToken, undefined, undefined,
+        undefined, disallow_data_access_caveats
+    ),
+    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(
+        AdminId, TokenAuth, OAuth2IdP
+    ),
     AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,
