@@ -385,7 +385,8 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
         {ok, [oneprovider:get_id()]}
     end),
     initializer:mock_test_file_context(Config, <<"file_id">>),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config);
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:mock_auth_manager(Config);
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
@@ -401,6 +402,7 @@ init_per_testcase(_Case, Config) ->
         {ok, [oneprovider:get_id()]}
     end),
     Nonce = <<"nonce">>,
+    initializer:mock_auth_manager(Config),
     {ok, SessId} = session_setup(Worker, Nonce, Iden, Self),
     initializer:mock_test_file_context(Config, <<"file_id">>),
     initializer:create_test_users_and_spaces(
@@ -415,6 +417,7 @@ end_per_suite(_Config) ->
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unmock_test_file_context(Config),
     test_utils:mock_unload(Workers, space_logic),
@@ -424,6 +427,7 @@ end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
+    initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unmock_test_file_context(Config),
     test_utils:mock_unload(Workers, space_logic),
