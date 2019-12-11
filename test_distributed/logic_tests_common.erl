@@ -80,11 +80,8 @@ mock_gs_client(Config) ->
     ),
 
     ok = test_utils:mock_expect(Nodes, token_logic, verify_access_token, fun(AccessToken, _, _, _) ->
-        {ok, #token{subject = ?SUB(user, UserId)} = Token} = tokens:deserialize(AccessToken),
-        {ok, #auth{
-            subject = ?SUB(user, UserId),
-            caveats = tokens:get_caveats(Token)
-        }, undefined}
+        {ok, #token{subject = ?SUB(user, UserId)}} = tokens:deserialize(AccessToken),
+        {ok, ?SUB(user, UserId), undefined}
     end),
 
     % gs_client requires successful setting of subdomain delegation IPs, but it cannot

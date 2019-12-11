@@ -180,8 +180,11 @@ clean_test_users_and_spaces(Config) ->
         initializer:teardown_session(W, Config)
     end, DomainWorkers),
 
-    test_utils:mock_validate_and_unload(Workers, [user_logic, group_logic,
-        space_logic, provider_logic, cluster_logic, harvester_logic]),
+    test_utils:mock_validate_and_unload(Workers, [
+        user_logic, group_logic,
+        space_logic, provider_logic, cluster_logic, harvester_logic,
+        auth_manager
+    ]),
     unmock_provider_ids(Workers).
 
 %%TODO this function can be deleted after resolving VFS-1811 and replacing call
@@ -483,7 +486,7 @@ unmock_test_file_context(Config) ->
 -spec mock_auth_manager(proplists:proplist()) -> ok.
 mock_auth_manager(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, auth_manager),
+    test_utils:mock_new(Workers, auth_manager, [passthrough]),
     test_utils:mock_expect(Workers, auth_manager, verify,
         fun(TokenAuth) ->
             case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
@@ -506,7 +509,16 @@ mock_auth_manager(Config) ->
                     Err2
             end
         end
-    ).
+    ),
+    test_utils:mock_expect(Workers, auth_manager, get_caveats, fun(TokenAuth) ->
+        AccessToken = auth_manager:get_access_token(TokenAuth),
+        case tokens:deserialize(AccessToken) of
+            {ok, Token} ->
+                {ok, tokens:get_caveats(Token)};
+            {error, _} = Error ->
+                Error
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -873,6 +885,7 @@ teardown_storage(Worker, Config) ->
     ok.
 user_logic_mock_setup(Workers, Users) ->
     test_utils:mock_new(Workers, user_logic, [passthrough]),
+    test_utils:mock_new(Workers, auth_manager, [passthrough]),
 
     UserConfigToUserDoc = fun(UserConfig) ->
         #user_config{
@@ -946,7 +959,17 @@ user_logic_mock_setup(Workers, Users) ->
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(UserToken, _, _, _) ->
         case proplists:get_value(UserToken, UsersByToken, undefined) of
             undefined -> {error, not_found};
-            UserId -> {ok, ?USER(UserId), undefined}
+            UserId -> {ok, ?SUB(user, UserId), undefined}
+        end
+    end),
+
+    test_utils:mock_expect(Workers, auth_manager, get_caveats, fun(TokenAuth) ->
+        AccessToken = auth_manager:get_access_token(TokenAuth),
+        case tokens:deserialize(AccessToken) of
+            {ok, Token} ->
+                {ok, tokens:get_caveats(Token)};
+            {error, _} = Error ->
+                Error
         end
     end),
 

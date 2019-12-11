@@ -264,7 +264,7 @@ mock_user_logic(Config) ->
             undefined, undefined, disallow_data_access_caveats
         ),
         case GetUserFun(TokenAuth, ?USER_ID) of
-            {ok, #document{key = UserId}} -> {ok, ?USER(UserId), undefined};
+            {ok, #document{key = UserId}} -> {ok, ?SUB(user, UserId), undefined};
             {error, _} = Error -> Error
         end
     end),

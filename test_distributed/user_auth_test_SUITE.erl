@@ -230,7 +230,7 @@ mock_token_logic(Config) ->
         (AccessToken, _, _, _) ->
             case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
-                    {ok, ?USER(?USER_ID), undefined};
+                    {ok, ?SUB(user, ?USER_ID), undefined};
                 {error, _} = Error ->
                     Error
             end

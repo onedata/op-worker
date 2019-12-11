@@ -225,8 +225,8 @@ reuse_or_create_session(SessId, SessType, Identity, Auth, ProxyVia) ->
         undefined ->
             [];
         TokenAuth ->
-            {ok, Token} = tokens:deserialize(auth_manager:get_access_token(TokenAuth)),
-            tokens:get_caveats(Token)
+            {ok, TokenCaveats} = auth_manager:get_caveats(TokenAuth),
+            TokenCaveats
     end,
 
     case data_constraints:get(Caveats) of

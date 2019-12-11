@@ -520,8 +520,6 @@ init_per_testcase(Case, Config) when
     ssl:start(),
     initializer:remove_pending_messages(),
 
-    mock_auth_manager(Config),
-
     % Artificially prolong message handling to avoid races between response from
     % the server and connection close.
     prolong_msg_routing(Workers),
@@ -537,6 +535,7 @@ init_per_testcase(Case, Config) when
     ),
 
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    mock_auth_manager(Config),
     lfm_proxy:init(NewConfig);
 
 init_per_testcase(heartbeats_test, Config) ->
