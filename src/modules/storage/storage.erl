@@ -10,7 +10,7 @@
 %%%
 %%% This module is an overlay to `storage_config` which manages private
 %%% local storage configuration and `storage_logic` that is responsible
-%%% for management of storage data shared via GraphSync.
+%%% for management of storage details shared via GraphSync.
 %%% Functions from those two modules should not be called directly.
 %%%
 %%% This module operates on opaque record representing storage structure.
@@ -41,8 +41,7 @@
 
 %%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
--export([set_readonly/2, set_luma_config/2,
-    set_imported_storage/2, set_qos_parameters/2]).
+-export([set_readonly/2, set_luma_config/2, set_imported_storage/2, set_qos_parameters/2]).
 -export([set_helper_insecure/2, update_helper_args/2, update_helper_admin_ctx/2,
     update_helper/2]).
 
@@ -61,16 +60,13 @@
 -export([on_storage_created/1]).
 
 % Structure that hold information about storage.
-% Contains combined fields from `storage_config` and `od_storage` records.
 % This record is NOT stored in datastore.
 -record(storage_record, {
     id :: od_storage:id(),
-    name :: name(),
     helper :: helpers:helper(),
     is_readonly :: boolean(),
     is_imported_storage :: boolean(),
-    luma_config :: luma_config:config() | undefined,
-    qos_parameters :: qos_parameters()
+    luma_config :: luma_config:config() | undefined
 }).
 
 -opaque record() :: #storage_record{}.
@@ -126,15 +122,12 @@ create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParamete
 get(StorageId) when is_binary(StorageId) ->
     case storage_config:get(StorageId) of
         {ok, #document{value = StorageConfig}} ->
-            {ok, OdStorageDoc} = storage_logic:get(StorageId),
             {ok, #storage_record{
                 id = StorageId,
-                name = storage_logic:get_name(OdStorageDoc),
                 helper = storage_config:get_helper(StorageConfig),
                 is_readonly = storage_config:is_readonly(StorageConfig),
                 luma_config = storage_config:get_luma_config(StorageConfig),
-                is_imported_storage = storage_config:is_imported_storage(StorageConfig),
-                qos_parameters = storage_logic:get_qos_parameters(OdStorageDoc)
+                is_imported_storage = storage_config:is_imported_storage(StorageConfig)
             }};
         {error, _} = Error -> Error
     end.
@@ -233,62 +226,70 @@ clear_storages() ->
 get_id(#storage_record{id = Id}) ->
     Id.
 
+
 -spec get_name(record()) -> name().
-get_name(#storage_record{name = Name}) ->
-    Name.
+get_name(#storage_record{id = Id}) ->
+    storage_logic:get_name(Id).
+
 
 -spec get_helper(record() | od_storage:id()) -> helpers:helper().
 get_helper(StorageId) when is_binary(StorageId) ->
-    % direct call to storage_config to avoid additional call to datastore to get od_storage
-    storage_config:get_helper(StorageId);
+    {ok, Storage} = get(StorageId),
+    get_helper(Storage);
 get_helper(#storage_record{helper = Helper}) ->
     Helper.
+
 
 -spec get_luma_config(record()) -> luma_config:config() | undefined.
 get_luma_config(#storage_record{luma_config = LumaConfig}) ->
     LumaConfig.
 
+
 -spec get_type(record() | od_storage:id()) -> helper:type().
 get_type(StorageId) when is_binary(StorageId) ->
-    Helper = storage_config:get_helper(StorageId),
+    Helper = get_helper(StorageId),
     helper:get_type(Helper);
 get_type(#storage_record{helper = Helper}) ->
     helper:get_type(Helper).
 
+
 -spec get_qos_parameters(record()) -> qos_parameters().
 get_qos_parameters(StorageId) when is_binary(StorageId) ->
-    % direct call to storage_logic to avoid additional call to datastore to get storage_config
     storage_logic:get_qos_parameters(StorageId);
-get_qos_parameters(#storage_record{qos_parameters = QoSParameters}) ->
-    QoSParameters.
+get_qos_parameters(#storage_record{id = Id}) ->
+    get_qos_parameters(Id).
+
+
+-spec is_readonly(record() | od_storage:id()) -> boolean().
+is_readonly(StorageId) when is_binary(StorageId) ->
+    {ok, Storage} = get(StorageId),
+    is_readonly(Storage);
+is_readonly(#storage_record{is_readonly = Readonly}) ->
+    Readonly.
+
+
+-spec is_imported_storage(record() | od_storage:id()) -> boolean().
+is_imported_storage(StorageId) when is_binary(StorageId) ->
+    {ok, Storage} = get(StorageId),
+    is_imported_storage(Storage);
+is_imported_storage(#storage_record{is_imported_storage = ImportedStorage}) ->
+    ImportedStorage.
+
+
+-spec is_luma_enabled(record()) -> boolean().
+is_luma_enabled(Storage) ->
+    get_luma_config(Storage) =/= undefined.
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Retrieves QoS parameters from storage data shared between providers
+%% Retrieves QoS parameters from storage details shared between providers
 %% through given space.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> qos_parameters().
 get_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
     storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId).
-
--spec is_readonly(record() | od_storage:id()) -> boolean().
-is_readonly(StorageId) when is_binary(StorageId) ->
-    % direct call to storage_config to avoid additional call to datastore to get od_storage
-    storage_config:is_readonly(StorageId);
-is_readonly(#storage_record{is_readonly = Readonly}) ->
-    Readonly.
-
--spec is_imported_storage(record() | od_storage:id()) -> boolean().
-is_imported_storage(StorageId) when is_binary(StorageId) ->
-    % direct call to storage_config to avoid additional call to datastore to get od_storage
-    storage_config:is_imported_storage(StorageId);
-is_imported_storage(#storage_record{is_imported_storage = ImportedStorage}) ->
-    ImportedStorage.
-
--spec is_luma_enabled(record()) -> boolean().
-is_luma_enabled(Storage) ->
-    get_luma_config(Storage) =/= undefined.
 
 
 %%%===================================================================
@@ -299,23 +300,25 @@ is_luma_enabled(Storage) ->
 update_name(StorageId, NewName) ->
     storage_logic:update_name(StorageId, NewName).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates LUMA configuration of the storage.
-%% LUMA cannot be enabled or disabled, only its parameters may be changed.
-%% @end
-%%--------------------------------------------------------------------
--spec update_luma_config(od_storage:id(), Changes) -> ok | {error, term()}
-    when Changes :: #{url => luma_config:url(), api_key => luma_config:api_key()}.
-update_luma_config(StorageId, Changes) ->
-    UpdateFun = fun
-        (undefined) -> {error, luma_disabled};
-        (PreviousConfig) ->
-            {ok, luma_config:new(
-                maps:get(url, Changes, luma_config:get_url(PreviousConfig)),
-                maps:get(api_key, Changes, luma_config:get_api_key(PreviousConfig))
-            )}
-        end,
+
+-spec update_luma_config(od_storage:id(), ChangesOrNewConfig) -> ok | {error, term()}
+    when ChangesOrNewConfig :: #{url => luma_config:url(), api_key => luma_config:api_key()}
+                               | luma_config:config() | undefined.
+update_luma_config(StorageId, ChangesOrNewConfig) ->
+    UpdateFun = case is_map(ChangesOrNewConfig) of
+        false ->
+            % New config is given explicitly. May enable/disable luma.
+            fun (_) -> {ok, ChangesOrNewConfig} end;
+        _ ->
+            % Changes to existing luma config are given. Only eligible if luma enabled.
+            fun (undefined) -> {error, luma_disabled};
+                (PreviousConfig) ->
+                    {ok, luma_config:new(
+                        maps:get(url, ChangesOrNewConfig, luma_config:get_url(PreviousConfig)),
+                        maps:get(api_key, ChangesOrNewConfig, luma_config:get_api_key(PreviousConfig))
+                    )}
+            end
+    end,
     storage_config:update_luma_config(StorageId, UpdateFun).
 
 
@@ -325,9 +328,11 @@ set_luma_config(StorageId, LumaConfig) ->
     UpdateFun = fun(_) -> {ok, LumaConfig} end,
     storage_config:update_luma_config(StorageId, UpdateFun).
 
+
 -spec set_readonly(od_storage:id(), boolean()) -> ok | {error, term()}.
 set_readonly(StorageId, Readonly) ->
     storage_config:set_readonly(StorageId, Readonly).
+
 
 -spec set_imported_storage(od_storage:id(), boolean()) -> ok | {error, term()}.
 set_imported_storage(StorageId, ImportedStorage) ->
@@ -339,6 +344,7 @@ set_imported_storage(StorageId, ImportedStorage) ->
                 storage_config:set_imported_storage(StorageId, ImportedStorage)
         end
     end).
+
 
 -spec set_qos_parameters(od_storage:id(), od_storage:qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
@@ -383,6 +389,7 @@ support_space(StorageId, SerializedToken, SupportSize) ->
         support_space_insecure(StorageId, SerializedToken, SupportSize)
     end).
 
+
 %% @private
 -spec support_space_insecure(od_storage:id(), tokens:serialized(), od_space:support_size()) ->
     {ok, od_space:id()} | errors:error().
@@ -398,6 +405,7 @@ support_space_insecure(StorageId, SpaceSupportToken, SupportSize) ->
         Error ->
             Error
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -435,12 +443,14 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
         false -> storage_logic:update_space_support_size(StorageId, SpaceId, NewSupportSize)
     end.
 
+
 -spec revoke_space_support(od_storage:id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
     case storage_logic:revoke_space_support(StorageId, SpaceId) of
         ok -> on_space_unsupported(SpaceId, StorageId);
         Error -> Error
     end.
+
 
 -spec supports_any_space(od_storage:id()) -> boolean() | errors:error().
 supports_any_space(StorageId) ->

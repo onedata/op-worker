@@ -288,7 +288,7 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
         }}
     end,
     rpc:call(Worker, storage, update_helper, [StorageId, UpdateHelperFun]),
-    rpc:call(Worker, storage, set_luma_config, [StorageId, LumaConfig]).
+    rpc:call(Worker, storage, update_luma_config, [StorageId, LumaConfig]).
 
 
 get_sd_handle(Worker, SpaceId, SessionId, Uuid, StorageId, FilePath) ->

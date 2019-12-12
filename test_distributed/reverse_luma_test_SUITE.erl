@@ -98,12 +98,10 @@ all() ->
 % Any changes there should also be applied here.
 -record(storage_record, {
     id :: od_storage:id(),
-    name :: storage_config:name(),
     helper :: helpers:helper(),
     is_readonly :: boolean(),
     is_imported_storage :: boolean(),
-    luma_config :: luma_config:config() | undefined,
-    qos_parameters :: od_storage:qos_parameters()
+    luma_config :: luma_config:config() | undefined
 }).
 
 -define(STORAGE_DISABLED_LUMA, ?STORAGE(?POSIX_HELPER_NAME, undefined)).
@@ -114,12 +112,10 @@ all() ->
 -define(STORAGE(HelperName, LumaConfig), ?STORAGE(?STORAGE_ID, HelperName, LumaConfig)).
 -define(STORAGE(StorageId, HelperName, LumaConfig), #storage_record{
     id = StorageId,
-    name = <<"test_storage">>,
     helper = #helper{name = HelperName},
     is_readonly = false,
     is_imported_storage = false,
-    luma_config = LumaConfig,
-    qos_parameters = #{}
+    luma_config = LumaConfig
 }).
 
 -define(SPACE_ID, <<"test_space_id">>).

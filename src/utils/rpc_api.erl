@@ -28,7 +28,6 @@
     storage_set_insecure/2,
     storage_set_readonly/2,
     storage_set_imported_storage/2,
-    storage_set_luma_config/2,
     storage_set_qos_parameters/2,
     storage_update_luma_config/2,
     storage_update_name/2,
@@ -167,12 +166,6 @@ storage_set_readonly(StorageId, Readonly) ->
     ok | {error, term()}.
 storage_set_imported_storage(StorageId, Value) ->
     storage:set_imported_storage(StorageId, Value).
-
-
--spec storage_set_luma_config(od_storage:id(), luma_config:config() | undefined) ->
-    ok | {error, term()}.
-storage_set_luma_config(StorageId, LumaConfig) ->
-    storage:set_luma_config(StorageId, LumaConfig).
 
 
 -spec storage_set_qos_parameters(od_storage:id(), od_storage:qos_parameters()) ->

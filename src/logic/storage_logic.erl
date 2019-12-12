@@ -149,8 +149,10 @@ revoke_space_support(StorageId, SpaceId) ->
 get_name(#document{value = #od_storage{name = Name}}) ->
     Name;
 get_name(StorageId) ->
-    {ok, Doc} = get(StorageId),
-    get_name(Doc).
+    case get(StorageId) of
+        {ok, Doc} -> get_name(Doc);
+        {error, _} = Error -> throw(Error)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -164,18 +166,6 @@ get_qos_parameters(#document{value = #od_storage{qos_parameters = QosParameters}
 get_qos_parameters(StorageId) ->
     {ok, Doc} = get(StorageId),
     get_qos_parameters(Doc).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get QoS parameters of storage supporting given space.
-%% @end
-%%--------------------------------------------------------------------
--spec get_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> od_storage:qos_parameters().
-get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
-    {ok, #document{value = #od_storage{
-        qos_parameters = QosParameters}}} = get_shared_data(StorageId, SpaceId),
-    QosParameters.
 
 
 -spec get_spaces(od_storage:id()) -> {ok, [od_space:id()]} | errors:error().
@@ -213,7 +203,23 @@ set_qos_parameters(StorageId, QosParameters) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Get QoS parameters of storage supporting given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> od_storage:qos_parameters().
+get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
+    {ok, #document{value = #od_storage{
+        qos_parameters = QosParameters}}} = get_shared_data(StorageId, SpaceId),
+    QosParameters.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Upgrades legacy space support in Onezone to model with new storages.
+%% This adds relation between given storage and given space and removes
+%% this space from virtual storage (with id equal to that of provider) in Onezone.
+%% Can be only used by providers already supporting given space.
+%%
 %% Dedicated for upgrading Oneprovider from 19.02.* to the next major release.
 %% @end
 %%--------------------------------------------------------------------
@@ -228,7 +234,7 @@ upgrade_legacy_support(StorageId, SpaceId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Retrieves storage data shared between providers through given space.
+%% Retrieves storage details shared between providers through given space.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_shared_data(od_storage:id(), od_space:id()) -> {ok, od_storage:doc()} | errors:error().

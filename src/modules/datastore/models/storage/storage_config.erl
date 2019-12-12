@@ -7,8 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Model for holding storage configuration. It contains provider specific
-%%% information and private storage data. It should not be shared with
-%%% other providers. To share storage data with other providers(through onezone)
+%%% information and private storage details. It should not be shared with
+%%% other providers. To share storage details with other providers(through Onezone)
 %%% module `storage_logic` and `od_storage` model are used.
 %%%
 %%% Module `storage` is an overlay to this module and `storage_logic`.

@@ -339,22 +339,18 @@ end).
 % Any changes there should also be applied here.
 -record(storage_record, {
     id :: od_storage:id(),
-    name :: storage_config:name(),
     helper :: helpers:helper(),
     is_readonly :: boolean(),
     is_imported_storage :: boolean(),
-    luma_config :: luma_config:config() | undefined,
-    qos_parameters :: od_storage:qos_parameters()
+    luma_config :: luma_config:config() | undefined
 }).
 
 -define(STORAGE_RECORD(Id, Name, Helper, LumaConfig), #storage_record{
     id = Id,
-    name = Name,
     helper = Helper,
     is_readonly = false,
     is_imported_storage = false,
-    luma_config = LumaConfig,
-    qos_parameters = #{}
+    luma_config = LumaConfig
 }).
 
 -define(SECURE_POSIX_STORAGE_CONFIG, #{
