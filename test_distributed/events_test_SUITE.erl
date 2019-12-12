@@ -153,7 +153,8 @@ init_per_testcase(Case, Config) when
     Case =:= emit_file_written_event_should_execute_handler;
     Case =:= emit_file_attr_changed_event_should_execute_handler;
     Case =:= emit_file_location_changed_event_should_execute_handler;
-    Case =:= emit_helper_params_changed_event_should_execute_handler ->
+    Case =:= emit_helper_params_changed_event_should_execute_handler
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, SubId} = create_subscription(Case, Worker),
     init_per_testcase(?DEFAULT_CASE(Case), [{subscription_id, SubId} | Config]);
@@ -168,7 +169,8 @@ init_per_testcase(Case, Config) when
     [{subscription_id, SubId} | NewConfig];
 
 init_per_testcase(Case, Config) when
-    Case =:= subscribe_should_notify_event_manager ->
+    Case =:= subscribe_should_notify_event_manager
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     NewConfig = init_per_testcase(?DEFAULT_CASE(Case), Config),
     SessId = ?config(session_id, NewConfig),
@@ -177,10 +179,12 @@ init_per_testcase(Case, Config) when
     [{subscription_id, SubId} | NewConfig];
 
 init_per_testcase(Case, Config) when
-    Case =:= subscribe_should_notify_all_event_managers ->
+    Case =:= subscribe_should_notify_all_event_managers
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
     {ok, SubId} = create_subscription(Case, Worker),
+    initializer:mock_auth_manager(Config),
     SessIds = lists:map(fun(N) ->
         Nonce = <<"nonce_", (integer_to_binary(N))/binary>>,
         {ok, SessId} = session_setup(Worker, Nonce),
@@ -193,6 +197,7 @@ init_per_testcase(Case, Config) when
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
+    initializer:mock_auth_manager(Config),
     {ok, SessId} = session_setup(Worker),
     test_utils:mock_new(Workers, space_logic),
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
@@ -200,32 +205,37 @@ init_per_testcase(_Case, Config) ->
     end),
     initializer:mock_test_file_context(Config, ?FILE_UUID),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
-        [{session_id, SessId} | Config]).
+        [{session_id, SessId} | Config]
+    ).
 
 end_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;
     Case =:= emit_file_written_event_should_execute_handler;
     Case =:= emit_file_attr_changed_event_should_execute_handler;
     Case =:= emit_file_location_changed_event_should_execute_handler;
-    Case =:= emit_helper_params_changed_event_should_execute_handler ->
+    Case =:= emit_helper_params_changed_event_should_execute_handler
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
     Case =:= flush_should_notify_awaiting_process;
-    Case =:= subscribe_should_notify_event_manager ->
+    Case =:= subscribe_should_notify_event_manager
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(session_id, Config), ?config(subscription_id, Config)),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
-    Case =:= subscribe_should_notify_all_event_managers ->
+    Case =:= subscribe_should_notify_all_event_managers
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
     unsubscribe(Worker, ?config(subscription_id, Config)),
     lists:foreach(fun(SessId) ->
         session_teardown(Worker, SessId)
     end, ?config(session_ids, Config)),
+    initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unmock_test_file_context(Config),
     test_utils:mock_validate_and_unload(Worker, [communicator]);
@@ -233,6 +243,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     session_teardown(Worker, ?config(session_id, Config)),
+    initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_unload(Workers, space_logic),
     initializer:unmock_test_file_context(Config),
@@ -264,10 +275,13 @@ session_setup(Worker) ->
 -spec session_setup(node(), Nonce :: binary()) -> {ok, session:id()}.
 session_setup(Worker, Nonce) ->
     UserId = <<"user1">>,
-    Iden = #user_identity{user_id = UserId},
-    SerializedToken = initializer:create_token(UserId),
+    AccessToken = initializer:create_access_token(UserId),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, Iden, #token_auth{token = SerializedToken}, self()
+        Worker, Nonce, ?SUB(user, UserId), TokenAuth, self()
     ).
 
 %%--------------------------------------------------------------------

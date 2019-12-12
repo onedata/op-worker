@@ -47,12 +47,12 @@ verify_handshake_auth(undefined, _) ->
     {ok, ?NOBODY};
 verify_handshake_auth(nobody, _) ->
     {ok, ?NOBODY};
-verify_handshake_auth({token, SerializedToken}, PeerIp) ->
-    Credentials = #token_auth{
-        token = SerializedToken,
-        peer_ip = PeerIp
-    },
-    case http_auth:authenticate(Credentials, gui, disallow_data_access_caveats) of
+verify_handshake_auth({token, AccessToken}, PeerIp) ->
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        PeerIp, graphsync, disallow_data_access_caveats
+    ),
+    case http_auth:authenticate(TokenAuth) of
         {ok, ?USER = Auth} ->
             {ok, Auth};
         {ok, ?NOBODY} ->

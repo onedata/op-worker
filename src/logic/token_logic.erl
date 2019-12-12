@@ -10,73 +10,117 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(token_logic).
--author("Lukasz Opiola").
+-author("Bartosz Walkowicz").
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/common/credentials.hrl").
--include_lib("ctool/include/aai/aai.hrl").
 
 -export([
-    verify_access_token/1,
-    verify_identity_token/1
+    verify_access_token/4,
+    verify_provider_identity_token/1
 ]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies given access token in Onezone, and upon success, returns the auth
-%% object, including subject's identity and caveats that were inscribed in the token.
+%% Verifies given access token in Onezone, and upon success, returns the
+%% subject's identity and token ttl.
+%% Ttl is the remaining time for which token will be valid or 'undefined'
+%% if no time constraints were set for token.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_access_token(#token_auth{}) -> {ok, aai:auth()} | errors:error().
-verify_access_token(#token_auth{token = SerializedToken, peer_ip = PeerIp}) ->
+-spec verify_access_token(
+    auth_manager:access_token(),
+    PeerIp :: undefined | ip_utils:ip(),
+    Interface :: undefined | cv_interface:interface(),
+    data_access_caveats:policy()
+) ->
+    {ok, aai:subject(), TTL :: undefined | time_utils:seconds()} | errors:error().
+verify_access_token(AccessToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_token, id = undefined, aspect = verify_access_token, scope = public},
-        data = #{
-            %% @TODO VFS-5914 add full auth_ctx information
-            <<"token">> => SerializedToken,
-            <<"peerIp">> => case PeerIp of
-                undefined -> null;
-                _ -> element(2, {ok, _} = ip_utils:to_binary(PeerIp))
-            end
-        }
+        gri = #gri{
+            type = od_token,
+            id = undefined,
+            aspect = verify_access_token,
+            scope = public
+        },
+        data = build_verification_payload(
+            AccessToken, PeerIp, Interface,
+            DataAccessCaveatsPolicy
+        )
     }),
     case Result of
+        {ok, #{<<"subject">> := Subject} = Ans} ->
+            TokenTTL = utils:null_to_undefined(maps:get(<<"ttl">>, Ans, null)),
+            {ok, aai:deserialize_subject(Subject), TokenTTL};
         {error, _} = Error ->
-            Error;
-        {ok, #{<<"subject">> := Subject}} ->
-            {ok, Token} = tokens:deserialize(SerializedToken),
-            {ok, #auth{
-                subject = aai:deserialize_subject(Subject),
-                caveats = tokens:get_caveats(Token)
-            }}
+            Error
     end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies given identity token in Onezone and returns the subject on success.
+%% Verifies given provider identity token in Onezone and returns the
+%% subject on success.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_identity_token(tokens:serialized()) ->
+-spec verify_provider_identity_token(tokens:serialized()) ->
     {ok, aai:subject()} | errors:error().
-verify_identity_token(SerializedToken) ->
+verify_provider_identity_token(IdentityToken) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
-        gri = #gri{type = od_token, id = undefined, aspect = verify_identity_token, scope = public},
-        data = #{
-            %% @TODO VFS-5914 add full auth_ctx information
-            <<"token">> => SerializedToken
-        }
+        gri = #gri{
+            type = od_token,
+            id = undefined,
+            aspect = verify_identity_token,
+            scope = public
+        },
+        data = #{<<"token">> => IdentityToken}
     }),
     case Result of
-        {error, _} = Error ->
-            Error;
         {ok, #{<<"subject">> := Subject}} ->
-            {ok, aai:deserialize_subject(Subject)}
+            {ok, aai:deserialize_subject(Subject)};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec build_verification_payload(
+    auth_manager:access_token(),
+    PeerIp :: undefined | ip_utils:ip(),
+    Interface :: undefined | cv_interface:interface(),
+    data_access_caveats:policy()
+) ->
+    json_utils:json_term().
+build_verification_payload(AccessToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+    Json = #{
+        <<"token">> => AccessToken,
+        <<"peerIp">> => case PeerIp of
+            undefined ->
+                null;
+            _ ->
+                element(2, {ok, _} = ip_utils:to_binary(PeerIp))
+        end,
+        <<"allowDataAccessCaveats">> => case DataAccessCaveatsPolicy of
+            allow_data_access_caveats -> true;
+            disallow_data_access_caveats -> false
+        end
+    },
+    case Interface of
+        undefined ->
+            Json;
+        _ ->
+            Json#{<<"interface">> => atom_to_binary(Interface, utf8)}
     end.

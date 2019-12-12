@@ -271,7 +271,7 @@ translate_from_protobuf(#'ClientHandshakeRequest'{
     compatible_oneprovider_versions = CompOpVersions
 }) ->
     #client_handshake_request{
-        auth = translate_from_protobuf(Macaroon),
+        credentials = translate_from_protobuf(Macaroon),
         nonce = Nonce,
         version = Version,
         compatible_oneprovider_versions = CompOpVersions
@@ -285,11 +285,9 @@ translate_from_protobuf(#'ProviderHandshakeRequest'{
         token = Token
     };
 translate_from_protobuf(#'Macaroon'{
-    macaroon = Macaroon
+    macaroon = AccessToken
 }) ->
-    #token_auth{
-        token = Macaroon
-    };
+    #credentials{access_token = AccessToken};
 translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
 
@@ -1321,11 +1319,11 @@ translate_to_protobuf(#handshake_response{
     {handshake_response, #'HandshakeResponse'{
         status = Status
     }};
-translate_to_protobuf(#token_auth{
-    token = Macaroon
+translate_to_protobuf(#credentials{
+    access_token = SerializedToken
 }) ->
     #'Macaroon'{
-        macaroon = Macaroon
+        macaroon = SerializedToken
     };
 
 

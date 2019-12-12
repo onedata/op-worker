@@ -520,8 +520,6 @@ init_per_testcase(Case, Config) when
     ssl:start(),
     initializer:remove_pending_messages(),
 
-    mock_user_identity(Workers),
-
     % Artificially prolong message handling to avoid races between response from
     % the server and connection close.
     prolong_msg_routing(Workers),
@@ -537,6 +535,7 @@ init_per_testcase(Case, Config) when
     ),
 
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    mock_auth_manager(Config),
     lfm_proxy:init(NewConfig);
 
 init_per_testcase(heartbeats_test, Config) ->
@@ -544,7 +543,7 @@ init_per_testcase(heartbeats_test, Config) ->
     initializer:remove_pending_messages(),
     ssl:start(),
 
-    mock_user_identity(Workers),
+    mock_auth_manager(Config),
     CP_Pid = spawn_control_proc(),
 
     test_utils:mock_new(Workers, helpers),
@@ -581,13 +580,13 @@ init_per_testcase(socket_timeout_test, Config) ->
 
 init_per_testcase(closing_last_connection_should_cancel_all_session_transfers_test, Config) ->
     % Shorten ttl to force quicker client session removal
-    init_per_testcase(heartbeats_test, [{fuse_session_ttl_seconds, 10} | Config]);
+    init_per_testcase(heartbeats_test, [{fuse_session_grace_period_seconds, 10} | Config]);
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     initializer:remove_pending_messages(),
-    mock_user_identity(Workers),
+    mock_auth_manager(Config),
 
     initializer:mock_provider_id(
         Workers, <<"providerId">>, <<"access-token">>, <<"identity-token">>
@@ -602,7 +601,8 @@ end_per_testcase(Case, Config) when
     Case =:= fulfill_promises_after_connection_error_test
 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [user_identity, router, guid_req]),
+    initializer:unmock_auth_manager(Config),
+    test_utils:mock_validate_and_unload(Workers, [router, guid_req]),
     ssl:stop(),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config);
@@ -615,8 +615,9 @@ end_per_testcase(Case, Config) when
     CP_Pid = ?config(control_proc, Config),
     ssl:stop(),
     stop_control_proc(CP_Pid),
+    initializer:unmock_auth_manager(Config),
     test_utils:mock_validate_and_unload(Workers, [
-        user_identity, helpers, attr_req, fslogic_event_handler
+        helpers, attr_req, fslogic_event_handler
     ]),
     initializer:clean_test_users_and_spaces_no_validate(Config);
 
@@ -631,7 +632,7 @@ end_per_testcase(socket_timeout_test, Config) ->
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:unmock_provider_ids(Workers),
-    test_utils:mock_validate_and_unload(Workers, [user_identity]),
+    initializer:unmock_auth_manager(Config),
     ssl:stop().
 
 
@@ -660,17 +661,8 @@ unmock_ranch_ssl(Node) ->
     test_utils:mock_unload(Node, [ranch_ssl]).
 
 
-mock_user_identity(Workers) ->
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = SerializedToken}) ->
-            {ok, #token{
-                subject = ?SUB(user, UserId)
-            }} = tokens:deserialize(SerializedToken),
-
-            {ok, #document{value = #user_identity{user_id = UserId}}}
-        end
-    ).
+mock_auth_manager(Config) ->
+    initializer:mock_auth_manager(Config).
 
 
 prolong_msg_routing(Workers) ->

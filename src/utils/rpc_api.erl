@@ -224,8 +224,7 @@ new_luma_config(URL, ApiKey) ->
     luma_config:new(URL, ApiKey).
 
 
--spec verify_storage_on_all_nodes(helpers:helper()) ->
-    ok | {error, term()} | {error, term(), Stacktrace :: list()}.
+-spec verify_storage_on_all_nodes(helpers:helper()) -> ok | errors:error().
 verify_storage_on_all_nodes(Helper) ->
     storage_detector:verify_storage_on_all_nodes(Helper).
 
@@ -246,7 +245,7 @@ space_logic_get_storage_ids(SpaceId) ->
 
 
 -spec file_popularity_api_configure(file_popularity_config:id(), map()) ->
-    ok | {error, term()}.
+    ok | errors:error() | {error, term()}.
 file_popularity_api_configure(SpaceId, NewConfiguration) ->
     file_popularity_api:configure(SpaceId, NewConfiguration).
 
@@ -370,7 +369,7 @@ is_subdomain_delegated() ->
 
 
 -spec set_delegated_subdomain(binary()) ->
-    ok | {error, subdomain_exists} | errors:error().
+    ok | errors:error().
 set_delegated_subdomain(Subdomain) ->
     provider_logic:set_delegated_subdomain(Subdomain).
 
@@ -398,7 +397,8 @@ update_subdomain_delegation_ips() ->
     provider_logic:update_subdomain_delegation_ips().
 
 
--spec autocleaning_configure(od_space:id(), map()) -> ok | {error, term()}.
+-spec autocleaning_configure(od_space:id(), map()) ->
+    ok | errors:error() | {error, term()}.
 autocleaning_configure(SpaceId, Configuration) ->
     autocleaning_api:configure(SpaceId, Configuration).
 

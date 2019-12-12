@@ -1098,7 +1098,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     A1 = rpc:call(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
     ?assertMatch({ok, _}, A1),
     {ok, SpaceDoc} = A1,
-    SpaceKey = SpaceDoc#document.key,
+%%    SpaceKey = SpaceDoc#document.key,
 %%    ct:print("Space key ~p", [SpaceKey]),
 
     DoTest = fun(TaskList) ->

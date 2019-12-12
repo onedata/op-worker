@@ -620,27 +620,19 @@ end_per_suite(Config) ->
 
 init_per_testcase(Case, Config) when
     Case =:= events_sent_to_client_directio;
-    Case =:= events_sent_to_client_proxyio ->
+    Case =:= events_sent_to_client_proxyio
+->
     ct:timetrap(timer:minutes(10)),
-    Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     ssl:start(),
 
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = SerializedToken}) ->
-            {ok, #token{
-                subject = ?SUB(user, UserId)
-            }} = tokens:deserialize(SerializedToken),
-
-            {ok, #document{value = #user_identity{user_id = UserId}}}
-        end
-    ),
+    initializer:mock_auth_manager(Config),
     init_per_testcase(default, Config);
 
 init_per_testcase(Case, Config) when
     Case =:= quota_updated_on_gui_upload;
-    Case =:= failed_gui_upload_test ->
+    Case =:= failed_gui_upload_test
+->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, cow_multipart),
     ok = test_utils:mock_new(Workers, cowboy_req),
@@ -664,7 +656,8 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(Case, Config) when
     Case =:= quota_updated_on_gui_upload;
-    Case =:= failed_upload_test ->
+    Case =:= failed_upload_test
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, cowboy_req),
     test_utils:mock_unload(Workers, cow_multipart),

@@ -419,7 +419,8 @@ validate_support_request(SerializedToken) ->
                 false -> ok
             end;
         {ok, #token{type = ReceivedType}} ->
-            ?ERROR_NOT_AN_INVITE_TOKEN(?SUPPORT_SPACE, ReceivedType);
+           ?ERROR_BAD_VALUE_TOKEN(<<"token">>,
+               ?ERROR_NOT_AN_INVITE_TOKEN(?SUPPORT_SPACE, ReceivedType));
         {error, _} = Error ->
             Error
     end.

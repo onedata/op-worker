@@ -79,12 +79,9 @@ mock_gs_client(Config) ->
         Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_ACCESS_TOKEN(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_TOKEN(?PROVIDER_1)
     ),
 
-    ok = test_utils:mock_expect(Nodes, token_logic, verify_access_token, fun(#token_auth{token = UserToken}) ->
-        {ok, #token{subject = ?SUB(user, UserId)}} = tokens:deserialize(UserToken),
-        {ok, #auth{
-            subject = ?SUB(user, UserId),
-            caveats = []
-        }}
+    ok = test_utils:mock_expect(Nodes, token_logic, verify_access_token, fun(AccessToken, _, _, _) ->
+        {ok, #token{subject = ?SUB(user, UserId)}} = tokens:deserialize(AccessToken),
+        {ok, ?SUB(user, UserId), undefined}
     end),
 
     % gs_client requires successful setting of subdomain delegation IPs, but it cannot
@@ -132,10 +129,15 @@ wait_for_mocked_connection(Config) ->
 create_user_session(Config, UserId) ->
     [Node | _] = ?NODES(Config),
 
-    SerializedToken = initializer:create_token(UserId),
-    Auth = #token_auth{token = SerializedToken},
-    {ok, #document{value = Identity}} = rpc:call(Node, user_identity, get_or_fetch, [Auth]),
-    {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [Identity, Auth]),
+    AccessToken = initializer:create_access_token(UserId),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
+    ),
+    {ok, ?USER(UserId), _} = rpc:call(Node, auth_manager, verify, [TokenAuth]),
+    {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [
+        ?SUB(user, UserId), TokenAuth
+    ]),
     % Make sure private user data is fetched (if user identity was cached, it might
     % not happen).
     rpc:call(Node, user_logic, get, [SessionId, ?SELF]),

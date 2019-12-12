@@ -508,16 +508,22 @@ confined_access_token_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     Caveat = #cv_data_readonly{},
-    Auth = #token_auth{token = initializer:create_token(?USER_1, [Caveat])},
+    AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), rest, allow_data_access_caveats
+    ),
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
     % Request should be denied before contacting Onezone because of
     % data access caveat presence
     ?assertMatch(
         ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
-        rpc:call(Node, user_logic, fetch_idp_access_token, [Auth, ?USER_1, ?MOCK_IDP])
+        rpc:call(Node, user_logic, fetch_idp_access_token, [TokenAuth, ?USER_1, ?MOCK_IDP])
     ),
-    ?assertEqual(GraphCalls, logic_tests_common:count_reqs(Config, graph)).
+    % Nevertheless, GraphCalls should be increased as TokenAuth was verified to
+    % retrieve caveats
+    ?assertEqual(GraphCalls+1, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================

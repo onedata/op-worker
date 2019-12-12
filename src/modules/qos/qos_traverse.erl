@@ -30,7 +30,7 @@
 
 %% Traverse behaviour callbacks
 -export([do_master_job/2, do_slave_job/2,
-    task_finished/1, get_job/1, get_sync_info/1, update_job_progress/5]).
+    task_finished/2, get_job/1, get_sync_info/1, update_job_progress/5]).
 
 -type task_type() :: traverse | reconcile.
 -export_type([task_type/0]).
@@ -118,8 +118,8 @@ get_job(DocOrID) ->
 get_sync_info(Job) ->
     tree_traverse:get_sync_info(Job).
 
--spec task_finished(traverse:id()) -> ok.
-task_finished(TaskId) ->
+-spec task_finished(traverse:id(), traverse:pool()) -> ok.
+task_finished(TaskId, _PoolName) ->
     {ok, #{
         <<"qos_entry_id">> := QosEntryId,
         <<"task_type">> := TaskType

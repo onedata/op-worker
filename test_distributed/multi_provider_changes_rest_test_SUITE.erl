@@ -79,14 +79,14 @@ token_auth_test(Config) ->
     Json = #{<<"fileMeta">> => #{
         <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
     }},
-    #token_auth{token = Token} = ?config({auth, ?USER_1}, Config),
+    Token = ?config({access_token, ?USER_1}, Config),
 
     % Request containing data caveats should be rejected
     DataCaveat = #cv_data_path{whitelist = [<<"/", SpaceId/binary>>]},
     TokenWithDataCaveat = tokens:confine(Token, DataCaveat),
     ExpRestError1 = rest_test_utils:get_rest_error(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat)),
     ?assertMatch(ExpRestError1, get_changes(
-        [{{auth, ?USER_1}, #token_auth{token = TokenWithDataCaveat}} | Config],
+        [{{access_token, ?USER_1}, TokenWithDataCaveat} | Config],
         WorkerP1, SpaceId, Json
     )),
 
@@ -96,7 +96,7 @@ token_auth_test(Config) ->
     TokenWithInvalidApiCaveat = tokens:confine(Token, InvalidApiCaveat),
     ExpRestError2 = rest_test_utils:get_rest_error(?ERROR_TOKEN_CAVEAT_UNVERIFIED(InvalidApiCaveat)),
     ?assertMatch(ExpRestError2, get_changes(
-        [{{auth, ?USER_1}, #token_auth{token = TokenWithInvalidApiCaveat}} | Config],
+        [{{access_token, ?USER_1}, TokenWithInvalidApiCaveat} | Config],
         WorkerP1, SpaceId, Json
     )),
 
@@ -104,7 +104,7 @@ token_auth_test(Config) ->
     ValidApiCaveat = #cv_api{whitelist = [{all, all, GRIPattern}]},
     TokenWithValidApiCaveat = tokens:confine(Token, ValidApiCaveat),
     ?assertMatch({ok, _}, get_changes(
-        [{{auth, ?USER_1}, #token_auth{token = TokenWithValidApiCaveat}} | Config],
+        [{{access_token, ?USER_1}, TokenWithValidApiCaveat} | Config],
         WorkerP1, SpaceId, Json
     )).
 
@@ -542,17 +542,7 @@ end_per_suite(Config) ->
 
 
 init_per_testcase(token_auth_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#token_auth{token = SerializedToken}) ->
-            {ok, #token{
-                subject = ?SUB(user, UserId)
-            }} = tokens:deserialize(SerializedToken),
-
-            {ok, #document{value = #user_identity{user_id = UserId}}}
-        end
-    ),
+    initializer:mock_auth_manager(Config),
     init_per_testcase(all, Config);
 
 init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
@@ -588,8 +578,7 @@ init_per_testcase(_Case, Config) ->
 
 
 end_per_testcase(token_auth_test, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [user_identity]),
+    initializer:unmock_auth_manager(Config),
     end_per_testcase(all, Config);
 
 end_per_testcase(changes_stream_closed_on_disconnection, Config) ->

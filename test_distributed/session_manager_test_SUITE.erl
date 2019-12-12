@@ -14,6 +14,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -58,8 +59,8 @@ session_manager_session_creation_and_reuse_test(Config) ->
 
     Nonce1 = <<"nonce_1">>,
     Nonce2 = <<"nonce_2">>,
-    Iden1 = #user_identity{user_id = <<"user_id_1">>},
-    Iden2 = #user_identity{user_id = <<"user_id_2">>},
+    Iden1 = ?SUB(user, <<"user_id_1">>),
+    Iden2 = ?SUB(user, <<"user_id_2">>),
 
     [SessId1, SessId2] = lists:map(fun({Nonce, Iden, Workers}) ->
         Answers = [{ok, SessId} | _] = utils:pmap(fun(Worker) ->
@@ -234,7 +235,7 @@ session_getters_test(Config) ->
 session_supervisor_child_crash_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Nonce = <<"nonce">>,
-    Iden = #user_identity{user_id = <<"user_id">>},
+    Iden = ?SUB(user, <<"user_id">>),
 
     lists:foreach(fun({ChildId, Fun, Args}) ->
         {ok, SessId} = fuse_test_utils:reuse_or_create_fuse_session(
@@ -279,9 +280,9 @@ init_per_testcase(session_manager_session_creation_and_reuse_test, Config) ->
 init_per_testcase(session_getters_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = <<"session_id">>,
-    Iden = #user_identity{user_id = <<"user_id">>},
+    Identity = ?SUB(user, <<"user_id">>),
     initializer:communicator_mock(Worker),
-    basic_session_setup(Worker, SessId, Iden, self(), Config);
+    basic_session_setup(Worker, SessId, Identity, self(), Config);
 
 init_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -298,13 +299,14 @@ init_per_testcase(session_supervisor_child_crash_test, Config) ->
 init_per_testcase(Case, Config) when
     Case =:= session_manager_session_components_running_test;
     Case =:= session_manager_supervision_tree_structure_test;
-    Case =:= session_manager_session_removal_test ->
+    Case =:= session_manager_session_removal_test
+->
     Workers = ?config(op_worker_nodes, Config),
     Self = self(),
     Nonce1 = <<"nonce_1">>,
     Nonce2 = <<"nonce_2">>,
-    Iden1 = #user_identity{user_id = <<"user_id_1">>},
-    Iden2 = #user_identity{user_id = <<"user_id_2">>},
+    Iden1 = ?SUB(user, <<"user_id_1">>),
+    Iden2 = ?SUB(user, <<"user_id_2">>),
 
     initializer:communicator_mock(Workers),
     {ok, SessId1} = fuse_test_utils:reuse_or_create_fuse_session(
@@ -389,12 +391,12 @@ get_child(Sup, ChildId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec basic_session_setup(node(), Nonce :: binary(),
-    session:identity(), Con :: pid(), Config :: term()) -> NewConfig :: term().
-basic_session_setup(Worker, Nonce, Iden, Con, Config) ->
+    aai:subject(), Con :: pid(), Config :: term()) -> NewConfig :: term().
+basic_session_setup(Worker, Nonce, Identity, Con, Config) ->
     {ok, SessId} = fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, Iden, undefined, Con
+        Worker, Nonce, Identity, undefined, Con
     ),
-    [{session_id, SessId}, {identity, Iden} | Config].
+    [{session_id, SessId}, {identity, Identity} | Config].
 
 %%--------------------------------------------------------------------
 %% @doc

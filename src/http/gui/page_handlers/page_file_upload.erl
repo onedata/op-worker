@@ -54,7 +54,7 @@ handle(<<"OPTIONS">>, Req) ->
     );
 handle(<<"POST">>, InitialReq) ->
     Req = gui_cors:allow_origin(oneprovider:get_oz_url(), InitialReq),
-    case http_auth:authenticate(Req, gui, disallow_data_access_caveats) of
+    case http_auth:authenticate(Req, graphsync, disallow_data_access_caveats) of
         {ok, ?USER(UserId) = Auth} ->
             try
                 Req2 = handle_multipart_req(Req, Auth, #{}),

@@ -111,6 +111,8 @@ get_client_user_ctx(SessionId, UserId, SpaceId, Storage) ->
 %%--------------------------------------------------------------------
 -spec get_posix_user_ctx(session:id(), od_user:id(), od_space:id()) ->
     posix_user_ctx().
+get_posix_user_ctx(?ROOT_SESS_ID, ?ROOT_USER_ID, _SpaceId) ->
+    {0, 0};
 get_posix_user_ctx(SessionId, UserId, SpaceId) ->
     {ok, UserCtx} = case select_posix_compatible_storage(SpaceId) of
         {ok, Storage} ->
@@ -332,9 +334,13 @@ fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx = #{
     <<"onedataAccessToken">> := OnedataAccessToken,
     <<"adminId">> := AdminId
 }, _Helper, OAuth2IdP) ->
-    {ok, {IdPAccessToken, TTL}} =
-        idp_access_token:acquire(AdminId,
-            #token_auth{token = OnedataAccessToken}, OAuth2IdP),
+    TokenAuth = auth_manager:build_token_auth(
+        OnedataAccessToken, undefined, undefined,
+        undefined, disallow_data_access_caveats
+    ),
+    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(
+        AdminId, TokenAuth, OAuth2IdP
+    ),
     AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,
@@ -353,8 +359,13 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCtx = #{
     <<"onedataAccessToken">> := OnedataAccessToken,
     <<"adminId">> := AdminId
 }, #helper{insecure = true}, OAuth2IdP) ->
-    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(AdminId,
-        #token_auth{token = OnedataAccessToken}, OAuth2IdP),
+    TokenAuth = auth_manager:build_token_auth(
+        OnedataAccessToken, undefined, undefined,
+        undefined, disallow_data_access_caveats
+    ),
+    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(
+        AdminId, TokenAuth, OAuth2IdP
+    ),
     AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCtx),
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,

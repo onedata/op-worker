@@ -52,7 +52,7 @@ operation_supported(get, instance, private) -> true;
 operation_supported(get, progress, private) -> true;
 operation_supported(get, throughput_charts, private) -> true;
 
-operation_supported(delete, instance, private) -> true;
+operation_supported(delete, cancel, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
@@ -81,7 +81,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = throughput_charts}}) -> #
     ]}}
 };
 
-data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
+data_spec(#op_req{operation = delete, gri = #gri{aspect = cancel}}) ->
     undefined.
 
 
@@ -137,7 +137,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
-    aspect = instance
+    aspect = cancel
 }} = Req, #transfer{space_id = SpaceId} = Transfer) ->
     case Transfer#transfer.user_id of
         UserId ->
@@ -178,7 +178,7 @@ validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
 ->
     ok;
 
-validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, _) ->
+validate(#op_req{operation = delete, gri = #gri{aspect = cancel}}, _) ->
     ok.
 
 
@@ -265,7 +265,7 @@ update(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
-delete(#op_req{gri = #gri{id = TransferId, aspect = instance}}) ->
+delete(#op_req{gri = #gri{id = TransferId, aspect = cancel}}) ->
     case transfer:cancel(TransferId) of
         ok ->
             ok;

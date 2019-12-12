@@ -17,13 +17,14 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
     reuse_or_create_fuse_session/3,
     reuse_or_create_rest_session/2,
-    reuse_or_create_incoming_provider_session/2,
+    reuse_or_create_incoming_provider_session/1,
     reuse_or_create_outgoing_provider_session/2,
     reuse_or_create_proxied_session/4,
     reuse_or_create_gui_session/2,
@@ -44,11 +45,11 @@
 %% Creates FUSE session or if session exists reuses it.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_fuse_session(Nonce :: binary(), session:identity(),
+-spec reuse_or_create_fuse_session(Nonce :: binary(), aai:subject(),
     session:auth()) -> {ok, session:id()} | error().
-reuse_or_create_fuse_session(Nonce, Iden, Auth) ->
-    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({fuse, Nonce, Auth})),
-    reuse_or_create_session(SessId, fuse, Iden, Auth).
+reuse_or_create_fuse_session(Nonce, Identity, Auth) ->
+    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({fuse, Nonce})),
+    reuse_or_create_session(SessId, fuse, Identity, Auth).
 
 
 %%--------------------------------------------------------------------
@@ -56,10 +57,11 @@ reuse_or_create_fuse_session(Nonce, Iden, Auth) ->
 %% Creates incoming provider's session or if session exists reuses it.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_incoming_provider_session(session:id(),
-    session:identity()) -> {ok, session:id()} | error().
-reuse_or_create_incoming_provider_session(SessId, Iden) ->
-    reuse_or_create_session(SessId, provider_incoming, Iden, undefined).
+-spec reuse_or_create_incoming_provider_session(aai:subject()) ->
+    {ok, session:id()} | error().
+reuse_or_create_incoming_provider_session(?SUB(?ONEPROVIDER, ProviderId) = Identity) ->
+    SessId = session_utils:get_provider_session_id(incoming, ProviderId),
+    reuse_or_create_session(SessId, provider_incoming, Identity, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -68,9 +70,9 @@ reuse_or_create_incoming_provider_session(SessId, Iden) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_outgoing_provider_session(session:id(),
-    session:identity()) -> {ok, session:id()} | error().
-reuse_or_create_outgoing_provider_session(SessId, Iden) ->
-    reuse_or_create_session(SessId, provider_outgoing, Iden, undefined).
+    aai:subject()) -> {ok, session:id()} | error().
+reuse_or_create_outgoing_provider_session(SessId, Identity) ->
+    reuse_or_create_session(SessId, provider_outgoing, Identity, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -83,9 +85,11 @@ reuse_or_create_outgoing_provider_session(SessId, Iden) ->
     session:auth(), SessionType :: atom()) ->
     {ok, session:id()} | error().
 reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
-    case user_identity:get_or_fetch(Auth) of
-        {ok, #document{value = #user_identity{} = Iden}} ->
-            reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia);
+    case auth_manager:verify(Auth) of
+        {ok, #auth{subject = ?SUB(user, _) = Identity}, _TokenValidUntil} ->
+            reuse_or_create_session(
+                SessId, SessionType, Identity, Auth, ProxyVia
+            );
         Error ->
             Error
     end.
@@ -96,15 +100,15 @@ reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
 %% Creates REST session or if session exists reuses it.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_rest_session(session:identity(), session:auth()) ->
+-spec reuse_or_create_rest_session(aai:subject(), session:auth()) ->
     {ok, session:id()} | error().
-reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
+reuse_or_create_rest_session(?SUB(user, UserId) = Identity, Auth) ->
     SessId = datastore_utils:gen_key(<<"">>, term_to_binary({rest, Auth})),
     case user_logic:exists(?ROOT_SESS_ID, UserId) of
         true ->
-            reuse_or_create_session(SessId, rest, Iden, Auth);
+            reuse_or_create_session(SessId, rest, Identity, Auth);
         false ->
-            {error, {invalid_identity, Iden}}
+            {error, {invalid_identity, Identity}}
     end.
 
 
@@ -113,11 +117,11 @@ reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
 %% Creates GUI session and starts session supervisor.
 %% @end
 %%--------------------------------------------------------------------
--spec reuse_or_create_gui_session(session:identity(), session:auth()) ->
+-spec reuse_or_create_gui_session(aai:subject(), session:auth()) ->
     {ok, session:id()} | error().
-reuse_or_create_gui_session(Iden, Auth) ->
+reuse_or_create_gui_session(Identity, Auth) ->
     SessId = datastore_utils:gen_key(<<"">>, term_to_binary({gui, Auth})),
-    reuse_or_create_session(SessId, gui, Iden, Auth).
+    reuse_or_create_session(SessId, gui, Identity, Auth).
 
 
 %%--------------------------------------------------------------------
@@ -132,7 +136,7 @@ create_root_session() ->
         value = #session{
             type = root,
             status = active,
-            identity = #user_identity{user_id = ?ROOT_USER_ID},
+            identity = ?SUB(root, ?ROOT_USER_ID),
             auth = ?ROOT_AUTH,
             data_constraints = data_constraints:get_allow_all_constraints()
         }
@@ -151,7 +155,7 @@ create_guest_session() ->
         value = #session{
             type = guest,
             status = active,
-            identity = #user_identity{user_id = ?GUEST_USER_ID},
+            identity = ?SUB(nobody, ?GUEST_USER_ID),
             auth = ?GUEST_AUTH,
             data_constraints = data_constraints:get_allow_all_constraints()
         }
@@ -199,10 +203,10 @@ remove_session(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(session:id(), session:type(),
-    session:identity(), session:auth() | undefined) ->
+    aai:subject(), session:auth() | undefined) ->
     {ok, SessId :: session:id()} | error().
-reuse_or_create_session(SessId, SessType, Iden, Auth) ->
-    reuse_or_create_session(SessId, SessType, Iden, Auth, undefined).
+reuse_or_create_session(SessId, SessType, Identity, Auth) ->
+    reuse_or_create_session(SessId, SessType, Identity, Auth, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -212,17 +216,17 @@ reuse_or_create_session(SessId, SessType, Iden, Auth) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(session:id(), session:type(),
-    session:identity(), session:auth() | undefined,
+    aai:subject(), session:auth() | undefined,
     ProxyVia :: oneprovider:id() | undefined) ->
     {ok, SessId :: session:id()} | error().
-reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
+reuse_or_create_session(SessId, SessType, Identity, Auth, ProxyVia) ->
     Caveats = case Auth of
         % Providers sessions are not constrained by any caveats
         undefined ->
             [];
-        #token_auth{token = SerializedToken} ->
-            {ok, Token} = tokens:deserialize(SerializedToken),
-            tokens:get_caveats(Token)
+        TokenAuth ->
+            {ok, TokenCaveats} = auth_manager:get_caveats(TokenAuth),
+            TokenCaveats
     end,
 
     case data_constraints:get(Caveats) of
@@ -230,7 +234,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
             % TODO VFS-5895 check if this critical section is still necessary
             critical_section:run([?MODULE, SessId], fun() ->
                 reuse_or_create_session(
-                    SessId, SessType, Iden, Auth,
+                    SessId, SessType, Identity, Auth,
                     DataConstraints, ProxyVia
                 )
             end);
@@ -249,16 +253,16 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
-    Iden :: session:identity(), Auth :: session:auth() | undefined,
+    Identity :: aai:subject(), Auth :: session:auth() | undefined,
     DataConstraints :: data_constraints:constraints(),
     ProxyVia :: undefined | oneprovider:id()
 ) ->
     {ok, SessId :: session:id()} | error().
-reuse_or_create_session(SessId, SessType, Iden, Auth, DataConstraints, ProxyVia) ->
+reuse_or_create_session(SessId, SessType, Identity, Auth, DataConstraints, ProxyVia) ->
     Sess = #session{
         type = SessType,
         status = initializing,
-        identity = Iden,
+        identity = Identity,
         auth = Auth,
         data_constraints = DataConstraints,
         proxy_via = ProxyVia
@@ -268,12 +272,12 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, DataConstraints, ProxyVia)
             % TODO VFS-5126 - possible race with closing (creation when cleanup
             % is not finished)
             {error, not_found};
-        (#session{identity = ValidIden} = ExistingSess) ->
-            case Iden of
-                ValidIden ->
+        (#session{identity = ValidIdentity} = ExistingSess) ->
+            case Identity of
+                ValidIdentity ->
                     {ok, ExistingSess};
                 _ ->
-                    {error, {invalid_identity, Iden}}
+                    {error, {invalid_identity, Identity}}
             end
     end,
     case session:update(SessId, Diff) of
@@ -283,7 +287,7 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, DataConstraints, ProxyVia)
             case start_session(#document{key = SessId, value = Sess}) of
                 {error, already_exists} ->
                     reuse_or_create_session(
-                        SessId, SessType, Iden, Auth,
+                        SessId, SessType, Identity, Auth,
                         DataConstraints, ProxyVia
                     );
                 Other ->

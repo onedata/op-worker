@@ -467,8 +467,7 @@ is_subdomain_delegated() ->
 %% Sets onezone subdomain pointing to this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec set_delegated_subdomain(binary()) ->
-    ok | {error, subdomain_exists} | errors:error().
+-spec set_delegated_subdomain(binary()) -> ok | errors:error().
 set_delegated_subdomain(Subdomain) ->
     IPs = node_manager:get_cluster_ips(),
     case set_subdomain_delegation(Subdomain, IPs) of
@@ -924,7 +923,7 @@ binaries_to_strings(List) ->
 -spec verify_provider_identity(od_provider:id(), IdentityToken :: binary()) ->
     ok | errors:error().
 verify_provider_identity(ProviderId, IdentityToken) ->
-    case token_logic:verify_identity_token(IdentityToken) of
+    case token_logic:verify_provider_identity_token(IdentityToken) of
         {ok, ?SUB(?ONEPROVIDER, ProviderId)} ->
             ok;
         {ok, _} ->

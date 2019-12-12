@@ -6,21 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Credentials that can be exchanged for user identity in identity model
+%%% Credentials used to authenticate a user together with context
+%%% information such as peer IP or interface (see auth_manager).
 %%% @end
 %%%-------------------------------------------------------------------
 
 -ifndef(CREDENTIALS_HRL).
 -define(CREDENTIALS_HRL, 1).
 
-% Record containing access token for user authorization in OZ.
--record(token_auth, {
-    token :: tokens:serialized(),
-    %% @TODO VFS-5718 - currently always undefined, peer IP should be collected
-    %% when a client (FUSE, REST, GUI) connects and associated with his
-    %% auth / session. It is utilized in gs_client_worker when adding
-    %% an auth override to the request.
-    peer_ip = undefined :: undefined | ip_utils:ip()
+-record(credentials, {
+    access_token :: tokens:serialized(),
+    audience_token = undefined :: undefined | tokens:serialized()
 }).
 
 -endif.

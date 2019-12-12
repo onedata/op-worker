@@ -16,6 +16,8 @@
 
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -98,9 +100,14 @@ clear_unused_webdav_credentials(Params) -> Params.
 
 %% @private
 -spec resolve_user_by_token(user_ctx()) -> user_ctx().
-resolve_user_by_token(#{<<"onedataAccessToken">> := Token} = Params) when
-    byte_size(Token) > 0 ->
-    {ok, UserId} = user_identity:get_or_fetch_user_id(Token),
+resolve_user_by_token(#{<<"onedataAccessToken">> := AccessToken} = Params) when
+    byte_size(AccessToken) > 0
+->
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined, undefined,
+        undefined, disallow_data_access_caveats
+    ),
+    {ok, ?USER(UserId), _} = auth_manager:verify(TokenAuth),
     Params#{<<"adminId">> => UserId};
 resolve_user_by_token(Params) -> Params.
 

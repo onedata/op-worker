@@ -87,37 +87,51 @@ incoming_session_watcher_should_retry_session_removal(Config) ->
 session_create_or_reuse_session_should_update_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
+    Nonce = ?config(session_nonce, Config),
     Accessed1 = get_session_access_time(Config),
-    fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, SessId, undefined, undefined, self()
+    timer:sleep(timer:seconds(1)),
+    ?assertMatch(
+        {ok, SessId},
+        fuse_test_utils:reuse_or_create_fuse_session(
+            Worker, Nonce, undefined, undefined, self()
+        )
     ),
-    ?call(Worker, get, [SessId]),
     Accessed2 = get_session_access_time(Config),
-    ?assert(Accessed2 - Accessed1 >= 0).
+    ?assert(Accessed2 - Accessed1 > 0).
 
 session_update_should_update_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     Accessed1 = get_session_access_time(Config),
-    ?call(Worker, update, [SessId, #{}]),
+    timer:sleep(timer:seconds(1)),
+    ?assertMatch(
+        {ok, SessId},
+        ?call(Worker, update, [SessId, fun(Sess) -> {ok, Sess} end])
+    ),
     Accessed2 = get_session_access_time(Config),
-    ?assert(Accessed2 - Accessed1 >= 0).
+    ?assert(Accessed2 - Accessed1 > 0).
 
 session_save_should_update_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config(session_id, Config),
     Accessed1 = get_session_access_time(Config),
-    ?call(Worker, save, [#document{value = get_session(Config)}]),
+    timer:sleep(timer:seconds(1)),
+    ?assertMatch(
+        {ok, SessId},
+        ?call(Worker, save, [get_session_doc(Config)])
+    ),
     Accessed2 = get_session_access_time(Config),
-    ?assert(Accessed2 - Accessed1 >= 0).
+    ?assert(Accessed2 - Accessed1 > 0).
 
 session_create_should_set_session_access_time(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = base64:encode(crypto:strong_rand_bytes(20)),
     Accessed1 = rpc:call(Worker, time_utils, cluster_time_seconds, []),
+    timer:sleep(timer:seconds(1)),
     ?call(Worker, create, [#document{key = SessId, value = #session{}}]),
     Accessed2 = get_session_access_time([{session_id, SessId} | Config]),
     ?call(Worker, delete, [SessId]),
-    ?assert(Accessed2 - Accessed1 >= 0).
+    ?assert(Accessed2 - Accessed1 > 0).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -128,11 +142,12 @@ init_per_suite(Config) ->
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = <<"session_id">>,
+    Nonce = crypto:strong_rand_bytes(20),
+    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({fuse, Nonce})),
     initializer:remove_pending_messages(),
     mock_session_manager(Worker),
     {ok, Pid} = start_incoming_session_watcher(Worker, SessId),
-    [{incoming_session_watcher, Pid}, {session_id, SessId} | Config].
+    [{incoming_session_watcher, Pid}, {session_id, SessId}, {session_nonce, Nonce} | Config].
 
 end_per_suite(_Config) ->
     ok.
@@ -158,10 +173,12 @@ end_per_testcase(_Case, Config) ->
     {ok, Pid :: pid()}.
 start_incoming_session_watcher(Worker, SessId) ->
     Self = self(),
-    ?call(Worker, application, set_env,
-        [?APP_NAME, fuse_session_ttl_seconds, 1]),
+    ?call(Worker, application, set_env, [
+        ?APP_NAME, fuse_session_grace_period_seconds, 2
+    ]),
     ?assertMatch({ok, _}, ?call(Worker, save, [#document{
-        key = SessId, value = #session{status = active, type = fuse, connections = [Self]}
+        key = SessId,
+        value = #session{status = active, type = fuse, connections = [Self]}
     }])),
     ?assertMatch({ok, _}, ?call(Worker, gen_server, start, [
         incoming_session_watcher, [SessId, fuse], []
@@ -214,13 +231,15 @@ set_session_status(Config, Status) ->
 %% Returns session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_session(Config :: term()) -> Session :: #session{}.
-get_session(Config) ->
+-spec get_session_doc(Config :: term()) -> Session :: #session{}.
+get_session_doc(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
-    {ok, #document{value = Session}} =
-        ?assertMatch({ok, _}, ?call(Worker, get, [SessId])),
-    Session.
+    {ok, #document{} = Doc} = ?assertMatch(
+        {ok, _},
+        ?call(Worker, get, [SessId])
+    ),
+    Doc.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -230,5 +249,5 @@ get_session(Config) ->
 %%--------------------------------------------------------------------
 -spec get_session_access_time(Config :: term()) -> Accessed :: erlang:timestamp().
 get_session_access_time(Config) ->
-    #session{accessed = Accessed} = get_session(Config),
+    #document{value = #session{accessed = Accessed}} = get_session_doc(Config),
     Accessed.

@@ -416,16 +416,22 @@ confined_access_token_test(Config) ->
 
     {ok, Objectid} = file_id:guid_to_objectid(file_id:pack_guid(<<"123">>, ?SPACE_1)),
     Caveat = #cv_data_objectid{whitelist = [Objectid]},
-    Auth = #token_auth{token = initializer:create_token(?USER_1, [Caveat])},
+    AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), rest, allow_data_access_caveats
+    ),
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
     % Request should be denied before contacting Onezone because the space in
     % objectid is different than requested
     ?assertMatch(
         ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
-        rpc:call(Node, space_logic, get, [Auth, ?SPACE_2])
+        rpc:call(Node, space_logic, get, [TokenAuth, ?SPACE_2])
     ),
-    ?assertEqual(GraphCalls, logic_tests_common:count_reqs(Config, graph)).
+    % Nevertheless, GraphCalls should be increased as TokenAuth was verified to
+    % retrieve caveats
+    ?assertEqual(GraphCalls+1, logic_tests_common:count_reqs(Config, graph)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
