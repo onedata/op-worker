@@ -177,7 +177,7 @@ check_access(UserCtx, FileCtx0, traverse_ancestors) ->
 
 check_access(UserCtx, FileCtx0, Permission) ->
     ShareId = file_ctx:get_share_id_const(FileCtx0),
-    case file_ctx:get_active_perms_type(FileCtx0) of
+    case file_ctx:get_active_perms_type(FileCtx0, true) of
         {acl, FileCtx1} ->
             {Acl, _} = file_ctx:get_acl(FileCtx1),
             check_acl_access(Permission, UserCtx, ShareId, Acl, FileCtx1);
