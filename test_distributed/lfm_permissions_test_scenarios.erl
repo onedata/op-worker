@@ -291,6 +291,7 @@ run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
     space_user = User,
     requires_traverse_ancestors = RequiresTraverseAncestors,
     files = Files,
+    valid_in_readonly_mode = IsReadonly,
     operation = Operation
 }, Config) ->
     OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
@@ -321,14 +322,14 @@ run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
         % only when caveats allows it
         run_caveats_scenario(
             Node, MainToken, OwnerUserSessId, User, Operation, ScenarioType,
-            ScenarioRootDirPath, ExtraData
+            ScenarioRootDirPath, ExtraData, IsReadonly
         )
-    end, [data_path, data_objectid]).
+    end, [data_path, data_objectid, data_readonly]).
 
 
 run_caveats_scenario(
     Node, MainToken, OwnerUserSessId, User, Operation, data_path,
-    ScenarioRootDirPath, ExtraData
+    ScenarioRootDirPath, ExtraData, _IsReadonly
 ) ->
     Token1 = tokens:confine(MainToken, #cv_data_path{whitelist = [<<"i_am_nowhere">>]}),
     SessId1 = lfm_permissions_test_utils:create_session(Node, User, Token1),
@@ -347,7 +348,7 @@ run_caveats_scenario(
     );
 run_caveats_scenario(
     Node, MainToken, OwnerUserSessId, User, Operation, data_objectid,
-    ScenarioRootDirPath, ExtraData
+    ScenarioRootDirPath, ExtraData, _IsReadonly
 ) ->
     ScenarioRootDirGuid = maps:get(ScenarioRootDirPath, ExtraData),
     {ok, ScenarioRootDirObjectId} = file_id:guid_to_objectid(ScenarioRootDirGuid),
@@ -369,7 +370,27 @@ run_caveats_scenario(
     ?assertNotMatch(
         {error, ?EACCES},
         Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData), 100
-    ).
+    );
+run_caveats_scenario(
+    Node, MainToken, OwnerUserSessId, User, Operation, data_readonly,
+    ScenarioRootDirPath, ExtraData, IsReadonly
+) ->
+    Token = tokens:confine(MainToken, #cv_data_readonly{}),
+    SessId = lfm_permissions_test_utils:create_session(Node, User, Token),
+    case IsReadonly of
+        true ->
+            % Operation should succeed
+            ?assertNotMatch(
+                {error, ?EACCES},
+                Operation(OwnerUserSessId, SessId, ScenarioRootDirPath, ExtraData)
+            );
+        false ->
+            % Operation should fail
+            ?assertMatch(
+                {error, ?EACCES},
+                Operation(OwnerUserSessId, SessId, ScenarioRootDirPath, ExtraData)
+            )
+    end.
 
 
 %%%===================================================================

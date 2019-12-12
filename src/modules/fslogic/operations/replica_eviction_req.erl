@@ -41,6 +41,8 @@ schedule_replica_eviction(
     UserCtx, FileCtx0, SourceProviderId,
     MigrationProviderId, ViewName, QueryViewParams
 ) ->
+    data_constraints:in_readonly_mode(UserCtx) andalso throw(?EACCES),
+
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors] %todo VFS-4844

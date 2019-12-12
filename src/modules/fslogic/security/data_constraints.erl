@@ -38,7 +38,7 @@
 
 
 %% API
--export([get_allow_all_constraints/0, get/1, inspect/3]).
+-export([get_allow_all_constraints/0, get/1, in_readonly_mode/1, inspect/4]).
 
 -ifdef(TEST).
 -export([
@@ -63,14 +63,16 @@
 
 -record(constraints, {
     paths :: allowed_paths(),
-    guids :: guid_constraints()
+    guids :: guid_constraints(),
+    readonly = false :: boolean()
 }).
 
--type constraints() :: #constraints{}.
+-opaque constraints() :: #constraints{}.
 
 -export_type([constraints/0, ancestor_policy/0]).
 
 
+-define(CV_READONLY, #cv_data_readonly{}).
 -define(CV_PATH(__PATHS), #cv_data_path{whitelist = __PATHS}).
 -define(CV_OBJECTID(__OBJECTIDS), #cv_data_objectid{whitelist = __OBJECTIDS}).
 
@@ -82,13 +84,15 @@
 
 -spec get_allow_all_constraints() -> constraints().
 get_allow_all_constraints() ->
-    #constraints{paths = any, guids = any}.
+    #constraints{paths = any, guids = any, readonly = false}.
 
 
 -spec get([caveats:caveat()]) ->
     {ok, constraints()} | {error, invalid_constraints}.
 get(Caveats) ->
     DataConstraints = lists:foldl(fun
+        (?CV_READONLY, Acc) ->
+            Acc#constraints{readonly = true};
         (?CV_PATH(Paths), #constraints{paths = any} = Acc) ->
             Acc#constraints{paths = consolidate_paths(Paths)};
         (?CV_PATH(_Paths), #constraints{paths = []} = Acc) ->
@@ -125,6 +129,12 @@ get(Caveats) ->
     end.
 
 
+-spec in_readonly_mode(user_ctx:ctx()) -> boolean().
+in_readonly_mode(UserCtx) ->
+    DataConstraints = user_ctx:get_data_constraints(UserCtx),
+    DataConstraints#constraints.readonly.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Verifies data constraints, that is whether access to specified file
@@ -140,13 +150,24 @@ get(Caveats) ->
 %% calculation cost so it should be used only in necessity.
 %% @end
 %%--------------------------------------------------------------------
--spec inspect(user_ctx:ctx(), file_ctx:ctx(), ancestor_policy()) ->
+-spec inspect(
+    UserCtx :: user_ctx:ctx(),
+    FileCtx :: file_ctx:ctx(),
+    AncestorPolicy :: ancestor_policy(),
+    AccessRequirements :: [data_access_rights:requirement()]
+) ->
     {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
-inspect(UserCtx, FileCtx0, AncestorPolicy) ->
+inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
     case user_ctx:get_data_constraints(UserCtx) of
-        #constraints{paths = any, guids = any} ->
+        #constraints{paths = any, guids = any, readonly = ReadOnly} ->
+            ReadOnly andalso data_access_rights:assert_operation_valid_in_readonly_mode(
+                AccessRequirements
+            ),
             {undefined, FileCtx0};
-        DataConstraints ->
+        #constraints{readonly = ReadOnly} = DataConstraints ->
+            ReadOnly andalso data_access_rights:assert_operation_valid_in_readonly_mode(
+                AccessRequirements
+            ),
             CheckResult = check_and_cache_data_constraints(
                 UserCtx, FileCtx0, DataConstraints, AncestorPolicy
             ),
