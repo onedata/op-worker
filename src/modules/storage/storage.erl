@@ -126,15 +126,15 @@ create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParamete
 get(StorageId) when is_binary(StorageId) ->
     case storage_config:get(StorageId) of
         {ok, #document{value = StorageConfig}} ->
-            {ok, StorageLogicDoc} = storage_logic:get(StorageId),
+            {ok, OdStorageDoc} = storage_logic:get(StorageId),
             {ok, #storage_record{
                 id = StorageId,
-                name = storage_logic:get_name(StorageLogicDoc),
+                name = storage_logic:get_name(OdStorageDoc),
                 helper = storage_config:get_helper(StorageConfig),
                 is_readonly = storage_config:is_readonly(StorageConfig),
                 luma_config = storage_config:get_luma_config(StorageConfig),
                 is_imported_storage = storage_config:is_imported_storage(StorageConfig),
-                qos_parameters = storage_logic:get_qos_parameters(StorageLogicDoc)
+                qos_parameters = storage_logic:get_qos_parameters(OdStorageDoc)
             }};
         {error, _} = Error -> Error
     end.

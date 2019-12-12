@@ -1346,13 +1346,18 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
 -spec storage_mock_setup(Workers :: node() | [node()]) -> ok.
 storage_mock_setup(Workers) ->
     ok = test_utils:mock_new(Workers, storage_logic),
-    ok = test_utils:mock_expect(Workers, storage_logic, get, fun(_) -> {ok, #document{value = #od_storage{
-        name = <<>>,
-        qos_parameters = #{}
-    }}} end),
+    ok = test_utils:mock_expect(Workers, storage_logic, get,
+        fun(_) -> {ok, #document{value = #od_storage{
+            name = <<>>,
+            qos_parameters = #{}
+        }}} end),
     ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters, fun(_) -> #{} end),
     ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(_,_) -> #{} end),
-    ok = test_utils:mock_expect(Workers, storage_logic, get_name, fun(_) -> <<>> end).
+    ok = test_utils:mock_expect(Workers, storage_logic, get_name,
+        % storage name is equal to its id
+        fun(#document{key = Id}) -> Id;
+           (Id) -> Id
+        end).
 
 
 -spec storage_mock_teardown(Workers :: node() | [node()]) -> ok.

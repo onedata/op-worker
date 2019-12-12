@@ -54,7 +54,7 @@ all() ->
     ?ALL(?TEST_CASES, ?TEST_CASES).
 
 -define(TIMEOUT, timer:minutes(1)).
--define(FILE_GUID(Id), file_id:pack_guid(<<"file_id_", (integer_to_binary(Id))/binary>>, <<"spaceid">>)).
+-define(FILE_GUID(Id), file_id:pack_guid(<<"file_id_", (integer_to_binary(Id))/binary>>, <<"space1">>)).
 -define(STM_ID(N), list_to_atom("stream_id_" ++ integer_to_list(N))).
 -define(CTR_THR(Value), [
     {name, ctr_thr}, {value, Value}, {description, "Summary events counter threshold."}

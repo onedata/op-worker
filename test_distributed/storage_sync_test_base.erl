@@ -3785,7 +3785,7 @@ add_storages(Config, CheckStorageFun) ->
         end, StorageIds),
         case find_storage(Storages, CheckStorageFun) of
             undefined -> AccIn;
-            RDWRStorage -> AccIn#{W => RDWRStorage}
+            FoundStorage -> AccIn#{W => FoundStorage}
         end
     end, #{}, Workers).
 
@@ -3793,8 +3793,8 @@ find_storage(Storages, CheckStorageFun) ->
     lists:foldl(fun
         (Storage, undefined) ->
             Helper = storage:get_helper(Storage),
-            Name = storage:get_name(Storage),
-            case CheckStorageFun(Name, Helper) of
+            Id = storage:get_id(Storage),
+            case CheckStorageFun(Id, Helper) of
                 true -> Storage;
                 false -> undefined
             end;
