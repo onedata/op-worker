@@ -60,7 +60,7 @@ subscribe_on_dir_test(Config) ->
     Dirname = generator:gen_name(),
 
     DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
-    Seq1 = get_seq(Config, 1),
+    Seq1 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId))),
     timer:sleep(2000), % there is no sync between subscription and unlink
@@ -71,7 +71,7 @@ subscribe_on_dir_test(Config) ->
     ?assertEqual(ok, lfm_proxy:unlink(Worker1, <<"0">>, {guid, FileGuid})),
     ?assertEqual(ok, receive_file_removed_event()),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, 1), -Seq1))),
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
