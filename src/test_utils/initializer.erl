@@ -679,6 +679,10 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     HarvestersSetup = proplists:get_value(<<"harvesters">>, GlobalSetup, []),
+    StoragesSetup = case proplists:get_value(<<"storages">>, GlobalSetup) of
+        undefined -> [];
+        S -> S
+    end,
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
 
     lists:foreach(fun({_, SpaceConfig}) ->
@@ -701,6 +705,10 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
             end
         end, Providers0)
     end, SpacesSetup),
+
+    StoragesSetupMap = lists:foldl(fun({P, Storages}, Acc) ->
+        Acc#{atom_to_binary(proplists:get_value(P, DomainMappings), utf8) => Storages}
+    end, #{}, StoragesSetup),
 
     MasterWorkers = lists:map(fun(Domain) ->
         [MWorker | _] = get_same_domain_workers(Config, Domain),
@@ -801,7 +809,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     user_logic_mock_setup(AllWorkers, Users),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
     space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters, CustomStorages),
-    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages),
+    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
         rpc:call(DomainWorker, fslogic_worker, init_cannonical_paths_cache, [all])
@@ -1144,10 +1152,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 %% @end
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
-    proplists:proplist(), proplists:proplist(),
-    [{binary(), [{binary(), non_neg_integer()}]}], [{binary(), binary()}]) -> ok.
+    proplists:proplist(), proplists:proplist(), [{binary(), [{binary(), non_neg_integer()}]}],
+    [{binary(), binary()}], #{binary() => [binary()]}) -> ok.
 provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
-    SpacesToStorages, CustomStorages
+    SpacesToStorages, CustomStorages, StoragesSetupMap
 ) ->
     test_utils:mock_new(AllWorkers, provider_logic),
 
@@ -1185,7 +1193,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
                     end, [], SpacesToStorages) ++
                     lists:filtermap(fun({StorageName, P}) when P == PID -> {true, StorageName};
                                        (_) -> false
-                    end, CustomStorages)),
+                    end, CustomStorages) ++ maps:get(PID, StoragesSetupMap, [])),
                     longitude = 0.0,
                     latitude = 0.0
                 }}}

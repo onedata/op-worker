@@ -253,7 +253,7 @@ get_type(#storage_record{helper = Helper}) ->
     helper:get_type(Helper).
 
 
--spec get_qos_parameters(record()) -> qos_parameters().
+-spec get_qos_parameters(od_storage:id() | record()) -> qos_parameters().
 get_qos_parameters(StorageId) when is_binary(StorageId) ->
     storage_logic:get_qos_parameters(StorageId);
 get_qos_parameters(#storage_record{id = Id}) ->
@@ -430,7 +430,7 @@ validate_support_request(SerializedToken) ->
            ?ERROR_BAD_VALUE_TOKEN(<<"token">>,
                ?ERROR_NOT_AN_INVITE_TOKEN(?SUPPORT_SPACE, ReceivedType));
         {error, _} = Error ->
-            Error
+            ?ERROR_BAD_VALUE_TOKEN(<<"token">>, Error)
     end.
 
 

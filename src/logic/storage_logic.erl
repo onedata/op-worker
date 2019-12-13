@@ -164,8 +164,10 @@ get_name(StorageId) ->
 get_qos_parameters(#document{value = #od_storage{qos_parameters = QosParameters}}) ->
     QosParameters;
 get_qos_parameters(StorageId) ->
-    {ok, Doc} = get(StorageId),
-    get_qos_parameters(Doc).
+    case get(StorageId) of
+        {ok, Doc} -> get_qos_parameters(Doc);
+        {error, _} = Error -> throw(Error)
+    end.
 
 
 -spec get_spaces(od_storage:id()) -> {ok, [od_space:id()]} | errors:error().
