@@ -52,8 +52,6 @@ handle_internal(Auth, <<"initializeFileUpload">>, Data) ->
     file_gs_rpc:register_file_upload(Auth, Data);
 handle_internal(Auth, <<"finalizeFileUpload">>, Data) ->
     file_gs_rpc:deregister_file_upload(Auth, Data);
-handle_internal(Auth, <<"getFileDownloadUrl">>, Data) ->
-    file_gs_rpc:get_file_download_url(Auth, Data);
 handle_internal(Auth, <<"moveFile">>, Data) ->
     file_gs_rpc:move(Auth, Data);
 handle_internal(Auth, <<"copyFile">>, Data) ->

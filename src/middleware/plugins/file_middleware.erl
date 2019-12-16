@@ -310,6 +310,7 @@ get_operation_supported(json_metadata, private) -> true;
 get_operation_supported(rdf_metadata, private) -> true;
 get_operation_supported(acl, private) -> true;
 get_operation_supported(transfers, private) -> true;
+get_operation_supported(download_url, private) -> true;
 get_operation_supported(_, _) -> false.
 
 
@@ -374,7 +375,10 @@ data_spec_get(#gri{aspect = acl}) ->
 
 data_spec_get(#gri{aspect = transfers}) -> #{
     optional => #{<<"include_ended_list">> => {boolean, any}}
-}.
+};
+
+data_spec_get(#gri{aspect = download_url}) ->
+    undefined.
 
 
 %% @private
@@ -387,7 +391,8 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
-    As =:= acl
+    As =:= acl;
+    As =:= download_url
 ->
     has_access_to_file(Auth, Guid);
 
@@ -407,7 +412,8 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata;
     As =:= acl;
-    As =:= transfers
+    As =:= transfers;
+    As =:= download_url
 ->
     assert_file_managed_locally(Guid).
 
@@ -535,6 +541,17 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
             {ok, value, Transfers#{<<"endedList">> => Ended}};
         false ->
             {ok, value, Transfers}
+    end;
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) ->
+    SessionId = Auth#auth.session_id,
+    case page_file_download:get_file_download_url(SessionId, FileGuid) of
+        {ok, URL} ->
+            {ok, value, URL};
+        ?ERROR_FORBIDDEN ->
+            ?ERROR_FORBIDDEN;
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
     end.
 
 

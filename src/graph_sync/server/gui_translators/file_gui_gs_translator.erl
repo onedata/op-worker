@@ -53,7 +53,9 @@ translate_value(#gri{aspect = transfers}, TransfersForFile0) ->
             };
         error ->
             TransfersForFile0
-    end.
+    end;
+translate_value(#gri{aspect = download_url}, URL) ->
+    #{<<"fileUrl">> => URL}.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

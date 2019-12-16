@@ -20,8 +20,7 @@
 -export([
     move/2, copy/2,
 
-    register_file_upload/2, deregister_file_upload/2,
-    get_file_download_url/2
+    register_file_upload/2, deregister_file_upload/2
 ]).
 
 
@@ -116,28 +115,6 @@ deregister_file_upload(?USER(UserId), Data) ->
     FileGuid = maps:get(<<"guid">>, SanitizedData),
     file_upload_manager:deregister_upload(UserId, FileGuid),
     {ok, #{}}.
-
-
--spec get_file_download_url(aai:auth(), gs_protocol:rpc_args()) ->
-    gs_protocol:rpc_result().
-get_file_download_url(?USER(_UserId, SessId) = Auth, Data) ->
-    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
-        required => #{<<"guid">> => {binary, non_empty}}
-    }),
-    FileGuid = maps:get(<<"guid">>, SanitizedData),
-    assert_space_membership_and_local_support(Auth, FileGuid),
-
-    case page_file_download:get_file_download_url(SessId, FileGuid) of
-        {ok, URL} ->
-            {ok, #{<<"fileUrl">> => URL}};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        {error, Errno} ->
-            ?debug("Cannot resolve file download url for file ~p - ~p", [
-                FileGuid, Errno
-            ]),
-            ?ERROR_POSIX(Errno)
-    end.
 
 
 %%%===================================================================
