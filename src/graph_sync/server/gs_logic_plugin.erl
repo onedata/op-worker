@@ -44,9 +44,15 @@
 -spec verify_handshake_auth(gs_protocol:client_auth(), ip_utils:ip()) ->
     {ok, aai:auth()} | errors:error().
 verify_handshake_auth(undefined, _) ->
-    {ok, ?NOBODY};
+    {ok, #auth{
+        subject = #subject{type = nobody, id = ?GUEST_USER_ID},
+        session_id = ?GUEST_SESS_ID
+    }};
 verify_handshake_auth(nobody, _) ->
-    {ok, ?NOBODY};
+    {ok, #auth{
+        subject = #subject{type = nobody, id = ?GUEST_USER_ID},
+        session_id = ?GUEST_SESS_ID
+    }};
 verify_handshake_auth({token, AccessToken}, PeerIp) ->
     TokenAuth = auth_manager:build_token_auth(
         AccessToken, undefined,
