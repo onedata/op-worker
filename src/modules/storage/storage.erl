@@ -16,9 +16,9 @@
 %%% This module operates on opaque record representing storage structure.
 %%% This record is NOT stored in datastore.
 %%%
-%%% This module contains deprecated functions. Previous `storage` model have
-%%% been renamed to `storage_config` and this functions are needed to
-%%% properly perform upgrade procedure.
+%%% This module contains dastore functions for a deprecated model 'storage'.
+%%% The model has been renamed to `storage_config` and those functions are
+%%% needed to properly perform upgrade procedure.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage).
@@ -36,7 +36,7 @@
 
 %%% Functions to retrieve storage details
 -export([get_id/1, get_name/1, get_helper/1, get_type/1, get_luma_config/1,
-    get_qos_parameters/1, get_qos_parameters_of_remote_storage/2]).
+    get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
 -export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
 
 %%% Functions to modify storage details
@@ -104,17 +104,17 @@ create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParamete
                 {ok, Id} ->
                     on_storage_created(Id),
                     {ok, Id};
-                Error ->
+                StorageConfigError ->
                     case storage_logic:delete_in_zone(Id) of
                         ok -> ok;
-                        {error, _} = Error1 ->
+                        {error, _} = Error ->
                             ?error("Could not revert creation of storage ~p in Onezone: ~p",
-                                [Id, Error1])
+                                [Id, Error])
                     end,
-                    Error
+                    StorageConfigError
             end;
-        Error ->
-            Error
+        StorageLogicError ->
+            StorageLogicError
     end.
 
 
@@ -162,7 +162,7 @@ describe(StorageId) ->
                 <<"lumaEnabled">> => is_luma_enabled(Storage),
                 <<"lumaUrl">> => LumaUrl,
                 <<"importedStorage">> => is_imported_storage(Storage),
-                <<"qosParameters">> => get_qos_parameters(Storage)
+                <<"qosParameters">> => get_qos_parameters_of_local_storage(Storage)
             }};
         {error, _} = Error -> Error
     end.
@@ -253,11 +253,22 @@ get_type(#storage_record{helper = Helper}) ->
     helper:get_type(Helper).
 
 
--spec get_qos_parameters(od_storage:id() | record()) -> qos_parameters().
-get_qos_parameters(StorageId) when is_binary(StorageId) ->
-    storage_logic:get_qos_parameters(StorageId);
-get_qos_parameters(#storage_record{id = Id}) ->
-    get_qos_parameters(Id).
+-spec get_qos_parameters_of_local_storage(od_storage:id() | record()) -> qos_parameters().
+get_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
+    storage_logic:get_qos_parameters_of_local_storage(StorageId);
+get_qos_parameters_of_local_storage(#storage_record{id = Id}) ->
+    get_qos_parameters_of_local_storage(Id).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves QoS parameters from storage details shared between providers
+%% through given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> qos_parameters().
+get_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
+    storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId).
 
 
 -spec is_readonly(record() | od_storage:id()) -> boolean().
@@ -281,17 +292,6 @@ is_luma_enabled(Storage) ->
     get_luma_config(Storage) =/= undefined.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves QoS parameters from storage details shared between providers
-%% through given space.
-%% @end
-%%--------------------------------------------------------------------
--spec get_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> qos_parameters().
-get_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
-    storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId).
-
-
 %%%===================================================================
 %%% Functions to modify storage details
 %%%===================================================================
@@ -304,18 +304,18 @@ update_name(StorageId, NewName) ->
 -spec update_luma_config(od_storage:id(), ChangesOrNewConfig) -> ok | {error, term()}
     when ChangesOrNewConfig :: #{url => luma_config:url(), api_key => luma_config:api_key()}
                                | luma_config:config() | undefined.
-update_luma_config(StorageId, ChangesOrNewConfig) ->
-    UpdateFun = case is_map(ChangesOrNewConfig) of
+update_luma_config(StorageId, DiffOrNewConfig) ->
+    UpdateFun = case is_map(DiffOrNewConfig) of
         false ->
             % New config is given explicitly. May enable/disable luma.
-            fun (_) -> {ok, ChangesOrNewConfig} end;
+            fun (_) -> {ok, DiffOrNewConfig} end;
         _ ->
             % Changes to existing luma config are given. Only eligible if luma enabled.
             fun (undefined) -> {error, luma_disabled};
                 (PreviousConfig) ->
                     {ok, luma_config:new(
-                        maps:get(url, ChangesOrNewConfig, luma_config:get_url(PreviousConfig)),
-                        maps:get(api_key, ChangesOrNewConfig, luma_config:get_api_key(PreviousConfig))
+                        maps:get(url, DiffOrNewConfig, luma_config:get_url(PreviousConfig)),
+                        maps:get(api_key, DiffOrNewConfig, luma_config:get_api_key(PreviousConfig))
                     )}
             end
     end,
@@ -514,7 +514,7 @@ lock_on_storage_by_name(Identifier, Fun) ->
 %% @doc
 %% Migrates storages and spaces support data to Onezone.
 %% Removes obsolete space_storage and storage documents.
-%% Dedicated for upgrading Oneprovider from 19.02.* to the next major release.
+%% Dedicated for upgrading Oneprovider from 19.02.* to 19.09.*.
 %% @end
 %%--------------------------------------------------------------------
 -spec migrate_to_zone() -> ok.
@@ -607,7 +607,7 @@ migrate_space_support(SpaceId) ->
     end,
     ?notice("Support of space: ~p successfully migrated", [SpaceId]).
 
-%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
+%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
 %%%===================================================================
 %% Deprecated API and datastore_model callbacks
 %%

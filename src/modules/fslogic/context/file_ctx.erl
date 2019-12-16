@@ -766,8 +766,8 @@ get_storage(FileCtx = #file_ctx{storage = undefined}) ->
     {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
     {ok, Storage} = storage:get(StorageId),
     {Storage, FileCtx#file_ctx{storage = Storage}};
-get_storage(FileCtx = #file_ctx{storage = StorageConfig}) ->
-    {StorageConfig, FileCtx}.
+get_storage(FileCtx = #file_ctx{storage = Storage}) ->
+    {Storage, FileCtx}.
 
 
 %%--------------------------------------------------------------------
