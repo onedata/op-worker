@@ -43,5 +43,7 @@ create_response(#gri{aspect = shared_dir}, _, value, ShareId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(_, ShareData) ->
-    ?OK_REPLY(ShareData).
+get_response(_, ShareData0) ->
+    {RootFileGuid, ShareData1} = maps:take(<<"rootFile">>, ShareData0),
+    {ok, ObjectId} = file_id:guid_to_objectid(RootFileGuid),
+    ?OK_REPLY(ShareData1#{<<"rootFileId">> => ObjectId}).

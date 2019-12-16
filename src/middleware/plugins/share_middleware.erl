@@ -254,13 +254,11 @@ get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
     public_url = SharePublicUrl,
     handle = Handle
 }) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(RootFile),
-
     {ok, #{
         <<"shareId">> => ShareId,
         <<"name">> => ShareName,
         <<"publicUrl">> => SharePublicUrl,
-        <<"rootFileId">> => ObjectId,
+        <<"rootFile">> => RootFile,
         <<"spaceId">> => SpaceId,
         <<"handleId">> => utils:ensure_defined(Handle, undefined, null)
     }}.
