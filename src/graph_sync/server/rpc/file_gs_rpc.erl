@@ -18,7 +18,6 @@
 
 %% API
 -export([
-    ls/2,
     move/2, copy/2,
 
     register_file_upload/2, deregister_file_upload/2,
@@ -29,51 +28,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec ls(aai:auth(), gs_protocol:rpc_args()) -> gs_protocol:rpc_result().
-ls(?USER(_UserId, SessionId) = Auth, Data) ->
-    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
-        required => #{
-            <<"guid">> => {binary, non_empty},
-            <<"limit">> => {integer, {not_lower_than, 1}}
-        },
-        optional => #{
-            <<"index">> => {any, fun
-                (null) ->
-                    {true, undefined};
-                (undefined) ->
-                    true;
-                (<<>>) ->
-                    throw(?ERROR_BAD_VALUE_EMPTY(<<"index">>));
-                (IndexBin) when is_binary(IndexBin) ->
-                    true;
-                (_) ->
-                    false
-            end},
-            <<"offset">> => {integer, any}
-        }
-    }),
-    FileGuid = maps:get(<<"guid">>, SanitizedData),
-    Limit = maps:get(<<"limit">>, SanitizedData),
-    StartId = maps:get(<<"index">>, SanitizedData, undefined),
-    Offset = maps:get(<<"offset">>, SanitizedData, 0),
-
-    assert_space_membership_and_local_support(Auth, FileGuid),
-
-    case lfm:ls(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
-        {ok, Children, _, _} ->
-            {ok, lists:map(fun({ChildGuid, _ChildName}) ->
-                gri:serialize(#gri{
-                    type = op_file,
-                    id = ChildGuid,
-                    aspect = instance,
-                    scope = private
-                })
-            end, Children)};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end.
 
 
 -spec move(aai:auth(), gs_protocol:rpc_args()) -> gs_protocol:rpc_result().

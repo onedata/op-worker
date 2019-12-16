@@ -48,8 +48,6 @@ handle(Auth, RpcFun, Data) ->
 %% @private
 -spec handle_internal(aai:auth(), gs_protocol:rpc_function(), gs_protocol:rpc_args()) ->
     gs_protocol:rpc_result().
-handle_internal(Auth, <<"getDirChildren">>, Data) ->
-    file_gs_rpc:ls(Auth, Data);
 handle_internal(Auth, <<"initializeFileUpload">>, Data) ->
     file_gs_rpc:register_file_upload(Auth, Data);
 handle_internal(Auth, <<"finalizeFileUpload">>, Data) ->

@@ -303,6 +303,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_meta
     boolean().
 get_operation_supported(instance, private) -> true;
 get_operation_supported(list, private) -> true;
+get_operation_supported(children, private) -> true;
 get_operation_supported(attrs, private) -> true;
 get_operation_supported(xattrs, private) -> true;
 get_operation_supported(json_metadata, private) -> true;
@@ -321,6 +322,28 @@ data_spec_get(#gri{aspect = list}) -> #{
     optional => #{
         <<"limit">> => {integer, {between, 1, 1000}},
         <<"offset">> => {integer, {not_lower_than, 0}}
+    }
+};
+
+data_spec_get(#gri{aspect = children}) -> #{
+    required => #{
+        <<"guid">> => {binary, non_empty},
+        <<"limit">> => {integer, {not_lower_than, 1}}
+    },
+    optional => #{
+        <<"index">> => {any, fun
+            (null) ->
+                {true, undefined};
+            (undefined) ->
+                true;
+            (<<>>) ->
+                throw(?ERROR_BAD_VALUE_EMPTY(<<"index">>));
+            (IndexBin) when is_binary(IndexBin) ->
+                true;
+            (_) ->
+                false
+        end},
+        <<"offset">> => {integer, any}
     }
 };
 
@@ -359,6 +382,7 @@ data_spec_get(#gri{aspect = transfers}) -> #{
 authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= list;
+    As =:= children;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
@@ -377,6 +401,7 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = trans
 validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= list;
+    As =:= children;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
@@ -412,6 +437,19 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}},
         {ok, #file_attr{guid = Guid}} ->
             {ok, ObjectId} = file_id:guid_to_objectid(Guid),
             {ok, [#{<<"id">> => ObjectId, <<"path">> => Path}]};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end;
+
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
+    SessionId = Auth#auth.session_id,
+    Limit = maps:get(<<"limit">>, Data),
+    StartId = maps:get(<<"index">>, Data, undefined),
+    Offset = maps:get(<<"offset">>, Data, 0),
+
+    case lfm:ls(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
+        {ok, Children, _, _} ->
+            {ok, value, Children};
         {error, Errno} ->
             ?ERROR_POSIX(Errno)
     end;

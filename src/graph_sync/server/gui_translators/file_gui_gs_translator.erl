@@ -38,6 +38,8 @@
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = children}, Children) ->
+    #{<<"children">> => lists:map(fun({Guid, _Name}) -> Guid end, Children)};
 translate_value(#gri{aspect = transfers}, TransfersForFile0) ->
     TransfersForFile1 = maps:update_with(
         <<"ongoingList">>,
