@@ -44,6 +44,7 @@ modify_storage_import(SpaceId, StrategyName, Args) ->
     {ok, datastore:key()} | {error, term()}.
 modify_storage_import(SpaceId, StrategyName, StorageId, Args) ->
     storage_sync_monitoring:ensure_created(SpaceId, StorageId),
+    file_meta:make_space_exist(SpaceId),
     space_strategies:set_strategy(SpaceId, StorageId, storage_import,
         StrategyName, Args).
 
@@ -91,6 +92,7 @@ modify_storage_update(SpaceId, StrategyName, Args) ->
     space_strategy:arguments()) -> {ok, datastore:key()} | {error, term()}.
 modify_storage_update(SpaceId, StrategyName, StorageId, Args) ->
     storage_sync_monitoring:ensure_created(SpaceId, StorageId),
+    file_meta:make_space_exist(SpaceId),
     {CurrentImportStrategyName, _} =
         space_strategies:get_storage_import_details(SpaceId, StorageId),
     case {StrategyName, CurrentImportStrategyName} of
