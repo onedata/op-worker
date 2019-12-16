@@ -16,7 +16,7 @@
 %%% This module operates on opaque record representing storage structure.
 %%% This record is NOT stored in datastore.
 %%%
-%%% This module contains dastore functions for a deprecated model 'storage'.
+%%% This module contains datastore functions for a deprecated model 'storage'.
 %%% The model has been renamed to `storage_config` and those functions are
 %%% needed to properly perform upgrade procedure.
 %%% @end
