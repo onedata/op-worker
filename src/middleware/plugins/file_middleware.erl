@@ -328,7 +328,6 @@ data_spec_get(#gri{aspect = list}) -> #{
 
 data_spec_get(#gri{aspect = children}) -> #{
     required => #{
-        <<"guid">> => {binary, non_empty},
         <<"limit">> => {integer, {not_lower_than, 1}}
     },
     optional => #{

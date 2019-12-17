@@ -178,5 +178,6 @@ is_type_supported(#gri{type = op_user}) -> true;
 is_type_supported(#gri{type = op_group}) -> true;
 is_type_supported(#gri{type = op_file}) -> true;
 is_type_supported(#gri{type = op_replica}) -> true;
+is_type_supported(#gri{type = op_share}) -> true;
 is_type_supported(#gri{type = op_transfer}) -> true;
 is_type_supported(#gri{type = _}) -> false.

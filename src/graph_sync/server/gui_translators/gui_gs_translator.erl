@@ -58,6 +58,8 @@ translate_value(_, #gri{type = op_space} = GRI, Value) ->
     space_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_file} = GRI, Value) ->
     file_gui_gs_translator:translate_value(GRI, Value);
+translate_value(_, #gri{type = op_share} = GRI, Value) ->
+    share_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_transfer} = GRI, Value) ->
     transfer_gui_gs_translator:translate_value(GRI, Value);
 translate_value(ProtocolVersion, GRI, Data) ->
