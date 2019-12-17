@@ -58,7 +58,7 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
 -spec emit_file_attr_changed(file_ctx:ctx(), #file_attr{}, [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_attr_changed(FileCtx, FileAttr, ExcludedSessions) ->
-    event:get_subscribers_and_emit(#file_attr_changed_event{file_attr = FileAttr},
+    event:emit_to_filtered_subscribers(#file_attr_changed_event{file_attr = FileAttr},
         #{file_ctx => FileCtx}, ExcludedSessions).
 
 %%--------------------------------------------------------------------
@@ -76,7 +76,7 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
             #fuse_response{fuse_response = #file_attr{} = FileAttr} =
                 attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID),
                     FileCtx2, true, false),
-            event:get_subscribers_and_emit(#file_attr_changed_event{
+            event:emit_to_filtered_subscribers(#file_attr_changed_event{
                 file_attr = FileAttr
             }, #{file_ctx => FileCtx2}, []);
         Other ->
@@ -157,7 +157,7 @@ emit_file_perm_changed(FileCtx) ->
 -spec emit_file_removed(file_ctx:ctx(), ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_removed(FileCtx, ExcludedSessions) ->
-    event:get_subscribers_and_emit(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
+    event:emit_to_filtered_subscribers(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
         #{file_ctx => FileCtx}, ExcludedSessions).
 
 %%--------------------------------------------------------------------
@@ -171,13 +171,13 @@ emit_file_renamed_to_client(FileCtx, NewParentGuid, NewName, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     Guid = file_ctx:get_guid_const(FileCtx),
     {OldParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
-    event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
+    event:emit_to_filtered_subscribers(#file_renamed_event{top_entry = #file_renamed_entry{
         old_guid = Guid,
         new_guid = Guid,
         new_parent_guid = NewParentGuid,
         new_name = NewName
-    }}, [#{file_ctx => FileCtx, key_base => OldParentGuid},
-        #{file_ctx => FileCtx, key_base => NewParentGuid}], [SessionId]).
+    }}, [#{file_ctx => FileCtx, parent => OldParentGuid},
+        #{file_ctx => FileCtx, parent => NewParentGuid}], [SessionId]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -188,13 +188,13 @@ emit_file_renamed_to_client(FileCtx, NewParentGuid, NewName, UserCtx) ->
     file_meta:name()) -> ok | {error, Reason :: term()}.
 emit_file_renamed_no_exclude(FileCtx, OldParentGuid, NewParentGuid, NewName) ->
     Guid = file_ctx:get_guid_const(FileCtx),
-    event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
+    event:emit_to_filtered_subscribers(#file_renamed_event{top_entry = #file_renamed_entry{
         old_guid = Guid,
         new_guid = Guid,
         new_parent_guid = NewParentGuid,
         new_name = NewName
-    }}, [#{file_ctx => FileCtx, key_base => OldParentGuid},
-        #{file_ctx => FileCtx, key_base => NewParentGuid}], []).
+    }}, [#{file_ctx => FileCtx, parent => OldParentGuid},
+        #{file_ctx => FileCtx, parent => NewParentGuid}], []).
 
 %%--------------------------------------------------------------------
 %% @doc

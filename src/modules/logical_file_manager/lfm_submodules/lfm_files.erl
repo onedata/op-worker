@@ -34,6 +34,7 @@
     application:get_env(?APP_NAME, default_sync_priority, 32)).
 
 -type sync_options() :: {priority, non_neg_integer()} | off.
+-type check_size_option() :: verify_size | ignore_size.
 
 %%%===================================================================
 %%% API
@@ -434,7 +435,7 @@ write_without_events(FileHandle, Offset, Buffer) ->
 
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, true, true,
-%% {priority, ?DEFAULT_SYNC_PRIORITY}, false)
+%% {priority, ?DEFAULT_SYNC_PRIORITY}, ignore_size)
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: lfm:handle(), Offset :: integer(),
     MaxSize :: integer()) ->
@@ -442,17 +443,17 @@ write_without_events(FileHandle, Offset, Buffer) ->
     lfm:error_reply().
 read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, true, true,
-        {priority, ?DEFAULT_SYNC_PRIORITY}, false).
+        {priority, ?DEFAULT_SYNC_PRIORITY}, ignore_size).
 
 %%--------------------------------------------------------------------
-%% @equiv read(FileHandle, Offset, MaxSize, true, true, SyncOptions, false)
+%% @equiv read(FileHandle, Offset, MaxSize, true, true, SyncOptions, ignore_size)
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: lfm:handle(), Offset :: integer(),
     MaxSize :: integer(), SyncOptions :: sync_options()) ->
     {ok, NewHandle :: lfm:handle(), binary()} |
     lfm:error_reply().
 read(FileHandle, Offset, MaxSize, SyncOptions) ->
-    read(FileHandle, Offset, MaxSize, true, true, SyncOptions, false).
+    read(FileHandle, Offset, MaxSize, true, true, SyncOptions, ignore_size).
 
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, true, true,
@@ -464,11 +465,11 @@ read(FileHandle, Offset, MaxSize, SyncOptions) ->
     lfm:error_reply().
 check_size_and_read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, true, true,
-        {priority, ?DEFAULT_SYNC_PRIORITY}, true).
+        {priority, ?DEFAULT_SYNC_PRIORITY}, verify_size).
 
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, false, true,
-%% {priority, ?DEFAULT_SYNC_PRIORITY), false}
+%% {priority, ?DEFAULT_SYNC_PRIORITY), ignore_size}
 %%--------------------------------------------------------------------
 -spec read_without_events(FileHandle :: lfm:handle(),
     Offset :: integer(), MaxSize :: integer()) ->
@@ -476,21 +477,21 @@ check_size_and_read(FileHandle, Offset, MaxSize) ->
     lfm:error_reply().
 read_without_events(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, true,
-        {priority, ?DEFAULT_SYNC_PRIORITY}, false).
+        {priority, ?DEFAULT_SYNC_PRIORITY}, ignore_size).
 
 %%--------------------------------------------------------------------
-%% @equiv read(FileHandle, Offset, MaxSize, false, true, SyncOptions, false)
+%% @equiv read(FileHandle, Offset, MaxSize, false, true, SyncOptions, ignore_size)
 %%--------------------------------------------------------------------
 -spec read_without_events(FileHandle :: lfm:handle(),
     Offset :: integer(), MaxSize :: integer(), SyncOptions :: sync_options()) ->
     {ok, NewHandle :: lfm:handle(), binary()} |
     lfm:error_reply().
 read_without_events(FileHandle, Offset, MaxSize, SyncOptions) ->
-    read(FileHandle, Offset, MaxSize, false, true, SyncOptions, false).
+    read(FileHandle, Offset, MaxSize, false, true, SyncOptions, ignore_size).
 
 %%--------------------------------------------------------------------
 %% @equiv read(FileHandle, Offset, MaxSize, false, false,
-%% {priority, ?DEFAULT_SYNC_PRIORITY), false}
+%% {priority, ?DEFAULT_SYNC_PRIORITY), ignore_size}
 %%--------------------------------------------------------------------
 -spec silent_read(FileHandle :: lfm:handle(),
     Offset :: integer(), MaxSize :: integer()) ->
@@ -498,17 +499,17 @@ read_without_events(FileHandle, Offset, MaxSize, SyncOptions) ->
     lfm:error_reply().
 silent_read(FileHandle, Offset, MaxSize) ->
     read(FileHandle, Offset, MaxSize, false, false,
-        {priority, ?DEFAULT_SYNC_PRIORITY}, false).
+        {priority, ?DEFAULT_SYNC_PRIORITY}, ignore_size).
 
 %%--------------------------------------------------------------------
-%% @equiv read(FileHandle, Offset, MaxSize, false, false, SyncOptions, false)
+%% @equiv read(FileHandle, Offset, MaxSize, false, false, SyncOptions, ignore_size)
 %%--------------------------------------------------------------------
 -spec silent_read(FileHandle :: lfm:handle(),
     Offset :: integer(), MaxSize :: integer(), SyncOptions :: sync_options()) ->
     {ok, NewHandle :: lfm:handle(), binary()} |
     lfm:error_reply().
 silent_read(FileHandle, Offset, MaxSize, SyncOptions) ->
-    read(FileHandle, Offset, MaxSize, false, false, SyncOptions, false).
+    read(FileHandle, Offset, MaxSize, false, false, SyncOptions, ignore_size).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -630,12 +631,11 @@ write_internal(LfmCtx, Offset, Buffer, GenerateEvents) ->
 %%--------------------------------------------------------------------
 -spec read(FileHandle :: lfm:handle(), Offset :: integer(),
     MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean(),
-    SyncOptions :: sync_options(), VerifySize :: boolean()) ->
+    SyncOptions :: sync_options(), VerifySize :: check_size_option()) ->
     {ok, NewHandle :: lfm:handle(), binary()} |
     lfm:error_reply().
 read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions, VerifySize) ->
-    case read_internal(FileHandle, Offset, MaxSize, GenerateEvents,
-        PrefetchData, SyncOptions, VerifySize) of
+    case read_internal(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions, VerifySize) of
         {error, Reason} ->
             {error, Reason};
         {ok, Bytes} ->
@@ -664,15 +664,15 @@ read(FileHandle, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions, Ver
 %%--------------------------------------------------------------------
 -spec read_internal(FileHandle :: lfm:handle(), Offset :: integer(),
     MaxSize :: integer(), GenerateEvents :: boolean(), PrefetchData :: boolean(),
-    SyncOptions :: sync_options(), VerifySize :: boolean()) ->
+    SyncOptions :: sync_options(), VerifySize :: check_size_option()) ->
     {ok, binary()} | lfm:error_reply().
 read_internal(LfmCtx, Offset, MaxSize, GenerateEvents, PrefetchData, SyncOptions, VerifySize) ->
     FileGuid = lfm_context:get_guid(LfmCtx),
     SessId = lfm_context:get_session_id(LfmCtx),
 
-    % TODO - temporary fix - not needed when helpers do not return data when offset is greater than size
+    % TODO VFS-6002 - temporary fix - not needed when helpers do not return data when offset is greater than size
     ReadSize = case VerifySize of
-        true ->
+        verify_size ->
             FileCtx = file_ctx:new_by_guid(FileGuid),
             SpaceID = file_ctx:get_space_id_const(FileCtx),
             {ok, Providers} = space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceID),

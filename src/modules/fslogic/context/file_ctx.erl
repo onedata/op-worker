@@ -423,7 +423,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
     ParentGuid =
         case fslogic_uuid:is_root_dir_uuid(ParentUuid) of
             true ->
-                case ParentUuid =:= ?ROOT_DIR_UUID
+                case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
                     andalso UserCtx =/= undefined
                     andalso user_ctx:is_normal_user(UserCtx)
                 of

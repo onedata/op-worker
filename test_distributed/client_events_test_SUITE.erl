@@ -62,7 +62,9 @@ subscribe_on_dir_test(Config) ->
     Seq1 = get_seq(Config, 1),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId))),
-    timer:sleep(2000), % there is no sync between subscription and unlink
+    {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = DirId}),
+    ?assertMatch({ok, [_]},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
 
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
@@ -95,7 +97,9 @@ subscribe_on_user_root_test_base(Config, UserNum, ExpectedAns) ->
     Seq1 = get_seq(Config, UserNum),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirId, 500))),
-    timer:sleep(2000), % there is no sync between subscription and unlink
+    {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_attr_changed_subscription{file_guid = DirId}),
+    ?assertMatch({ok, [_]},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
 
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(SpaceGuid), []]),
     ?assertEqual(ExpectedAns, receive_file_attr_changed_event()),
@@ -128,7 +132,9 @@ subscribe_on_new_space_test_base(Config, UserNum, ExpectedAns) ->
     Seq1 = get_seq(Config, UserNum),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirId, 500))),
-    timer:sleep(2000), % there is no sync between subscription and unlink
+    {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_attr_changed_subscription{file_guid = DirId}),
+    ?assertMatch({ok, [_]},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
 
     rpc:call(Worker1, file_meta, make_space_exist, [<<"space_id1">>]),
     ?assertEqual(ExpectedAns, receive_file_attr_changed_event()),
@@ -159,7 +165,6 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils, ?MODULE]} | Config].
 
 init_per_testcase(_Case, Config) ->
-    timer:sleep(1000),
     initializer:remove_pending_messages(),
     ssl:start(),
     lfm_proxy:init(Config).
