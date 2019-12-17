@@ -19,7 +19,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
--export([emit/1, emit/2, flush/2, flush/5, subscribe/2, unsubscribe/2]).
+-export([emit/1, emit/2, emit_to_filtered_subscribers/3, flush/2, flush/5, subscribe/2, unsubscribe/2]).
 -export([get_event_managers/1]).
 
 -export([init_counters/0, init_report/0]).
@@ -55,10 +55,7 @@
 %%--------------------------------------------------------------------
 -spec emit(Evt :: base() | type()) -> ok | {error, Reason :: term()}.
 emit(Evt) ->
-    case subscription_manager:get_subscribers(Evt) of
-        {ok, SessIds} -> emit(Evt, SessIds);
-        {error, Reason} -> {error, Reason}
-    end.
+    emit_to_filtered_subscribers(Evt, undefined, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -68,14 +65,7 @@ emit(Evt) ->
 -spec emit(Evt :: base() | aggregated() | type(), MgrRef :: manager_ref()) ->
     ok | {error, Reason :: term()}.
 emit(Evt, {exclude, MgrRef}) ->
-    case subscription_manager:get_subscribers(Evt) of
-        {ok, SessIds} ->
-            Excluded = get_event_managers(MgrRef),
-            Subscribed = get_event_managers(SessIds),
-            emit(Evt, subtract_unique(Subscribed, Excluded));
-        {error, Reason} ->
-            {error, Reason}
-    end;
+    emit_to_filtered_subscribers(Evt, undefined, MgrRef);
 
 emit(#event{} = Evt, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
@@ -91,6 +81,30 @@ emit({aggregated, Evts}, MgrRef) ->
 
 emit(Evt, MgrRef) ->
     emit(#event{type = Evt}, MgrRef).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets subscribers and sends an event to event managers that represent subscribers.
+%% Filters subscribers list if needed.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_to_filtered_subscribers(Evt :: base() | aggregated() | type(), subscription_manager:routing_info(),
+    ExcludedRef :: pid() | session:id() | [pid() | session:id()]) ->
+    ok | {error, Reason :: term()}.
+emit_to_filtered_subscribers(Evt, RoutingInfo, []) ->
+    case subscription_manager:get_subscribers(Evt, RoutingInfo) of
+        {ok, SessIds} -> emit(Evt, SessIds);
+        {error, Reason} -> {error, Reason}
+    end;
+emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
+    case subscription_manager:get_subscribers(Evt, RoutingInfo) of
+        {ok, SessIds} ->
+            Excluded = get_event_managers(ExcludedRef),
+            Subscribed = get_event_managers(SessIds),
+            emit(Evt, subtract_unique(Subscribed, Excluded));
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

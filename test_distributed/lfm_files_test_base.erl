@@ -70,7 +70,7 @@
   readdir_should_work_with_token/1,
   readdir_should_work_with_token2/1,
   readdir_should_work_with_startid/1,
-  lfm_recreate_handle/1,
+  lfm_recreate_handle/3,
   lfm_open_failure/1,
   lfm_create_and_open_failure/1,
   lfm_open_in_direct_mode/1,
@@ -117,20 +117,25 @@ lfm_rmdir(Config) ->
   ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, DirPath, 8#755)),
   ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, DirPath})).
 
-lfm_recreate_handle(Config) ->
+lfm_recreate_handle(Config, CreatePerms, DeleteAfterOpen) ->
   [W | _] = ?config(op_worker_nodes, Config),
-  {MemEntriesBefore, CacheEntriesBefore} = get_mem_and_disc_entries(W),
   {SessId1, _UserId1} = {
     ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     ?config({user_id, <<"user1">>}, Config)
   },
-  {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
-  {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
+  {ok, {FileGuid, Handle}} = lfm_proxy:create_and_open(W, SessId1, <<"/space_name1/test_read">>, CreatePerms),
+  case DeleteAfterOpen of
+    delete_after_open ->
+      ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, {guid, FileGuid})),
+      ?assertEqual(ok, rpc:call(W, permissions_cache, invalidate, []));
+    _ ->
+      ok
+  end,
 
   % remove handle before write to file so that handle has to be recreated
   Context = rpc:call(W, ets, lookup_element, [lfm_handles, Handle, 2]),
   HandleId = lfm_context:get_handle_id(Context),
-  rpc:call(W, session_handles, remove, [SessId1, HandleId]),
+  ?assertEqual({error, not_found}, rpc:call(W, session_handles, get, [SessId1, HandleId])),
 
   % try to write to file to confirm that handle has been recreated
   FileContent = <<"test_data">>,
@@ -139,13 +144,9 @@ lfm_recreate_handle(Config) ->
 
   ?assertEqual(ok, lfm_proxy:close(W, Handle)),
 
-  FileGuid = lfm_context:get_guid(Context),
   ?assertEqual(false, rpc:call(
     W, file_handles, exists, [file_id:guid_to_uuid(FileGuid)])
-  ),
-  {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
-  print_mem_and_disc_docs_diff(W, MemEntriesBefore, CacheEntriesBefore,
-    MemEntriesAfter, CacheEntriesAfter).
+  ).
 
 lfm_open_failure(Config) ->
   [W | _] = ?config(op_worker_nodes, Config),

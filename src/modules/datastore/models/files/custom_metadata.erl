@@ -105,8 +105,8 @@ create_or_update(#document{key = Key, value = Default, scope = Scope}, Diff) ->
 %%--------------------------------------------------------------------
 -spec get_xattr_metadata(file_meta:uuid(), xattr:name(), Inherited :: boolean()) ->
     {ok, xattr:value()} | {error, term()}.
-get_xattr_metadata(?ROOT_DIR_UUID, Name, true) ->
-    get_xattr_metadata(?ROOT_DIR_UUID, Name, false);
+get_xattr_metadata(?GLOBAL_ROOT_DIR_UUID, Name, true) ->
+    get_xattr_metadata(?GLOBAL_ROOT_DIR_UUID, Name, false);
 get_xattr_metadata(FileUuid, Name, true) ->
     case get_xattr_metadata(FileUuid, Name, false) of
         {ok, Value} ->
