@@ -63,7 +63,9 @@ subscribe_on_dir_test(Config) ->
     Seq1 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId))),
-    timer:sleep(2000), % there is no sync between subscription and unlink
+    {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = DirId}),
+    ?assertMatch({ok, [_]},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
 
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
@@ -85,8 +87,8 @@ subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
-    EmmiterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmmiterSessionId, <<"/space_name1">>),
+    EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
 
     UserCtx = rpc:call(Worker1, user_ctx, new, [SessionId]),
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
@@ -97,7 +99,9 @@ subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
     Seq1 = get_seq(Config, User),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirId, 500))),
-    timer:sleep(2000), % there is no sync between subscription and unlink
+    {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_attr_changed_subscription{file_guid = DirId}),
+    ?assertMatch({ok, [_]},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
 
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(SpaceGuid), []]),
     ?assertEqual(ExpectedAns, receive_file_attr_changed_event()),
@@ -116,9 +120,9 @@ subscribe_on_new_space_test_base(Config, User, ExpectedAns) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
-    EmmiterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
 
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmmiterSessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
     SpaceDirUuid = file_id:guid_to_uuid(SpaceGuid),
     ?assertEqual(ok, rpc:call(Worker1, file_meta, delete, [SpaceDirUuid])),
 
@@ -131,7 +135,9 @@ subscribe_on_new_space_test_base(Config, User, ExpectedAns) ->
     Seq1 = get_seq(Config, User),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirId, 500))),
-    timer:sleep(2000), % there is no sync between subscription and unlink
+    {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_attr_changed_subscription{file_guid = DirId}),
+    ?assertMatch({ok, [_]},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
 
     rpc:call(Worker1, file_meta, make_space_exist, [<<"space_id1">>]),
     ?assertEqual(ExpectedAns, receive_file_attr_changed_event()),
@@ -153,7 +159,6 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils, ?MODULE]} | Config].
 
 init_per_testcase(_Case, Config) ->
-    timer:sleep(1000),
     initializer:remove_pending_messages(),
     ssl:start(),
     lfm_proxy:init(Config).

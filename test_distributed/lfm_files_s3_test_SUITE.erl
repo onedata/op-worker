@@ -153,13 +153,13 @@ lfm_rmdir_test(Config) ->
   lfm_files_test_base:lfm_rmdir(Config).
 
 lfm_recreate_handle_test(Config) ->
-  lfm_files_test_base:lfm_recreate_handle(Config, 8#755, false).
+  lfm_files_test_base:lfm_recreate_handle(Config, 8#755, dont_delete_file).
 
 lfm_write_after_create_no_perms_test(Config) ->
-  lfm_files_test_base:lfm_recreate_handle(Config, 8#444, false).
+  lfm_files_test_base:lfm_recreate_handle(Config, 8#444, dont_delete_file).
 
 lfm_recreate_handle_after_delete_test(Config) ->
-  lfm_files_test_base:lfm_recreate_handle(Config, 8#755, true).
+  lfm_files_test_base:lfm_recreate_handle(Config, 8#755, delete_after_open).
 
 lfm_open_failure_test(Config) ->
   lfm_files_test_base:lfm_open_failure(Config).

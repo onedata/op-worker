@@ -125,7 +125,7 @@ lfm_recreate_handle(Config, CreatePerms, DeleteAfterOpen) ->
   },
   {ok, {FileGuid, Handle}} = lfm_proxy:create_and_open(W, SessId1, <<"/space_name1/test_read">>, CreatePerms),
   case DeleteAfterOpen of
-    true ->
+    delete_after_open ->
       ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, {guid, FileGuid})),
       ?assertEqual(ok, rpc:call(W, permissions_cache, invalidate, []));
     _ ->

@@ -38,15 +38,15 @@
 get_routing_key(#subscription{type = Type}) ->
     get_routing_key(Type);
 get_routing_key(#file_attr_changed_subscription{file_guid = FileGuid}) ->
-    {ok, get_routing_key_from_guid(<<"file_attr_changed.">>, FileGuid)};
+    {ok, gen_routing_key_for_guid(<<"file_attr_changed.">>, FileGuid)};
 get_routing_key(#file_location_changed_subscription{file_guid = FileGuid}) ->
-    {ok, get_routing_key_from_guid(<<"file_location_changed.">>, FileGuid)};
+    {ok, gen_routing_key_for_guid(<<"file_location_changed.">>, FileGuid)};
 get_routing_key(#file_perm_changed_subscription{file_guid = FileGuid}) ->
-    {ok, get_routing_key_from_guid(<<"file_perm_changed.">>, FileGuid)};
+    {ok, gen_routing_key_for_guid(<<"file_perm_changed.">>, FileGuid)};
 get_routing_key(#file_removed_subscription{file_guid = FileGuid}) ->
-    {ok, get_routing_key_from_guid(<<"file_removed.">>, FileGuid)};
+    {ok, gen_routing_key_for_guid(<<"file_removed.">>, FileGuid)};
 get_routing_key(#file_renamed_subscription{file_guid = FileGuid}) ->
-    {ok, get_routing_key_from_guid(<<"file_renamed.">>, FileGuid)};
+    {ok, gen_routing_key_for_guid(<<"file_renamed.">>, FileGuid)};
 get_routing_key(#quota_exceeded_subscription{}) ->
     {ok, <<"quota_exceeded">>};
 get_routing_key(#helper_params_changed_subscription{storage_id = StorageId}) ->
@@ -160,13 +160,14 @@ update_context(Object, _Ctx) ->
 %% Gets routing key for events where it bases on guid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_routing_key_from_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
-get_routing_key_from_guid(Base, FileGuid) ->
+-spec gen_routing_key_for_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
+gen_routing_key_for_guid(Prefix, FileGuid) ->
     Uuid = file_id:guid_to_uuid(FileGuid),
     case fslogic_uuid:is_user_root_dir_uuid(Uuid) of
         true ->
+            % Change user's root uuid to main root dir uuid
             RootUuid = ?ROOT_DIR_UUID,
-            <<Base/binary, RootUuid/binary>>;
+            <<Prefix/binary, RootUuid/binary>>;
         _ ->
-            <<Base/binary, Uuid/binary>>
+            <<Prefix/binary, Uuid/binary>>
     end.

@@ -33,7 +33,7 @@
 -spec get_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(), Inherited :: boolean()) ->
     fslogic_worker:fuse_response().
 get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
-    case file_ctx:get_active_perms_type(FileCtx, false) of
+    case file_ctx:get_active_perms_type(FileCtx, ignore_deleted) of
         {acl, FileCtx2} ->
             case acl_req:get_acl(UserCtx, FileCtx2) of
                 #provider_response{
@@ -242,7 +242,7 @@ list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
                     % is added to listing if active perms type for
                     % file is acl. Otherwise, to keep backward compatibility,
                     % it is omitted.
-                    case file_ctx:get_active_perms_type(FileCtx, false) of
+                    case file_ctx:get_active_perms_type(FileCtx, ignore_deleted) of
                         {acl, _} ->
                             [?ACL_KEY | XattrList];
                         _ ->

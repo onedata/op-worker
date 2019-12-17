@@ -30,6 +30,7 @@
 -export([create_file_doc/4]).
 
 -type handle_id() :: storage_driver:handle_id() | undefined.
+-type new_file() :: boolean(). % opening new file requires changes in procedure (see file_handles:creation_handle/0).
 -export_type([handle_id/0]).
 
 -define(NEW_HANDLE_ID, base64:encode(crypto:strong_rand_bytes(20))).
@@ -409,7 +410,7 @@ open_file_internal(UserCtx, FileCtx, Flag, HandleId, VerifyDeletionLink) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec open_file_internal(user_ctx:ctx(),
-    FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), boolean(), boolean()) ->
+    FileCtx :: file_ctx:ctx(), fslogic_worker:open_flag(), handle_id(), new_file(), boolean()) ->
     no_return() | {storage_driver:handle_id(), file_location:record(), file_ctx:ctx()}.
 open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExists) ->
     FileCtx = verify_file_exists(FileCtx0, HandleId0),
@@ -440,8 +441,8 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
 -spec maybe_open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(), boolean(),
     handle_id()) -> ok | no_return().
 maybe_open_on_storage(_FileCtx, _SessId, _Flag, true, _) ->
-    ok;
-maybe_open_on_storage(FileCtx, SessId, Flag, _ShouldOpen, HandleId) ->
+    ok; % Files are not open on server-side when client uses directIO
+maybe_open_on_storage(FileCtx, SessId, Flag, _DirectIO, HandleId) ->
     Node = read_write_req:get_proxyio_node(file_ctx:get_uuid_const(FileCtx)),
     ok = rpc:call(Node, ?MODULE, open_on_storage,
         [FileCtx, SessId, Flag, HandleId]).
@@ -483,7 +484,7 @@ verify_file_exists(FileCtx, _HandleId) ->
 %% Verifies handle id and registers it.
 %% @end
 %%--------------------------------------------------------------------
--spec check_and_register_open(file_ctx:ctx(), session:id(), handle_id(), boolean()) ->
+-spec check_and_register_open(file_ctx:ctx(), session:id(), handle_id(), new_file()) ->
     storage_driver:handle_id() | no_return().
 check_and_register_open(FileCtx, SessId, undefined, true) ->
     HandleId = ?NEW_HANDLE_ID,

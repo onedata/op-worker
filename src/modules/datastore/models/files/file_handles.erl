@@ -29,6 +29,11 @@
 -type key() :: datastore:key().
 -type record() :: #file_handles{}.
 -type doc() :: datastore_doc:doc(record()).
+% Handle created during file creation.
+% Read/write with this handle should be allowed even if file permissions forbid them.
+-type creation_handle() :: file_req:handle_id().
+
+-export_type([creation_handle/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -88,7 +93,7 @@ list() ->
 %% FileCtx and SessionId.
 %% @end
 %%--------------------------------------------------------------------
--spec register_open(file_ctx:ctx(), session:id(), pos_integer(), file_req:handle_id()) ->
+-spec register_open(file_ctx:ctx(), session:id(), pos_integer(), creation_handle()) ->
     ok | {error, term()}.
 register_open(FileCtx, SessId, Count, CreateHandleID) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -233,7 +238,7 @@ invalidate_session_entry(FileCtx, SessId) ->
 %% Returns handle connected with file creation.
 %% @end
 %%--------------------------------------------------------------------
--spec get_creation_handle(key()) -> {ok, file_req:handle_id()} | {error, term()}.
+-spec get_creation_handle(key()) -> {ok, creation_handle()} | {error, term()}.
 get_creation_handle(Key) ->
     case datastore_model:get(?CTX, Key) of
         {ok, #document{value = #file_handles{creation_handle = Handle}}} -> {ok, Handle};

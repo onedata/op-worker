@@ -23,7 +23,6 @@
 -include("proto/oneprovider/remote_driver_messages.hrl").
 -include("proto/oneprovider/rtransfer_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
 -export([effective_session_id/1]).
@@ -171,7 +170,7 @@ route_and_ignore_answer(#client_message{
     message_body = FuseRequest = #fuse_request{fuse_request = #file_request{context_guid = ContextGuid}}
 } = Msg) ->
     Req = {fuse_request, effective_session_id(Msg), FuseRequest},
-    worker_proxy:cast(get_worker_ref(ContextGuid), Req);
+    worker_proxy:cast(fslogic_ref_by_context_guid(ContextGuid), Req);
 route_and_ignore_answer(#client_message{
     message_body = #fuse_request{} = FuseRequest
 } = Msg) ->
@@ -291,7 +290,7 @@ answer_or_delegate(Msg = #client_message{
     message_body = FuseRequest = #fuse_request{fuse_request = #file_request{context_guid = ContextGuid}}
 }, RIB) ->
     Req = {fuse_request, effective_session_id(Msg), FuseRequest},
-    delegate_request(get_worker_ref(ContextGuid), Req, MsgId, RIB);
+    delegate_request(fslogic_ref_by_context_guid(ContextGuid), Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
@@ -305,7 +304,7 @@ answer_or_delegate(Msg = #client_message{
     message_body = ProviderRequest = #provider_request{context_guid = ContextGuid}
 }, RIB) ->
     Req = {provider_request, effective_session_id(Msg), ProviderRequest},
-    delegate_request(get_worker_ref(ContextGuid), Req, MsgId, RIB);
+    delegate_request(fslogic_ref_by_context_guid(ContextGuid), Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = Id,
@@ -337,16 +336,6 @@ delegate_request(WorkerRef, Req, MsgId, RIB) ->
     ).
 
 %% @private
--ifndef(gen_local_keys).
--spec get_worker_ref(file_id:file_guid()) -> {id, module(), datastore:key()}.
-get_worker_ref(ContextGuid) ->
+-spec fslogic_ref_by_context_guid(file_id:file_guid()) -> {id, module(), datastore:key()}.
+fslogic_ref_by_context_guid(ContextGuid) ->
     {id, fslogic_worker, file_id:guid_to_uuid(ContextGuid)}.
--endif.
--ifdef(gen_local_keys).
--spec get_worker_ref(file_id:file_guid()) -> module() | {id, module(), datastore:key()}.
-get_worker_ref(ContextGuid) ->
-    case fslogic_uuid:is_space_dir_guid(ContextGuid) of
-        true -> fslogic_worker;
-        _ -> {id, fslogic_worker, file_id:guid_to_uuid(ContextGuid)}
-    end.
--endif.

@@ -975,10 +975,10 @@ get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts, IncludeLocal) ->
 %% or posix otherwise).
 %% @end
 %%--------------------------------------------------------------------
--spec get_active_perms_type(ctx(), boolean()) -> {file_meta:permissions_type(), ctx()}.
-get_active_perms_type(FileCtx = #file_ctx{file_doc = undefined}, IncludeDeleted) ->
-    {Doc, FileCtx2} = case IncludeDeleted of
-        true -> get_file_doc_including_deleted(FileCtx);
+-spec get_active_perms_type(ctx(), include_deleted | ignore_deleted) -> {file_meta:permissions_type(), ctx()}.
+get_active_perms_type(FileCtx = #file_ctx{file_doc = undefined}, GetMode) ->
+    {Doc, FileCtx2} = case GetMode of
+        include_deleted -> get_file_doc_including_deleted(FileCtx);
         _ -> get_file_doc(FileCtx)
     end,
     get_active_perms_type_from_doc(Doc, FileCtx2);
