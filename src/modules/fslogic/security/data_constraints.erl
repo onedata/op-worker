@@ -8,15 +8,17 @@
 %%% @doc
 %%% This module handles operations on data constraints (e.g. verifying
 %%% whether access to file should be allowed).
-%%% There are 2 types of constraints:
-%%% - allowed_paths - list of paths which are allowed (also their subpaths).
-%%%                   To verify if allowed_paths hold for some file one must
-%%%                   check if file path is contained in list or is subpath
-%%%                   of any path from list,
+%%% There are 3 types of constraints:
+%%% - allowed_paths    - list of paths which are allowed (also their subpaths).
+%%%                      To verify if allowed_paths hold for some file one must
+%%%                      check if file path is contained in list or is subpath
+%%%                      of any path from list,
 %%% - guid_constraints - list of guid whitelists. To verify if guid_constraints
 %%%                      hold for some file one must check if every whitelist
 %%%                      contains either that file's guid or any
-%%%                      of its ancestors.
+%%%                      of its ancestors,
+%%% - readonly mode    - flag telling whether only operations available in
+%%%                      readonly mode can be performed.
 %%% NOTE !!!
 %%% Sometimes access may be granted not only to paths or subpaths allowed
 %%% by constraints directly but also to those paths ancestors (operations like
@@ -38,7 +40,7 @@
 
 
 %% API
--export([get_allow_all_constraints/0, get/1, inspect/3]).
+-export([get_allow_all_constraints/0, get/1, is_in_readonly_mode/1, inspect/4]).
 
 -ifdef(TEST).
 -export([
@@ -63,14 +65,16 @@
 
 -record(constraints, {
     paths :: allowed_paths(),
-    guids :: guid_constraints()
+    guids :: guid_constraints(),
+    readonly = false :: boolean()
 }).
 
--type constraints() :: #constraints{}.
+-opaque constraints() :: #constraints{}.
 
 -export_type([constraints/0, ancestor_policy/0]).
 
 
+-define(CV_READONLY, #cv_data_readonly{}).
 -define(CV_PATH(__PATHS), #cv_data_path{whitelist = __PATHS}).
 -define(CV_OBJECTID(__OBJECTIDS), #cv_data_objectid{whitelist = __OBJECTIDS}).
 
@@ -82,13 +86,15 @@
 
 -spec get_allow_all_constraints() -> constraints().
 get_allow_all_constraints() ->
-    #constraints{paths = any, guids = any}.
+    #constraints{paths = any, guids = any, readonly = false}.
 
 
 -spec get([caveats:caveat()]) ->
     {ok, constraints()} | {error, invalid_constraints}.
 get(Caveats) ->
     DataConstraints = lists:foldl(fun
+        (?CV_READONLY, Acc) ->
+            Acc#constraints{readonly = true};
         (?CV_PATH(Paths), #constraints{paths = any} = Acc) ->
             Acc#constraints{paths = consolidate_paths(Paths)};
         (?CV_PATH(_Paths), #constraints{paths = []} = Acc) ->
@@ -125,6 +131,12 @@ get(Caveats) ->
     end.
 
 
+-spec is_in_readonly_mode(user_ctx:ctx()) -> boolean().
+is_in_readonly_mode(UserCtx) ->
+    DataConstraints = user_ctx:get_data_constraints(UserCtx),
+    DataConstraints#constraints.readonly.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Verifies data constraints, that is whether access to specified file
@@ -140,13 +152,28 @@ get(Caveats) ->
 %% calculation cost so it should be used only in necessity.
 %% @end
 %%--------------------------------------------------------------------
--spec inspect(user_ctx:ctx(), file_ctx:ctx(), ancestor_policy()) ->
+-spec inspect(
+    UserCtx :: user_ctx:ctx(),
+    FileCtx :: file_ctx:ctx(),
+    AncestorPolicy :: ancestor_policy(),
+    AccessRequirements :: [data_access_rights:requirement()]
+) ->
     {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
-inspect(UserCtx, FileCtx0, AncestorPolicy) ->
-    case user_ctx:get_data_constraints(UserCtx) of
+inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
+    DataConstraints = user_ctx:get_data_constraints(UserCtx),
+
+    case DataConstraints#constraints.readonly of
+        true ->
+            data_access_rights:assert_operation_available_in_readonly_mode(
+                AccessRequirements
+            );
+        false ->
+            ok
+    end,
+    case DataConstraints of
         #constraints{paths = any, guids = any} ->
             {undefined, FileCtx0};
-        DataConstraints ->
+        _ ->
             CheckResult = check_and_cache_data_constraints(
                 UserCtx, FileCtx0, DataConstraints, AncestorPolicy
             ),
