@@ -103,7 +103,6 @@ create_share_insecure(UserCtx, FileCtx, Name) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    check_is_dir(FileCtx),
     assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     case share_logic:create(SessionId, ShareId, Name, SpaceId, ShareGuid) of
@@ -135,7 +134,6 @@ remove_share_insecure(UserCtx, FileCtx) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    check_is_dir(FileCtx),
     assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     case file_meta:remove_share(FileCtx, ShareId) of
@@ -145,15 +143,6 @@ remove_share_insecure(UserCtx, FileCtx) ->
             ok = share_logic:delete(SessionId, ShareId),
             ok = permissions_cache:invalidate(),
             #provider_response{status = #status{code = ?OK}}
-    end.
-
-
-%% @private
--spec check_is_dir(file_ctx:ctx()) -> ok | no_return().
-check_is_dir(FileCtx) ->
-    case file_ctx:is_dir(FileCtx) of
-        {false, _} -> ?ERROR(?ENOTDIR);
-        _ -> ok
     end.
 
 
