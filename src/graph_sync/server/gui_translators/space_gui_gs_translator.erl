@@ -128,4 +128,6 @@ translate_resource(#gri{aspect = providers, scope = private}, ProviderIds) ->
                 scope = protected
             })
         end, ProviderIds)
-    }.
+    };
+translate_resource(#gri{aspect = {view, _}, scope = private}, ViewInfo) ->
+    ViewInfo.
