@@ -66,7 +66,8 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
     type = TypeAttr,
     mode = Mode,
     size = SizeAttr,
-    mtime = ModificationTime
+    mtime = ModificationTime,
+    shares = Shares
 }) ->
     {Type, Size} = case TypeAttr of
         ?DIRECTORY_TYPE ->
@@ -92,6 +93,19 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
                 })
         end,
 
+        % Currently only one share per file is allowed.
+        Share = case Shares of
+            [ShareId] ->
+                gri:serialize(#gri{
+                    type = op_share,
+                    id = ShareId,
+                    aspect = instance,
+                    scope = private
+                });
+            _ ->
+                null
+        end,
+
         #{
             <<"name">> => Name,
             <<"owner">> => gri:serialize(#gri{
@@ -112,6 +126,7 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
             }),
             <<"mtime">> => ModificationTime,
             <<"size">> => Size,
+            <<"share">> => Share,
             <<"distribution">> => gri:serialize(#gri{
                 type = op_replica,
                 id = Guid,
