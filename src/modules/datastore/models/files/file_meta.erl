@@ -238,15 +238,15 @@ get(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_including_deleted(uuid()) -> {ok, doc()} | {error, term()}.
-get_including_deleted(?ROOT_DIR_UUID) ->
+get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
     {ok, #document{
-        key = ?ROOT_DIR_UUID,
+        key = ?GLOBAL_ROOT_DIR_UUID,
         value = #file_meta{
-            name = ?ROOT_DIR_NAME,
+            name = ?GLOBAL_ROOT_DIR_NAME,
             is_scope = true,
             mode = 8#111,
             owner = ?ROOT_USER_ID,
-            parent_uuid = ?ROOT_DIR_UUID
+            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     }};
 get_including_deleted(FileUuid) ->
@@ -658,7 +658,7 @@ get_ancestors(FileUuid) ->
         {ok, #document{key = Key}} = file_meta:get(FileUuid),
         {ok, get_ancestors2(Key, [])}
     end).
-get_ancestors2(?ROOT_DIR_UUID, Acc) ->
+get_ancestors2(?GLOBAL_ROOT_DIR_UUID, Acc) ->
     Acc;
 get_ancestors2(FileUuid, Acc) ->
     {ok, ParentUuid} = get_parent_uuid({uuid, FileUuid}),
@@ -706,7 +706,7 @@ setup_onedata_user(UserId, EffSpaces) ->
             end, EffSpaces),
 
             FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
-            case create({uuid, ?ROOT_DIR_UUID},
+            case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
                 #document{
                     key = FileUuid,
                     value = #file_meta{
@@ -715,7 +715,7 @@ setup_onedata_user(UserId, EffSpaces) ->
                         mode = 8#1755,
                         owner = ?ROOT_USER_ID,
                         is_scope = true,
-                        parent_uuid = ?ROOT_DIR_UUID
+                        parent_uuid = ?GLOBAL_ROOT_DIR_UUID
                     }
                 })
             of
@@ -781,10 +781,10 @@ make_space_exist(SpaceId) ->
             name = SpaceId, type = ?DIRECTORY_TYPE,
             mode = ?DEFAULT_SPACE_DIR_MODE,
             owner = ?ROOT_USER_ID, is_scope = true,
-            parent_uuid = ?ROOT_DIR_UUID
+            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     },
-    case file_meta:create({uuid, ?ROOT_DIR_UUID}, FileDoc) of
+    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
         {ok, _} ->
             TimesDoc = #document{
                 key = SpaceDirUuid,

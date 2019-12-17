@@ -166,7 +166,7 @@ gen_routing_key_for_guid(Prefix, FileGuid) ->
     case fslogic_uuid:is_user_root_dir_uuid(Uuid) of
         true ->
             % Change user's root uuid to main root dir uuid
-            RootUuid = ?ROOT_DIR_UUID,
+            RootUuid = ?GLOBAL_ROOT_DIR_UUID,
             <<Prefix/binary, RootUuid/binary>>;
         _ ->
             <<Prefix/binary, Uuid/binary>>

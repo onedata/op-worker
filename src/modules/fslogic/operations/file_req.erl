@@ -438,8 +438,8 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
 %% Opens a file on storage if needed. Chooses appropriate node.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(), boolean(),
-    handle_id()) -> ok | no_return().
+-spec maybe_open_on_storage(file_ctx:ctx(), session:id(), fslogic_worker:open_flag(),
+    DirectIO :: boolean(), handle_id()) -> ok | no_return().
 maybe_open_on_storage(_FileCtx, _SessId, _Flag, true, _) ->
     ok; % Files are not open on server-side when client uses directIO
 maybe_open_on_storage(FileCtx, SessId, Flag, _DirectIO, HandleId) ->
