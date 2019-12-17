@@ -59,6 +59,7 @@ operation_supported(get, {view, _}, private) -> true;
 operation_supported(get, {query_view, _}, private) -> true;
 operation_supported(get, eff_users, private) -> true;
 operation_supported(get, eff_groups, private) -> true;
+operation_supported(get, shares, private) -> true;
 operation_supported(get, providers, private) -> true;
 operation_supported(get, transfers, private) -> true;
 operation_supported(get, transfers_active_channels, private) -> true;
@@ -141,6 +142,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = eff_users}}) ->
     undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = eff_groups}}) ->
+    undefined;
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = shares}}) ->
     undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = providers}}) ->
@@ -270,6 +274,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 }}, _) when
     As =:= eff_users;
     As =:= eff_groups;
+    As =:= shares;
     As =:= providers
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
@@ -356,6 +361,7 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {query_view,
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
     As =:= eff_users;
     As =:= eff_groups;
+    As =:= shares;
     As =:= providers
 ->
     middleware_utils:assert_space_supported_locally(SpaceId);
@@ -498,6 +504,9 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_users}}, _) ->
 
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_groups}}, _) ->
     space_logic:get_eff_groups(Auth#auth.session_id, SpaceId);
+
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = shares}}, _) ->
+    space_logic:get_shares(Auth#auth.session_id, SpaceId);
 
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = providers}}, _) ->
     space_logic:get_provider_ids(Auth#auth.session_id, SpaceId);
