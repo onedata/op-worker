@@ -156,7 +156,7 @@ schedule_file_replication(
     UserCtx, FileCtx0, TargetProviderId, Callback,
     ViewName, QueryViewParams
 ) ->
-    data_constraints:in_readonly_mode(UserCtx) andalso throw(?EACCES),
+    data_constraints:is_in_readonly_mode(UserCtx) andalso throw(?EACCES),
 
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,

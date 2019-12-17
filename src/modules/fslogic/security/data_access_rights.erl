@@ -23,7 +23,7 @@
 %% API
 -export([
     assert_granted/3,
-    assert_operation_valid_in_readonly_mode/1
+    assert_operation_available_in_readonly_mode/1
 ]).
 
 -type type() ::
@@ -76,14 +76,10 @@ assert_granted(UserCtx, FileCtx0, AccessRequirements0) ->
 %% can be executed in readonly mode.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_operation_valid_in_readonly_mode([requirement()]) ->
+-spec assert_operation_available_in_readonly_mode([requirement()]) ->
     ok | no_return().
-assert_operation_valid_in_readonly_mode(AccessRequirements) ->
-    AllRequirementsValidInReadonlyMode = lists:all(fun(AccessRequirement) ->
-        is_valid_in_readonly_mode(AccessRequirement)
-    end, AccessRequirements),
-
-    case AllRequirementsValidInReadonlyMode of
+assert_operation_available_in_readonly_mode(AccessRequirements) ->
+    case lists:all(fun is_available_in_readonly_mode/1, AccessRequirements) of
         true -> ok;
         false -> throw(?EACCES)
     end.
@@ -95,25 +91,25 @@ assert_operation_valid_in_readonly_mode(AccessRequirements) ->
 
 
 %% @private
--spec is_valid_in_readonly_mode(requirement()) -> boolean().
-is_valid_in_readonly_mode({AccessType1, 'or', AccessType2}) ->
-    is_valid_in_readonly_mode(AccessType1)
-        andalso is_valid_in_readonly_mode(AccessType2);
+-spec is_available_in_readonly_mode(requirement()) -> boolean().
+is_available_in_readonly_mode({AccessType1, 'or', AccessType2}) ->
+    is_available_in_readonly_mode(AccessType1)
+        andalso is_available_in_readonly_mode(AccessType2);
 
-is_valid_in_readonly_mode(root)                   -> true;
-is_valid_in_readonly_mode(share)                  -> true;
-is_valid_in_readonly_mode(owner)                  -> true;
-is_valid_in_readonly_mode(owner_if_parent_sticky) -> true;
-is_valid_in_readonly_mode(traverse_ancestors)     -> true;
+is_available_in_readonly_mode(root)                   -> true;
+is_available_in_readonly_mode(share)                  -> true;
+is_available_in_readonly_mode(owner)                  -> true;
+is_available_in_readonly_mode(owner_if_parent_sticky) -> true;
+is_available_in_readonly_mode(traverse_ancestors)     -> true;
 
-is_valid_in_readonly_mode(?read_object)           -> true;
-is_valid_in_readonly_mode(?list_container)        -> true;
-is_valid_in_readonly_mode(?read_metadata)         -> true;
-is_valid_in_readonly_mode(?read_attributes)       -> true;
-is_valid_in_readonly_mode(?read_acl)              -> true;
-is_valid_in_readonly_mode(?traverse_container)    -> true;
+is_available_in_readonly_mode(?read_object)           -> true;
+is_available_in_readonly_mode(?list_container)        -> true;
+is_available_in_readonly_mode(?read_metadata)         -> true;
+is_available_in_readonly_mode(?read_attributes)       -> true;
+is_available_in_readonly_mode(?read_acl)              -> true;
+is_available_in_readonly_mode(?traverse_container)    -> true;
 
-is_valid_in_readonly_mode(_)                      -> false.
+is_available_in_readonly_mode(_)                      -> false.
 
 
 %% @private

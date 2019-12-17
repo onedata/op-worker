@@ -291,7 +291,7 @@ run_data_access_caveats_scenarios(ScenariosRootDirPath, #perms_test_spec{
     space_user = User,
     requires_traverse_ancestors = RequiresTraverseAncestors,
     files = Files,
-    valid_in_readonly_mode = IsReadonly,
+    available_in_readonly_mode = IsReadonly,
     operation = Operation
 }, Config) ->
     OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),

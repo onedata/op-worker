@@ -8,15 +8,17 @@
 %%% @doc
 %%% This module handles operations on data constraints (e.g. verifying
 %%% whether access to file should be allowed).
-%%% There are 2 types of constraints:
-%%% - allowed_paths - list of paths which are allowed (also their subpaths).
-%%%                   To verify if allowed_paths hold for some file one must
-%%%                   check if file path is contained in list or is subpath
-%%%                   of any path from list,
+%%% There are 3 types of constraints:
+%%% - allowed_paths    - list of paths which are allowed (also their subpaths).
+%%%                      To verify if allowed_paths hold for some file one must
+%%%                      check if file path is contained in list or is subpath
+%%%                      of any path from list,
 %%% - guid_constraints - list of guid whitelists. To verify if guid_constraints
 %%%                      hold for some file one must check if every whitelist
 %%%                      contains either that file's guid or any
-%%%                      of its ancestors.
+%%%                      of its ancestors,
+%%% - readonly mode    - flag telling whether only operations available in
+%%%                      readonly mode can be performed.
 %%% NOTE !!!
 %%% Sometimes access may be granted not only to paths or subpaths allowed
 %%% by constraints directly but also to those paths ancestors (operations like
@@ -38,7 +40,7 @@
 
 
 %% API
--export([get_allow_all_constraints/0, get/1, in_readonly_mode/1, inspect/4]).
+-export([get_allow_all_constraints/0, get/1, is_in_readonly_mode/1, inspect/4]).
 
 -ifdef(TEST).
 -export([
@@ -129,8 +131,8 @@ get(Caveats) ->
     end.
 
 
--spec in_readonly_mode(user_ctx:ctx()) -> boolean().
-in_readonly_mode(UserCtx) ->
+-spec is_in_readonly_mode(user_ctx:ctx()) -> boolean().
+is_in_readonly_mode(UserCtx) ->
     DataConstraints = user_ctx:get_data_constraints(UserCtx),
     DataConstraints#constraints.readonly.
 
@@ -158,16 +160,20 @@ in_readonly_mode(UserCtx) ->
 ) ->
     {ChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
 inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
-    case user_ctx:get_data_constraints(UserCtx) of
-        #constraints{paths = any, guids = any, readonly = ReadOnly} ->
-            ReadOnly andalso data_access_rights:assert_operation_valid_in_readonly_mode(
+    DataConstraints = user_ctx:get_data_constraints(UserCtx),
+
+    case DataConstraints#constraints.readonly of
+        true ->
+            data_access_rights:assert_operation_available_in_readonly_mode(
                 AccessRequirements
-            ),
+            );
+        false ->
+            ok
+    end,
+    case DataConstraints of
+        #constraints{paths = any, guids = any} ->
             {undefined, FileCtx0};
-        #constraints{readonly = ReadOnly} = DataConstraints ->
-            ReadOnly andalso data_access_rights:assert_operation_valid_in_readonly_mode(
-                AccessRequirements
-            ),
+        _ ->
             CheckResult = check_and_cache_data_constraints(
                 UserCtx, FileCtx0, DataConstraints, AncestorPolicy
             ),

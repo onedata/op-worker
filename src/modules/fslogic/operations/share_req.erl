@@ -42,7 +42,7 @@ end).
 -spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
     fslogic_worker:provider_response().
 create_share(UserCtx, FileCtx0, Name) ->
-    data_constraints:in_readonly_mode(UserCtx) andalso throw(?EACCES),
+    data_constraints:is_in_readonly_mode(UserCtx) andalso throw(?EACCES),
 
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
@@ -58,7 +58,7 @@ create_share(UserCtx, FileCtx0, Name) ->
 -spec remove_share(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 remove_share(UserCtx, FileCtx0) ->
-    data_constraints:in_readonly_mode(UserCtx) andalso throw(?EACCES),
+    data_constraints:is_in_readonly_mode(UserCtx) andalso throw(?EACCES),
 
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,

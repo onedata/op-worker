@@ -132,7 +132,7 @@
     files :: [#dir{} | #file{}],
 
     % Tells whether operation should work in readonly mode (readonly caveats set)
-    valid_in_readonly_mode = false :: boolean(),
+    available_in_readonly_mode = false :: boolean(),
 
     % Operation being tested. It will be called for various combinations of
     % either posix or acl permissions. It is expected to fail for combinations
