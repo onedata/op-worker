@@ -501,7 +501,7 @@ key(undefined, SpaceId, TransferType, StatsType) ->
     key(<<"all">>, SpaceId, TransferType, StatsType);
 key(TargetProvider, SpaceId, TransferType, StatsType) ->
     Extension = datastore_key:new_from_digest([TargetProvider, TransferType, StatsType]),
-    datastore_utils:build_adjacent(Extension, SpaceId).
+    datastore_key:build_adjacent(Extension, SpaceId).
 
 
 %%--------------------------------------------------------------------
