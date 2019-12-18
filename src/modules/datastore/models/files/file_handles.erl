@@ -245,18 +245,6 @@ get_creation_handle(Key) ->
         Other -> Other
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns handle connected with file creation.
-%% @end
-%%--------------------------------------------------------------------
--spec get_creation_handle(key()) -> {ok, storage_file_manager:handle_id()} | {error, term()}.
-get_creation_handle(Key) ->
-    case datastore_model:get(?CTX, Key) of
-        {ok, #document{value = #file_handles{creation_handle = Handle}}} -> {ok, Handle};
-        Other -> Other
-    end.
-
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================

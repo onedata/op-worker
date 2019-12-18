@@ -98,7 +98,7 @@
 %%--------------------------------------------------------------------
 -spec new_root_ctx() -> ctx().
 new_root_ctx() ->
-    new_by_guid(file_id:pack_guid(?ROOT_DIR_UUID, undefined)).
+    new_by_guid(file_id:pack_guid(?GLOBAL_ROOT_DIR_UUID, undefined)).
 
 %%--------------------------------------------------------------------
 %% @doc
