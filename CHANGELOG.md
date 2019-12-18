@@ -4,6 +4,19 @@
 CHANGELOG
 ---------
 
+### 19.02.1
+
+* Bump version to 19.02.1
+* VFS-5826 Ensure db start at cluster init
+* VFS-5900 GUI update * Added showing special subjects in ACL editor
+* VFS-5826 Add missing event during dir creation
+* VFS-5891 Clean authorization nonce after its TTL
+* VFS-5826 Add events during file creation
+* VFS-5826 Change max_read_dir_plus_procs value
+* VFS-5826 Emmit attr_changed events on chmod and acl change
+* VFS-5826 Change events processing - allow subscriptions per dir
+
+
 ### 19.02.0-rc2
 
 * VFS-5775 fix file distribution data backend crashing on empty file
