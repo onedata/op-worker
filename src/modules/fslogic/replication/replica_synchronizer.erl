@@ -65,7 +65,7 @@
     file_ctx :: file_ctx:ctx(),
     file_guid :: undefined | fslogic_worker:file_guid(),
     space_id :: undefined | od_space:id(),
-    dest_storage_id :: storage:id() | undefined,
+    dest_storage_id :: od_storage:id() | undefined,
     dest_file_id :: helpers:file_id() | undefined,
     last_transfer :: undefined | block(),
     in_progress :: ordsets:ordset({block(), fetch_ref(), priority()}),
@@ -859,6 +859,10 @@ disassociate_froms(Froms, State = #state{
     {[], [], RB, RT, FTS, STFs}, Froms),
 
     FinishedTransfers = maps:values(maps:with(Froms, FTT)),
+
+    lists:foreach(fun(TransferId) ->
+        gproc:unreg({c, l, TransferId})
+    end, FinishedTransfers),
 
     {FinishedBlocks, FinishedSessions, FinishedTransfers, State#state{
         requested_blocks = RB2,

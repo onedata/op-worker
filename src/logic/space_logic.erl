@@ -23,15 +23,16 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
--export([get/2, get_protected_data/2, get_as_map/1]).
+-export([get/2, get_protected_data/2]).
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3]).
--export([get_eff_groups/2, get_shares/2]).
+-export([get_eff_groups/2, get_shares/2, get_local_storage_ids/1, get_local_storage_id/1]).
 -export([get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
+-export([is_supported_by_storage/2]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
@@ -51,7 +52,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_space:id()) ->
-    {ok, od_space:doc()} | gs_protocol:error().
+    {ok, od_space:doc()} | errors:error().
 get(SessionId, SpaceId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -66,7 +67,7 @@ get(SessionId, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_protected_data(gs_client_worker:client(), od_space:id()) ->
-    {ok, od_space:doc()} | gs_protocol:error().
+    {ok, od_space:doc()} | errors:error().
 get_protected_data(SessionId, SpaceId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -75,33 +76,8 @@ get_protected_data(SessionId, SpaceId) ->
     }).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves details of given space using current provider's auth
-%% and translates them to a map for use by onepanel.
-%% @end
-%%--------------------------------------------------------------------
--spec get_as_map(od_space:id()) ->
-    {ok, #{atom() := term()}} | gs_protocol:error().
-get_as_map(SpaceId) ->
-    case get(?ROOT_SESS_ID, SpaceId) of
-        {ok, #document{value = Record}} ->
-            {ok, #{
-                name => Record#od_space.name,
-                direct_users => Record#od_space.direct_users,
-                eff_users => Record#od_space.eff_users,
-                direct_groups => Record#od_space.direct_groups,
-                eff_groups => Record#od_space.eff_groups,
-                providers => Record#od_space.providers,
-                shares => Record#od_space.shares,
-                harvesters => Record#od_space.harvesters
-            }};
-        {error, Error} -> {error, Error}
-    end.
-
-
 -spec get_name(gs_client_worker:client(), od_space:id()) ->
-    {ok, od_space:name()} | gs_protocol:error().
+    {ok, od_space:name()} | errors:error().
 get_name(SessionId, SpaceId) ->
     case get_protected_data(SessionId, SpaceId) of
         {ok, #document{value = #od_space{name = Name}}} ->
@@ -112,7 +88,7 @@ get_name(SessionId, SpaceId) ->
 
 
 -spec get_eff_users(gs_client_worker:client(), od_space:id()) ->
-    {ok, #{od_user:id() => [privileges:space_privilege()]}} | gs_protocol:error().
+    {ok, #{od_user:id() => [privileges:space_privilege()]}} | errors:error().
 get_eff_users(SessionId, SpaceId) ->
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{eff_users = EffUsers}}} ->
@@ -161,7 +137,7 @@ has_eff_privileges(SpaceId, UserId, Privileges) ->
 
 
 -spec get_eff_groups(gs_client_worker:client(), od_space:id()) ->
-    {ok, #{od_group:id() => [privileges:space_privilege()]}} | gs_protocol:error().
+    {ok, #{od_group:id() => [privileges:space_privilege()]}} | errors:error().
 get_eff_groups(SessionId, SpaceId) ->
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{eff_groups = EffGroups}}} ->
@@ -177,7 +153,7 @@ has_eff_group(#document{value = #od_space{eff_groups = EffGroups}}, GroupId) ->
 
 
 -spec get_shares(gs_client_worker:client(), od_space:id()) ->
-    {ok, [od_share:id()]} | gs_protocol:error().
+    {ok, [od_share:id()]} | errors:error().
 get_shares(SessionId, SpaceId) ->
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{shares = Shares}}} ->
@@ -186,9 +162,47 @@ get_shares(SessionId, SpaceId) ->
             Error
     end.
 
+%%-------------------------------------------------------------------
+%% @doc
+%% @TODO VFS-5497 Remove after allowing to support one space with many storages on one provider
+%% This function returns StorageId for given SpaceId.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_local_storage_id(od_space:id()) -> {ok, od_storage:id()} | errors:error().
+get_local_storage_id(SpaceId) ->
+    case get_local_storage_ids(SpaceId) of
+        {ok, []} -> {error, space_not_supported};
+        {ok, [StorageId | _]} -> {ok, StorageId};
+        Other -> Other
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of storage ids supporting given space under this provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_local_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
+get_local_storage_ids(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{local_storages = LocalStorages}}} ->
+            {ok, LocalStorages};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_all_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
+get_all_storage_ids(SpaceId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{storages = AllStorages}}} ->
+            {ok, maps:keys(AllStorages)};
+        {error, _} = Error ->
+            Error
+    end.
+
 
 -spec get_provider_ids(gs_client_worker:client(), od_space:id()) ->
-    {ok, [od_provider:id()]} | gs_protocol:error().
+    {ok, [od_provider:id()]} | errors:error().
 get_provider_ids(SessionId, SpaceId) ->
     case get(SessionId, SpaceId) of
         {ok, #document{value = #od_space{providers = Providers}}} ->
@@ -214,6 +228,14 @@ is_supported(SessionId, SpaceId, ProviderId) ->
             is_supported(SpaceDoc, ProviderId);
         _ ->
             false
+    end.
+
+
+-spec is_supported_by_storage(od_space:id(), od_storage:id()) -> boolean().
+is_supported_by_storage(SpaceId, StorageId) ->
+    case get_all_storage_ids(SpaceId) of
+        {ok, AllStorageIds} -> lists:member(StorageId, AllStorageIds);
+        _ -> false
     end.
 
 
@@ -269,7 +291,7 @@ can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
 %%        FirstFailedSeq is the first sequence number on which harvesting
 %%        failed for given index.
 %%        If harvesting succeeds for whole Destination, the map is empty.
-%%     * {error, _} :: gs_protocol:error()
+%%     * {error, _} :: errors:error()
 %%
 %% NOTE!!!
 %% If you introduce any changes in this function, please ensure that
@@ -278,7 +300,7 @@ can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
 %%--------------------------------------------------------------------
 -spec harvest_metadata(od_space:id(), harvesting_destination:destination(),
     harvesting_batch:batch_entries(), couchbase_changes:seq(),
-    couchbase_changes:seq()) -> {ok, harvesting_result:failure_map()} | gs_protocol:error().
+    couchbase_changes:seq()) -> {ok, harvesting_result:failure_map()} | errors:error().
 harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq)->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
@@ -294,7 +316,7 @@ harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq)->
     }, ?HARVEST_METADATA_TIMEOUT).
 
 -spec get_harvesters(od_space:doc() | od_space:id()) ->
-    {ok, [od_harvester:id()]} | gs_protocol:error().
+    {ok, [od_harvester:id()]} | errors:error().
 get_harvesters(#document{value = #od_space{harvesters = Harvesters}}) ->
     {ok, Harvesters};
 get_harvesters(SpaceId) ->

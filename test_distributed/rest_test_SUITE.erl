@@ -15,29 +15,29 @@
 -include("global_definitions.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
 -export([
-    macaroon_auth/1,
+    token_auth/1,
     internal_error_when_handler_crashes/1,
     custom_error_when_handler_throws_error/1
 ]).
 
 
 all() -> ?ALL([
-    macaroon_auth,
+    token_auth,
     internal_error_when_handler_crashes,
     custom_error_when_handler_throws_error
 ]).
-
--define(MACAROON, <<"DUMMY-MACAROON">>).
 
 -define(USER_ID, <<"test_id">>).
 -define(USER_FULL_NAME, <<"test_name">>).
@@ -51,16 +51,19 @@ all() -> ?ALL([
 %%% Test functions
 %%%===================================================================
 
-macaroon_auth(Config) ->
+token_auth(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
 
+    SerializedToken = initializer:create_access_token(?USER_ID),
+
     % when
-    AuthFail = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => <<"invalid">>}),
-    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{<<"X-Auth-Token">> => ?MACAROON}),
-    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{<<"Macaroon">> => ?MACAROON}),
-    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{<<"Authorization">> => <<"Bearer ", (?MACAROON)/binary>>}),
+    AuthFail = do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => <<"invalid">>}),
+    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => SerializedToken}),
+    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{?HDR_AUTHORIZATION => <<"Bearer ", SerializedToken/binary>>}),
+    %% @todo VFS-5554 Deprecated, included for backward compatibility
+    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{?HDR_MACAROON => SerializedToken}),
 
     % then
     ?assertMatch({ok, 401, _, _}, AuthFail),
@@ -72,7 +75,7 @@ internal_error_when_handler_crashes(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, op_space, get, fun test_crash/2),
+    test_utils:mock_expect(Workers, space_middleware, get, fun test_crash/2),
 
     % when
     {ok, Status, _, _} = do_request(Config, get, Endpoint ++ "spaces"),
@@ -84,14 +87,14 @@ custom_error_when_handler_throws_error(Config) ->
     % given
     Workers = [Worker | _] = ?config(op_worker_nodes, Config),
     Endpoint = rest_endpoint(Worker),
-    test_utils:mock_expect(Workers, op_space, get, fun(_, _) -> throw(?ERROR_BAD_VALUE_JSON(<<"dummy">>)) end),
+    test_utils:mock_expect(Workers, space_middleware, get, fun(_, _) -> throw(?ERROR_BAD_VALUE_JSON(<<"dummy">>)) end),
 
     % when
     {ok, Status, _, Body} = do_request(Config, get, Endpoint ++ "spaces"),
 
     % then
-    ?assertEqual(400, Status),
-    ?assertEqual(<<"{\"error\":\"Bad value: provided \\\"dummy\\\" must be a valid JSON\"}">>, Body).
+    ExpRestError = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_JSON(<<"dummy">>)),
+    ?assertMatch(ExpRestError, {Status, json_utils:decode(Body)}).
 
 
 %%%===================================================================
@@ -102,7 +105,7 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         [Worker | _] = ?config(op_worker_nodes, NewConfig),
         initializer:clear_subscriptions(Worker),
-        NewConfig
+        initializer:setup_storage(NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
@@ -114,8 +117,8 @@ init_per_testcase(Case, Config) when
     Workers = ?config(op_worker_nodes, Config),
     ssl:start(),
     hackney:start(),
-    test_utils:mock_new(Workers, op_space),
-    test_utils:mock_expect(Workers, op_space, authorize, fun(_, _) -> true end),
+    test_utils:mock_new(Workers, space_middleware),
+    test_utils:mock_expect(Workers, space_middleware, authorize, fun(_, _) -> true end),
     mock_provider_id(Config),
     Config;
 init_per_testcase(_Case, Config) ->
@@ -132,7 +135,7 @@ end_per_testcase(Case, Config) when
     Case =:= custom_error_when_handler_throws_error
 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, op_space),
+    test_utils:mock_unload(Workers, space_middleware),
     unmock_provider_id(Config),
     hackney:stop(),
     ssl:stop();
@@ -183,7 +186,7 @@ rest_endpoint(Node) ->
 
 mock_provider_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, provider_logic, []),
+    test_utils:mock_new(Workers, provider_logic, [passthrough]),
     test_utils:mock_expect(Workers, provider_logic, has_eff_user,
         fun(UserId) ->
             UserId =:= ?USER_ID
@@ -207,6 +210,15 @@ mock_space_logic(Config) ->
     test_utils:mock_expect(Workers, space_logic, get_name,
         fun(_, ?SPACE_ID) ->
             {ok, ?SPACE_NAME}
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_local_storage_ids,
+        fun (_SpaceId) ->
+            {ok, lists:foldl(fun(Worker, Acc) ->
+                case ?config({storage_id, ?GET_DOMAIN(Worker)}, Config) of
+                    undefined -> Acc;
+                    StorageId -> [StorageId | Acc]
+                end
+            end, [], Workers)}
         end).
 
 unmock_space_logic(Config) ->
@@ -223,24 +235,38 @@ mock_user_logic(Config) ->
     }}},
 
     GetUserFun = fun
-        (#macaroon_auth{macaroon = ?MACAROON}, ?USER_ID) ->
-            UserDoc;
         (?ROOT_SESS_ID, ?USER_ID) ->
             UserDoc;
-        (UserSessId, ?USER_ID) ->
+        (?ROOT_AUTH, ?USER_ID) ->
+            UserDoc;
+        (UserSessId, ?USER_ID) when is_binary(UserSessId) ->
             try session:get_user_id(UserSessId) of
                 {ok, ?USER_ID} -> UserDoc;
                 _ -> ?ERROR_UNAUTHORIZED
             catch
                 _:_ -> ?ERROR_UNAUTHORIZED
             end;
+        (TokenAuth, ?USER_ID) ->
+            case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
+                {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
+                    UserDoc;
+                {error, _} = Error ->
+                    Error
+            end;
         (_, _) ->
             {error, not_found}
     end,
 
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
-    test_utils:mock_expect(Workers, user_logic, get_by_auth, fun(Auth) ->
-        GetUserFun(Auth, ?USER_ID)
+    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(AccessToken, _, _, _) ->
+        TokenAuth = auth_manager:build_token_auth(
+            AccessToken, undefined,
+            undefined, undefined, disallow_data_access_caveats
+        ),
+        case GetUserFun(TokenAuth, ?USER_ID) of
+            {ok, #document{key = UserId}} -> {ok, ?SUB(user, UserId), undefined};
+            {error, _} = Error -> Error
+        end
     end),
     test_utils:mock_expect(Workers, user_logic, exists,
         fun(Auth, UserId) ->
@@ -263,7 +289,7 @@ unmock_user_logic(Config) ->
 mock_provider_id(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:mock_provider_id(
-        Workers, ?PROVIDER_ID, <<"auth-macaroon">>, <<"identity-macaroon">>
+        Workers, ?PROVIDER_ID, <<"access-token">>, <<"identity-token">>
     ).
 
 

@@ -36,28 +36,28 @@ oz_connection_test(Config) ->
     [Node | _] = Nodes = ?config(op_worker_nodes, Config),
 
     % If provider can't connect to onezone, it should return
-    % ?ERROR_NO_CONNECTION_TO_OZ for all requests.
+    % ?ERROR_NO_CONNECTION_TO_ONEZONE for all requests.
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_CONN_ERROR),
     ?assertMatch(
-        ?ERROR_NO_CONNECTION_TO_OZ,
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID]),
+        ?ERROR_NO_CONNECTION_TO_ONEZONE,
+        rpc:call(Node, provider_logic, get, []),
         10
     ),
 
     % If provider can connect to onezone, but was authenticated as nobody,
-    % it should return ?ERROR_NO_CONNECTION_TO_OZ for all requests.
+    % it should return ?ERROR_NO_CONNECTION_TO_ONEZONE for all requests.
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_NOBODY_IDENTITY),
     ?assertMatch(
-        ?ERROR_NO_CONNECTION_TO_OZ,
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID]),
+        ?ERROR_NO_CONNECTION_TO_ONEZONE,
+        rpc:call(Node, provider_logic, get, []),
         10
     ),
 
     % Requests should work when the provider connects to onezone.
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_CORRECT_CONNECTION),
     ?assertMatch(
-        {ok, ?MOCK_DISCH_MACAROON},
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID]),
+        {ok, _},
+        rpc:call(Node, provider_logic, get, []),
         10
     ),
 

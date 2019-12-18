@@ -20,7 +20,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -124,7 +124,7 @@ events_aggregation_manager_error_test2(_Config) ->
     %TODO VFS-5383 - test event manager test other way
     ok.
 %%    Workers = ?config(op_worker_nodes, Config),
-%%    test_utils:set_env(Workers, ?APP_NAME, fuse_session_ttl_seconds, 5),
+%%    test_utils:set_env(Workers, ?APP_NAME, fuse_session_grace_period_seconds, 5),
 %%    test_utils:mock_new(Workers, event_manager, [passthrough]),
 %%
 %%    test_utils:mock_expect(Workers, event_manager, handle_call, fun
@@ -143,7 +143,7 @@ events_aggregation_manager_error_test2(_Config) ->
 %%    {ConnectionWorker, AssertionWorker} = get_nodes(Config),
 %%    events_aggregation_failed_test_base(Config, ConnectionWorker, AssertionWorker),
 %%    test_utils:mock_unload(Workers, event_manager),
-%%    test_utils:set_env(Workers, ?APP_NAME, fuse_session_ttl_seconds, 300).
+%%    test_utils:set_env(Workers, ?APP_NAME, fuse_session_grace_period_seconds, 300).
 
 events_aggregation_test(Config) ->
     {ConnectionWorker, AssertionWorker} = get_nodes(Config),
@@ -186,7 +186,7 @@ events_flush_test(Config) ->
 
 events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     UserId = <<"user1">>,
-    MacaroonAuth = ?config({auth, UserId}, Config),
+    AccessToken = ?config({access_token, UserId}, Config),
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
@@ -198,8 +198,8 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     mock_aggregate_read_events(AssertionWorker),
     mock_handle_file_read_events(AssertionWorker),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(
-        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), MacaroonAuth
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(
+        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), AccessToken
     ),
 
     % Send 2 event with some delay and assert correct aggregation
@@ -227,31 +227,32 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
 
     ok = ssl:close(Sock).
 
-events_aggregation_failed_test_base(Config, ConnectionWorker, AssertionWorker) ->
-    UserId = <<"user1">>,
-    MacaroonAuth = ?config({auth, UserId}, Config),
-    SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
-
-    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), binary_to_list(generator:gen_name())])),
-    {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
-
-    {ok, {Sock, TestSessionID}} = fuse_test_utils:connect_via_macaroon(
-        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), MacaroonAuth
-    ),
-
-    ?assertMatch({ok, _}, rpc:call(ConnectionWorker, session, get, [TestSessionID])),
-    Block1 = #file_block{offset = 0, size = 4},
-    fuse_test_utils:emit_file_read_event(Sock, 0, 0, FileGuid, [Block1]),
-    timer:sleep(10000),
-
-    ?assertEqual({error, not_found}, rpc:call(ConnectionWorker, session, get, [TestSessionID])),
-    ?assertEqual({error, closed}, ssl:send(Sock, <<"test">>)),
-    ok = ssl:close(Sock).
+%%events_aggregation_failed_test_base(Config, ConnectionWorker, AssertionWorker) ->
+%TODO VFS-5383 - test event manager test other way
+%%    UserId = <<"user1">>,
+%%    AccessToken = ?config({access_token, UserId}, Config),
+%%    SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
+%%    [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
+%%
+%%    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), binary_to_list(generator:gen_name())])),
+%%    {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
+%%
+%%    {ok, {Sock, TestSessionID}} = fuse_test_utils:connect_via_token(
+%%        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), AccessToken
+%%    ),
+%%
+%%    ?assertMatch({ok, _}, rpc:call(ConnectionWorker, session, get, [TestSessionID])),
+%%    Block1 = #file_block{offset = 0, size = 4},
+%%    fuse_test_utils:emit_file_read_event(Sock, 0, 0, FileGuid, [Block1]),
+%%    timer:sleep(10000),
+%%
+%%    ?assertEqual({error, not_found}, rpc:call(ConnectionWorker, session, get, [TestSessionID])),
+%%    ?assertEqual({error, closed}, ssl:send(Sock, <<"test">>)),
+%%    ok = ssl:close(Sock).
 
 events_flush_test_base(Config, ConnectionWorker, AssertionWorker, MockError, FlushCode) ->
     UserId = <<"user1">>,
-    MacaroonAuth = ?config({auth, UserId}, Config),
+    AccessToken = ?config({access_token, UserId}, Config),
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
@@ -263,8 +264,8 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker, MockError, Flu
     mock_aggregate_written_events(AssertionWorker),
     mock_handle_file_written_events(AssertionWorker, MockError),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(
-        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), MacaroonAuth
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(
+        ConnectionWorker, [{active, true}], crypto:strong_rand_bytes(10), AccessToken
     ),
 
     [#'Subscription'{id = SubscriptionId}] = fuse_test_utils:get_subscriptions(Sock, [file_written]),

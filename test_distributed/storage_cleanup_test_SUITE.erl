@@ -18,7 +18,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 -include_lib("kernel/include/file.hrl").
 
@@ -660,10 +660,10 @@ get_space_mount_point(Worker, SpaceId) ->
     storage_mount_point(Worker, StorageId).
 
 get_supporting_storage_id(Worker, SpaceId) ->
-    [StorageId] = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
+    {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.
 
 storage_mount_point(Worker, StorageId) ->
-    [Helper | _] = rpc:call(Worker, storage, get_helpers, [StorageId]),
+    [Helper | _] = rpc:call(Worker, storage_config, get_helpers, [StorageId]),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).

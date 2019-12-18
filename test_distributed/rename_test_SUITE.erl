@@ -16,7 +16,7 @@
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -445,14 +445,19 @@ attributes_retaining_test(Config) ->
     {_, Dir3Guid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(1, TestDir, "/dir3"))),
     {_, File3Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId1, filename(1, TestDir, "/dir3/file3"), 8#770)),
 
-    PreRenameGuids = [Dir1Guid, File1Guid, Dir2Guid, File2Guid, Dir3Guid, File3Guid],
-
-    Ace = #access_control_entity{
+    FileAce = #access_control_entity{
         acetype = ?allow_mask,
         aceflags = ?no_flags_mask,
         identifier = UserId,
         name = UserName,
-        acemask = (?read_mask bor ?write_mask bor ?execute_mask)
+        acemask = ?all_object_perms_mask
+    },
+    DirAce = #access_control_entity{
+        acetype = ?allow_mask,
+        aceflags = ?no_flags_mask,
+        identifier = UserId,
+        name = UserName,
+        acemask = ?all_container_perms_mask
     },
     Mimetype = <<"text/html">>,
     TransferEncoding = <<"base64">>,
@@ -462,8 +467,17 @@ attributes_retaining_test(Config) ->
         #xattr{name = <<"xattr_name2">>, value = <<"xattr2">>}
     ],
 
+    PreRenameGuids = [
+        {Dir1Guid, DirAce},
+        {File1Guid, FileAce},
+        {Dir2Guid, DirAce},
+        {File2Guid, FileAce},
+        {Dir3Guid, DirAce},
+        {File3Guid, FileAce}
+    ],
+
     lists:foreach(
-        fun(Guid) ->
+        fun({Guid, Ace}) ->
             ?assertEqual(ok, lfm_proxy:set_acl(W1, SessId1, {guid, Guid}, [Ace])),
             ?assertEqual(ok, lfm_proxy:set_mimetype(W1, SessId1, {guid, Guid}, Mimetype)),
             ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W1, SessId1, {guid, Guid}, TransferEncoding)),
@@ -479,16 +493,16 @@ attributes_retaining_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId1, {guid, Dir3Guid}, filename(3, TestDir, "/dir3_target"))),
 
     PostRenamePathsAndWorkers = [
-        {filename(1, TestDir, "/dir1_target"), W1},
-        {filename(1, TestDir, "/dir1_target/file1"), W1},
-        {filename(2, TestDir, "/dir2_target"), W1},
-        {filename(2, TestDir, "/dir2_target/file2"), W1},
-        {filename(3, TestDir, "/dir3_target"), W2},
-        {filename(3, TestDir, "/dir3_target/file3"), W2}
+        {filename(1, TestDir, "/dir1_target"), DirAce, W1},
+        {filename(1, TestDir, "/dir1_target/file1"), FileAce, W1},
+        {filename(2, TestDir, "/dir2_target"), DirAce, W1},
+        {filename(2, TestDir, "/dir2_target/file2"), FileAce, W1},
+        {filename(3, TestDir, "/dir3_target"), DirAce, W2},
+        {filename(3, TestDir, "/dir3_target/file3"), FileAce, W2}
     ],
 
     lists:foreach(
-        fun({Path, Worker}) ->
+        fun({Path, Ace, Worker}) ->
             SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
             ?assertEqual({ok, [Ace]}, lfm_proxy:get_acl(Worker, SessId, {path, Path})),
             ?assertEqual({ok, Mimetype}, lfm_proxy:get_mimetype(Worker, SessId, {path, Path})),

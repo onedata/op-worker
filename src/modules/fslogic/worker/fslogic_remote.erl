@@ -22,7 +22,7 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -57,7 +57,7 @@ reroute(UserCtx, ProviderId, Request) ->
     Msg = #client_message{
         message_body = Request,
         effective_session_id = EffSessionId,
-        effective_session_auth = Auth
+        effective_session_credentials = auth_manager:get_credentials(Auth)
     },
 
     {ok, #server_message{

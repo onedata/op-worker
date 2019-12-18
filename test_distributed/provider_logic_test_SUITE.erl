@@ -22,7 +22,8 @@
     get_protected_data_test/1,
     mixed_get_test/1,
     subscribe_test/1,
-    convenience_functions_test/1
+    convenience_functions_test/1,
+    confined_access_token_test/1
 ]).
 
 all() -> ?ALL([
@@ -30,7 +31,8 @@ all() -> ?ALL([
     get_protected_data_test,
     mixed_get_test,
     subscribe_test,
-    convenience_functions_test
+    convenience_functions_test,
+    confined_access_token_test
 ]).
 
 %%%===================================================================
@@ -327,6 +329,26 @@ convenience_functions_test(Config) ->
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
+
+
+confined_access_token_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    Caveat = #cv_api{whitelist = [{?OP_PANEL, all, ?GRI_PATTERN('*', '*', '*', '*')}]},
+    AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
+    ),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    % Request should be denied before contacting Onezone because of the
+    % API caveat
+    ?assertMatch(
+        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
+        rpc:call(Node, provider_logic, get_protected_data, [TokenAuth, ?PROVIDER_1])
+    ),
+    ?assertEqual(GraphCalls, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================

@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Model that stores list of storage IDs attached to the space.
+%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_storage).
@@ -17,12 +18,11 @@
 -include("global_definitions.hrl").
 
 %% API
--export([add/2, add/3]).
--export([get/1, delete/1, update/2]).
+-export([get/1, delete/1]).
 -export([get_storage_ids/1, get_mounted_in_root/1]).
 
 %% datastore_model callbacks
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type id() :: od_space:id().
 -type record() :: #space_storage{}.
@@ -36,15 +36,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates space storage.
-%% @end
-%%--------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, id()} | {error, term()}.
-update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -64,71 +55,15 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
-    autocleaning_api:disable(Key),
-    autocleaning_api:delete_config(Key),
-    file_popularity_api:disable(Key),
-    file_popularity_api:delete_config(Key),
-    space_strategies:delete(Key),
-    main_harvesting_stream:space_unsupported(Key),
     datastore_model:delete(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds storage to the space.
-%% @end
-%%--------------------------------------------------------------------
--spec add(od_space:id(), storage:id()) ->
-    {ok, od_space:id()} | {error, Reason :: term()}.
-add(SpaceId, StorageId) ->
-    add(SpaceId, StorageId, false).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds storage to the space.
-%% @end
-%%--------------------------------------------------------------------
--spec add(od_space:id(), storage:id(), boolean()) ->
-    {ok, od_space:id()} | {error, Reason :: term()}.
-add(SpaceId, StorageId, MountInRoot) ->
-    % critical section to avoid race in {@link storage:safe_remove/1}
-    critical_section:run({storage_to_space, StorageId}, fun() ->
-        Diff = fun(#space_storage{
-            storage_ids = StorageIds,
-            mounted_in_root = MountedInRoot
-        } = Model) ->
-            case lists:member(StorageId, StorageIds) of
-                true -> {error, already_exists};
-                false ->
-                    SpaceStorage = Model#space_storage{
-                        storage_ids = [StorageId | StorageIds]
-                    },
-                    case MountInRoot of
-                        true ->
-                            {ok, SpaceStorage#space_storage{
-                                mounted_in_root = [StorageId | MountedInRoot]
-                            }};
-                        _ ->
-                            {ok, SpaceStorage}
-                    end
-            end
-        end,
-        #document{value = Default} = new(SpaceId, StorageId, MountInRoot),
-
-        case datastore_model:update(?CTX, SpaceId, Diff, Default) of
-            {ok, _} ->
-                ok = space_strategies:add_storage(SpaceId, StorageId),
-                {ok, SpaceId};
-            {error, Reason} ->
-                {error, Reason}
-        end
-    end).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns list of storage IDs attached to the space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_ids(record() | doc() | id()) -> [storage:id()].
+-spec get_storage_ids(record() | doc() | id()) -> [od_storage:id()].
 get_storage_ids(#space_storage{storage_ids = StorageIds}) ->
     StorageIds;
 get_storage_ids(#document{value = #space_storage{} = Value}) ->
@@ -143,7 +78,7 @@ get_storage_ids(SpaceId) ->
 %% storage root.
 %% @end
 %%--------------------------------------------------------------------
--spec get_mounted_in_root(record() | doc() | id()) -> [storage:id()].
+-spec get_mounted_in_root(record() | doc() | id()) -> [od_storage:id()].
 get_mounted_in_root(#space_storage{mounted_in_root = StorageIds}) ->
     StorageIds;
 get_mounted_in_root(#document{value = #space_storage{} = Value}) ->
@@ -152,28 +87,19 @@ get_mounted_in_root(SpaceId) ->
     {ok, Doc} = ?MODULE:get(SpaceId),
     get_mounted_in_root(Doc).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns space_storage document.
-%% @end
-%%--------------------------------------------------------------------
--spec(new(od_space:id(), storage:id(), boolean()) -> doc()).
-new(SpaceId, StorageId, true) ->
-    #document{key = SpaceId, value = #space_storage{
-        storage_ids = [StorageId],
-        mounted_in_root = [StorageId]}};
-new(SpaceId, StorageId, _) ->
-    #document{key = SpaceId, value = #space_storage{storage_ids = [StorageId]}}.
-
 
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
 
 %%--------------------------------------------------------------------
 %% @doc

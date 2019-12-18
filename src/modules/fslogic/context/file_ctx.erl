@@ -28,7 +28,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -record(file_ctx, {
@@ -41,15 +41,13 @@
     storage_posix_user_context :: undefined | luma:posix_user_ctx(),
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
-    storage_doc :: undefined | storage:doc(),
+    storage_doc :: undefined | storage_config:doc(),
     file_location_ids :: undefined | [file_location:id()],
-    acl :: undefined | acl:acl(),
     is_dir :: undefined | boolean(),
-    is_import_on :: undefined | boolean(),
+    is_space_synced :: undefined | boolean(),
     extended_direct_io = false :: boolean(),
     storage_path_type :: undefined | helpers:storage_path_type(),
-    mounted_in_root :: undefined | boolean(),
-    storage_sync_info :: undefined | storage_sync_info:doc()
+    is_imported_storage :: undefined | boolean()
 }).
 
 -type ctx() :: #file_ctx{}.
@@ -63,28 +61,31 @@
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_guid_const/1, get_uuid_const/1, get_extended_direct_io_const/1,
-    set_storage_path_type/2, get_storage_path_type_const/1, get_mounted_in_root/1,
-    get_canonical_path_tokens/1]).
+    set_storage_path_type/2, get_storage_path_type_const/1, is_imported_storage/1
+]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
-    is_root_dir_const/1, has_acl_const/1, file_exists_const/1, is_in_user_space_const/2]).
+    is_root_dir_const/1, file_exists_const/1, is_in_user_space_const/2]).
 -export([equals/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_file_doc/1,
-    get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1, get_storage_file_id/2,
-    get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
+-export([get_canonical_path/1, get_canonical_path_tokens/1, get_file_doc/1,
+    get_file_doc_including_deleted/1, get_parent/2,
+    get_storage_file_id/1, get_storage_file_id/2,
+    get_new_storage_file_id/1, get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3,
-    get_file_children/4, get_file_children/5, get_file_children/6,
+    get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
     get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2, fill_location_gaps/4,
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
     get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
-    get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
-    get_acl/1, get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
-    get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
-    is_import_on/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1,
-    get_storage_sync_info/1]).
+    get_or_create_local_regular_file_location_doc/3, get_file_location_ids/1,
+    get_file_location_docs/1, get_file_location_docs/2,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2,
+    get_file_size/1, get_file_size_from_remote_locations/1, get_owner/1,
+    get_group_owner/1, get_local_storage_file_size/1,
+    is_space_synced/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1
+]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -98,7 +99,7 @@
 %%--------------------------------------------------------------------
 -spec new_root_ctx() -> ctx().
 new_root_ctx() ->
-    new_by_guid(file_id:pack_guid(?ROOT_DIR_UUID, undefined)).
+    new_by_guid(fslogic_uuid:root_dir_guid()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -238,7 +239,7 @@ get_share_id_const(#file_ctx{guid = Guid}) ->
 %% Returns file's space ID.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_id_const(ctx()) -> od_space:id() | undefined.
+-spec get_space_id_const(ctx()) -> od_space:id().
 get_space_id_const(#file_ctx{guid = Guid}) ->
     file_id:guid_to_space_id(Guid).
 
@@ -283,8 +284,9 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {<<"/">>, FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            CanonicalPath = filename:join(generate_canonical_path(FileCtx)),
-            {CanonicalPath, FileCtx#file_ctx{canonical_path = CanonicalPath}}
+            {Path, FileCtx2} = generate_canonical_path(FileCtx),
+            CanonicalPath = filename:join(Path),
+            {CanonicalPath, FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path(FileCtx = #file_ctx{canonical_path = Path}) ->
     {Path, FileCtx}.
@@ -300,30 +302,13 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {[<<"/">>], FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            CanonicalPathTokens = generate_canonical_path(FileCtx),
+            {CanonicalPathTokens, FileCtx2} = generate_canonical_path(FileCtx),
             CanonicalPath = filename:join(CanonicalPathTokens),
             {CanonicalPathTokens,
-                FileCtx#file_ctx{canonical_path = CanonicalPath}}
+                FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
     {fslogic_path:split(Path), FileCtx}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's uuid path (i.e "/SpaceId/A/B/C/FileUuid").
-%% If canonical_path entry is undefined, it will be set to canonical
-%% path for compatibility with other modules, but the returned path
-%% will be flat.
-%% @end
-%%--------------------------------------------------------------------
--spec get_flat_path_const(ctx()) -> file_meta:path().
-get_flat_path_const(FileCtx) ->
-    case is_root_dir_const(FileCtx) of
-        true ->
-            <<"/">>;
-        false ->
-            filename:join(generate_flat_path(FileCtx))
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -358,19 +343,16 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns if space is mounted in root.
+%% Checks whether space is supported by imported storage.
 %% @end
 %%--------------------------------------------------------------------
--spec get_mounted_in_root(ctx()) -> {boolean(), ctx()}.
-get_mounted_in_root(FileCtx = #file_ctx{mounted_in_root = undefined}) ->
-    SpaceId = get_space_id_const(FileCtx),
-    {ok, SS} = space_storage:get(SpaceId),
-    InRootIDs = space_storage:get_mounted_in_root(SS),
-    {StorageDoc, FileCtx2} = get_storage_doc(FileCtx),
-    MiR = lists:member(StorageDoc#document.key, InRootIDs),
-    {MiR, FileCtx2#file_ctx{mounted_in_root = MiR}};
-get_mounted_in_root(FileCtx = #file_ctx{mounted_in_root = MiR}) ->
-    {MiR, FileCtx}.
+-spec is_imported_storage(ctx()) -> {boolean(), ctx()}.
+is_imported_storage(FileCtx = #file_ctx{is_imported_storage = undefined}) ->
+    {StorageConfig, FileCtx2} = get_storage_doc(FileCtx),
+    ImportedStorage = storage_config:is_imported_storage(StorageConfig),
+    {ImportedStorage, FileCtx2#file_ctx{is_imported_storage = ImportedStorage}};
+is_imported_storage(FileCtx = #file_ctx{is_imported_storage = ImportedStorage}) ->
+    {ImportedStorage, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -422,7 +404,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
     ParentGuid =
         case fslogic_uuid:is_root_dir_uuid(ParentUuid) of
             true ->
-                case ParentUuid =:= ?ROOT_DIR_UUID
+                case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
                     andalso UserCtx =/= undefined
                     andalso user_ctx:is_normal_user(UserCtx)
                 of
@@ -430,7 +412,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
                         UserId = user_ctx:get_user_id(UserCtx),
                         fslogic_uuid:user_root_dir_guid(UserId);
                     _ ->
-                        file_id:pack_guid(ParentUuid, undefined)
+                        fslogic_uuid:root_dir_guid()
                 end;
             false ->
                 SpaceId = get_space_id_const(FileCtx2),
@@ -445,7 +427,6 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
     {Parent, FileCtx2#file_ctx{parent = Parent}};
 get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
     {Parent, FileCtx}.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -488,76 +469,54 @@ get_storage_file_id(FileCtx) ->
 -spec get_storage_file_id(ctx(), boolean()) ->
     {StorageFileId :: helpers:file_id() | undefined, ctx()}.
 get_storage_file_id(FileCtx0 = #file_ctx{storage_file_id = undefined}, Generate) ->
-    case get_local_file_location_doc(FileCtx0, false) of
-        {#document{value = #file_location{file_id = ID, storage_file_created = SFC}}, FileCtx}
-            when ID =/= undefined, SFC or Generate ->
-            {ID, FileCtx};
-        {_, FileCtx} ->
-            % Check if id should be generated
-            {Continue, FileCtx2} = case Generate of
-                true -> {true, FileCtx};
-                _ -> is_dir(FileCtx)
-            end,
-            case Continue of
-                true ->
-                    {StorageDoc, _} = file_ctx:get_storage_doc(FileCtx2),
-                    #document{value = #storage{helpers
-                    = [#helper{storage_path_type = StoragePathType} | _]}} = StorageDoc,
-                    case StoragePathType of
-                        ?FLAT_STORAGE_PATH ->
-                            FileId = get_flat_path_const(FileCtx2),
-                            % TODO - do not get_canonical_path (fix acceptance tests before)
-                            {_, FileCtx3} = get_canonical_path(FileCtx2),
-                            {FileId, FileCtx3#file_ctx{storage_file_id = FileId}};
-                        ?CANONICAL_STORAGE_PATH ->
-                            {FileIdTokens, FileCtx3} = get_canonical_path_tokens(FileCtx2),
-                            {MiR, FileCtx4} = get_mounted_in_root(FileCtx3),
-                            FileId = case {MiR, FileIdTokens} of
-                                         {true, [Root, _SpaceID | Path]} ->
-                                             filename:join([Root | Path]);
-                                         _ ->
-                                             filename:join(FileIdTokens)
-                                     end,
-
-                            {FileId, FileCtx4#file_ctx{storage_file_id = FileId}}
-                    end;
-                _ ->
-                    {undefined, FileCtx}
+    case is_root_dir_const(FileCtx0) of
+        true ->
+            StorageFileId = ?DIRECTORY_SEPARATOR_BINARY,
+            {StorageFileId, FileCtx0#file_ctx{storage_file_id = StorageFileId}};
+        false ->
+            case get_local_file_location_doc(FileCtx0, false) of
+                {#document{value = #file_location{file_id = ID, storage_file_created = SFC}}, FileCtx}
+                    when ID =/= undefined andalso (SFC or Generate) ->
+                    {ID, FileCtx};
+                {_, FileCtx} ->
+                    % Check if id should be generated
+                    {Continue, FileCtx2} = case Generate of
+                        true -> {true, FileCtx};
+                        _ -> is_dir(FileCtx)
+                    end,
+                    case Continue of
+                        true ->
+                            get_new_storage_file_id(FileCtx2);
+                        _ ->
+                            {undefined, FileCtx2}
+                    end
             end
     end;
 get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
     {StorageFileId, FileCtx}.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns raw path on storage.
-%% @end
-%%--------------------------------------------------------------------
--spec get_raw_storage_path(ctx()) -> {StorageFileId :: helpers:file_id(), ctx()}.
-get_raw_storage_path(FileCtx = #file_ctx{is_import_on = true}) ->
-    {FileId, FileCtx2} = get_storage_file_id(FileCtx),
-    SpaceId = get_space_id_const(FileCtx2),
-    {StorageId, FileCtx3} = get_storage_id(FileCtx2),
-    {filename_mapping:to_storage_path(SpaceId, StorageId, FileId), FileCtx3};
-get_raw_storage_path(FileCtx = #file_ctx{is_import_on = false}) ->
-    {FileId, FileCtx2} = get_storage_file_id(FileCtx),
-    {FileId, FileCtx2};
-get_raw_storage_path(FileCtx) ->
-    {_, FileCtx2} = is_import_on(FileCtx),
-    get_raw_storage_path(FileCtx2).
+-spec get_new_storage_file_id(ctx()) -> {helpers:file_id(), ctx()}.
+get_new_storage_file_id(FileCtx) ->
+    {StorageConfig, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+    Helper = storage_config:get_helper(StorageConfig),
+    case helper:get_storage_path_type(Helper) of
+        ?FLAT_STORAGE_PATH ->
+            {FileId, FileCtx3} = storage_file_id:flat(FileCtx2),
+            % TODO - do not get_canonical_path (fix acceptance tests before)
+            {_, FileCtx4} = get_canonical_path(FileCtx3),
+            {FileId, FileCtx4#file_ctx{storage_file_id = FileId}};
+        ?CANONICAL_STORAGE_PATH ->
+            {StorageFileId, FileCtx3} = storage_file_id:canonical(FileCtx2),
+            {StorageFileId, FileCtx3#file_ctx{storage_file_id = StorageFileId}}
+    end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns information about import settings in space when file is stored.
-%% @end
-%%--------------------------------------------------------------------
--spec is_import_on(ctx()) -> {boolean(), ctx()}.
-is_import_on(FileCtx = #file_ctx{is_import_on = undefined}) ->
+-spec is_space_synced(ctx()) -> {boolean(), ctx()}.
+is_space_synced(FileCtx = #file_ctx{is_space_synced = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
-    IsOn = space_strategies:is_import_on(SpaceId),
-    {IsOn, FileCtx#file_ctx{is_import_on = IsOn}};
-is_import_on(FileCtx = #file_ctx{is_import_on = IsOn}) ->
-    {IsOn, FileCtx}.
+    IsSynced = space_strategies:is_any_storage_imported(SpaceId),
+    {IsSynced, FileCtx#file_ctx{is_space_synced = IsSynced}};
+is_space_synced(FileCtx = #file_ctx{is_space_synced = IsSynced}) ->
+    {IsSynced, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -567,15 +526,13 @@ is_import_on(FileCtx = #file_ctx{is_import_on = IsOn}) ->
 -spec get_space_name(ctx(), user_ctx:ctx()) ->
     {od_space:name(), ctx()} | no_return().
 get_space_name(FileCtx = #file_ctx{space_name = undefined}, UserCtx) ->
-    UserDoc = user_ctx:get_user(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
     SpaceId = get_space_id_const(FileCtx),
-    case user_logic:has_eff_space(UserDoc, SpaceId) of
-        false ->
-            throw(?ENOENT);
-        true ->
-            {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
-            {SpaceName, FileCtx#file_ctx{space_name = SpaceName}}
+    case space_logic:get_name(SessionId, SpaceId) of
+        {ok, SpaceName} ->
+            {SpaceName, FileCtx#file_ctx{space_name = SpaceName}};
+        {error, _} ->
+            throw(?ENOENT)
     end;
 get_space_name(FileCtx = #file_ctx{space_name = SpaceName}, _Ctx) ->
     {SpaceName, FileCtx}.
@@ -592,7 +549,8 @@ get_aliased_name(FileCtx = #file_ctx{file_name = undefined}, UserCtx) ->
         andalso UserCtx =/= undefined
         andalso (not session_utils:is_special(user_ctx:get_session_id(UserCtx))) of
         false ->
-            get_name_of_nonspace_file(FileCtx);
+            {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
+            {Name, FileCtx2};
         true ->
             {Name, FileCtx2} = get_space_name(FileCtx, UserCtx),
             {Name, FileCtx2#file_ctx{file_name = Name}}
@@ -701,7 +659,8 @@ get_child_canonical_path(ParentCtx, FileName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: integer(), Limit :: non_neg_integer()
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit()
 ) ->
     {Children :: [ctx()], NewFileCtx :: ctx()}.
 get_file_children(FileCtx, UserCtx, Offset, Limit) ->
@@ -713,8 +672,8 @@ get_file_children(FileCtx, UserCtx, Offset, Limit) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: integer(),
-    Limit :: non_neg_integer(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
     Token :: undefined | datastore_links_iter:token()
 ) ->
     {Children :: [ctx()], NewToken :: datastore_links_iter:token(), NewFileCtx :: ctx()} |
@@ -728,8 +687,8 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_children(ctx(), user_ctx:ctx(),
-    Offset :: integer(),
-    Limit :: non_neg_integer(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
     Token :: undefined | datastore_links_iter:token(),
     StartId :: undefined | file_meta:name()
 ) ->
@@ -738,7 +697,7 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token) ->
 get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
     case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
-            {list_user_spaces(UserCtx, Offset, Limit), FileCtx};
+            {list_user_spaces(UserCtx, Offset, Limit, undefined), FileCtx};
         false ->
             {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
             SpaceId = get_space_id_const(FileCtx2),
@@ -757,26 +716,58 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns list of directory children bounded by specified AllowedChildren.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_children_whitelisted(ctx(), user_ctx:ctx(),
+    NonNegOffset :: file_meta:non_neg_offset(),
+    Limit :: file_meta:limit(),
+    ChildrenWhiteList :: [file_meta:name()]
+) ->
+    {Children :: [ctx()], NewFileCtx :: ctx()}.
+get_file_children_whitelisted(
+    FileCtx, UserCtx, NonNegOffset, Limit, ChildrenWhiteList
+) when NonNegOffset >= 0 ->
+    case is_user_root_dir_const(FileCtx, UserCtx) of
+        true ->
+            {list_user_spaces(UserCtx, NonNegOffset, Limit, ChildrenWhiteList), FileCtx};
+        false ->
+            {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
+            SpaceId = get_space_id_const(FileCtx2),
+            ShareId = get_share_id_const(FileCtx2),
+
+            {ok, ChildrenLinks} = file_meta:list_children_whitelisted(
+                FileDoc, NonNegOffset, Limit, ChildrenWhiteList
+            ),
+            ChildrenCtxs = lists:map(fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
+                new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
+            end, ChildrenLinks),
+            {ChildrenCtxs, FileCtx2}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns storage id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_id(ctx()) -> {storage:id(), ctx()}.
+-spec get_storage_id(ctx()) -> {od_storage:id(), ctx()}.
 get_storage_id(FileCtx) ->
     {#document{key = StorageId}, FileCtx2} = get_storage_doc(FileCtx),
     {StorageId, FileCtx2}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns storage document of file's space.
+%% Returns local storage_config document of file's space.
+%% @TODO VFS-5853 return here higher level storage record
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_doc(ctx()) -> {storage:doc(), ctx()}.
+-spec get_storage_doc(ctx()) -> {storage_config:doc(), ctx()}.
 get_storage_doc(FileCtx = #file_ctx{storage_doc = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
-    {ok, StorageDoc} = fslogic_storage:select_storage(SpaceId),
-    {StorageDoc, FileCtx#file_ctx{storage_doc = StorageDoc}};
-get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageDoc}) ->
-    {StorageDoc, FileCtx}.
+    {ok, StorageConfig} = fslogic_storage:select_storage(SpaceId),
+    {StorageConfig, FileCtx#file_ctx{storage_doc = StorageConfig}};
+get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageConfig}) ->
+    {StorageConfig, FileCtx}.
 
 
 %%--------------------------------------------------------------------
@@ -869,7 +860,7 @@ get_or_create_local_file_location_doc(FileCtx, IncludeBlocks) ->
             {undefined, FileCtx2};
         {false, FileCtx2} ->
             get_or_create_local_regular_file_location_doc(FileCtx2,
-                IncludeBlocks)
+                IncludeBlocks, true)
     end.
 
 %%--------------------------------------------------------------------
@@ -943,15 +934,29 @@ get_file_location_docs(FileCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file location docs.
+%% @equiv get_file_location_docs(FileCtx, GetLocationOpts, true)
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location_docs(ctx(), fslogic_location_cache:get_doc_opts()) ->
     {[file_location:doc()], ctx()}.
 % TODO VFS-4412 - export as _const function
 get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts) ->
-    {LocationIds, FileCtx2} = get_file_location_ids(FileCtx),
+    get_file_location_docs(FileCtx, GetLocationOpts, true).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file location docs.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location_docs(ctx(), fslogic_location_cache:get_doc_opts(), boolean()) ->
+    {[file_location:doc()], ctx()}.
+get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts, IncludeLocal) ->
+    {LocationIds0, FileCtx2} = get_file_location_ids(FileCtx),
     FileUuid = get_uuid_const(FileCtx),
+    LocationIds = case IncludeLocal of
+        true -> LocationIds0;
+        _ -> LocationIds0 -- [file_location:local_id(FileUuid)]
+    end,
     LocationDocs = lists:filtermap(fun(LocId) ->
         case fslogic_location_cache:get_location(LocId, FileUuid,
             GetLocationOpts) of
@@ -965,15 +970,54 @@ get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns file active permissions type, that is info which permissions
+%% are taken into account when checking authorization (acl if it is defined
+%% or posix otherwise).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_active_perms_type(ctx(), include_deleted | ignore_deleted) -> {file_meta:permissions_type(), ctx()}.
+get_active_perms_type(FileCtx = #file_ctx{file_doc = undefined}, GetMode) ->
+    {Doc, FileCtx2} = case GetMode of
+        include_deleted -> get_file_doc_including_deleted(FileCtx);
+        _ -> get_file_doc(FileCtx)
+    end,
+    get_active_perms_type_from_doc(Doc, FileCtx2);
+get_active_perms_type(FileCtx = #file_ctx{file_doc = Doc}, _) ->
+    get_active_perms_type_from_doc(Doc, FileCtx).
+
+-spec get_active_perms_type_from_doc(file_meta:doc(), ctx()) -> {file_meta:permissions_type(), ctx()}.
+get_active_perms_type_from_doc(#document{value = #file_meta{acl = []}}, FileCtx) ->
+    {posix, FileCtx};
+get_active_perms_type_from_doc(#document{value = #file_meta{}}, FileCtx) ->
+    {acl, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns file Access Control List.
 %% @end
 %%--------------------------------------------------------------------
--spec get_acl(ctx()) -> {undefined | acl:acl(), ctx()}.
-get_acl(FileCtx = #file_ctx{acl = undefined}) ->
-    Acl = acl:get(FileCtx),
-    {Acl, FileCtx#file_ctx{acl = Acl}};
-get_acl(FileCtx = #file_ctx{acl = Acl}) ->
-    {Acl, FileCtx}.
+-spec get_acl(ctx()) -> {acl:acl(), ctx()}.
+get_acl(FileCtx = #file_ctx{file_doc = #document{
+    value = #file_meta{acl = Acl}
+}}) ->
+    {Acl, FileCtx};
+get_acl(FileCtx) ->
+    {_, FileCtx2} = get_file_doc(FileCtx),
+    get_acl(FileCtx2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file Posix Mode.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_mode(ctx()) -> {file_meta:posix_permissions(), ctx()}.
+get_mode(FileCtx = #file_ctx{file_doc = #document{
+    value = #file_meta{mode = Mode}
+}}) ->
+    {Mode, FileCtx};
+get_mode(FileCtx) ->
+    {_, FileCtx2} = get_file_doc(FileCtx),
+    get_mode(FileCtx2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1043,24 +1087,6 @@ get_group_owner(FileCtx) ->
     {_, FileCtx2} = get_file_doc(FileCtx),
     get_group_owner(FileCtx2).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns local #storage_sync_info document for given FileCtx.
-%% @end
-%%-------------------------------------------------------------------
--spec get_storage_sync_info(ctx()) -> {storage_sync_info:doc() | undefined, ctx()}.
-get_storage_sync_info(FileCtx = #file_ctx{storage_sync_info = undefined}) ->
-    {FilePath, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    SpaceId = get_space_id_const(FileCtx2),
-    case storage_sync_info:get(FilePath, SpaceId) of
-        {error, _Reason} ->
-            {undefined, FileCtx2};
-        {ok, StorageSyncInfo} ->
-            {StorageSyncInfo, FileCtx2#file_ctx{storage_sync_info = StorageSyncInfo}}
-    end;
-get_storage_sync_info(FileCtx = #file_ctx{storage_sync_info = StorageSyncInfo}) ->
-    {StorageSyncInfo, FileCtx}.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1080,8 +1106,7 @@ is_file_ctx_const(_) ->
 %%--------------------------------------------------------------------
 -spec is_space_dir_const(ctx()) -> boolean().
 is_space_dir_const(#file_ctx{guid = Guid}) ->
-    SpaceId = (catch fslogic_uuid:space_dir_uuid_to_spaceid(file_id:guid_to_uuid(Guid))),
-    is_binary(SpaceId).
+    fslogic_uuid:is_space_dir_guid(Guid).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1114,17 +1139,6 @@ is_root_dir_const(#file_ctx{}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks if file has Access Control List defined.
-%% @end
-%%--------------------------------------------------------------------
--spec has_acl_const(ctx()) -> boolean().
-has_acl_const(FileCtx = #file_ctx{acl = undefined}) ->
-    acl:exists(FileCtx);
-has_acl_const(_) ->
-    true.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Checks if file exists.
 %% @end
 %%--------------------------------------------------------------------
@@ -1142,7 +1156,7 @@ file_exists_const(_) ->
 %%--------------------------------------------------------------------
 -spec is_in_user_space_const(ctx(), user_ctx:ctx()) -> boolean().
 is_in_user_space_const(FileCtx, UserCtx) ->
-    case is_root_dir_const(FileCtx) of
+    case is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             true;
         false ->
@@ -1193,73 +1207,33 @@ new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
 %% Generates canonical path
 %% @end
 %%--------------------------------------------------------------------
--spec generate_canonical_path(ctx()) -> [file_meta:name()].
+-spec generate_canonical_path(ctx()) -> {[file_meta:name()], ctx()}.
 generate_canonical_path(FileCtx) ->
-    case is_root_dir_const(FileCtx) of
-        true ->
-            [<<"/">>];
-        false ->
-            {ParentCtx, FileCtx2} = get_parent(FileCtx, undefined),
-            case is_space_dir_const(FileCtx2) of
-                true ->
-                    SpaceId = get_space_id_const(FileCtx2),
-                    generate_canonical_path(ParentCtx) ++ [SpaceId];
-                false ->
-                    {Name, _FileCtx3} = get_name_of_nonspace_file(FileCtx2),
-                    generate_canonical_path(ParentCtx) ++ [Name]
-            end
+    Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}, scope = SpaceId}, ParentValue, CalculationInfo]) ->
+        case fslogic_uuid:is_root_dir_uuid(Uuid) of
+            true ->
+                {ok, [<<"/">>], CalculationInfo};
+            false ->
+                case fslogic_uuid:is_space_dir_uuid(Uuid) of
+                    true ->
+                        {ok, [<<"/">>, SpaceId], CalculationInfo};
+                    false ->
+                        {ok, ParentValue ++ [Name], CalculationInfo}
+                end
+        end
+    end,
+    {#document{value = #file_meta{name = FileName, type = FileType}, scope = Space} = Doc, FileCtx2} =
+        get_file_doc_including_deleted(FileCtx),
+    CacheName = location_and_link_utils:get_cannonical_paths_cache_name(Space),
+    case FileType of
+        ?DIRECTORY_TYPE ->
+            {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),
+            {Path, FileCtx2};
+        _ ->
+            {ok, ParentDoc} = file_meta:get_parent(Doc),
+            {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
+            {Path ++ [FileName], FileCtx2}
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Generates Uuid based flat path. Uuid based path is for storages, which
-%% do not have POSIX style file paths (e.g. object stores) and
-%% do not provide rename on files on the storage without necessity
-%% to copy and delete.
-%% The paths have a flat 3-level tree namespace based on the first characters,
-%% e.g. "/SpaceId/A/B/C/ABCyasd7321r5ssasdd7asdsafdfvsd"
-%% @end
-%%--------------------------------------------------------------------
--spec generate_flat_path(ctx()) -> [file_meta:name()].
-generate_flat_path(FileCtx) ->
-    case is_root_dir_const(FileCtx) of
-        true ->
-            [<<"/">>];
-        false ->
-            {_, FileCtx2} = get_parent(FileCtx, undefined),
-            SpaceId = get_space_id_const(FileCtx2),
-            case is_space_dir_const(FileCtx2) of
-                true ->
-                    [<<"/">>, SpaceId];
-                false ->
-                    FileUuid = get_uuid_const(FileCtx2),
-                    FileUuidStr = binary_to_list(FileUuid),
-                    case length(FileUuidStr) > 3 of
-                        true ->
-                            [<<"/">>, SpaceId,
-                              list_to_binary(string:substr(FileUuidStr, 1, 1)),
-                              list_to_binary(string:substr(FileUuidStr, 2, 1)),
-                              list_to_binary(string:substr(FileUuidStr, 3, 1)),
-                              FileUuid];
-                        false ->
-                            [<<"/">>, SpaceId, <<"other">>, FileUuid]
-                    end
-            end
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns name of file that is not a space.
-%% @end
-%%--------------------------------------------------------------------
--spec get_name_of_nonspace_file(ctx()) -> {file_meta:name(), ctx()} | no_return().
-get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = undefined}) ->
-    {#document{value = #file_meta{name = Name}}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
-    {Name, FileCtx2#file_ctx{file_name = Name}};
-get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = FileName}) ->
-    {FileName, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1267,28 +1241,36 @@ get_name_of_nonspace_file(FileCtx = #file_ctx{file_name = FileName}) ->
 %% Returns local file location doc, creates it if it's not present
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_local_regular_file_location_doc(ctx(), boolean()) ->
+-spec get_or_create_local_regular_file_location_doc(ctx(), boolean(), boolean()) ->
     {file_location:doc() | undefined, ctx()}.
-get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks) ->
+get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks, true) ->
     case get_local_file_location_doc(FileCtx, IncludeBlocks) of
         {undefined, FileCtx2} ->
-            {CreatedLocation, FileCtx3} =
-                location_and_link_utils:get_new_file_location_doc(FileCtx2, false, false),
-            {LocationDocs, FileCtx4} = get_file_location_docs(FileCtx3),
-            lists:foreach(fun(ChangedLocation) ->
-                replica_dbsync_hook:on_file_location_change(FileCtx4, ChangedLocation)
-            end, LocationDocs),
-            FileUuid = get_uuid_const(FileCtx),
-            {
-                #document{
-                    key = file_location:local_id(FileUuid),
-                    value = CreatedLocation
-                },
-                FileCtx4
-            };
+            get_or_create_local_regular_file_location_doc(FileCtx2, IncludeBlocks, false);
         {Location, FileCtx2} ->
             {Location, FileCtx2}
-    end.
+    end;
+get_or_create_local_regular_file_location_doc(FileCtx, _IncludeBlocks, _CheckLocationExists) ->
+    {CreatedLocation, FileCtx2, New} =
+        location_and_link_utils:get_new_file_location_doc(FileCtx, false, false),
+    FileCtx4 = case New of
+        true ->
+            {LocationDocs, FileCtx3} = get_file_location_docs(FileCtx2, true, false),
+            lists:foreach(fun(ChangedLocation) ->
+                replica_dbsync_hook:on_file_location_change(FileCtx3, ChangedLocation)
+            end, LocationDocs),
+            FileCtx3;
+        _ ->
+            FileCtx2
+    end,
+    FileUuid = get_uuid_const(FileCtx),
+    {
+        #document{
+            key = file_location:local_id(FileUuid),
+            value = CreatedLocation
+        },
+        FileCtx4
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1299,7 +1281,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks) ->
 -spec get_file_size_from_remote_locations(file_ctx:ctx() | file_meta:uuid()) ->
     {Size :: non_neg_integer(), file_ctx:ctx()}.
 get_file_size_from_remote_locations(FileCtx) ->
-    {LocationDocs, FileCtx2} = get_file_location_docs(FileCtx),
+    {LocationDocs, FileCtx2} = get_file_location_docs(FileCtx, true, false),
     case LocationDocs of
         [] ->
             {0, FileCtx2};
@@ -1333,14 +1315,23 @@ get_file_size_from_remote_locations(FileCtx) ->
     end.
 
 %% @private
--spec list_user_spaces(user_ctx:ctx(), Offset :: non_neg_integer(),
-    Limit :: non_neg_integer()) -> Children :: [ctx()].
-list_user_spaces(UserCtx, Offset, Limit) ->
+-spec list_user_spaces(user_ctx:ctx(), file_meta:offset(), file_meta:limit(),
+    SpaceWhiteList :: undefined | [od_space:id()]) -> Children :: [ctx()].
+list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
-    case Offset < length(Spaces) of
+    #document{value = #od_user{eff_spaces = AllSpaces}} = user_ctx:get_user(UserCtx),
+
+    FilteredSpaces = case SpaceWhiteList of
+        undefined ->
+            AllSpaces;
+        _ ->
+            lists:filter(fun(Space) ->
+                lists:member(Space, SpaceWhiteList)
+            end, AllSpaces)
+    end,
+    case Offset < length(FilteredSpaces) of
         true ->
-            SpacesChunk = lists:sublist(Spaces, Offset + 1, Limit),
+            SpacesChunk = lists:sublist(FilteredSpaces, Offset + 1, Limit),
             Children = lists:map(fun(SpaceId) ->
                 {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
                 SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),

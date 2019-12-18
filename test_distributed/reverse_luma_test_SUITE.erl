@@ -16,7 +16,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2, init_per_suite/1, end_per_suite/1]).
@@ -94,7 +94,7 @@ all() ->
 -define(STORAGE_ID, <<"test_storage_id">>).
 -define(STORAGE, ?STORAGE(?POSIX_HELPER_NAME, ?LUMA_CONFIG)).
 -define(STORAGE(LumaConfig), ?STORAGE(?POSIX_HELPER_NAME, LumaConfig)).
--define(STORAGE(HelperName, LumaConfig), #storage{
+-define(STORAGE(HelperName, LumaConfig), #storage_config{
     name = <<"test_storage">>,
     helpers = [#helper{name = HelperName}],
     luma_config = LumaConfig
@@ -360,7 +360,7 @@ init_per_testcase(Case, Config) when
     Case =:= get_user_id_on_posix_storage_should_query_reverse_luma_once ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy, storage], [passthrough]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy, storage_config], [passthrough]),
     mock_resolve_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
@@ -373,7 +373,7 @@ init_per_testcase(Case, Config) when
     Case =:= get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy, storage], [passthrough]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy, storage_config], [passthrough]),
     mock_resolve_acl_user_post(Worker,
         {ok, 200, [], str_utils:format_bin("{
         \"idp\": \"~s\",
@@ -420,7 +420,7 @@ init_per_testcase(Case, Config) when
     ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy, storage, provider_logic], [passthrough]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy, storage_config, provider_logic], [passthrough]),
     mock_resolve_group_post(Worker,
         {
             ok, 200, [], str_utils:format_bin("{
@@ -440,7 +440,7 @@ init_per_testcase(Case, Config) when
     Case =:= get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_once->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy, storage], [passthrough]),
+    test_utils:mock_new(Worker, [reverse_luma_proxy, storage_config], [passthrough]),
     mock_resolve_acl_group_post(Worker,
         {
             ok, 200, [], str_utils:format_bin("{

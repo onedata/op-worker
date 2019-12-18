@@ -47,8 +47,8 @@ start_rtransfer() ->
     prepare_graphite_opts(),
     {ok, RtransferPid} = rtransfer_link_sup:start_link(no_cluster),
     rtransfer_link:set_provider_nodes([node()], ?MODULE),
-    StorageDocs = get_storages(10),
-    lists:foreach(fun add_storage/1, StorageDocs),
+    StorageConfigs = get_storages(10),
+    lists:foreach(fun add_storage/1, StorageConfigs),
     {ok, RtransferPid}.
 
 %%--------------------------------------------------------------------
@@ -58,6 +58,7 @@ start_rtransfer() ->
 %% but then resumed.
 %% @end
 %%--------------------------------------------------------------------
+-spec restart_link() -> ok | {error, not_running}.
 restart_link() ->
     case whereis(rtransfer_link_port) of
         undefined -> {error, not_running};
@@ -112,7 +113,7 @@ get_nodes(ProviderId) ->
     {ok, Handle :: term()} | {error, Reason :: any()}.
 open(FileGUID, _OpenFlag) ->
     % TODO vfs-4412 - delete second arg and change name
-    sfm_utils:create_delayed_storage_file(file_ctx:new_by_guid(FileGUID)),
+    sd_utils:create_delayed_storage_file(file_ctx:new_by_guid(FileGUID)),
     {ok, undefined}.
 
 %%--------------------------------------------------------------------
@@ -141,7 +142,7 @@ close(_Handle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec auth_request(TransferData :: binary(), ProviderId :: binary()) ->
-                          false | {storage:id(), helpers:file_id(), fslogic_worker:file_guid()}.
+                          false | {od_storage:id(), helpers:file_id(), fslogic_worker:file_guid()}.
 auth_request(TransferData, ProviderId) ->
     try
         %% TransferId is not verified because provider could've created the transfer
@@ -206,9 +207,9 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
 %% Adds storage to rtransfer.
 %% @end
 %%--------------------------------------------------------------------
--spec add_storage(storage:doc()) -> any().
-add_storage(#document{key = StorageId, value = #storage{}} = Storage) ->
-    Helper = hd(storage:get_helpers(Storage)),
+-spec add_storage(storage_config:doc()) -> any().
+add_storage(#document{key = StorageId, value = #storage_config{}} = Storage) ->
+    Helper = hd(storage_config:get_helpers(Storage)),
     HelperParams = helper:get_params(Helper, helper:get_admin_ctx(Helper)),
     HelperName = helper:get_name(HelperParams),
     HelperArgs = maps:to_list(helper:get_args(HelperParams)),
@@ -401,11 +402,11 @@ fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum) ->
 %% Get storages list. Retry if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storages(non_neg_integer()) -> [storage:doc()] | {error, term()}.
+-spec get_storages(non_neg_integer()) -> [storage_config:doc()] | {error, term()}.
 get_storages(Num) ->
-    case {storage:list(), Num} of
-        {{ok, StorageDocs}, _} ->
-            StorageDocs;
+    case {storage_config:list(), Num} of
+        {{ok, StorageConfigs}, _} ->
+            StorageConfigs;
         {Error, 0} ->
             Error;
         _ ->

@@ -23,7 +23,8 @@
     mixed_get_test/1,
     subscribe_test/1,
     convenience_functions_test/1,
-    harvest_metadata_test/1
+    harvest_metadata_test/1,
+    confined_access_token_test/1
 ]).
 
 all() -> ?ALL([
@@ -32,7 +33,8 @@ all() -> ?ALL([
     mixed_get_test,
     subscribe_test,
     convenience_functions_test,
-    harvest_metadata_test
+    harvest_metadata_test,
+    confined_access_token_test
 ]).
 
 %%%===================================================================
@@ -407,6 +409,29 @@ harvest_metadata_test(Config) ->
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
+
+
+confined_access_token_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    {ok, Objectid} = file_id:guid_to_objectid(file_id:pack_guid(<<"123">>, ?SPACE_1)),
+    Caveat = #cv_data_objectid{whitelist = [Objectid]},
+    AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), rest, allow_data_access_caveats
+    ),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    % Request should be denied before contacting Onezone because the space in
+    % objectid is different than requested
+    ?assertMatch(
+        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
+        rpc:call(Node, space_logic, get, [TokenAuth, ?SPACE_2])
+    ),
+    % Nevertheless, GraphCalls should be increased as TokenAuth was verified to
+    % retrieve caveats
+    ?assertEqual(GraphCalls+1, logic_tests_common:count_reqs(Config, graph)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

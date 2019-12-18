@@ -34,7 +34,8 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    generated_key => false
+    generated_key => false,
+    memory_copies => all
 }).
 
 %%%===================================================================

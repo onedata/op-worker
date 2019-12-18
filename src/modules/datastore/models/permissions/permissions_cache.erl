@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model used for caching permissions to files (used by check_permissions module).
+%%% Model used for caching permissions to files (used by fslogic_authz module).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(permissions_cache).
@@ -16,11 +16,10 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("cluster_worker/include/elements/task_manager/task_manager.hrl").
 
 %% API
 -export([save/1, get/1, exists/1, delete/1, update/2, create/1, create_or_update/2]).
--export([check_permission/1, cache_permission/2, invalidate/0]).
+-export([check_permission/1, cache_permission/2, invalidate/0, invalidate_on_node/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -36,7 +35,8 @@
 -define(CTX, #{
     model => ?MODULE,
     disc_driver => undefined,
-    volatile => true
+    volatile => true,
+    routing => local
 }).
 
 %% First helper module to be used
@@ -171,6 +171,16 @@ cache_permission(Rule, Value) ->
 %%--------------------------------------------------------------------
 -spec invalidate() -> ok.
 invalidate() ->
+    rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, invalidate_on_node, []),
+    ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears all permissions from cache on node.
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_on_node() -> ok.
+invalidate_on_node() ->
     CurrentModel = case permissions_cache:get(?STATUS_UUID) of
         {ok, #document{value = #permissions_cache{value = {Model, _}}}} ->
             Model;
@@ -184,10 +194,11 @@ invalidate() ->
         _ ->
             case start_clearing(CurrentModel) of
                 {ok, _} ->
-                    task_manager:start_task(fun() ->
+                    spawn(fun() ->
                         erlang:apply(CurrentModel, delete_all, []),
                         ok = stop_clearing(CurrentModel)
-                    end, ?CLUSTER_LEVEL);
+                    end),
+                    ok;
                 {error, parallel_cleaning} ->
                     ok
             end
