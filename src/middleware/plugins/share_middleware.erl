@@ -249,7 +249,7 @@ get(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = 
 
 get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
     space = SpaceId,
-    root_file = RootFile,
+    root_file = RootFileGuid,
     name = ShareName,
     public_url = SharePublicUrl,
     handle = Handle
@@ -258,7 +258,7 @@ get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
         <<"shareId">> => ShareId,
         <<"name">> => ShareName,
         <<"publicUrl">> => SharePublicUrl,
-        <<"rootFile">> => RootFile,
+        <<"rootFileId">> => RootFileGuid,
         <<"spaceId">> => SpaceId,
         <<"handleId">> => utils:ensure_defined(Handle, undefined, null)
     }}.

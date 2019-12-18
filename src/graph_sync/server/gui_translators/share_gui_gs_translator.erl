@@ -34,16 +34,18 @@ translate_value(#gri{aspect = shared_dir}, ShareId) ->
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
-translate_resource(#gri{aspect = instance, scope = private}, ShareData) ->
-    maps:update_with(
-        <<"rootFile">>,
-        fun(RootFileGuid) ->
-            gri:serialize(#gri{
-                type = op_file,
-                id = RootFileGuid,
-                aspect = instance,
-                scope = private
-            })
-        end,
-        ShareData
-    ).
+translate_resource(#gri{aspect = instance, scope = private}, #{
+    <<"name">> := ShareName,
+    <<"publicUrl">> := SharePublicUrl,
+    <<"rootFileId">> := RootFileGuid
+}) ->
+    #{
+        <<"name">> => ShareName,
+        <<"publicUrl">> => SharePublicUrl,
+        <<"rootFile">> => gri:serialize(#gri{
+            type = op_file,
+            id = RootFileGuid,
+            aspect = instance,
+            scope = private
+        })
+    }.
