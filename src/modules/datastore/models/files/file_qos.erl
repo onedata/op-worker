@@ -205,7 +205,7 @@ get_assigned_entries(EffectiveFileQos) ->
     EffectiveFileQos#effective_file_qos.assigned_entries.
 
 
--spec get_assigned_entries_for_storage(od_storage:id(), effective_file_qos()) ->
+-spec get_assigned_entries_for_storage(effective_file_qos(), od_storage:id()) ->
     [qos_entry:id()].
 get_assigned_entries_for_storage(EffectiveFileQos, StorageId) ->
     maps:get(StorageId, get_assigned_entries(EffectiveFileQos), []).

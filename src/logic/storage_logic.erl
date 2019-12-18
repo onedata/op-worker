@@ -178,9 +178,10 @@ get_qos_parameters_of_local_storage(StorageId) ->
 %%--------------------------------------------------------------------
 -spec get_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> od_storage:qos_parameters().
 get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
-    {ok, #document{value = #od_storage{
-        qos_parameters = QosParameters}}} = get_shared_data(StorageId, SpaceId),
-    QosParameters.
+    case get_shared_data(StorageId, SpaceId) of
+        {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} -> QosParameters;
+        Error -> throw(Error)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -188,12 +189,11 @@ get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
 %% Get provider id of storage supporting given space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_provider_of_remote_storage(od_storage:id(), od_space:id()) ->
-    {ok, od_provider:id()} | errors:error().
+-spec get_provider_of_remote_storage(od_storage:id(), od_space:id()) -> od_provider:id().
 get_provider_of_remote_storage(StorageId, SpaceId) ->
     case get_shared_data(StorageId, SpaceId) of
-        {ok, #document{value = #od_storage{provider = Provider}}} -> {ok, Provider};
-        Error -> Error
+        {ok, #document{value = #od_storage{provider = Provider}}} -> Provider;
+        Error -> throw(Error)
     end.
 
 

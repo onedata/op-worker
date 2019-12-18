@@ -403,7 +403,7 @@ qos_that_cannot_be_fulfilled_spec(Path, WorkerAddingQos, AssertionWorkers, _Prov
                 file_key = {path, Path},
                 qos_expression_in_rpn = [<<"country=PL">>, <<"country=PT">>, <<"|">>, <<"type=disk">>, <<"-">>],
                 replicas_num = 1,
-                possibility_check = {impossibl, ?GET_DOMAIN_BIN(WorkerAddingQos)}
+                possibility_check = {impossible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
         ],
         expected_file_qos = [

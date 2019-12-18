@@ -269,21 +269,21 @@ get_expression(QosEntry) ->
     {ok, QosEntry#qos_entry.expression}.
 
 
--spec get_replicas_num(record()) -> {ok, replicas_num()}.
+-spec get_replicas_num(doc() | record()) -> {ok, replicas_num()}.
 get_replicas_num(#document{value = QosEntry}) ->
     get_replicas_num(QosEntry);
 get_replicas_num(QosEntry) ->
     {ok, QosEntry#qos_entry.replicas_num}.
 
 
--spec get_file_uuid(record()) -> {ok, file_meta:uuid()}.
+-spec get_file_uuid(doc() | record()) -> {ok, file_meta:uuid()}.
 get_file_uuid(#document{value = QosEntry}) ->
     get_file_uuid(QosEntry);
 get_file_uuid(QosEntry) ->
     {ok, QosEntry#qos_entry.file_uuid}.
 
 
--spec get_traverse_reqs(record()) -> {ok, qos_traverse_req:traverse_reqs()}.
+-spec get_traverse_reqs(doc() | record()) -> {ok, qos_traverse_req:traverse_reqs()}.
 get_traverse_reqs(#document{value = QosEntry}) ->
     get_traverse_reqs(QosEntry);
 get_traverse_reqs(QosEntry) ->
@@ -416,7 +416,7 @@ split_traverse_reqs(AllTraverseReqs, SpaceId) ->
     maps:fold(fun(TaskId, TraverseReq, {LocalTraverseReqs, RemoteTraverseReqs}) ->
         StorageId = qos_traverse_req:get_storage(TraverseReq),
         case storage:get_provider_of_remote_storage(StorageId, SpaceId) of
-            ProviderId -> {[TaskId | LocalTraverseReqs], RemoteTraverseReqs};
+            P when P == ProviderId -> {[TaskId | LocalTraverseReqs], RemoteTraverseReqs};
             _ -> {LocalTraverseReqs, [TaskId | RemoteTraverseReqs]}
         end
     end, {[], []}, AllTraverseReqs).

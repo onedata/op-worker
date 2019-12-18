@@ -278,7 +278,7 @@ get_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageI
 %% retrieved from storage details shared between providers through given space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_provider_of_remote_storage(od_storage:id(), od_space:id()) -> oneprovider:id().
+-spec get_provider_of_remote_storage(od_storage:id(), od_space:id()) -> od_provider:id().
 get_provider_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
     storage_logic:get_provider_of_remote_storage(StorageId, SpaceId).
 

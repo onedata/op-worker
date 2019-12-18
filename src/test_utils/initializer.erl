@@ -360,7 +360,6 @@ teardown_session(Worker, Config) ->
 -spec setup_storage(Config :: list()) -> list().
 setup_storage(Config) ->
     DomainWorkers = get_different_domain_workers(Config),
-    Workers = ?config(op_worker_nodes, Config),
     setup_storage(DomainWorkers, Config).
 
 %%--------------------------------------------------------------------
@@ -387,8 +386,8 @@ setup_storage([Worker | Rest], Config) ->
     StorageName = <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
     {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, false, undefined, false]),
     rpc:call(Worker, storage, on_storage_created, [StorageId]),
-    [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     storage_mock_setup(Worker, #{?GET_DOMAIN_BIN(Worker) => #{StorageId => #{}}}),
+    [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).
 
 %%--------------------------------------------------------------------
@@ -679,10 +678,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     HarvestersSetup = proplists:get_value(<<"harvesters">>, GlobalSetup, []),
-    StoragesSetup = case proplists:get_value(<<"storages">>, GlobalSetup) of
-        undefined -> [];
-        S -> S
-    end,
+    StoragesSetup = proplists:get_value(<<"storages">>, GlobalSetup, []),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
 
     lists:foreach(fun({_, SpaceConfig}) ->
@@ -1198,7 +1194,7 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
                     end, [], SpacesToStorages) ++
                     lists:filtermap(fun({StorageName, P}) when P == PID -> {true, StorageName};
                                        (_) -> false
-                    end, CustomStorages) ++ maps:keys(maps:get(PID, StoragesSetupMap, []))),
+                    end, CustomStorages) ++ maps:keys(maps:get(PID, StoragesSetupMap, #{}))),
                     longitude = 0.0,
                     latitude = 0.0
                 }}}

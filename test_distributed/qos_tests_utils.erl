@@ -233,7 +233,10 @@ wait_for_qos_fulfilment_in_parallel(Config, QosToWaitForList, QosNameIdMapping, 
         end, ExpectedQosEntries),
         ExpectedIsPossible = case LookupExpectedQosEntry of
             [ExpectedQosEntry] ->
-                ExpectedQosEntry#expected_qos_entry.possibility_check =/= impossible;
+                case ExpectedQosEntry#expected_qos_entry.possibility_check of
+                    {possible, _} -> true;
+                    {impossible, _} -> false
+                end;
             [] ->
                 true
         end,
@@ -558,7 +561,7 @@ mock_space_storages(Config, StorageList) ->
 
 mock_storage_qos_parameters(Workers, StorageQos) ->
     test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(StorageId, _SpaceId) ->
-        {ok, maps:get(StorageId, StorageQos, #{})}
+        maps:get(StorageId, StorageQos, #{})
     end).
 
 

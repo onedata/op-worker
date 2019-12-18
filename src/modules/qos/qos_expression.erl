@@ -234,7 +234,7 @@ eval_rpn(Operand, Stack, AvailableStorage, SpaceId) ->
 -spec filter_storage(binary(), binary(), sets:set(od_storage:id()), od_space:id()) -> sets:set(od_storage:id()).
 filter_storage(Key, Val, StorageSet, SpaceId) ->
     sets:filter(fun (StorageId) ->
-        {ok, StorageQosParameters} = storage:get_qos_parameters_of_remote_storage(StorageId, SpaceId),
+        StorageQosParameters = storage:get_qos_parameters_of_remote_storage(StorageId, SpaceId),
         case maps:find(Key, StorageQosParameters) of
             {ok, Val} ->
                 true;
