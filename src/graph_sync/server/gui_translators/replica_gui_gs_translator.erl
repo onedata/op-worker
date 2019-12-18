@@ -21,7 +21,10 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([translate_resource/2]).
+-export([
+    translate_value/2,
+    translate_resource/2
+]).
 
 -type chunks_bar_entry() :: {BarNum :: non_neg_integer(), Fill :: non_neg_integer()}.
 -type chunks_bar_data() :: [chunks_bar_entry()].
@@ -37,6 +40,15 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = As}, TransferId) when
+    As =:= instance;
+    As =:= replicate_by_view;
+    As =:= evict_by_view
+->
+    #{<<"transferId">> => TransferId}.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

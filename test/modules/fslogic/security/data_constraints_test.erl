@@ -18,6 +18,7 @@
 -include_lib("ctool/include/aai/caveats.hrl").
 
 
+-define(CV_READONLY, #cv_data_readonly{}).
 -define(CV_PATH(__PATHS), #cv_data_path{whitelist = __PATHS}).
 -define(CV_OBJECTID(__OBJECTIDS), #cv_data_objectid{whitelist = __OBJECTIDS}).
 
@@ -131,7 +132,7 @@ get_test_() ->
 
     [
         ?_assertEqual(
-            {ok, {constraints, any, any}},
+            {ok, {constraints, any, any, false}},
             data_constraints:get([])
         ),
         ?_assertEqual(
@@ -143,17 +144,21 @@ get_test_() ->
             data_constraints:get([?CV_OBJECTID([])])
         ),
         ?_assertEqual(
-            {ok, {constraints, any, [[Guid1, Guid2]]}},
+            {ok, {constraints, any, [[Guid1, Guid2]], false}},
             data_constraints:get([?CV_OBJECTID([ObjectId1, ObjectId2])])
         ),
         ?_assertEqual(
-            {ok, {constraints, [<<"/z/x/c/d/e">>], [[Guid2], [Guid1]]}},
+            {ok, {constraints, [<<"/z/x/c/d/e">>], [[Guid2], [Guid1]], false}},
             data_constraints:get([
                 ?CV_PATH([<<"/q/w/e">>, <<"/z/x/c">>]),
                 ?CV_OBJECTID([ObjectId1]),
                 ?CV_PATH([<<"/a/s/d">>, <<"/z/x/c/d/e">>]),
                 ?CV_OBJECTID([ObjectId2])
             ])
+        ),
+        ?_assertEqual(
+            {ok, {constraints, any, any, true}},
+            data_constraints:get([?CV_READONLY])
         )
     ].
 

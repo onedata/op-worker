@@ -36,6 +36,8 @@
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = rerun}, TransferId) ->
+    #{<<"transferId">> => TransferId};
 translate_value(#gri{aspect = throughput_charts}, Charts) ->
     Charts.
 

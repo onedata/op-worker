@@ -119,7 +119,7 @@ copy_file(SessId, #file_attr{guid = SourceGuid, mode = Mode}, TargetParentGuid, 
 -spec copy_file_content(lfm:handle(), lfm:handle(), non_neg_integer()) ->
     {ok, lfm:handle(), lfm:handle()} | {error, term()}.
 copy_file_content(SourceHandle, TargetHandle, Offset) ->
-    case lfm:read(SourceHandle, Offset, ?COPY_BUFFER_SIZE) of
+    case lfm:check_size_and_read(SourceHandle, Offset, ?COPY_BUFFER_SIZE) of
         {ok, NewSourceHandle, <<>>} ->
             {ok, NewSourceHandle, TargetHandle};
         {ok, NewSourceHandle, Data} ->

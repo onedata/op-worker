@@ -47,7 +47,7 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
 
 -type doc() :: datastore:doc().
 -type diff() :: datastore_doc:diff(file_meta()).
@@ -238,15 +238,15 @@ get(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_including_deleted(uuid()) -> {ok, doc()} | {error, term()}.
-get_including_deleted(?ROOT_DIR_UUID) ->
+get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
     {ok, #document{
-        key = ?ROOT_DIR_UUID,
+        key = ?GLOBAL_ROOT_DIR_UUID,
         value = #file_meta{
-            name = ?ROOT_DIR_NAME,
+            name = ?GLOBAL_ROOT_DIR_NAME,
             is_scope = true,
             mode = 8#111,
             owner = ?ROOT_USER_ID,
-            parent_uuid = ?ROOT_DIR_UUID
+            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     }};
 get_including_deleted(FileUuid) ->
@@ -658,7 +658,7 @@ get_ancestors(FileUuid) ->
         {ok, #document{key = Key}} = file_meta:get(FileUuid),
         {ok, get_ancestors2(Key, [])}
     end).
-get_ancestors2(?ROOT_DIR_UUID, Acc) ->
+get_ancestors2(?GLOBAL_ROOT_DIR_UUID, Acc) ->
     Acc;
 get_ancestors2(FileUuid, Acc) ->
     {ok, ParentUuid} = get_parent_uuid({uuid, FileUuid}),
@@ -706,7 +706,7 @@ setup_onedata_user(UserId, EffSpaces) ->
             end, EffSpaces),
 
             FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
-            case create({uuid, ?ROOT_DIR_UUID},
+            case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
                 #document{
                     key = FileUuid,
                     value = #file_meta{
@@ -715,7 +715,7 @@ setup_onedata_user(UserId, EffSpaces) ->
                         mode = 8#1755,
                         owner = ?ROOT_USER_ID,
                         is_scope = true,
-                        parent_uuid = ?ROOT_DIR_UUID
+                        parent_uuid = ?GLOBAL_ROOT_DIR_UUID
                     }
                 })
             of
@@ -781,10 +781,10 @@ make_space_exist(SpaceId) ->
             name = SpaceId, type = ?DIRECTORY_TYPE,
             mode = ?DEFAULT_SPACE_DIR_MODE,
             owner = ?ROOT_USER_ID, is_scope = true,
-            parent_uuid = ?ROOT_DIR_UUID
+            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     },
-    case file_meta:create({uuid, ?ROOT_DIR_UUID}, FileDoc) of
+    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
         {ok, _} ->
             TimesDoc = #document{
                 key = SpaceDirUuid,
@@ -794,7 +794,8 @@ make_space_exist(SpaceId) ->
             case times:save(TimesDoc) of
                 {ok, _} -> ok;
                 {error, already_exists} -> ok
-            end;
+            end,
+            emit_space_dir_created(SpaceDirUuid, SpaceId);
         {error, already_exists} ->
             ok
     end.
@@ -1084,6 +1085,20 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
             {error, Reason}
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends event about space dir creation
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: datastore:key()) -> ok | no_return().
+emit_space_dir_created(DirUuid, SpaceId) ->
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
+    #fuse_response{fuse_response = FileAttr} =
+        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_USER_ID), FileCtx, false, false),
+    FileAttr2 = FileAttr#file_attr{size = 0},
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -1333,3 +1348,27 @@ upgrade_record(8, {
     {9, {?MODULE, Name, Type, Mode, ACL, Owner, GroupOwner, IsScope,
         ProviderId, Shares, Deleted, ParentUuid
     }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function called when saving changes from other providers (checks conflicts: local doc vs. remote changes).
+%% It is used to check if file has been renamed remotely to send appropriate event.
+%% TODO - VFS-5962 - delete when event emission is possible in dbsync_events.
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve_conflict(datastore_model:ctx(), doc(), doc()) -> default.
+resolve_conflict(_Ctx, #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}},
+    #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}) ->
+    case NewName =/= PrevName of
+        true ->
+            spawn(fun() ->
+                FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid)),
+                OldParentGuid = fslogic_uuid:uuid_to_guid(PrevParentUuid),
+                NewParentGuid = fslogic_uuid:uuid_to_guid(NewParentUuid),
+                fslogic_event_emitter:emit_file_renamed_no_exclude(FileCtx, OldParentGuid, NewParentGuid, NewName)
+            end);
+        _ ->
+            ok
+    end,
+
+    default.

@@ -164,12 +164,12 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = transfers_active_channels
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_charts, _}}}) -> #{
     required => #{
-        <<"transferType">> => {binary, [
+        <<"transfer_type">> => {binary, [
             ?JOB_TRANSFERS_TYPE,
             ?ON_THE_FLY_TRANSFERS_TYPE,
             ?ALL_TRANSFERS_TYPE
         ]},
-        <<"chartsType">> => {binary, [
+        <<"charts_type">> => {binary, [
             ?MINUTE_PERIOD,
             ?HOUR_PERIOD,
             ?DAY_PERIOD,
@@ -550,8 +550,8 @@ get(#op_req{data = Data, gri = #gri{
         <<"undefined">> -> undefined;
         _ -> ProviderId
     end,
-    TransferType = maps:get(<<"transferType">>, Data),
-    ChartsType = maps:get(<<"chartsType">>, Data),
+    TransferType = maps:get(<<"transfer_type">>, Data),
+    ChartsType = maps:get(<<"charts_type">>, Data),
     TimeWindow = transfer_histograms:period_to_time_window(ChartsType),
 
     % Some functions from transfer_histograms module require specifying

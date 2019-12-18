@@ -16,7 +16,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_root_dir_uuid/1, is_space_dir_uuid/1, is_space_dir_guid/1]).
+-export([is_root_dir_uuid/1, is_user_root_dir_uuid/1, is_space_dir_uuid/1, is_space_dir_guid/1]).
 -export([user_root_dir_uuid/1, user_root_dir_guid/1, root_dir_guid/0]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, spaceid_to_space_dir_guid/1]).
@@ -31,13 +31,22 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns true if given uuid represents user root dir.
+%% Returns true if given uuid represents user root dir or root dir.
 %% @end
 %%--------------------------------------------------------------------
 -spec is_root_dir_uuid(FileUuid :: file_meta:uuid()) -> boolean().
-is_root_dir_uuid(?ROOT_DIR_UUID) ->
+is_root_dir_uuid(?GLOBAL_ROOT_DIR_UUID) ->
     true;
 is_root_dir_uuid(FileUuid) ->
+    is_user_root_dir_uuid(FileUuid).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns true if given uuid represents user root dir.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_user_root_dir_uuid(FileUuid :: file_meta:uuid()) -> boolean().
+is_user_root_dir_uuid(FileUuid) ->
     case FileUuid of
         <<?USER_ROOT_PREFIX, _UserId/binary>> ->
             true;
@@ -51,7 +60,7 @@ is_root_dir_uuid(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec root_dir_guid() -> fslogic_worker:file_guid().
 root_dir_guid() ->
-    file_id:pack_guid(?ROOT_DIR_UUID, ?ROOT_DIR_VIRTUAL_SPACE_ID).
+    file_id:pack_guid(?GLOBAL_ROOT_DIR_UUID, ?ROOT_DIR_VIRTUAL_SPACE_ID).
 
 %%--------------------------------------------------------------------
 %% @doc Returns Uuid of user's root directory.
@@ -155,7 +164,7 @@ space_dir_uuid_to_spaceid(<<?SPACE_ROOT_PREFIX, SpaceId/binary>>) ->
 gen_path(Entry, SessionId, Tokens) ->
     {ok, #document{key = Uuid, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
     case file_meta:get_parent(Doc) of
-        {ok, #document{key = ?ROOT_DIR_UUID}} ->
+        {ok, #document{key = ?GLOBAL_ROOT_DIR_UUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Uuid),
             {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
