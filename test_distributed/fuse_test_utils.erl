@@ -281,7 +281,7 @@ connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
         RM
     ),
 
-    SessId = datastore_key:new_from_digest({fuse, Nonce}),
+    SessId = datastore_key:new_from_digest([<<"fuse">>, Nonce]),
     ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.
 

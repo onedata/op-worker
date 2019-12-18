@@ -48,7 +48,7 @@
 -spec reuse_or_create_fuse_session(Nonce :: binary(), aai:subject(),
     session:auth()) -> {ok, session:id()} | error().
 reuse_or_create_fuse_session(Nonce, Identity, Auth) ->
-    SessId = datastore_key:new_from_digest({fuse, Nonce}),
+    SessId = datastore_key:new_from_digest([<<"fuse">>, Nonce]),
     reuse_or_create_session(SessId, fuse, Identity, Auth).
 
 
@@ -103,7 +103,7 @@ reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
 -spec reuse_or_create_rest_session(aai:subject(), session:auth()) ->
     {ok, session:id()} | error().
 reuse_or_create_rest_session(?SUB(user, UserId) = Identity, Auth) ->
-    SessId = datastore_key:new_from_digest({rest, Auth}),
+    SessId = datastore_key:new_from_digest([<<"rest">>, Auth]),
     case user_logic:exists(?ROOT_SESS_ID, UserId) of
         true ->
             reuse_or_create_session(SessId, rest, Identity, Auth);
@@ -120,7 +120,7 @@ reuse_or_create_rest_session(?SUB(user, UserId) = Identity, Auth) ->
 -spec reuse_or_create_gui_session(aai:subject(), session:auth()) ->
     {ok, session:id()} | error().
 reuse_or_create_gui_session(Identity, Auth) ->
-    SessId = datastore_key:new_from_digest({gui, Auth}),
+    SessId = datastore_key:new_from_digest([<<"gui">>, Auth]),
     reuse_or_create_session(SessId, gui, Identity, Auth).
 
 
