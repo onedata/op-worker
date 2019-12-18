@@ -593,7 +593,7 @@ periodical_spaces_autocleaning_check() ->
         {ok, SpaceIds} ->
             MyNode = node(),
             lists:foreach(fun(SpaceId) ->
-                case consistent_hashing:get_node(SpaceId) of
+                case datastore_key:responsible_node(SpaceId) of
                     MyNode -> autocleaning_api:maybe_check_and_start_autocleaning(SpaceId);
                     _ -> ok
                 end

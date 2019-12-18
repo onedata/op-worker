@@ -323,7 +323,7 @@ import_file_unsafe(StorageFileCtx, FileUuid, Info = #{parent_ctx := ParentCtx}) 
     {OwnerId, StorageFileCtx3} = get_owner_id(StorageFileCtx2, StorageId),
     {GroupId, StorageFileCtx4} = get_group_owner_id(StorageFileCtx3, SpaceId, StorageId),
     {FileUuid2, CreateLinks} = case FileUuid =:= undefined of
-        true -> {datastore_utils:gen_key(), true};
+        true -> {datastore_key:new(), true};
         false -> {FileUuid, false}
     end,
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx4),

@@ -115,7 +115,7 @@ get_user_id_on_posix_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_key:new_from_digest(str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
     ?assertEqual({ok, ExpectedSubjectId}, Result).
 
@@ -123,7 +123,7 @@ get_user_id_on_posix_storage_by_acl_username(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_key:new_from_digest(str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
     ?assertEqual({ok, ExpectedSubjectId}, Result).
 
@@ -165,7 +165,7 @@ get_user_id_by_acl_username_should_fail_with_not_supported_storage_error(Config)
 
 get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_key:new_from_digest(str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
@@ -181,7 +181,7 @@ get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
 
 get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_key:new_from_digest(str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
@@ -197,7 +197,7 @@ get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Conf
 
 get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_key:new_from_digest(str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
@@ -216,7 +216,7 @@ get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
 
 get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ExpectedSubjectId = datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
+    ExpectedSubjectId = datastore_key:new_from_digest(str_utils:format_bin("~p:~s",
         [?TEST_PROVIDER_ID, ?TEST_USER_ID])),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,

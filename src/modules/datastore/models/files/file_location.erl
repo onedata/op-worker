@@ -61,7 +61,7 @@ local_id(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec id(file_meta:uuid(), od_provider:id()) -> file_location:id().
 id(FileUuid, ProviderId) ->
-    datastore_utils:gen_key(ProviderId, FileUuid).
+    datastore_key:build_adjacent(ProviderId, FileUuid).
 
 %%--------------------------------------------------------------------
 %% @doc

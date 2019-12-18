@@ -70,7 +70,7 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
 -spec reconcile_qos_for_entry(file_ctx:ctx(), qos_entry:id()) -> ok.
 reconcile_qos_for_entry(FileCtx, QosEntryId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    TaskId = datastore_utils:gen_key(),
+    TaskId = datastore_key:new(),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     Options = #{
         task_id => TaskId,

@@ -143,7 +143,7 @@ init_per_suite(Config) ->
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Nonce = crypto:strong_rand_bytes(20),
-    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({fuse, Nonce})),
+    SessId = datastore_key:new_from_digest({fuse, Nonce}),
     initializer:remove_pending_messages(),
     mock_session_manager(Worker),
     {ok, Pid} = start_incoming_session_watcher(Worker, SessId),
