@@ -465,16 +465,35 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
             transfer:list_ended_transfers(SpaceId, StartId, Offset, Limit)
     end,
 
-    NextPageToken = case length(Transfers) of
+    Result = case length(Transfers) of
         Limit ->
-            {ok, LinkKey} = transfer:get_link_key_by_state(
-                lists:last(Transfers), TransferState
+            % Link tree was synchronized but it is possible that not every
+            % transfer doc was synchronized. In such case it is not possible
+            % to get it's link key, so such ids are omitted in returned json.
+            {SynchronizedTransfers, NextPageToken} = lists:foldr(
+                fun
+                    (Tid, {TransfersAcc, undefined}) ->
+                        case transfer:get_link_key_by_state(Tid, TransferState) of
+                            {ok, LinkName} ->
+                                {[Tid | TransfersAcc], LinkName};
+                            {error, not_found} ->
+                                {TransfersAcc, undefined}
+                        end;
+                    (Tid, {TransfersAcc, LinkName}) ->
+                        {[Tid | TransfersAcc], LinkName}
+                end,
+                {[], undefined},
+                Transfers
             ),
-            #{<<"nextPageToken">> => LinkKey};
+            #{
+                <<"transfers">> => SynchronizedTransfers,
+                <<"nextPageToken">> => NextPageToken
+            };
         _ ->
-            #{}
+            #{<<"transfers">> => Transfers}
     end,
-    {ok, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)}.
+
+    {ok, Result}.
 
 
 %%--------------------------------------------------------------------
