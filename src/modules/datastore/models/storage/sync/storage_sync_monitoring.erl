@@ -512,7 +512,7 @@ mark_finished_scan(SpaceId, StorageId) ->
 %%-------------------------------------------------------------------
 -spec id(od_space:id(), od_storage:id()) -> id().
 id(SpaceId, StorageId) ->
-    datastore_utils:gen_key(SpaceId, StorageId).
+    datastore_key:build_adjacent(SpaceId, StorageId).
 
 -spec update(od_space:id(), od_storage:id(), diff()) -> {ok, doc()} | error().
 update(SpaceId, StorageId, Diff) ->

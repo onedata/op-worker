@@ -124,7 +124,7 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
     RootStorageFileCtx = storage_file_ctx:new(RootStorageFileId, SpaceId, StorageId),
     StorageType = storage_config:get_type(StorageId),
     DefinedTaskId = case TaskId =:= undefined of
-        true -> datastore_utils:gen_key();
+        true -> datastore_key:new();
         false -> TaskId
     end,
     Iterator = get_iterator(StorageType),

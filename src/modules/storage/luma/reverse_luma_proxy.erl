@@ -164,9 +164,9 @@ http_client_post(Url, ReqHeaders, ReqBody) ->
 idp_to_onedata_user_id(<<"onedata">>, IdpUserId) ->
     IdpUserId;
 idp_to_onedata_user_id(Idp, IdpUserId) ->
-    datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
-        [Idp, IdpUserId]
-    )).
+    % NOTE: legacy key generation must always be used to ensure that user
+    % mappings are not lost after system upgrade from version pre 19.02.1
+    datastore_key:gen_legacy_key(<<"">>, str_utils:format_bin("~ts:~s", [Idp, IdpUserId])).
 
 
 %%-------------------------------------------------------------------

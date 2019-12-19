@@ -955,7 +955,7 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
 order_transfers(D1, D2) ->
     #document{revs = [Rev1 | _], value = T1} = D1,
     #document{revs = [Rev2 | _], value = T2} = D2,
-    IsGreaterRev = datastore_utils:is_greater_rev(Rev1, Rev2),
+    IsGreaterRev = datastore_rev:is_greater(Rev1, Rev2),
 
     Vec1 = {
         status_to_int(T1#transfer.replication_status),
