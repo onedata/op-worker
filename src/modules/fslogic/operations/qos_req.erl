@@ -259,8 +259,8 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN,
                           ReplicasNum, true, TraverseReqs) of
         {ok, _} ->
-            % QoS cache is invalidated by each provider that should start traverse
-            % task (see qos_hooks:maybe_start_traverse)
+            file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             maps:fold(fun(TaskId, #qos_traverse_req{storage_id = Storage}, _) ->
                 ok = qos_hooks:maybe_start_traverse(FileCtx, QosEntryId, Storage, TaskId)
             end, ok, TraverseReqs),
