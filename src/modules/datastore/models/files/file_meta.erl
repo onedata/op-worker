@@ -42,7 +42,8 @@
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
 -export([check_name/3]).
-
+% For tests
+-export([get_all_links/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -832,7 +833,7 @@ is_child_of_hidden_dir(Path) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_name(ParentUuid :: uuid(), name(), CheckDoc :: doc()) ->
-    ok | {conflicting, ExtendedName :: name(), Conflicts :: [{uuid(), name()}]} | {error, term()}.
+    ok | {conflicting, ExtendedName :: name(), Conflicts :: [{uuid(), name()}]}.
 check_name(undefined, _Name, _ChildDoc) ->
     ok; % Roor directory
 check_name(ParentUuid, Name, #document{
@@ -841,7 +842,7 @@ check_name(ParentUuid, Name, #document{
         provider_id = ChildProvider
     }
 }) ->
-    case datastore_model:get_links(?CTX, ParentUuid, all, Name) of
+    case file_meta:get_all_links(ParentUuid, Name) of
         {ok, [#link{target = ChildUuid}]} ->
             ok;
         {ok, []} ->
@@ -861,9 +862,18 @@ check_name(ParentUuid, Name, #document{
                     {NameAcc, [{Uuid, ExtendedName} | OtherAcc]}
             end, {Name, []}, WithTag),
             {conflicting, NameAns, OtherFiles};
-        {error, Reason} ->
-            {error, Reason}
+        {error, _Reason} ->
+            ok
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function created to be mocked during tests.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_all_links(uuid(), name()) -> {ok, [datastore:link()]} | {error, term()}.
+get_all_links(Uuid, Name) ->
+    datastore_model:get_links(?CTX, Uuid, all, Name).
 
 %%%===================================================================
 %%% Internal functions

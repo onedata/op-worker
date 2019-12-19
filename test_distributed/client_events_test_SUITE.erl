@@ -38,8 +38,8 @@ all() ->
         subscribe_on_user_root_test,
         subscribe_on_user_root_filter_test,
         subscribe_on_new_space_test,
-        subscribe_on_new_space_filter_test
-%%        events_on_conflicts_test
+        subscribe_on_new_space_filter_test,
+        events_on_conflicts_test
     ]).
 
 %%%===================================================================
@@ -167,9 +167,7 @@ events_on_conflicts_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mv(Worker1, SessionId, {guid, FileGuid}, <<"/space_name1/", Dirname/binary, "/xyz">>)),
     ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessionId, {guid, FileGuid})),
 
-    %%    ?assertEqual(ok, receive_file_renamed_event(FileGuid)),
-    ?assertEqual(ok, receive_file_renamed_event()),
-    ?assertEqual(ok, receive_file_renamed_event()),
+    % Events triggered by mv and unlink
     ?assertEqual(ok, receive_file_renamed_event()),
     ?assertEqual(ok, receive_file_renamed_event()),
 
@@ -203,13 +201,15 @@ init_per_suite(Config) ->
 
 init_per_testcase(events_on_conflicts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, datastore_model),
-    test_utils:mock_expect(Workers, datastore_model, get_links, fun
-        (Ctx, Uuid, Tree, Name) when Name =:= <<"abc">> orelse Name =:= <<"xyz">> ->
-            {ok, [Link]} = meck:passthrough([Ctx, Uuid, Tree, Name]),
-            {ok, [Link, Link#link{target = generator:gen_name(), tree_id = <<"q">>}]};
-        (Ctx, Uuid, Tree, Name) ->
-            meck:passthrough([Ctx, Uuid, Tree, Name])
+    test_utils:mock_new(Workers, file_meta),
+    test_utils:mock_expect(Workers, file_meta, get_all_links, fun
+        (Uuid, Name) when Name =:= <<"abc">> orelse Name =:= <<"xyz">> ->
+            case meck:passthrough([Uuid, Name]) of
+                {ok, List} -> {ok, [#link{name = Name, target = <<>>, tree_id = <<"q">>} | List]};
+                {error, not_found} -> {ok, [#link{name = Name, target = <<>>, tree_id = <<"q">>}]}
+            end;
+        (Uuid, Name) ->
+            meck:passthrough([Uuid, Name])
     end),
     init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
@@ -220,7 +220,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(events_on_conflicts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-%%    test_utils:mock_validate_and_unload(Workers, datastore_model),
+    test_utils:mock_validate_and_unload(Workers, file_meta),
     end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
