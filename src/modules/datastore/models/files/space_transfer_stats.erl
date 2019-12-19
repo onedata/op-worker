@@ -72,8 +72,7 @@ key(TransferType, SpaceId) ->
 -spec key(ProviderId :: od_provider:id(), TransferType :: binary(),
     SpaceId :: od_space:id()) -> binary().
 key(ProviderId, TransferType, SpaceId) ->
-    Extension = datastore_key:new_from_digest([ProviderId, TransferType]),
-    datastore_key:build_adjacent(Extension, SpaceId).
+    datastore_key:adjacent_from_digest([ProviderId, TransferType], SpaceId).
 
 
 %%-------------------------------------------------------------------

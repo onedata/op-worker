@@ -115,15 +115,13 @@ get_user_id_on_posix_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ExpectedSubjectId = expected_user_id(),
-    ?assertEqual({ok, ExpectedSubjectId}, Result).
+    ?assertEqual({ok, expected_user_id()}, Result).
 
 get_user_id_on_posix_storage_by_acl_username(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ExpectedSubjectId = expected_user_id(),
-    ?assertEqual({ok, ExpectedSubjectId}, Result).
+    ?assertEqual({ok, expected_user_id()}, Result).
 
 get_user_id_on_posix_storage_should_return_root_user_id_when_reverse_luma_is_disabled(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -163,66 +161,62 @@ get_user_id_by_acl_username_should_fail_with_not_supported_storage_error(Config)
 
 get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ExpectedSubjectId = expected_user_id(),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ?assertEqual({ok, ExpectedSubjectId}, Result),
+    ?assertEqual({ok, expected_user_id()}, Result),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ?assertEqual({ok, ExpectedSubjectId}, Result2),
+    ?assertEqual({ok, expected_user_id()}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
         ['_', '_', '_', '_'], 1).
 
 get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ExpectedSubjectId = expected_user_id(),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ?assertEqual({ok, ExpectedSubjectId}, Result),
+    ?assertEqual({ok, expected_user_id()}, Result),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_DOC(?STORAGE_ID, ?STORAGE)]),
-    ?assertEqual({ok, ExpectedSubjectId}, Result2),
+    ?assertEqual({ok, expected_user_id()}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id_by_name,
         ['_', '_', '_', '_'], 1).
 
 get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ExpectedSubjectId = expected_user_id(),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
-    ?assertEqual({ok, ExpectedSubjectId}, Result),
+    ?assertEqual({ok, expected_user_id()}, Result),
 
     rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
 
-    ?assertEqual({ok, ExpectedSubjectId}, Result2),
+    ?assertEqual({ok, expected_user_id()}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
         ['_', '_', '_', '_'], 2).
 
 get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ExpectedSubjectId = expected_user_id(),
 
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
-    ?assertEqual({ok, ExpectedSubjectId}, Result),
+    ?assertEqual({ok, expected_user_id()}, Result),
 
     rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE_ID, ?STORAGE(?LUMA_CONFIG)]),
 
-    ?assertEqual({ok, ExpectedSubjectId}, Result2),
+    ?assertEqual({ok, expected_user_id()}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id_by_name,
         ['_', '_', '_', '_'], 2).
