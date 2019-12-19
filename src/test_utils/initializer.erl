@@ -44,7 +44,6 @@
 -record(user_config, {
     id :: od_user:id(),
     name :: binary(),
-    default_space :: binary(),
     spaces :: [],
     groups :: [],
     macaroon :: binary()
@@ -52,20 +51,6 @@
 
 -define(TIMEOUT, timer:seconds(5)).
 -define(DEFAULT_GLOBAL_SETUP, [
-    {<<"users">>, [
-        {<<"user1">>, [
-            {<<"default_space">>, <<"space_id1">>}
-        ]},
-        {<<"user2">>, [
-            {<<"default_space">>, <<"space_id2">>}
-        ]},
-        {<<"user3">>, [
-            {<<"default_space">>, <<"space_id3">>}
-        ]},
-        {<<"user4">>, [
-            {<<"default_space">>, <<"space_id4">>}
-        ]}
-    ]},
     {<<"groups">>, [
         {<<"group1">>, [
             {<<"users">>, [<<"user1">>]}
@@ -576,7 +561,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     GlobalSetup = proplists:get_value(<<"test_global_setup">>, ConfigJSON, ?DEFAULT_GLOBAL_SETUP),
     DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
-    UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     HarvestersSetup = proplists:get_value(<<"harvesters">>, GlobalSetup, []),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
 
@@ -631,18 +615,11 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         {GroupId, proplists:get_value(<<"users">>, GroupConfig)}
     end, proplists:get_value(<<"groups">>, GlobalSetup)),
 
-    UserToSpaces0 = lists:foldl(fun({SpaceId, Users}, AccIn) ->
+    UserToSpaces = lists:foldl(fun({SpaceId, Users}, AccIn) ->
         lists:foldl(fun(UserId, CAcc) ->
             maps:put(UserId, maps:get(UserId, CAcc, []) ++ [{SpaceId, proplists:get_value(SpaceId, Spaces)}], CAcc)
         end, AccIn, Users)
     end, #{}, SpaceUsers),
-
-    UserToSpaces = maps:map(fun(UserId, SpacesList) ->
-        UserConfig = proplists:get_value(UserId, UsersSetup),
-        DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
-        DefaultSpace = {DefaultSpaceId, proplists:get_value(DefaultSpaceId, SpacesList)},
-        [DefaultSpace | SpacesList -- [DefaultSpace]]
-    end, UserToSpaces0),
 
     UserToGroups = lists:foldl(fun({GroupId, Users}, AccIn) ->
         lists:foldl(fun(UserId, CAcc) ->
@@ -668,8 +645,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     end, SpacesSetup),
 
     Users = maps:fold(fun(UserId, SpacesList, AccIn) ->
-        UserConfig = proplists:get_value(UserId, UsersSetup),
-        DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
         Macaroon = ?DUMMY_USER_MACAROON(UserId),
         Name = fun(Text, User) ->
             list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
@@ -678,7 +653,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
             name = Name("name", UserId),
             spaces = SpacesList,
             macaroon = Macaroon,
-            default_space = DefaultSpaceId,
             groups = maps:get(UserId, UserToGroups, [])
         }}
         ]
@@ -783,9 +757,7 @@ teardown_storage(Worker, Config) ->
 %% Mocks user_logic module, so that it returns user details, spaces and groups.
 %% @end
 %%--------------------------------------------------------------------
--spec user_logic_mock_setup(Workers :: node() | [node()],
-    [{UserNum :: integer(), Spaces :: [{binary(), binary()}],
-        DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
+-spec user_logic_mock_setup(Workers :: node() | [node()], [{od_user:id(), #user_config{}}]) ->
     ok.
 user_logic_mock_setup(Workers, Users) ->
     test_utils:mock_new(Workers, user_logic, [passthrough]),
@@ -794,7 +766,7 @@ user_logic_mock_setup(Workers, Users) ->
         #user_config{
             name = UName, id = UID,
             groups = Groups,
-            spaces = Spaces, default_space = DefaultSpaceId
+            spaces = Spaces
         } = UserConfig,
         {SpaceIds, _} = lists:unzip(Spaces),
         {GroupIds, _} = lists:unzip(Groups),
@@ -803,7 +775,6 @@ user_logic_mock_setup(Workers, Users) ->
             linked_accounts = [],
             emails = [],
             username = <<>>,
-            default_space = DefaultSpaceId,
             eff_spaces = SpaceIds,
             eff_groups = GroupIds
         }}}
@@ -909,13 +880,6 @@ user_logic_mock_setup(Workers, Users) ->
                     end, false, EffSpaces)
         end).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks group_logic module, so that it returns default group details for
-%% default group Id.
-%% @end
-%%--------------------------------------------------------------------
 -spec group_logic_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}], [{binary(), [binary()]}]) -> ok.
 group_logic_mock_setup(Workers, Groups, _Users) ->
@@ -926,13 +890,6 @@ group_logic_mock_setup(Workers, Groups, _Users) ->
         {ok, GroupName}
     end).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks space_logic module, so that it returns default space details for default
-%% space ID.
-%% @end
-%%--------------------------------------------------------------------
 -spec space_logic_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}], [{binary(), [binary()]}],
     [{binary(), [{binary(), non_neg_integer()}]}], [{binary(), [binary()]}]) -> ok.
@@ -992,13 +949,6 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToProviders, SpacesHarveste
         {ok, proplists:get_value(SpaceId, SpacesHarvesters, [])}
     end).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks provider_logic module, so that it returns default provider details for
-%% default provider Id.
-%% @end
-%%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
     proplists:proplist(), proplists:proplist(),
     [{binary(), [{binary(), non_neg_integer()}]}]) -> ok.

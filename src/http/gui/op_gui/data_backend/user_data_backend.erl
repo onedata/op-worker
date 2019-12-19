@@ -147,14 +147,9 @@ delete_record(<<"user">>, _Id) ->
 user_record(SessionId, UserId) ->
     {ok, #document{value = #od_user{
         full_name = Name,
-        default_space = DefaultSpaceValue,
         eff_spaces = EffSpaces,
         eff_handle_services = EffHServices
     }}} = user_logic:get(SessionId, UserId),
-    DefaultSpace = case DefaultSpaceValue of
-        undefined -> null;
-        _ -> DefaultSpaceValue
-    end,
     Shares = lists:foldl(
         fun(SpaceId, Acc) ->
             % Make sure that user is allowed to view shares in this space
@@ -169,7 +164,6 @@ user_record(SessionId, UserId) ->
     [
         {<<"id">>, UserId},
         {<<"name">>, Name},
-        {<<"defaultSpaceId">>, gs_protocol:undefined_to_null(DefaultSpace)},
         {<<"spaces">>, EffSpaces},
         {<<"shares">>, Shares},
         {<<"handleServices">>, EffHServices}
