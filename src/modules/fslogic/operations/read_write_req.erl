@@ -72,7 +72,7 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
 %%--------------------------------------------------------------------
 -spec get_proxyio_node(file_meta:uuid()) -> node().
 get_proxyio_node(Uuid) ->
-    consistent_hashing:get_node(Uuid).
+    datastore_key:responsible_node(Uuid).
 
 %%%===================================================================
 %%% Internal functions

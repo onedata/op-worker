@@ -253,7 +253,7 @@ mock_start_link(Address, _, _, _, _) ->
 
 
 mock_async_request(ClientRef, GsRequest = #gs_req{id = undefined}) ->
-    mock_async_request(ClientRef, GsRequest#gs_req{id = datastore_utils:gen_key()});
+    mock_async_request(ClientRef, GsRequest#gs_req{id = datastore_key:new()});
 mock_async_request(ClientRef, GsRequest = #gs_req{id = ReqId}) ->
     case global:whereis_name(gs_client_mock) of
         ClientRef ->

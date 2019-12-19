@@ -83,7 +83,7 @@ run(Pool, DocOrCtx, Opts) when is_atom(Pool) ->
     run(atom_to_binary(Pool, utf8), DocOrCtx, Opts);
 run(Pool, #document{} = Doc, Opts) ->
     TaskID = case maps:get(task_id, Opts, undefined) of
-        undefined -> datastore_utils:gen_key();
+        undefined -> datastore_key:new();
         ID -> ID
     end,
     ExecuteActionOnDir = maps:get(execute_slave_on_dir, Opts, false),

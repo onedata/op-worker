@@ -699,7 +699,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
         rpc:call(W1, fslogic_location_cache, create_location,
-            [#document{key = datastore_utils:gen_key(), value = RemoteLocation}, true])
+            [#document{key = datastore_key:new(), value = RemoteLocation}, true])
     ),
     {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_location_cache, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = #document{
@@ -906,7 +906,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
     },
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
-        rpc:call(W1, fslogic_location_cache, create_location, [#document{key = datastore_utils:gen_key(), value = RemoteLocation}, true])
+        rpc:call(W1, fslogic_location_cache, create_location, [#document{key = datastore_key:new(), value = RemoteLocation}, true])
     ),
     {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_location_cache, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = bump_version(RemoteLocationDoc, 1),
@@ -1037,7 +1037,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
         rpc:call(W1, fslogic_location_cache, create_location,
-            [#document{key = datastore_utils:gen_key(),value = RemoteLocation}, true])
+            [#document{key = datastore_key:new(),value = RemoteLocation}, true])
     ),
     {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_location_cache, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = #document{

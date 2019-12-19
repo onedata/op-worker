@@ -1114,7 +1114,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
 
         GenerateDoc = fun(Type) ->
             Name = generator:gen_name(),
-            Uuid = datastore_utils:gen_key(),
+            Uuid = datastore_key:new(),
             Doc = #document{key = Uuid, value =
             #file_meta{
                 name = Name,
