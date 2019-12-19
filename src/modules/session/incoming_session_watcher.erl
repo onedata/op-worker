@@ -17,6 +17,7 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -31,13 +32,23 @@
 
 -record(state, {
     session_id :: session:id(),
-    session_grace_period :: session:grace_period()
+    session_grace_period :: session:grace_period(),
+    identity :: aai:subject(),
+    % token_auth -> for user sessions (gui, rest, fuse). It needs to be periodically
+    %               verified whether it's still valid (it can be revoked)
+    % undefined  -> for provider_incoming sessions. No periodic peer verification
+    %               is needed.
+    auth :: undefined | session:auth()
 }).
 
 -define(REMOVE_SESSION, remove_session).
 -define(CHECK_SESSION_ACTIVITY, check_session_activity).
+-define(CHECK_SESSION_VALIDITY, check_session_validity).
 
 -define(SESSION_REMOVAL_RETRY_DELAY, 15).   % in seconds
+-define(SESSION_VALIDITY_CHECK_INTERVAL,
+    application:get_env(?APP_NAME, session_validity_check_interval_seconds, 10)
+).
 
 -type state() :: #state{}.
 
@@ -81,11 +92,18 @@ init([SessId, SessType]) ->
             watcher = Self
         }}
     end),
+
     GracePeriod = get_session_grace_period(SessType),
+    {ok, #document{value = Session}} = session:get(SessId),
+
+    schedule_session_validity_checkup(0),
     schedule_session_activity_checkup(GracePeriod),
+
     {ok, #state{
         session_id = SessId,
-        session_grace_period = GracePeriod
+        session_grace_period = GracePeriod,
+        identity = Session#session.identity,
+        auth = Session#session.auth
     }}.
 
 
@@ -150,7 +168,7 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
         {ok, #document{value = #session{connections = [_ | _]}}} ->
             {false, GracePeriod};
         {ok, #document{value = #session{status = active}}} ->
-            maybe_mark_inactive(SessionId, GracePeriod);
+            mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod);
         {error, _} = Error ->
             {false, Error}
     end,
@@ -164,6 +182,31 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
             {noreply, State, hibernate};
         {false, {error, Reason}} ->
             {stop, Reason, State}
+    end;
+
+handle_info(?CHECK_SESSION_VALIDITY, #state{auth = undefined} = State) ->
+    {noreply, State, hibernate};
+
+handle_info(?CHECK_SESSION_VALIDITY, #state{
+    session_id = SessionId,
+    identity = Identity,
+    auth = Auth
+} = State) ->
+    Now = time_utils:system_time_seconds(),
+    case mark_inactive_if_token_auth_has_expired(SessionId, Identity, Auth) of
+        true ->
+            schedule_session_removal(0),
+            {noreply, State};
+        {false, undefined} ->
+            schedule_session_validity_checkup(?SESSION_VALIDITY_CHECK_INTERVAL),
+            {noreply, State, hibernate};
+        {false, TokenValidUntil} ->
+            NextCheckupDelay = min(
+                TokenValidUntil - Now,
+                ?SESSION_VALIDITY_CHECK_INTERVAL
+            ),
+            schedule_session_validity_checkup(NextCheckupDelay),
+            {noreply, State, hibernate}
     end;
 
 handle_info({'EXIT', _, shutdown}, State) ->
@@ -235,9 +278,9 @@ get_session_grace_period(_) ->
 %% exceed grace period and true for inactive session that exceeded it.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_mark_inactive(session:id(), session:grace_period()) ->
+-spec mark_inactive_if_grace_period_has_passed(session:id(), session:grace_period()) ->
     true | {false, RemainingTime :: time_utils:seconds()}.
-maybe_mark_inactive(SessionId, GracePeriod) ->
+mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
     Diff = fun
         (#session{status = active, accessed = Accessed} = Sess) ->
             InactivityPeriod = time_utils:cluster_time_seconds() - Accessed,
@@ -260,11 +303,58 @@ maybe_mark_inactive(SessionId, GracePeriod) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks whether session token auth is still valid (it may have been revoked
+%% for example). If it is invalid, session is marked as 'inactive' for later
+%% removal.
+%% Returns false and time until which token will be valid (unless owner
+%% revokes/removes it) if auth is valid or true otherwise.
+%% @end
+%%--------------------------------------------------------------------
+-spec mark_inactive_if_token_auth_has_expired(session:id(), aai:subject(),
+    session:auth()
+) ->
+    true | {false, TokenValidUntil :: undefined | time_utils:seconds()}.
+mark_inactive_if_token_auth_has_expired(SessionId, Identity, TokenAuth) ->
+    case auth_manager:verify(TokenAuth) of
+        {ok, #auth{subject = Identity}, TokenValidUntil} ->
+            {false, TokenValidUntil};
+        {ok, #auth{subject = Subject}, _} ->
+            ?debug("Token identity verification failure.~nExpected ~p.~nGot: ~p", [
+                Identity, Subject
+            ]),
+            mark_inactive(SessionId),
+            true;
+        {error, Reason} ->
+            ?debug("Token auth verification failure: ~p", [Reason]),
+            mark_inactive(SessionId),
+            true
+    end.
+
+
+%% @private
+-spec mark_inactive(SessionId) -> {ok, SessionId} | {error, term()} when
+    SessionId :: session:id().
+mark_inactive(SessionId) ->
+    session:update(SessionId, fun(#session{} = Sess) ->
+        {ok, Sess#session{status = inactive}}
+    end).
+
+
 %% @private
 -spec schedule_session_activity_checkup(Delay :: time_utils:seconds()) ->
     TimeRef :: reference().
 schedule_session_activity_checkup(Delay) ->
     erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_ACTIVITY).
+
+
+%% @private
+-spec schedule_session_validity_checkup(Delay :: time_utils:seconds()) ->
+    TimeRef :: reference().
+schedule_session_validity_checkup(Delay) ->
+    erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_VALIDITY).
 
 
 %% @private
