@@ -126,7 +126,7 @@ maybe_start(SpaceId, SpaceQuota) ->
                         _ ->
                             ok
                     end;
-                _ ->
+                false ->
                     ok
             end;
         false ->

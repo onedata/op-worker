@@ -140,7 +140,7 @@ get_duplicated_blocks_per_provider(LocalBlocksList, LocalVV, RemoteLocations) ->
                     _ ->
                         false
                 end;
-            OTHER ->
+            _ ->
                 false
         end
     end, RemoteLocations).

@@ -17,6 +17,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -32,6 +33,7 @@
     terminate/2,
     code_change/3]).
 
+% exported for tests
 -export([custom_predicate/2]).
 
 -define(SERVER, ?MODULE).
@@ -195,8 +197,8 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec custom_predicate(replica_deletion:job_type(), replica_deletion:job_id()) -> true | false.
-custom_predicate(autocleaning, AutocleaningRunId) ->
+custom_predicate(?AUTOCLEANING_JOB, AutocleaningRunId) ->
     autocleaning_controller:replica_deletion_predicate(AutocleaningRunId);
-custom_predicate(eviction, _) ->
+custom_predicate(?EVICTION_JOB, _) ->
     % TODO check whether eviction wasn't canceled
     true.

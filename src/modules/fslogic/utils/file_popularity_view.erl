@@ -17,19 +17,11 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/4, example_query/1, query/3, delete/1, modify/4]).
-
--type  index_token() :: #index_token{}.
-
--export_type([index_token/0]).
+-export([create/4, example_query/1, delete/1, modify/4]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-% TODO
-% TODO * wywalić wszystko co jest związane z querowaniem po widoku stąd
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -79,33 +71,6 @@ modify(SpaceId, LastOpenWeight, AvgOpenCountPerDayWeight, MaxAvgOpenCountPerDay)
             Error
     end.
 
--spec query(od_space:id(), undefined | index_token(), non_neg_integer()) ->
-    {[file_id:objectid()], undefined | index_token()} | {error, term()}.
-query(SpaceId, IndexToken, Limit) ->
-    Options = token_to_opts(IndexToken, Limit),
-    Ctx = datastore_model_default:get_ctx(file_popularity),
-    DiscCtx = maps:get(disc_driver_ctx, Ctx),
-    ViewName = ?FILE_POPULARITY_VIEW(SpaceId),
-    case couchbase_driver:query_view(DiscCtx, ViewName, ViewName, Options) of
-        {ok, #{<<"rows">> := []}} ->
-            {[], IndexToken};
-        {ok, #{<<"rows">> := Rows}} ->
-            TokenDefined = utils:ensure_defined(IndexToken, undefined, #index_token{}),
-            {RevertedFileIds, NewToken} = lists:foldl(fun(Row, {RevertedFileIdsIn, TokenIn}) ->
-                Key = maps:get(<<"key">>, Row),
-                FileId = maps:get(<<"value">>, Row),
-                DocId = maps:get(<<"id">>, Row),
-                {[FileId | RevertedFileIdsIn], TokenIn#index_token{
-                    start_key = Key,
-                    last_doc_id = DocId
-                }}
-            end, {[], TokenDefined}, Rows),
-            {lists:reverse(RevertedFileIds), NewToken};
-        Error = {error, Reason} ->
-            ?error("Querying file_popularity_view ~p failed due to ~p", [ViewName, Reason]),
-            Error
-    end.
-
 %%-------------------------------------------------------------------
 %% @doc
 %% Returns example curl which can be used to query 10 least popular
@@ -123,31 +88,6 @@ example_query(SpaceId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
--spec token_to_opts(undefined | index_token(), non_neg_integer()) -> [couchbase_driver:view_opt()].
-token_to_opts(undefined, Limit) ->
-    [
-        {stale, false},
-        {limit, Limit}
-    ];
-token_to_opts(#index_token{
-last_doc_id = undefined,
-    start_key = undefined
-}, Limit) -> [
-        {stale, false},
-        {limit, Limit}
-    ];
-token_to_opts(#index_token{
-    last_doc_id = LastDocId,
-    start_key = LastKey
-}, Limit) ->
-    [
-        {stale, false},
-        {startkey, LastKey},
-        {startkey_docid, LastDocId},
-        {limit, Limit},
-        {skip, 1}
-    ].
 
 %%-------------------------------------------------------------------
 %% @private

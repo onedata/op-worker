@@ -14,6 +14,8 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/traverse/view_traverse.hrl").
+
 
 -type id() :: binary().
 -type status() :: active | completed | failed.
@@ -26,11 +28,11 @@
 
 %% API
 -export([get/1, update/2, delete/1, delete/2, create/2,
-    mark_completed/1, mark_failed/1, mark_released_file/2, set_index_token/2,
-    get_index_token/1, get_bytes_to_release/1, get_released_bytes/1, is_finished/1, get_started_at/1]).
+    mark_completed/1, mark_failed/1, mark_released_file/2, set_query_view_token/2,
+    get_query_view_token/1, get_bytes_to_release/1, get_released_bytes/1, is_finished/1, get_started_at/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -123,15 +125,15 @@ mark_completed(ARId) ->
             Error
     end.
 
--spec set_index_token(id(), file_popularity_view:index_token()) -> ok.
-set_index_token(ARId, IndexToken) ->
+-spec set_query_view_token(id(), view_traverse:token()) -> ok.
+set_query_view_token(ARId, Token) ->
     ok = ?extract_ok(update(ARId, fun(AC) ->
-        {ok, AC#autocleaning_run{index_token = IndexToken}}
+        {ok, AC#autocleaning_run{query_view_token = Token}}
     end)).
 
--spec get_index_token(record()) -> file_popularity_view:index_token().
-get_index_token(#autocleaning_run{index_token = IndexToken}) ->
-    IndexToken.
+-spec get_query_view_token(record()) -> view_traverse:token().
+get_query_view_token(#autocleaning_run{query_view_token = Token}) ->
+    Token.
 
 -spec get_bytes_to_release(record()) -> non_neg_integer().
 get_bytes_to_release(#autocleaning_run{bytes_to_release = BytesToRelease}) ->
@@ -168,6 +170,15 @@ get_ctx() ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns model's record version.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    2.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns model's record structure in provided version.
 %% @end
 %%--------------------------------------------------------------------
@@ -187,4 +198,41 @@ get_record_struct(1) ->
             {last_key, string},
             {end_key, string}
         ]}}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {space_id, string},
+        {started_at, integer},
+        {stopped_at, integer},
+        {status, atom},
+        {released_bytes, integer},
+        {bytes_to_release, integer},
+        {released_files, integer},
+        {query_view_token, {record, [
+            {offset, integer},
+            {last_doc_id, string},
+            {last_start_key, term}
+        ]}}
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, SpaceId, StartedAt, StoppedAt, Status,
+    ReleasedBytes, BytesToRelease, ReleasedFiles, _IndexToken
+}) ->
+    {2, #autocleaning_run{
+        space_id = SpaceId,
+        started_at = StartedAt,
+        stopped_at = StoppedAt,
+        status = Status,
+        released_bytes = ReleasedBytes,
+        bytes_to_release = BytesToRelease,
+        released_files = ReleasedFiles,
+        % index token was wrongly persisted, therefore we can ignore it
+        query_view_token = #query_view_token{}
+    }}.

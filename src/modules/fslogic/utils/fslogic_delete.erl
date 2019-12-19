@@ -193,15 +193,15 @@ process_file_links(FileCtx, UserCtx, KeepParentLink) ->
     {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
     FileCtx3 = link_utils:add_deletion_link(FileCtx2, ParentUuid),
-    ok = case KeepParentLink of
-             false ->
-                 FileUuid = file_ctx:get_uuid_const(FileCtx3),
-                 Scope = file_ctx:get_space_id_const(FileCtx3),
-                 {FileName, _FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
-                 file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName);
-             _ ->
-                 ok
-         end.
+    case KeepParentLink of
+         false ->
+             FileUuid = file_ctx:get_uuid_const(FileCtx3),
+             Scope = file_ctx:get_space_id_const(FileCtx3),
+             {FileName, _FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
+             ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName);
+         _ ->
+             ok
+     end.
 
 %%--------------------------------------------------------------------
 %% @private

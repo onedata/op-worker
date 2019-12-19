@@ -110,8 +110,9 @@ end, __Distributions))).
 
 -define(assertFilesInView(Worker, SpaceId, ExpectedGuids),
     ?assertMatch([], begin
-        {FileIds, _} = rpc:call(Worker, file_popularity_api, query, [SpaceId, ?MAX_LIMIT]),
-        __Guids = [?id_to_guid(F) || F <- FileIds],
+        {ok, #{<<"rows">> := Rows}} = rpc:call(Worker, index, query, [SpaceId, <<"file-popularity">>, [{limit, ?MAX_LIMIT}]]),
+        __FileIds = [maps:get(<<"value">>, Row) || Row <- Rows],
+        __Guids = [?id_to_guid(__F) || __F <- __FileIds],
         ExpectedGuids -- __Guids
     end, ?ATTEMPTS)).
 
@@ -123,8 +124,8 @@ end, __Distributions))).
 
 -define(id_to_guid(CdmiId),
     begin
-        {ok, Guid} = file_id:objectid_to_guid(CdmiId),
-        Guid
+        {ok, __Guid} = file_id:objectid_to_guid(CdmiId),
+        __Guid
     end).
 
 %%%===================================================================
@@ -178,6 +179,8 @@ autocleaning_should_not_evict_file_replica_when_it_is_not_replicated(Config) ->
         threshold => Size - 1
     }),
 
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1], [Size]), Guid),
+    ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
     {ok, ARId} = force_start(W1, ?SPACE_ID),
     ?assertMatch({ok, [ARId]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
@@ -613,7 +616,10 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         application:start(ssl),
         hackney:start(),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
+        NewConfig2 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig),
+        Workers = ?config(op_worker_nodes, NewConfig2),
+        test_utils:set_env(Workers, op_worker, autocleaning_restart_runs, false),
+        sort_workers(NewConfig2)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
 
@@ -693,10 +699,10 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_tes
 %%%===================================================================
 
 disable_periodical_spaces_autocleaning_check(Worker) ->
-    test_utils:set_env(Worker, ?APP_NAME, periodical_spaces_autocleaning_check_enabled, false).
+    test_utils:set_env(Worker, ?APP_NAME, autocleaning_periodical_spaces_check_enabled, false).
 
 enable_periodical_spaces_autocleaning_check(Worker) ->
-    test_utils:set_env(Worker, ?APP_NAME, periodical_spaces_autocleaning_check_enabled, true).
+    test_utils:set_env(Worker, ?APP_NAME, autocleaning_periodical_spaces_check_enabled, true).
 
 write_file(Worker, SessId, FilePath, Size) ->
     {ok, Guid} = lfm_proxy:create(Worker, SessId, FilePath, 8#664),
@@ -830,3 +836,7 @@ change_last_open(Worker, FileGuid, NewLastOpen) ->
     rpc:call(Worker, file_popularity, update, [Uuid, fun(FP) ->
         {ok, FP#file_popularity{last_open = NewLastOpen}}
     end]).
+
+sort_workers(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).

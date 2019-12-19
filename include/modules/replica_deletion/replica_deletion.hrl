@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% Definitions of macros used in modules associated with
+%%% replica_deletion mechanism.
 %%% @end
 %%%-------------------------------------------------------------------
 

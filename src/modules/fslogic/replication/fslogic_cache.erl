@@ -313,6 +313,8 @@ get_doc(Key) ->
                     put({?BLOCKS, Key}, blocks_to_tree(Blocks, Sorted)),
 
                     put({?PUBLIC_BLOCKS, Key}, PublicBlocks),
+
+
                     LocationDoc2;
                 {error, not_found} = ENF ->
                     ENF;

@@ -396,7 +396,7 @@ update(ViewName, Diff, SpaceId) ->
 
 
 %% @private
--spec query(id(), options()) -> {ok, json_utils:json_term()} | {error, term()}.
+-spec query(id(), options()) -> {ok, json_utils:json_map()} | {error, term()}.
 query(ViewId, Options) ->
     case couchbase_driver:query_view(?DISK_CTX, ViewId, ViewId, Options) of
         {ok, _} = Ans ->

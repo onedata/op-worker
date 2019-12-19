@@ -5,15 +5,20 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for performing space cleanup with given
-%%% configuration. It deletes files returned from file_popularity_view,
-%%% with given constraints, until configured target level of storage
-%%% occupancy is reached.
+%%% This gen_server is responsible for controlling run of autocleaning
+%%% with given configuration.
+%%% It uses autocleaning_view_traverse to start traverse over file_popularity view
+%%% to choose the least popular files (according to the popularity
+%%% function, see file_popularity_view)
+%%% returned from file_popularity_view, with given constraints.
+%%% It schedules replica_deletion requests for the files until
+%%% configured target level of storage occupancy is reached.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(autocleaning_controller).
 -author("Jakub Kudzia").
 
+-behaviour(replica_deletion_behaviour).
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
@@ -21,11 +26,24 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
-
 %% API
--export([start/3, stop_cleaning/2, process_replica_deletion_result/4, check/1,
-    notify_processed_file/2, notify_file_to_process/2, restart/3, replica_deletion_predicate/1, notify_finished_traverse/2]).
+-export([
+    start/3,
+    restart/3,
+    stop/2,
+    check/1, % todo usunac
+    notify_files_to_process/4,
+    notify_finished_traverse/2,
+    notify_processed_file/3,
+    pack_batch_id/2,
+    unpack_batch_id/1
+]).
+
+%% replica_deletion_behaviour callbacks
+-export([
+    process_replica_deletion_result/4,
+    replica_deletion_predicate/1
+]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -39,76 +57,57 @@
 -define(SERVER(SpaceId), {global, {?SERVER, SpaceId}}).
 
 -record(state, {
-    run_id :: run_id(),
+    run_id :: batch_id(),
     space_id :: od_space:id(),
     config :: autocleaning:config(),
+    batch_size :: non_neg_integer(),
 
     files_to_process = 0 :: non_neg_integer(),
     files_processed = 0 :: non_neg_integer(),
     released_bytes = 0 :: non_neg_integer(),
     bytes_to_release = 0 :: non_neg_integer(),
 
-    % queue for caching least popular files that where queried from the file_popularity_view
-    queue = queue:new() :: queue:queue(file_ctx:ctx()),
-    % erlang's queue:len/1  is O(n) so will keep track of the queue length ourselves
-    queue_len = 0 :: non_neg_integer(),
-
     end_of_view_reached = false :: boolean(),
-    cleaning_stopped = false :: boolean(),
     scheduled_cancelling = false :: boolean(),
 
-    next_batch_token :: undefined | file_popularity_view:index_token(),
+    next_batch_token :: undefined | view_traverse:token(),
 
-    batches_counter = 0 :: non_neg_integer(),
-
-    % map storing #batch_counters per each started batch
-    batch_counters_map = #{} :: #{non_neg_integer() => batch_counters()},
-    batches_tokens = #{} :: map(),
+    % map storing #batch_file_counters per each started batch
+    batches_counters = #{} :: #{batch_no() => batch_file_counters()},
+    batches_tokens = #{} :: #{batch_no() => view_traverse:token()},
     % set of already finished batches, which tokens can be stored in the #autocleaning_run model
-    finished_batches = ordsets:new(),
+    finished_batches = ordsets:new() :: ordsets:ordset(batch_no()),
     % number of the last batch which token has already been persisted in the autocleaning model
-    last_persisted_batch = 0 :: non_neg_integer()
+    last_persisted_batch = 0 :: batch_no()
 }).
 
 % helper record that stores counters for each batch of files
--record(batch_counters, {
+-record(batch_file_counters, {
     files_processed = 0 :: non_neg_integer(),
     files_to_process = 0 :: non_neg_integer()
 }).
 
--type batch_id() :: binary().
--type run_id() :: autocleaning:run_id().
--type batch_num() :: non_neg_integer().
--type state() :: #state{}.
--type batch_counters() :: #batch_counters{}.
-
--export_type([batch_id/0]).
 
 -record(message, {
     content :: term(),
-    run_id :: run_id()
+    run_id :: batch_id()
 }).
 
-
-
-% Messages
-%%-define(CLEANUP_BATCH, cleanup_batch).
-%%-define(CLEANUP_BATCH(StartDocId), {cleanup_batch, StartDocId}).
-
+% Generic message
 -define(MESSAGE(Content, AutocleaningRunId), #message{content = Content, run_id = AutocleaningRunId}).
 
+% Message contents
 -define(START_CLEANING, start_cleaning).
 -define(START_CLEANING_MSG(AutocleaningRunId), ?MESSAGE(?START_CLEANING, AutocleaningRunId)).
 
--define(FILE_RELEASED(Bytes), {file_released, Bytes}).
--define(FILE_RELEASED_MSG(Bytes, AutocleaningRunId), ?MESSAGE(?FILE_RELEASED(Bytes), AutocleaningRunId)).
+-define(FILE_RELEASED(Bytes, BatchNo), {file_released, Bytes, BatchNo}).
+-define(FILE_RELEASED_MSG(AutocleaningRunId, Bytes, BatchNo), ?MESSAGE(?FILE_RELEASED(Bytes, BatchNo), AutocleaningRunId)).
 
--define(FILE_PROCESSED, processed_file).
--define(FILE_PROCESSED_MSG(AutocleaningRunId), ?MESSAGE(?FILE_PROCESSED, AutocleaningRunId)).
+-define(FILE_PROCESSED(BatchNo), {processed_file, BatchNo}).
+-define(FILE_PROCESSED_MSG(AutocleaningRunId, BatchNo), ?MESSAGE(?FILE_PROCESSED(BatchNo), AutocleaningRunId)).
 
--define(FILE_TO_PROCESS, to_process_file).
--define(FILE_TO_PROCESS_MSG(AutocleaningRunId), ?MESSAGE(?FILE_TO_PROCESS, AutocleaningRunId)).
-
+-define(FILES_TO_PROCESS(FilesNumber, Token), {files_to_process, FilesNumber, Token}).
+-define(FILES_TO_PROCESS_MSG(AutocleaningRunId, FilesNumber, Token), ?MESSAGE(?FILES_TO_PROCESS(FilesNumber, Token), AutocleaningRunId)).
 
 -define(STOP_CLEANING, stop_cleaning).
 -define(STOP_CLEANING_MSG(AutocleaningRunId), ?MESSAGE(?STOP_CLEANING, AutocleaningRunId)).
@@ -116,37 +115,19 @@
 -define(TRAVERSE_FINISHED, traverse_finished).
 -define(TRAVERSE_FINISHED_MSG(AutocleaningRunId), ?MESSAGE(?TRAVERSE_FINISHED, AutocleaningRunId)).
 
+-type batch_id() :: binary().
+-type run_id() :: autocleaning:run_id().
+-type batch_no() :: non_neg_integer().
+-type state() :: #state{}.
+-type batch_file_counters() :: #batch_file_counters{}.
+-type message_content() :: ?START_CLEANING | ?FILE_RELEASED(_, _) | ?FILE_PROCESSED(_) | ?FILES_TO_PROCESS(_, _) |
+    ?STOP_CLEANING | ?TRAVERSE_FINISHED.
+-export_type([batch_id/0]).
+
 
 % batch size used to query the file_popularity_view
--define(VIEW_BATCH_SIZE, application:get_env(?APP_NAME,
-    autocleaning_view_batch_size, 1000)).
-
-% max number of active tasks being simultaneously processed by the
-% replica_deletion_master process
-% if more tasks are added, replica_deletion_master's queues them in the memory
--define(REPLICA_DELETION_MAX_PARALLEL_REQUESTS,
-    application:get_env(?APP_NAME, replica_deletion_max_parallel_requests, 2000)).
-
-% ratio used to calculate the ?NEXT_BATCH_THRESHOLD which defines
-% when autocleaning_controller should schedule next batch of file replicas to
-% be deleted to replica_deletion_master
-% calculated threshold is proportional to ?REPLICA_DELETION_MAX_ACTIVE_TASKS
--define(AUTOCLEANING_CONTROLLER_NEXT_BATCH_RATIO,
-    application:get_env(?APP_NAME, autocleaning_controller_next_batch_ratio, 1.5)).
-
-% if number of files currently processed (which is basically equal to files_to_process - files_processed)
-% by replica_deletion_master is less than ?NEXT_BATCH_THRESHOLD, autocleaning_controller
-% will schedule deletion of ?DELETION_BATCH_SIZE number of replicas
--define(NEXT_BATCH_THRESHOLD,
-    ?AUTOCLEANING_CONTROLLER_NEXT_BATCH_RATIO * ?REPLICA_DELETION_MAX_PARALLEL_REQUESTS
-).
-
-% number of file replicas which will be scheduled for deletion in one batch
--define(DELETION_BATCH_SIZE,
-    application:get_env(?APP_NAME, autocleaning_deletion_batch_size, ?REPLICA_DELETION_MAX_PARALLEL_REQUESTS)).
-
+-define(BATCH_SIZE, application:get_env(?APP_NAME, autocleaning_view_batch_size, 1000)).
 -define(ID_SEPARATOR, <<"##">>).
-
 
 -define(run_and_catch_errors(Fun, State),
     try
@@ -161,14 +142,7 @@
     end
 ).
 
-
 %todo zmierzyc ile trwa listowanie widoku
-%todo skąd mam wiedzieć kiedy przerwać cleanowanie?
-% todo cancelowanie wiszacych tasków
-% todo czy zapisywac last Key_id i last_token id w dokuemcne autocleaning_run??
- % -> chyba musze, i chyba nie ma sensu restartowanie traverse'a bo nie bedzie powiazany z autocleaningiem
-
-% todo UWAGA -> traverse zapisze sie juz jak wrzucimy request do deletion_mastera (a nie jak sie usunie, musze na poziomie ac controllera zapisuywac cio juz przetworzylem
 
 %%%===================================================================
 %%% API
@@ -180,7 +154,7 @@
 %% Returns error if other auto-cleaning run is in progress.
 %% @end
 %%-------------------------------------------------------------------
--spec start(od_space:id(), autocleaning:config(), non_neg_integer()) -> {ok, run_id()} | {error, term()}.
+-spec start(od_space:id(), autocleaning:config(), non_neg_integer()) -> {ok, batch_id()} | {error, term()}.
 start(SpaceId, Config, CurrentSize) ->
     Target = autocleaning_config:get_target(Config),
     BytesToRelease = CurrentSize - Target,
@@ -203,8 +177,8 @@ start(SpaceId, Config, CurrentSize) ->
             Other
     end.
 
--spec restart(run_id(), od_space:id(), autocleaning:config()) ->
-    {ok, run_id()} | ok.
+-spec restart(batch_id(), od_space:id(), autocleaning:config()) ->
+    {ok, batch_id()} | ok.
 restart(ARId, SpaceId, Config) ->
     case autocleaning_run:get(ARId) of
         {ok, #document{value = AR = #autocleaning_run{
@@ -230,32 +204,47 @@ restart(ARId, SpaceId, Config) ->
             autocleaning:mark_run_finished(SpaceId)
     end.
 
--spec stop_cleaning(od_space:id(), run_id()) -> ok.
-stop_cleaning(SpaceId, AutocleaningRunId) ->
+-spec stop(od_space:id(), batch_id()) -> ok.
+stop(SpaceId, AutocleaningRunId) ->
     gen_server2:cast(?SERVER(SpaceId), ?STOP_CLEANING_MSG(AutocleaningRunId)).
 
--spec notify_processed_file(od_space:id(), run_id()) -> ok.
-notify_processed_file(SpaceId, AutocleaningRunId) ->
-    gen_server2:cast(?SERVER(SpaceId), ?FILE_PROCESSED_MSG(AutocleaningRunId)).
+-spec notify_files_to_process(od_space:id(), run_id(), non_neg_integer(), view_traverse:token()) -> ok.
+notify_files_to_process(SpaceId, AutocleaningRunId, FilesNumber, Token) ->
+    gen_server2:cast(?SERVER(SpaceId), ?FILES_TO_PROCESS_MSG(AutocleaningRunId, FilesNumber, Token)).
 
-notify_file_to_process(SpaceId, AutocleaningRunId) ->
-    gen_server2:cast(?SERVER(SpaceId), ?FILE_TO_PROCESS_MSG(AutocleaningRunId)).
+-spec notify_processed_file(od_space:id(), run_id(), non_neg_integer()) -> ok.
+notify_processed_file(SpaceId, AutocleaningRunId, BatchNo) ->
+    gen_server2:cast(?SERVER(SpaceId), ?FILE_PROCESSED_MSG(AutocleaningRunId, BatchNo)).
 
--spec notify_finished_traverse(od_space:id(), run_id()) -> ok.
+-spec notify_finished_traverse(od_space:id(), batch_id()) -> ok.
 notify_finished_traverse(SpaceId, AutocleaningRunId) ->
     gen_server2:cast(?SERVER(SpaceId), ?TRAVERSE_FINISHED_MSG(AutocleaningRunId)).
+
+-spec pack_batch_id(batch_id(), non_neg_integer()) -> batch_id().
+pack_batch_id(AutocleaningRunId, Int) ->
+    <<AutocleaningRunId/binary, ?ID_SEPARATOR/binary, (integer_to_binary(Int))/binary>>.
+
+-spec unpack_batch_id(batch_id()) -> {batch_id(), non_neg_integer()}.
+unpack_batch_id(BatchId) ->
+    [AutocleaningRunId, BatchNo] = binary:split(BatchId, ?ID_SEPARATOR),
+    {AutocleaningRunId, binary_to_integer(BatchNo)}.
 
 %%%===================================================================
 %%% Internal API
 %%%===================================================================
 
--spec start_cleaning(od_space:id(), run_id()) -> ok.
+-spec start_cleaning(od_space:id(), batch_id()) -> ok.
 start_cleaning(SpaceId, AutocleaningRunId) ->
     gen_server2:cast(?SERVER(SpaceId), ?START_CLEANING_MSG(AutocleaningRunId)).
 
--spec notify_released_file(od_space:id(), non_neg_integer(), run_id()) -> ok.
-notify_released_file(SpaceId, ReleasedBytes, ARId) ->
-    gen_server2:cast(?SERVER(SpaceId), ?FILE_RELEASED_MSG(ReleasedBytes, ARId)).
+-spec notify_released_file(od_space:id(), run_id(), non_neg_integer(), batch_no()) -> ok.
+notify_released_file(SpaceId, ARId, ReleasedBytes, BatchNo) ->
+    gen_server2:cast(?SERVER(SpaceId), ?FILE_RELEASED_MSG(ARId, ReleasedBytes, BatchNo)).
+
+-spec notify_processed_file(od_space:id(), batch_id()) -> ok.
+notify_processed_file(SpaceId, BatchId) ->
+    {ARId, BatchNo} = unpack_batch_id(BatchId),
+    notify_processed_file(SpaceId, ARId, BatchNo).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -264,56 +253,48 @@ notify_released_file(SpaceId, ReleasedBytes, ARId) ->
 %%-------------------------------------------------------------------
 -spec check(od_space:id()) -> any().
 check(SpaceId) ->
+    % TODO DELETE
     gen_server2:cast(?SERVER(SpaceId), check).
 
-%%-------------------------------------------------------------------
+%%%===================================================================
+%%% replica_deletion_behaviour callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
 %% @doc
-%% This function is called by replica_deletion_worker to ensure
-%% whether it should delete file replica.
+%% {@link replica_deletion_behaviour} callback replica_deletion_predicate/1.
 %% @end
-%%-------------------------------------------------------------------
--spec replica_deletion_predicate(run_id()) -> any().
-replica_deletion_predicate(AutocleaningRunId) ->
-%%    {AutocleaningRunId, _BatchNum} = unpack_batch_id(ReportId),
+%%--------------------------------------------------------------------
+-spec replica_deletion_predicate(batch_id()) -> boolean().
+replica_deletion_predicate(BatchId) ->
+    {AutocleaningRunId, _BatchNo} = unpack_batch_id(BatchId),
     {ok, #{
         released_bytes := Released,
         bytes_to_release := ToRelease
     }} = autocleaning_api:get_run_report(AutocleaningRunId),
     Released < ToRelease.
 
-%%-------------------------------------------------------------------
+%%--------------------------------------------------------------------
 %% @doc
-%% Posthook executed by replica_deletion_worker after deleting file
-%% replica.
+%% {@link replica_deletion_behaviour} callback process_replica_deletion_result/4.
 %% @end
-%%-------------------------------------------------------------------
+%%--------------------------------------------------------------------
 -spec process_replica_deletion_result(replica_deletion:result(), od_space:id(),
-    file_meta:uuid(), run_id()) -> ok.
-process_replica_deletion_result({ok, ReleasedBytes}, SpaceId, FileUuid, ARId) ->
-    ?debug("Auto-cleaning of file ~p in run ~p released ~p bytes.",
-        [FileUuid, ARId, ReleasedBytes]),
+    file_meta:uuid(), batch_id()) -> ok.
+process_replica_deletion_result({ok, ReleasedBytes}, SpaceId, FileUuid, BatchId) ->
+    {ARId, BatchNo} = unpack_batch_id(BatchId),
+    ?debug("Auto-cleaning of file ~p in run ~p released ~p bytes.", [FileUuid, ARId, ReleasedBytes]),
     autocleaning_run:mark_released_file(ARId, ReleasedBytes),
-    notify_released_file(SpaceId, ReleasedBytes, ARId);
-process_replica_deletion_result({error, precondition_not_satisfied},
-    SpaceId, _FileUuid, ARId
-) ->
-    notify_processed_file(SpaceId, ARId);
-process_replica_deletion_result({error, canceled}, SpaceId, _FileUuid, ARId) ->
-    notify_processed_file(SpaceId, ARId);
-process_replica_deletion_result(Error, SpaceId, FileUuid, ARId) ->
-%%    {ARId, _BatchNum} = unpack_batch_id(ReportId),
-    ?error("Error ~p occurred during auto-cleanig of file ~p in run ~p",
+    notify_released_file(SpaceId, ARId, ReleasedBytes, BatchNo);
+process_replica_deletion_result({error, precondition_not_satisfied}, SpaceId, _FileUuid, BatchId) ->
+    notify_processed_file(SpaceId, BatchId);
+process_replica_deletion_result({error, canceled}, SpaceId, _FileUuid, BatchId) ->
+    notify_processed_file(SpaceId, BatchId);
+process_replica_deletion_result(Error, SpaceId, FileUuid, BatchId) ->
+    {ARId, BatchNo} = unpack_batch_id(BatchId),
+    ?error("Error ~p occurred during auto-cleanisg of file ~p in run ~p",
         [Error, FileUuid, ARId]),
-    notify_processed_file(SpaceId, ARId).
-
--spec pack_batch_id(run_id(), non_neg_integer()) -> batch_id().
-pack_batch_id(AutocleaningRunId, Int) ->
-    <<AutocleaningRunId/binary, ?ID_SEPARATOR/binary, (integer_to_binary(Int))/binary>>.
-
--spec unpack_batch_id(batch_id()) -> {run_id(), non_neg_integer()}.
-unpack_batch_id(BatchId) ->
-    [AutocleaningRunId, BatchNum] = binary:split(BatchId, ?ID_SEPARATOR),
-    {AutocleaningRunId, binary_to_integer(BatchNum)}.
+    notify_processed_file(SpaceId, ARId, BatchNo).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -331,12 +312,13 @@ unpack_batch_id(BatchId) ->
 init([ARId, SpaceId, AutocleaningRun, Config]) ->
     BytesToRelease = autocleaning_run:get_bytes_to_release(AutocleaningRun),
     AlreadyReleasedBytes = autocleaning_run:get_released_bytes(AutocleaningRun),
-    NextBatchToken = autocleaning_run:get_index_token(AutocleaningRun), % todo uzywac doc_id i start_key id  ( o ile w ogóle ?!)
+    NextBatchToken = autocleaning_run:get_query_view_token(AutocleaningRun),
     start_cleaning(SpaceId, ARId),
     {ok, #state{
         run_id = ARId,
         space_id = SpaceId,
         config = Config,
+        batch_size = ?BATCH_SIZE,
         bytes_to_release = BytesToRelease - AlreadyReleasedBytes,
         next_batch_token = NextBatchToken
     }}.
@@ -371,15 +353,13 @@ handle_call(_Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}).
 handle_cast(check, State = #state{
     files_to_process = FTP,
-    files_processed = FP,
-    queue_len = QLen
+    files_processed = FP
 }) ->
     % todo remove this test log after resolving VFS-5128
     % todo this log will not appear on production as it can be triggered only from console
     ?critical(
     "~nFiles to process: ~p~n"
-    "Files processed: ~p~n"
-    "Queue length: ~p~n", [FTP, FP, QLen]),
+    "Files processed: ~p~n", [FTP, FP]),
     {noreply, State};
 handle_cast(?MESSAGE(MessageContent, AutocleaningRunId), State = #state{run_id = AutocleaningRunId}) ->
     handle_cast_internal(MessageContent, State);
@@ -434,48 +414,51 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-% TODO Czy na pewno musimy kontrolowac liczbe plikow do przeprocesowania?
-
+-spec handle_cast_internal(message_content(), state()) ->
+    {noreply, state()} | {stop, normal | {error, term()}, state()}.
 handle_cast_internal(?START_CLEANING, State = #state{
     run_id = AutocleaningRunId,
     space_id = SpaceId,
-    config = #autocleaning_config{rules = ACRules}
+    config = #autocleaning_config{rules = ACRules},
+    batch_size = BatchSize,
+    next_batch_token = NextBatchToken
 }) ->
-    % TODO wywalic pobierania wynikow widoku z tego moudlu,
-    % zosteawic tylko kontrolowanie ile zostąło zwolninych byte'ów i plików'
     % todo handle error from run here
-    autocleaning_view_traverse:run(SpaceId, AutocleaningRunId, ACRules),
+    autocleaning_view_traverse:run(SpaceId, AutocleaningRunId, ACRules, BatchSize, NextBatchToken),
     {noreply, State};
-%%    ?run_and_catch_errors(fun() ->
-%%        ?debug("Auto-cleaning run ~p of space ~p started", [ARId, SpaceId]),
-%%        State2 = start_cleaning_internal(State),
-%%        State3 = process_updated_state(State2),
-%%        {noreply, State3}
-%%    end, State);
-handle_cast_internal(?FILE_RELEASED(ReleasedBytes), State) ->
+handle_cast_internal(?FILES_TO_PROCESS(FilesNumber, Token), State = #state{
+    files_to_process = FilesToProcess,
+    batches_counters = BatchesCounters,
+    batches_tokens = BatchesTokens
+}) ->
+    TokenOffset = view_traverse:get_offset(Token),
+    BatchNo = TokenOffset - FilesNumber,
+    {noreply, State#state{
+        files_to_process = FilesToProcess + FilesNumber,
+        batches_counters = BatchesCounters#{BatchNo => init_batch_file_counters(FilesNumber)},
+        batches_tokens = BatchesTokens#{BatchNo => Token}
+    }};
+handle_cast_internal(?FILE_RELEASED(ReleasedBytes, BatchNo), State) ->
     ?run_and_catch_errors(fun() ->
-        State2 = mark_released_file(ReleasedBytes, State),
+        State2 = mark_released_file(State, ReleasedBytes, BatchNo),
         State3 = process_updated_state(State2),
         {noreply, State3}
     end, State);
-handle_cast_internal(?FILE_PROCESSED, State) ->
+handle_cast_internal(?FILE_PROCESSED(BatchNo), State) ->
     ?run_and_catch_errors(fun() ->
-        State2 = mark_processed_file(State),
+        State2 = mark_processed_file(State, BatchNo),
         State3 = process_updated_state(State2),
         {noreply, State3}
     end, State);
-
-handle_cast_internal(?FILE_TO_PROCESS, State = #state{files_to_process = FilesToProcess}) ->
-    {noreply, State#state{files_to_process = FilesToProcess + 1}};
 handle_cast_internal(?TRAVERSE_FINISHED, State) ->
-    todo;
+    State2 = State#state{end_of_view_reached = true},
+    {noreply, process_updated_state(State2)};
 handle_cast_internal(?STOP_CLEANING, State = #state{
     run_id = ARId,
     space_id = SpaceId
 }) ->
     ?run_and_catch_errors(fun() ->
         autocleaning_run:mark_completed(ARId),
-%%        replica_deletion_master:cancelling_finished(ARId, SpaceId),
         ?debug("Auto-cleaning run ~p of space ~p finished", [ARId, SpaceId]),
         {stop, normal, State}
     end, State);
@@ -483,78 +466,68 @@ handle_cast_internal(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
 
-%%-spec start_cleaning_internal(state()) -> state().
-%%start_cleaning_internal(State) ->
-%%    State2 = maybe_refill_queue(State, ?REPLICA_DELETION_MAX_ACTIVE_TASKS),
-%%    maybe_schedule_cleaning(State2).
 
-
--spec mark_released_file(non_neg_integer(), state()) -> state().
-mark_released_file(FileReleasedBytes, State = #state{released_bytes = ReleasedBytes}) ->
-    State2 = mark_processed_file(State),
+-spec mark_released_file(state(), non_neg_integer(), batch_no()) -> state().
+mark_released_file(State = #state{released_bytes = ReleasedBytes}, FileReleasedBytes, BatchNo) ->
+    State2 = mark_processed_file(State, BatchNo),
     State2#state{released_bytes = ReleasedBytes + FileReleasedBytes}.
 
 
--spec mark_processed_file(state()) -> state().
+-spec mark_processed_file(state(), non_neg_integer()) -> state().
 mark_processed_file(State = #state{
     finished_batches = BatchesToPersist,
     files_processed = FilesProcessed,
-    batch_counters_map = BatchesCounters
-}) ->
-%%    {NewBatchesCounters, NewBatchesToPersist} = case
-%%        increment_and_check_equality(BatchesCounters, BatchNum)
-%%    of
-%%        {false, BatchesCounters2} ->
-%%            {BatchesCounters2, BatchesToPersist};
-%%        {true, BatchesCounters2} ->
-%%            BatchesToPersist2 = ordsets:add_element(BatchNum, BatchesToPersist),
-%%            {BatchesCounters2, BatchesToPersist2}
-%%    end,
+    batches_counters = BatchesCounters
+}, BatchNo) ->
+    {NewBatchesCounters, NewBatchesToPersist} = case
+        increment_and_check_equality(BatchesCounters, BatchNo)
+    of
+        {false, BatchesCounters2} ->
+            {BatchesCounters2, BatchesToPersist};
+        {true, BatchesCounters2} ->
+            BatchesToPersist2 = ordsets:add_element(BatchNo, BatchesToPersist),
+            {BatchesCounters2, BatchesToPersist2}
+    end,
     State#state{
-%%        finished_batches = NewBatchesToPersist,
-%%        batch_counters_map = NewBatchesCounters,
+        finished_batches = NewBatchesToPersist,
+        batches_counters = NewBatchesCounters,
         files_processed = FilesProcessed + 1
     }.
 
 
 -spec process_updated_state(state()) -> state().
 process_updated_state(State) ->
-    State2 = maybe_stop_cleaning(State).
-%%    State3 = persist_finished_batches(State2). % todo ogarnac czy w ogole musimy tu pilnowac restartow???
-%%    State4 = maybe_refill_queue(State3, ?REPLICA_DELETION_MAX_ACTIVE_TASKS),
-%%    maybe_schedule_cleaning(State4).
-
+    State2 = maybe_stop_cleaning(State),
+    persist_finished_batches(State2).
 
 -spec maybe_stop_cleaning(state()) -> state().
 maybe_stop_cleaning(State = #state{
     space_id = SpaceId,
     run_id = ARId,
     files_to_process = FilesToProcess,
-    files_processed = FilesToProcess
+    files_processed = FilesToProcess,
+    end_of_view_reached = true
 }) ->
-    stop_cleaning(SpaceId, ARId),
-    State#state{cleaning_stopped = true};
+    stop(SpaceId, ARId),
+    State;
 maybe_stop_cleaning(State = #state{
     run_id = ARId,
     space_id = SpaceId,
     bytes_to_release = BytesToRelease,
     released_bytes = ReleasedBytes,
     scheduled_cancelling = false,
-    batch_counters_map = BatchesCounters
+    batches_counters = BatchesCounters,
+    end_of_view_reached = TraverseFinished
 }) when BytesToRelease =< ReleasedBytes ->
-
-
-    replica_deletion_master:cancel_autocleaning_request(SpaceId, ARId),
-    autocleaning_view_traverse:cancel(ARId),
-
-%%    lists:foreach(fun(BatchNum) ->
-%%        replica_deletion_master:cancel(pack_batch_id(ARId, BatchNum), SpaceId)
-%%    end, maps:keys(BatchesCounters)),
-
-    State#state{
-        cleaning_stopped = true,
-        scheduled_cancelling = true
-    };
+    case TraverseFinished of
+        true -> ok;
+        false ->
+            autocleaning_view_traverse:cancel(ARId)
+    end,
+    lists:foreach(fun(BatchNo) ->
+        replica_deletion_master:cancel_autocleaning_request(SpaceId, pack_batch_id(ARId, BatchNo))
+    end, maps:keys(BatchesCounters)),
+    State#state{scheduled_cancelling = true};
 maybe_stop_cleaning(State) ->
     State.
 
@@ -576,7 +549,7 @@ persist_finished_batches(State = #state{
     case BatchNumToPersist =:= 0 of
         false ->
             {BatchToken, BatchesTokens2} = maps:take(BatchNumToPersist, BatchesTokens),
-            autocleaning_run:set_index_token(ARId, BatchToken),
+            autocleaning_run:set_query_view_token(ARId, BatchToken),
 
             BatchesTokens3 = lists:foldl(fun(StrippedBatchNum, BatchesTokensIn) ->
                 maps:remove(StrippedBatchNum, BatchesTokensIn)
@@ -592,171 +565,44 @@ persist_finished_batches(State = #state{
     end.
 
 
-%%-spec maybe_refill_queue(state(), non_neg_integer()) -> state().
-%%maybe_refill_queue(State = #state{end_of_view_reached = true}, _MinLength) ->
-%%    State;
-%%maybe_refill_queue(State = #state{cleaning_stopped = true}, _MinLength) ->
-%%    State;
-%%maybe_refill_queue(State = #state{queue_len = QLen}, MinLength) when QLen < MinLength ->
-%%    State2 = refill_queue_with_one_batch(State),
-%%    maybe_refill_queue(State2, MinLength);
-%%maybe_refill_queue(State = #state{}, _MinLength) ->
-%%    State.
+-spec increment_and_check_equality(#{non_neg_integer() => batch_file_counters()},
+    non_neg_integer()) -> {boolean(), #{non_neg_integer() => batch_file_counters()}}.
+increment_and_check_equality(BatchesCounters, BatchNo) ->
+    BatchFileCounters = maps:get(BatchNo, BatchesCounters),
+    {AreCountersEqual, BatchFileCounters2} = increment_and_check_equality(BatchFileCounters),
+    BatchesCounters2 = case AreCountersEqual of
+        true -> maps:remove(BatchNo, BatchesCounters);
+        false -> BatchesCounters#{BatchNo => BatchFileCounters2}
+    end,
+    {AreCountersEqual, BatchesCounters2}.
 
 
-%%-spec maybe_schedule_cleaning(state()) -> state().
-%%maybe_schedule_cleaning(State = #state{
-%%    cleaning_stopped = false,
-%%    space_id = SpaceId,
-%%    run_id = ARId,
-%%    files_to_process = FilesToProcess,
-%%    files_processed = FilesProcessed,
-%%    queue_len = QLen,
-%%    queue = Queue
-%%}) when QLen > 0 ->
-%%    case (FilesToProcess - FilesProcessed) < ?NEXT_BATCH_THRESHOLD of
-%%        true ->
-%%            QueueList = queue:to_list(Queue),
-%%            ToSchedule = lists:sublist(QueueList, ?DELETION_BATCH_SIZE),
-%%            ToScheduleLen = length(ToSchedule),
-%%            Queue2 = queue:from_list(lists:nthtail(ToScheduleLen, QueueList)),
-%%            ScheduledNum = schedule_file_replicas_deletion(ToSchedule, ARId, SpaceId),
-%%            State#state{
-%%                files_to_process = FilesToProcess + ScheduledNum,
-%%                queue = Queue2,
-%%                queue_len = QLen - ToScheduleLen
-%%            };
-%%        false ->
-%%            State
-%%    end;
-%%maybe_schedule_cleaning(State) ->
-%%    State.
+-spec increment_and_check_equality(batch_file_counters()) -> {boolean(), batch_file_counters()}.
+increment_and_check_equality(BFC = #batch_file_counters{
+    files_to_process = FilesToProcess,
+    files_processed = FilesProcessed
+}) ->
+    FilesProcessed2 = FilesProcessed + 1,
+    {FilesProcessed2 == FilesToProcess, BFC#batch_file_counters{files_processed = FilesProcessed2}}.
 
 
-%%-spec refill_queue_with_one_batch(state()) -> state().
-%%refill_queue_with_one_batch(State = #state{
-%%    space_id = SpaceId,
-%%    config = #autocleaning_config{rules = ACRules},
-%%    next_batch_token = NextBatchToken,
-%%    batches_counter = BatchesCounter,
-%%    batches_tokens = BatchStartTokens,
-%%    batch_counters_map = BatchesFileCounters,
-%%    queue_len = QLen,
-%%    queue = Queue,
-%%    finished_batches = BatchesToPersist
-%%}) ->
-%%    BatchesCounter2 = BatchesCounter + 1,
-%%    case query(SpaceId, ?VIEW_BATCH_SIZE, NextBatchToken) of
-%%        {[], NextBatchToken} ->
-%%            State#state{
-%%                end_of_view_reached = true
-%%            };
-%%        {PreselectedFileIds, NewNextBatchToken} ->
-%%            case filter(PreselectedFileIds, ACRules) of
-%%                [] ->
-%%                    State#state{
-%%                        batches_counter = BatchesCounter2,
-%%                        next_batch_token = NewNextBatchToken,
-%%                        batches_tokens = BatchStartTokens#{BatchesCounter2 => NextBatchToken},
-%%                        finished_batches = ordsets:add_element(BatchesCounter2, BatchesToPersist)
-%%                    };
-%%                FilteredFiles ->
-%%                    NewFilesToProcess = length(FilteredFiles),
-%%                    FilesWithBatchNum = [{F, BatchesCounter2} || F <- FilteredFiles],
-%%                    State#state{
-%%                        batches_counter = BatchesCounter2,
-%%                        next_batch_token = NewNextBatchToken,
-%%                        batches_tokens = BatchStartTokens#{BatchesCounter2 => NextBatchToken},
-%%                        batch_counters_map = BatchesFileCounters#{BatchesCounter2 => new_batch_counters(NewFilesToProcess)},
-%%                        queue_len = QLen + NewFilesToProcess,
-%%                        queue = queue:join(Queue, queue:from_list(FilesWithBatchNum))
-%%                    }
-%%            end
-%%    end.
-%%
-%%%%-------------------------------------------------------------------
-%%%% @private
-%%%% @doc
-%%%% Filters files returned from the file-popularity view.
-%%%% Files that do not satisfy auto-cleaning rules are removed from the list.
-%%%% @end
-%%%%-------------------------------------------------------------------
-%%-spec filter([file_id:objectid()], autocleaning_config:rules()) -> [file_ctx:ctx()].
-%%filter(PreselectedFiles, ACRules) ->
-%%    lists:filtermap(fun(FileId) ->
-%%        {ok, Guid} = file_id:objectid_to_guid(FileId),
-%%        FileCtx = file_ctx:new_by_guid(Guid),
-%%        try
-%%            case autocleaning_rules:are_all_rules_satisfied(FileCtx, ACRules) of
-%%                true -> {true, FileCtx};
-%%                false -> false
-%%            end
-%%        catch
-%%            Error:Reason ->
-%%                Uuid = file_ctx:get_uuid_const(FileCtx),
-%%                SpaceId = file_ctx:get_space_id_const(FileCtx),
-%%                ?error_stacktrace("Filtering preselected file with uuid ~p in space ~p failed due to ~p:~p",
-%%                    [Uuid, SpaceId, Error, Reason]),
-%%                false
-%%        end
-%%    end, PreselectedFiles).
-%%
-%%%%-------------------------------------------------------------------
-%%%% @doc
-%%%% Schedules deletion of the replicas of given files.
-%%%% Returns number of schedule deletions.
-%%%% @end
-%%%%-------------------------------------------------------------------
-%%-spec schedule_file_replicas_deletion([{file_ctx:ctx(), non_neg_integer()}],
-%%    run_id(), od_space:id()) -> non_neg_integer().
-%%schedule_file_replicas_deletion(FilesToCleanAndBatchNum, ARId, SpaceId) ->
-%%    lists:foldl(fun({FileCtx, BatchNum}, ScheduledNumIn) ->
-%%        case replica_deletion_master:get_setting_for_deletion_task(FileCtx) of
-%%            undefined ->
-%%                ScheduledNumIn;
-%%            {FileUuid, Provider, Blocks, VV} ->
-%%                BatchId = pack_batch_id(ARId, BatchNum),
-%%                schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, BatchId, SpaceId),
-%%                ScheduledNumIn + 1
-%%        end
-%%    end, 0, FilesToCleanAndBatchNum).
-%%
-%%%%-------------------------------------------------------------------
-%%%% @private
-%%%% @doc
-%%%% Adds task of replica deletion to replica_deletion_master queue.
-%%%% @end
-%%%%-------------------------------------------------------------------
-%%-spec schedule_replica_deletion_task(file_meta:uuid(), od_provider:id(),
-%%    fslogic_blocks:blocks(), version_vector:version_vector(), batch_id(),
-%%    od_space:id()) -> ok.
-%%schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, BatchId, SpaceId) ->
-%%    replica_deletion_master:enqueue_task(FileUuid, Provider, Blocks, VV,
-%%        BatchId, autocleaning, SpaceId).
-
-
-%%-spec increment_and_check_equality(#{non_neg_integer() => batch_counters()},
-%%    non_neg_integer()) -> {boolean(), #{non_neg_integer() => batch_counters()}}.
-%%increment_and_check_equality(BatchesCounters, BatchNum) ->
-%%    BatchCounters = maps:get(BatchNum, BatchesCounters),
-%%    case increment_and_check_equality(BatchCounters) of
-%%        true ->
-%%            {true, maps:remove(BatchNum, BatchesCounters)};
-%%        {false, BatchFileCounters2} ->
-%%            {false, BatchesCounters#{BatchNum => BatchFileCounters2}}
-%%    end.
-
-
-%%-spec increment_and_check_equality(batch_counters()) -> true | {false, batch_counters()}.
-%%increment_and_check_equality(#batch_counters{
-%%    files_to_process = FilesToProcess,
-%%    files_processed = FilesProcessed
-%%}) when FilesToProcess == (FilesProcessed + 1) ->
-%%    true;
-%%increment_and_check_equality(BC = #batch_counters{files_processed = FilesProcessed}) ->
-%%    {false, BC#batch_counters{files_processed = FilesProcessed}}.
-
-
+%%--------------------------------------------------------------------
+%% @doc
+%% This function strips an increasing, "continuous" subsequence from
+%% the beginning of list L.
+%% Stripped subsequence must start from M = N + 1.
+%% "Continuous" in this context means that for each
+%% term X_{n} = X_{n-1} + 1.
+%% The function returns a triple where:
+%%  - the 1st element is the last element of stripped subsequence
+%%    or N if nothing was stripped,
+%%  - the 2nd element is stripped subsequence,
+%%  - the 3rd element is remaining part of list L.
+%% WARNING!!!
+%% This function assumes that L is an increasing sequence of
+%% integers.
+%% @end
+%%--------------------------------------------------------------------
 -spec strip_if_continuous(non_neg_integer(), [non_neg_integer()]) ->
     {non_neg_integer(), [non_neg_integer()], [non_neg_integer()]}.
 strip_if_continuous(N, L) ->
@@ -764,23 +610,15 @@ strip_if_continuous(N, L) ->
 
 -spec strip_if_continuous(non_neg_integer(), [non_neg_integer()], [non_neg_integer()]) ->
     {non_neg_integer(), [non_neg_integer()], [non_neg_integer()]}.
-strip_if_continuous(N, StrippedReversed, []) ->
-    {N, StrippedReversed, []};
 strip_if_continuous(N, StrippedReversed, [H | R]) when N + 1 == H ->
     strip_if_continuous(H, [H | StrippedReversed], R);
 strip_if_continuous(N, StrippedReversed, L) ->
-    {N, StrippedReversed, L}.
+    {N, lists:reverse(StrippedReversed), L}.
 
 
-%%-spec new_batch_counters(non_neg_integer()) -> batch_counters().
-%%new_batch_counters(FilesToProcess) ->
-%%    #batch_counters{
-%%        files_to_process = FilesToProcess,
-%%        files_processed = 0
-%%    }.
-%%
-%%
-%%-spec query(od_space:id(), non_neg_integer(), file_popularity_view:index_token()) ->
-%%    {[file_id:objectid()], file_popularity_view:index_token() | undefined}.
-%%query(SpaceId, BatchSize, IndexToken) ->
-%%    file_popularity_api:query(SpaceId, IndexToken, BatchSize).
+-spec init_batch_file_counters(non_neg_integer()) -> batch_file_counters().
+init_batch_file_counters(FilesToProcess) ->
+    #batch_file_counters{
+        files_to_process = FilesToProcess,
+        files_processed = 0
+    }.

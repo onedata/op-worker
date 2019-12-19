@@ -58,13 +58,13 @@
 -define(INIT_CANONICAL_PATHS_CACHE(Space), {init_canonical_paths_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
-    application:get_env(?APP_NAME, periodical_spaces_autocleaning_check_enabled, true)).
+    application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
 
 % delays and intervals
 -define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL,
     application:get_env(?APP_NAME, invalidate_permissions_cache_interval, timer:seconds(30))).
--define(PERIODICAL_SPACES_AUTOCLEANING_CHECK_INTERVAL,
-    application:get_env(?APP_NAME, periodical_spaces_autocleaning_check_interval, timer:minutes(1))).
+-define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
+    application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
 -define(RERUN_TRANSFERS_DELAY,
     application:get_env(?APP_NAME, rerun_transfers_delay, 10000)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
@@ -84,6 +84,9 @@
 
 % This macro is used to disable automatic rerun of transfers in tests
 -define(SHOULD_RERUN_TRANSFERS, application:get_env(?APP_NAME, rerun_transfers, true)).
+
+% This macro is used to disable automatic restart of autocleaning runs in tests
+-define(SHOULD_RESTART_AUTOCLEANING_RUNS, application:get_env(?APP_NAME, autocleaning_restart_runs, true)).
 
 %%%===================================================================
 %%% API
@@ -116,7 +119,7 @@ init(_Args) ->
     erlang:send_after(0, self(), {sync_timer, ?INIT_CANONICAL_PATHS_CACHE(all)}),
 
     transfer:init(),
-    autocleaning_view_traverse:init(),
+    autocleaning_view_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
 
     schedule_invalidate_permissions_cache(),
@@ -212,7 +215,7 @@ handle(_Request) ->
     Error :: timeout | term().
 cleanup() ->
     transfer:cleanup(),
-    autocleaning_view_traverse:stop(),
+    autocleaning_view_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
     ok.
 
@@ -573,7 +576,7 @@ schedule_restart_autocleaning_runs() ->
 
 -spec schedule_periodical_spaces_autocleaning_check() -> ok.
 schedule_periodical_spaces_autocleaning_check() ->
-    schedule(?PERIODICAL_SPACES_AUTOCLEANING_CHECK, ?PERIODICAL_SPACES_AUTOCLEANING_CHECK_INTERVAL).
+    schedule(?PERIODICAL_SPACES_AUTOCLEANING_CHECK, ?AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL).
 
 -spec schedule(term(), non_neg_integer()) -> ok.
 schedule(Request, Timeout) ->
@@ -635,18 +638,23 @@ rerun_transfers() ->
 
 -spec restart_autocleaning_runs() -> ok.
 restart_autocleaning_runs() ->
-    try provider_logic:get_spaces() of
-        {ok, SpaceIds} ->
-            lists:foreach(fun(SpaceId) ->
-                autocleaning_api:restart_autocleaning_run(SpaceId)
-            end, SpaceIds);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            schedule_restart_autocleaning_runs();
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            schedule_restart_autocleaning_runs();
-        Error = {error, _} ->
-            ?error("Unable to restart auto-cleaning runs due to: ~p", [Error])
-    catch
-        Error2:Reason ->
-            ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}])
+    case ?SHOULD_RESTART_AUTOCLEANING_RUNS of
+        true ->
+            try provider_logic:get_spaces() of
+                {ok, SpaceIds} ->
+                    lists:foreach(fun(SpaceId) ->
+                        autocleaning_api:restart_autocleaning_run(SpaceId)
+                    end, SpaceIds);
+                ?ERROR_UNREGISTERED_ONEPROVIDER ->
+                    schedule_restart_autocleaning_runs();
+                ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+                    schedule_restart_autocleaning_runs();
+                Error = {error, _} ->
+                    ?error("Unable to restart auto-cleaning runs due to: ~p", [Error])
+            catch
+                Error2:Reason ->
+                    ?error_stacktrace("Unable to restart autocleaning-runs due to: ~p", [{Error2, Reason}])
+            end;
+        false ->
+            ok
     end.
