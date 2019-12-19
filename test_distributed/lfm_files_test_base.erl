@@ -1207,13 +1207,25 @@ create_share_dir(Config) ->
   ?assertMatch({error, ?EEXIST}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
 
 create_share_file(Config) ->
-  [W | _] = ?config(op_worker_nodes, Config),
+  [W | _] = Workers = ?config(op_worker_nodes, Config),
   SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+  UserId = ?config({user_id, <<"user1">>}, Config),
   Path = <<"/space_name1/share_file">>,
   {ok, Guid} = lfm_proxy:create(W, SessId, Path, 8#700),
+  SpaceId = file_id:guid_to_space_id(Guid),
 
-  % Files cannot be shared
-  ?assertMatch({error, ?ENOTDIR}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
+  % Make sure SPACE_MANAGE_SHARES priv is accounted
+  initializer:testmaster_mock_space_user_privileges(
+    Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
+  ),
+  ?assertMatch({error, ?EACCES}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
+
+  initializer:testmaster_mock_space_user_privileges(
+    Workers, SpaceId, UserId, privileges:space_admin()
+  ),
+  ?assertMatch({ok, {<<_/binary>>, <<_/binary>>}}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
+  % Only one share per file is supported
+  ?assertMatch({error, ?EEXIST}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
 
 remove_share(Config) ->
   [W | _] = Workers = ?config(op_worker_nodes, Config),

@@ -590,71 +590,74 @@ create_share_base(Config, RestPathType) ->
     Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
-    SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
-    {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
-    {ok, SharedDirObjectId} = file_id:guid_to_objectid(SharedDirGuid),
+    DirPath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
+    {ok, DirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, DirPath, 8#700),
+    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
     % create regular file
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1"])),
-    {ok, FileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, File, 8#600),
+    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1"])),
+    {ok, FileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, FilePath, 8#600),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     % get rest paths
-    {SharedDirRestPath, FileRestPath} = case RestPathType of
+    {DirRestPath, FileRestPath} = case RestPathType of
         path ->
-            {str_utils:format_bin("shares~s", [SharedDir]),
-            str_utils:format_bin("shares~s", [File])};
+            {str_utils:format_bin("shares~s", [DirPath]),
+            str_utils:format_bin("shares~s", [FilePath])};
         id ->
-            {str_utils:format_bin("shares-id/~s", [SharedDirObjectId]),
+            {str_utils:format_bin("shares-id/~s", [DirObjectId]),
             str_utils:format_bin("shares-id/~s", [FileObjectId])}
     end,
-
-    % request without share name should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
-        {SupportingProviderNode, SharedDirRestPath, post, Headers, <<"">>}
-    )),
 
     ShareName = <<"Share name">>,
     Payload = json_utils:encode(#{<<"name">> => ShareName}),
 
-    % creating share for file should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_POSIX(?ENOTDIR),
-        {SupportingProviderNode, FileRestPath, post, Headers, Payload}
-    )),
+    lists:foreach(fun({Guid, RestPath}) ->
+        % request without share name should fail
+        ?assertMatch(true, rest_test_utils:assert_request_error(
+            ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
+            {SupportingProviderNode, RestPath, post, Headers, <<"">>}
+        )),
 
-    % creating share from provider that does not support space should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
-        {OtherProviderNode, SharedDirRestPath, post, Headers, Payload}
-    )),
+        % creating share from provider that does not support space should fail
+        ?assertMatch(true, rest_test_utils:assert_request_error(
+            ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
+            {OtherProviderNode, RestPath, post, Headers, Payload}
+        )),
 
-    % creating share for directory with share name in request should succeed
-    % and return share id in response
-    {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(SupportingProviderNode, SharedDirRestPath, post, Headers, Payload)),
-    #{<<"shareId">> := ShareId} = json_utils:decode(Response),
-    ShareGuid = file_id:guid_to_share_guid(SharedDirGuid, ShareId),
+        % creating with share name in request should succeed
+        % and return share id in response
+        {ok, 200, _, Response} = ?assertMatch(
+            {ok, 200, _, _},
+            rest_test_utils:request(SupportingProviderNode, RestPath, post, Headers, Payload)
+        ),
+        #{<<"shareId">> := ShareId} = json_utils:decode(Response),
+        ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
 
-    % check that share with given name and id has been created
-    ?assertMatch(
-        {ok, #document{key = ShareId, value = #od_share{
-            root_file = ShareGuid, name = ShareName, space = SpaceId
-        }}},
-        rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId])
-    ),
+        % check that share with given name and id has been created
+        ?assertMatch(
+            {ok, #document{key = ShareId, value = #od_share{
+                root_file = ShareGuid, name = ShareName, space = SpaceId
+            }}},
+            rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId])
+        ),
 
-    % creating share for directory that has existing share should fail
-    ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_POSIX(?EEXIST),
-        {SupportingProviderNode, SharedDirRestPath, post, Headers, Payload}
-    )),
+        % creating share for file that has existing share should fail
+        ?assertMatch(true, rest_test_utils:assert_request_error(
+            ?ERROR_POSIX(?EEXIST),
+            {SupportingProviderNode, RestPath, post, Headers, Payload}
+        )),
 
-    % creating share after removal of previous one should succeed
-    ok = lfm_proxy:remove_share(SupportingProviderNode, SessionId, ShareId),
-    {ok, 200, _, _}  = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(SupportingProviderNode, SharedDirRestPath, post, Headers, Payload)).
+        % creating share after removal of previous one should succeed
+        ok = lfm_proxy:remove_share(SupportingProviderNode, SessionId, ShareId),
+        {ok, 200, _, _}  = ?assertMatch(
+            {ok, 200, _, _},
+            rest_test_utils:request(SupportingProviderNode, RestPath, post, Headers, Payload)
+        )
+    end, [
+        {DirGuid, DirRestPath},
+        {FileGuid, FileRestPath}
+    ]).
 
 get_share(Config) ->
     get_file_share_base(Config, path).
