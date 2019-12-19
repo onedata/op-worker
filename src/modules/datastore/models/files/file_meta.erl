@@ -41,6 +41,7 @@
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
+-export([check_name/3]).
 
 
 %% datastore_model callbacks
@@ -825,6 +826,45 @@ is_child_of_hidden_dir(Path) ->
     {Parent, _} = fslogic_path:basename_and_parent(ParentPath),
     is_hidden(Parent).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given file has conflicts with other on name field.
+%% @end
+%%--------------------------------------------------------------------
+%%-spec check_name(ParentUuid :: uuid(), name(), CheckUuid :: uuid()) ->
+%%    ok | {conflicting, ExtendedName :: name(), Conflicts :: [{uuid(), name()}]} | {error, term()}.
+check_name(undefined, Name, ChildDoc) ->
+    ok;
+check_name(ParentUuid, Name, #document{
+    key = ChildUuid,
+    value = #file_meta{
+        provider_id = ChildProvider
+    }
+}) ->
+    case datastore_model:get_links(?CTX, ParentUuid, all, Name) of
+        {ok, [#link{target = ChildUuid}]} ->
+            ok;
+        {ok, []} ->
+            ok;
+        {ok, Links} ->
+            Links2 = case lists:filter(fun(#link{tree_id = TreeID}) -> TreeID =:= ChildProvider end, Links) of
+                [] ->
+                    [#link{tree_id = ChildProvider, name = Name, target = ChildUuid} | Links];
+                _ ->
+                    Links
+            end,
+            WithTag = tag_children(Links2),
+            {NameAns, OtherFiles} = lists:foldl(fun
+                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) when Uuid =:= ChildUuid->
+                    {ExtendedName, OtherAcc};
+                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) ->
+                    {NameAcc, [{Uuid, ExtendedName} | OtherAcc]}
+            end, {Name, []}, WithTag),
+            {conflicting, NameAns, OtherFiles};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1219,7 +1259,8 @@ resolve_conflict(_Ctx, #document{key = Uuid, value = #file_meta{name = NewName, 
                 FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid)),
                 OldParentGuid = fslogic_uuid:uuid_to_guid(PrevParentUuid),
                 NewParentGuid = fslogic_uuid:uuid_to_guid(NewParentUuid),
-                fslogic_event_emitter:emit_file_renamed_no_exclude(FileCtx, OldParentGuid, NewParentGuid, NewName)
+                fslogic_event_emitter:emit_file_renamed_no_exclude(
+                    FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName)
             end);
         _ ->
             ok

@@ -28,7 +28,8 @@
     subscribe_on_user_root_test/1,
     subscribe_on_user_root_filter_test/1,
     subscribe_on_new_space_test/1,
-    subscribe_on_new_space_filter_test/1
+    subscribe_on_new_space_filter_test/1,
+    events_on_conflicts_test/1
 ]).
 
 all() ->
@@ -38,6 +39,7 @@ all() ->
         subscribe_on_user_root_filter_test,
         subscribe_on_new_space_test,
         subscribe_on_new_space_filter_test
+%%        events_on_conflicts_test
     ]).
 
 %%%===================================================================
@@ -137,6 +139,47 @@ subscribe_on_new_space_test_base(Config, UserNum, ExpectedAns) ->
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
+events_on_conflicts_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+
+    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
+        generator:gen_name(), 8#755)),
+    ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
+
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+
+    Filename = <<"abc">>,
+    Dirname = generator:gen_name(),
+
+    DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
+    Seq1 = get_seq(Config, 1),
+    Seq2 = get_seq(Config, 1),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId))),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_file_renamed_subscription_message(0, Seq2, -Seq2, DirId))),
+    timer:sleep(2000), % there is no sync between subscription and unlink
+
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
+    fuse_test_utils:close(Sock, FileGuid, HandleId),
+    ?assertMatch({ok, _}, lfm_proxy:mv(Worker1, SessionId, {guid, FileGuid}, <<"/space_name1/", Dirname/binary, "/xyz">>)),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessionId, {guid, FileGuid})),
+
+    %%    ?assertEqual(ok, receive_file_renamed_event(FileGuid)),
+    ?assertEqual(ok, receive_file_renamed_event()),
+    ?assertEqual(ok, receive_file_renamed_event()),
+    ?assertEqual(ok, receive_file_renamed_event()),
+    ?assertEqual(ok, receive_file_renamed_event()),
+
+    lists:foreach(fun(Seq) ->
+        ?assertEqual(ok, ssl:send(Sock,
+            fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, 1), -Seq)))
+    end, [Seq1, Seq2]),
+    ?assertEqual(ok, ssl:close(Sock)),
+    ok.
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -158,12 +201,27 @@ init_per_suite(Config) ->
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils, ?MODULE]} | Config].
 
+init_per_testcase(events_on_conflicts_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, datastore_model),
+    test_utils:mock_expect(Workers, datastore_model, get_links, fun
+        (Ctx, Uuid, Tree, Name) when Name =:= <<"abc">> orelse Name =:= <<"xyz">> ->
+            {ok, [Link]} = meck:passthrough([Ctx, Uuid, Tree, Name]),
+            {ok, [Link, Link#link{target = generator:gen_name(), tree_id = <<"q">>}]};
+        (Ctx, Uuid, Tree, Name) ->
+            meck:passthrough([Ctx, Uuid, Tree, Name])
+    end),
+    init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
     timer:sleep(1000),
     initializer:remove_pending_messages(),
     ssl:start(),
     lfm_proxy:init(Config).
 
+end_per_testcase(events_on_conflicts_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+%%    test_utils:mock_validate_and_unload(Workers, datastore_model),
+    end_per_testcase(default, Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
     ssl:stop().
@@ -194,6 +252,29 @@ receive_file_attr_changed_event() ->
         #'ServerMessage'{
             message_body = {events, #'Events'{events = [#'Event'{
                 type = {file_attr_changed, #'FileAttrChangedEvent'{}}
+            }]}}
+        } -> ok;
+        Msg -> Msg
+    end.
+
+receive_file_renamed_event(Name) ->
+    case fuse_test_utils:receive_server_message([message_stream_reset, subscription, message_request,
+        message_acknowledgement, processing_status]) of
+        #'ServerMessage'{
+            message_body = {events, #'Events'{events = [#'Event'{
+                type = {file_renamed, #'FileRenamedEvent'{top_entry = #'FileRenamedEntry'{
+                    new_name = Name}}}
+            }]}}
+        } -> ok;
+        Msg -> Msg
+    end.
+
+receive_file_renamed_event() ->
+    case fuse_test_utils:receive_server_message([message_stream_reset, subscription, message_request,
+        message_acknowledgement, processing_status]) of
+        #'ServerMessage'{
+            message_body = {events, #'Events'{events = [#'Event'{
+                type = {file_renamed, #'FileRenamedEvent'{top_entry = #'FileRenamedEntry'{}}}
             }]}}
         } -> ok;
         Msg -> Msg

@@ -16,10 +16,11 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
-    get_file_attr_insecure/4, get_child_attr/3, chmod/3, update_times/5,
+    get_file_attr_insecure/4, get_file_attr_and_conflicts/4, get_child_attr/3, chmod/3, update_times/5,
     chmod_attrs_only_insecure/2]).
 
 %%%===================================================================
@@ -69,6 +70,21 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
     AllowDeletedFiles :: boolean(), IncludeSize :: boolean()) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
+    {Ans, _} = get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize),
+    Ans.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file attributes. When the AllowDeletedFiles flag is set to true,
+%% function will return attributes even for files that are marked as deleted.
+%% Returns also list of conflicting files.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_attr_and_conflicts(user_ctx:ctx(), file_ctx:ctx(),
+    AllowDeletedFiles :: boolean(), IncludeSize :: boolean()) ->
+    {fslogic_worker:fuse_response(), Conflicts :: [{file_meta:uuid(), file_meta:name()}]}.
+% Wylaczyc sprawdzanie dla nowych plikow i read_dir_plus
+get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
     {#document{
         key = Uuid,
         value = #file_meta{
@@ -78,7 +94,7 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
             owner = OwnerId,
             shares = Shares
         }
-    }, FileCtx2} = case AllowDeletedFiles of
+    } = Doc, FileCtx2} = case AllowDeletedFiles of
         true ->
             file_ctx:get_file_doc_including_deleted(FileCtx);
         false ->
@@ -97,7 +113,12 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
     {{ATime, CTime, MTime}, FileCtx6} = file_ctx:get_times(FileCtx5),
     {ParentGuid, _FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
 
-    #fuse_response{
+    {FinalName, ConflictingFiles} = case file_meta:check_name(file_id:guid_to_uuid(ParentGuid), FileName, Doc) of
+        {conflicting, ExtendedName, Others} -> {ExtendedName, Others};
+        _ -> {FileName, []}
+    end,
+
+    {#fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_attr{
             uid = Uid,
@@ -110,12 +131,12 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
             mtime = MTime,
             ctime = CTime,
             size = Size,
-            name = FileName,
+            name = FinalName,
             provider_id = ProviderId,
             shares = Shares,
             owner_id = OwnerId
         }
-    }.
+    }, ConflictingFiles}.
 
 %%--------------------------------------------------------------------
 %% @equiv get_child_attr_insecure/3 with permission checks
@@ -181,9 +202,12 @@ get_child_attr_insecure(UserCtx, ParentFileCtx, Name) ->
     fslogic_worker:fuse_response().
 ensure_proper_file_name(FuseResponse = #fuse_response{
     status = #status{code = ?OK},
-    fuse_response = FileAttr
+    fuse_response = #file_attr{name = AnsName} = FileAttr
 }, Name) ->
-    FuseResponse#fuse_response{fuse_response = FileAttr#file_attr{name = Name}};
+    case binary:split(Name, <<"@">>) of
+        [AnsName | _] -> FuseResponse;
+        _ -> FuseResponse#fuse_response{fuse_response = FileAttr#file_attr{name = Name}}
+    end;
 ensure_proper_file_name(FuseResponse, _Name) ->
     FuseResponse.
 
