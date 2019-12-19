@@ -20,7 +20,8 @@
 
 %% API
 -export([get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
-    get_file_attr_insecure/4, get_file_attr_and_conflicts/4, get_child_attr/3, chmod/3, update_times/5,
+    get_file_attr_insecure/4, get_file_attr_internal/3, get_file_attr_and_conflicts/5,
+    get_child_attr/3, chmod/3, update_times/5,
     chmod_attrs_only_insecure/2]).
 
 %%%===================================================================
@@ -70,21 +71,31 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
     AllowDeletedFiles :: boolean(), IncludeSize :: boolean()) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
-    {Ans, _} = get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize),
+    {Ans, _} = get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, true),
     Ans.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file attributes. When the AllowDeletedFiles flag is set to true,
+%% Returns file attributes. Internal function - no permissions check, no name verification, no deleted files.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_attr_internal(user_ctx:ctx(), file_ctx:ctx(),
+    IncludeSize :: boolean()) -> fslogic_worker:fuse_response().
+get_file_attr_internal(UserCtx, FileCtx, IncludeSize) ->
+    {Ans, _} = get_file_attr_and_conflicts(UserCtx, FileCtx, false, IncludeSize, false),
+    Ans.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file attributes and information about conflicts. When the AllowDeletedFiles flag is set to true,
 %% function will return attributes even for files that are marked as deleted.
 %% Returns also list of conflicting files.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_attr_and_conflicts(user_ctx:ctx(), file_ctx:ctx(),
-    AllowDeletedFiles :: boolean(), IncludeSize :: boolean()) ->
+    AllowDeletedFiles :: boolean(), IncludeSize :: boolean(), VerifyName :: boolean()) ->
     {fslogic_worker:fuse_response(), Conflicts :: [{file_meta:uuid(), file_meta:name()}]}.
-% Wylaczyc sprawdzanie dla nowych plikow i read_dir_plus
-get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
+get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, VerifyName) ->
     {#document{
         key = Uuid,
         value = #file_meta{
@@ -113,9 +124,14 @@ get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
     {{ATime, CTime, MTime}, FileCtx6} = file_ctx:get_times(FileCtx5),
     {ParentGuid, _FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
 
-    {FinalName, ConflictingFiles} = case file_meta:check_name(file_id:guid_to_uuid(ParentGuid), FileName, Doc) of
-        {conflicting, ExtendedName, Others} -> {ExtendedName, Others};
-        _ -> {FileName, []}
+    {FinalName, ConflictingFiles} = case VerifyName of
+        true ->
+            case file_meta:check_name(file_id:guid_to_uuid(ParentGuid), FileName, Doc) of
+                {conflicting, ExtendedName, Others} -> {ExtendedName, Others};
+                _ -> {FileName, []}
+            end;
+        _ ->
+            {FileName, []}
     end,
 
     {#fuse_response{

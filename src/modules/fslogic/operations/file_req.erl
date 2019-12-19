@@ -188,7 +188,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
 
-        #fuse_response{fuse_response = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, FileCtx2, false, false),
+        #fuse_response{fuse_response = FileAttr} = attr_req:get_file_attr_internal(UserCtx, FileCtx2, false),
         FileAttr2 = FileAttr#file_attr{size = 0},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         #fuse_response{
@@ -269,7 +269,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     try
         {_, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx),
-        #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx2, false, false),
+        #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_internal(UserCtx, FileCtx2, false),
         FileAttr2 = FileAttr#file_attr{size = 0},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
         Ans#fuse_response{fuse_response = FileAttr2}

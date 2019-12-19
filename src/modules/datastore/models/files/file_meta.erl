@@ -831,10 +831,10 @@ is_child_of_hidden_dir(Path) ->
 %% Checks if given file has conflicts with other on name field.
 %% @end
 %%--------------------------------------------------------------------
-%%-spec check_name(ParentUuid :: uuid(), name(), CheckUuid :: uuid()) ->
-%%    ok | {conflicting, ExtendedName :: name(), Conflicts :: [{uuid(), name()}]} | {error, term()}.
-check_name(undefined, Name, ChildDoc) ->
-    ok;
+-spec check_name(ParentUuid :: uuid(), name(), CheckDoc :: doc()) ->
+    ok | {conflicting, ExtendedName :: name(), Conflicts :: [{uuid(), name()}]} | {error, term()}.
+check_name(undefined, _Name, _ChildDoc) ->
+    ok; % Roor directory
 check_name(ParentUuid, Name, #document{
     key = ChildUuid,
     value = #file_meta{
@@ -1047,7 +1047,7 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
 emit_space_dir_created(DirUuid, SpaceId) ->
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
     #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_USER_ID), FileCtx, false, false),
+        attr_req:get_file_attr_internal(user_ctx:new(?ROOT_USER_ID), FileCtx, false),
     FileAttr2 = FileAttr#file_attr{size = 0},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
 
