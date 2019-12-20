@@ -274,6 +274,8 @@ create_file_location_changed(Location, Offset, OffsetEnd) ->
 %% @doc
 %% Emits #file_renamed_event for files that can be viewed with different suffix
 %% after changes represented by other event.
+%% The function is introduced because oneclient does not resolve conflicts on its side.
+%% Can be removed after upgrade of oneclient.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_suffixes(Files :: [{file_meta:uuid(), file_meta:name()}],
