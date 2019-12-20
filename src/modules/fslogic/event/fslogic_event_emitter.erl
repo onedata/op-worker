@@ -282,13 +282,17 @@ create_file_location_changed(Location, Offset, OffsetEnd) ->
     ParentGuid :: fslogic_worker:file_guid()) -> ok.
 emit_suffixes(Files, ParentGuid) ->
     lists:foreach(fun({Uuid, ExtendedName}) ->
-        Guid = fslogic_uuid:uuid_to_guid(Uuid),
-        FileCtx = file_ctx:new_by_guid(Guid),
+        try
+            Guid = fslogic_uuid:uuid_to_guid(Uuid),
+            FileCtx = file_ctx:new_by_guid(Guid),
 
-        event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
-            old_guid = Guid,
-            new_guid = Guid,
-            new_parent_guid = ParentGuid,
-            new_name = ExtendedName
-        }}, [#{file_ctx => FileCtx, key_base => ParentGuid}], [])
+            event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
+                old_guid = Guid,
+                new_guid = Guid,
+                new_parent_guid = ParentGuid,
+                new_name = ExtendedName
+            }}, [#{file_ctx => FileCtx, key_base => ParentGuid}], [])
+        catch
+            _:_ -> ok % File not fully synchronized (file_meta is missing)
+        end
     end, Files).
