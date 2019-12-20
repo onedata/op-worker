@@ -41,10 +41,10 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
     case file_ctx:get_and_cache_file_doc_including_deleted(FileCtx) of
         {error, not_found} ->
             ok;
-        {#document{value = #file_meta{parent_uuid = ParentUuid}}, FileCtx2} ->
+        {#document{}, FileCtx2} ->
             {#fuse_response{fuse_response = #file_attr{} = FileAttr}, OtherFiles} =
                 attr_req:get_file_attr_and_conflicts(user_ctx:new(?ROOT_SESS_ID), FileCtx2, true, true, true),
-            emit_suffixes(OtherFiles, fslogic_uuid:uuid_to_guid(ParentUuid)),
+            emit_suffixes(OtherFiles, {ctx, FileCtx2}),
             emit_file_attr_changed(FileCtx2, FileAttr, ExcludedSessions);
         Other ->
             Other
@@ -165,10 +165,10 @@ emit_file_removed(FileCtx, ExcludedSessions) ->
         value = #file_meta{
             name = Name,
             parent_uuid = ParentUuid
-        }} = Doc, _} = file_ctx:get_file_doc_including_deleted(FileCtx),
+        }} = Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case file_meta:check_name(ParentUuid, Name, Doc) of
         {conflicting, _, OtherFiles} ->
-            emit_suffixes(OtherFiles, fslogic_uuid:uuid_to_guid(ParentUuid));
+            emit_suffixes(OtherFiles, {ctx, FileCtx2});
         _ ->
             ok
     end,
@@ -240,7 +240,7 @@ emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, OldName, Exclu
     {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     FinalName = case file_meta:check_name(file_id:guid_to_uuid(OldParentGuid), OldName, Doc) of
         {conflicting, ExtendedName, OtherFiles} ->
-            emit_suffixes(OtherFiles, NewParentGuid),
+            emit_suffixes(OtherFiles, {parent_guid, NewParentGuid}),
             ExtendedName;
         _ ->
             NewName
@@ -279,8 +279,10 @@ create_file_location_changed(Location, Offset, OffsetEnd) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_suffixes(Files :: [{file_meta:uuid(), file_meta:name()}],
-    ParentGuid :: fslogic_worker:file_guid()) -> ok.
-emit_suffixes(Files, ParentGuid) ->
+    {parent_guid, ParentGuid :: fslogic_worker:file_guid()} | {ctx, file_ctx:ctx()}) -> ok.
+emit_suffixes([], _) ->
+    ok;
+emit_suffixes(Files, {parent_guid, ParentGuid}) ->
     lists:foreach(fun({Uuid, ExtendedName}) ->
         try
             Guid = fslogic_uuid:uuid_to_guid(Uuid),
@@ -295,4 +297,11 @@ emit_suffixes(Files, ParentGuid) ->
         catch
             _:_ -> ok % File not fully synchronized (file_meta is missing)
         end
-    end, Files).
+    end, Files);
+emit_suffixes(Files, {ctx, FileCtx}) ->
+    try
+        {ParentCtx, _} = file_ctx:get_parent(FileCtx, user_ctx:new(?ROOT_USER_ID)),
+        emit_suffixes(Files, {parent_guid, file_ctx:get_guid_const(ParentCtx)})
+    catch
+        _:_ -> ok % Parent not fully synchronized
+    end.
