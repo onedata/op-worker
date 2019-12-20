@@ -43,6 +43,7 @@
     middleware:scope()) -> boolean().
 operation_supported(create, shared_dir, private) -> true;
 
+operation_supported(get, instance, public) -> true;
 operation_supported(get, instance, private) -> true;
 operation_supported(get, shared_dir, private) -> true;
 
@@ -94,11 +95,23 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
 fetch_entity(#op_req{operation = create, gri = #gri{aspect = shared_dir}}) ->
     {ok, {undefined, 1}};
 
+fetch_entity(#op_req{operation = get, gri = #gri{
+    id = ShareId,
+    aspect = instance,
+    scope = public
+}}) ->
+    case share_logic:get_public_data(?GUEST_SESS_ID, ShareId) of
+        {ok, #document{value = Share}} ->
+            {ok, {Share, 1}};
+        {error, _} = Error ->
+            Error
+    end;
+
 fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     id = ShareId,
     aspect = instance
 }}) ->
-    fetch_share(Auth, ShareId);
+    fetch_private_share_data(Auth, ShareId);
 
 fetch_entity(#op_req{operation = get, gri = #gri{aspect = shared_dir}}) ->
     {ok, {undefined, 1}};
@@ -107,7 +120,7 @@ fetch_entity(#op_req{operation = update, auth = Auth, gri = #gri{
     id = ShareId,
     aspect = instance
 }}) ->
-    fetch_share(Auth, ShareId);
+    fetch_private_share_data(Auth, ShareId);
 
 fetch_entity(#op_req{operation = update, gri = #gri{aspect = shared_dir}}) ->
     {ok, {undefined, 1}};
@@ -116,7 +129,7 @@ fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
     id = ShareId,
     aspect = instance
 }}) ->
-    fetch_share(Auth, ShareId);
+    fetch_private_share_data(Auth, ShareId);
 
 fetch_entity(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
     {ok, {undefined, 1}}.
@@ -131,15 +144,15 @@ fetch_entity(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
-authorize(#op_req{auth = ?NOBODY}, _) ->
-    false;
-
 authorize(#op_req{operation = create, auth = Auth, gri = #gri{
     id = DirGuid,
     aspect = shared_dir
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(DirGuid),
     middleware_utils:is_eff_space_member(Auth, SpaceId);
+
+authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = public}}, _) ->
+    true;
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}},
     #od_share{space = SpaceId}
@@ -187,6 +200,9 @@ authorize(#op_req{operation = delete, auth = Auth, gri = #gri{
 validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = shared_dir}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     middleware_utils:assert_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{aspect = instance, scope = public}}, _) ->
+    ok;
 
 validate(#op_req{operation = get, gri = #gri{aspect = instance}}, #od_share{
     space = SpaceId
@@ -240,7 +256,7 @@ create(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = Req, _) ->
     ShareId = resolve_share_id(Auth, DirGuid),
-    case fetch_share(Auth, ShareId) of
+    case fetch_private_share_data(Auth, ShareId) of
         {ok, {Share, _}} ->
             get(Req#op_req{gri = GRI#gri{id = ShareId, aspect = instance}}, Share);
         {error, _} = Error ->
@@ -259,8 +275,8 @@ get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
         <<"name">> => ShareName,
         <<"publicUrl">> => SharePublicUrl,
         <<"rootFileId">> => RootFileGuid,
-        <<"spaceId">> => SpaceId,
-        <<"handleId">> => utils:ensure_defined(Handle, undefined, null)
+        <<"spaceId">> => utils:undefined_to_null(SpaceId),
+        <<"handleId">> => utils:undefined_to_null(Handle)
     }}.
 
 
@@ -300,9 +316,9 @@ delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
 
 
 %% @private
--spec fetch_share(aai:auth(), od_share:id()) ->
+-spec fetch_private_share_data(aai:auth(), od_share:id()) ->
     {ok, {#od_share{}, middleware:revision()}} | ?ERROR_NOT_FOUND.
-fetch_share(?USER(_UserId, SessionId), ShareId) ->
+fetch_private_share_data(?USER(_UserId, SessionId), ShareId) ->
     case share_logic:get(SessionId, ShareId) of
         {ok, #document{value = Share}} ->
             {ok, {Share, 1}};

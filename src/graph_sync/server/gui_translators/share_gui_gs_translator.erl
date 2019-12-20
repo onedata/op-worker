@@ -34,11 +34,14 @@ translate_value(#gri{aspect = shared_dir}, ShareId) ->
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
-translate_resource(#gri{aspect = instance, scope = private}, #{
+translate_resource(#gri{aspect = instance, scope = Scope}, #{
     <<"name">> := ShareName,
     <<"publicUrl">> := SharePublicUrl,
     <<"rootFileId">> := RootFileGuid
-}) ->
+}) when
+    Scope =:= private;
+    Scope =:= public
+->
     #{
         <<"name">> => ShareName,
         <<"publicUrl">> => SharePublicUrl,
