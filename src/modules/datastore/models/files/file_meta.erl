@@ -830,7 +830,7 @@ is_child_of_hidden_dir(Path) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if given file has conflicts with other files on name field.
-%% ParentUuid and Name cannot be get from document as this function may be used
+%% ParentUuid and Name cannot be got from document as this function may be used
 %% as a result of conflict resolving that involve renamed file document.
 %% @end
 %%--------------------------------------------------------------------
