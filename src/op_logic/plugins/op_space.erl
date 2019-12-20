@@ -467,9 +467,10 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
 
     Result = case length(Transfers) of
         Limit ->
-            % Link tree was synchronized but it is possible that not every
-            % transfer doc was synchronized. In such case it is not possible
-            % to get it's link key, so such ids are omitted in returned json.
+            % The list returned by the link tree can contain transfers for which
+            % the doc was not synchronized yet. In such case it is not possible
+            % to get it's link key. Find the last transfer id for which the doc
+            % is synchronized and drop the remaining ids from the result
             {SynchronizedTransfers, NextPageToken} = lists:foldr(
                 fun
                     (Tid, {TransfersAcc, undefined}) ->
