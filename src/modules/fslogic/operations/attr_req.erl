@@ -16,11 +16,10 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
-    get_file_attr_insecure/4, get_file_attr_internal/3, get_file_attr_and_conflicts/5,
+    get_file_attr_insecure/4, get_file_attr_light/3, get_file_attr_and_conflicts/5,
     get_child_attr/3, chmod/3, update_times/5,
     chmod_attrs_only_insecure/2]).
 
@@ -79,9 +78,9 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
 %% Returns file attributes. Internal function - no permissions check, no name verification, no deleted files.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_attr_internal(user_ctx:ctx(), file_ctx:ctx(),
+-spec get_file_attr_light(user_ctx:ctx(), file_ctx:ctx(),
     IncludeSize :: boolean()) -> fslogic_worker:fuse_response().
-get_file_attr_internal(UserCtx, FileCtx, IncludeSize) ->
+get_file_attr_light(UserCtx, FileCtx, IncludeSize) ->
     {Ans, _} = get_file_attr_and_conflicts(UserCtx, FileCtx, false, IncludeSize, false),
     Ans.
 
@@ -211,7 +210,8 @@ get_child_attr_insecure(UserCtx, ParentFileCtx, Name) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function ensures that requested Name is in returned #file_attr{}.
+%% This function ensures that requested Name is in returned #file_attr{} if it has no suffix.
+%% Used to prevent races connected with remote rename.
 %% @end
 %%-------------------------------------------------------------------
 -spec ensure_proper_file_name(fslogic_worker:fuse_response(), file_meta:name()) ->
@@ -220,8 +220,8 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
     status = #status{code = ?OK},
     fuse_response = #file_attr{name = AnsName} = FileAttr
 }, Name) ->
-    case binary:split(Name, <<"@">>) of
-        [AnsName | _] -> FuseResponse;
+    case file_meta:has_suffix(Name) of
+        {true, AnsName} -> FuseResponse;
         _ -> FuseResponse#fuse_response{fuse_response = FileAttr#file_attr{name = Name}}
     end;
 ensure_proper_file_name(FuseResponse, _Name) ->

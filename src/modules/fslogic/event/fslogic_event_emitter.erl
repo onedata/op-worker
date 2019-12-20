@@ -199,32 +199,6 @@ emit_file_renamed_no_exclude(FileCtx, OldParentGuid, NewParentGuid, NewName, Pre
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends an event informing given client about file rename.
-%% @end
-%%--------------------------------------------------------------------
--spec emit_file_renamed(file_ctx:ctx(), fslogic_worker:file_guid(), fslogic_worker:file_guid(),
-    file_meta:name(), file_meta:name(), [session:id()]) -> ok | {error, Reason :: term()}.
-emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, OldName, Exclude) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
-    {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    FinalName = case file_meta:check_name(file_id:guid_to_uuid(OldParentGuid), OldName, Doc) of
-        {conflicting, ExtendedName, OtherFiles} ->
-            emit_suffixes(OtherFiles, NewParentGuid),
-            ExtendedName;
-        _ ->
-            NewName
-    end,
-
-    event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
-        old_guid = Guid,
-        new_guid = Guid,
-        new_parent_guid = NewParentGuid,
-        new_name = FinalName
-    }}, [#{file_ctx => FileCtx2, key_base => OldParentGuid},
-        #{file_ctx => FileCtx2, key_base => NewParentGuid}], Exclude).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Sends a list of currently disabled spaces due to exceeded quota.
 %% @end
 %%--------------------------------------------------------------------
@@ -253,6 +227,32 @@ emit_helper_params_changed(StorageId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends an event informing given client about file rename.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_renamed(file_ctx:ctx(), fslogic_worker:file_guid(), fslogic_worker:file_guid(),
+    file_meta:name(), file_meta:name(), [session:id()]) -> ok | {error, Reason :: term()}.
+emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, OldName, Exclude) ->
+    Guid = file_ctx:get_guid_const(FileCtx),
+    {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    FinalName = case file_meta:check_name(file_id:guid_to_uuid(OldParentGuid), OldName, Doc) of
+        {conflicting, ExtendedName, OtherFiles} ->
+            emit_suffixes(OtherFiles, NewParentGuid),
+            ExtendedName;
+        _ ->
+            NewName
+    end,
+
+    event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
+        old_guid = Guid,
+        new_guid = Guid,
+        new_parent_guid = NewParentGuid,
+        new_name = FinalName
+    }}, [#{file_ctx => FileCtx2, key_base => OldParentGuid},
+        #{file_ctx => FileCtx2, key_base => NewParentGuid}], Exclude).
 
 %%--------------------------------------------------------------------
 %% @private

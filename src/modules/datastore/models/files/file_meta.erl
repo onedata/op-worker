@@ -41,7 +41,7 @@
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
--export([check_name/3]).
+-export([check_name/3, has_suffix/1]).
 % For tests
 -export([get_all_links/2]).
 
@@ -829,13 +829,15 @@ is_child_of_hidden_dir(Path) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks if given file has conflicts with other on name field.
+%% Checks if given file has conflicts with other files on name field.
+%% ParentUuid and Name cannot be get from document as this function may be used
+%% as a result of conflict resolving that involve renamed file document.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_name(ParentUuid :: uuid(), name(), CheckDoc :: doc()) ->
     ok | {conflicting, ExtendedName :: name(), Conflicts :: [{uuid(), name()}]}.
 check_name(undefined, _Name, _ChildDoc) ->
-    ok; % Roor directory
+    ok; % Root directory
 check_name(ParentUuid, Name, #document{
     key = ChildUuid,
     value = #file_meta{
@@ -848,8 +850,9 @@ check_name(ParentUuid, Name, #document{
         {ok, []} ->
             ok;
         {ok, Links} ->
-            Links2 = case lists:filter(fun(#link{tree_id = TreeID}) -> TreeID =:= ChildProvider end, Links) of
-                [] ->
+            Links2 = case lists:any(fun(#link{tree_id = TreeID}) -> TreeID =:= ChildProvider end, Links) of
+                false ->
+                    % Link is missing, possible race on dbsync
                     [#link{tree_id = ChildProvider, name = Name, target = ChildUuid} | Links];
                 _ ->
                     Links
@@ -874,6 +877,18 @@ check_name(ParentUuid, Name, #document{
 -spec get_all_links(uuid(), name()) -> {ok, [datastore:link()]} | {error, term()}.
 get_all_links(Uuid, Name) ->
     datastore_model:get_links(?CTX, Uuid, all, Name).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if file has suffix. Returns name without suffix if true.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_suffix(name()) -> {true, NameWithoutSuffix :: name()} | false.
+has_suffix(Name) ->
+    case binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR) of
+        [BaseName | _] -> {true, BaseName};
+        _ -> false
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -971,7 +986,9 @@ tag_children(Links) ->
                 }, Children2) ->
                     [#child_link_uuid{
                         uuid = FileUuid,
-                        name = <<Name/binary, "@", TreeId:Len2/binary>>
+                        name = <<Name/binary,
+                            ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR_CHAR,
+                            TreeId:Len2/binary>>
                     } | Children2]
             end, Children, LocalLinks ++ RemoteLinks)
     end, [], [Group2 | Groups2]).
@@ -1057,7 +1074,7 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
 emit_space_dir_created(DirUuid, SpaceId) ->
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
     #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_internal(user_ctx:new(?ROOT_USER_ID), FileCtx, false),
+        attr_req:get_file_attr_light(user_ctx:new(?ROOT_USER_ID), FileCtx, false),
     FileAttr2 = FileAttr#file_attr{size = 0},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
 

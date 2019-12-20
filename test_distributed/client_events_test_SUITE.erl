@@ -42,6 +42,10 @@ all() ->
         events_on_conflicts_test
     ]).
 
+-define(CONFLICTING_FILE_NAME, <<"abc">>).
+-define(CONFLICTING_FILE_AFTER_RENAME, <<"xyz">>).
+-define(TEST_TREE_ID, <<"q">>).
+
 %%%===================================================================
 %%% Tests
 %%%===================================================================
@@ -139,6 +143,8 @@ subscribe_on_new_space_test_base(Config, UserNum, ExpectedAns) ->
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
+% Create file names' conflict using mocks (see init_per_testcase)
+% Additional events should appear
 events_on_conflicts_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
@@ -150,7 +156,7 @@ events_on_conflicts_test(Config) ->
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
 
-    Filename = <<"abc">>,
+    Filename = ?CONFLICTING_FILE_NAME,
     Dirname = generator:gen_name(),
 
     DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
@@ -160,7 +166,12 @@ events_on_conflicts_test(Config) ->
         fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId))),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_renamed_subscription_message(0, Seq2, -Seq2, DirId))),
-    timer:sleep(2000), % there is no sync between subscription and unlink
+    {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = DirId}),
+    {ok, SubscriptionRoutingKey2} = subscription_type:get_routing_key(#file_renamed_subscription{file_guid = DirId}),
+    ?assertMatch({ok, [_]},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
+    ?assertMatch({ok, [_]},
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey2, undefined]), 10),
 
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
@@ -203,10 +214,10 @@ init_per_testcase(events_on_conflicts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, file_meta),
     test_utils:mock_expect(Workers, file_meta, get_all_links, fun
-        (Uuid, Name) when Name =:= <<"abc">> orelse Name =:= <<"xyz">> ->
+        (Uuid, Name) when Name =:= ?CONFLICTING_FILE_NAME orelse Name =:= ?CONFLICTING_FILE_AFTER_RENAME ->
             case meck:passthrough([Uuid, Name]) of
-                {ok, List} -> {ok, [#link{name = Name, target = <<>>, tree_id = <<"q">>} | List]};
-                {error, not_found} -> {ok, [#link{name = Name, target = <<>>, tree_id = <<"q">>}]}
+                {ok, List} -> {ok, [#link{name = Name, target = <<>>, tree_id = ?TEST_TREE_ID} | List]};
+                {error, not_found} -> {ok, [#link{name = Name, target = <<>>, tree_id = ?TEST_TREE_ID}]}
             end;
         (Uuid, Name) ->
             meck:passthrough([Uuid, Name])
