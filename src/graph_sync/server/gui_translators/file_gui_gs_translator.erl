@@ -56,7 +56,7 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
             {<<"file">>, SizeAttr}
     end,
 
-    fun(?USER(_UserId, SessId)) ->
+    fun(#auth{session_id = SessId}) ->
         FileUuid = file_id:guid_to_uuid(Guid),
         {ok, ActivePermsType} = file_meta:get_active_perms_type(FileUuid),
 
