@@ -137,7 +137,7 @@ strategy_handle_job(#space_strategy_job{strategy_name = check_locally, data = Da
                     {ok, #document{key = Uuid}} = file_meta:get({path, LogicalPath}),
                     Guid = fslogic_uuid:uuid_to_guid(Uuid),
                     File = file_ctx:new_by_guid(Guid),
-                    (catch attr_req:get_file_attr_insecure(CTX, File));
+                    (catch attr_req:get_file_attr_light(CTX, File, true));
                 _ ->
                     undefined
             end
