@@ -31,14 +31,16 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    fold_enabled => true
+    fold_enabled => true,
+    memory_copies => all,
+    disc_driver => undefined
 }).
 
 %% API
 -export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_posthooks/0]).
+-export([get_ctx/0, get_posthooks/0]).
 
 %%%===================================================================
 %%% API
@@ -102,20 +104,6 @@ run_after(Doc = #document{key = HrvId, value = #od_harvester{spaces = Spaces, in
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_struct(datastore_model:record_version()) ->
-    datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {indices, [binary]},
-        {spaces, [binary]},
-        {cache_state, #{atom => term}}
-    ]}.
 
 %%--------------------------------------------------------------------
 %% @doc

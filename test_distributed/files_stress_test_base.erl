@@ -152,10 +152,11 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata)
     FilesPerDir = ?config(files_per_dir, Config),
 
     % Setup test
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     User = <<"user1">>,
 
-    SessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
+    [SessId | _] = SessIds =
+        lists:map(fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end, Workers),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
 
     Master = self(),
@@ -202,12 +203,13 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata)
             % Function that creates test directories and measures performance
             Fun = fun
                 ({{D, DName}, DParent}) ->
+                    {W, S} = get_worker_and_session(Workers, SessIds),
                     {T, {A, GUID}} = measure_execution_time(fun() ->
                         MkdirAns = case CacheGUIDS of
                             false ->
-                                lfm_proxy:mkdir(Worker, SessId, D, 8#755);
+                                lfm_proxy:mkdir(W, S, D, 8#755);
                             _ ->
-                                lfm_proxy:mkdir(Worker, SessId, DParent, DName, 8#755)
+                                lfm_proxy:mkdir(W, S, DParent, DName, 8#755)
                         end,
                         case MkdirAns of
                             {ok, DirGuid} ->
@@ -219,8 +221,9 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata)
                     Master ! {worker_ans, A, T},
                     GUID;
                 ({D, _}) ->
+                    {W, S} = get_worker_and_session(Workers, SessIds),
                     {T, {A, GUID}} = measure_execution_time(fun() ->
-                        case lfm_proxy:mkdir(Worker, SessId, D, 8#755) of
+                        case lfm_proxy:mkdir(W, S, D, 8#755) of
                             {ok, DirGuid} ->
                                 {dir_ok, DirGuid};
                             Other ->
@@ -233,6 +236,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata)
 
             % Function that creates test files and measures performance
             Fun2 = fun(D, GUID) ->
+                {W, S} = get_worker_and_session(Workers, SessIds),
                 ToSend = lists:foldl(fun(N, Answers) ->
                     N2 = integer_to_binary(N),
                     F = <<D/binary, "/", N2/binary>>,
@@ -240,23 +244,23 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata)
                         try
                             {ok, FileGUID} = case CacheGUIDS of
                                 false ->
-                                    lfm_proxy:create(Worker, SessId, F, 8#755);
+                                    lfm_proxy:create(W, S, F, 8#755);
                                 _ ->
-                                    lfm_proxy:create(Worker, SessId, GUID, N2, 8#755)
+                                    lfm_proxy:create(W, S, GUID, N2, 8#755)
                             end,
                             % Fill file if needed (depends on test config)
                             case WriteToFile of
                                 true ->
                                     {ok, Handle} = case CacheGUIDS of
                                         false ->
-                                            lfm_proxy:open(Worker, SessId, {path, F}, rdwr);
+                                            lfm_proxy:open(W, S, {path, F}, rdwr);
                                         _ ->
-                                            lfm_proxy:open(Worker, SessId, {guid, FileGUID}, rdwr)
+                                            lfm_proxy:open(W, S, {guid, FileGUID}, rdwr)
                                     end,
                                     WriteBuf = generator:gen_name(),
                                     WriteSize = size(WriteBuf),
-                                    {ok, WriteSize} = lfm_proxy:write(Worker, Handle, 0, WriteBuf),
-                                    ok = lfm_proxy:close(Worker, Handle),
+                                    {ok, WriteSize} = lfm_proxy:write(W, Handle, 0, WriteBuf),
+                                    ok = lfm_proxy:close(W, Handle),
                                     ok;
                                 _ ->
                                     ok
@@ -268,9 +272,9 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata)
                                     Xattr = #xattr{name = F, value = F},
                                     case CacheGUIDS of
                                         false ->
-                                            lfm_proxy:set_xattr(Worker, SessId, {path, F}, Xattr);
+                                            lfm_proxy:set_xattr(W, S, {path, F}, Xattr);
                                         _ ->
-                                            lfm_proxy:set_xattr(Worker, SessId, {guid, FileGUID}, Xattr)
+                                            lfm_proxy:set_xattr(W, S, {guid, FileGUID}, Xattr)
                                     end,
                                     file_ok;
                                 _ ->
@@ -569,3 +573,10 @@ ls(Worker, SessId, Dir, Token, _) ->
 get_param_value(ParamName, ParamsList) ->
     #parameter{value = Value} = lists:keyfind(ParamName, 2, ParamsList),
     Value.
+
+get_worker_and_session([W], [S]) ->
+    {W, S};
+get_worker_and_session(Workers, Sessions) ->
+    Num = rand:uniform(length(Workers)),
+    {lists:nth(Num, Workers), lists:nth(Num, Sessions)}.
+

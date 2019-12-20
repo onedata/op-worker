@@ -16,16 +16,14 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([is_root_dir_uuid/1, is_user_root_dir_uuid/1, user_root_dir_uuid/1, user_root_dir_guid/1]).
+-export([is_root_dir_uuid/1, is_user_root_dir_uuid/1, is_space_dir_uuid/1, is_space_dir_guid/1]).
+-export([user_root_dir_uuid/1, user_root_dir_guid/1, root_dir_guid/0]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
--export([
-    is_space_dir_guid/1,
-    spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1,
-    space_dir_uuid_to_spaceid_no_error/1, spaceid_to_space_dir_guid/1
-]).
+-export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, spaceid_to_space_dir_guid/1]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
+-define(ROOT_DIR_VIRTUAL_SPACE_ID, <<"rootDirVirtualSpaceId">>).
 
 %%%===================================================================
 %%% API
@@ -37,7 +35,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec is_root_dir_uuid(FileUuid :: file_meta:uuid()) -> boolean().
-is_root_dir_uuid(?ROOT_DIR_UUID) ->
+is_root_dir_uuid(?GLOBAL_ROOT_DIR_UUID) ->
     true;
 is_root_dir_uuid(FileUuid) ->
     is_user_root_dir_uuid(FileUuid).
@@ -57,6 +55,14 @@ is_user_root_dir_uuid(FileUuid) ->
     end.
 
 %%--------------------------------------------------------------------
+%% @doc Returns Guid of root directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec root_dir_guid() -> fslogic_worker:file_guid().
+root_dir_guid() ->
+    file_id:pack_guid(?GLOBAL_ROOT_DIR_UUID, ?ROOT_DIR_VIRTUAL_SPACE_ID).
+
+%%--------------------------------------------------------------------
 %% @doc Returns Uuid of user's root directory.
 %% @end
 %%--------------------------------------------------------------------
@@ -70,7 +76,7 @@ user_root_dir_uuid(UserId) ->
 %%--------------------------------------------------------------------
 -spec user_root_dir_guid(UserId :: od_user:id()) -> fslogic_worker:file_guid().
 user_root_dir_guid(UserId) ->
-    file_id:pack_guid(user_root_dir_uuid(UserId), undefined).
+    file_id:pack_guid(user_root_dir_uuid(UserId), ?ROOT_DIR_VIRTUAL_SPACE_ID).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -95,13 +101,8 @@ uuid_to_path(SessionId, FileUuid) ->
 %%--------------------------------------------------------------------
 -spec uuid_to_guid(file_meta:uuid()) -> fslogic_worker:file_guid().
 uuid_to_guid(FileUuid) ->
-    try uuid_to_space_id(FileUuid) of
-        SpaceId ->
-            file_id:pack_guid(FileUuid, SpaceId)
-    catch
-        {not_a_space, _} ->
-            file_id:pack_guid(FileUuid, undefined)
-    end.
+    SpaceId = uuid_to_space_id(FileUuid),
+    file_id:pack_guid(FileUuid, SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -132,28 +133,20 @@ spaceid_to_space_dir_guid(SpaceId) ->
     file_id:pack_guid(spaceid_to_space_dir_uuid(SpaceId), SpaceId).
 
 %%--------------------------------------------------------------------
-%% @doc Convert file_meta uuid of space directory to SpaceId
+%% @doc
+%% Returns true if given uuid represents space dir.
+%% @end
 %%--------------------------------------------------------------------
--spec space_dir_uuid_to_spaceid(file_meta:uuid()) -> od_space:id().
-space_dir_uuid_to_spaceid(SpaceUuid) ->
-    case SpaceUuid of
-        <<?SPACE_ROOT_PREFIX, SpaceId/binary>> ->
-            SpaceId;
-        _ ->
-            throw({not_a_space, {uuid, SpaceUuid}}) %todo remove this throw and return undefined instead
-    end.
+-spec is_space_dir_uuid(file_meta:uuid()) -> boolean().
+is_space_dir_uuid(<<?SPACE_ROOT_PREFIX, _SpaceId/binary>>) -> true;
+is_space_dir_uuid(_) -> false.
 
 %%--------------------------------------------------------------------
 %% @doc Convert file_meta uuid of space directory to SpaceId
 %%--------------------------------------------------------------------
--spec space_dir_uuid_to_spaceid_no_error(file_meta:uuid()) -> od_space:id().
-space_dir_uuid_to_spaceid_no_error(SpaceUuid) ->
-    try space_dir_uuid_to_spaceid(SpaceUuid) of
-        SpaceId ->
-            SpaceId
-    catch
-        _:_ -> <<>>
-    end.
+-spec space_dir_uuid_to_spaceid(file_meta:uuid()) -> od_space:id().
+space_dir_uuid_to_spaceid(<<?SPACE_ROOT_PREFIX, SpaceId/binary>>) ->
+    SpaceId.
 
 %%%===================================================================
 %%% Internal functions
@@ -171,7 +164,7 @@ space_dir_uuid_to_spaceid_no_error(SpaceUuid) ->
 gen_path(Entry, SessionId, Tokens) ->
     {ok, #document{key = Uuid, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
     case file_meta:get_parent(Doc) of
-        {ok, #document{key = ?ROOT_DIR_UUID}} ->
+        {ok, #document{key = ?GLOBAL_ROOT_DIR_UUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Uuid),
             {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
@@ -184,14 +177,13 @@ gen_path(Entry, SessionId, Tokens) ->
 %% Returns space ID for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec uuid_to_space_id(file_meta:uuid()) ->
-    SpaceId :: od_space:id().
+-spec uuid_to_space_id(file_meta:uuid()) -> SpaceId :: od_space:id().
 uuid_to_space_id(FileUuid) ->
-    case FileUuid of
-        ?ROOT_DIR_UUID ->
-            undefined;
-        _ ->
+    case is_root_dir_uuid(FileUuid) of
+        true ->
+            ?ROOT_DIR_VIRTUAL_SPACE_ID;
+        false ->
             {ok, Doc} = file_meta:get_including_deleted(FileUuid),
-            {ok, SpaceUuid} = file_meta:get_scope_id(Doc),
-            fslogic_uuid:space_dir_uuid_to_spaceid(SpaceUuid)
+            {ok, SpaceId} = file_meta:get_scope_id(Doc),
+            SpaceId
     end.

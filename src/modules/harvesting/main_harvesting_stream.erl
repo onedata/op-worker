@@ -28,7 +28,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([propose_takeover/2, revise_harvester/3,
@@ -75,12 +75,12 @@ revise_space_harvesters(SpaceId, Harvesters) ->
 
 -spec space_removed(od_space:id()) -> ok.
 space_removed(SpaceId) ->
-    Node = consistent_hashing:get_node(SpaceId),
+    Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, ?MODULE, space_removed_internal, [SpaceId]).
 
 -spec space_unsupported(od_space:id()) -> ok.
 space_unsupported(SpaceId) ->
-    Node = consistent_hashing:get_node(SpaceId),
+    Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, ?MODULE, space_unsupported_internal, [SpaceId]).
 
 -spec revise_all_spaces() -> ok.
@@ -338,7 +338,7 @@ multicall_internal(SpaceId, Request) ->
 
 -spec call_internal(od_space:id(), term()) -> term().
 call_internal(SpaceId, Request) ->
-    case consistent_hashing:get_node(SpaceId) =:= node() of
+    case datastore_key:responsible_node(SpaceId) =:= node() of
         true ->
             Name = ?MAIN_HARVESTING_STREAM(SpaceId),
             try

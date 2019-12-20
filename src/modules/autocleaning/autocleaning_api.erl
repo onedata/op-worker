@@ -20,6 +20,7 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -41,7 +42,8 @@
 %% occupancy hasn't reached the configured threshold).
 %% @end
 %%-------------------------------------------------------------------
--spec force_start(od_space:id()) -> {ok, autocleaning:run_id()} | {error, term()}.
+-spec force_start(od_space:id()) ->
+    {ok, autocleaning:run_id()} | errors:error() | {error, term()}.
 force_start(SpaceId) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
@@ -56,10 +58,10 @@ force_start(SpaceId) ->
                             {error, nothing_to_clean}
                     end;
                 false ->
-                    {error, autocleaning_disabled}
+                    ?ERROR_AUTO_CLEANING_DISABLED
             end;
         false ->
-            {error, file_popularity_disabled}
+            ?ERROR_FILE_POPULARITY_DISABLED
     end .
 
 %%-------------------------------------------------------------------
@@ -172,7 +174,7 @@ configure(SpaceId, Configuration) ->
         true ->
             autocleaning:create_or_update(SpaceId, Configuration);
         false ->
-            {error, file_popularity_disabled}
+            ?ERROR_FILE_POPULARITY_DISABLED
     end.
 
 -spec disable(od_space:id()) -> ok | {error, term()}.

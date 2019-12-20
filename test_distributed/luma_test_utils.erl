@@ -12,7 +12,7 @@
 -module(luma_test_utils).
 -author("Wojciech Geisler").
 
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 
 -export([new_ceph_user_ctx/2, new_cephrados_user_ctx/2, new_posix_user_ctx/2,
     new_s3_user_ctx/2, new_swift_user_ctx/2, new_glusterfs_user_ctx/2,

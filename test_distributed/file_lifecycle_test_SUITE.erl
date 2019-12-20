@@ -53,8 +53,8 @@ open_race_test(Config) ->
 
     check_dir_init(W),
 
-    test_utils:mock_new(W, sfm_utils, [passthrough]),
-    test_utils:mock_expect(W, sfm_utils, create_storage_file,
+    test_utils:mock_new(W, sd_utils, [passthrough]),
+    test_utils:mock_expect(W, sd_utils, create_storage_file,
         fun(UserCtx, FileCtx, VerifyLink) ->
             Ans = meck:passthrough([UserCtx, FileCtx, VerifyLink]),
             timer:sleep(2000),
@@ -294,8 +294,8 @@ create_delete_race_test(Config) ->
 rename_to_opened_file_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
+    {ok, [WorkerStorage | _]} = rpc:call(W, storage_config, list, []),
+    #document{value = #storage_config{helpers = [Helpers]}} = WorkerStorage,
     #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
     StorageSpacePath = filename:join([MountPoint, "space_id1"]),
     Dirs1Length = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
@@ -326,8 +326,8 @@ create_file_existing_on_disk_test(Config) ->
     FilePath0 = <<"/space_name1/", (generator:gen_name())/binary>>,
     lfm_proxy:create_and_open(W, SessId1, FilePath0, 8#777), % To create storage dirs
 
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
+    {ok, [WorkerStorage | _]} = rpc:call(W, storage_config, list, []),
+    #document{value = #storage_config{helpers = [Helpers]}} = WorkerStorage,
     #{<<"mountPoint">> := MountPoint} = helper:get_args(Helpers),
     StoragePath = filename:join([MountPoint, "space_id1", binary_to_list(FileName)]),
 
@@ -407,15 +407,15 @@ end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_unload(Workers, [communicator, file_meta, file_req, sfm_utils, fslogic_times]).
+    test_utils:mock_unload(Workers, [communicator, file_meta, file_req, sd_utils, fslogic_times]).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 check_dir_init(W) ->
-    {ok, [WorkerStorage | _]} = rpc:call(W, storage, list, []),
-    #document{value = #storage{helpers = [Helpers]}} = WorkerStorage,
+    {ok, [WorkerStorage | _]} = rpc:call(W, storage_config, list, []),
+    #document{value = #storage_config{helpers = [Helpers]}} = WorkerStorage,
     #{<<"mountPoint">> := MountPoint}= helper:get_args(Helpers),
     StorageSpacePath = filename:join([MountPoint, "space_id1"]),
 

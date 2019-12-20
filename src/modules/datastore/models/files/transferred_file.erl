@@ -22,7 +22,9 @@
 -export([
     report_transfer_start/3,
     report_transfer_finish/4,
-    report_transfer_deletion/1
+    report_transfer_deletion/1,
+
+    get_history_limit/0
 ]).
 -export([get_transfers/1]).
 -export([clean_up/1]).
@@ -167,6 +169,16 @@ report_transfer_deletion(#document{key = TransferId, value = Transfer}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns maximum number of remembered ended transfers for file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_history_limit() -> non_neg_integer().
+get_history_limit() ->
+    ?HISTORY_LIMIT.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns a list of ongoing transfers for given file/dir. The list includes
 %% schedule times of the transfers.
 %% @end
@@ -283,7 +295,7 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
     }} = PrevDoc,
 
     AllPast = enforce_history_limit(ordsets:union(NewPast, PrevPast)),
-    MergedPastDoc = case datastore_utils:is_greater_rev(NewRev, PreviousRev) of
+    MergedPastDoc = case datastore_rev:is_greater(NewRev, PreviousRev) of
         true ->
             NewDoc#document{value = NewRecord#transferred_file{ended_transfers = AllPast}};
         false ->
@@ -332,7 +344,7 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
 %% @private
 -spec file_guid_to_id(fslogic_worker:file_guid()) -> id().
 file_guid_to_id(FileGuid) ->
-    datastore_utils:gen_key(<<>>, FileGuid).
+    file_id:guid_to_uuid(FileGuid).
 
 
 %% @private

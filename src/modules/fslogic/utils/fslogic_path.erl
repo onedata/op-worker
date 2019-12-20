@@ -16,7 +16,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([split_skipping_dots/1]).
@@ -128,7 +128,7 @@ to_uuid(ParentUuid, Name) ->
 -spec resolve(file_meta:path()) ->
     {ok, file_meta:doc()} | {error, term()}.
 resolve(Path) ->
-    resolve({uuid, ?ROOT_DIR_UUID}, Path).
+    resolve({uuid, ?GLOBAL_ROOT_DIR_UUID}, Path).
 
 -spec resolve(file_meta:entry(), file_meta:path()) ->
     {ok, file_meta:doc()} | {error, term()}.

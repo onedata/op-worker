@@ -56,7 +56,7 @@ get_configuration_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     UserId = ?config({user_id, <<"user1">>}, Config),
 
-    UserRootGuid = file_id:pack_guid(fslogic_uuid:user_root_dir_uuid(UserId), undefined),
+    UserRootGuid = fslogic_uuid:user_root_dir_guid(UserId),
 
     ?assertMatch(#configuration{subscriptions = [_ | _], root_guid = UserRootGuid},
         ?fcm_req(Worker, get_configuration, [SessId])).
@@ -69,10 +69,7 @@ get_helper_params_test(Config) ->
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath, 8#644)),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    SpaceId = case file_ctx:get_space_id_const(FileCtx) of
-        undefined -> throw(?ENOENT);
-        <<_/binary>> = Id -> Id
-    end,
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     %% Test forced proxy mode
     Response1 = ?req(Worker, SessId, #get_helper_params{
@@ -148,7 +145,7 @@ verify_storage_test_file_test(Config) ->
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
 
     FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [FileGuid]),
-    {FileId, _} = rpc:call(Worker, file_ctx, get_raw_storage_path, [FileCtx]),
+    {FileId, _} = rpc:call(Worker, file_ctx, get_storage_file_id, [FileCtx]),
     SpaceId = <<"space_id1">>,
 
     Response1 = ?req(Worker, SessId, #verify_storage_test_file{

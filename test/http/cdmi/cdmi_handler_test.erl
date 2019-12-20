@@ -16,7 +16,7 @@
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 get_supported_version_test() ->
   Binary00 = <<"">>,

@@ -12,7 +12,7 @@
 -module(view_utils).
 -author("Bartosz Walkowicz").
 
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([sanitize_query_options/1, escape_js_function/1]).

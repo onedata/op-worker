@@ -1,6 +1,7 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2016-2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -97,16 +98,14 @@
 %%%--------------------------------------------------------------------
 -module(changes_stream_handler).
 -author("Tomasz Lichon").
+-author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
--include("global_definitions.hrl").
--include("http/http_common.hrl").
 -include("http/rest.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/datastore/datastore_models.hrl").
+-include("middleware/middleware.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/api_errors.hrl").
 
 %% API
 -export([
@@ -142,7 +141,8 @@
 ]).
 
 -define(FILE_LOCATION_FIELDS, [
-    <<"provider_id">>, <<"storage_id">>, <<"size">>, <<"space_id">>, <<"storage_file_created">>
+    <<"provider_id">>, <<"storage_id">>, <<"size">>, <<"space_id">>,
+    <<"storage_file_created">>
 ]).
 
 -define(TIME_FIELDS, [
@@ -169,7 +169,7 @@ init(Req, _Opts) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:terminate/3
 %%--------------------------------------------------------------------
--spec terminate(Reason :: term(), req(), map()) -> ok.
+-spec terminate(Reason :: term(), cowboy_req:req(), map()) -> ok.
 terminate(_, _, #{changes_stream := Stream, loop_pid := Pid, ref := Ref}) ->
     couchbase_changes:cancel_stream(Stream),
     Pid ! {Ref, stream_ended};
@@ -182,7 +182,8 @@ terminate(_, _, #{}) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:allowed_methods/2
 %%--------------------------------------------------------------------
--spec allowed_methods(req(), map() | {error, term()}) -> {[binary()], req(), map()}.
+-spec allowed_methods(cowboy_req:req(), map() | {error, term()}) ->
+    {[binary()], cowboy_req:req(), map()}.
 allowed_methods(Req, State) ->
     {[<<"POST">>], Req, State}.
 
@@ -190,15 +191,29 @@ allowed_methods(Req, State) ->
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:is_authorized/2
 %%--------------------------------------------------------------------
--spec is_authorized(req(), map()) -> {true | {false, binary()} | halt, req(), map()}.
+-spec is_authorized(cowboy_req:req(), map()) ->
+    {true | {false, binary()} | halt, cowboy_req:req(), map()}.
 is_authorized(Req, State) ->
-    http_auth:is_authorized(Req, State).
+    case http_auth:authenticate(Req, rest, disallow_data_access_caveats) of
+        {ok, ?USER(UserId, SessionId) = Auth} ->
+            case authorize(Req, Auth) of
+                ok ->
+                    {true, Req, State#{user_id => UserId, auth => SessionId}};
+                {error, _} = Error ->
+                    {stop, send_error_response(Req, Error), State}
+            end;
+        {ok, ?NOBODY} ->
+            {stop, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), State};
+        {error, _} = Error ->
+            {stop, send_error_response(Req, Error), Req}
+    end.
 
 
 %%--------------------------------------------------------------------
 %% @doc @equiv pre_handler:content_types_provided/2
 %%--------------------------------------------------------------------
--spec content_types_accepted(req(), map()) -> {[{binary(), atom()}], req(), map()}.
+-spec content_types_accepted(cowboy_req:req(), map()) ->
+    {[{binary(), atom()}], cowboy_req:req(), map()}.
 content_types_accepted(Req, State) ->
     {[
         {<<"application/json">>, stream_space_changes}
@@ -221,13 +236,14 @@ content_types_accepted(Req, State) ->
 %% @param timeout Time of inactivity after which close stream.
 %% @param last_seq
 %%--------------------------------------------------------------------
--spec stream_space_changes(req(), map()) -> {term(), req(), map()}.
+-spec stream_space_changes(cowboy_req:req(), map()) ->
+    {term(), cowboy_req:req(), map()}.
 stream_space_changes(Req, State) ->
     try parse_params(Req, State) of
         {Req2, State2} ->
             State3 = ?MODULE:init_stream(State2),
             Req3 = cowboy_req:stream_reply(
-                ?HTTP_200_OK, #{<<"content-type">> => <<"application/json">>}, Req2
+                ?HTTP_200_OK, #{?HDR_CONTENT_TYPE => <<"application/json">>}, Req2
             ),
             stream_loop(Req3, State3),
             cowboy_req:stream_body(<<"">>, fin, Req3),
@@ -235,17 +251,7 @@ stream_space_changes(Req, State) ->
             {stop, Req3, State3}
     catch
         throw:Error ->
-            #rest_resp{
-                code = Code,
-                headers = Headers,
-                body = Body
-            } = rest_translator:error_response(Error),
-            RespBody = case Body of
-                {binary, Bin} -> Bin;
-                _ -> json_utils:encode(Body)
-            end,
-            NewReq = cowboy_req:reply(Code, Headers, RespBody, Req),
-            {stop, NewReq, State};
+            {stop, send_error_response(Req, Error), State};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:process_request - ~p:~p", [
                 ?MODULE, Type, Message
@@ -261,14 +267,39 @@ stream_space_changes(Req, State) ->
 
 
 %% @private
--spec parse_params(cowboy_req:req(), map()) -> {cowboy_req:req(), map()}.
-parse_params(Req, #{user_id := UserId} = State0) ->
+-spec authorize(cowboy_req:req(), aai:auth()) -> ok | errors:error().
+authorize(Req, ?USER(UserId) = Auth) ->
     SpaceId = cowboy_req:binding(sid, Req),
-    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_CHANGES_STREAM) of
-        true -> ok;
-        false -> throw(?ERROR_FORBIDDEN)
-    end,
 
+    case space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_CHANGES_STREAM) of
+        true ->
+            try
+                GRI = #gri{type = op_metrics, id = SpaceId, aspect = changes},
+                api_auth:check_authorization(Auth, ?OP_WORKER, create, GRI)
+            catch
+                _:_ ->
+                    ?ERROR_INTERNAL_SERVER_ERROR
+            end;
+        false ->
+            ?ERROR_FORBIDDEN
+    end.
+
+
+%% @private
+-spec send_error_response(cowboy_req:req(), errors:error()) -> cowboy_req:req().
+send_error_response(Req, Error) ->
+    #rest_resp{
+        code = Code,
+        headers = Headers,
+        body = Body
+    } = rest_translator:error_response(Error),
+    cowboy_req:reply(Code, Headers, json_utils:encode(Body), Req).
+
+
+%% @private
+-spec parse_params(cowboy_req:req(), map()) -> {cowboy_req:req(), map()}.
+parse_params(Req, State0) ->
+    SpaceId = cowboy_req:binding(sid, Req),
     QueryParams = maps:from_list(cowboy_req:parse_qs(Req)),
     State1 = State0#{
         space_id => SpaceId,
@@ -444,7 +475,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     Pid = self(),
 
     % TODO VFS-5570
-    Node = consistent_hashing:get_node({dbsync_out_stream, SpaceId}),
+    Node = datastore_key:responsible_node(SpaceId),
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
         [<<"onedata">>, SpaceId, fun(Feed) ->
             notify(Pid, Ref, Feed)
@@ -458,7 +489,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
 %% Listens for events and pushes them to the socket
 %% @end
 %%--------------------------------------------------------------------
--spec stream_loop(req(), map()) -> ok.
+-spec stream_loop(cowboy_req:req(), map()) -> ok.
 stream_loop(Req, State = #{
     timeout := Timeout,
     ref := Ref
@@ -489,7 +520,7 @@ stream_loop(Req, State = #{
 %% Parse and send change received from db stream, to the client.
 %% @end
 %%--------------------------------------------------------------------
--spec send_change(req(), datastore:doc(), map()) -> ok.
+-spec send_change(cowboy_req:req(), datastore:doc(), map()) -> ok.
 send_change(Req, ChangedDoc = #document{
     seq = Seq,
     key = FileUuid,
@@ -519,7 +550,7 @@ send_change(Req, ChangedDoc = #document{
 
 
 %% @private
--spec send_changes(req(), datastore_doc:seq(), file_meta:uuid(),
+-spec send_changes(cowboy_req:req(), datastore_doc:seq(), file_meta:uuid(),
     datastore:doc(), map()) -> ok.
 send_changes(Req, Seq, FileUuid, ChangedDoc, State) ->
     case get_all_docs_changes(FileUuid, ChangedDoc, State) of

@@ -59,7 +59,7 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
 -spec emit_file_attr_changed(file_ctx:ctx(), #file_attr{}, [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_attr_changed(FileCtx, FileAttr, ExcludedSessions) ->
-    event:get_subscribers_and_emit(#file_attr_changed_event{file_attr = FileAttr},
+    event:emit_to_filtered_subscribers(#file_attr_changed_event{file_attr = FileAttr},
         #{file_ctx => FileCtx}, ExcludedSessions).
 
 %%--------------------------------------------------------------------
@@ -77,7 +77,7 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
             #fuse_response{fuse_response = #file_attr{} = FileAttr} =
                 attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID),
                     FileCtx2, true, false),
-            event:get_subscribers_and_emit(#file_attr_changed_event{
+            event:emit_to_filtered_subscribers(#file_attr_changed_event{
                 file_attr = FileAttr
             }, #{file_ctx => FileCtx2}, []);
         Other ->
@@ -158,7 +158,7 @@ emit_file_perm_changed(FileCtx) ->
 -spec emit_file_removed(file_ctx:ctx(), ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_removed(FileCtx, ExcludedSessions) ->
-    Ans = event:get_subscribers_and_emit(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
+    Ans = event:emit_to_filtered_subscribers(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
         #{file_ctx => FileCtx}, ExcludedSessions),
 
     {#document{
@@ -217,7 +217,7 @@ emit_quota_exceeded() ->
 %% Sends event indicating storage helper params have changed.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_helper_params_changed(StorageId :: storage:id()) ->
+-spec emit_helper_params_changed(StorageId :: od_storage:id()) ->
     ok | {error, Reason :: term()}.
 emit_helper_params_changed(StorageId) ->
     event:emit(#helper_params_changed_event{
@@ -246,13 +246,13 @@ emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, OldName, Exclu
             NewName
     end,
 
-    event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
+    event:emit_to_filtered_subscribers(#file_renamed_event{top_entry = #file_renamed_entry{
         old_guid = Guid,
         new_guid = Guid,
         new_parent_guid = NewParentGuid,
         new_name = FinalName
-    }}, [#{file_ctx => FileCtx2, key_base => OldParentGuid},
-        #{file_ctx => FileCtx2, key_base => NewParentGuid}], Exclude).
+    }}, [#{file_ctx => FileCtx2, parent => OldParentGuid},
+        #{file_ctx => FileCtx2, parent => NewParentGuid}], Exclude).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -288,12 +288,12 @@ emit_suffixes(Files, {parent_guid, ParentGuid}) ->
             Guid = fslogic_uuid:uuid_to_guid(Uuid),
             FileCtx = file_ctx:new_by_guid(Guid),
 
-            event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
+            event:emit_to_filtered_subscribers(#file_renamed_event{top_entry = #file_renamed_entry{
                 old_guid = Guid,
                 new_guid = Guid,
                 new_parent_guid = ParentGuid,
                 new_name = ExtendedName
-            }}, [#{file_ctx => FileCtx, key_base => ParentGuid}], [])
+            }}, [#{file_ctx => FileCtx, parent => ParentGuid}], [])
         catch
             _:_ -> ok % File not fully synchronized (file_meta is missing)
         end

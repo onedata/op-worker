@@ -45,12 +45,14 @@
     task_id => traverse:id(),
     callback_module => traverse:callback_module(),
     group_id => traverse:group(),
+    additional_data => traverse:additional_data(),
     % Options used to create jobs
     execute_slave_on_dir => execute_slave_on_dir(),
     batch_size => batch_size(),
     traverse_info => traverse_info(),
     % Provider which should execute task
-    target_provider_id => oneprovider:id()
+    target_provider_id => oneprovider:id(),
+    additional_data => traverse:additional_data()
 }.
 
 -export_type([master_job/0, slave_job/0, execute_slave_on_dir/0, batch_size/0, traverse_info/0]).
@@ -59,7 +61,7 @@
 %%% Main API
 %%%===================================================================
 
--spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok.
+-spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer()) -> ok | no_return().
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) when is_atom(Pool) ->
     init(atom_to_binary(Pool, utf8), MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit);
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) ->
@@ -67,7 +69,7 @@ init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit) ->
         #{executor => oneprovider:get_id_or_undefined()}).
 
 -spec init(traverse:pool() | atom(), non_neg_integer(), non_neg_integer(), non_neg_integer(),
-    [traverse:callback_module()]) -> ok.
+    [traverse:callback_module()]) -> ok  | no_return().
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules) when is_atom(Pool) ->
     init(atom_to_binary(Pool, utf8), MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules);
 init(Pool, MasterJobsNum, SlaveJobsNum, ParallelOrdersLimit, CallbackModules) ->
@@ -83,7 +85,7 @@ run(Pool, DocOrCtx, Opts) when is_atom(Pool) ->
     run(atom_to_binary(Pool, utf8), DocOrCtx, Opts);
 run(Pool, #document{} = Doc, Opts) ->
     TaskID = case maps:get(task_id, Opts, undefined) of
-        undefined -> datastore_utils:gen_key();
+        undefined -> datastore_key:new();
         ID -> ID
     end,
     ExecuteActionOnDir = maps:get(execute_slave_on_dir, Opts, false),
@@ -102,13 +104,17 @@ run(Pool, #document{} = Doc, Opts) ->
         undefined -> RunOpts2;
         Group -> RunOpts2#{group_id => Group}
     end,
+    RunOpts4 = case maps:get(additional_data, Opts, undefined) of
+        undefined -> RunOpts3;
+        AdditionalData -> RunOpts3#{additional_data => AdditionalData}
+    end,
 
     ok = traverse:run(Pool, TaskID, #tree_traverse{
         doc = Doc,
         execute_slave_on_dir = ExecuteActionOnDir,
         batch_size = BatchSize,
         traverse_info = TraverseInfo
-    }, RunOpts3),
+    }, RunOpts4),
     {ok, TaskID};
 run(Pool, FileCtx, Opts) ->
     {Doc, _} = file_ctx:get_file_doc(FileCtx),
@@ -184,7 +190,7 @@ get_sync_info() ->
 %% returns jobs for listed children and next batch if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec do_master_job(master_job(), traverse:id()) -> {ok, traverse:master_job_map()}.
+-spec do_master_job(master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
 do_master_job(#tree_traverse{
     doc = #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
     token = Token,
@@ -193,7 +199,7 @@ do_master_job(#tree_traverse{
     execute_slave_on_dir = OnDir,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
-} = TT, _TaskID) ->
+} = TT, _MasterJobArgs) ->
     {ok, Children, ExtendedInfo} = case {Token, LN} of
         {undefined, <<>>} ->
             file_meta:list_children(Doc, BatchSize);
@@ -228,7 +234,7 @@ do_master_job(#tree_traverse{
 do_master_job(#tree_traverse{
     doc = Doc,
     traverse_info = TraverseInfo
-}, _TaskID) ->
+}, _MasterJobArgs) ->
     {ok, #{slave_jobs => [{Doc, TraverseInfo}], master_jobs => []}}.
 
 %%--------------------------------------------------------------------
