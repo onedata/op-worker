@@ -129,7 +129,7 @@ get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, Ve
     {{ATime, CTime, MTime}, FileCtx6} = file_ctx:get_times(FileCtx5),
     {ParentGuid, _FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
 
-    {FinalName, ConflictingFiles} = case VerifyName of
+    {FinalName, ConflictingFiles} = case VerifyName andalso ParentGuid =/= undefined of
         true ->
             case file_meta:check_name(file_id:guid_to_uuid(ParentGuid), FileName, Doc) of
                 {conflicting, ExtendedName, Others} -> {ExtendedName, Others};
