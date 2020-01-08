@@ -423,9 +423,9 @@ cease_support_cleanup_test(Config) ->
         target => 0,
         threshold => 100
     },
-    test_utils:mock_expect(Node, provider_logic, get_support_size, fun(_) -> {ok, 10000} end),
     ok = rpc:call(Node, autocleaning_api, configure, [SpaceId, ACConfig]),
 
+    % force cleanup by adding new support when remnants of previous one still exist
     {ok, _} = rpc:call(Node, space_storage, add, [SpaceId, StorageId, false]),
 
     EmptySpaceStrategies = #space_strategies{
@@ -454,6 +454,12 @@ init_per_suite(Config) ->
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
+
+init_per_testcase(cease_support_cleanup_test, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Nodes, provider_logic),
+    test_utils:mock_expect(Nodes, provider_logic, get_support_size, fun(_) -> {ok, 10000} end),
+    Config;
 init_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Nodes, main_harvesting_stream),
@@ -461,10 +467,16 @@ init_per_testcase(_, Config) ->
         fun(_, _) -> ok end),
     logic_tests_common:init_per_testcase(Config).
 
+
+end_per_testcase(cease_support_cleanup_test, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Nodes, provider_logic),
+    ok;
 end_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes, main_harvesting_stream),
     ok.
+
 
 end_per_suite(Config) ->
     logic_tests_common:unmock_gs_client(Config),

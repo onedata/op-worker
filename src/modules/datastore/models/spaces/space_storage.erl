@@ -66,7 +66,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
-    delete_auxiliary_documents(Key),
+    delete_associated_documents(Key),
     datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
@@ -94,7 +94,7 @@ add(SpaceId, StorageId, MountInRoot) ->
                 ok;
             {ok, #document{value = #space_storage{}}} ->
                 % remove possible remnants of previous support
-                delete_auxiliary_documents(SpaceId)
+                delete_associated_documents(SpaceId)
         end,
 
         case datastore_model:save(?CTX, new(SpaceId, StorageId, MountInRoot)) of
@@ -140,8 +140,8 @@ get_mounted_in_root(SpaceId) ->
 %%%===================================================================
 
 %% @private
--spec delete_auxiliary_documents(id()) -> ok.
-delete_auxiliary_documents(Key) ->
+-spec delete_associated_documents(id()) -> ok.
+delete_associated_documents(Key) ->
     space_strategies:delete(Key),
     file_popularity_api:disable(Key),
     file_popularity_api:delete_config(Key),
