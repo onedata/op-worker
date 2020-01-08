@@ -1485,8 +1485,8 @@ storage_mock_setup(Workers, StoragesSetupMap) ->
             GetQosParametersFun(StorageId)
         end),
 
-    ok = test_utils:mock_expect(Workers, storage_logic, get_provider_of_remote_storage,
-        fun(StorageId,_) ->
+    ok = test_utils:mock_expect(Workers, storage_logic, get_provider,
+        fun(StorageId) ->
             maps:get(<<"provider_id">>, maps:get(StorageId, StorageMap, #{}), #{})
         end),
 
