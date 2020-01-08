@@ -637,11 +637,13 @@ put_into_cache(Doc = #document{key = Id, value = Record}) ->
     Type:update_cache(Id, fun(_) -> {ok, Record} end, Doc).
 
 
+-spec get_storage_id(node()) -> od_storage:id().
 get_storage_id(Worker) ->
     {ok, [StorageId]} = rpc:call(Worker, provider_logic, get_storage_ids, []),
     StorageId.
 
 
+-spec get_supporting_storage_id(node(), od_space:id()) -> od_storage:id().
 get_supporting_storage_id(Worker, SpaceId) ->
     {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.
@@ -1442,9 +1444,9 @@ storage_mock_setup(Workers) ->
             name = <<>>,
             qos_parameters = #{}
         }}} end),
-    ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_local_storage, fun(_) -> #{} end),
-    ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(_,_) -> #{} end),
-    ok = test_utils:mock_expect(Workers, storage_logic, get_name,
+    ok = test_utils:mock_expect(Workers, storage_logic, fetch_qos_parameters_of_local_storage, fun(_) -> #{} end),
+    ok = test_utils:mock_expect(Workers, storage_logic, fetch_qos_parameters_of_remote_storage, fun(_,_) -> #{} end),
+    ok = test_utils:mock_expect(Workers, storage_logic, fetch_name,
         % storage name is equal to its id
         fun(#document{key = Id}) -> Id;
            (Id) -> Id

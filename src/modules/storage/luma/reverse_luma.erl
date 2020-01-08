@@ -156,7 +156,7 @@ get_group_id_by_name(Name, SpaceId, Storage) ->
 -spec get_user_id_from_supported_storage_credentials(integer(), od_storage:id(),
     storage:record()) -> {ok, od_user:id()} | {error, term()}.
 get_user_id_from_supported_storage_credentials(Uid, StorageId, Storage) ->
-    StorageName = storage:get_name(Storage),
+    StorageName = storage:fetch_name(StorageId),
     LumaConfig = storage:get_luma_config(Storage),
     case reverse_luma_proxy:get_user_id(Uid, StorageId, StorageName, LumaConfig) of
         {error, Reason} ->
@@ -174,7 +174,7 @@ get_user_id_from_supported_storage_credentials(Uid, StorageId, Storage) ->
 -spec get_user_id_from_supported_storage_acl_name(binary(), od_storage:id(),
     storage:record()) -> {ok, od_user:id()} | {error, term()}.
 get_user_id_from_supported_storage_acl_name(Name, StorageId, Storage) ->
-    StorageName = storage:get_name(Storage),
+    StorageName = storage:fetch_name(StorageId),
     LumaConfig = storage:get_luma_config(Storage),
     case reverse_luma_proxy:get_user_id_by_name(Name, StorageId, StorageName,
         LumaConfig)
@@ -194,7 +194,7 @@ get_user_id_from_supported_storage_acl_name(Name, StorageId, Storage) ->
 -spec get_group_id_from_supported_storage_credentials(integer(), od_space:id(),
     od_storage:id(), storage:record()) -> {ok, od_group:id()} | {error, term()}.
 get_group_id_from_supported_storage_credentials(Gid, SpaceId, StorageId, Storage) ->
-    StorageName = storage:get_name(Storage),
+    StorageName = storage:fetch_name(StorageId),
     LumaConfig = storage:get_luma_config(Storage),
     case reverse_luma_proxy:get_group_id(Gid, SpaceId, StorageId, StorageName,
         LumaConfig)
@@ -214,7 +214,7 @@ get_group_id_from_supported_storage_credentials(Gid, SpaceId, StorageId, Storage
 -spec get_group_id_from_supported_storage_acl_name(binary(), od_space:id(),
     od_storage:id(), storage:record()) -> {ok, od_group:id()} | {error, term()}.
 get_group_id_from_supported_storage_acl_name(Name, SpaceId, StorageId, Storage) ->
-    StorageName = storage:get_name(Storage),
+    StorageName = storage:fetch_name(StorageId),
     LumaConfig = storage:get_luma_config(Storage),
     case reverse_luma_proxy:get_group_id_by_name(Name, SpaceId, StorageId,
         StorageName, LumaConfig)
