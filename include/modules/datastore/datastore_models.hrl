@@ -234,7 +234,7 @@
     proxy_via :: undefined | oneprovider:id(),
     % Key-value in-session memory
     memory = #{} :: map(),
-    direct_io = false :: boolean()
+    direct_io = #{} :: #{od_space:id() => boolean()}
 }).
 
 % Model used to cache idp access tokens
@@ -606,7 +606,8 @@
 %% Model that stores file handles
 -record(file_handles, {
     is_removed = false :: boolean(),
-    descriptors = #{} :: file_descriptors()
+    descriptors = #{} :: file_descriptors(),
+    creation_handle :: file_handles:creation_handle()
 }).
 
 %% Model that holds file's custom metadata

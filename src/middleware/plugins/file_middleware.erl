@@ -352,7 +352,7 @@ data_spec_get(#gri{aspect = acl}) ->
     undefined;
 
 data_spec_get(#gri{aspect = transfers}) -> #{
-    optional => #{<<"include_ended_list">> => {boolean, any}}
+    optional => #{<<"include_ended_ids">> => {boolean, any}}
 }.
 
 
@@ -491,12 +491,12 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
     }} = transferred_file:get_transfers(FileGuid),
 
     Transfers = #{
-        <<"ongoingList">> => Ongoing,
+        <<"ongoingIds">> => Ongoing,
         <<"endedCount">> => length(Ended)
     },
-    case maps:get(<<"include_ended_list">>, Data, false) of
+    case maps:get(<<"include_ended_ids">>, Data, false) of
         true ->
-            {ok, value, Transfers#{<<"endedList">> => Ended}};
+            {ok, value, Transfers#{<<"endedIds">> => Ended}};
         false ->
             {ok, value, Transfers}
     end.

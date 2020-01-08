@@ -51,7 +51,7 @@ handle_qos_entry_change(SpaceId, #document{
     case qos_entry:is_possible(QosEntry) of
         true ->
             {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosEntry),
-            qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs);
         false ->
             ok = qos_entry:add_to_impossible_list(QosEntryId, SpaceId),

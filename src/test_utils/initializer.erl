@@ -299,11 +299,12 @@ setup_session(Worker, [{_, #user_config{
         [Nonce, Identity, TokenAuth])
     ),
 
-    lists:foreach(fun({_, SpaceName}) ->
+    lists:foreach(fun({SpaceId, SpaceName}) ->
         case get(SpaceName) of
             undefined -> put(SpaceName, [SessId]);
             SessIds -> put(SpaceName, [SessId | SessIds])
-        end
+        end,
+        rpc:call(Worker, session, set_direct_io, [SessId, SpaceId, false])
     end, Spaces),
 
     Ctx = rpc:call(Worker, user_ctx, new, [SessId]),
@@ -635,11 +636,13 @@ put_into_cache(Doc = #document{key = Id, value = Record}) ->
     Type:update_cache(Id, fun(_) -> {ok, Record} end, Doc).
 
 
+-spec get_storage_id(node()) -> od_storage:id().
 get_storage_id(Worker) ->
     {ok, [StorageId]} = rpc:call(Worker, provider_logic, get_storage_ids, []),
     StorageId.
 
 
+-spec get_supporting_storage_id(node(), od_space:id()) -> od_storage:id().
 get_supporting_storage_id(Worker, SpaceId) ->
     {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.

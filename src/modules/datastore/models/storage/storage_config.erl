@@ -142,6 +142,8 @@ update_helper(StorageId, UpdateFun) ->
         (#storage_config{helper = PreviousHelper} = StorageConfig) ->
             case UpdateFun(PreviousHelper) of
                 {ok, PreviousHelper} ->
+                    % this error informs higher level module, that no changes were made
+                    % and there is no need to execute `on_helper_changed` callback
                     {error, no_changes};
                 {ok, NewHelper} ->
                     {ok, StorageConfig#storage_config{helper = NewHelper}};

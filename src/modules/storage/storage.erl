@@ -35,14 +35,15 @@
 -export([create/6, get/1, describe/1, exists/1, delete/1, clear_storages/0]).
 
 %%% Functions to retrieve storage details
--export([get_id/1, get_name/1, get_helper/1, get_type/1, get_luma_config/1,
-    get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
+-export([get_id/1, get_helper/1, get_type/1, get_luma_config/1]).
+-export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
+    fetch_qos_parameters_of_remote_storage/2]).
 -export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
 -export([is_local/1]).
 
 %%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
--export([set_readonly/2, set_luma_config/2, set_imported_storage/2, set_qos_parameters/2]).
+-export([set_readonly/2, set_imported_storage/2, set_qos_parameters/2]).
 -export([set_helper_insecure/2, update_helper_args/2, update_helper_admin_ctx/2,
     update_helper/2]).
 
@@ -77,6 +78,7 @@
 -export_type([record/0, name/0, qos_parameters/0]).
 
 -compile({no_auto_import, [get/1]}).
+
 
 %%%===================================================================
 %%% API
@@ -155,7 +157,7 @@ describe(StorageId) ->
             Base = maps:merge(HelperArgs, AdminCtx),
             {ok, Base#{
                 <<"id">> => StorageId,
-                <<"name">> => get_name(Storage),
+                <<"name">> => fetch_name(StorageId),
                 <<"type">> => helper:get_name(Helper),
                 <<"readonly">> => is_readonly(Storage),
                 <<"insecure">> => helper:is_insecure(Helper),
@@ -163,7 +165,7 @@ describe(StorageId) ->
                 <<"lumaEnabled">> => is_luma_enabled(Storage),
                 <<"lumaUrl">> => LumaUrl,
                 <<"importedStorage">> => is_imported_storage(Storage),
-                <<"qosParameters">> => get_qos_parameters_of_local_storage(Storage)
+                <<"qosParameters">> => fetch_qos_parameters_of_local_storage(StorageId)
             }};
         {error, _} = Error -> Error
     end.
@@ -219,6 +221,7 @@ clear_storages() ->
         catch storage_logic:delete_in_zone(Id)
     end, StorageIds).
 
+
 %%%===================================================================
 %%% Functions to retrieve storage details
 %%%===================================================================
@@ -226,11 +229,6 @@ clear_storages() ->
 -spec get_id(record()) -> od_storage:id().
 get_id(#storage_record{id = Id}) ->
     Id.
-
-
--spec get_name(record()) -> name().
-get_name(#storage_record{id = Id}) ->
-    storage_logic:get_name(Id).
 
 
 -spec get_helper(record() | od_storage:id()) -> helpers:helper().
@@ -254,11 +252,14 @@ get_type(#storage_record{helper = Helper}) ->
     helper:get_type(Helper).
 
 
--spec get_qos_parameters_of_local_storage(od_storage:id() | record()) -> qos_parameters().
-get_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
-    storage_logic:get_qos_parameters_of_local_storage(StorageId);
-get_qos_parameters_of_local_storage(#storage_record{id = Id}) ->
-    get_qos_parameters_of_local_storage(Id).
+-spec fetch_name(od_storage:id()) -> name().
+fetch_name(StorageId) when is_binary(StorageId) ->
+    storage_logic:get_name(StorageId).
+
+
+-spec fetch_qos_parameters_of_local_storage(od_storage:id()) -> qos_parameters().
+fetch_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
+    storage_logic:get_qos_parameters_of_local_storage(StorageId).
 
 
 %%--------------------------------------------------------------------
@@ -267,20 +268,9 @@ get_qos_parameters_of_local_storage(#storage_record{id = Id}) ->
 %% through given space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> qos_parameters().
-get_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
+-spec fetch_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> qos_parameters().
+fetch_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
     storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves id of provider to which given storage belongs. This information is
-%% retrieved from storage details shared between providers through given space.
-%% @end
-%%--------------------------------------------------------------------
--spec get_provider_of_remote_storage(od_storage:id(), od_space:id()) -> od_provider:id().
-get_provider_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
-    storage_logic:get_provider(StorageId, SpaceId).
 
 
 -spec is_readonly(record() | od_storage:id()) -> boolean().
@@ -343,13 +333,6 @@ update_luma_config(StorageId, DiffOrNewConfig) ->
     storage_config:update_luma_config(StorageId, UpdateFun).
 
 
--spec set_luma_config(od_storage:id(), luma_config:config() | undefined) ->
-    ok | {error, term()}.
-set_luma_config(StorageId, LumaConfig) ->
-    UpdateFun = fun(_) -> {ok, LumaConfig} end,
-    storage_config:update_luma_config(StorageId, UpdateFun).
-
-
 -spec set_readonly(od_storage:id(), boolean()) -> ok | {error, term()}.
 set_readonly(StorageId, Readonly) ->
     storage_config:set_readonly(StorageId, Readonly).
@@ -405,6 +388,7 @@ update_helper(StorageId, UpdateFun) ->
         {error, no_changes} -> ok;
         {error, _} = Error -> Error
     end.
+
 
 %%%===================================================================
 %%% Support related functions
@@ -494,6 +478,7 @@ supports_any_space(StorageId) ->
         {error, _} = Error -> Error
     end.
 
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -503,10 +488,12 @@ supports_any_space(StorageId) ->
 on_storage_created(StorageId) ->
     rtransfer_config:add_storage(StorageId).
 
+
 %% @private
 -spec on_space_supported(od_space:id()) -> ok.
 on_space_supported(SpaceId) ->
     ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
+
 
 %% @private
 -spec on_space_unsupported(od_space:id(), od_storage:id()) -> ok.
@@ -518,6 +505,7 @@ on_space_unsupported(SpaceId, StorageId) ->
     storage_sync:space_unsupported(SpaceId, StorageId),
     main_harvesting_stream:space_unsupported(SpaceId).
 
+
 %% @private
 -spec on_helper_changed(StorageId :: od_storage:id()) -> ok.
 on_helper_changed(StorageId) ->
@@ -527,21 +515,25 @@ on_helper_changed(StorageId) ->
     rpc:multicall(Nodes, rtransfer_config, restart_link, []),
     helpers_reload:refresh_helpers_by_storage(StorageId).
 
+
 %% @private
 -spec is_name_occupied(name()) -> boolean().
 is_name_occupied(Name) ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
     lists:member(Name, lists:map(fun storage_logic:get_name/1, StorageIds)).
 
+
 %% @private
 -spec lock_on_storage_by_id(od_storage:id(), fun(() -> Result)) -> Result.
 lock_on_storage_by_id(Identifier, Fun) ->
     critical_section:run({storage_id, Identifier}, Fun).
 
+
 %% @private
 -spec lock_on_storage_by_name(name(), fun(() -> Result)) -> Result.
 lock_on_storage_by_name(Identifier, Fun) ->
     critical_section:run({storage_name, Identifier}, Fun).
+
 
 %%%===================================================================
 %%% Upgrade from 19.02.*
@@ -646,6 +638,7 @@ migrate_space_support(SpaceId) ->
     end,
     ?notice("Support of space: ~p successfully migrated", [SpaceId]).
 
+
 %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
 %%%===================================================================
 %% Deprecated API and datastore_model callbacks
@@ -680,6 +673,7 @@ delete_deprecated(StorageId) ->
 -spec list_deprecated() -> {ok, [datastore_doc:doc(#storage{})]} | {error, term()}.
 list_deprecated() ->
     datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -777,6 +771,7 @@ get_record_struct(5) ->
             {api_key, string}
         ]}}
     ]}.
+
 
 %%--------------------------------------------------------------------
 %% @doc

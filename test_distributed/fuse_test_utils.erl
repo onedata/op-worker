@@ -281,7 +281,7 @@ connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
         RM
     ),
 
-    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({fuse, Nonce})),
+    SessId = datastore_key:new_from_digest([<<"fuse">>, Nonce]),
     ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.
 
@@ -326,14 +326,18 @@ receive_server_message(IgnoredMsgList) ->
     receive_server_message(IgnoredMsgList, ?TIMEOUT).
 
 receive_server_message(IgnoredMsgList, Timeout) ->
+    Now = time_utils:system_time_millis(),
     receive
         {_, _, Data} ->
             % ignore listed messages
             Msg = messages:decode_msg(Data, 'ServerMessage'),
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
-                true -> receive_server_message(IgnoredMsgList);
-                false -> Msg
+                true ->
+                    NewTimeout = max(0, Timeout - (time_utils:system_time_millis() - Now)),
+                    receive_server_message(IgnoredMsgList, NewTimeout);
+                false ->
+                    Msg
             end
     after Timeout ->
         {error, timeout}

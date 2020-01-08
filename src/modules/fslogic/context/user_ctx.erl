@@ -31,10 +31,10 @@
 -export([new/1]).
 -export([
     get_user/1, get_user_id/1,
-    get_session_id/1,
+    get_eff_spaces/1, get_session_id/1,
     get_auth/1, get_data_constraints/1
 ]).
--export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/1]).
+-export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/2]).
 
 %%%===================================================================
 %%% API functions
@@ -83,6 +83,16 @@ get_user(#user_ctx{session = #document{key = SessId, value = #session{
 get_user_id(#user_ctx{session = Session}) ->
     {ok, UserId} = session:get_user_id(Session),
     UserId.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets effective spaces from user context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_eff_spaces(ctx()) -> [od_space:id()].
+get_eff_spaces(UserCtx) ->
+    #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
+    Spaces.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -143,8 +153,10 @@ is_normal_user(#user_ctx{session = #document{key = SessId}}) ->
 %% Checks if session uses direct_io.
 %% @end
 %%--------------------------------------------------------------------
--spec is_direct_io(ctx()) -> boolean().
+-spec is_direct_io(ctx(), od_space:id()) -> boolean().
 is_direct_io(#user_ctx{session = #document{
-    value = #session{direct_io = DirectIO}
-}}) ->
-    DirectIO.
+    value = #session{direct_io = DirectIO, type = fuse}
+}}, SpaceId) ->
+    maps:get(SpaceId, DirectIO, true);
+is_direct_io(_, _) ->
+    false.

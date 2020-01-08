@@ -209,7 +209,7 @@ update_hashes(StorageFileId, SpaceId, Mtime) ->
 
 -spec id(helpers:file_id(), od_space:id()) -> key().
 id(StorageFileId, SpaceId) ->
-    datastore_utils:gen_key(SpaceId, StorageFileId).
+    datastore_key:adjacent_from_digest([StorageFileId], SpaceId).
 
 -spec create_or_update(helpers:file_id(), od_space:id(), diff()) -> ok | error().
 create_or_update(StorageFileId, SpaceId, Diff) ->

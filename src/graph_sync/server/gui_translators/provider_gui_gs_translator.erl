@@ -16,12 +16,22 @@
 -include("middleware/middleware.hrl").
 
 %% API
--export([translate_resource/2]).
+-export([
+    translate_value/2,
+    translate_resource/2
+]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = configuration}, Configuration) ->
+    Configuration;
+translate_value(#gri{aspect = test_image}, {binary, TestImage}) ->
+    #{<<"testImage">> => TestImage}.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

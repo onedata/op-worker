@@ -81,7 +81,7 @@
     get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3, get_file_location_ids/1,
     get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/1, get_acl/1, get_mode/1, get_child_canonical_path/2,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2,
     get_file_size/1, get_file_size_from_remote_locations/1, get_owner/1,
     get_group_owner/1, get_local_storage_file_size/1,
     is_space_synced/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1
@@ -404,7 +404,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
     ParentGuid =
         case fslogic_uuid:is_root_dir_uuid(ParentUuid) of
             true ->
-                case ParentUuid =:= ?ROOT_DIR_UUID
+                case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
                     andalso UserCtx =/= undefined
                     andalso user_ctx:is_normal_user(UserCtx)
                 of
@@ -433,7 +433,7 @@ get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
 %% Returns GUID of parent or undefined when the file is a root dir.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent_guid(ctx(), user_ctx:ctx()) -> {fslogic_worker:file_guid(), ctx()}.
+-spec get_parent_guid(ctx(), user_ctx:ctx() | undefined) -> {fslogic_worker:file_guid() | undefined, ctx()}.
 get_parent_guid(FileCtx, UserCtx) ->
     case is_root_dir_const(FileCtx) of
         true ->
@@ -975,18 +975,21 @@ get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts, IncludeLocal) ->
 %% or posix otherwise).
 %% @end
 %%--------------------------------------------------------------------
--spec get_active_perms_type(ctx()) -> {file_meta:permissions_type(), ctx()}.
-get_active_perms_type(FileCtx = #file_ctx{file_doc = #document{
-    value = #file_meta{acl = []}
-}}) ->
+-spec get_active_perms_type(ctx(), include_deleted | ignore_deleted) -> {file_meta:permissions_type(), ctx()}.
+get_active_perms_type(FileCtx = #file_ctx{file_doc = undefined}, GetMode) ->
+    {Doc, FileCtx2} = case GetMode of
+        include_deleted -> get_file_doc_including_deleted(FileCtx);
+        _ -> get_file_doc(FileCtx)
+    end,
+    get_active_perms_type_from_doc(Doc, FileCtx2);
+get_active_perms_type(FileCtx = #file_ctx{file_doc = Doc}, _) ->
+    get_active_perms_type_from_doc(Doc, FileCtx).
+
+-spec get_active_perms_type_from_doc(file_meta:doc(), ctx()) -> {file_meta:permissions_type(), ctx()}.
+get_active_perms_type_from_doc(#document{value = #file_meta{acl = []}}, FileCtx) ->
     {posix, FileCtx};
-get_active_perms_type(FileCtx = #file_ctx{file_doc = #document{
-    value = #file_meta{}
-}}) ->
-    {acl, FileCtx};
-get_active_perms_type(FileCtx) ->
-    {_, FileCtx2} = get_file_doc(FileCtx),
-    get_active_perms_type(FileCtx2).
+get_active_perms_type_from_doc(#document{value = #file_meta{}}, FileCtx) ->
+    {acl, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc

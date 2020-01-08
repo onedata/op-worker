@@ -295,7 +295,7 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
     }} = PrevDoc,
 
     AllPast = enforce_history_limit(ordsets:union(NewPast, PrevPast)),
-    MergedPastDoc = case datastore_utils:is_greater_rev(NewRev, PreviousRev) of
+    MergedPastDoc = case datastore_rev:is_greater(NewRev, PreviousRev) of
         true ->
             NewDoc#document{value = NewRecord#transferred_file{ended_transfers = AllPast}};
         false ->
@@ -344,7 +344,7 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
 %% @private
 -spec file_guid_to_id(fslogic_worker:file_guid()) -> id().
 file_guid_to_id(FileGuid) ->
-    datastore_utils:gen_key(<<>>, FileGuid).
+    file_id:guid_to_uuid(FileGuid).
 
 
 %% @private

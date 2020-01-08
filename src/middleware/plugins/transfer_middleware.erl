@@ -73,7 +73,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
     undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = throughput_charts}}) -> #{
-    required => #{<<"chartsType">> => {binary, [
+    required => #{<<"charts_type">> => {binary, [
         ?MINUTE_PERIOD,
         ?HOUR_PERIOD,
         ?DAY_PERIOD,
@@ -221,7 +221,7 @@ get(#op_req{gri = #gri{aspect = progress}}, #transfer{
     }};
 get(#op_req{data = Data, gri = #gri{aspect = throughput_charts}}, Transfer) ->
     StartTime = Transfer#transfer.start_time,
-    ChartsType = maps:get(<<"chartsType">>, Data),
+    ChartsType = maps:get(<<"charts_type">>, Data),
 
     % Return historical statistics of finished transfers intact. As for active
     % ones, pad them with zeroes to current time and erase recent n-seconds to

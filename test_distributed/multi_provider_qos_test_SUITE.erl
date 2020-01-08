@@ -838,7 +838,7 @@ init_per_testcase(qos_status_test, Config) ->
         fun(_, FileCtx, _, _, _, _) ->
             FileGuid = file_ctx:get_guid_const(FileCtx),
             TestPid ! {qos_slave_job, self(), FileGuid},
-            receive {completed, FileGuid} -> ok end
+            receive {completed, FileGuid} -> {ok, FileGuid} end
         end),
     init_per_testcase(default, Config);
 

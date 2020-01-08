@@ -138,7 +138,7 @@ http_client_post(Url, ReqHeaders, ReqBody) ->
     Body :: binary().
 get_request_body(SessionId, UserId, SpaceId, Storage) ->
     StorageId = storage:get_id(Storage),
-    StorageName = storage:get_name(Storage),
+    StorageName = storage:fetch_name(StorageId),
     Body = #{
         <<"storageId">> => StorageId,
         <<"storageName">> => StorageName,
@@ -157,7 +157,7 @@ get_request_body(SessionId, UserId, SpaceId, Storage) ->
     Body :: binary().
 get_group_request_body(undefined, SpaceId, Storage) ->
     StorageId = storage:get_id(Storage),
-    StorageName = storage:get_name(Storage),
+    StorageName = storage:fetch_name(StorageId),
     Body = #{
         <<"spaceId">> => SpaceId,
         <<"storageId">> => StorageId,
@@ -166,7 +166,7 @@ get_group_request_body(undefined, SpaceId, Storage) ->
     json_utils:encode(filter_null_and_undefined_values(Body));
 get_group_request_body(GroupId, SpaceId, Storage) ->
     StorageId = storage:get_id(Storage),
-    StorageName = storage:get_name(Storage),
+    StorageName = storage:fetch_name(StorageId),
     Body = #{
         <<"groupId">> => GroupId,
         <<"spaceId">> => SpaceId,

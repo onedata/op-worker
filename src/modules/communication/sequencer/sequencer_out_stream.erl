@@ -50,7 +50,7 @@
 }).
 
 -define(PROCESS_REQUEST_RETRY_DELAY, timer:seconds(5)).
--define(LOG_FAILED_ATTEMPTS_THRESHOLD, 3).
+-define(LOG_FAILED_ATTEMPTS_THRESHOLD, 10).
 
 %%%===================================================================
 %%% API
@@ -405,6 +405,8 @@ resend_messages(LowerSeqNum, UpperSeqNum, Msgs, StmId, SessId) ->
 -spec maybe_log_failure(Request :: term(), Reason :: term(),
     Attempt :: non_neg_integer()) -> ok.
 maybe_log_failure(_, {badmatch, {error, empty_connection_pool}}, _) ->
+    ok;
+maybe_log_failure(_, {badmatch, {error, no_connection_to_peer_provider}}, _) ->
     ok;
 maybe_log_failure(_, {badmatch, {error, not_found}}, _) ->
     ok;

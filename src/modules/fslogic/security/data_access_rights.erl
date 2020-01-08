@@ -21,7 +21,10 @@
 -include_lib("ctool/include/privileges.hrl").
 
 %% API
--export([assert_granted/3]).
+-export([
+    assert_granted/3,
+    assert_operation_available_in_readonly_mode/1
+]).
 
 -type type() ::
     owner
@@ -67,9 +70,46 @@ assert_granted(UserCtx, FileCtx0, AccessRequirements0) ->
     end.
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether operation requiring specified access requirements
+%% can be executed in readonly mode.
+%% @end
+%%--------------------------------------------------------------------
+-spec assert_operation_available_in_readonly_mode([requirement()]) ->
+    ok | no_return().
+assert_operation_available_in_readonly_mode(AccessRequirements) ->
+    case lists:all(fun is_available_in_readonly_mode/1, AccessRequirements) of
+        true -> ok;
+        false -> throw(?EACCES)
+    end.
+
+
 %%%===================================================================
 %%% Internal Functions
 %%%===================================================================
+
+
+%% @private
+-spec is_available_in_readonly_mode(requirement()) -> boolean().
+is_available_in_readonly_mode({AccessType1, 'or', AccessType2}) ->
+    is_available_in_readonly_mode(AccessType1)
+        andalso is_available_in_readonly_mode(AccessType2);
+
+is_available_in_readonly_mode(root)                   -> true;
+is_available_in_readonly_mode(share)                  -> true;
+is_available_in_readonly_mode(owner)                  -> true;
+is_available_in_readonly_mode(owner_if_parent_sticky) -> true;
+is_available_in_readonly_mode(traverse_ancestors)     -> true;
+
+is_available_in_readonly_mode(?read_object)           -> true;
+is_available_in_readonly_mode(?list_container)        -> true;
+is_available_in_readonly_mode(?read_metadata)         -> true;
+is_available_in_readonly_mode(?read_attributes)       -> true;
+is_available_in_readonly_mode(?read_acl)              -> true;
+is_available_in_readonly_mode(?traverse_container)    -> true;
+
+is_available_in_readonly_mode(_)                      -> false.
 
 
 %% @private
@@ -177,7 +217,7 @@ check_access(UserCtx, FileCtx0, traverse_ancestors) ->
 
 check_access(UserCtx, FileCtx0, Permission) ->
     ShareId = file_ctx:get_share_id_const(FileCtx0),
-    case file_ctx:get_active_perms_type(FileCtx0) of
+    case file_ctx:get_active_perms_type(FileCtx0, include_deleted) of
         {acl, FileCtx1} ->
             {Acl, _} = file_ctx:get_acl(FileCtx1),
             check_acl_access(Permission, UserCtx, ShareId, Acl, FileCtx1);

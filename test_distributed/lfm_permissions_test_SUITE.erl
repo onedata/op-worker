@@ -649,6 +649,7 @@ mkdir_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
             lfm_proxy:mkdir(W, SessId, <<TestCaseRootDirPath/binary, "/dir1/dir2">>)
         end
@@ -667,6 +668,7 @@ ls_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirGuid = maps:get(DirPath, ExtraData),
@@ -687,6 +689,7 @@ readdir_plus_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirGuid = maps:get(DirPath, ExtraData),
@@ -706,6 +709,7 @@ get_child_attr_test(Config) ->
             perms = [?traverse_container],
             children = [#file{name = <<"file1">>}]
         }],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ParentDirGuid = maps:get(ParentDirPath, ExtraData),
@@ -738,6 +742,7 @@ mv_dir_test(Config) ->
         ],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             SrcDirPath = <<TestCaseRootDirPath/binary, "/dir1/dir11">>,
             SrcDirGuid = maps:get(SrcDirPath, ExtraData),
@@ -768,6 +773,7 @@ rm_dir_test(Config) ->
         ],
         posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
             DirGuid = maps:get(DirPath, ExtraData),
@@ -788,6 +794,7 @@ create_file_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ParentDirGuid = maps:get(ParentDirPath, ExtraData),
@@ -814,6 +821,7 @@ open_for_read_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -840,6 +848,7 @@ open_for_write_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -866,6 +875,7 @@ open_for_rdwr_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -886,6 +896,7 @@ create_and_open_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ParentDirGuid = maps:get(ParentDirPath, ExtraData),
@@ -906,6 +917,7 @@ truncate_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -938,6 +950,7 @@ mv_file_test(Config) ->
         ],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             SrcFilePath = <<TestCaseRootDirPath/binary, "/dir1/file11">>,
             SrcFileGuid = maps:get(SrcFilePath, ExtraData),
@@ -968,6 +981,7 @@ rm_file_test(Config) ->
         ],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -983,6 +997,7 @@ get_parent_test(Config) ->
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -998,6 +1013,7 @@ get_file_path_test(Config) ->
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1013,6 +1029,7 @@ get_file_guid_test(Config) ->
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             lfm_proxy:resolve_guid(W, SessId, FilePath)
@@ -1027,6 +1044,7 @@ get_file_attr_test(Config) ->
         test_node = W,
         root_dir = ?SCENARIO_NAME,
         files = [#file{name = <<"file1">>}],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1047,6 +1065,7 @@ get_file_distribution_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1151,6 +1170,7 @@ check_read_perms_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1171,6 +1191,7 @@ check_write_perms_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1191,6 +1212,7 @@ check_rdwr_perms_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1208,6 +1230,7 @@ create_share_test(Config) ->
         files = [#dir{name = <<"dir1">>}],
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirGuid = maps:get(DirPath, ExtraData),
@@ -1233,6 +1256,7 @@ remove_share_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_MANAGE_SHARES],
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ShareId = maps:get(DirPath, ExtraData),
@@ -1251,6 +1275,7 @@ get_acl_test(Config) ->
             name = <<"file1">>,
             perms = [?read_acl]
         }],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1271,6 +1296,7 @@ set_acl_test(Config) ->
         }],
         posix_requires_space_privs = owner,
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1297,6 +1323,7 @@ remove_acl_test(Config) ->
         }],
         posix_requires_space_privs = owner,
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1319,6 +1346,7 @@ get_transfer_encoding_test(Config) ->
                 Guid
             end
         }],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1339,6 +1367,7 @@ set_transfer_encoding_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1361,6 +1390,7 @@ get_cdmi_completion_status_test(Config) ->
                 Guid
             end
         }],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1381,6 +1411,7 @@ set_cdmi_completion_status_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1403,6 +1434,7 @@ get_mimetype_test(Config) ->
                 Guid
             end
         }],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1423,6 +1455,7 @@ set_mimetype_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1447,6 +1480,7 @@ get_metadata_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1467,6 +1501,7 @@ set_metadata_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1491,6 +1526,7 @@ remove_metadata_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1516,6 +1552,7 @@ get_xattr_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1538,6 +1575,7 @@ list_xattr_test(Config) ->
                 Guid
             end
         }],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1558,6 +1596,7 @@ set_xattr_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1586,6 +1625,7 @@ remove_xattr_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1606,6 +1646,7 @@ add_qos_entry_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileGuid = maps:get(FilePath, ExtraData),
@@ -1632,6 +1673,7 @@ get_qos_entry_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
@@ -1658,6 +1700,7 @@ remove_qos_entry_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
+        available_in_readonly_mode = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
@@ -1683,6 +1726,7 @@ get_effective_file_qos_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             lfm_proxy:get_effective_file_qos(W, SessId, {path, FilePath})
@@ -1708,6 +1752,7 @@ check_qos_fulfillment_test(Config) ->
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),

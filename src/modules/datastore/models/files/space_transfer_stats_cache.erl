@@ -500,9 +500,7 @@ merge_histograms(Hist1, LastUpdate1, Hist2, LastUpdate2, TimeWindow) ->
 key(undefined, SpaceId, TransferType, StatsType) ->
     key(<<"all">>, SpaceId, TransferType, StatsType);
 key(TargetProvider, SpaceId, TransferType, StatsType) ->
-    Seed = <<TargetProvider/binary, "|", SpaceId/binary>>,
-    Key0 = <<TransferType/binary, "|", StatsType/binary>>,
-    datastore_utils:gen_key(Seed, Key0).
+    datastore_key:adjacent_from_digest([TargetProvider, TransferType, StatsType], SpaceId).
 
 
 %%--------------------------------------------------------------------

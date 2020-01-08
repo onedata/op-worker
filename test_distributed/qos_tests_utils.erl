@@ -539,7 +539,8 @@ assert_file_distribution(Config, Workers, {FileName, FileContent, ExpectedFileDi
                     "Wrong file distribution for ~p on worker ~p. ~n"
                     "Expected: ~p~n"
                     "Got: ~p~n",
-                    [FilePath, Worker, ExpectedDistributionSorted, FileLocationsSorted]);
+                    [FilePath, Worker, ExpectedDistributionSorted, FileLocationsSorted]),
+                    false;
             {true, _} ->
                 Res
         end

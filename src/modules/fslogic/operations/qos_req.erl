@@ -241,7 +241,7 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosEntryId) ->
 add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    QosEntryId = datastore_utils:gen_key(),
+    QosEntryId = datastore_key:new(),
 
     AllTraverseReqs = qos_traverse_req:build_traverse_reqs(FileUuid, Storages),
 
@@ -271,7 +271,7 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
 add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    QosEntryId = datastore_utils:gen_key(),
+    QosEntryId = datastore_key:new(),
 
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN, ReplicasNum) of
         {ok, _} ->

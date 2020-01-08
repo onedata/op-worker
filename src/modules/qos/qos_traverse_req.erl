@@ -43,7 +43,7 @@
 -spec build_traverse_reqs(file_meta:uuid(), [od_storage:id()]) -> traverse_reqs().
 build_traverse_reqs(FileUuid, StoragesList) ->
     lists:foldl(fun(Storage, Acc) ->
-        TaskId = datastore_utils:gen_key(),
+        TaskId = datastore_key:new(),
         Acc#{TaskId => #qos_traverse_req{
             start_file_uuid = FileUuid,
             storage_id = Storage
