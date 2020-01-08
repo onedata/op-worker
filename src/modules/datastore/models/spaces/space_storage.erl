@@ -33,6 +33,8 @@
 
 -define(CTX, #{model => ?MODULE}).
 
+-compile({no_auto_import, [get/1]}).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -64,12 +66,7 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
-    autocleaning_api:disable(Key),
-    autocleaning_api:delete_config(Key),
-    file_popularity_api:disable(Key),
-    file_popularity_api:delete_config(Key),
-    space_strategies:delete(Key),
-    main_harvesting_stream:space_unsupported(Key),
+    delete_auxiliary_documents(Key),
     datastore_model:delete(?CTX, Key).
 
 %%--------------------------------------------------------------------
@@ -92,36 +89,22 @@ add(SpaceId, StorageId) ->
 add(SpaceId, StorageId, MountInRoot) ->
     % critical section to avoid race in {@link storage:safe_remove/1}
     critical_section:run({storage_to_space, StorageId}, fun() ->
-        Diff = fun(#space_storage{
-            storage_ids = StorageIds,
-            mounted_in_root = MountedInRoot
-        } = Model) ->
-            case lists:member(StorageId, StorageIds) of
-                true -> {error, already_exists};
-                false ->
-                    SpaceStorage = Model#space_storage{
-                        storage_ids = [StorageId | StorageIds]
-                    },
-                    case MountInRoot of
-                        true ->
-                            {ok, SpaceStorage#space_storage{
-                                mounted_in_root = [StorageId | MountedInRoot]
-                            }};
-                        _ ->
-                            {ok, SpaceStorage}
-                    end
-            end
+        case get(SpaceId) of
+            {error, not_found} ->
+                ok;
+            {ok, #document{value = #space_storage{}}} ->
+                % remove possible remnants of previous support
+                delete_auxiliary_documents(SpaceId)
         end,
-        #document{value = Default} = new(SpaceId, StorageId, MountInRoot),
 
-        case datastore_model:update(?CTX, SpaceId, Diff, Default) of
+        case datastore_model:save(?CTX, new(SpaceId, StorageId, MountInRoot)) of
             {ok, _} ->
                 ok = space_strategies:add_storage(SpaceId, StorageId),
                 {ok, SpaceId};
-            {error, Reason} ->
-                {error, Reason}
+            {error, _} = Error ->
+                Error
         end
-    end).
+   end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -155,6 +138,15 @@ get_mounted_in_root(SpaceId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec delete_auxiliary_documents(id()) -> ok.
+delete_auxiliary_documents(Key) ->
+    space_strategies:delete(Key),
+    file_popularity_api:disable(Key),
+    file_popularity_api:delete_config(Key),
+    autocleaning_api:delete_config(Key),
+    main_harvesting_stream:space_unsupported(Key).
 
 %%--------------------------------------------------------------------
 %% @private

@@ -23,7 +23,8 @@
     mixed_get_test/1,
     subscribe_test/1,
     convenience_functions_test/1,
-    harvest_metadata_test/1
+    harvest_metadata_test/1,
+    cease_support_cleanup_test/1
 ]).
 
 all() -> ?ALL([
@@ -32,7 +33,8 @@ all() -> ?ALL([
     mixed_get_test,
     subscribe_test,
     convenience_functions_test,
-    harvest_metadata_test
+    harvest_metadata_test,
+    cease_support_cleanup_test
 ]).
 
 %%%===================================================================
@@ -407,6 +409,39 @@ harvest_metadata_test(Config) ->
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
+
+cease_support_cleanup_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+    StorageId = <<"storage1">>,
+    SpaceId = <<"space1">>,
+
+    {ok, _} = rpc:call(Node, space_storage, add, [SpaceId, StorageId, true]),
+    {ok, _} = rpc:call(Node, storage_sync, start_simple_scan_import, [SpaceId, StorageId, 5, true]),
+    ok = rpc:call(Node, file_popularity_api, enable, [SpaceId]),
+    ACConfig =  #{
+        enabled => true,
+        target => 0,
+        threshold => 100
+    },
+    test_utils:mock_expect(Node, provider_logic, get_support_size, fun(_) -> {ok, 10000} end),
+    ok = rpc:call(Node, autocleaning_api, configure, [SpaceId, ACConfig]),
+
+    {ok, _} = rpc:call(Node, space_storage, add, [SpaceId, StorageId, false]),
+
+    EmptySpaceStrategies = #space_strategies{
+        storage_strategies = #{
+            StorageId => #storage_strategies{}
+        }
+    },
+
+    ?assertEqual([], rpc:call(Node, space_storage, get_mounted_in_root, [SpaceId])),
+    {ok, #document{value = SpaceStrategies}} = ?assertMatch({ok, _}, rpc:call(Node, space_strategies, get, [SpaceId])),
+    ?assertEqual(EmptySpaceStrategies, SpaceStrategies),
+    ?assertEqual({error, not_found}, rpc:call(Node, storage_sync_monitoring, get, [SpaceId, StorageId])),
+    ?assertEqual(undefined, rpc:call(Node, autocleaning, get_config, [SpaceId])),
+    ?assertEqual({error, not_found}, rpc:call(Node, autocleaning, get, [SpaceId])),
+    ?assertEqual(false, rpc:call(Node, file_popularity_api, is_enabled, [SpaceId])),
+    ?assertEqual({error, not_found}, rpc:call(Node, file_popularity_config, get, [SpaceId])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
