@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([raw_to_rpn/1, calculate_storages/3]).
+-export([raw_to_rpn/1, calculate_assigned_storages/3]).
 
 
 % For test purpose
@@ -68,26 +68,14 @@ raw_to_rpn(Expression) ->
 %% given expression and replicas number.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_storages(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num()) ->
+-spec calculate_assigned_storages(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num()) ->
     {true, [od_storage:id()]} | false | {error, term()}.
-calculate_storages(FileCtx, Expression, ReplicasNum) ->
-    {FileLocationsDoc, _NewFileCtx} =  file_ctx:get_file_location_docs(FileCtx),
-    ProvidersBlocks = lists:map(fun(#document{value = FileLocation}) ->
-        #file_location{provider_id = ProviderId, blocks = Blocks} = FileLocation,
-        TotalBlocksSize = lists:foldl(fun(#file_block{size = S}, SizeAcc) ->
-            SizeAcc + S
-        end, 0, Blocks),
-        #{
-            <<"providerId">> => ProviderId,
-            <<"totalBlocksSize">> => TotalBlocksSize
-        }
-    end, FileLocationsDoc),
-
+calculate_assigned_storages(FileCtx, Expression, ReplicasNum) ->
     % TODO: VFS-5574 add check if storage has enough free space
     % call using ?MODULE macro for mocking in tests
     SpaceStorages = ?MODULE:get_space_storages(FileCtx),
     calculate_storages(
-        Expression, ReplicasNum, SpaceStorages, ProvidersBlocks, file_ctx:get_space_id_const(FileCtx)
+        Expression, ReplicasNum, SpaceStorages, file_ctx:get_space_id_const(FileCtx)
     ).
 
 
@@ -103,15 +91,15 @@ calculate_storages(FileCtx, Expression, ReplicasNum) ->
 %% Takes into consideration actual file locations.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_storages(rpn(), pos_integer(), [od_storage:id()], [#file_location{}], od_space:id()) ->
+-spec calculate_storages(rpn(), pos_integer(), [od_storage:id()], od_space:id()) ->
     {ture, [od_storage:id()]} | false | ?ERROR_INVALID_QOS_EXPRESSION.
-calculate_storages(_Expression, _ReplicasNum, [], _FileLocations, _SpaceId) ->
+calculate_storages(_Expression, _ReplicasNum, [], _SpaceId) ->
     false;
-calculate_storages(Expression, ReplicasNum, SpaceStorages, FileLocations, SpaceId) ->
+calculate_storages(Expression, ReplicasNum, SpaceStorages, SpaceId) ->
     % TODO: VFS-5734 choose storages for dirs according to current files distribution
     try
         StorageList = eval_rpn(Expression, SpaceStorages, SpaceId),
-        select(StorageList, ReplicasNum, FileLocations, SpaceId)
+        select(StorageList, ReplicasNum)
     catch
         throw:?ERROR_INVALID_QOS_EXPRESSION ->
             ?ERROR_INVALID_QOS_EXPRESSION
@@ -247,49 +235,20 @@ filter_storage(Key, Val, StorageSet, SpaceId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% @private
-%% Selects required number of storage from list of storage.
-%% Storage with higher current blocks size are preferred.
+%% Selects required number of storage from list of storages.
 %% If there are no enough storages on list returns false otherwise returns
 %% {true, StorageList}.
 %% @end
 %%--------------------------------------------------------------------
--spec select([od_storage:id()], pos_integer(), [#file_location{}], od_space:id()) ->
-    {true, [od_storage:id()]} | false.
-select([], _ReplicasNum, _FileLocations, _SpaceId) ->
+-spec select([od_storage:id()], pos_integer()) -> {true, [od_storage:id()]} | false.
+select([], _ReplicasNum) ->
     false;
-select(StorageList, ReplicasNum, FileLocations, SpaceId) ->
-    StorageListWithBlocksSize = lists:map(fun (StorageId) ->
-        {get_storage_blocks_size(StorageId, FileLocations, SpaceId), StorageId}
-    end, StorageList),
-
-    SortedStorageListWithBlocksSize = lists:reverse(lists:sort(StorageListWithBlocksSize)),
-    StorageSublist = [StorageId ||
-        {_, StorageId} <- lists:sublist(SortedStorageListWithBlocksSize, ReplicasNum)],
+select(StorageList, ReplicasNum) ->
+    StorageSublist = lists:sublist(StorageList, ReplicasNum),
     case length(StorageSublist) of
-        ReplicasNum ->
-            {true, StorageSublist};
-        _ ->
-            false
+        ReplicasNum -> {true, StorageSublist};
+        _ -> false
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @private
-%% Returns blocks sum for given storage according to file_locations.
-%% @end
-%%--------------------------------------------------------------------
--spec get_storage_blocks_size(od_storage:id(), [#file_location{}], od_space:id()) -> integer().
-get_storage_blocks_size(StorageId, FileLocations, SpaceId) ->
-    lists:foldl(fun(FileLocation, PartialStorageBlockSize) ->
-        ProviderId = storage:get_provider_of_remote_storage(StorageId, SpaceId),
-        case maps:get(<<"providerId">>, FileLocation) of
-            ProviderId ->
-                PartialStorageBlockSize + maps:get(<<"totalBlocksSize">>, FileLocation);
-            _ ->
-                PartialStorageBlockSize
-        end
-     end, 0, FileLocations).
 
 
 %%--------------------------------------------------------------------

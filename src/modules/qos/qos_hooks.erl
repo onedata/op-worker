@@ -129,9 +129,9 @@ reevaluate_impossible_qos(#document{key = QosEntryId} = QosEntryDoc) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    case qos_expression:calculate_storages(FileCtx, QosExpression, ReplicasNum) of
+    case qos_expression:calculate_assigned_storages(FileCtx, QosExpression, ReplicasNum) of
         {true, StoragesList} ->
-            AllTraverseReqs = qos_traverse_req:new_traverse_reqs(
+            AllTraverseReqs = qos_traverse_req:build_traverse_reqs(
                 file_ctx:get_uuid_const(FileCtx), StoragesList
             ),
             qos_entry:mark_entry_possible(QosEntryId, SpaceId, AllTraverseReqs),

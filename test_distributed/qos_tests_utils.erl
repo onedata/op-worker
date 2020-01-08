@@ -41,7 +41,7 @@
     get_op_nodes_sorted/1, get_guid/2, get_guid/3,
     create_dir_structure/2, create_dir_structure/4,
     create_file/4, create_directory/3,
-    wait_for_qos_fulfilment_in_parallel/4,
+    wait_for_qos_fulfillment_in_parallel/4,
     add_qos/2, add_multiple_qos_in_parallel/2,
     map_qos_names_to_ids/2,
     get_provider_storage/1,
@@ -73,7 +73,7 @@ fulfill_qos_test_base(Config, #fulfill_qos_test_spec{
 
     % add QoS and w8 for fulfillment
     QosNameIdMapping = add_multiple_qos_in_parallel(Config, QosToAddList),
-    wait_for_qos_fulfilment_in_parallel(Config, WaitForQos, QosNameIdMapping, ExpectedQosEntries),
+    wait_for_qos_fulfillment_in_parallel(Config, WaitForQos, QosNameIdMapping, ExpectedQosEntries),
 
     % check file distribution and qos documents
     ?assertMatch(ok, assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, ?ATTEMPTS)),
@@ -212,16 +212,16 @@ get_guid(Worker, SessId, Path) ->
     Guid.
 
 
-wait_for_qos_fulfilment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntries) ->
+wait_for_qos_fulfillment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntries) ->
     % if test spec does not specify for which QoS fulfillment wait, wait for all QoS
     % on all workers
     Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     QosNamesWithWorkerList = lists:foldl(fun(QosName, Acc) ->
         [{QosName, Workers} | Acc]
     end, [], maps:keys(QosNameIdMapping)),
-    wait_for_qos_fulfilment_in_parallel(Config, QosNamesWithWorkerList, QosNameIdMapping, ExpectedQosEntries);
+    wait_for_qos_fulfillment_in_parallel(Config, QosNamesWithWorkerList, QosNameIdMapping, ExpectedQosEntries);
 
-wait_for_qos_fulfilment_in_parallel(Config, QosToWaitForList, QosNameIdMapping, ExpectedQosEntries) ->
+wait_for_qos_fulfillment_in_parallel(Config, QosToWaitForList, QosNameIdMapping, ExpectedQosEntries) ->
     Results = utils:pmap(fun({QosName, WorkerList}) ->
         QosEntryId = maps:get(QosName, QosNameIdMapping),
 

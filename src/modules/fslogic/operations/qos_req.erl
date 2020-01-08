@@ -37,7 +37,7 @@ add_qos_entry(UserCtx, FileCtx0, Expression, ReplicasNum) ->
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),
-    add_qos_entry_insecure(UserCtx, FileCtx1, Expression, ReplicasNum).
+    add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum).
 
 
 %%--------------------------------------------------------------------
@@ -111,16 +111,18 @@ check_fulfillment(UserCtx, FileCtx0, QosEntryId) ->
 %% traverse should be run.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_expression:raw(), qos_entry:replicas_num()) ->
+-spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:raw(), qos_entry:replicas_num()) ->
     fslogic_worker:provider_response().
-add_qos_entry_insecure(_UserCtx, FileCtx, QosExpression, ReplicasNum) ->
+add_qos_entry_insecure(FileCtx, QosExpression, ReplicasNum) ->
     case qos_expression:raw_to_rpn(QosExpression) of
         {ok, QosExpressionInRPN} ->
             % TODO: VFS-5567 for now target storage for dir is selected here and
             % does not change in qos traverse task. Have to figure out how to
             % choose different storages for subdirs and/or file if multiple storage
             % fulfilling qos are available.
-            CalculatedStorages = qos_expression:calculate_storages(FileCtx, QosExpressionInRPN, ReplicasNum),
+            CalculatedStorages = qos_expression:calculate_assigned_storages(
+                FileCtx, QosExpressionInRPN, ReplicasNum
+            ),
 
             case CalculatedStorages of
                 {true, Storages} ->
@@ -241,13 +243,13 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     QosEntryId = datastore_utils:gen_key(),
 
-    AllTraverseReqs = qos_traverse_req:new_traverse_reqs(FileUuid, Storages),
+    AllTraverseReqs = qos_traverse_req:build_traverse_reqs(FileUuid, Storages),
 
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN,
                           ReplicasNum, true, AllTraverseReqs) of
         {ok, _} ->
-            % No need to invalidate QoS cache here; it is invalidated by each provider
-            % that should start traverse task (see qos_traverse_req:start_traverse)
+            file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
+            qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs),
             #provider_response{
                 status = #status{code = ?OK},

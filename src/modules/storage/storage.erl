@@ -36,9 +36,9 @@
 
 %%% Functions to retrieve storage details
 -export([get_id/1, get_name/1, get_helper/1, get_type/1, get_luma_config/1,
-    get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2,
-    get_provider_of_remote_storage/2]).
+    get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
 -export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
+-export([is_local/1]).
 
 %%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
@@ -280,7 +280,7 @@ get_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageI
 %%--------------------------------------------------------------------
 -spec get_provider_of_remote_storage(od_storage:id(), od_space:id()) -> od_provider:id().
 get_provider_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
-    storage_logic:get_provider_of_remote_storage(StorageId, SpaceId).
+    storage_logic:get_provider(StorageId, SpaceId).
 
 
 -spec is_readonly(record() | od_storage:id()) -> boolean().
@@ -302,6 +302,15 @@ is_imported_storage(#storage_record{is_imported_storage = ImportedStorage}) ->
 -spec is_luma_enabled(record()) -> boolean().
 is_luma_enabled(Storage) ->
     get_luma_config(Storage) =/= undefined.
+
+
+-spec is_local(od_storage:id()) -> boolean().
+is_local(StorageId) ->
+    case storage_logic:get_provider(StorageId) of
+        {ok, ProviderId} -> oneprovider:is_self(ProviderId);
+        ?ERROR_FORBIDDEN -> false;
+        Error -> throw(Error)
+    end.
 
 
 %%%===================================================================

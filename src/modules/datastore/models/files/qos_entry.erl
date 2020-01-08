@@ -28,8 +28,8 @@
 %%%     - there is no information that qos_entry cannot be satisfied (this
 %%%       information is stored in `possibility_check` field in qos_entry document.
 %%%       It is set to `{possible, ProviderId}` if during evaluation of QoS expression
-%%%       it provider ProviderId wa able to calculate list of storages
-%%%       that would fulfill QoS requirements, otherwise it is set to `{impossible, ProviderId}`)
+%%%       provider ProviderId was able to calculate list of storages that would fulfill
+%%%       QoS requirements, otherwise it is set to `{impossible, ProviderId}`)
 %%%     - there are no traverse requests in qos_entry document. Traverse requests
 %%%       are added to qos_entry document on its creation and removed from document
 %%%       when traverse task for this request is completed
@@ -49,7 +49,7 @@
 %% functions operating on document using datastore model API
 -export([
     get/1, delete/1, create/5, create/7,
-    add_links/4, delete_links/4, fold_links/5
+    add_shared_links/4, delete_shared_links/4, fold_links/5
 ]).
 
 %% higher-level functions operating on qos_entry document
@@ -137,31 +137,31 @@ delete(QosEntryId) ->
     datastore_model:delete(?CTX, QosEntryId).
 
 
--spec add_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
+-spec add_local_links(datastore:key(), datastore:tree_id(),
     one_or_many({datastore:link_name(), datastore:link_target()})) ->
     one_or_many({ok, datastore:link()} | {error, term()}).
-add_links(Scope, Key, TreeId, Links) ->
-    datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
-
-
--spec add_links(datastore:key(), datastore:tree_id(),
-    one_or_many({datastore:link_name(), datastore:link_target()})) ->
-    one_or_many({ok, datastore:link()} | {error, term()}).
-add_links(Key, TreeId, Links) ->
+add_local_links(Key, TreeId, Links) ->
     datastore_model:add_links(?CTX, Key, TreeId, Links).
 
 
--spec delete_links(datastore:key(), datastore:tree_id(),
+-spec add_shared_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
+    one_or_many({datastore:link_name(), datastore:link_target()})) ->
+    one_or_many({ok, datastore:link()} | {error, term()}).
+add_shared_links(Scope, Key, TreeId, Links) ->
+    datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
+
+
+-spec delete_local_links(datastore:key(), datastore:tree_id(),
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
-delete_links(Key, TreeId, Links) ->
+delete_local_links(Key, TreeId, Links) ->
     datastore_model:delete_links(?CTX, Key, TreeId, Links).
 
 
--spec delete_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
+-spec delete_shared_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
-delete_links(Scope, Key, TreeId, Links) ->
+delete_shared_links(Scope, Key, TreeId, Links) ->
     datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
 
@@ -208,14 +208,14 @@ get_space_id(QosEntryId) ->
 -spec add_to_impossible_list(id(), od_space:id()) ->  ok.
 add_to_impossible_list(QosEntryId, SpaceId) ->
     ?extract_ok(
-        add_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId})
+        add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId})
     ).
 
 
 -spec delete_from_impossible_list(id(), od_space:id()) ->  ok.
 delete_from_impossible_list(QosEntryId, SpaceId) ->
     ?extract_ok(
-        delete_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)
+        delete_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)
     ).
 
 
@@ -252,7 +252,7 @@ mark_entry_possible(QosEntryId, SpaceId, AllTraverseReqs) ->
 remove_traverse_req(QosEntryId, TraverseId) ->
     Diff = fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
         {ok, QosEntry#qos_entry{
-            traverse_reqs = qos_traverse_req:remove(TraverseId, TR)
+            traverse_reqs = qos_traverse_req:remove_req(TraverseId, TR)
         }}
     end,
 
@@ -391,12 +391,12 @@ resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = TR},
     % traverse requests are equal in both documents
 
     default;
-resolve_conflict_internal(SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReqs},
+resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReqs},
     #qos_entry{traverse_reqs = LocalReqs} = Value) ->
     % traverse requests are different
 
-    {LocalTraverseIds, _} = split_traverse_reqs(LocalReqs, SpaceId),
-    {_, RemoteTraverseIds} = split_traverse_reqs(RemoteReqs, SpaceId),
+    {LocalTraverseIds, _} = split_traverse_reqs(LocalReqs),
+    {_, RemoteTraverseIds} = split_traverse_reqs(RemoteReqs),
     Value#qos_entry{
         traverse_reqs = qos_traverse_req:select_traverse_reqs(
             LocalTraverseIds ++ RemoteTraverseIds, LocalReqs)
@@ -409,14 +409,13 @@ resolve_conflict_internal(SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReqs
 %% Splits given traverse reqs to those of current provider and those of remote providers.
 %% @end
 %%--------------------------------------------------------------------
--spec split_traverse_reqs(qos_traverse_req:traverse_reqs(), od_space:id()) ->
+-spec split_traverse_reqs(qos_traverse_req:traverse_reqs()) ->
     {[qos_traverse_req:id()], [qos_traverse_req:id()]}.
-split_traverse_reqs(AllTraverseReqs, SpaceId) ->
-    ProviderId = oneprovider:get_id(),
+split_traverse_reqs(AllTraverseReqs) ->
     maps:fold(fun(TaskId, TraverseReq, {LocalTraverseReqs, RemoteTraverseReqs}) ->
         StorageId = qos_traverse_req:get_storage(TraverseReq),
-        case storage:get_provider_of_remote_storage(StorageId, SpaceId) of
-            P when P == ProviderId -> {[TaskId | LocalTraverseReqs], RemoteTraverseReqs};
-            _ -> {LocalTraverseReqs, [TaskId | RemoteTraverseReqs]}
+        case storage:is_local(StorageId) of
+            true -> {[TaskId | LocalTraverseReqs], RemoteTraverseReqs};
+            false -> {LocalTraverseReqs, [TaskId | RemoteTraverseReqs]}
         end
     end, {[], []}, AllTraverseReqs).

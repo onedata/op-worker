@@ -19,7 +19,7 @@
 
 %% API
 -export([
-    new_traverse_reqs/2, remove/2,
+    build_traverse_reqs/2, remove_req/2,
     select_traverse_reqs/2, get_storage/1,
     are_all_finished/1,
     start_applicable_traverses/3
@@ -40,8 +40,8 @@
 %% Returns new traverse reqs based on given storages list and file uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec new_traverse_reqs(file_meta:uuid(), [od_storage:id()]) -> traverse_reqs().
-new_traverse_reqs(FileUuid, StoragesList) ->
+-spec build_traverse_reqs(file_meta:uuid(), [od_storage:id()]) -> traverse_reqs().
+build_traverse_reqs(FileUuid, StoragesList) ->
     lists:foldl(fun(Storage, Acc) ->
         TaskId = datastore_utils:gen_key(),
         Acc#{TaskId => #qos_traverse_req{
@@ -56,8 +56,8 @@ new_traverse_reqs(FileUuid, StoragesList) ->
 %% Removes traverse req associated with given TraverseId from TraverseReqs.
 %% @end
 %%--------------------------------------------------------------------
--spec remove(id(), traverse_reqs()) -> traverse_reqs().
-remove(TraverseId, TraverseReqs) ->
+-spec remove_req(id(), traverse_reqs()) -> traverse_reqs().
+remove_req(TraverseId, TraverseReqs) ->
     maps:remove(TraverseId, TraverseReqs).
 
 
@@ -78,7 +78,7 @@ get_storage(#qos_traverse_req{storage_id = StorageId}) ->
 
 -spec are_all_finished(traverse_reqs()) -> boolean().
 are_all_finished(AllTraverseReqs) ->
-    AllTraverseReqs == #{}.
+    maps:size(AllTraverseReqs) == 0.
 
 
 %%--------------------------------------------------------------------
@@ -95,10 +95,10 @@ start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs) ->
         } = TraverseReq,
 
         FileCtx = file_ctx:new_by_guid(file_id:pack_guid(StartFileUuid, SpaceId)),
-        StorageProvider = storage:get_provider_of_remote_storage(StorageId, SpaceId),
-        oneprovider:is_self(StorageProvider) andalso
+        storage:is_local(StorageId) andalso
             start_traverse(FileCtx, QosEntryId, StorageId, TaskId)
-    end, ok, AllTraverseReqs).
+    end, ok, AllTraverseReqs),
+    ok.
 
 
 %%--------------------------------------------------------------------
