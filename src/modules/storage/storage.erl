@@ -164,7 +164,7 @@ describe(StorageId) ->
                 <<"lumaEnabled">> => is_luma_enabled(Storage),
                 <<"lumaUrl">> => LumaUrl,
                 <<"importedStorage">> => is_imported_storage(Storage),
-                <<"qosParameters">> => fetch_qos_parameters_of_local_storage(Storage)
+                <<"qosParameters">> => fetch_qos_parameters_of_local_storage(StorageId)
             }};
         {error, _} = Error -> Error
     end.
