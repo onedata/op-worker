@@ -49,7 +49,7 @@ handle_qos_entry_change(SpaceId, #document{
     FileUuid = qos_entry:get_file_uuid(QosEntry),
     TraverseMap = qos_entry:get_traverse_map(QosEntry),
     file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
-    qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     maps:fold(fun(TaskId, #qos_traverse_req{start_file_uuid = StartFileUuid, storage_id = StorageId}, _) ->
         FileCtx = file_ctx:new_by_guid(file_id:pack_guid(StartFileUuid, SpaceId)),
         ok = maybe_start_traverse(FileCtx, QosEntryId, StorageId, TaskId)

@@ -475,7 +475,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     Pid = self(),
 
     % TODO VFS-5570
-    Node = consistent_hashing:get_node({dbsync_out_stream, SpaceId}),
+    Node = datastore_key:responsible_node(SpaceId),
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
         [<<"onedata">>, SpaceId, fun(Feed) ->
             notify(Pid, Ref, Feed)

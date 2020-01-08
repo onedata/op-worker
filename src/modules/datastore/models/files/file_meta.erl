@@ -1039,10 +1039,9 @@ get_uuid(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec fill_uuid(doc(), uuid()) -> doc().
 fill_uuid(Doc = #document{key = undefined, value = #file_meta{type = ?DIRECTORY_TYPE}}, _ParentUuid) ->
-    Doc#document{key = datastore_utils:gen_key()};
+    Doc#document{key = datastore_key:new()};
 fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
-    HashPart = consistent_hashing:get_hashing_key(ParentUuid),
-    Doc#document{key = datastore_utils:gen_key(HashPart)};
+    Doc#document{key = datastore_key:new_adjacent_to(ParentUuid)};
 fill_uuid(Doc, _ParentUuid) ->
     Doc.
 

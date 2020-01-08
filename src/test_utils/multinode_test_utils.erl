@@ -22,7 +22,7 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Generates random key handled on local node.
-%% To be called by datastore_utils:gen_key/0
+%% To be called by datastore_key:new/0
 %% @end
 %%--------------------------------------------------------------------
 -spec gen_key() -> datastore:key().
@@ -53,10 +53,10 @@ fslogic_ref_by_context_guid(ContextGuid) ->
 %%--------------------------------------------------------------------
 -spec gen_key_node(node()) -> datastore:key().
 gen_key_node(TargetNode) ->
-    Key = consistent_hashing:gen_hashing_key(),
-    case consistent_hashing:get_node(Key) of
+    Key = datastore_key:new(),
+    case datastore_key:responsible_node(Key) of
         TargetNode ->
-            datastore_utils:gen_key(Key);
+            Key;
         _ ->
             gen_key_node(TargetNode)
     end.

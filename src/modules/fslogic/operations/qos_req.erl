@@ -246,10 +246,10 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosEntryId) ->
 add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    QosEntryId = datastore_utils:gen_key(),
+    QosEntryId = datastore_key:new(),
 
     TraverseReqs = lists:foldl(fun(Storage, Acc) ->
-        TaskId = datastore_utils:gen_key(),
+        TaskId = datastore_key:new(),
         Acc#{TaskId => #qos_traverse_req{
             start_file_uuid = FileUuid,
             storage_id = Storage
@@ -259,8 +259,8 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN,
                           ReplicasNum, true, TraverseReqs) of
         {ok, _} ->
-            % QoS cache is invalidated by each provider that should start traverse
-            % task (see qos_hooks:maybe_start_traverse)
+            file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             maps:fold(fun(TaskId, #qos_traverse_req{storage_id = Storage}, _) ->
                 ok = qos_hooks:maybe_start_traverse(FileCtx, QosEntryId, Storage, TaskId)
             end, ok, TraverseReqs),
@@ -284,7 +284,7 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
 add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    QosEntryId = datastore_utils:gen_key(),
+    QosEntryId = datastore_key:new(),
 
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN, ReplicasNum) of
         {ok, _} ->
