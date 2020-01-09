@@ -492,8 +492,9 @@ generate_posix_identifier(Id, {Low, High}) ->
 %% Selects POSIX storage for the list of configured space storages.
 %% @end
 %%--------------------------------------------------------------------
--spec select_posix_compatible_storage(od_space:id() | [od_storage:id()]) ->
-    {ok, storage:record()} | {error, Reason :: term()}.
+-spec select_posix_compatible_storage
+    (od_space:id()) -> {ok, storage:record()} | {error, Reason :: term()};
+    ([od_storage:id()]) -> storage:record() | undefined.
 select_posix_compatible_storage(SpaceId) when is_binary(SpaceId) ->
     case space_logic:get_local_storage_ids(SpaceId) of
         {ok, StorageIds} ->
