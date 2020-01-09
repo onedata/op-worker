@@ -309,7 +309,7 @@
     % These are requests to providers to start QoS traverse.
     traverse_reqs = #{} :: qos_traverse_req:traverse_reqs(),
     % Contains id of provider that marked given entry as possible or impossible
-    possibility_check = {impossible, <<>>} :: {possible, od_provider:id()} | {impossible, od_provider:id()}
+    possibility_check :: {possible | impossible, od_provider:id()}
 }).
 
 -record(file_meta, {

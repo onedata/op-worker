@@ -660,8 +660,8 @@ mock_storage_get_provider(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, storage),
     lists:foreach(fun(Worker) ->
-    ok = test_utils:mock_expect(Workers, storage, get_provider_of_remote_storage,
-        fun(_StorageId, _) ->
+    ok = test_utils:mock_expect(Workers, storage_logic, get_provider,
+        fun(_StorageId) ->
             ?GET_DOMAIN_BIN(Worker)
         end)
     end, Workers).

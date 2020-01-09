@@ -336,12 +336,16 @@ get_record_struct(1) ->
 %% local changes of current provider traverses are taken into account.
 %% (When entry is possible to fulfill only changes done to this document are
 %% removals of traverse_reqs or removal of document).
-
+%%
 %% When entry was marked possible and more than one provider calculated target
 %% storages (this can happen when storages making entry possible were added on
 %% different providers at the same time) only changes made by provider with
 %% lowest id (in lexicographical order) will be saved, other providers will
 %% revoke their changes.
+%%
+%% When entry was impossible and remote provider marked it as possible
+%% (this can happen when entry was reevaluated) value set by remote provider
+%% will be saved.
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
@@ -386,11 +390,20 @@ resolve_conflict_internal(SpaceId, QosId,
             % remote changes were made by provider with higher id -> ignore them
             LocalEntry
     end;
+
+resolve_conflict_internal(_SpaceId, _QosId,
+    #qos_entry{possibility_check = {possible, _}} = RemoteEntry,
+    #qos_entry{possibility_check = {impossible, _}}) ->
+    % remote provider marked impossible entry as possible
+
+    RemoteEntry;
+
 resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = TR},
     #qos_entry{traverse_reqs = TR}) ->
     % traverse requests are equal in both documents
 
     default;
+
 resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReqs},
     #qos_entry{traverse_reqs = LocalReqs} = Value) ->
     % traverse requests are different

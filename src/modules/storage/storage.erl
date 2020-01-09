@@ -297,9 +297,9 @@ is_luma_enabled(Storage) ->
 -spec is_local(od_storage:id()) -> boolean().
 is_local(StorageId) ->
     case storage_logic:get_provider(StorageId) of
-        {ok, ProviderId} -> oneprovider:is_self(ProviderId);
         ?ERROR_FORBIDDEN -> false;
-        Error -> throw(Error)
+        {error, _} = Error -> throw(Error);
+        ProviderId -> oneprovider:is_self(ProviderId)
     end.
 
 
