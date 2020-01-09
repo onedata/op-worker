@@ -492,31 +492,33 @@ generate_posix_identifier(Id, {Low, High}) ->
 %% Selects POSIX storage for the list of configured space storages.
 %% @end
 %%--------------------------------------------------------------------
--spec select_posix_compatible_storage(od_space:id()) ->
-    {ok, storage:record(), helper:name()} | {error, Reason :: term()}.
-select_posix_compatible_storage(SpaceId) ->
+-spec select_posix_compatible_storage
+    (od_space:id()) -> {ok, storage:record()} | {error, Reason :: term()};
+    ([od_storage:id()]) -> storage:record() | undefined.
+select_posix_compatible_storage(SpaceId) when is_binary(SpaceId) ->
     case space_logic:get_local_storage_ids(SpaceId) of
         {ok, StorageIds} ->
-            Storage = lists:foldl(fun
-                (StorageId, undefined) ->
-                    case storage:get(StorageId) of
-                        {ok, SR} ->
-                            Helper = storage:get_helper(SR),
-                            HelperName = helper:get_name(Helper),
-                            case lists:member(HelperName, ?POSIX_COMPATIBLE_HELPERS) of
-                                true -> SR;
-                                false -> undefined
-                            end;
-                        {error, not_found} ->
-                            undefined
-                    end;
-                (_, PosixCompatibleSC) ->
-                    PosixCompatibleSC
-            end, undefined, StorageIds),
-            case Storage =:= undefined of
-                true -> {error, not_found};
-                false -> {ok, Storage}
+            case select_posix_compatible_storage(StorageIds) of
+                undefined -> {error, not_found};
+                Storage -> {ok, Storage}
             end;
         Error = {error, _} ->
             Error
-    end.
+    end;
+select_posix_compatible_storage(StorageIds) when is_list(StorageIds)->
+    lists:foldl(fun
+        (StorageId, undefined) ->
+            case storage:get(StorageId) of
+                {ok, SR} ->
+                    Helper = storage:get_helper(SR),
+                    HelperName = helper:get_name(Helper),
+                    case lists:member(HelperName, ?POSIX_COMPATIBLE_HELPERS) of
+                        true -> SR;
+                        false -> undefined
+                    end;
+                {error, not_found} ->
+                    undefined
+            end;
+        (_, PosixCompatibleSR) ->
+            PosixCompatibleSR
+    end, undefined, StorageIds).

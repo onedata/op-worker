@@ -156,11 +156,6 @@ get_name(StorageId) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Get own storage QoS parameters.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_qos_parameters_of_local_storage(od_storage:id() | od_storage:doc()) -> od_storage:qos_parameters().
 get_qos_parameters_of_local_storage(#document{value = #od_storage{qos_parameters = QosParameters}}) ->
     QosParameters;
@@ -171,11 +166,6 @@ get_qos_parameters_of_local_storage(StorageId) ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Get QoS parameters of storage supporting given space.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> od_storage:qos_parameters().
 get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
     case get_shared_data(StorageId, SpaceId) of
