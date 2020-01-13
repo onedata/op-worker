@@ -110,6 +110,7 @@ reconcile_qos(FileUuid, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec reevaluate_all_impossible_qos_in_space(od_space:id()) -> ok.
 reevaluate_all_impossible_qos_in_space(SpaceId) ->
+    % TODO VFS-6005 Use traverse to list impossible qos
     {ok, QosList} = qos_entry:get_impossible_list(SpaceId),
     lists:foreach(fun reevaluate_impossible_qos/1, QosList).
 
