@@ -28,16 +28,13 @@
 -type raw() :: binary(). % e.g. <<"country=FR&type=disk">>
 -type rpn() :: [binary()]. % e.g. [<<"country=FR">>, <<"type=disk">>, <<"&">>]
 
--type key() :: binary().
--type value() :: binary().
-
--export_type([rpn/0, raw/0, key/0, value/0]).
+-export_type([rpn/0, raw/0]).
 
 -type operator_stack() :: [operator_or_paren()].
 -type operator_or_paren() :: operator() | paren().
 -type paren() :: binary().
 -type operator() :: binary().
--type expr_token() :: binary().
+-type expr_token() :: operator() | binary().
 -type storages_with_params() :: #{od_storage:id() => storage:qos_parameters()}.
 
 %%%===================================================================
@@ -187,7 +184,7 @@ filter_storages(AllStoragesWithParams, RPNExpression) ->
 
 
 %% @private
--spec apply_operator(expr_token(), [[od_storage:id()]]) ->
+-spec apply_operator(operator(), [[od_storage:id()]]) ->
     [[od_storage:id()]] | no_return().
 apply_operator(?UNION, [StoragesList1, StoragesList2 | StackTail]) ->
     [lists_utils:union(StoragesList1, StoragesList2)| StackTail];
@@ -206,7 +203,7 @@ apply_operator(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec select_storages_with_param(storages_with_params(), expr_token()) ->
-    [[storage:id()] | expr_token()].
+    [[od_storage:id()] | expr_token()].
 select_storages_with_param(AllStoragesWithParams, ExprToken) ->
     case binary:split(ExprToken, [?EQUALITY], [global]) of
         [Key, Val] ->
