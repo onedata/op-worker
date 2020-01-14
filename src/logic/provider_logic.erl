@@ -250,7 +250,7 @@ get_spaces(SessionId, ProviderId) ->
 %% Retrieves storage_ids of this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_ids() -> {ok, [od_storage:id()]} | errors:error().
+-spec get_storage_ids() -> {ok, [storage:id()]} | errors:error().
 get_storage_ids() ->
     get_storage_ids(?SELF).
 
@@ -260,7 +260,7 @@ get_storage_ids() ->
 %% Retrieves storage_ids of provider by given ProviderId using current provider's auth.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_ids(od_provider:id()) -> {ok, [od_storage:id()]} | errors:error().
+-spec get_storage_ids(od_provider:id()) -> {ok, [storage:id()]} | errors:error().
 get_storage_ids(ProviderId) ->
     case get(?ROOT_SESS_ID, ProviderId) of
         {ok, #document{value = #od_provider{storages = Storages}}} ->
@@ -269,7 +269,7 @@ get_storage_ids(ProviderId) ->
             Error
     end.
 
--spec has_storage(od_storage:id()) -> boolean().
+-spec has_storage(storage:id()) -> boolean().
 has_storage(StorageId) ->
     case get_storage_ids() of
         {ok, StorageIds} -> lists:member(StorageId, StorageIds);

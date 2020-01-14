@@ -35,7 +35,7 @@
 -type paren() :: binary().
 -type operator() :: binary().
 -type expr_token() :: operator() | binary().
--type storages_with_params() :: #{od_storage:id() => storage:qos_parameters()}.
+-type storages_with_params() :: #{storage:id() => storage:qos_parameters()}.
 
 %%%===================================================================
 %%% API
@@ -67,7 +67,7 @@ raw_to_rpn(Expression) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec calculate_assigned_storages(file_ctx:ctx(), rpn(), qos_entry:replicas_num()) ->
-    {true, [od_storage:id()]} | false | {error, term()}.
+    {true, [storage:id()]} | false | {error, term()}.
 calculate_assigned_storages(FileCtx, Expression, ReplicasNum) ->
     % TODO: VFS-5574 add check if storage has enough free space
     SpaceId = file_ctx:get_space_id_const(FileCtx),
@@ -166,7 +166,7 @@ handle_operator(ParsedOperator, Stack, RPNExpression) ->
 %% fulfilling QoS are left.
 %% @end
 %%--------------------------------------------------------------------
--spec filter_storages(storages_with_params(), [expr_token()]) -> [od_storage:id()].
+-spec filter_storages(storages_with_params(), [expr_token()]) -> [storage:id()].
 filter_storages(AllStoragesWithParams, RPNExpression) ->
     FinalStack = lists:foldl(fun(ExprToken, Stack) ->
         case lists:member(ExprToken, ?OPERATORS) of
@@ -184,8 +184,8 @@ filter_storages(AllStoragesWithParams, RPNExpression) ->
 
 
 %% @private
--spec apply_operator(operator(), [[od_storage:id()]]) ->
-    [[od_storage:id()]] | no_return().
+-spec apply_operator(operator(), [[storage:id()]]) ->
+    [[storage:id()]] | no_return().
 apply_operator(?UNION, [StoragesList1, StoragesList2 | StackTail]) ->
     [lists_utils:union(StoragesList1, StoragesList2)| StackTail];
 apply_operator(?INTERSECTION, [StoragesList1, StoragesList2 | StackTail]) ->
@@ -203,7 +203,7 @@ apply_operator(_, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec select_storages_with_param(storages_with_params(), expr_token()) ->
-    [[od_storage:id()] | expr_token()].
+    [[storage:id()] | expr_token()].
 select_storages_with_param(AllStoragesWithParams, ExprToken) ->
     case binary:split(ExprToken, [?EQUALITY], [global]) of
         [Key, Val] ->
@@ -226,8 +226,8 @@ select_storages_with_param(AllStoragesWithParams, ExprToken) ->
 %% {true, StorageList}.
 %% @end
 %%--------------------------------------------------------------------
--spec choose_storages([od_storage:id()], qos_entry:replicas_num()) ->
-    {true, [od_storage:id()]} | false.
+-spec choose_storages([storage:id()], qos_entry:replicas_num()) ->
+    {true, [storage:id()]} | false.
 choose_storages(EligibleStoragesList, ReplicasNum) ->
     % TODO: VFS-5734 choose storages according to current files distribution
     StorageSublist = lists:sublist(EligibleStoragesList, ReplicasNum),

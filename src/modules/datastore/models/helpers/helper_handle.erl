@@ -41,7 +41,7 @@
 %% Creates and caches helper handle.
 %% @end
 %%--------------------------------------------------------------------
--spec create(session:id(), od_user:id(), od_space:id(), od_storage:id()) ->
+-spec create(session:id(), od_user:id(), od_space:id(), storage:id()) ->
     {ok, doc()}.
 create(SessionId, UserId, SpaceId, StorageId) ->
     {ok, Storage} = storage:get(StorageId),

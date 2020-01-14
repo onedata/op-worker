@@ -1444,7 +1444,7 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, C
 
 %% Modifies storage timeout twice in order to
 %% trigger helper reload and restore previous value.
--spec modify_storage_timeout(node(), od_storage:id(), NewValue :: binary()) -> ok.
+-spec modify_storage_timeout(node(), storage:id(), NewValue :: binary()) -> ok.
 modify_storage_timeout(Node, StorageId, NewValue) ->
     Helper = rpc:call(Node, storage, get_helper, [StorageId]),
     OldValue = maps:get(<<"timeout">>, helper:get_args(Helper),

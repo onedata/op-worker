@@ -52,7 +52,7 @@
 %%--------------------------------------------------------------------
 %% @equiv create_in_zone(Name, QosParameters, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), od_storage:qos_parameters()) -> {ok, od_storage:id()} | errors:error().
+-spec create_in_zone(od_storage:name(), od_storage:qos_parameters()) -> {ok, storage:id()} | errors:error().
 create_in_zone(Name, QosParameters) ->
     create_in_zone(Name, QosParameters, undefined).
 
@@ -62,8 +62,8 @@ create_in_zone(Name, QosParameters) ->
 %% Creates document containing storage public information in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), od_storage:qos_parameters(), od_storage:id() | undefined) ->
-    {ok, od_storage:id()} | errors:error().
+-spec create_in_zone(od_storage:name(), od_storage:qos_parameters(), storage:id() | undefined) ->
+    {ok, storage:id()} | errors:error().
 create_in_zone(Name, QosParameters, StorageId) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
@@ -78,7 +78,7 @@ create_in_zone(Name, QosParameters, StorageId) ->
     end)).
 
 
--spec get(od_storage:id()) -> {ok, od_storage:doc()} | errors:error().
+-spec get(storage:id()) -> {ok, od_storage:doc()} | errors:error().
 get(StorageId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,
@@ -87,7 +87,7 @@ get(StorageId) ->
     }).
 
 
--spec delete_in_zone(od_storage:id()) -> ok | errors:error().
+-spec delete_in_zone(storage:id()) -> ok | errors:error().
 delete_in_zone(StorageId) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = delete,
@@ -101,7 +101,7 @@ delete_in_zone(StorageId) ->
     end).
 
 
--spec support_space(od_storage:id(), tokens:serialized(), od_space:support_size()) ->
+-spec support_space(storage:id(), tokens:serialized(), od_space:support_size()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SpaceSupportToken, SupportSize) ->
     Data = #{<<"token">> => SpaceSupportToken, <<"size">> => SupportSize},
@@ -118,7 +118,7 @@ support_space(StorageId, SpaceSupportToken, SupportSize) ->
     end).
 
 
--spec update_space_support_size(od_storage:id(), od_space:id(), NewSupportSize :: integer()) ->
+-spec update_space_support_size(storage:id(), od_space:id(), NewSupportSize :: integer()) ->
     ok | errors:error().
 update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
     Data = #{<<"size">> => NewSupportSize},
@@ -133,7 +133,7 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
     end).
 
 
--spec revoke_space_support(od_storage:id(), od_space:id()) -> ok | errors:error().
+-spec revoke_space_support(storage:id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = delete,
@@ -146,7 +146,7 @@ revoke_space_support(StorageId, SpaceId) ->
     end).
 
 
--spec get_name(od_storage:id() | od_storage:doc()) -> storage:name().
+-spec get_name(storage:id() | od_storage:doc()) -> storage:name().
 get_name(#document{value = #od_storage{name = Name}}) ->
     Name;
 get_name(StorageId) ->
@@ -156,7 +156,7 @@ get_name(StorageId) ->
     end.
 
 
--spec get_qos_parameters_of_local_storage(od_storage:id() | od_storage:doc()) -> od_storage:qos_parameters().
+-spec get_qos_parameters_of_local_storage(storage:id() | od_storage:doc()) -> od_storage:qos_parameters().
 get_qos_parameters_of_local_storage(#document{value = #od_storage{qos_parameters = QosParameters}}) ->
     QosParameters;
 get_qos_parameters_of_local_storage(StorageId) ->
@@ -166,7 +166,7 @@ get_qos_parameters_of_local_storage(StorageId) ->
     end.
 
 
--spec get_qos_parameters_of_remote_storage(od_storage:id(), od_space:id()) -> od_storage:qos_parameters().
+-spec get_qos_parameters_of_remote_storage(storage:id(), od_space:id()) -> od_storage:qos_parameters().
 get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
     case get_shared_data(StorageId, SpaceId) of
         {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} -> QosParameters;
@@ -174,7 +174,7 @@ get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
     end.
 
 
--spec get_provider(od_storage:id()) -> od_provider:id() | errors:error().
+-spec get_provider(storage:id()) -> od_provider:id() | errors:error().
 get_provider(StorageId) ->
     case get(StorageId) of
         {ok, #document{value = #od_storage{provider = Provider}}} -> Provider;
@@ -182,7 +182,7 @@ get_provider(StorageId) ->
     end.
 
 
--spec get_spaces(od_storage:id()) -> {ok, [od_space:id()]} | errors:error().
+-spec get_spaces(storage:id()) -> {ok, [od_space:id()]} | errors:error().
 get_spaces(StorageId) ->
     case get(StorageId) of
         {ok, #document{value = #od_storage{spaces = Spaces}}} ->
@@ -191,7 +191,7 @@ get_spaces(StorageId) ->
     end.
 
 
--spec update_name(od_storage:id(), od_storage:name()) -> ok | errors:error().
+-spec update_name(storage:id(), od_storage:name()) -> ok | errors:error().
 update_name(StorageId, NewName) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
@@ -203,7 +203,7 @@ update_name(StorageId, NewName) ->
     end).
 
 
--spec set_qos_parameters(od_storage:id(), od_storage:qos_parameters()) -> ok | errors:error().
+-spec set_qos_parameters(storage:id(), od_storage:qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
@@ -224,7 +224,7 @@ set_qos_parameters(StorageId, QosParameters) ->
 %% Dedicated for upgrading Oneprovider from 19.02.* to 19.09.*.
 %% @end
 %%--------------------------------------------------------------------
--spec upgrade_legacy_support(od_storage:id(), od_space:id()) -> ok | errors:error().
+-spec upgrade_legacy_support(storage:id(), od_space:id()) -> ok | errors:error().
 upgrade_legacy_support(StorageId, SpaceId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
@@ -238,7 +238,7 @@ upgrade_legacy_support(StorageId, SpaceId) ->
 %% Retrieves storage details shared between providers through given space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_shared_data(od_storage:id(), od_space:id()) -> {ok, od_storage:doc()} | errors:error().
+-spec get_shared_data(storage:id(), od_space:id()) -> {ok, od_storage:doc()} | errors:error().
 get_shared_data(StorageId, SpaceId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = get,

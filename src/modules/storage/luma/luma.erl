@@ -52,7 +52,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_server_user_ctx(session:id(), od_user:id(), od_space:id(),
-    od_storage:id() | storage:record()) -> {ok, user_ctx()} | {error, Reason :: term()}.
+    storage:id() | storage:data()) -> {ok, user_ctx()} | {error, Reason :: term()}.
 get_server_user_ctx(SessionId, UserId, SpaceId, StorageId) when is_binary(StorageId) ->
     {ok, Storage} = storage:get(StorageId),
     get_server_user_ctx(SessionId, UserId, SpaceId, Storage);
@@ -84,7 +84,7 @@ get_server_user_ctx(SessionId, UserId, SpaceId, Storage) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_client_user_ctx(session:id(), od_user:id(), od_space:id(),
-    storage:record()) -> {ok, user_ctx()} | {error, Reason :: term()}.
+    storage:data()) -> {ok, user_ctx()} | {error, Reason :: term()}.
 get_client_user_ctx(SessionId, UserId, SpaceId, Storage) ->
     Helper = storage:get_helper(Storage),
     HelperName = helper:get_name(Helper),
@@ -152,7 +152,7 @@ get_posix_user_ctx(SessionId, UserId, GroupId, SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_server_user_ctx(session:id(), od_user:id(), undefined | od_group:id(),
-    od_space:id(), storage:record() | od_storage:id()) ->
+    od_space:id(), storage:data() | storage:id()) ->
     {ok, user_ctx()} | {error, Reason :: term()}.
 get_server_user_ctx(SessionId, UserId, GroupId, SpaceId, StorageId) when is_binary(StorageId)->
     {ok, Storage} = storage:get(StorageId),
@@ -282,7 +282,7 @@ get_user_ctx(Strategies) ->
 %% Fails with an error if the response is erroneous.
 %% @end
 %%--------------------------------------------------------------------
--spec fetch_user_ctx(session:id(), od_user:id(), od_space:id(), storage:record(),
+-spec fetch_user_ctx(session:id(), od_user:id(), od_space:id(), storage:data(),
     helpers:helper()) -> {ok, user_ctx()} | {error, Reason :: term()} | undefined.
 fetch_user_ctx(SessionId, UserId, SpaceId, Storage, Helper) ->
     case storage:is_luma_enabled(Storage) of
@@ -380,7 +380,7 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCtx = #{
 %% @end
 %%--------------------------------------------------------------------
 -spec fetch_user_ctx(session:id(), od_user:id(), od_group:id() | undefined,
-    od_space:id(), storage:record(), helpers:helper()) ->
+    od_space:id(), storage:data(), helpers:helper()) ->
     {ok, user_ctx()} | {error, Reason :: term()} | undefined.
 fetch_user_ctx(SessionId, UserId, _GroupId, SpaceId, Storage,
     Helper = #helper{name = ?WEBDAV_HELPER_NAME}
@@ -493,8 +493,8 @@ generate_posix_identifier(Id, {Low, High}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec select_posix_compatible_storage
-    (od_space:id()) -> {ok, storage:record()} | {error, Reason :: term()};
-    ([od_storage:id()]) -> storage:record() | undefined.
+    (od_space:id()) -> {ok, storage:data()} | {error, Reason :: term()};
+    ([storage:id()]) -> storage:data() | undefined.
 select_posix_compatible_storage(SpaceId) when is_binary(SpaceId) ->
     case space_logic:get_local_storage_ids(SpaceId) of
         {ok, StorageIds} ->
@@ -509,16 +509,16 @@ select_posix_compatible_storage(StorageIds) when is_list(StorageIds)->
     lists:foldl(fun
         (StorageId, undefined) ->
             case storage:get(StorageId) of
-                {ok, SR} ->
-                    Helper = storage:get_helper(SR),
+                {ok, Storage} ->
+                    Helper = storage:get_helper(Storage),
                     HelperName = helper:get_name(Helper),
                     case lists:member(HelperName, ?POSIX_COMPATIBLE_HELPERS) of
-                        true -> SR;
+                        true -> Storage;
                         false -> undefined
                     end;
                 {error, not_found} ->
                     undefined
             end;
-        (_, PosixCompatibleSR) ->
-            PosixCompatibleSR
+        (_, PosixCompatibleStorage) ->
+            PosixCompatibleStorage
     end, undefined, StorageIds).

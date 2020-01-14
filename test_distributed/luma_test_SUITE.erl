@@ -7,10 +7,6 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc This module tests LUMA
-%%%
-%%% This test suite uses record that is equivalent to an opaque record
-%%% defined in `storage` module. Any changes there should also be
-%%% applied in `luma_test.hrl`.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(luma_test_SUITE).

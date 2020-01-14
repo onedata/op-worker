@@ -635,7 +635,7 @@ create_times(FileUuid, MTime, ATime, CTime, SpaceId) ->
 %% Returns owner id of given file, acquired from reverse LUMA.
 %% @end
 %%-------------------------------------------------------------------
--spec get_owner_id(storage_file_ctx:ctx(), od_storage:id()) -> {od_user:id(), storage_file_ctx:ctx()}.
+-spec get_owner_id(storage_file_ctx:ctx(), storage:id()) -> {od_user:id(), storage_file_ctx:ctx()}.
 get_owner_id(StorageFileCtx, StorageId) ->
     {StatBuf, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     #statbuf{st_uid = Uid} = StatBuf,
@@ -648,7 +648,7 @@ get_owner_id(StorageFileCtx, StorageId) ->
 %% Returns group owner id of given file, acquired from reverse LUMA.
 %% @end
 %%-------------------------------------------------------------------
--spec get_group_owner_id(storage_file_ctx:ctx(), od_space:id(), od_storage:id()) ->
+-spec get_group_owner_id(storage_file_ctx:ctx(), od_space:id(), storage:id()) ->
     {od_group:id() | undefined, storage_file_ctx:ctx()}.
 get_group_owner_id(StorageFileCtx, SpaceId, StorageId) ->
     {StatBuf, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
