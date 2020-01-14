@@ -189,7 +189,7 @@ route_and_ignore_answer(#client_message{
         audience_token = AudienceToken
     }
 } = Msg) ->
-    incoming_session_watcher:update_credentials(
+    incoming_session_watcher:schedule_credentials_update(
         effective_session_id(Msg),
         AccessToken, AudienceToken
     ),
