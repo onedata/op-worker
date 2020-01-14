@@ -28,13 +28,6 @@
     assert_qos_entry_documents/3, assert_qos_entry_documents/4
 ]).
 
-% mocks
--export([
-    mock_space_storages/2,
-    mock_storage_qos_parameters/2,
-    mock_synchronize_transfers/1
-]).
-
 % util functions
 -export([
     fulfill_qos_test_base/2,
@@ -43,9 +36,7 @@
     create_file/4, create_directory/3,
     wait_for_qos_fulfillment_in_parallel/4,
     add_qos/2, add_multiple_qos_in_parallel/2,
-    map_qos_names_to_ids/2,
-    get_provider_storage/1,
-    inject_storage_id/2
+    map_qos_names_to_ids/2
 ]).
 
 -define(ATTEMPTS, 60).
@@ -291,19 +282,6 @@ map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->
     [maps:get(QosName, QosNameIdMapping) || QosName <- QosNamesList].
 
 
-get_provider_storage(Worker) ->
-    {ok, [StorageId]}  = rpc:call(Worker, provider_logic, get_storage_ids, [?GET_DOMAIN_BIN(Worker)]),
-    StorageId.
-
-
-inject_storage_id(Workers, QosMockMap) ->
-    lists:foldl(fun(Worker, Acc) ->
-        [ProviderName | _] = binary:split(?GET_DOMAIN_BIN(Worker), <<".">>),
-        StorageId = qos_tests_utils:get_provider_storage(Worker),
-        Acc#{StorageId => maps:get(ProviderName, QosMockMap)}
-    end, #{}, Workers).
-
-
 %%%====================================================================
 %%% Assertions
 %%%====================================================================
@@ -392,7 +370,7 @@ assert_file_qos_document(
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
             true ->
-                maps:filter(fun(Key, _Val) -> Key == get_provider_storage(Worker) end, AssignedEntries);
+                maps:filter(fun(Key, _Val) -> Key == initializer:get_storage_id(Worker) end, AssignedEntries);
             false ->
                 AssignedEntries
         end
@@ -454,7 +432,7 @@ assert_effective_qos(
     ExpectedEffectiveQos = #effective_file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
-            true -> maps:filter(fun(Key, _Val) -> Key == get_provider_storage(Worker) end, AssignedEntries);
+            true -> maps:filter(fun(Key, _Val) -> Key == initializer:get_storage_id(Worker) end, AssignedEntries);
             false -> AssignedEntries
         end
     },
@@ -545,33 +523,6 @@ assert_file_distribution(Config, Workers, {FileName, FileContent, ExpectedFileDi
                 Res
         end
     end, true, Workers).
-
-
-%%%====================================================================
-%%% Mocks
-%%%====================================================================
-
-mock_space_storages(Config, StorageList) ->
-    Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_expect(Workers, space_logic, get_all_storage_ids,
-        fun(_) ->
-            {ok, StorageList}
-        end).
-
-
-mock_storage_qos_parameters(Workers, StorageQos) ->
-    test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(StorageId, _SpaceId) ->
-        {ok, maps:get(StorageId, StorageQos, #{})}
-    end).
-
-
-mock_synchronize_transfers(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
-    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) ->
-            {ok, ok}
-        end).
 
 
 %%%====================================================================

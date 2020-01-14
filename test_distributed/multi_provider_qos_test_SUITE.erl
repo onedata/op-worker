@@ -733,7 +733,7 @@ reconcile_qos_using_file_meta_posthooks_test(Config) ->
 
 
 reevaluate_impossible_qos_test(Config) ->
-    [Worker1, Worker2, Worker3 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    [Worker1, Worker2, _Worker3 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
 
     DirName = <<"dir1">>,
     DirPath = filename:join(?SPACE_PATH1, DirName),
@@ -769,14 +769,10 @@ reevaluate_impossible_qos_test(Config) ->
 
     {_GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
 
-    qos_tests_utils:mock_storage_qos_parameters(Worker1, qos_tests_utils:inject_storage_id([Worker1], #{?P1 => #{<<"country">> => <<"other">>}})),
-    qos_tests_utils:mock_storage_qos_parameters(Worker2, qos_tests_utils:inject_storage_id([Worker2], #{?P2 => #{<<"country">> => <<"other">>}})),
-    qos_tests_utils:mock_storage_qos_parameters(Worker3, qos_tests_utils:inject_storage_id([Worker3], #{?P3 => #{<<"country">> => <<"other">>}})),
-
-    % trigger on all providers to test conflict resolution
-    ok = rpc:call(Worker1, qos_hooks, reevaluate_all_impossible_qos_in_space, [?SPACE_ID]),
-    ok = rpc:call(Worker2, qos_hooks, reevaluate_all_impossible_qos_in_space, [?SPACE_ID]),
-    ok = rpc:call(Worker3, qos_hooks, reevaluate_all_impossible_qos_in_space, [?SPACE_ID]),
+    utils:pforeach(fun(Worker) ->
+        ok = rpc:call(Worker, storage, set_qos_parameters, [initializer:get_storage_id(Worker), #{<<"country">> => <<"other">>}])
+        % Impossible qos reevaluation is called after successful set_qos_parameters
+    end, Workers),
 
     ExpectedQosEntriesAfter = [
         #expected_qos_entry{
@@ -795,7 +791,7 @@ reevaluate_impossible_qos_test(Config) ->
             workers = Workers,
             path = DirPath,
             qos_entries = [?QOS1],
-            assigned_entries = #{qos_tests_utils:get_provider_storage(Worker1) => [?QOS1]}
+            assigned_entries = #{initializer:get_storage_id(Worker1) => [?QOS1]}
         }
     ],
     qos_tests_utils:assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, true, 10).
@@ -846,9 +842,6 @@ init_per_testcase(_, Config) ->
     ct:timetrap(timer:minutes(10)),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(NewConfig),
-    Workers = ?config(op_worker_nodes, NewConfig),
-    MockWithStorageId = qos_tests_utils:inject_storage_id(Workers, ?TEST_PROVIDERS_QOS),
-    qos_tests_utils:mock_storage_qos_parameters(Workers, MockWithStorageId),
     NewConfig.
 
 
@@ -950,7 +943,7 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename, WaitForQos) ->
                 path = ?FILE_PATH(QosFilename),
                 qos_entries = [?QOS1],
                 assigned_entries = #{
-                    qos_tests_utils:get_provider_storage(Worker3) => [?QOS1]
+                    initializer:get_storage_id(Worker3) => [?QOS1]
                 }
             }
         ],
@@ -1052,9 +1045,9 @@ read_file(Worker, FilePath) ->
 get_provider_to_storage_mappings(Config) ->
     [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     #{
-        ?P1 => qos_tests_utils:get_provider_storage(WorkerP1),
-        ?P2 => qos_tests_utils:get_provider_storage(WorkerP2),
-        ?P3 => qos_tests_utils:get_provider_storage(WorkerP3)
+        ?P1 => initializer:get_storage_id(WorkerP1),
+        ?P2 => initializer:get_storage_id(WorkerP2),
+        ?P3 => initializer:get_storage_id(WorkerP3)
     }.
 
 
