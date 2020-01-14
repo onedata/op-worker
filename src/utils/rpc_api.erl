@@ -168,7 +168,7 @@ storage_set_imported_storage(StorageId, Value) ->
     storage:set_imported_storage(StorageId, Value).
 
 
--spec storage_set_qos_parameters(storage:id(), od_storage:qos_parameters()) ->
+-spec storage_set_qos_parameters(storage:id(), storage:qos_parameters()) ->
     ok | errors:error().
 storage_set_qos_parameters(StorageId, QosParameters) ->
     storage:set_qos_parameters(StorageId, QosParameters).
