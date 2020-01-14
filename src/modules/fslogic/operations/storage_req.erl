@@ -65,7 +65,7 @@ get_configuration(SessId) ->
 %% Gets helper params based on given storage id and space id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_helper_params(user_ctx:ctx(), od_storage:id(),
+-spec get_helper_params(user_ctx:ctx(), storage:id(),
     od_space:id(), atom()) -> #fuse_response{}.
 get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
     {ok, Storage} = storage:get(StorageId),
@@ -97,7 +97,7 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_storage_test_file(user_ctx:ctx(), fslogic_worker:file_guid(),
-    od_storage:id()) -> #fuse_response{}.
+    storage:id()) -> #fuse_response{}.
 create_storage_test_file(UserCtx, Guid, StorageId) ->
     FileCtx = file_ctx:new_by_guid(Guid),
     UserId = user_ctx:get_user_id(UserCtx),
@@ -145,7 +145,7 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_storage_test_file(user_ctx:ctx(), od_space:id(),
-    od_storage:id(), helpers:file_id(), FileContent :: binary()) -> #fuse_response{}.
+    storage:id(), helpers:file_id(), FileContent :: binary()) -> #fuse_response{}.
 verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),

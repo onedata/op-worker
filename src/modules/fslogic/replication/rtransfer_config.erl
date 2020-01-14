@@ -142,7 +142,7 @@ close(_Handle) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec auth_request(TransferData :: binary(), ProviderId :: binary()) ->
-                          false | {od_storage:id(), helpers:file_id(), fslogic_worker:file_guid()}.
+                          false | {storage:id(), helpers:file_id(), fslogic_worker:file_guid()}.
 auth_request(TransferData, ProviderId) ->
     try
         %% TransferId is not verified because provider could've created the transfer
@@ -207,7 +207,7 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
 %% Adds storage to rtransfer.
 %% @end
 %%--------------------------------------------------------------------
--spec add_storage(od_storage:id()) -> any().
+-spec add_storage(storage:id()) -> any().
 add_storage(StorageId) ->
     Helper = storage:get_helper(StorageId),
     HelperParams = helper:get_params(Helper, helper:get_admin_ctx(Helper)),
@@ -402,7 +402,7 @@ fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum) ->
 %% Get storages list. Retry if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storages(non_neg_integer()) -> [od_storage:id()] | {error, term()}.
+-spec get_storages(non_neg_integer()) -> [storage:id()] | {error, term()}.
 get_storages(Retries) ->
     case {provider_logic:get_storage_ids(), Retries} of
         {{ok, StorageIds}, _} ->

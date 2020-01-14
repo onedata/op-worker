@@ -113,94 +113,94 @@ apply(Function, Args) ->
 
 -spec storage_create(storage:name(), helpers:helper(), boolean(),
     undefined | luma_config:config(), boolean(), storage:qos_parameters()) ->
-    od_storage:id() | {error, term()}.
+    storage:id() | {error, term()}.
 storage_create(Name, Helpers, ReadOnly, LumaConfig, ImportedStorage, QosParameters) ->
     storage:create(Name, Helpers, ReadOnly, LumaConfig, ImportedStorage, QosParameters).
 
 
--spec storage_safe_remove(od_storage:id()) -> ok | {error, storage_in_use | term()}.
+-spec storage_safe_remove(storage:id()) -> ok | {error, storage_in_use | term()}.
 storage_safe_remove(StorageId) ->
     storage:delete(StorageId).
 
 
--spec storage_supports_any_space(od_storage:id()) -> boolean().
+-spec storage_supports_any_space(storage:id()) -> boolean().
 storage_supports_any_space(StorageId) ->
     storage:supports_any_space(StorageId).
 
 
--spec storage_list_ids() -> {ok, [od_storage:id()]} | {error, term()}.
+-spec storage_list_ids() -> {ok, [storage:id()]} | {error, term()}.
 storage_list_ids() ->
     provider_logic:get_storage_ids().
 
 
--spec storage_get_helper(od_storage:id()) -> {ok, helpers:helper()}.
+-spec storage_get_helper(storage:id()) -> {ok, helpers:helper()}.
 storage_get_helper(StorageId) ->
     {ok, storage:get_helper(StorageId)}.
 
 
--spec storage_update_admin_ctx(od_storage:id(), helper:user_ctx()) ->
+-spec storage_update_admin_ctx(storage:id(), helper:user_ctx()) ->
     ok | {error, term()}.
 storage_update_admin_ctx(StorageId, Changes) ->
     storage:update_helper_admin_ctx(StorageId, Changes).
 
 
--spec storage_update_helper_args(od_storage:id(), helper:args()) ->
+-spec storage_update_helper_args(storage:id(), helper:args()) ->
     ok | {error, term()}.
 storage_update_helper_args(StorageId, Changes) ->
     storage:update_helper_args(StorageId, Changes).
 
 
--spec storage_set_insecure(od_storage:id(), Insecure :: boolean()) ->
+-spec storage_set_insecure(storage:id(), Insecure :: boolean()) ->
     ok | {error, term()}.
 storage_set_insecure(StorageId, Insecure) ->
     storage:set_helper_insecure(StorageId, Insecure).
 
 
--spec storage_set_readonly(od_storage:id(), Readonly :: boolean()) ->
+-spec storage_set_readonly(storage:id(), Readonly :: boolean()) ->
     ok | {error, term()}.
 storage_set_readonly(StorageId, Readonly) ->
     storage:set_readonly(StorageId, Readonly).
 
 
--spec storage_set_imported_storage(od_storage:id(), boolean()) ->
+-spec storage_set_imported_storage(storage:id(), boolean()) ->
     ok | {error, term()}.
 storage_set_imported_storage(StorageId, Value) ->
     storage:set_imported_storage(StorageId, Value).
 
 
--spec storage_set_qos_parameters(od_storage:id(), od_storage:qos_parameters()) ->
+-spec storage_set_qos_parameters(storage:id(), od_storage:qos_parameters()) ->
     ok | errors:error().
 storage_set_qos_parameters(StorageId, QosParameters) ->
     storage:set_qos_parameters(StorageId, QosParameters).
 
 
--spec storage_update_luma_config(od_storage:id(), Changes) -> ok | {error, term()}
+-spec storage_update_luma_config(storage:id(), Changes) -> ok | {error, term()}
     when Changes :: #{url => luma_config:url(), api_key => luma_config:api_key()}.
 storage_update_luma_config(StorageId, Changes) ->
     storage:update_luma_config(StorageId, Changes).
 
 
--spec storage_update_name(od_storage:id(), NewName :: storage:name()) -> ok.
+-spec storage_update_name(storage:id(), NewName :: storage:name()) -> ok.
 storage_update_name(StorageId, NewName) ->
     storage:update_name(StorageId, NewName).
 
 
--spec storage_exists(od_storage:id()) -> boolean().
+-spec storage_exists(storage:id()) -> boolean().
 storage_exists(StorageId) ->
     storage:exists(StorageId).
 
 
--spec storage_describe(od_storage:id()) ->
+-spec storage_describe(storage:id()) ->
     {ok, #{binary() := binary() | boolean() | undefined}} | {error, term()}.
 storage_describe(StorageId) ->
     storage:describe(StorageId).
 
 
--spec storage_is_imported_storage(od_storage:id()) -> boolean().
+-spec storage_is_imported_storage(storage:id()) -> boolean().
 storage_is_imported_storage(StorageId) ->
     storage:is_imported_storage(StorageId).
 
--spec invalidate_luma_cache(od_storage:id()) -> ok.
+-spec invalidate_luma_cache(storage:id()) -> ok.
 invalidate_luma_cache(StorageId) ->
     luma_cache:invalidate(StorageId).
 
@@ -232,7 +232,7 @@ prepare_user_ctx_params(HelperName, Params) ->
     helper_params:prepare_user_ctx_params(HelperName, Params).
 
 
--spec space_logic_get_storage_ids(od_space:id()) -> {ok, [od_storage:id()]}.
+-spec space_logic_get_storage_ids(od_space:id()) -> {ok, [storage:id()]}.
 space_logic_get_storage_ids(SpaceId) ->
     space_logic:get_local_storage_ids(SpaceId).
 
@@ -285,7 +285,7 @@ provider_logic_update(Data) ->
     provider_logic:update(Data).
 
 
--spec support_space(od_storage:id(), tokens:serialized(), SupportSize :: integer()) ->
+-spec support_space(storage:id(), tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, Token, SupportSize) ->
     storage:support_space(StorageId, Token, SupportSize).
@@ -440,13 +440,13 @@ get_root_token_file_path() ->
     provider_auth:get_root_token_file_path().
 
 
--spec get_storage_import_details(od_space:id(), od_storage:id()) ->
+-spec get_storage_import_details(od_space:id(), storage:id()) ->
     space_strategies:sync_details().
 get_storage_import_details(SpaceId, StorageId) ->
     storage_sync:get_import_details(SpaceId, StorageId).
 
 
--spec get_storage_update_details(od_space:id(), od_storage:id()) ->
+-spec get_storage_update_details(od_space:id(), storage:id()) ->
     space_strategies:sync_details().
 get_storage_update_details(SpaceId, StorageId) ->
     storage_sync:get_update_details(SpaceId, StorageId).

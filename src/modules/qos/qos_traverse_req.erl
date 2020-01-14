@@ -40,7 +40,7 @@
 %% Returns new traverse reqs based on given storages list and file uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec build_traverse_reqs(file_meta:uuid(), [od_storage:id()]) -> traverse_reqs().
+-spec build_traverse_reqs(file_meta:uuid(), [storage:id()]) -> traverse_reqs().
 build_traverse_reqs(FileUuid, StoragesList) ->
     lists:foldl(fun(Storage, Acc) ->
         TaskId = datastore_key:new(),
@@ -71,7 +71,7 @@ select_traverse_reqs(TraverseIds, TraverseReqs) ->
     maps:with(TraverseIds, TraverseReqs).
 
 
--spec get_storage(traverse_req()) -> od_storage:id().
+-spec get_storage(traverse_req()) -> storage:id().
 get_storage(#qos_traverse_req{storage_id = StorageId}) ->
     StorageId.
 
@@ -108,7 +108,7 @@ start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs) ->
 %% Starts QoS traverse and updates file_qos accordingly.
 %% @end
 %%--------------------------------------------------------------------
--spec start_traverse(file_ctx:ctx(), qos_entry:id(), od_storage:id(), traverse:id()) -> ok.
+-spec start_traverse(file_ctx:ctx(), qos_entry:id(), storage:id(), traverse:id()) -> ok.
 start_traverse(FileCtx, QosEntryId, StorageId, TaskId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),

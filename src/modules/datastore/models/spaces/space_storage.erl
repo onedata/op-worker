@@ -63,7 +63,7 @@ delete(Key) ->
 %% Returns list of storage IDs attached to the space.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_ids(record() | doc() | id()) -> [od_storage:id()].
+-spec get_storage_ids(record() | doc() | id()) -> [storage:id()].
 get_storage_ids(#space_storage{storage_ids = StorageIds}) ->
     StorageIds;
 get_storage_ids(#document{value = #space_storage{} = Value}) ->
@@ -78,7 +78,7 @@ get_storage_ids(SpaceId) ->
 %% storage root.
 %% @end
 %%--------------------------------------------------------------------
--spec get_mounted_in_root(record() | doc() | id()) -> [od_storage:id()].
+-spec get_mounted_in_root(record() | doc() | id()) -> [storage:id()].
 get_mounted_in_root(#space_storage{mounted_in_root = StorageIds}) ->
     StorageIds;
 get_mounted_in_root(#document{value = #space_storage{} = Value}) ->

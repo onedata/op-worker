@@ -172,18 +172,18 @@
 }).
 
 -record(get_helper_params, {
-    storage_id :: od_storage:id(),
+    storage_id :: storage:id(),
     space_id :: od_space:id(),
     helper_mode :: ?AUTO_HELPER_MODE | ?FORCE_PROXY_HELPER_MODE | ?FORCE_DIRECT_HELPER_MODE
 }).
 
 -record(create_storage_test_file, {
-    storage_id :: od_storage:id(),
+    storage_id :: storage:id(),
     file_guid :: fslogic_worker:file_guid()
 }).
 
 -record(verify_storage_test_file, {
-    storage_id :: od_storage:id(),
+    storage_id :: storage:id(),
     space_id :: od_space:id(),
     file_id :: helpers:file_id(),
     file_content :: binary()

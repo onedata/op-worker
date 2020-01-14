@@ -73,13 +73,13 @@
 %%    * ?ROOT_ID(<<"/root1/dir1/dir2/dir3/leaf">> if MarkLeaves == false.
 %% @end
 %%-------------------------------------------------------------------
--spec add_link_recursive(helpers:file_id(), od_storage:id(), link_name(), boolean()) -> ok.
+-spec add_link_recursive(helpers:file_id(), storage:id(), link_name(), boolean()) -> ok.
 add_link_recursive(StorageFileId, StorageId, ChildStorageFileId, MarkLeaves) ->
     ChildrenTokens = fslogic_path:split(ChildStorageFileId) -- fslogic_path:split(StorageFileId),
     RootId = ?ROOT_ID(StorageFileId, StorageId),
     add_link_recursive(RootId, StorageFileId, StorageId, ChildrenTokens, MarkLeaves).
 
--spec list(helpers:file_id(), od_storage:id(), datastore_links_iter:token(), non_neg_integer()) ->
+-spec list(helpers:file_id(), storage:id(), datastore_links_iter:token(), non_neg_integer()) ->
     {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
 list(StorageFileId, StorageId, Token, Limit) ->
     list_internal(?ROOT_ID(StorageFileId, StorageId), Token, Limit).
@@ -91,7 +91,7 @@ list(StorageFileId, StorageId, Token, Limit) ->
 %% StorageFileId.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_recursive(helpers:file_id(), od_storage:id()) -> ok.
+-spec delete_recursive(helpers:file_id(), storage:id()) -> ok.
 delete_recursive(StorageFileId, StorageId) ->
     delete_recursive_internal(?ROOT_ID(StorageFileId, StorageId)).
 
@@ -106,16 +106,16 @@ get_link(RootId, ChildName) ->
         Error -> Error
     end.
 
--spec get_link(helpers:file_id(), od_storage:id(), link_name()) -> {ok, link_target()} | error().
+-spec get_link(helpers:file_id(), storage:id(), link_name()) -> {ok, link_target()} | error().
 get_link(StorageFileId, StorageId, ChildName) ->
     get_link(?ROOT_ID(StorageFileId, StorageId), ChildName).
 
--spec list(helpers:file_id(), od_storage:id(), non_neg_integer()) ->
+-spec list(helpers:file_id(), storage:id(), non_neg_integer()) ->
     {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
 list(StorageFileId, StorageId, Limit) ->
     list_internal(?ROOT_ID(StorageFileId, StorageId), #link_token{}, Limit).
 
--spec delete_link(helpers:file_id(), od_storage:id(), link_name()) -> ok.
+-spec delete_link(helpers:file_id(), storage:id(), link_name()) -> ok.
 delete_link(StorageFileId, StorageId, ChildName) ->
     delete_link_internal(?ROOT_ID(StorageFileId, StorageId), ChildName).
 
@@ -131,7 +131,7 @@ add_link_internal(RootId, ChildName, Target) ->
         {error, already_exists} -> ok
     end.
 
--spec add_link_recursive(root_id(), helpers:file_id(), od_storage:id(), [helpers:file_id()], boolean()) -> ok.
+-spec add_link_recursive(root_id(), helpers:file_id(), storage:id(), [helpers:file_id()], boolean()) -> ok.
 add_link_recursive(_RootId, _StorageFileId, _StorageId, [], _MarkLeaves) ->
     ok;
 add_link_recursive(RootId, StorageFileId, StorageId, [ChildName | RestChildren], MarkLeaves) ->

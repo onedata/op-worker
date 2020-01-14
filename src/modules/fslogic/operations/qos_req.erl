@@ -236,7 +236,7 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosEntryId) ->
 %% Creates new qos_entry document with appropriate traverse requests.
 %% @end
 %%--------------------------------------------------------------------
--spec add_possible_qos(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), [od_storage:id()]) ->
+-spec add_possible_qos(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), [storage:id()]) ->
     fslogic_worker:provider_response().
 add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),

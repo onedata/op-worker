@@ -34,7 +34,7 @@
 %% in a dedicated subdirectory.
 %% @end
 %%-------------------------------------------------------------------
--spec space_dir_id(od_space:id(), od_storage:id()) -> helpers:file_id().
+-spec space_dir_id(od_space:id(), storage:id()) -> helpers:file_id().
 space_dir_id(SpaceId, StorageId) ->
     case storage:is_imported_storage(StorageId) of
         true ->

@@ -69,7 +69,7 @@ raw_to_rpn(Expression) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec calculate_assigned_storages(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num()) ->
-    {true, [od_storage:id()]} | false | {error, term()}.
+    {true, [storage:id()]} | false | {error, term()}.
 calculate_assigned_storages(FileCtx, Expression, ReplicasNum) ->
     % TODO: VFS-5574 add check if storage has enough free space
     % call using ?MODULE macro for mocking in tests
@@ -91,8 +91,8 @@ calculate_assigned_storages(FileCtx, Expression, ReplicasNum) ->
 %% Takes into consideration actual file locations.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_storages(rpn(), pos_integer(), [od_storage:id()], od_space:id()) ->
-    {ture, [od_storage:id()]} | false | ?ERROR_INVALID_QOS_EXPRESSION.
+-spec calculate_storages(rpn(), pos_integer(), [storage:id()], od_space:id()) ->
+    {ture, [storage:id()]} | false | ?ERROR_INVALID_QOS_EXPRESSION.
 calculate_storages(_Expression, _ReplicasNum, [], _SpaceId) ->
     false;
 calculate_storages(Expression, ReplicasNum, SpaceStorages, SpaceId) ->
@@ -187,7 +187,7 @@ handle_operator(ParsedOperator, Stack, RPNExpression) ->
 %% fulfilling QoS are left.
 %% @end
 %%--------------------------------------------------------------------
--spec eval_rpn(rpn(), [od_storage:id()], od_space:id()) -> [od_storage:id()].
+-spec eval_rpn(rpn(), [storage:id()], od_space:id()) -> [storage:id()].
 eval_rpn(RPNExpression, StorageList, SpaceId) ->
     StorageSet = sets:from_list(StorageList),
     [ResSet] = lists:foldl(
@@ -196,8 +196,8 @@ eval_rpn(RPNExpression, StorageList, SpaceId) ->
         end , [], RPNExpression),
     sets:to_list(ResSet).
 
--spec eval_rpn(binary(), operand_stack(), sets:set(od_storage:id()), od_space:id()) ->
-    [sets:set(od_storage:id())] | no_return().
+-spec eval_rpn(binary(), operand_stack(), sets:set(storage:id()), od_space:id()) ->
+    [sets:set(storage:id())] | no_return().
 eval_rpn(?UNION, [Operand1, Operand2 | StackTail], _AvailableStorage, _SpaceId) ->
     [sets:union(Operand1, Operand2)| StackTail];
 eval_rpn(?INTERSECTION, [Operand1, Operand2 | StackTail], _AvailableStorage, _SpaceId) ->
@@ -219,7 +219,7 @@ eval_rpn(Operand, Stack, AvailableStorage, SpaceId) ->
 %% to value are left.
 %% @end
 %%--------------------------------------------------------------------
--spec filter_storage(binary(), binary(), sets:set(od_storage:id()), od_space:id()) -> sets:set(od_storage:id()).
+-spec filter_storage(binary(), binary(), sets:set(storage:id()), od_space:id()) -> sets:set(storage:id()).
 filter_storage(Key, Val, StorageSet, SpaceId) ->
     sets:filter(fun (StorageId) ->
         StorageQosParameters = storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId),
@@ -240,7 +240,7 @@ filter_storage(Key, Val, StorageSet, SpaceId) ->
 %% {true, StorageList}.
 %% @end
 %%--------------------------------------------------------------------
--spec select([od_storage:id()], pos_integer()) -> {true, [od_storage:id()]} | false.
+-spec select([storage:id()], pos_integer()) -> {true, [storage:id()]} | false.
 select([], _ReplicasNum) ->
     false;
 select(StorageList, ReplicasNum) ->
@@ -257,7 +257,7 @@ select(StorageList, ReplicasNum) ->
 %% Get list of storage id supporting space in which given file is stored.
 %% @end
 %%--------------------------------------------------------------------
--spec get_space_storages(file_ctx:ctx()) -> [od_storage:id()].
+-spec get_space_storages(file_ctx:ctx()) -> [storage:id()].
 get_space_storages(FileCtx) ->
     {ok, StorageIds} = space_logic:get_all_storage_ids(file_ctx:get_space_id_const(FileCtx)),
     StorageIds.

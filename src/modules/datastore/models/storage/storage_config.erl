@@ -56,8 +56,8 @@
 %%% API
 %%%===================================================================
 
--spec create(od_storage:id(), helpers:helper(), boolean(),
-    luma_config:config(), boolean()) -> {ok, od_storage:id()} | {error, term()}.
+-spec create(storage:id(), helpers:helper(), boolean(),
+    luma_config:config(), boolean()) -> {ok, storage:id()} | {error, term()}.
 create(StorageId, Helper, Readonly, LumaConfig, ImportedStorage) ->
     ?extract_key(datastore_model:create(?CTX, #document{
         key = StorageId,
@@ -70,24 +70,24 @@ create(StorageId, Helper, Readonly, LumaConfig, ImportedStorage) ->
     })).
 
 
--spec get(od_storage:id()) -> {ok, doc()} | {error, term()}.
+-spec get(storage:id()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
     datastore_model:get(?CTX, Key).
 
 
 %% @private
--spec update(od_storage:id(), diff()) -> {ok, doc()} | {error, term()}.
+-spec update(storage:id(), diff()) -> {ok, doc()} | {error, term()}.
 update(Key, Diff) ->
     datastore_model:update(?CTX, Key, Diff).
 
 
--spec exists(od_storage:id()) -> boolean().
+-spec exists(storage:id()) -> boolean().
 exists(Key) ->
     {ok, Exists} = datastore_model:exists(?CTX, Key),
     Exists.
 
 
--spec delete(od_storage:id()) -> ok | {error, term()}.
+-spec delete(storage:id()) -> ok | {error, term()}.
 delete(StorageId) ->
     datastore_model:delete(?CTX, StorageId).
 
@@ -95,39 +95,41 @@ delete(StorageId) ->
 %%% API functions
 %%%===================================================================
 
--spec get_id(od_storage:id() | doc()) -> od_storage:id().
+-spec get_id(doc()) -> storage:id().
 get_id(#document{key = StorageId, value = #storage_config{}}) ->
     StorageId.
 
 
--spec get_helper(doc() | record() | od_storage:id()) -> helpers:helper().
-get_helper(#storage_config{helper = Helper}) ->
-    Helper;
+-spec get_helper(doc() | record() | storage:id()) -> helpers:helper().
 get_helper(#document{value = StorageConfig}) ->
     get_helper(StorageConfig);
+get_helper(#storage_config{helper = Helper}) ->
+    Helper;
 get_helper(StorageId) ->
     {ok, StorageDoc} = get(StorageId),
     get_helper(StorageDoc).
 
 
--spec get_luma_config(record() | doc()) -> undefined | luma_config:config().
-get_luma_config(#storage_config{luma_config = LumaConfig}) ->
-    LumaConfig;
+-spec get_luma_config(doc() | record()) -> undefined | luma_config:config().
 get_luma_config(#document{value = Storage = #storage_config{}}) ->
-    get_luma_config(Storage).
+    get_luma_config(Storage);
+get_luma_config(#storage_config{luma_config = LumaConfig}) ->
+    LumaConfig.
 
 
--spec is_readonly(od_storage:id() | record() | doc()) -> boolean().
-is_readonly(#storage_config{readonly = ReadOnly}) ->
-    ReadOnly;
+-spec is_readonly(doc() | record() | storage:id()) -> boolean().
 is_readonly(#document{value = #storage_config{} = Value}) ->
     is_readonly(Value);
+is_readonly(#storage_config{readonly = ReadOnly}) ->
+    ReadOnly;
 is_readonly(StorageId) ->
     {ok, StorageConfigDoc} = get(StorageId),
     is_readonly(StorageConfigDoc).
 
 
--spec is_imported_storage(record() | od_storage:id()) -> boolean().
+-spec is_imported_storage(doc() | record() | storage:id()) -> boolean().
+is_imported_storage(#document{value = #storage_config{} = Value}) ->
+    is_imported_storage(Value);
 is_imported_storage(#storage_config{imported_storage = ImportedStorage}) ->
     ImportedStorage;
 is_imported_storage(StorageId) ->
@@ -135,7 +137,7 @@ is_imported_storage(StorageId) ->
     is_imported_storage(Value).
 
 
--spec update_helper(od_storage:id(), fun((helpers:helper()) -> helpers:helper())) ->
+-spec update_helper(storage:id(), fun((helpers:helper()) -> helpers:helper())) ->
     ok | {error, term()}.
 update_helper(StorageId, UpdateFun) ->
     ?extract_ok(update(StorageId, fun
@@ -159,7 +161,7 @@ update_helper(StorageId, UpdateFun) ->
 %% LUMA cannot be enabled or disabled, only its parameters may be changed.
 %% @end
 %%--------------------------------------------------------------------
--spec update_luma_config(od_storage:id(), UpdateFun) -> ok | {error, term()}
+-spec update_luma_config(storage:id(), UpdateFun) -> ok | {error, term()}
     when UpdateFun :: fun((luma_config:config()) -> {ok, luma_config:config()} | {error, term()}).
 update_luma_config(StorageId, UpdateFun) ->
     ?extract_ok(update(StorageId, fun
@@ -173,7 +175,7 @@ update_luma_config(StorageId, UpdateFun) ->
     end)).
 
 
--spec set_readonly(StorageId :: od_storage:id(), Readonly :: boolean()) ->
+-spec set_readonly(storage:id(), Readonly :: boolean()) ->
     ok | {error, term()}.
 set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
     ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
@@ -181,7 +183,7 @@ set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
     end)).
 
 
--spec set_imported_storage(od_storage:id(), boolean()) -> ok.
+-spec set_imported_storage(storage:id(), boolean()) -> ok.
 set_imported_storage(StorageId, Value) ->
     ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
         {ok, Storage#storage_config{imported_storage = Value}}

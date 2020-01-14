@@ -33,7 +33,7 @@
 %% Queries third party LUMA service for the storage user context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_ctx(session:id(), od_user:id(), od_space:id(), storage:record(), helpers:helper()) ->
+-spec get_user_ctx(session:id(), od_user:id(), od_space:id(), storage:data(), helpers:helper()) ->
     {ok, luma:user_ctx()} | {error, Reason :: term()}.
 get_user_ctx(SessionId, UserId, SpaceId, Storage, Helper) ->
     LumaConfig = storage:get_luma_config(Storage),
@@ -61,7 +61,7 @@ get_user_ctx(SessionId, UserId, SpaceId, Storage, Helper) ->
 %% Queries third party LUMA service for the storage GID for given GroupId.
 %% @end
 %%-------------------------------------------------------------------
--spec get_group_ctx(od_group:id() | undefined, od_space:id(), storage:record(), helpers:helper()) ->
+-spec get_group_ctx(od_group:id() | undefined, od_space:id(), storage:data(), helpers:helper()) ->
     {ok, luma:group_ctx()} | {error, term()}.
 get_group_ctx(_GroupId, _SpaceId, _Storage, #helper{name = ?CEPH_HELPER_NAME}) ->
     undefined;
@@ -134,7 +134,7 @@ http_client_post(Url, ReqHeaders, ReqBody) ->
 %% Constructs user context request that will be sent to the external LUMA service.
 %% @end
 %%--------------------------------------------------------------------
--spec get_request_body(session:id(), od_user:id(), od_space:id(), storage:record()) ->
+-spec get_request_body(session:id(), od_user:id(), od_space:id(), storage:data()) ->
     Body :: binary().
 get_request_body(SessionId, UserId, SpaceId, Storage) ->
     StorageId = storage:get_id(Storage),
@@ -153,7 +153,7 @@ get_request_body(SessionId, UserId, SpaceId, Storage) ->
 %% Constructs user context request that will be sent to the external LUMA service.
 %% @end
 %%--------------------------------------------------------------------
--spec get_group_request_body(od_group:id() | undefined, od_space:id(), storage:record()) ->
+-spec get_group_request_body(od_group:id() | undefined, od_space:id(), storage:data()) ->
     Body :: binary().
 get_group_request_body(undefined, SpaceId, Storage) ->
     StorageId = storage:get_id(Storage),
