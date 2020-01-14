@@ -41,7 +41,7 @@
     storage_posix_user_context :: undefined | luma:posix_user_ctx(),
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
-    storage :: undefined | storage:record(),
+    storage :: undefined | storage:data(),
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
     is_space_synced :: undefined | boolean(),
@@ -750,7 +750,7 @@ get_file_children_whitelisted(
 %% Returns storage id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_id(ctx()) -> {od_storage:id(), ctx()}.
+-spec get_storage_id(ctx()) -> {storage:id(), ctx()}.
 get_storage_id(FileCtx) ->
     {Storage, FileCtx2} = get_storage(FileCtx),
     {storage:get_id(Storage), FileCtx2}.
@@ -760,7 +760,7 @@ get_storage_id(FileCtx) ->
 %% Returns record of storage supporting space in which file was created.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage(ctx()) -> {storage:record(), ctx()}.
+-spec get_storage(ctx()) -> {storage:data(), ctx()}.
 get_storage(FileCtx = #file_ctx{storage = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
     {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),

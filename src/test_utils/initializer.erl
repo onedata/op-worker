@@ -637,13 +637,13 @@ put_into_cache(Doc = #document{key = Id, value = Record}) ->
     Type:update_cache(Id, fun(_) -> {ok, Record} end, Doc).
 
 
--spec get_storage_id(node()) -> od_storage:id().
+-spec get_storage_id(node()) -> storage:id().
 get_storage_id(Worker) ->
     {ok, [StorageId]} = rpc:call(Worker, provider_logic, get_storage_ids, []),
     StorageId.
 
 
--spec get_supporting_storage_id(node(), od_space:id()) -> od_storage:id().
+-spec get_supporting_storage_id(node(), od_space:id()) -> storage:id().
 get_supporting_storage_id(Worker, SpaceId) ->
     {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.
@@ -1502,7 +1502,7 @@ setup_storage(Worker, Domain, ProviderConfig, Config) ->
 %% Add space storage mapping
 %% @end
 %%--------------------------------------------------------------------
--spec on_space_supported(atom(), od_storage:id(), boolean()) -> any().
+-spec on_space_supported(atom(), storage:id(), boolean()) -> any().
 on_space_supported(Worker, StorageId, ImportedStorage) ->
     case ImportedStorage of
         true -> ok = rpc:call(Worker, storage_config, set_imported_storage, [StorageId, true]);

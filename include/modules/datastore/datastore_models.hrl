@@ -102,10 +102,10 @@
     direct_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
     eff_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
 
-    storages = #{} :: #{od_storage:id() => Size :: integer()},
+    storages = #{} :: #{storage:id() => Size :: integer()},
 
     % This value is calculated after fetch from zone for performance reasons.
-    local_storages = [] :: [od_storage:id()],
+    local_storages = [] :: [storage:id()],
 
     providers = #{} :: #{od_provider:id() => Size :: integer()},
 
@@ -141,7 +141,7 @@
     online = false :: boolean(),
 
     % Direct relations to other entities
-    storages = [] :: [od_storage:id()],
+    storages = [] :: [storage:id()],
 
     % Effective relations to other entities
     eff_spaces = #{} :: #{od_space:id() => Size :: integer()},
@@ -250,7 +250,7 @@
     session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),
     space_id :: undefined | od_space:id(),
-    storage_id :: undefined | od_storage:id(),
+    storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
     needs_root_privileges :: undefined | boolean(),
     file_size = 0 :: non_neg_integer(),
@@ -348,8 +348,8 @@
 
 %% Model that maps space to storage
 -record(space_storage, {
-    storage_ids = [] :: [od_storage:id()],
-    mounted_in_root = [] :: [od_storage:id()]
+    storage_ids = [] :: [storage:id()],
+    mounted_in_root = [] :: [storage:id()]
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.
@@ -451,7 +451,7 @@
 -record(file_location, {
     uuid :: file_meta:uuid(),
     provider_id :: undefined | oneprovider:id(),
-    storage_id :: undefined | od_storage:id(),
+    storage_id :: undefined | storage:id(),
     file_id :: undefined | helpers:file_id(),
     blocks = [] :: fslogic_location_cache:stored_blocks(),
     version_vector = #{},
@@ -559,7 +559,7 @@
     % storage traverse specific fields
     storage_file_id :: helper:name(),
     space_id :: od_space:id(),
-    storage_id :: od_storage:id(),
+    storage_id :: storage:id(),
     iterator_module :: storage_traverse:iterator_module(),
     offset = 0 ::  non_neg_integer(),
     batch_size :: non_neg_integer(),

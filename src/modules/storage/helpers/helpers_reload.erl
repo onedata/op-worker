@@ -33,7 +33,7 @@
 %% args and ctx.
 %% @end
 %%--------------------------------------------------------------------
--spec refresh_helpers_by_storage(od_storage:id()) -> ok.
+-spec refresh_helpers_by_storage(storage:id()) -> ok.
 refresh_helpers_by_storage(StorageId) ->
     {ok, Nodes} = node_manager:get_cluster_nodes(),
     rpc:multicall(Nodes, ?MODULE, local_refresh_helpers, [StorageId]),
@@ -47,7 +47,7 @@ refresh_helpers_by_storage(StorageId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec refresh_handle_params(helpers:helper_handle() | helpers:file_handle(),
-    session:id(), od_space:id(), storage:record() | od_storage:id()) -> ok.
+    session:id(), od_space:id(), storage:data() | storage:id()) -> ok.
 refresh_handle_params(Handle, SessionId, SpaceId, StorageId) when is_binary(StorageId) ->
     {ok, Storage} = storage:get(StorageId),
     refresh_handle_params(Handle, SessionId, SpaceId, Storage);
@@ -64,7 +64,7 @@ refresh_handle_params(Handle, SessionId, SpaceId, Storage) ->
 %%% RPC exports
 %%%===================================================================
 
--spec local_refresh_helpers(StorageId :: od_storage:id()) -> ok.
+-spec local_refresh_helpers(StorageId :: storage:id()) -> ok.
 local_refresh_helpers(StorageId) ->
     {ok, Storage} = storage:get(StorageId),
     {ok, Sessions} = session:list(),
