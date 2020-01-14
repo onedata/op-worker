@@ -189,14 +189,10 @@ route_and_ignore_answer(#client_message{
         audience_token = AudienceToken
     }
 } = Msg) ->
-    EffSessionId = effective_session_id(Msg),
-    % This function performs an async call to session manager worker.
-    % TODO VFS-5895 check identity, calc new data constraints
-    {ok, _} = session:update(EffSessionId, fun(Session = #session{auth = TokenAuth}) ->
-        {ok, Session#session{auth = auth_manager:update_credentials(
-            TokenAuth, AccessToken, AudienceToken
-        )}}
-    end),
+    incoming_session_watcher:update_credentials(
+        effective_session_id(Msg),
+        AccessToken, AudienceToken
+    ),
     ok;
 route_and_ignore_answer(ClientMsg) ->
     event_router:route_message(ClientMsg).

@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/2, update_credentials/3]).
 
 %% gen_server callbacks
 -export([
@@ -35,7 +35,7 @@
     session_grace_period :: session:grace_period(),
     identity :: aai:subject(),
     % token_auth -> for user sessions (gui, rest, fuse). It needs to be periodically
-    %               verified whether it's still valid (it can be revoked)
+    %               verified whether it's still valid (it could be revoked)
     % undefined  -> for provider_incoming sessions. No periodic peer verification
     %               is needed.
     auth :: undefined | session:auth()
@@ -67,6 +67,20 @@
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start_link(SessId, SessType) ->
     gen_server2:start_link(?MODULE, [SessId, SessType], []).
+
+
+-spec update_credentials(session:id(), auth_manager:access_token(),
+    auth_manager:audience_token()) -> ok.
+update_credentials(SessionId, AccessToken, AudienceToken) ->
+    case session:get(SessionId) of
+        {ok, #document{value = #session{watcher = SessionWatcher}}} ->
+            gen_server2:cast(
+                SessionWatcher,
+                {update_credentials, AccessToken, AudienceToken}
+            );
+        _ ->
+            ok
+    end.
 
 
 %%%===================================================================
@@ -136,6 +150,30 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_cast({update_credentials, AccessToken, AudienceToken}, #state{
+    session_id = SessionId,
+    identity = Identity,
+    auth = OldTokenAuth
+} = State) ->
+    NewTokenAuth = auth_manager:update_credentials(
+        OldTokenAuth, AccessToken, AudienceToken
+    ),
+    case ensure_auth_validity(NewTokenAuth, Identity) of
+        ok ->
+            {ok, TokenCaveats} = auth_manager:get_caveats(NewTokenAuth),
+            {ok, DataConstraints} = data_constraints:get(TokenCaveats),
+            {ok, _} = session:update(SessionId, fun(Session) ->
+                {ok, Session#session{
+                    auth = NewTokenAuth,
+                    data_constraints = DataConstraints
+                }}
+            end),
+            {noreply, State#state{auth = NewTokenAuth}, hibernate};
+        {error, token_auth_invalid} ->
+            mark_inactive(SessionId),
+            schedule_session_removal(0),
+            {noreply, State}
+    end;
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -184,29 +222,18 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
             {stop, Reason, State}
     end;
 
-handle_info(?CHECK_SESSION_VALIDITY, #state{auth = undefined} = State) ->
-    {noreply, State, hibernate};
-
 handle_info(?CHECK_SESSION_VALIDITY, #state{
     session_id = SessionId,
     identity = Identity,
     auth = Auth
 } = State) ->
-    Now = time_utils:system_time_seconds(),
-    case mark_inactive_if_token_auth_has_expired(SessionId, Identity, Auth) of
-        true ->
-            schedule_session_removal(0),
-            {noreply, State};
-        {false, undefined} ->
-            schedule_session_validity_checkup(?SESSION_VALIDITY_CHECK_INTERVAL),
+    case ensure_auth_validity(Auth, Identity) of
+        ok ->
             {noreply, State, hibernate};
-        {false, TokenValidUntil} ->
-            NextCheckupDelay = min(
-                TokenValidUntil - Now,
-                ?SESSION_VALIDITY_CHECK_INTERVAL
-            ),
-            schedule_session_validity_checkup(NextCheckupDelay),
-            {noreply, State, hibernate}
+        {error, token_auth_invalid} ->
+            mark_inactive(SessionId),
+            schedule_session_removal(0),
+            {noreply, State}
     end;
 
 handle_info({'EXIT', _, shutdown}, State) ->
@@ -303,34 +330,43 @@ mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks whether session token auth is still valid (it may have been revoked
-%% for example). If it is invalid, session is marked as 'inactive' for later
-%% removal.
-%% Returns false and time until which token will be valid (unless owner
-%% revokes/removes it) if auth is valid or true otherwise.
-%% @end
-%%--------------------------------------------------------------------
--spec mark_inactive_if_token_auth_has_expired(session:id(), aai:subject(),
-    session:auth()
-) ->
-    true | {false, TokenValidUntil :: undefined | time_utils:seconds()}.
-mark_inactive_if_token_auth_has_expired(SessionId, Identity, TokenAuth) ->
+-spec ensure_auth_validity(undefined | session:auth(), aai:subject()) ->
+    ok | {error, token_auth_invalid}.
+ensure_auth_validity(undefined, _Identity) ->
+    ok;
+ensure_auth_validity(TokenAuth, Identity) ->
+    case check_token_auth_validity(TokenAuth, Identity) of
+        invalid ->
+            {error, token_auth_invalid};
+        {valid, undefined} ->
+            schedule_session_validity_checkup(?SESSION_VALIDITY_CHECK_INTERVAL),
+            ok;
+        {valid, TokenValidUntil} ->
+            NextCheckupDelay = min(
+                max(0, TokenValidUntil - time_utils:system_time_seconds()),
+                ?SESSION_VALIDITY_CHECK_INTERVAL
+            ),
+            schedule_session_validity_checkup(NextCheckupDelay),
+            ok
+    end.
+
+
+%% @private
+-spec check_token_auth_validity(auth_manager:token_auth(), aai:subject()) ->
+    {valid, TokenValidUntil :: undefined | time_utils:seconds()} | invalid.
+check_token_auth_validity(TokenAuth, Identity) ->
     case auth_manager:verify(TokenAuth) of
         {ok, #auth{subject = Identity}, TokenValidUntil} ->
-            {false, TokenValidUntil};
+            {valid, TokenValidUntil};
         {ok, #auth{subject = Subject}, _} ->
             ?debug("Token identity verification failure.~nExpected ~p.~nGot: ~p", [
                 Identity, Subject
             ]),
-            mark_inactive(SessionId),
-            true;
+            invalid;
         {error, Reason} ->
             ?debug("Token auth verification failure: ~p", [Reason]),
-            mark_inactive(SessionId),
-            true
+            invalid
     end.
 
 
