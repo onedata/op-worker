@@ -49,7 +49,7 @@
 %% functions operating on document using datastore model API
 -export([
     get/1, delete/1, create/5, create/7,
-    add_shared_links/4, delete_shared_links/4, fold_links/5
+    add_synced_links/4, delete_synced_links/4, fold_links/5
 ]).
 
 %% higher-level functions operating on qos_entry document
@@ -80,12 +80,14 @@
 
 -export_type([id/0, doc/0, record/0, replicas_num/0]).
 
--define(CTX, #{
+-define(LOCAL_CTX, #{
     model => ?MODULE,
-    sync_enabled => true,
     remote_driver => datastore_remote_driver,
     mutator => oneprovider:get_id_or_undefined(),
     local_links_tree_id => oneprovider:get_id_or_undefined()
+}).
+-define(CTX, ?LOCAL_CTX#{
+    sync_enabled => true
 }).
 
 -define(IMPOSSIBLE_KEY(SpaceId), <<"impossible_qos_key_", SpaceId/binary>>).
@@ -141,13 +143,13 @@ delete(QosEntryId) ->
     one_or_many({datastore:link_name(), datastore:link_target()})) ->
     one_or_many({ok, datastore:link()} | {error, term()}).
 add_local_links(Key, TreeId, Links) ->
-    datastore_model:add_links(?CTX, Key, TreeId, Links).
+    datastore_model:add_links(?LOCAL_CTX, Key, TreeId, Links).
 
 
--spec add_shared_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
+-spec add_synced_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
     one_or_many({datastore:link_name(), datastore:link_target()})) ->
     one_or_many({ok, datastore:link()} | {error, term()}).
-add_shared_links(Scope, Key, TreeId, Links) ->
+add_synced_links(Scope, Key, TreeId, Links) ->
     datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
 
@@ -155,13 +157,13 @@ add_shared_links(Scope, Key, TreeId, Links) ->
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
 delete_local_links(Key, TreeId, Links) ->
-    datastore_model:delete_links(?CTX, Key, TreeId, Links).
+    datastore_model:delete_links(?LOCAL_CTX, Key, TreeId, Links).
 
 
--spec delete_shared_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
+-spec delete_synced_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
-delete_shared_links(Scope, Key, TreeId, Links) ->
+delete_synced_links(Scope, Key, TreeId, Links) ->
     datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
 
 

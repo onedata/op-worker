@@ -67,6 +67,11 @@
 
 -compile({no_auto_import, [get/1]}).
 
+-define(throw_on_error(Res), case Res of
+    {error, _} = Error -> throw(Error);
+    _ -> Res
+end).
+
 
 %%%===================================================================
 %%% API
@@ -229,12 +234,15 @@ get_type(StorageDataOrId) ->
 
 -spec fetch_name(id()) -> name().
 fetch_name(StorageId) when is_binary(StorageId) ->
-    storage_logic:get_name(StorageId).
+    {ok, Name} = ?throw_on_error(storage_logic:get_name(StorageId)),
+    Name.
 
 
 -spec fetch_qos_parameters_of_local_storage(id()) -> qos_parameters().
 fetch_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
-    storage_logic:get_qos_parameters_of_local_storage(StorageId).
+    {ok, QosParameters} =
+        ?throw_on_error(storage_logic:get_qos_parameters_of_local_storage(StorageId)),
+    QosParameters.
 
 
 %%--------------------------------------------------------------------
@@ -245,7 +253,9 @@ fetch_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
 %%--------------------------------------------------------------------
 -spec fetch_qos_parameters_of_remote_storage(id(), od_space:id()) -> qos_parameters().
 fetch_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
-    storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId).
+    {ok, QosParameters} =
+        ?throw_on_error(storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId)),
+    QosParameters.
 
 
 -spec is_readonly(data() | id()) -> boolean().
@@ -268,7 +278,7 @@ is_local(StorageId) ->
     case storage_logic:get_provider(StorageId) of
         ?ERROR_FORBIDDEN -> false;
         {error, _} = Error -> throw(Error);
-        ProviderId -> oneprovider:is_self(ProviderId)
+        {ok, ProviderId} -> oneprovider:is_self(ProviderId)
     end.
 
 

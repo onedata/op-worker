@@ -662,6 +662,6 @@ mock_storage_get_provider(Config) ->
     lists:foreach(fun(Worker) ->
     ok = test_utils:mock_expect(Workers, storage_logic, get_provider,
         fun(_StorageId) ->
-            ?GET_DOMAIN_BIN(Worker)
+            {ok, ?GET_DOMAIN_BIN(Worker)}
         end)
     end, Workers).

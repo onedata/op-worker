@@ -58,7 +58,7 @@ report_file_changed(QosEntryId, SpaceId, FileUuid, TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     RelativePath = get_relative_path(OriginFileGuid, FileGuid),
     Link = {?QOS_STATUS_LINK_NAME(RelativePath, TaskId), TaskId},
-    {ok, _} = qos_entry:add_shared_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosEntryId), oneprovider:get_id(), Link),
+    {ok, _} = qos_entry:add_synced_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosEntryId), oneprovider:get_id(), Link),
     ok.
 
 %%--------------------------------------------------------------------
@@ -73,7 +73,7 @@ report_file_reconciled(QosEntryId, SpaceId, FileUuid, TaskId) ->
     {ok, OriginFileGuid} = qos_entry:get_file_guid(QosEntryId),
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     RelativePath = get_relative_path(OriginFileGuid, FileGuid),
-    ok = qos_entry:delete_shared_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosEntryId), oneprovider:get_id(),
+    ok = qos_entry:delete_synced_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosEntryId), oneprovider:get_id(),
         ?QOS_STATUS_LINK_NAME(RelativePath, TaskId)).
 
 %%--------------------------------------------------------------------

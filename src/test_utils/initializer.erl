@@ -1470,8 +1470,8 @@ storage_mock_setup(Workers, StoragesSetupMap) ->
     }}} end,
 
     GetQosParametersFun = fun(StorageId) ->
-            {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} = GetStorageFun(StorageId),
-            QosParameters
+        {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} = GetStorageFun(StorageId),
+        {ok, QosParameters}
     end,
 
     ok = test_utils:mock_new(Workers, storage_logic),
@@ -1487,13 +1487,13 @@ storage_mock_setup(Workers, StoragesSetupMap) ->
 
     ok = test_utils:mock_expect(Workers, storage_logic, get_provider,
         fun(StorageId) ->
-            maps:get(<<"provider_id">>, maps:get(StorageId, StorageMap, #{}), #{})
+            {ok, maps:get(<<"provider_id">>, maps:get(StorageId, StorageMap, #{}), #{})}
         end),
 
     ok = test_utils:mock_expect(Workers, storage_logic, get_name,
         % storage name is equal to its id
-        fun(#document{key = Id}) -> Id;
-           (Id) -> Id
+        fun(#document{key = Id}) -> {ok, Id};
+           (Id) -> {ok, Id}
         end).
 
 

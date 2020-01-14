@@ -562,7 +562,7 @@ mock_space_storages(Config, StorageList) ->
 
 mock_storage_qos_parameters(Workers, StorageQos) ->
     test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(StorageId, _SpaceId) ->
-        maps:get(StorageId, StorageQos, #{})
+        {ok, maps:get(StorageId, StorageQos, #{})}
     end).
 
 

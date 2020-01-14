@@ -52,7 +52,8 @@
 %%--------------------------------------------------------------------
 %% @equiv create_in_zone(Name, QosParameters, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), od_storage:qos_parameters()) -> {ok, storage:id()} | errors:error().
+-spec create_in_zone(od_storage:name(), od_storage:qos_parameters()) ->
+    {ok, storage:id()} | errors:error().
 create_in_zone(Name, QosParameters) ->
     create_in_zone(Name, QosParameters, undefined).
 
@@ -148,36 +149,39 @@ revoke_space_support(StorageId, SpaceId) ->
 
 -spec get_name(storage:id() | od_storage:doc()) -> storage:name().
 get_name(#document{value = #od_storage{name = Name}}) ->
-    Name;
+    {ok, Name};
 get_name(StorageId) ->
     case get(StorageId) of
         {ok, Doc} -> get_name(Doc);
-        {error, _} = Error -> throw(Error)
+        {error, _} = Error -> Error
     end.
 
 
--spec get_qos_parameters_of_local_storage(storage:id() | od_storage:doc()) -> od_storage:qos_parameters().
+-spec get_qos_parameters_of_local_storage(storage:id() | od_storage:doc()) ->
+    od_storage:qos_parameters().
 get_qos_parameters_of_local_storage(#document{value = #od_storage{qos_parameters = QosParameters}}) ->
-    QosParameters;
+    {ok, QosParameters};
 get_qos_parameters_of_local_storage(StorageId) ->
     case get(StorageId) of
         {ok, Doc} -> get_qos_parameters_of_local_storage(Doc);
-        {error, _} = Error -> throw(Error)
+        {error, _} = Error -> Error
     end.
 
 
--spec get_qos_parameters_of_remote_storage(storage:id(), od_space:id()) -> od_storage:qos_parameters().
+-spec get_qos_parameters_of_remote_storage(storage:id(), od_space:id()) ->
+    od_storage:qos_parameters().
 get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
     case get_shared_data(StorageId, SpaceId) of
-        {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} -> QosParameters;
-        Error -> throw(Error)
+        {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} ->
+            {ok, QosParameters};
+        Error -> Error
     end.
 
 
 -spec get_provider(storage:id()) -> od_provider:id() | errors:error().
 get_provider(StorageId) ->
     case get(StorageId) of
-        {ok, #document{value = #od_storage{provider = Provider}}} -> Provider;
+        {ok, #document{value = #od_storage{provider = Provider}}} -> {ok, Provider};
         Error -> Error
     end.
 
