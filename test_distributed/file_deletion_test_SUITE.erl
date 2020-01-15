@@ -447,7 +447,8 @@ end_per_suite(Config) ->
 
 init_per_testcase(Case, Config) when
     Case =:= counting_file_open_and_release_test;
-    Case =:= invalidating_session_open_files_test ->
+    Case =:= invalidating_session_open_files_test
+->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [fslogic_uuid, file_ctx, fslogic_delete, file_meta],
@@ -459,6 +460,8 @@ init_per_testcase(Case, Config) when
             ?FILE_UUID = file_ctx:get_uuid_const(FileCtx),
             ok
         end),
+
+    initializer:mock_auth_manager(Config),
     Config;
 
 
@@ -466,7 +469,6 @@ init_per_testcase(remove_file_on_ceph_using_client, Config) ->
     initializer:remove_pending_messages(),
     ssl:start(),
 
-    initializer:mock_auth_manager(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo);
@@ -481,7 +483,7 @@ init_per_testcase(Case, Config) when
     Case =:= file_stat_should_return_enoent_after_deletion;
     Case =:= file_open_should_return_enoent_after_deletion;
     Case =:= file_handle_should_work_after_deletion
-    ->
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, [storage_driver, rename_req,
@@ -496,7 +498,8 @@ init_per_testcase(Case, Config) when
     Case =:= remove_opened_file_posix_test;
     Case =:= remove_opened_file_ceph_test;
     Case =:= correct_file_on_storage_is_deleted_new_file_first;
-    Case =:= correct_file_on_storage_is_deleted_old_file_first ->
+    Case =:= correct_file_on_storage_is_deleted_old_file_first
+->
     initializer:remove_pending_messages(),
     ssl:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
@@ -505,7 +508,8 @@ init_per_testcase(Case, Config) when
 
 end_per_testcase(Case, Config) when
     Case =:= counting_file_open_and_release_test;
-    Case =:= invalidating_session_open_files_test ->
+    Case =:= invalidating_session_open_files_test
+->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_validate_and_unload(Worker, [fslogic_delete, file_ctx, file_meta]),

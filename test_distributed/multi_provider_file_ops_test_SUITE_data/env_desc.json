@@ -274,6 +274,22 @@
                         "storage": "/mnt/st2"
                     }
                 }
+            },
+            "space8": {
+                "displayed_name": "space8",
+                "users": [
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "cephrados"
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2"
+                    }
+                }
             }
         }
     }

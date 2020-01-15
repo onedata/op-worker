@@ -186,7 +186,6 @@ init_per_testcase(_Case, Config) ->
     ssl:start(),
     hackney:start(),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    initializer:mock_auth_manager(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
 
 end_per_testcase(choose_adequate_handler_test = Case, Config) ->
