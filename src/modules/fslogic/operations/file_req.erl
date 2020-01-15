@@ -312,7 +312,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     fslogic_worker:fuse_response().
 get_file_location_insecure(_UserCtx, FileCtx) ->
     throw_if_not_exists(FileCtx),
-    {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+    {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
     {#document{
         value = #file_location{
             blocks = Blocks,

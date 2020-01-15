@@ -347,6 +347,7 @@ mismatching_nested_parens(Config) ->
 %%%===================================================================
 
 simple_key_val_qos(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
     run_tests(Config, [file, dir], fun(Path) ->
         [Worker] = qos_tests_utils:get_op_nodes_sorted(Config),
         qos_test_base:simple_key_val_qos_spec(Path, Worker, [Worker], ?PROVIDERS_MAP)

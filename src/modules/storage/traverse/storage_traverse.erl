@@ -112,17 +112,17 @@ stop(Pool) when is_atom(Pool) ->
 stop(Pool) ->
     traverse:stop_pool(Pool).
 
--spec run(pool(), od_space:id(), od_storage:id(), info(), run_opts()) -> ok.
+-spec run(pool(), od_space:id(), storage:id(), info(), run_opts()) -> ok.
 run(Pool, SpaceId, StorageId, TraverseInfo, RunOpts) ->
     run(Pool, undefined, SpaceId, StorageId, TraverseInfo, RunOpts).
 
--spec run(pool(), traverse:id() | undefined, od_space:id(), od_storage:id(), info(), run_opts()) -> ok.
+-spec run(pool(), traverse:id() | undefined, od_space:id(), storage:id(), info(), run_opts()) -> ok.
 run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) when is_atom(Pool) ->
     run(atom_to_binary(Pool, utf8), TaskId, SpaceId, StorageId, TraverseInfo, RunOpts);
 run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
-    RootStorageFileId = storage_file_id:space_id(SpaceId, StorageId),
+    RootStorageFileId = storage_file_id:space_dir_id(SpaceId, StorageId),
     RootStorageFileCtx = storage_file_ctx:new(RootStorageFileId, SpaceId, StorageId),
-    StorageType = storage_config:get_type(StorageId),
+    StorageType = storage:get_type(StorageId),
     DefinedTaskId = case TaskId =:= undefined of
         true -> datastore_key:new();
         false -> TaskId

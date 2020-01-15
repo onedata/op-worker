@@ -33,15 +33,14 @@
 %% Queries third party LUMA service for the storage user context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_ctx(session:id(), od_user:id(), od_space:id(), storage_config:doc(), storage_config:helper()) ->
+-spec get_user_ctx(session:id(), od_user:id(), od_space:id(), storage:data(), helpers:helper()) ->
     {ok, luma:user_ctx()} | {error, Reason :: term()}.
-get_user_ctx(SessionId, UserId, SpaceId, StorageConfig = #document{
-    value = #storage_config{
-        luma_config = LumaConfig = #luma_config{url = LumaUrl}
-}}, Helper) ->
+get_user_ctx(SessionId, UserId, SpaceId, Storage, Helper) ->
+    LumaConfig = storage:get_luma_config(Storage),
+    LumaUrl = luma_config:get_url(LumaConfig),
     Url = str_utils:format_bin("~s/map_user_credentials", [LumaUrl]),
     ReqHeaders = get_request_headers(LumaConfig),
-    ReqBody = get_request_body(SessionId, UserId, SpaceId, StorageConfig),
+    ReqBody = get_request_body(SessionId, UserId, SpaceId, Storage),
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             UserCtx = json_utils:decode(RespBody),
@@ -62,23 +61,22 @@ get_user_ctx(SessionId, UserId, SpaceId, StorageConfig = #document{
 %% Queries third party LUMA service for the storage GID for given GroupId.
 %% @end
 %%-------------------------------------------------------------------
--spec get_group_ctx(od_group:id() | undefined, od_space:id(), storage_config:doc(), storage_config:helper()) ->
+-spec get_group_ctx(od_group:id() | undefined, od_space:id(), storage:data(), helpers:helper()) ->
     {ok, luma:group_ctx()} | {error, term()}.
-get_group_ctx(_GroupId, _SpaceId, _StorageConfig, #helper{name = ?CEPH_HELPER_NAME}) ->
+get_group_ctx(_GroupId, _SpaceId, _Storage, #helper{name = ?CEPH_HELPER_NAME}) ->
     undefined;
-get_group_ctx(_GroupId, _SpaceId, _StorageConfig, #helper{name = ?CEPHRADOS_HELPER_NAME}) ->
+get_group_ctx(_GroupId, _SpaceId, _Storage, #helper{name = ?CEPHRADOS_HELPER_NAME}) ->
     undefined;
-get_group_ctx(_GroupId, _SpaceId, _StorageConfig, #helper{name = ?S3_HELPER_NAME}) ->
+get_group_ctx(_GroupId, _SpaceId, _Storage, #helper{name = ?S3_HELPER_NAME}) ->
     undefined;
-get_group_ctx(_GroupId, _SpaceId, _StorageConfig, #helper{name = ?SWIFT_HELPER_NAME}) ->
+get_group_ctx(_GroupId, _SpaceId, _Storage, #helper{name = ?SWIFT_HELPER_NAME}) ->
     undefined;
-get_group_ctx(GroupId, SpaceId, StorageConfig = #document{
-    value = #storage_config{
-        luma_config = LumaConfig = #luma_config{url = LumaUrl}
-}}, Helper) ->
+get_group_ctx(GroupId, SpaceId, Storage, Helper) ->
+    LumaConfig = storage:get_luma_config(Storage),
+    LumaUrl = luma_config:get_url(LumaConfig),
     Url = str_utils:format_bin("~s/map_group", [LumaUrl]),
     ReqHeaders = get_request_headers(LumaConfig),
-    ReqBody = get_group_request_body(GroupId, SpaceId, StorageConfig),
+    ReqBody = get_group_request_body(GroupId, SpaceId, Storage),
     case luma_proxy:http_client_post(Url, ReqHeaders, ReqBody) of
         {ok, 200, _RespHeaders, RespBody} ->
             GroupCtx = json_utils:decode(RespBody),
@@ -99,17 +97,20 @@ get_group_ctx(GroupId, SpaceId, StorageConfig = #document{
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns LUMA request headers based on #luma_config.
+%% Returns LUMA request headers based on LumaConfig.
 %% @end
 %%-------------------------------------------------------------------
 -spec get_request_headers(luma_config:config()) -> map().
-get_request_headers(#luma_config{api_key = undefined}) ->
-    #{?HDR_CONTENT_TYPE => <<"application/json">>};
-get_request_headers(#luma_config{api_key = APIKey}) ->
-    #{
-        ?HDR_CONTENT_TYPE => <<"application/json">>,
-        ?HDR_X_AUTH_TOKEN => APIKey
-    }.
+get_request_headers(LumaConfig) ->
+    case luma_config:get_api_key(LumaConfig) of
+        undefined ->
+            #{?HDR_CONTENT_TYPE => <<"application/json">>};
+        APIKey ->
+            #{
+                ?HDR_CONTENT_TYPE => <<"application/json">>,
+                ?HDR_X_AUTH_TOKEN => APIKey
+            }
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -133,12 +134,14 @@ http_client_post(Url, ReqHeaders, ReqBody) ->
 %% Constructs user context request that will be sent to the external LUMA service.
 %% @end
 %%--------------------------------------------------------------------
--spec get_request_body(session:id(), od_user:id(), od_space:id(), storage_config:doc()) ->
+-spec get_request_body(session:id(), od_user:id(), od_space:id(), storage:data()) ->
     Body :: binary().
-get_request_body(SessionId, UserId, SpaceId, StorageConfig) ->
+get_request_body(SessionId, UserId, SpaceId, Storage) ->
+    StorageId = storage:get_id(Storage),
+    StorageName = storage:fetch_name(StorageId),
     Body = #{
-        <<"storageId">> => storage_config:get_id(StorageConfig),
-        <<"storageName">> => storage_config:get_name(StorageConfig),
+        <<"storageId">> => StorageId,
+        <<"storageName">> => StorageName,
         <<"spaceId">> => SpaceId,
         <<"userDetails">> => get_user_details(SessionId, UserId)
     },
@@ -150,22 +153,20 @@ get_request_body(SessionId, UserId, SpaceId, StorageConfig) ->
 %% Constructs user context request that will be sent to the external LUMA service.
 %% @end
 %%--------------------------------------------------------------------
--spec get_group_request_body(od_group:id() | undefined, od_space:id(), storage_config:doc()) ->
+-spec get_group_request_body(od_group:id() | undefined, od_space:id(), storage:data()) ->
     Body :: binary().
-get_group_request_body(undefined, SpaceId, #document{
-    key = StorageId,
-    value = #storage_config{name = StorageName}
-}) ->
+get_group_request_body(undefined, SpaceId, Storage) ->
+    StorageId = storage:get_id(Storage),
+    StorageName = storage:fetch_name(StorageId),
     Body = #{
         <<"spaceId">> => SpaceId,
         <<"storageId">> => StorageId,
         <<"storageName">> => StorageName
     },
     json_utils:encode(filter_null_and_undefined_values(Body));
-get_group_request_body(GroupId, SpaceId, #document{
-    key = StorageId,
-    value = #storage_config{name = StorageName}
-}) ->
+get_group_request_body(GroupId, SpaceId, Storage) ->
+    StorageId = storage:get_id(Storage),
+    StorageName = storage:fetch_name(StorageId),
     Body = #{
         <<"groupId">> => GroupId,
         <<"spaceId">> => SpaceId,

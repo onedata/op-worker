@@ -67,8 +67,7 @@ upgrade_from_19_02_x_storages(Config) ->
         luma_config = LumaConfig
     },
     ExpectedStorageConfig = #storage_config{
-        name = St,
-        helpers = [Helper],
+        helper = Helper,
         readonly = false,
         luma_config = LumaConfig,
         imported_storage = false
@@ -87,7 +86,7 @@ upgrade_from_19_02_x_storages(Config) ->
     ?assertMatch({error, not_found}, rpc:call(Worker, datastore_model, get, [space_storage:get_ctx(), SpaceId])),
 
     test_utils:mock_assert_num_calls_sum(Worker, storage_logic, upgrade_legacy_support, 2, 1),
-    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, create_in_zone, 2, 1),
+    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, create_in_zone, 3, 1),
     % Virtual storage should be removed in onezone
     test_utils:mock_assert_num_calls_sum(Worker, storage_logic, delete_in_zone, 1, 1),
     ?assertMatch({ok, #document{value = ExpectedStorageConfig}}, rpc:call(Worker, storage_config, get, [St])).
@@ -99,8 +98,8 @@ upgrade_from_19_02_x_storages(Config) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        initializer:setup_storage(NewConfig),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
+        NewConfig1 = initializer:setup_storage(NewConfig),
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig1, "env_desc.json"), NewConfig1)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
@@ -109,7 +108,7 @@ init_per_testcase(upgrade_from_19_02_x_storages, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, storage_logic, [passthrough]),
-    test_utils:mock_expect(Worker, storage_logic, create_in_zone, fun(_,StorageId) -> {ok, StorageId} end),
+    test_utils:mock_expect(Worker, storage_logic, create_in_zone, fun(_,_,StorageId) -> {ok, StorageId} end),
     test_utils:mock_expect(Worker, storage_logic, delete_in_zone, fun(_) -> ok end),
     test_utils:mock_expect(Worker, storage_logic, upgrade_legacy_support, fun(_,_) -> ok end),
     test_utils:mock_new(Worker, oneprovider),

@@ -190,10 +190,9 @@ rename_into_itself(FileGuid) ->
     no_return() | #fuse_response{}.
 rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFileCtx,
     TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
-    {StorageConfig, SourceFileCtx2} =
-        file_ctx:get_storage_doc(SourceFileCtx), #document{
-        value = #storage_config{helpers = [#helper{name = HelperName} | _]}
-    } = StorageConfig,
+    {Storage, SourceFileCtx2} = file_ctx:get_storage(SourceFileCtx),
+    Helper = storage:get_helper(Storage),
+    HelperName = helper:get_name(Helper),
     case lists:member(HelperName,
         [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
          ?WEBDAV_HELPER_NAME]) of
@@ -342,16 +341,16 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
 rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, _, undefined, _
 ) ->
-    SpaceId = file_ctx:get_space_id_const(SourceFileCtx),
-    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    #document{value = #storage_config{helpers = [#helper{storage_path_type = StoragePathType}|_]}} = Storage,
+    {Storage, SourceFileCtx1} = file_ctx:get_storage(SourceFileCtx),
+    Helper = storage:get_helper(Storage),
+    StoragePathType = helper:get_storage_path_type(Helper),
 
     case StoragePathType of
       ?FLAT_STORAGE_PATH ->
-          rename_file_on_flat_storage(UserCtx, SourceFileCtx,
+          rename_file_on_flat_storage(UserCtx, SourceFileCtx1,
               TargetParentFileCtx, TargetName, undefined);
       _ ->
-        copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName)
+        copy_and_remove(UserCtx, SourceFileCtx1, TargetParentFileCtx, TargetName)
     end;
 rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, TheSameType, TheSameType, TargetFileCtx
@@ -359,17 +358,17 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetGuid = file_ctx:get_guid_const(TargetFileCtx),
     SessId = user_ctx:get_session_id(UserCtx),
 
-    SpaceId = file_ctx:get_space_id_const(SourceFileCtx),
-    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    #document{value = #storage_config{helpers = [#helper{storage_path_type = StoragePathType}|_]}} = Storage,
+    {Storage, SourceFileCtx1} = file_ctx:get_storage(SourceFileCtx),
+    Helper = storage:get_helper(Storage),
+    StoragePathType = helper:get_storage_path_type(Helper),
 
     case StoragePathType of
       ?FLAT_STORAGE_PATH ->
-          rename_file_on_flat_storage(UserCtx, SourceFileCtx,
+          rename_file_on_flat_storage(UserCtx, SourceFileCtx1,
               TargetParentFileCtx, TargetName, TargetGuid);
       _ ->
         ok = lfm:unlink(SessId, {guid, TargetGuid}, false),
-        copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName)
+        copy_and_remove(UserCtx, SourceFileCtx1, TargetParentFileCtx, TargetName)
     end;
 rename_into_different_place_within_non_posix_space(_, _, _, _,
     ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, _
@@ -513,9 +512,9 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
         _ -> ok
     end,
 
-    {ok, StorageConfig} = fslogic_storage:select_storage(SpaceId),
-    Helper = storage_config:get_helper(StorageConfig),
-    StorageId = storage_config:get_id(StorageConfig),
+    {Storage, SourceFileCtx4} = file_ctx:get_storage(SourceFileCtx3),
+    Helper = storage:get_helper(Storage),
+    StorageId = storage:get_id(Storage),
     case helper:get_storage_path_type(Helper) of
       ?FLAT_STORAGE_PATH ->
         ok;
@@ -528,8 +527,8 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
         end
     end,
     ParentGuid = file_ctx:get_guid_const(TargetParentFileCtx2),
-    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx3, ParentGuid, TargetName, UserCtx),
-    {SourceFileCtx2, TargetFileId}.
+    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx4, ParentGuid, TargetName, UserCtx),
+    {SourceFileCtx4, TargetFileId}.
 
 %%--------------------------------------------------------------------
 %% @private

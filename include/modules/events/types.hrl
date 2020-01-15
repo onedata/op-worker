@@ -102,7 +102,7 @@
 
 %% definition of an event triggered when storage helper params are changed
 -record(helper_params_changed_event, {
-    storage_id :: od_storage:id()
+    storage_id :: storage:id()
 }).
 
 %% definition of a monitoring event

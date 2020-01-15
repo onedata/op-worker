@@ -20,7 +20,7 @@
 %%%===================================================================
 
 %% API
--export([space_id/2, flat/1, canonical/1]).
+-export([space_dir_id/2, flat/1, canonical/1]).
 
 %%%===================================================================
 %%% API functions
@@ -28,12 +28,15 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns space directory storage file id.
+%% Returns storage file id of space directory.
+%% If storage is marked as "imported", space data is located directly in
+%% storage root directory. Otherwise data of each space is stored
+%% in a dedicated subdirectory.
 %% @end
 %%-------------------------------------------------------------------
--spec space_id(od_space:id(), od_storage:id()) -> helpers:file_id().
-space_id(SpaceId, StorageId) ->
-    case storage_config:is_imported_storage(StorageId) of
+-spec space_dir_id(od_space:id(), storage:id()) -> helpers:file_id().
+space_dir_id(SpaceId, StorageId) ->
+    case storage:is_imported_storage(StorageId) of
         true ->
             ?DIRECTORY_SEPARATOR_BINARY;
         false ->

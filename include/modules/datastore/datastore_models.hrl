@@ -102,10 +102,10 @@
     direct_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
     eff_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
 
-    storages = #{} :: #{od_storage:id() => Size :: integer()},
+    storages = #{} :: #{storage:id() => Size :: integer()},
 
     % This value is calculated after fetch from zone for performance reasons.
-    local_storages = [] :: [od_storage:id()],
+    local_storages = [] :: [storage:id()],
 
     providers = #{} :: #{od_provider:id() => Size :: integer()},
 
@@ -141,7 +141,7 @@
     online = false :: boolean(),
 
     % Direct relations to other entities
-    storages = [] :: [od_storage:id()],
+    storages = [] :: [storage:id()],
 
     % Effective relations to other entities
     eff_spaces = #{} :: #{od_space:id() => Size :: integer()},
@@ -187,6 +187,7 @@
 }).
 
 -record(od_storage, {
+    name = <<>> :: od_storage:name(),
     provider :: od_provider:id() | undefined,
     spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
@@ -249,7 +250,7 @@
     session_id :: undefined | session:id(),
     file_uuid :: file_meta:uuid(),
     space_id :: undefined | od_space:id(),
-    storage_id :: undefined | od_storage:id(),
+    storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
     needs_root_privileges :: undefined | boolean(),
     file_size = 0 :: non_neg_integer(),
@@ -291,7 +292,7 @@
     % should be stored are calculated using QoS expression. Calculated storages
     % are used to create traverse requests in qos_entry document. When provider
     % notices change in qos_entry document, it checks whether traverse request
-    % for his storage is present. If yes provider updates entry in assigned_entries
+    % for his storage is present. If so, provider updates entry in assigned_entries
     % map for his local storage.
     assigned_entries = #{} :: file_qos:assigned_entries()
 }).
@@ -325,8 +326,7 @@
 }).
 
 -record(storage_config, {
-    name = <<>> :: storage_config:name(),
-    helpers = [] :: [storage_config:helper()],
+    helper :: helpers:helper(),
     readonly = false :: boolean(),
     luma_config = undefined :: undefined | luma_config:config(),
     imported_storage = false :: boolean()
@@ -336,7 +336,7 @@
 %%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
 -record(storage, {
     name = <<>> :: storage_config:name(),
-    helpers = [] :: [storage_config:helper()],
+    helpers = [] :: [helpers:helper()],
     readonly = false :: boolean(),
     luma_config = undefined :: undefined | luma_config:config()
 }).
@@ -348,8 +348,8 @@
 
 %% Model that maps space to storage
 -record(space_storage, {
-    storage_ids = [] :: [od_storage:id()],
-    mounted_in_root = [] :: [od_storage:id()]
+    storage_ids = [] :: [storage:id()],
+    mounted_in_root = [] :: [storage:id()]
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.
@@ -451,7 +451,7 @@
 -record(file_location, {
     uuid :: file_meta:uuid(),
     provider_id :: undefined | oneprovider:id(),
-    storage_id :: undefined | od_storage:id(),
+    storage_id :: undefined | storage:id(),
     file_id :: undefined | helpers:file_id(),
     blocks = [] :: fslogic_location_cache:stored_blocks(),
     version_vector = #{},
@@ -559,7 +559,7 @@
     % storage traverse specific fields
     storage_file_id :: helper:name(),
     space_id :: od_space:id(),
-    storage_id :: od_storage:id(),
+    storage_id :: storage:id(),
     iterator_module :: storage_traverse:iterator_module(),
     offset = 0 ::  non_neg_integer(),
     batch_size :: non_neg_integer(),

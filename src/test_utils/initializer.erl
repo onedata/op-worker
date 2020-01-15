@@ -43,6 +43,7 @@
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
 -export([mock_share_logic/1, unmock_share_logic/1]).
 -export([put_into_cache/1]).
+-export([get_storage_id/1, get_supporting_storage_id/2]).
 -export([local_ip_v4/0]).
 
 
@@ -204,7 +205,7 @@ clean_test_users_and_spaces_no_validate(Config) ->
     end, DomainWorkers),
 
     test_utils:mock_unload(Workers, [user_logic, group_logic, space_logic,
-        provider_logic, cluster_logic, harvester_logic, provider_auth]),
+        provider_logic, cluster_logic, harvester_logic, storage_logic, provider_auth]),
     unmock_provider_ids(Workers).
 
 %%--------------------------------------------------------------------
@@ -360,6 +361,8 @@ teardown_session(Worker, Config) ->
 -spec setup_storage(Config :: list()) -> list().
 setup_storage(Config) ->
     DomainWorkers = get_different_domain_workers(Config),
+    Workers = ?config(op_worker_nodes, Config),
+    storage_mock_setup(Workers),
     setup_storage(DomainWorkers, Config).
 
 %%--------------------------------------------------------------------
@@ -383,11 +386,9 @@ setup_storage([Worker | Rest], Config) ->
         false,
         ?CANONICAL_STORAGE_PATH
     ),
-    StorageConfig = storage_config:new(
-        <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
-        [Helper]),
-    {ok, StorageId} = rpc:call(Worker, storage_config, save_doc, [StorageConfig]),
-    ok = rpc:call(Worker, storage_config, on_storage_created, [StorageId]),
+    StorageName = <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
+    {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, false, undefined, false]),
+    rpc:call(Worker, storage, on_storage_created, [StorageId]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).
 
@@ -399,6 +400,8 @@ setup_storage([Worker | Rest], Config) ->
 -spec teardown_storage(Config :: list()) -> ok.
 teardown_storage(Config) ->
     DomainWorkers = get_different_domain_workers(Config),
+    Workers = ?config(op_worker_nodes, Config),
+    storage_mock_teardown(Workers),
     lists:foreach(fun(Worker) ->
         teardown_storage(Worker, Config) end, DomainWorkers).
 
@@ -634,6 +637,17 @@ put_into_cache(Doc = #document{key = Id, value = Record}) ->
     Type:update_cache(Id, fun(_) -> {ok, Record} end, Doc).
 
 
+-spec get_storage_id(node()) -> storage:id().
+get_storage_id(Worker) ->
+    {ok, [StorageId]} = rpc:call(Worker, provider_logic, get_storage_ids, []),
+    StorageId.
+
+
+-spec get_supporting_storage_id(node(), od_space:id()) -> storage:id().
+get_supporting_storage_id(Worker, SpaceId) ->
+    {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
+    StorageId.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -668,6 +682,10 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
     UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     HarvestersSetup = proplists:get_value(<<"harvesters">>, GlobalSetup, []),
+    StoragesSetup = case proplists:get_value(<<"storages">>, GlobalSetup) of
+        undefined -> [];
+        S -> S
+    end,
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
 
     lists:foreach(fun({_, SpaceConfig}) ->
@@ -690,6 +708,10 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
             end
         end, Providers0)
     end, SpacesSetup),
+
+    StoragesSetupMap = lists:foldl(fun({P, Storages}, Acc) ->
+        Acc#{atom_to_binary(proplists:get_value(P, DomainMappings), utf8) => Storages}
+    end, #{}, StoragesSetup),
 
     MasterWorkers = lists:map(fun(Domain) ->
         [MWorker | _] = get_same_domain_workers(Config, Domain),
@@ -730,14 +752,12 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         end, AccIn, Users)
     end, #{}, GroupUsers),
 
-    StorageMappings = lists:foldl(fun(Worker, OuterAcc) ->
-        {ok, WorkerStorageList} = rpc:call(Worker, storage_config, list, []),
-        maps:merge(OuterAcc, lists:foldl(fun(StorageConfig, InnerAcc) ->
-            StorageName = rpc:call(Worker, storage_config, get_name, [StorageConfig]),
-            StorageId = rpc:call(Worker, storage_config, get_id, [StorageConfig]),
-            InnerAcc#{{StorageName, domain_to_provider_id(?GET_DOMAIN(Worker))} => StorageId}
-        end, #{}, WorkerStorageList))
-    end, #{}, MasterWorkers),
+    CustomStorages = lists:filtermap(fun(Domain) ->
+        case ?config({storage_id, Domain}, Config) of
+            undefined -> false;
+            StorageId -> {true, {StorageId, atom_to_binary(Domain, utf8)}}
+        end
+    end, Domains),
 
     SpacesSupports = lists:filtermap(fun({SpaceId, SpaceConfig}) ->
         Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
@@ -791,8 +811,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
 
     user_logic_mock_setup(AllWorkers, Users),
     group_logic_mock_setup(AllWorkers, Groups, GroupUsers),
-    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters, StorageMappings),
-    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, StorageMappings),
+    space_logic_mock_setup(AllWorkers, Spaces, SpaceUsers, SpacesSupports, SpacesHarvesters, CustomStorages),
+    provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
         rpc:call(DomainWorker, fslogic_worker, init_cannonical_paths_cache, [all])
@@ -800,6 +820,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
 
     cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
+    storage_mock_setup(AllWorkers),
     ok = init_qos_bounded_cache(Config),
 
     %% Setup storage
@@ -809,7 +830,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
             Domain = proplists:get_value(PID, DomainMappings),
             case get_same_domain_workers(Config, Domain) of
                 [Worker | _] ->
-                    setup_storage(Worker, Domain, ProviderConfig, Config, StorageMappings);
+                    setup_storage(Worker, Domain, ProviderConfig, Config);
                 _ -> ok
             end
         end, Providers0)
@@ -1056,8 +1077,8 @@ group_logic_mock_setup(Workers, Groups, _Users) ->
 %%--------------------------------------------------------------------
 -spec space_logic_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}],
-    [{binary(), [binary()]}], #{{binary(), binary()} => binary()}) -> ok.
-space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvesters, StorageMappings) ->
+    [{binary(), [binary()]}], [{binary(), binary()}]) -> ok.
+space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvesters, CustomStorages) ->
     test_utils:mock_new(Workers, space_logic),
 
     GetSpaceFun = fun(_, SpaceId) ->
@@ -1066,7 +1087,8 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         EffUsers = maps:from_list(lists:map(fun(UID) ->
             {UID, node_get_mocked_space_user_privileges(SpaceId, UID)}
         end, UserIds)),
-        Storages = proplists:get_value(SpaceId, SpacesToStorages, maps:from_list([{St, 1000000000} || St <- maps:keys(StorageMappings)])),
+        Storages = proplists:get_value(SpaceId, SpacesToStorages,
+            maps:from_list([{St, 1000000000} || St <- CustomStorages])),
         {ok, #document{key = SpaceId, value = #od_space{
             name = SpaceName,
             providers = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
@@ -1075,9 +1097,9 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
             harvesters = proplists:get_value(SpaceId, SpacesHarvesters, []),
             eff_users = EffUsers,
             eff_groups = #{},
-            storages = maps:fold(fun(StorageNameAndProvider, Support, Acc) ->
-                StorageId = maps:get(StorageNameAndProvider, StorageMappings),
-                Acc#{StorageId => Support}
+            storages = maps:fold(fun({StorageName, _Provider}, Support, Acc) ->
+                % StorageName is the same as Id
+                Acc#{StorageName => Support}
             end, #{}, Storages)
         }}}
     end,
@@ -1133,10 +1155,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 %% @end
 %%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
-    proplists:proplist(), proplists:proplist(),
-    [{binary(), [{binary(), non_neg_integer()}]}], #{{binary(), binary()} => binary()}) -> ok.
+    proplists:proplist(), proplists:proplist(), [{binary(), [{binary(), non_neg_integer()}]}],
+    [{binary(), binary()}], #{binary() => [binary()]}) -> ok.
 provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
-    SpacesToStorages, StorageMappings
+    SpacesToStorages, CustomStorages, StoragesSetupMap
 ) ->
     test_utils:mock_new(AllWorkers, provider_logic),
 
@@ -1160,15 +1182,21 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
                     subdomain_delegation = false,
                     domain = PID,  % domain is the same as Id
                     eff_spaces = maps:from_list(lists:map(fun(SpaceId) ->
-                        Storages = proplists:get_value(SpaceId, SpacesToStorages, maps:from_list([{St, 1000000000} || St <- maps:keys(StorageMappings)])),
+                        Storages = proplists:get_value(SpaceId, SpacesToStorages,
+                            maps:from_list([{St, 1000000000} || St <- CustomStorages])),
                         ProvidersSupp = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
                             maps:update_with(ProviderId, fun(PrevSupport) -> PrevSupport + Support end, Support, Acc)
                         end, #{}, Storages),
                         {SpaceId, maps:get(PID, ProvidersSupp)}
                     end, Spaces)),
-                    storages = maps:fold(fun({_StorageName, ProviderId}, StorageId, Acc) when ProviderId == PID -> [StorageId | Acc];
-                                            ({_StorageName, _OtherProviderId}, _StorageId, Acc) -> Acc
-                    end, [], StorageMappings),
+                    storages = lists:usort(lists:foldl(fun({_SpaceId, SupportMap}, AccOut) ->
+                        AccOut ++ lists:foldl(fun({StorageName, P}, AccIn) when P == PID -> [StorageName | AccIn];
+                                                 (_, AccIn) -> AccIn
+                        end, [], maps:keys(SupportMap))
+                    end, [], SpacesToStorages) ++
+                    lists:filtermap(fun({StorageName, P}) when P == PID -> {true, StorageName};
+                                       (_) -> false
+                    end, CustomStorages) ++ maps:get(PID, StoragesSetupMap, [])),
                     longitude = 0.0,
                     latitude = 0.0
                 }}}
@@ -1220,6 +1248,12 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
             {ok, Support} -> {ok, Support};
             error -> {error, not_found}
         end
+    end,
+
+    GetStorageIdsFun = fun(ProviderId) ->
+        {ok, #document{value = #od_provider{storages = StorageIds}}} =
+            GetProviderFun(?ROOT_SESS_ID, ProviderId),
+        {ok, StorageIds}
     end,
 
     HasEffUserFun = fun(?ROOT_SESS_ID, ProviderId, UserId) ->
@@ -1298,6 +1332,17 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
     test_utils:mock_expect(AllWorkers, provider_logic, get_spaces,
         fun() ->
             GetSpacesFun(?ROOT_SESS_ID, oneprovider:get_id())
+        end),
+
+
+    test_utils:mock_expect(AllWorkers, provider_logic, get_storage_ids,
+        fun(PID) ->
+            GetStorageIdsFun(PID)
+        end),
+
+    test_utils:mock_expect(AllWorkers, provider_logic, get_storage_ids,
+        fun() ->
+            GetStorageIdsFun(oneprovider:get_id())
         end),
 
 
@@ -1390,6 +1435,28 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
         {ok, Doc}
     end).
 
+
+-spec storage_mock_setup(Workers :: node() | [node()]) -> ok.
+storage_mock_setup(Workers) ->
+    ok = test_utils:mock_new(Workers, storage_logic),
+    ok = test_utils:mock_expect(Workers, storage_logic, get,
+        fun(_) -> {ok, #document{value = #od_storage{
+            name = <<>>,
+            qos_parameters = #{}
+        }}} end),
+    ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_local_storage, fun(_) -> #{} end),
+    ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(_,_) -> #{} end),
+    ok = test_utils:mock_expect(Workers, storage_logic, get_name,
+        % storage name is equal to its id
+        fun(#document{key = Id}) -> Id;
+           (Id) -> Id
+        end).
+
+
+-spec storage_mock_teardown(Workers :: node() | [node()]) -> ok.
+storage_mock_teardown(Workers) ->
+    test_utils:mock_unload(Workers, storage_logic).
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -1410,9 +1477,8 @@ maybe_set_imported_storage_value(ProviderConfig) ->
 %% Setup test storage.
 %% @end
 %%--------------------------------------------------------------------
--spec setup_storage(atom(), atom(), proplists:proplist(), list(),
-    #{{binary(), binary()} => binary()}) -> {ok, od_space:id()} | ok.
-setup_storage(Worker, Domain, ProviderConfig, Config, StorageMapping) ->
+-spec setup_storage(atom(), atom(), proplists:proplist(), list()) -> {ok, od_space:id()} | ok.
+setup_storage(Worker, Domain, ProviderConfig, Config) ->
     case proplists:get_value(<<"storage">>, ProviderConfig) of
         undefined ->
             case ?config({storage_id, Domain}, Config) of
@@ -1424,10 +1490,8 @@ setup_storage(Worker, Domain, ProviderConfig, Config, StorageMapping) ->
         StorageName ->
             StorageId = case ?config({storage_id, Domain}, Config) of
                 %if storage is not mocked, get StorageId
-                undefined ->
-                    maps:get({StorageName, ?GET_DOMAIN_BIN(Worker)}, StorageMapping);
-                StId ->
-                    StId
+                undefined -> StorageName;
+                StId -> StId
             end,
             on_space_supported(Worker, StorageId, maybe_set_imported_storage_value(ProviderConfig))
     end.
@@ -1438,10 +1502,10 @@ setup_storage(Worker, Domain, ProviderConfig, Config, StorageMapping) ->
 %% Add space storage mapping
 %% @end
 %%--------------------------------------------------------------------
--spec on_space_supported(atom(), od_storage:id(), boolean()) -> any().
+-spec on_space_supported(atom(), storage:id(), boolean()) -> any().
 on_space_supported(Worker, StorageId, ImportedStorage) ->
     case ImportedStorage of
-        true -> ok = rpc:call(Worker, storage_config, set_imported_storage_insecure, [StorageId, true]);
+        true -> ok = rpc:call(Worker, storage_config, set_imported_storage, [StorageId, true]);
         false -> ok
     end.
 
