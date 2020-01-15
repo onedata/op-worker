@@ -221,13 +221,13 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = effective_qos}}, _) 
 
 get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEntry) ->
     SessionId = Auth#auth.session_id,
-    {ok, Fulfilled} = ?check(lfm_qos:check_qos_fulfilled(
-        SessionId, QosEntryId
-    )),
+    {ok, Fulfilled} = ?check(lfm_qos:check_qos_fulfilled(SessionId, QosEntryId)),
+    {ok, Expression} = qos_entry:get_expression(QosEntry),
+    {ok, ReplicasNum} = qos_entry:get_replicas_num(QosEntry),
     {ok, #{
         <<"qosEntryId">> => QosEntryId,
-        <<"expression">> => qos_entry:get_expression(QosEntry),
-        <<"replicasNum">> => qos_entry:get_replicas_num(QosEntry),
+        <<"expression">> => Expression,
+        <<"replicasNum">> => ReplicasNum,
         <<"fulfilled">> => Fulfilled
     }}.
 

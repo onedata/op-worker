@@ -32,9 +32,10 @@
 
 %%% Functions to retrieve storage details
 -export([get_id/1, get_helper/1, get_type/1, get_luma_config/1]).
--export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
+-export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
+-export([is_local/1]).
 
 %%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
@@ -65,6 +66,11 @@
 -export_type([id/0, data/0, name/0, qos_parameters/0]).
 
 -compile({no_auto_import, [get/1]}).
+
+-define(throw_on_error(Res), case Res of
+    {error, _} = Error -> throw(Error);
+    _ -> Res
+end).
 
 
 %%%===================================================================
@@ -226,6 +232,32 @@ get_type(StorageDataOrId) ->
     helper:get_type(Helper).
 
 
+-spec fetch_name(id()) -> name().
+fetch_name(StorageId) when is_binary(StorageId) ->
+    {ok, Name} = ?throw_on_error(storage_logic:get_name(StorageId)),
+    Name.
+
+
+-spec fetch_qos_parameters_of_local_storage(id()) -> qos_parameters().
+fetch_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
+    {ok, QosParameters} =
+        ?throw_on_error(storage_logic:get_qos_parameters_of_local_storage(StorageId)),
+    QosParameters.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves QoS parameters from storage details shared between providers
+%% through given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec fetch_qos_parameters_of_remote_storage(id(), od_space:id()) -> qos_parameters().
+fetch_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
+    {ok, QosParameters} =
+        ?throw_on_error(storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId)),
+    QosParameters.
+
+
 -spec is_readonly(data() | id()) -> boolean().
 is_readonly(StorageDataOrId) ->
     storage_config:is_readonly(StorageDataOrId).
@@ -241,25 +273,13 @@ is_luma_enabled(Storage) ->
     get_luma_config(Storage) =/= undefined.
 
 
--spec fetch_name(id()) -> name().
-fetch_name(StorageId) when is_binary(StorageId) ->
-    storage_logic:get_name(StorageId).
-
-
--spec fetch_qos_parameters_of_local_storage(id()) -> qos_parameters().
-fetch_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
-    storage_logic:get_qos_parameters_of_local_storage(StorageId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Retrieves QoS parameters from storage details shared between providers
-%% through given space.
-%% @end
-%%--------------------------------------------------------------------
--spec fetch_qos_parameters_of_remote_storage(id(), od_space:id()) -> qos_parameters().
-fetch_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
-    storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId).
+-spec is_local(id()) -> boolean().
+is_local(StorageId) ->
+    case storage_logic:get_provider(StorageId) of
+        ?ERROR_FORBIDDEN -> false;
+        {error, _} = Error -> throw(Error);
+        {ok, ProviderId} -> oneprovider:is_self(ProviderId)
+    end.
 
 
 %%%===================================================================
@@ -311,7 +331,14 @@ set_imported_storage(StorageId, ImportedStorage) ->
 
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
-    storage_logic:set_qos_parameters(StorageId, QosParameters).
+    case storage_logic:set_qos_parameters(StorageId, QosParameters) of
+        ok ->
+            {ok, Spaces} = storage_logic:get_spaces(StorageId),
+            lists:foreach(fun(SpaceId) ->
+                qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId)
+            end, Spaces);
+        Error -> Error
+    end.
 
 
 -spec update_helper_args(id(), helper:args()) -> ok | {error, term()}.
@@ -364,7 +391,13 @@ support_space_insecure(StorageId, SpaceSupportToken, SupportSize) ->
                 true ->
                     ?ERROR_STORAGE_IN_USE;
                 false ->
-                    storage_logic:support_space(StorageId, SpaceSupportToken, SupportSize)
+                    case storage_logic:support_space(StorageId, SpaceSupportToken, SupportSize) of
+                        {ok, SpaceId} ->
+                            on_space_supported(SpaceId),
+                            {ok, SpaceId};
+                        {error, _} = Error ->
+                            Error
+                    end
             end;
         Error ->
             Error
@@ -433,6 +466,12 @@ supports_any_space(StorageId) ->
 -spec on_storage_created(id()) -> ok.
 on_storage_created(StorageId) ->
     rtransfer_config:add_storage(StorageId).
+
+
+%% @private
+-spec on_space_supported(od_space:id()) -> ok.
+on_space_supported(SpaceId) ->
+    ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 
 %% @private

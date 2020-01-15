@@ -19,9 +19,8 @@
 %% API
 -export([
     handle_qos_entry_change/2,
-    reconcile_qos_on_storage/2,
-    reconcile_qos_on_storage/3,
-    maybe_start_traverse/4
+    reconcile_qos/1, reconcile_qos/2,
+    reevaluate_all_impossible_qos_in_space/1
 ]).
 
 
@@ -35,63 +34,55 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_qos_entry_change(od_space:id(), qos_entry:doc()) -> ok.
-handle_qos_entry_change(_SpaceId, #document{
+handle_qos_entry_change(SpaceId, #document{
     deleted = true,
     key = QosEntryId,
     value = QosEntry
 }) ->
-    FileUuid = qos_entry:get_file_uuid(QosEntry),
+    {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
+    qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     ok = file_qos:remove_qos_entry_id(FileUuid, QosEntryId);
 handle_qos_entry_change(SpaceId, #document{
     key = QosEntryId,
     value = QosEntry
-}) ->
-    FileUuid = qos_entry:get_file_uuid(QosEntry),
-    TraverseMap = qos_entry:get_traverse_map(QosEntry),
+} = QosEntryDoc) ->
+    {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
     file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
-    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-    maps:fold(fun(TaskId, #qos_traverse_req{start_file_uuid = StartFileUuid, storage_id = StorageId}, _) ->
-        FileCtx = file_ctx:new_by_guid(file_id:pack_guid(StartFileUuid, SpaceId)),
-        ok = maybe_start_traverse(FileCtx, QosEntryId, StorageId, TaskId)
-    end, ok, TraverseMap).
+    case qos_entry:is_possible(QosEntry) of
+        true ->
+            {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosEntry),
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs);
+        false ->
+            ok = qos_entry:add_to_impossible_list(QosEntryId, SpaceId),
+            ok = reevaluate_impossible_qos(QosEntryDoc)
+    end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% This function is used to create new file_ctx when file_meta_posthook
-%% is executed.
+%% Schedules file replication if it is required by effective_file_qos.
+%% Uses QoS traverse pool.
 %% @end
 %%--------------------------------------------------------------------
--spec reconcile_qos_on_storage(file_meta:uuid(), od_space:id(), storage:id()) -> ok.
-reconcile_qos_on_storage(FileUuid, SpaceId, StorageId) ->
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
-    reconcile_qos_on_storage(FileCtx, StorageId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Schedules file replication to given storage if it is required by
-%% effective_file_qos. Uses QoS traverse pool.
-%% @end
-%%--------------------------------------------------------------------
--spec reconcile_qos_on_storage(file_ctx:ctx(), storage:id()) -> ok.
-reconcile_qos_on_storage(FileCtx, StorageId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-
+-spec reconcile_qos(file_ctx:ctx()) -> ok.
+reconcile_qos(FileCtx) ->
+    {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx),
+    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    SpaceId  = file_ctx:get_space_id_const(FileCtx1),
     case file_qos:get_effective(FileUuid) of
         {error, {file_meta_missing, MissingUuid}} ->
             % new file_ctx will be generated when file_meta_posthook
-            % will be executed (see function above).
+            % will be executed (see function below).
             file_meta_posthooks:add_hook(
                 MissingUuid, <<"check_qos_", FileUuid/binary>>,
-                ?MODULE, ?FUNCTION_NAME, [FileUuid, SpaceId, StorageId]
+                ?MODULE, ?FUNCTION_NAME, [FileUuid, SpaceId]
             ),
             ok;
         {ok, EffFileQos} ->
-            QosToUpdate = file_qos:get_qos_to_update(StorageId, EffFileQos),
+            QosToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
             lists:foreach(fun(QosEntryId) ->
-                ok = qos_traverse:reconcile_qos_for_entry(FileCtx, QosEntryId)
+                ok = qos_traverse:reconcile_qos_for_entry(FileCtx1, QosEntryId)
             end, QosToUpdate);
         undefined ->
             ok
@@ -100,50 +91,59 @@ reconcile_qos_on_storage(FileCtx, StorageId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Executed only by provider to which given storage belongs to.
-%% Starts QoS traverse and updates file_qos accordingly.
+%% @equiv reconcile_qos(file_ctx:new_by_guid(FileGuid, SpaceId))
+%% This function is used as file_meta_posthook and recreates file_ctx
+%% as previous one could be outdated.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_start_traverse(file_ctx:ctx(), qos_entry:id(), storage:id(), traverse:id()) -> ok.
-maybe_start_traverse(FileCtx, QosEntryId, Storage, TaskId) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    % TODO VFS-5573 use storage id instead of provider
-    case oneprovider:get_id() of
-        Storage ->
-            ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            case lookup_file_meta_doc(FileCtx) of
-                {ok, FileCtx1} ->
-                    ok = qos_traverse:start_initial_traverse(FileCtx1, QosEntryId, TaskId);
-                {error, not_found} ->
-                    % There is no need to start traverse as appropriate transfers will be started
-                    % when file is finally synced. If this is directory, then each child registered
-                    % file meta posthook that will fulfill QoS after all its ancestors are synced.
-                    ok = qos_entry:remove_traverse_req(QosEntryId, TaskId)
-            end;
-        _ ->
-            ok
-    end.
+-spec reconcile_qos(file_meta:uuid(), od_space:id()) -> ok.
+reconcile_qos(FileUuid, SpaceId) ->
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
+    reconcile_qos(FileCtx).
 
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @private
-%% Returns file's file_meta document.
-%% Returns error if there is no such file doc (it is not synced yet).
+%% For each impossible QoS entry in given space recalculates target storages
+%% and if entry is now possible to fulfill adds appropriate traverse requests.
 %% @end
 %%--------------------------------------------------------------------
--spec lookup_file_meta_doc(file_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, not_found}.
-lookup_file_meta_doc(FileCtx) ->
-    try
-        {_Doc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-        {ok, FileCtx2}
-    catch
-        _:{badmatch, {error, not_found} = Error}->
-            Error
-    end.
+-spec reevaluate_all_impossible_qos_in_space(od_space:id()) -> ok.
+reevaluate_all_impossible_qos_in_space(SpaceId) ->
+    % TODO VFS-6005 Use traverse to list impossible qos
+    {ok, QosList} = qos_entry:get_impossible_list(SpaceId),
+    lists:foreach(fun reevaluate_impossible_qos/1, QosList).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Recalculates target storages for given QoS entry and if it is now possible
+%% to fulfill adds appropriate traverse requests.
+%% @end
+%%--------------------------------------------------------------------
+-spec reevaluate_impossible_qos(qos_entry:id() | qos_entry:doc()) -> ok.
+reevaluate_impossible_qos(#document{key = QosEntryId} = QosEntryDoc) ->
+    {ok, FileGuid} = qos_entry:get_file_guid(QosEntryDoc),
+    {ok, ReplicasNum} = qos_entry:get_replicas_num(QosEntryDoc),
+    {ok, QosExpression} = qos_entry:get_expression(QosEntryDoc),
+
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+
+    case qos_expression:calculate_assigned_storages(FileCtx, QosExpression, ReplicasNum) of
+        {true, StoragesList} ->
+            AllTraverseReqs = qos_traverse_req:build_traverse_reqs(
+                file_ctx:get_uuid_const(FileCtx), StoragesList
+            ),
+            qos_entry:mark_entry_possible(QosEntryId, SpaceId, AllTraverseReqs),
+            % No need to invalidate QoS cache here; it is invalidated by each provider
+            % that should start traverse task (see qos_traverse_req:start_traverse)
+            qos_traverse_req:start_applicable_traverses(
+                QosEntryId, SpaceId, AllTraverseReqs
+            );
+        false -> ok
+    end;
+
+reevaluate_impossible_qos(QosEntryId) ->
+    {ok, QosEntryDoc} = qos_entry:get(QosEntryId),
+    reevaluate_impossible_qos(QosEntryDoc).

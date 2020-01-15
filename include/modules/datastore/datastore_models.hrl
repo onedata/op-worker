@@ -306,9 +306,12 @@
     file_uuid :: file_meta:uuid(),
     expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
-    is_possible = false :: boolean(),
     % These are requests to providers to start QoS traverse.
-    traverse_reqs = #{} :: qos_entry:traverse_map()
+    traverse_reqs = #{} :: qos_traverse_req:traverse_reqs(),
+    % Contains id of provider that marked given entry as possible or impossible.
+    % If more than one provider concurrently marks entry as possible one provider is
+    % deterministically selected during conflict resolution.
+    possibility_check :: {possible | impossible, od_provider:id()}
 }).
 
 -record(file_meta, {

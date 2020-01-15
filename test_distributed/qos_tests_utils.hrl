@@ -72,7 +72,7 @@
     file_key :: {path, file_meta:path()} | {uuid, file_meta:uuid()},
     qos_expression_in_rpn :: qos_expression:rpn(),
     replicas_num :: qos_entry:replics_num(),
-    is_possible = true :: boolean()
+    possibility_check :: od_provider:id()
 }).
 
 

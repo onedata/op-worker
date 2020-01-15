@@ -47,8 +47,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                 case file_ctx:get_local_file_location_doc(FileCtx3) of
                     {undefined, FileCtx4} ->
                         fslogic_event_emitter:emit_file_attr_changed(FileCtx4, []),
-                        % TODO VFS-5573 use storage id instead of provider
-                        qos_hooks:reconcile_qos_on_storage(FileCtx4, oneprovider:get_id());
+                        qos_hooks:reconcile_qos(FileCtx4);
                     {LocalLocation, FileCtx4} ->
                         update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
                 end;
@@ -82,12 +81,10 @@ update_local_location_replica(FileCtx,
         greater -> ok;
         lesser ->
             update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc),
-            % TODO VFS-5573 use storage id instead of provider
-            qos_hooks:reconcile_qos_on_storage(FileCtx, oneprovider:get_id());
+            qos_hooks:reconcile_qos(FileCtx);
         concurrent ->
             reconcile_replicas(FileCtx, LocalDoc, RemoteDoc),
-            % TODO VFS-5573 use storage id instead of provider
-            qos_hooks:reconcile_qos_on_storage(FileCtx, oneprovider:get_id())
+            qos_hooks:reconcile_qos(FileCtx)
     end.
 
 %%--------------------------------------------------------------------

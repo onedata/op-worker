@@ -465,16 +465,13 @@ handle_task(#task{
     },
     id = ReportId
 } = Task, SpaceId) ->
-    % TODO: VFS-5573 use actual storage id
-    StorageId = oneprovider:get_id(),
+    {StorageId, _} = file_ctx:get_storage_id(file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))),
     case file_qos:is_replica_protected(FileUuid, StorageId) of
         false ->
             {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
                 Type, SpaceId),
             ok;
         true ->
-            % This is needed to avoid deadlock as cancel_task
-            % makes a synchronous call to this process.
             cancel_task(Task, SpaceId)
     end.
 

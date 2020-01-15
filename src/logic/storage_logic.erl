@@ -37,6 +37,7 @@
 -export([revoke_space_support/2]).
 -export([get_name/1]).
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
+-export([get_provider/1]).
 -export([get_spaces/1]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
@@ -51,7 +52,8 @@
 %%--------------------------------------------------------------------
 %% @equiv create_in_zone(Name, QosParameters, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), od_storage:qos_parameters()) -> {ok, storage:id()} | errors:error().
+-spec create_in_zone(od_storage:name(), od_storage:qos_parameters()) ->
+    {ok, storage:id()} | errors:error().
 create_in_zone(Name, QosParameters) ->
     create_in_zone(Name, QosParameters, undefined).
 
@@ -101,7 +103,7 @@ delete_in_zone(StorageId) ->
 
 
 -spec support_space(storage:id(), tokens:serialized(), od_space:support_size()) ->
-    {ok, od_space:id()}.
+    {ok, od_space:id()} | errors:error().
 support_space(StorageId, SpaceSupportToken, SupportSize) ->
     Data = #{<<"token">> => SpaceSupportToken, <<"size">> => SupportSize},
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
@@ -145,31 +147,43 @@ revoke_space_support(StorageId, SpaceId) ->
     end).
 
 
--spec get_name(storage:id() | od_storage:doc()) -> storage:name().
+-spec get_name(storage:id() | od_storage:doc()) -> {ok, storage:name()} | errors:error().
 get_name(#document{value = #od_storage{name = Name}}) ->
-    Name;
+    {ok, Name};
 get_name(StorageId) ->
     case get(StorageId) of
         {ok, Doc} -> get_name(Doc);
-        {error, _} = Error -> throw(Error)
+        {error, _} = Error -> Error
     end.
 
 
--spec get_qos_parameters_of_local_storage(storage:id() | od_storage:doc()) -> od_storage:qos_parameters().
+-spec get_qos_parameters_of_local_storage(storage:id() | od_storage:doc()) ->
+    {ok, od_storage:qos_parameters()} | errors:error().
 get_qos_parameters_of_local_storage(#document{value = #od_storage{qos_parameters = QosParameters}}) ->
-    QosParameters;
+    {ok, QosParameters};
 get_qos_parameters_of_local_storage(StorageId) ->
     case get(StorageId) of
         {ok, Doc} -> get_qos_parameters_of_local_storage(Doc);
-        {error, _} = Error -> throw(Error)
+        {error, _} = Error -> Error
     end.
 
 
--spec get_qos_parameters_of_remote_storage(storage:id(), od_space:id()) -> od_storage:qos_parameters().
+-spec get_qos_parameters_of_remote_storage(storage:id(), od_space:id()) ->
+    {ok, od_storage:qos_parameters()} | errors:error().
 get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
-    {ok, #document{value = #od_storage{
-        qos_parameters = QosParameters}}} = get_shared_data(StorageId, SpaceId),
-    QosParameters.
+    case get_shared_data(StorageId, SpaceId) of
+        {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} ->
+            {ok, QosParameters};
+        Error -> Error
+    end.
+
+
+-spec get_provider(storage:id()) -> {ok, od_provider:id()} | errors:error().
+get_provider(StorageId) ->
+    case get(StorageId) of
+        {ok, #document{value = #od_storage{provider = Provider}}} -> {ok, Provider};
+        Error -> Error
+    end.
 
 
 -spec get_spaces(storage:id()) -> {ok, [od_space:id()]} | errors:error().
@@ -203,7 +217,6 @@ set_qos_parameters(StorageId, QosParameters) ->
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_storage, StorageId)
     end).
-
 
 %%--------------------------------------------------------------------
 %% @doc
