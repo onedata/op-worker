@@ -553,10 +553,9 @@ assert_file_distribution(Config, Workers, {FileName, FileContent, ExpectedFileDi
 
 mock_space_storages(Config, StorageList) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, qos_expression, [passthrough]),
-    ok = test_utils:mock_expect(Workers, qos_expression, get_space_storages,
+    ok = test_utils:mock_expect(Workers, space_logic, get_all_storage_ids,
         fun(_) ->
-            StorageList
+            {ok, StorageList}
         end).
 
 

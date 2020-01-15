@@ -75,16 +75,15 @@ all() -> [
     qos_bounded_cache_should_be_periodically_cleaned_if_overfilled,
     qos_bounded_cache_should_not_be_cleaned_if_not_overfilled,
 
-    % TODO: VFS-5569 uncomment below tests after implementing proper validation
     % Invalid QoS expression tests
-%%    key_without_value,
-%%    two_keys_without_value_connected_with_operand,
-%%    operator_without_second_operand,
-%%    operator_without_first_operand,
-%%    two_operators_in_row,
-%%    closing_paren_without_matching_opening_one,
-%%    opening_paren_without_matching_closing_one,
-%%    mismatching_nested_parens,
+    key_without_value,
+    two_keys_without_value_connected_with_operand,
+    operator_without_second_operand,
+    operator_without_first_operand,
+    two_operators_in_row,
+    closing_paren_without_matching_opening_one,
+    opening_paren_without_matching_closing_one,
+    mismatching_nested_parens,
 
     % Single QoS expression tests
     simple_key_val_qos,
@@ -250,7 +249,7 @@ key_without_value(Config) ->
     create_test_file(Config),
 
     ?assertMatch(
-        ?ERROR_INVALID_QOS_EXPRESSION,
+        {error, ?EINVAL},
         lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country">>, 1)
     ).
 
@@ -262,7 +261,7 @@ two_keys_without_value_connected_with_operand(Config) ->
     create_test_file(Config),
 
     ?assertMatch(
-        ?ERROR_INVALID_QOS_EXPRESSION,
+        {error, ?EINVAL},
         lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country|type">>, 1)
     ).
 
@@ -274,7 +273,7 @@ operator_without_second_operand(Config) ->
     create_test_file(Config),
 
     ?assertMatch(
-        ?ERROR_INVALID_QOS_EXPRESSION,
+        {error, ?EINVAL},
         lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL&">>, 1)
     ).
 
@@ -286,7 +285,7 @@ operator_without_first_operand(Config) ->
     create_test_file(Config),
 
     ?assertMatch(
-        ?ERROR_INVALID_QOS_EXPRESSION,
+        {error, ?EINVAL},
         lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"|country=PL">>, 1)
     ).
 
@@ -298,7 +297,7 @@ two_operators_in_row(Config) ->
     create_test_file(Config),
 
     ?assertMatch(
-        ?ERROR_INVALID_QOS_EXPRESSION,
+        {error, ?EINVAL},
         lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL&-type-disk">>, 1)
     ).
 
@@ -310,7 +309,7 @@ closing_paren_without_matching_opening_one(Config) ->
     create_test_file(Config),
 
     ?assertMatch(
-        ?ERROR_INVALID_QOS_EXPRESSION,
+        {error, ?EINVAL},
         lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL)">>, 1)
     ).
 
@@ -322,7 +321,7 @@ opening_paren_without_matching_closing_one(Config) ->
     create_test_file(Config),
 
     ?assertMatch(
-        ?ERROR_INVALID_QOS_EXPRESSION,
+        {error, ?EINVAL},
         lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"(country=PL">>, 1)
     ).
 
@@ -334,7 +333,7 @@ mismatching_nested_parens(Config) ->
     create_test_file(Config),
 
     ?assertMatch(
-        ?ERROR_INVALID_QOS_EXPRESSION,
+        {error, ?EINVAL},
         lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"(type=disk|tier=t2&(country=PL)">>, 1)
     ).
 
