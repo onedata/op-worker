@@ -81,13 +81,13 @@
 -export_type([id/0, doc/0, record/0, replicas_num/0]).
 
 -define(LOCAL_CTX, #{
-    model => ?MODULE,
+    model => ?MODULE
+}).
+-define(CTX, ?LOCAL_CTX#{
+    sync_enabled => true,
     remote_driver => datastore_remote_driver,
     mutator => oneprovider:get_id_or_undefined(),
     local_links_tree_id => oneprovider:get_id_or_undefined()
-}).
--define(CTX, ?LOCAL_CTX#{
-    sync_enabled => true
 }).
 
 -define(IMPOSSIBLE_KEY(SpaceId), <<"impossible_qos_key_", SpaceId/binary>>).

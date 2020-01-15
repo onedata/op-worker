@@ -147,7 +147,7 @@ revoke_space_support(StorageId, SpaceId) ->
     end).
 
 
--spec get_name(storage:id() | od_storage:doc()) -> storage:name().
+-spec get_name(storage:id() | od_storage:doc()) -> {ok, storage:name()} | errors:error().
 get_name(#document{value = #od_storage{name = Name}}) ->
     {ok, Name};
 get_name(StorageId) ->
@@ -158,7 +158,7 @@ get_name(StorageId) ->
 
 
 -spec get_qos_parameters_of_local_storage(storage:id() | od_storage:doc()) ->
-    od_storage:qos_parameters().
+    {ok, od_storage:qos_parameters()} | errors:error().
 get_qos_parameters_of_local_storage(#document{value = #od_storage{qos_parameters = QosParameters}}) ->
     {ok, QosParameters};
 get_qos_parameters_of_local_storage(StorageId) ->
@@ -169,7 +169,7 @@ get_qos_parameters_of_local_storage(StorageId) ->
 
 
 -spec get_qos_parameters_of_remote_storage(storage:id(), od_space:id()) ->
-    od_storage:qos_parameters().
+    {ok, od_storage:qos_parameters()} | errors:error().
 get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
     case get_shared_data(StorageId, SpaceId) of
         {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} ->
@@ -178,7 +178,7 @@ get_qos_parameters_of_remote_storage(StorageId, SpaceId) ->
     end.
 
 
--spec get_provider(storage:id()) -> od_provider:id() | errors:error().
+-spec get_provider(storage:id()) -> {ok, od_provider:id()} | errors:error().
 get_provider(StorageId) ->
     case get(StorageId) of
         {ok, #document{value = #od_storage{provider = Provider}}} -> {ok, Provider};
