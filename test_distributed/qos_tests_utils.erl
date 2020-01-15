@@ -14,10 +14,12 @@
 -author("Michal Stanisz").
 
 -include("qos_tests_utils.hrl").
+-include("rest_test_utils.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 
 % assertions
@@ -100,7 +102,8 @@ add_multiple_qos_in_parallel(Config, QosToAddList) ->
         case Result of
             {ok, {_QosName, _QosEntryId}} ->
                 true;
-            _ ->
+            Error ->
+                ct:pal("~p", [Error]),
                 false
         end
     end, Results)),
@@ -121,12 +124,23 @@ add_qos(Config, #qos_to_add{
     % ensure file exists
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, {path, FilePath}), ?ATTEMPTS),
 
-    {ok, QosEntryId} = ?assertMatch(
-        {ok, _QosEntryId},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, FilePath}, QosExpression, ReplicasNum)
-    ),
+    case add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) of
+        {ok, RespBody} ->
+            DecodedBody = json_utils:decode(RespBody),
+            #{<<"qosEntryId">> := QosEntryId} = ?assertMatch(#{<<"qosEntryId">> := _}, DecodedBody),
+            {ok, {QosName, QosEntryId}};
+        {error, _} = Error -> Error
+    end.
 
-    {ok, {QosName, QosEntryId}}.
+
+add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) ->
+    URL = <<"qos/", FilePath/binary>>,
+    Headers = [?USER_TOKEN_HEADER(Config, <<"user1">>), {<<"Content-type">>, <<"application/json">>}],
+    ReqBody = #{
+        <<"expression">> => QosExpression,
+        <<"replicasNum">> => ReplicasNum
+    },
+    make_rest_req(Worker, URL, post, Headers, ReqBody).
 
 
 create_dir_structure(Config, #test_dir_structure{
@@ -332,12 +346,12 @@ assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, Attempt
                     Uuid
             end,
             assert_qos_entry_document(
-                Worker, QosEntryId, FileUuid, QosExpressionRPN, ReplicasNum, Attempts, PossibilityCheck
+                Config, Worker, QosEntryId, FileUuid, QosExpressionRPN, ReplicasNum, Attempts, PossibilityCheck
             )
         end, Workers)
     end, ExpectedQosEntries).
 
-assert_qos_entry_document(Worker, QosEntryId, FileUuid, Expression, ReplicasNum, Attempts, PossibilityCheck) ->
+assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, ReplicasNum, Attempts, PossibilityCheck) ->
     ExpectedQosEntry = #qos_entry{
         file_uuid = FileUuid,
         expression = Expression,
@@ -354,7 +368,24 @@ assert_qos_entry_document(Worker, QosEntryId, FileUuid, Expression, ReplicasNum,
         ),
         {QosEntry, ErrMsg}
     end,
-    assert_match_with_err_msg(GetQosEntryFun, ExpectedQosEntry, Attempts, 200).
+    assert_match_with_err_msg(GetQosEntryFun, ExpectedQosEntry, Attempts, 200),
+    {ok, {Expression, ReplicasNum}} = get_qos_entry_by_rest(Config, Worker, QosEntryId).
+
+
+get_qos_entry_by_rest(Config, Worker, QosEntryId) ->
+    URL = <<"qos-entry/", QosEntryId/binary>>,
+    Headers = [?USER_TOKEN_HEADER(Config, <<"user1">>)],
+    case make_rest_req(Worker, URL, get, Headers, #{}) of
+        {ok, RespBody} ->
+            DecodedBody = json_utils:decode(RespBody),
+            #{
+                <<"qosEntryId">> := QosEntryId,
+                <<"expression">> := Expression,
+                <<"replicasNum">> := ReplicasNum
+            } = DecodedBody,
+            {ok, {Expression, ReplicasNum}};
+        {error, _} = Error -> Error
+    end.
 
 
 assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, FilterOther) ->
@@ -438,7 +469,7 @@ assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssi
             SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
             FileUuid = ?GET_FILE_UUID(Worker, SessId, FilePath),
             assert_effective_qos(
-                Worker, FileUuid, FilePath, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
+                Config, Worker, FilePath, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
                 FilterAssignedEntries, Attempts
             ),
 
@@ -448,9 +479,7 @@ assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssi
         end, Workers)
     end, ExpectedEffQosEntries).
 
-assert_effective_qos(
-    Worker, FileUuid, FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts
-) ->
+assert_effective_qos(Config, Worker, FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts) ->
     ExpectedEffectiveQos = #effective_file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
@@ -461,7 +490,7 @@ assert_effective_qos(
     ExpectedEffectiveQosSorted = sort_effective_qos(ExpectedEffectiveQos),
 
     GetSortedEffectiveQos = fun() ->
-        {ok, EffQos} = rpc:call(Worker, file_qos, get_effective, [FileUuid]),
+        {ok, EffQos} = get_effective_qos_by_rest(Config, Worker, FilePath),
         EffQosSorted = sort_effective_qos(EffQos),
         ErrMsg = str_utils:format(
             "Worker: ~p~n"
@@ -473,6 +502,24 @@ assert_effective_qos(
         {EffQosSorted, ErrMsg}
     end,
     assert_match_with_err_msg(GetSortedEffectiveQos, ExpectedEffectiveQosSorted, Attempts, 500).
+
+
+get_effective_qos_by_rest(Config, Worker, FilePath) ->
+    URL = <<"qos/", FilePath/binary>>,
+    Headers = [?USER_TOKEN_HEADER(Config, <<"user1">>)],
+    case make_rest_req(Worker, URL, get, Headers, #{}) of
+        {ok, RespBody} ->
+            DecodedBody = json_utils:decode(RespBody),
+            #{
+                <<"assignedEntries">> := AssignedEntries,
+                <<"qosEntries">> := QosList
+            } = DecodedBody,
+            {ok, #effective_file_qos{
+                assigned_entries = AssignedEntries,
+                qos_entries = QosList
+            }};
+        {error, _} = Error -> Error
+    end.
 
 
 assert_distribution_in_dir_structure(_, undefined, _) ->
@@ -642,4 +689,13 @@ assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected , Attempts, Sleep) 
         _ ->
             timer:sleep(Sleep),
             assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts - 1, Sleep)
+    end.
+
+
+make_rest_req(Worker, URL, Method, Headers, ReqBody) ->
+    case rest_test_utils:request(Worker, URL, Method, Headers, json_utils:encode(ReqBody)) of
+        {ok, 200, _, RespBody} ->
+            {ok, RespBody};
+        {ok, Code, _, RespBody} ->
+            {error, {Code, RespBody}}
     end.
