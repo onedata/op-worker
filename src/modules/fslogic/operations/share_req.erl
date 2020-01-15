@@ -108,9 +108,9 @@ create_share_insecure(UserCtx, FileCtx, Name) ->
     case share_logic:create(SessionId, ShareId, Name, SpaceId, ShareGuid) of
         {ok, _} ->
             case file_meta:add_share(FileCtx, ShareId) of
-                {error, already_exists} ->
+                {error, _} ->
                     ok = share_logic:delete(SessionId, ShareId),
-                    ?ERROR(?EEXIST);
+                    ?ERROR(?EAGAIN);
                 {ok, _} ->
                     #provider_response{
                         status = #status{code = ?OK},

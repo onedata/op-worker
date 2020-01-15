@@ -1202,9 +1202,16 @@ create_share_dir(Config) ->
   initializer:testmaster_mock_space_user_privileges(
     Workers, SpaceId, UserId, privileges:space_admin()
   ),
-  ?assertMatch({ok, {<<_/binary>>, <<_/binary>>}}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
-  % Only one share per dir is supported
-  ?assertMatch({error, ?EEXIST}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
+  {ok, {ShareId1, _}} = ?assertMatch(
+    {ok, {<<_/binary>>, <<_/binary>>}},
+    lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)
+  ),
+  % Dir can be shared multiple times
+  {ok, {ShareId2, _}} = ?assertMatch(
+    {ok, {<<_/binary>>, <<_/binary>>}},
+    lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)
+  ),
+  ?assertNot(ShareId1 == ShareId2).
 
 create_share_file(Config) ->
   [W | _] = Workers = ?config(op_worker_nodes, Config),
@@ -1223,9 +1230,16 @@ create_share_file(Config) ->
   initializer:testmaster_mock_space_user_privileges(
     Workers, SpaceId, UserId, privileges:space_admin()
   ),
-  ?assertMatch({ok, {<<_/binary>>, <<_/binary>>}}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)),
-  % Only one share per file is supported
-  ?assertMatch({error, ?EEXIST}, lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)).
+  {ok, {ShareId1, _}} = ?assertMatch(
+    {ok, {<<_/binary>>, <<_/binary>>}},
+    lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)
+  ),
+  % File can be shared multiple times
+  {ok, {ShareId2, _}} = ?assertMatch(
+    {ok, {<<_/binary>>, <<_/binary>>}},
+    lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)
+  ),
+  ?assertNot(ShareId1 == ShareId2).
 
 remove_share(Config) ->
   [W | _] = Workers = ?config(op_worker_nodes, Config),
@@ -1234,28 +1248,28 @@ remove_share(Config) ->
   DirPath = <<"/space_name1/share_dir">>,
   {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#704),
   SpaceId = file_id:guid_to_space_id(Guid),
-  {ok, {ShareId, _ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+  {ok, {ShareId1, _ShareGuid1}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
+  {ok, {_ShareId2, ShareGuid2}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
 
   % Make sure SPACE_MANAGE_SHARES priv is accounted
   initializer:testmaster_mock_space_user_privileges(
     Workers, SpaceId, UserId, privileges:space_admin() -- [?SPACE_MANAGE_SHARES]
   ),
-  ?assertMatch({error, ?EACCES}, lfm_proxy:remove_share(W, SessId, ShareId)),
+  ?assertMatch({error, ?EACCES}, lfm_proxy:remove_share(W, SessId, ShareId1)),
 
   initializer:testmaster_mock_space_user_privileges(
     Workers, SpaceId, UserId, privileges:space_admin()
   ),
 
   % Remove share by share Id
-  ?assertMatch(ok, lfm_proxy:remove_share(W, SessId, ShareId)),
+  ?assertMatch(ok, lfm_proxy:remove_share(W, SessId, ShareId1)),
   % ShareId no longer exists -> {error, not_found}
-  ?assertMatch({error, not_found}, lfm_proxy:remove_share(W, SessId, ShareId)),
+  ?assertMatch({error, not_found}, lfm_proxy:remove_share(W, SessId, ShareId1)),
 
   % Remove share by Guid
-  {ok, {_ShareId, ShareGuid}} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
-  ?assertMatch(ok, lfm_proxy:remove_share_by_guid(W, SessId, ShareGuid)),
+  ?assertMatch(ok, lfm_proxy:remove_share_by_guid(W, SessId, ShareGuid2)),
   % ShareGuid no longer points to a shared file -> {error, ?ENOENT}
-  ?assertMatch({error, ?ENOENT}, lfm_proxy:remove_share_by_guid(W, SessId, ShareGuid)).
+  ?assertMatch({error, ?ENOENT}, lfm_proxy:remove_share_by_guid(W, SessId, ShareGuid2)).
 
 share_getattr(Config) ->
   [W | _] = ?config(op_worker_nodes, Config),

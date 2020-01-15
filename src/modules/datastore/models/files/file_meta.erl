@@ -738,31 +738,37 @@ setup_onedata_user(UserId, EffSpaces) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Add shareId to file meta. Only one share per file is allowed.
+%% Add shareId to file meta.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()}  | {error, term()}.
 add_share(FileCtx, ShareId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    update({uuid, FileUuid}, fun
-        (FileMeta = #file_meta{shares = []}) ->
-            {ok, FileMeta#file_meta{shares = [ShareId]}};
-        (#file_meta{shares = _}) ->
-            {error, already_exists}
+    update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
+        {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
     end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Remove shareId from file meta. Only one share per file is allowed.
+%% Remove shareId from file meta.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()} | {error, term()}.
 remove_share(FileCtx, ShareId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
-        case Shares of
-            [ShareId] -> {ok, FileMeta#file_meta{shares = []}};
-            _ -> {error, not_found}
+        Result = lists:foldl(fun(ShId, {IsMember, Acc}) ->
+            case ShareId == ShId of
+                true -> {found, Acc};
+                false -> {IsMember, [ShId | Acc]}
+            end
+        end, {not_found, []}, Shares),
+
+        case Result of
+            {found, FilteredShares} ->
+                {ok, FileMeta#file_meta{shares = FilteredShares}};
+            {not_found, _} ->
+                {error, not_found}
         end
     end).
 
