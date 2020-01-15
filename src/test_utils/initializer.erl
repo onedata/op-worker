@@ -835,8 +835,8 @@ user_logic_mock_setup(Workers, Users) ->
         end
     end),
 
-    test_utils:mock_expect(Workers, user_logic, get_full_name, fun(Client, UserId) ->
-        {ok, #document{value = #od_user{full_name = FullName}}} = GetUserFun(protected, Client, UserId),
+    test_utils:mock_expect(Workers, user_logic, get_full_name, fun(UserId) ->
+        {ok, #document{value = #od_user{full_name = FullName}}} = GetUserFun(protected, ?ROOT_SESS_ID, UserId),
         {ok, FullName}
     end),
 
@@ -885,7 +885,7 @@ user_logic_mock_setup(Workers, Users) ->
 group_logic_mock_setup(Workers, Groups, _Users) ->
     test_utils:mock_new(Workers, group_logic),
 
-    test_utils:mock_expect(Workers, group_logic, get_name, fun(_Client, GroupId) ->
+    test_utils:mock_expect(Workers, group_logic, get_name, fun(GroupId) ->
         GroupName = proplists:get_value(GroupId, Groups),
         {ok, GroupName}
     end).
