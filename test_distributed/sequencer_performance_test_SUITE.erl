@@ -155,7 +155,7 @@ route_message_should_forward_messages_in_right_order_base(Config) ->
   SeqNums = case MsgOrd of
               normal -> lists:seq(0, MsgNum - 1);
               reverse -> lists:seq(MsgNum - 1, 0, -1);
-              random -> utils:random_shuffle(lists:seq(0, MsgNum - 1))
+              random -> lists_utils:shuffle(lists:seq(0, MsgNum - 1))
             end,
 
   initializer:remove_pending_messages(),
@@ -221,11 +221,11 @@ route_message_should_work_for_multiple_streams_base(Config) ->
     {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
       utils:pforeach(fun(StmId) ->
         lists:foreach(fun(Msg) ->
-          [Wrk | _] = utils:random_shuffle(Workers),
+          [Wrk | _] = lists_utils:shuffle(Workers),
           route_message(Wrk, #client_message{session_id = SessId,
             message_stream = Msg#message_stream{stream_id = StmId}
           })
-        end, utils:random_shuffle(Msgs))
+        end, lists_utils:shuffle(Msgs))
       end, lists:seq(1, StmNum))
     end),
 

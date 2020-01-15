@@ -191,7 +191,7 @@ stream_supervisor_should_be_restarted(Config) ->
 
 main_harvesting_stream_should_not_be_started_if_space_is_not_supported(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     {HarvestersConfig, SpacesConfig} = harvesters_and_spaces_config(#{
         ?HARVESTER_ID(1) => #{indices => 1, spaces => 1}
     }),
@@ -311,14 +311,14 @@ start_stop_streams_mixed_test(Config) ->
     DeletedSpaces = maps:keys(SpacesConfig2) -- maps:keys(SpacesConfig3),
 
     lists:foreach(fun(SpaceId) ->
-        pretend_space_deletion(utils:random_element(Nodes), SpaceId)
+        pretend_space_deletion(lists_utils:random_element(Nodes), SpaceId)
     end, DeletedSpaces),
 
     ?assertMatch(5, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     update_harvesters_structure(Config, #{}, #{}),
     lists:foreach(fun(SpaceId) ->
-        pretend_space_deletion(utils:random_element(Nodes), SpaceId)
+        pretend_space_deletion(lists_utils:random_element(Nodes), SpaceId)
     end, maps:keys(SpacesConfig3)),
     ?assertMatch(0, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS).
 
@@ -397,7 +397,7 @@ adding_index_should_start_aux_stream_to_catch_up_with_main_stream(Config) ->
 
 aux_stream_should_be_started_test(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     ok = rpc:call(Node, harvesting_state, ensure_created, [?SPACE_ID(1)]),
     Dest = harvesting_destination:init(?HARVESTER_ID(1), ?INDEX_ID(1)),
     ok = rpc:call(Node, harvesting_state, set_seen_seq, [?SPACE_ID(1), Dest, 1000000]),
@@ -411,7 +411,7 @@ aux_stream_should_be_started_test(Config) ->
 
 aux_stream_should_not_be_started_test(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     ok = rpc:call(Node, harvesting_state, ensure_created, [?SPACE_ID(1)]),
     Dest = harvesting_destination:init(?HARVESTER_ID(1), [?INDEX_ID(1), ?INDEX_ID(2)]),
     ok = rpc:call(Node, harvesting_state, set_seen_seq, [?SPACE_ID(1), Dest, 1000000]),
@@ -1295,7 +1295,7 @@ end_per_suite(_Config) ->
 
 update_harvesters_structure(Config, HarvestersConfig, SpacesConfig) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     Spaces = maps:keys(SpacesConfig),
     mock_harvester_logic_get(Nodes, HarvestersConfig),
     mock_space_logic_get_harvesters(Nodes, SpacesConfig),
@@ -1484,7 +1484,7 @@ random_custom_metadata_seqs(Changes, Count) when Count =< length(Changes) ->
 random_custom_metadata_seqs(_RelevantChanges, 0, RandomSeqs) ->
     RandomSeqs;
 random_custom_metadata_seqs(RelevantChanges, Count, RandomSeqs) ->
-    Doc = #document{seq = Seq} = utils:random_element(RelevantChanges),
+    Doc = #document{seq = Seq} = lists_utils:random_element(RelevantChanges),
     random_custom_metadata_seqs(RelevantChanges -- [Doc], Count - 1, [Seq | RandomSeqs]).
 
 
