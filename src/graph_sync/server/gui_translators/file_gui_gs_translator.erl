@@ -73,17 +73,16 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
                 })
         end,
 
-        % Currently only one share per file is allowed.
-        Share = case Shares of
-            [ShareId] ->
-                gri:serialize(#gri{
-                    type = op_share,
-                    id = ShareId,
-                    aspect = instance,
-                    scope = private
-                });
+        SharesGRI = case Shares of
+            [] ->
+                null;
             _ ->
-                null
+                gri:serialize(#gri{
+                    type = op_file,
+                    id = Guid,
+                    aspect = shares,
+                    scope = private
+                })
         end,
 
         #{
@@ -106,7 +105,7 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
             }),
             <<"mtime">> => ModificationTime,
             <<"size">> => Size,
-            <<"share">> => Share,
+            <<"share">> => SharesGRI,
             <<"distribution">> => gri:serialize(#gri{
                 type = op_replica,
                 id = Guid,
@@ -123,4 +122,15 @@ translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
         }
     catch throw:{error, Errno} ->
         throw(?ERROR_POSIX(Errno))
-    end.
+    end;
+translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
+    #{
+        <<"list">> => lists:map(fun(ShareId) ->
+            gri:serialize(#gri{
+                type = op_share,
+                id = ShareId,
+                aspect = instance,
+                scope = private
+            })
+        end, ShareIds)
+    }.

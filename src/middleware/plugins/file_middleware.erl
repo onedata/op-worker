@@ -309,6 +309,7 @@ get_operation_supported(xattrs, private) -> true;
 get_operation_supported(json_metadata, private) -> true;
 get_operation_supported(rdf_metadata, private) -> true;
 get_operation_supported(acl, private) -> true;
+get_operation_supported(shares, private) -> true;
 get_operation_supported(transfers, private) -> true;
 get_operation_supported(download_url, private) -> true;
 get_operation_supported(_, _) -> false.
@@ -372,6 +373,9 @@ data_spec_get(#gri{aspect = rdf_metadata}) ->
 data_spec_get(#gri{aspect = acl}) ->
     undefined;
 
+data_spec_get(#gri{aspect = shares}) ->
+    undefined;
+
 data_spec_get(#gri{aspect = transfers}) -> #{
     optional => #{<<"include_ended_ids">> => {boolean, any}}
 };
@@ -391,6 +395,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata;
     As =:= acl;
+    As =:= shares;
     As =:= download_url
 ->
     has_access_to_file(Auth, Guid);
@@ -411,6 +416,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata;
     As =:= acl;
+    As =:= shares;
     As =:= transfers;
     As =:= download_url
 ->
@@ -524,6 +530,14 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) -
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     ?check(lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}));
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
+    case lfm:stat(Auth#auth.session_id, {guid, FileGuid}) of
+        {ok, #file_attr{shares = Shares}} ->
+            {ok, Shares};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end;
 
 get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
     {ok, #{
