@@ -40,6 +40,52 @@ translate_value(#gri{aspect = download_url}, URL) ->
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
+translate_resource(#gri{id = Guid, aspect = instance, scope = public}, #file_attr{
+    name = Name,
+    type = TypeAttr,
+    mode = Mode,
+    size = SizeAttr,
+    mtime = ModificationTime,
+    shares = Shares
+}) ->
+    {Type, Size} = case TypeAttr of
+        ?DIRECTORY_TYPE ->
+            {<<"dir">>, null};
+        _ ->
+            {<<"file">>, SizeAttr}
+    end,
+    {_, _, ShareId} = file_id:unpack_share_guid(Guid),
+
+    fun(#auth{session_id = SessId}) ->
+        IsRootDir = case ShareId of
+            undefined ->
+                fslogic_uuid:is_space_dir_guid(Guid);
+            _ ->
+                lists:member(ShareId, Shares)
+        end,
+        Parent = case IsRootDir of
+            true ->
+                null;
+            false ->
+                {ok, ParentGuid} = ?check(lfm:get_parent(SessId, {guid, Guid})),
+                gri:serialize(#gri{
+                    type = op_file,
+                    id = ParentGuid,
+                    aspect = instance,
+                    scope = public
+                })
+        end,
+
+        #{
+            <<"name">> => Name,
+            <<"index">> => Name,
+            <<"type">> => Type,
+            <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
+            <<"mtime">> => ModificationTime,
+            <<"size">> => Size,
+            <<"parent">> => Parent
+        }
+    end;
 translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
     name = Name,
     owner_id = Owner,

@@ -302,8 +302,10 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_meta
 -spec get_operation_supported(gri:gri(), middleware:scope()) ->
     boolean().
 get_operation_supported(instance, private) -> true;
+get_operation_supported(instance, public) -> true;
 get_operation_supported(list, private) -> true;
 get_operation_supported(children, private) -> true;
+get_operation_supported(children, public) -> true;
 get_operation_supported(attrs, private) -> true;
 get_operation_supported(xattrs, private) -> true;
 get_operation_supported(json_metadata, private) -> true;
@@ -312,6 +314,7 @@ get_operation_supported(acl, private) -> true;
 get_operation_supported(shares, private) -> true;
 get_operation_supported(transfers, private) -> true;
 get_operation_supported(download_url, private) -> true;
+get_operation_supported(download_url, public) -> true;
 get_operation_supported(_, _) -> false.
 
 
@@ -386,6 +389,13 @@ data_spec_get(#gri{aspect = download_url}) ->
 
 %% @private
 -spec authorize_get(middleware:req(), middleware:entity()) -> boolean().
+authorize_get(#op_req{gri = #gri{aspect = As, scope = public}}, _) when
+    As =:= instance;
+    As =:= children;
+    As =:= download_url
+->
+    true;
+
 authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= list;
@@ -704,8 +714,8 @@ delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec has_access_to_file(aai:auth(), file_id:file_guid()) -> boolean().
-has_access_to_file(?NOBODY, Guid) ->
-    file_id:is_share_guid(Guid);
+has_access_to_file(?NOBODY, _Guid) ->
+    false;
 has_access_to_file(?USER(UserId) = Auth, Guid) ->
     case fslogic_uuid:user_root_dir_guid(UserId) of
         Guid ->

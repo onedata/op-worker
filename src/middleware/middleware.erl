@@ -102,10 +102,20 @@ handle(OpReq) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(req(), versioned_entity()) -> result().
-handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
+handle(#op_req{gri = #gri{type = EntityType, id = EntityId}} = OpReq0, VersionedEntity) ->
     try
+        OpReq1 = case EntityType of
+            op_file ->
+                % Every req using share guid must be carried with guest auth
+                case file_id:is_share_guid(EntityId) of
+                    true -> OpReq0#op_req{auth = ?NOBODY};
+                    false -> OpReq0
+                end;
+            _ ->
+                OpReq0
+        end,
         ReqCtx0 = #req_ctx{
-            req = OpReq,
+            req = OpReq1,
             plugin = get_plugin(EntityType),
             versioned_entity = VersionedEntity
         },
