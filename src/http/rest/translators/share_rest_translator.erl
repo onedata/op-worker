@@ -32,8 +32,8 @@
 -spec create_response(gri:gri(), middleware:auth_hint(),
     middleware:data_format(), Result :: term() | {gri:gri(), term()} |
     {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
-create_response(#gri{aspect = shared_dir}, _, value, ShareId) ->
-    PathTokens = [<<"shares-id">>, ShareId],
+create_response(#gri{aspect = instance}, _, resource, {#gri{id = ShareId}, _}) ->
+    PathTokens = [<<"shares">>, ShareId],
     ?CREATED_REPLY(PathTokens, #{<<"shareId">> => ShareId}).
 
 

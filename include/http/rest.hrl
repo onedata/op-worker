@@ -51,7 +51,7 @@
 -define(OK_REPLY(__Body), #rest_resp{code = ?HTTP_200_OK, body = __Body}).
 -define(NO_CONTENT_REPLY, #rest_resp{code = ?HTTP_204_NO_CONTENT}).
 -define(CREATED_REPLY(__PathTokens, __Body), #rest_resp{
-    code = ?HTTP_200_OK,
+    code = ?HTTP_201_CREATED,
     headers = #{<<"Location">> => list_to_binary(oneprovider:get_rest_endpoint(
         string:trim(filename:join([<<"/">> | __PathTokens]), leading, [$/])
     ))},

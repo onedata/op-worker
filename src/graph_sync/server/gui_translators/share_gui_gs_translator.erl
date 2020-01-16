@@ -16,20 +16,12 @@
 -include("middleware/middleware.hrl").
 
 %% API
--export([
-    translate_value/2,
-    translate_resource/2
-]).
+-export([translate_resource/2]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = shared_dir}, ShareId) ->
-    #{<<"shareId">> => ShareId}.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
@@ -49,6 +41,6 @@ translate_resource(#gri{aspect = instance, scope = Scope}, #{
             type = op_file,
             id = RootFileGuid,
             aspect = instance,
-            scope = private
+            scope = public
         })
     }.

@@ -52,7 +52,7 @@ get_response(_, ReplicaData) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link rest_translator_behaviour} callback create_response/4.
+%% {@link rest_translator_behaviour} callback delete_response/4.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_response(gri:gri(), middleware:data_format(),
