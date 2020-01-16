@@ -621,7 +621,7 @@ add_qos_and_check_qos_docs(Config, #qos_spec{
     expected_file_qos = ExpectedFileQos
 } ) ->
     % add QoS for file and wait for appropriate QoS status
-    QosNameIdMapping = qos_tests_utils:add_multiple_qos_in_parallel(Config, QosToAddList),
+    QosNameIdMapping = qos_tests_utils:add_multiple_qos(Config, QosToAddList),
     qos_tests_utils:wait_for_qos_fulfillment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntries),
 
     % check qos documents
@@ -639,7 +639,7 @@ add_qos_for_dir_and_check_effective_qos(Config, #effective_qos_test_spec{
     qos_tests_utils:create_dir_structure(Config, InitialDirStructure),
 
     % add QoS and wait for appropriate QoS status
-    QosNameIdMapping = qos_tests_utils:add_multiple_qos_in_parallel(Config, QosToAddList),
+    QosNameIdMapping = qos_tests_utils:add_multiple_qos(Config, QosToAddList),
     qos_tests_utils:wait_for_qos_fulfillment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntries),
 
     % check qos_entry documents and effective QoS
