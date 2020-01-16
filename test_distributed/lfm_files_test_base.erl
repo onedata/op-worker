@@ -82,13 +82,6 @@
   lfm_rmdir/1
 ]).
 
-
--define(STORAGE_ID(Worker), begin
-  {ok, [__Storage]} = rpc:call(Worker, storage_config, list, []),
-  storage_config:get_id(__Storage)
-  end
-).
-
 -define(TIMEOUT, timer:seconds(10)).
 -define(REPEATS, 3).
 -define(SUCCESS_RATE, 100).
@@ -813,7 +806,7 @@ fslogic_new_file(Config) ->
   ?assertNotMatch(undefined, FileId11),
   ?assertNotMatch(undefined, FileId21),
 
-  TestStorageId = ?STORAGE_ID(Worker),
+  TestStorageId = initializer:get_storage_id(Worker),
   ?assertMatch(TestStorageId, StorageId11),
   ?assertMatch(TestStorageId, StorageId21),
 

@@ -13,8 +13,6 @@
 -author("Michal Cwiertnia").
 
 -include("modules/datastore/qos.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -22,10 +20,6 @@
 %% API
 -export([add_qos_entry/4, get_qos_entry/3, remove_qos_entry/3, get_effective_file_qos/2,
     check_fulfillment/3]).
-
-% For test purpose
--export([get_space_storages/2]).
-
 
 %%%===================================================================
 %%% API
@@ -43,7 +37,7 @@ add_qos_entry(UserCtx, FileCtx0, Expression, ReplicasNum) ->
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),
-    add_qos_entry_insecure(UserCtx, FileCtx1, Expression, ReplicasNum).
+    add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum).
 
 
 %%--------------------------------------------------------------------
@@ -117,17 +111,18 @@ check_fulfillment(UserCtx, FileCtx0, QosEntryId) ->
 %% traverse should be run.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_expression:raw(), qos_entry:replicas_num()) ->
+-spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:raw(), qos_entry:replicas_num()) ->
     fslogic_worker:provider_response().
-add_qos_entry_insecure(UserCtx, FileCtx, QosExpression, ReplicasNum) ->
+add_qos_entry_insecure(FileCtx, QosExpression, ReplicasNum) ->
     case qos_expression:raw_to_rpn(QosExpression) of
         {ok, QosExpressionInRPN} ->
             % TODO: VFS-5567 for now target storage for dir is selected here and
             % does not change in qos traverse task. Have to figure out how to
             % choose different storages for subdirs and/or file if multiple storage
             % fulfilling qos are available.
-            CalculatedStorages = calculate_storages(user_ctx:get_session_id(UserCtx),
-                FileCtx, QosExpressionInRPN, ReplicasNum),
+            CalculatedStorages = qos_expression:calculate_assigned_storages(
+                FileCtx, QosExpressionInRPN, ReplicasNum
+            ),
 
             case CalculatedStorages of
                 {true, Storages} ->
@@ -241,29 +236,21 @@ check_fulfillment_insecure(_UserCtx, FileCtx, QosEntryId) ->
 %% Creates new qos_entry document with appropriate traverse requests.
 %% @end
 %%--------------------------------------------------------------------
--spec add_possible_qos(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), [od_storage:id()]) ->
+-spec add_possible_qos(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), [storage:id()]) ->
     fslogic_worker:provider_response().
 add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     QosEntryId = datastore_key:new(),
 
-    TraverseReqs = lists:foldl(fun(Storage, Acc) ->
-        TaskId = datastore_key:new(),
-        Acc#{TaskId => #qos_traverse_req{
-            start_file_uuid = FileUuid,
-            storage_id = Storage
-        }}
-    end, #{}, Storages),
+    AllTraverseReqs = qos_traverse_req:build_traverse_reqs(FileUuid, Storages),
 
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN,
-                          ReplicasNum, true, TraverseReqs) of
+                          ReplicasNum, true, AllTraverseReqs) of
         {ok, _} ->
             file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            maps:fold(fun(TaskId, #qos_traverse_req{storage_id = Storage}, _) ->
-                ok = qos_hooks:maybe_start_traverse(FileCtx, QosEntryId, Storage, TaskId)
-            end, ok, TraverseReqs),
+            qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs),
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #qos_entry_id{id = QosEntryId}
@@ -290,7 +277,6 @@ add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
         {ok, _} ->
             ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-            ok = qos_entry:add_impossible_qos(QosEntryId, SpaceId),
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #qos_entry_id{id = QosEntryId}
@@ -298,47 +284,3 @@ add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
         _ ->
             #provider_response{status = #status{code = ?EAGAIN}}
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Calculate list of storage id, on which file should be present according to
-%% given expression and replicas number.
-%% @end
-%%--------------------------------------------------------------------
--spec calculate_storages(session:id(), file_ctx:ctx(), qos_expression:rpn(),
-    qos_entry:replicas_num()) -> {true, [od_storage:id()]} | false | {error, term()}.
-calculate_storages(SessId, FileCtx, Expression, ReplicasNum) ->
-    {FileLocationsDoc, _NewFileCtx} =  file_ctx:get_file_location_docs(FileCtx),
-    ProvidersBlocks = lists:map(fun(#document{value = FileLocation}) ->
-        #file_location{provider_id = ProviderId, blocks = Blocks} = FileLocation,
-        TotalBlocksSize = lists:foldl(fun(#file_block{size = S}, SizeAcc) ->
-            SizeAcc + S
-        end, 0, Blocks),
-        #{
-            <<"providerId">> => ProviderId,
-            <<"totalBlocksSize">> => TotalBlocksSize
-        }
-    end, FileLocationsDoc),
-
-    % TODO: VFS-5574 add check if storage has enough free space
-    % call using ?MODULE macro for mocking in tests
-    SpaceStorages = ?MODULE:get_space_storages(SessId, FileCtx),
-    qos_expression:calculate_storages(
-        Expression, ReplicasNum, SpaceStorages, ProvidersBlocks
-    ).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Get list of storage id supporting space in which given file is stored.
-%% @end
-%%--------------------------------------------------------------------
--spec get_space_storages(session:id(), file_ctx:ctx()) -> [od_storage:id()].
-get_space_storages(SessionId, FileCtx) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-
-    % TODO: VFS-5573 use storage qos
-    {ok, ProvidersId} = space_logic:get_provider_ids(SessionId, SpaceId),
-    ProvidersId.

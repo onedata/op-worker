@@ -137,7 +137,7 @@ check_space(SpaceId) ->
         check_storage(SpaceId, StorageId, SyncConfig)
     end, undefined, SyncConfigs).
 
--spec check_storage(od_space:id(), od_storage:id(), space_strategies:sync_config()) -> ok.
+-spec check_storage(od_space:id(), storage:id(), space_strategies:sync_config()) -> ok.
 check_storage(SpaceId, StorageId, SyncConfig) ->
     case is_syncable(StorageId) of
         true -> maybe_start_scan(SpaceId, StorageId, SyncConfig);
@@ -150,7 +150,7 @@ check_storage(SpaceId, StorageId, SyncConfig) ->
 %% This function is responsible for starting suitable storage_sync scans.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_start_scan(od_space:id(), od_storage:id(), space_strategies:sync_config()) -> ok.
+-spec maybe_start_scan(od_space:id(), storage:id(), space_strategies:sync_config()) -> ok.
 maybe_start_scan(SpaceId, StorageId, SyncConfig) ->
     {ImportEnabled, ImportConfig} = space_strategies:get_import_details(SyncConfig),
     case ImportEnabled of
@@ -165,7 +165,7 @@ maybe_start_scan(SpaceId, StorageId, SyncConfig) ->
             end
     end.
 
--spec maybe_start_update_scan(od_space:id(), od_storage:id(), space_strategies:sync_config()) -> ok.
+-spec maybe_start_update_scan(od_space:id(), storage:id(), space_strategies:sync_config()) -> ok.
 maybe_start_update_scan(SpaceId, StorageId, SyncConfig) ->
     {UpdateEnabled, UpdateConfig} = space_strategies:get_update_details(SyncConfig),
     case UpdateEnabled of
@@ -193,9 +193,16 @@ maybe_start_update_scan(SpaceId, StorageId, SyncConfig) ->
     end.
 
 
--spec is_syncable(storage_config:doc() | od_storage:id()) -> boolean().
-is_syncable(StorageDoc = #document{value = #storage_config{}}) ->
-    Helper = storage_config:get_helper(StorageDoc),
+-spec is_syncable(storage:data() | storage:id()) -> boolean().
+is_syncable(StorageId) when is_binary(StorageId) ->
+    case storage:get(StorageId) of
+        {ok, Storage} ->
+            is_syncable(Storage);
+        _ ->
+            false
+    end;
+is_syncable(Storage) ->
+    Helper = storage:get_helper(Storage),
     HelperName = helper:get_name(Helper),
     case lists:member(HelperName,
         [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?WEBDAV_HELPER_NAME])
@@ -203,19 +210,12 @@ is_syncable(StorageDoc = #document{value = #storage_config{}}) ->
         true ->
             true;
         false ->
-            is_syncable_object_storage(StorageDoc)
-    end;
-is_syncable(StorageId) when is_binary(StorageId) ->
-    case storage_config:get(StorageId) of
-        {ok, StorageDoc} ->
-            is_syncable(StorageDoc);
-        _ ->
-            false
+            is_syncable_object_storage(Storage)
     end.
 
--spec is_syncable_object_storage(storage_config:doc()) -> boolean().
-is_syncable_object_storage(StorageDoc = #document{value = #storage_config{}}) ->
-    Helper = storage_config:get_helper(StorageDoc),
+-spec is_syncable_object_storage(storage:data()) -> boolean().
+is_syncable_object_storage(Storage) ->
+    Helper = storage:get_helper(Storage),
     HelperName = helper:get_name(Helper),
     StoragePathType = helper:get_storage_path_type(Helper),
     Args = helper:get_args(Helper),

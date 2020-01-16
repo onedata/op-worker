@@ -58,7 +58,7 @@ report_file_changed(QosEntryId, SpaceId, FileUuid, TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     RelativePath = get_relative_path(OriginFileGuid, FileGuid),
     Link = {?QOS_STATUS_LINK_NAME(RelativePath, TaskId), TaskId},
-    {ok, _} = qos_entry:add_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosEntryId), oneprovider:get_id(), Link),
+    {ok, _} = qos_entry:add_synced_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosEntryId), oneprovider:get_id(), Link),
     ok.
 
 %%--------------------------------------------------------------------
@@ -73,7 +73,7 @@ report_file_reconciled(QosEntryId, SpaceId, FileUuid, TaskId) ->
     {ok, OriginFileGuid} = qos_entry:get_file_guid(QosEntryId),
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     RelativePath = get_relative_path(OriginFileGuid, FileGuid),
-    ok = qos_entry:delete_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosEntryId), oneprovider:get_id(),
+    ok = qos_entry:delete_synced_links(SpaceId, ?QOS_STATUS_LINKS_KEY(QosEntryId), oneprovider:get_id(),
         ?QOS_STATUS_LINK_NAME(RelativePath, TaskId)).
 
 %%--------------------------------------------------------------------
@@ -85,11 +85,12 @@ report_file_reconciled(QosEntryId, SpaceId, FileUuid, TaskId) ->
 -spec check_fulfilment(qos_entry:id(), fslogic_worker:file_guid()) ->  boolean().
 check_fulfilment(QosEntryId, FileGuid) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
+    {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosDoc),
 
     case qos_entry:is_possible(QosDoc) of
         false -> false;
         true ->
-            case qos_entry:are_all_traverses_finished(QosDoc) of
+            case qos_traverse_req:are_all_finished(AllTraverseReqs) of
                 true ->
                     {ok, OriginGuid} = qos_entry:get_file_guid(QosDoc),
                     RelativePath = get_relative_path(OriginGuid, FileGuid),
@@ -135,7 +136,7 @@ get_relative_path(AncestorGuid, ChildGuid) ->
 %%--------------------------------------------------------------------
 -spec get_next_status_link(qos_entry:id(), binary()) ->  {ok, path() | empty} | {error, term()}.
 get_next_status_link(QosEntryId, PrevName) ->
-    qos_entry:fold_links(?QOS_STATUS_LINKS_KEY(QosEntryId),
+    qos_entry:fold_links(?QOS_STATUS_LINKS_KEY(QosEntryId), all,
         fun(#link{name = N}, _Acc) -> {ok, N} end,
         empty,
         #{prev_link_name => PrevName, size => 1}

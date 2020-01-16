@@ -91,7 +91,7 @@
 
 %% definition of a subscription for storage modification
 -record(helper_params_changed_subscription, {
-    storage_id :: od_storage:id()
+    storage_id :: storage:id()
 }).
 
 %% definition of a subscription for file renaming

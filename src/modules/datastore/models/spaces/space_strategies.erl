@@ -40,7 +40,7 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type sync_config() :: #storage_sync_config{}.
--type sync_configs() :: #{od_storage:id() => sync_config()}.
+-type sync_configs() :: #{storage:id() => sync_config()}.
 -type sync_details() :: {boolean(), import_config() | update_config()}.
 
 %% @formatter:off
@@ -103,7 +103,7 @@ is_any_storage_imported(SpaceId) ->
         end
     end, StorageIds).
 
--spec configure_import(od_space:id(), od_storage:id(), boolean(), import_config()) -> ok.
+-spec configure_import(od_space:id(), storage:id(), boolean(), import_config()) -> ok.
 configure_import(SpaceId, StorageId, Enabled, NewConfig) ->
     FilledConfig = fill_import_config(NewConfig),
     DefaultSyncConfig = ?DEFAULT_IMPORT_SYNC_CONFIG(Enabled, FilledConfig),
@@ -117,7 +117,7 @@ configure_import(SpaceId, StorageId, Enabled, NewConfig) ->
         {ok, SS#space_strategies{sync_configs = NewSS}}
     end, ?DEFAULT_RECORD(StorageId, DefaultSyncConfig))).
 
--spec configure_update(od_space:id(), od_storage:id(), boolean(), update_config()) -> ok.
+-spec configure_update(od_space:id(), storage:id(), boolean(), update_config()) -> ok.
 configure_update(SpaceId, StorageId, Enabled, NewConfig) ->
     FilledConfig = fill_update_config(NewConfig),
     DefaultSyncConfig = ?DEFAULT_UPDATE_SYNC_CONFIG(Enabled, FilledConfig),
@@ -131,7 +131,7 @@ configure_update(SpaceId, StorageId, Enabled, NewConfig) ->
         {ok, SS#space_strategies{sync_configs = NewSS}}
     end, ?DEFAULT_RECORD(StorageId, DefaultSyncConfig))).
 
--spec get_import_details(od_space:id(), od_storage:id()) -> sync_details().
+-spec get_import_details(od_space:id(), storage:id()) -> sync_details().
 get_import_details(SpaceId, StorageId) ->
     case space_strategies:get(SpaceId) of
         {ok, #document{value = #space_strategies{sync_configs = Configs}}} ->
@@ -150,7 +150,7 @@ get_import_details(#storage_sync_config{
 }) ->
     {ImportEnabled, ImportConfig}.
 
--spec get_update_details(od_space:id(), od_storage:id()) -> sync_details().
+-spec get_update_details(od_space:id(), storage:id()) -> sync_details().
 get_update_details(SpaceId, StorageId) ->
     case space_strategies:get(SpaceId) of
         {ok, #document{value = #space_strategies{sync_configs = Configs}}} ->

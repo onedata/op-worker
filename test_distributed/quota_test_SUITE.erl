@@ -817,15 +817,11 @@ storage_file_path(Worker, SpaceId, FilePath) ->
     filename:join([SpaceMnt, SpaceId, FilePath]).
 
 get_space_mount_point(Worker, SpaceId) ->
-    StorageId = get_supporting_storage_id(Worker, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
     storage_mount_point(Worker, StorageId).
 
-get_supporting_storage_id(Worker, SpaceId) ->
-    {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
-    StorageId.
-
 storage_mount_point(Worker, StorageId) ->
-    [Helper | _] = rpc:call(Worker, storage_config, get_helpers, [StorageId]),
+    Helper = rpc:call(Worker, storage, get_helper, [StorageId]),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).
 
