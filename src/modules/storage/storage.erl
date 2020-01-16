@@ -198,13 +198,9 @@ delete_insecure(StorageId) ->
 %%--------------------------------------------------------------------
 -spec clear_storages() -> ok.
 clear_storages() ->
-    {ok, StorageIds} = provider_logic:get_storage_ids(),
-    lists:foreach(fun(Id) ->
-        ok = storage_config:delete(Id),
-        % all storages should have been deleted by Onezone after
-        % provider was deregistered, but try to remove them just in case
-        catch storage_logic:delete_in_zone(Id)
-    end, StorageIds).
+    % all storages should have been deleted by Onezone after
+    % provider was deregistered, so clear only local data
+    storage_config:delete_all().
 
 
 %%%===================================================================
