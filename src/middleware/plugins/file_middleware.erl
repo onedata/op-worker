@@ -303,6 +303,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_meta
     boolean().
 get_operation_supported(instance, private) -> true;
 get_operation_supported(instance, public) -> true;
+get_operation_supported(object_id, private) -> true;
 get_operation_supported(list, private) -> true;
 get_operation_supported(children, private) -> true;
 get_operation_supported(children, public) -> true;
@@ -321,6 +322,9 @@ get_operation_supported(_, _) -> false.
 %% @private
 -spec data_spec_get(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
 data_spec_get(#gri{aspect = instance}) ->
+    undefined;
+
+data_spec_get(#gri{aspect = object_id}) ->
     undefined;
 
 data_spec_get(#gri{aspect = list}) -> #{
@@ -410,6 +414,9 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
 ->
     has_access_to_file(Auth, Guid);
 
+authorize_get(#op_req{gri = #gri{aspect = object_id}}, _) ->
+    true;
+
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = transfers}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS).
@@ -430,7 +437,10 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= transfers;
     As =:= download_url
 ->
-    assert_file_managed_locally(Guid).
+    assert_file_managed_locally(Guid);
+
+validate_get(#op_req{gri = #gri{aspect = object_id}}, _) ->
+    true.
 
 
 %%--------------------------------------------------------------------
@@ -441,6 +451,10 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
     ?check(lfm:stat(Auth#auth.session_id, {guid, FileGuid}));
+
+get(#op_req{gri = #gri{id = FileGuid, aspect = object_id}}, _) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+    {ok, #{<<"fileId">> => ObjectId}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
     SessionId = Auth#auth.session_id,

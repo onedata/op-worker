@@ -36,6 +36,7 @@
 ]).
 
 -export([
+    get_file_objectid/1,
     get_simple_file_distribution/1,
     transfers_should_be_ordered_by_timestamps/1,
     posix_mode_get/1,
@@ -76,6 +77,7 @@
 
 all() ->
     ?ALL([
+        get_file_objectid,
         get_simple_file_distribution,
         transfers_should_be_ordered_by_timestamps,
         posix_mode_get,
@@ -164,6 +166,21 @@ end, __Distributions))).
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+
+get_file_objectid(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "get_file_objectid"])),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath, 8#700),
+    {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+        WorkerP1, <<"file-id/", FilePath/binary>>, get,
+        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
+    )),
+    #{<<"fileId">> := ObjectId} = json_utils:decode(Response),
+    ?assertMatch({ok, ObjectId}, file_id:guid_to_objectid(FileGuid)).
+
 
 get_simple_file_distribution(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),

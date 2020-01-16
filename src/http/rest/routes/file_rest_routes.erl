@@ -30,6 +30,17 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
+    %% Get file id
+    {<<"/file-id/[...]">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?PATH_BINDING, 
+            aspect = object_id, 
+            scope = private
+        }
+    }},
     %% List files and folders
     {<<"/files/[...]">>, rest_handler, #rest_req{
         method = 'GET',
