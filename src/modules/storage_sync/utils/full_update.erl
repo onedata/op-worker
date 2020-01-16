@@ -33,8 +33,8 @@
 %% Deletes all files that exist in database but were deleted on storage
 %% @end
 %%-------------------------------------------------------------------
--spec run(space_strategy:job(), file_ctx:ctx()) -> {ok, space_strategy:job()}.
-run(Job = #space_strategy_job{
+-spec run(space_strategy:job(), file_ctx:ctx()) -> ok | {error, term()}.
+run(#space_strategy_job{
     data = #{
         space_id := SpaceId,
         storage_id := StorageId,
@@ -50,20 +50,16 @@ run(Job = #space_strategy_job{
     try
         save_db_children_names(DBTable, FileCtx),
         save_storage_children_names(StorageTable, StorageFileCtx),
-        ok = remove_files_not_existing_on_storage(StorageTable, DBTable,
-            FileCtx, SpaceId, StorageId),
-        storage_sync_monitoring:mark_updated_file(SpaceId, StorageId)
+        ok = remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId, StorageId)
     catch
         Error:Reason ->
             ?error_stacktrace("full_update:run failed for file: ~p due to ~p",
                 [FileName, {Error, Reason}]),
-            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId)
-
+            {error, {Error, Reason}}
     after
         true = ets:delete(StorageTable),
         true = ets:delete(DBTable)
-    end,
-    {ok, Job}.
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
