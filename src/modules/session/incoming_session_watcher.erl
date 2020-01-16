@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2, schedule_credentials_update/3]).
+-export([start_link/2, request_credentials_update/3]).
 
 %% gen_server callbacks
 -export([
@@ -72,9 +72,9 @@ start_link(SessId, SessType) ->
     gen_server2:start_link(?MODULE, [SessId, SessType], []).
 
 
--spec schedule_credentials_update(session:id(), auth_manager:access_token(),
+-spec request_credentials_update(session:id(), auth_manager:access_token(),
     auth_manager:audience_token()) -> ok.
-schedule_credentials_update(SessionId, AccessToken, AudienceToken) ->
+request_credentials_update(SessionId, AccessToken, AudienceToken) ->
     case session:get(SessionId) of
         {ok, #document{value = #session{watcher = SessionWatcher}}} ->
             gen_server2:cast(
@@ -114,6 +114,10 @@ init([SessId, SessType]) ->
     {ok, #document{value = Session}} = session:get(SessId),
 
     schedule_session_activity_checkup(GracePeriod),
+    % Auth was checked by auth_manager not so long ago (just before creation
+    % of session) so result should be cached and immediate check will not be
+    % expensive. Instead, it will allow to fetch TokenTTL and adjust real
+    % timer for next validity checkup.
     ValidityCheckupTimer = schedule_session_validity_checkup(0),
 
     {ok, #state{
@@ -158,14 +162,14 @@ handle_cast({update_credentials, AccessToken, AudienceToken}, #state{
     session_id = SessionId,
     identity = Identity,
     auth = OldTokenAuth,
-    validity_checkup_timer = ValidityCheckupTimer
+    validity_checkup_timer = OldTimer
 } = State) ->
-    cancel_validity_checkup_timer(ValidityCheckupTimer),
+    cancel_validity_checkup_timer(OldTimer),
     NewTokenAuth = auth_manager:update_credentials(
         OldTokenAuth, AccessToken, AudienceToken
     ),
-    case ensure_auth_validity(NewTokenAuth, Identity) of
-        {ok, NewValidityCheckupTimer} ->
+    case check_auth_validity(NewTokenAuth, Identity) of
+        {true, NewTimer} ->
             {ok, TokenCaveats} = auth_manager:get_caveats(NewTokenAuth),
             {ok, DataConstraints} = data_constraints:get(TokenCaveats),
             {ok, _} = session:update(SessionId, fun(Session) ->
@@ -176,10 +180,10 @@ handle_cast({update_credentials, AccessToken, AudienceToken}, #state{
             end),
             NewState = State#state{
                 auth = NewTokenAuth,
-                validity_checkup_timer = NewValidityCheckupTimer
+                validity_checkup_timer = NewTimer
             },
             {noreply, NewState, hibernate};
-        {error, token_auth_invalid} ->
+        false ->
             mark_inactive(SessionId),
             schedule_session_removal(0),
             {noreply, State}
@@ -236,16 +240,14 @@ handle_info(?CHECK_SESSION_VALIDITY, #state{
     session_id = SessionId,
     identity = Identity,
     auth = Auth,
-    validity_checkup_timer = ValidityCheckupTimer
+    validity_checkup_timer = OldTimer
 } = State) ->
-    cancel_validity_checkup_timer(ValidityCheckupTimer),
-    case ensure_auth_validity(Auth, Identity) of
-        {ok, NewValidityCheckupTimer} ->
-            NewState = State#state{
-                validity_checkup_timer = NewValidityCheckupTimer
-            },
+    cancel_validity_checkup_timer(OldTimer),
+    case check_auth_validity(Auth, Identity) of
+        {true, NewTimer} ->
+            NewState = State#state{validity_checkup_timer = NewTimer},
             {noreply, NewState, hibernate};
-        {error, token_auth_invalid} ->
+        false ->
             mark_inactive(SessionId),
             schedule_session_removal(0),
             {noreply, State}
@@ -346,40 +348,28 @@ mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
 
 
 %% @private
--spec ensure_auth_validity(undefined | session:auth(), aai:subject()) ->
-    {ok, NewTimer :: undefined | reference()} | {error, token_auth_invalid}.
-ensure_auth_validity(undefined, _Identity) ->
-    {ok, undefined};
-ensure_auth_validity(TokenAuth, Identity) ->
-    case check_token_auth_validity(TokenAuth, Identity) of
-        invalid ->
-            {error, token_auth_invalid};
-        {valid, undefined} ->
-            {ok, schedule_session_validity_checkup(?SESSION_VALIDITY_CHECK_INTERVAL)};
-        {valid, TokenValidUntil} ->
+-spec check_auth_validity(undefined | session:auth(), aai:subject()) ->
+    {true, NewTimer :: undefined | reference()} | false.
+check_auth_validity(undefined, _Identity) ->
+    {true, undefined};
+check_auth_validity(TokenAuth, Identity) ->
+    case auth_manager:verify(TokenAuth) of
+        {ok, #auth{subject = Identity}, undefined} ->
+            {true, schedule_session_validity_checkup(?SESSION_VALIDITY_CHECK_INTERVAL)};
+        {ok, #auth{subject = Identity}, TokenValidUntil} ->
             NextCheckupDelay = min(
                 max(0, TokenValidUntil - time_utils:system_time_seconds()),
                 ?SESSION_VALIDITY_CHECK_INTERVAL
             ),
-            {ok, schedule_session_validity_checkup(NextCheckupDelay)}
-    end.
-
-
-%% @private
--spec check_token_auth_validity(auth_manager:token_auth(), aai:subject()) ->
-    {valid, TokenValidUntil :: undefined | time_utils:seconds()} | invalid.
-check_token_auth_validity(TokenAuth, Identity) ->
-    case auth_manager:verify(TokenAuth) of
-        {ok, #auth{subject = Identity}, TokenValidUntil} ->
-            {valid, TokenValidUntil};
+            {true, schedule_session_validity_checkup(NextCheckupDelay)};
         {ok, #auth{subject = Subject}, _} ->
             ?debug("Token identity verification failure.~nExpected ~p.~nGot: ~p", [
                 Identity, Subject
             ]),
-            invalid;
+            false;
         {error, Reason} ->
             ?debug("Token auth verification failure: ~p", [Reason]),
-            invalid
+            false
     end.
 
 
