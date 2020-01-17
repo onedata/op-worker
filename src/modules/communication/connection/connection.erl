@@ -334,8 +334,8 @@ handle_info({upgrade_protocol, Hostname}, State) ->
     case socket_send(State, UpgradeReq) of
         {ok, NewState} ->
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
-        {error, Reason} ->
-            {stop, Reason, State}
+        {error, _Reason} ->
+            {stop, normal, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Socket, ok = Ok} = State) ->
@@ -345,12 +345,14 @@ handle_info({Ok, Socket, Data}, #state{status = upgrading_protocol, socket = Soc
             activate_socket(State2, false),
             {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
         {error, _Reason} ->
-            {stop, handshake_failed, State}
+            % Concrete errors were already logged in 'handle_protocol_upgrade_response'
+            % so terminate gracefully as to not spam more error logs
+            {stop, normal, State}
     catch Type:Reason ->
         ?error_stacktrace("Unexpected error during protocol upgrade: ~p:~p", [
             Type, Reason
         ]),
-        {stop, handshake_failed, State}
+        {stop, normal, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = Socket, ok = Ok} = State) ->
@@ -361,12 +363,14 @@ handle_info({Ok, Socket, Data}, #state{status = performing_handshake, socket = S
             activate_socket(State2, false),
             {noreply, State2, ?PROTO_CONNECTION_TIMEOUT};
         {error, _Reason} ->
-            {stop, handshake_failed, State}
+            % Concrete errors were already logged in 'handle_handshake' so
+            % terminate gracefully as to not spam more error logs
+            {stop, normal, State}
     catch Type:Reason ->
         ?error_stacktrace("Unexpected error while performing handshake: ~p:~p", [
             Type, Reason
         ]),
-        {stop, handshake_failed, State}
+        {stop, normal, State}
     end;
 
 handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok} = State) ->
@@ -374,8 +378,10 @@ handle_info({Ok, Socket, Data}, #state{status = ready, socket = Socket, ok = Ok}
         {ok, NewState} ->
             activate_socket(NewState, false),
             {noreply, NewState, ?PROTO_CONNECTION_TIMEOUT};
-        {error, Reason} ->
-            {stop, Reason, State}
+        {error, _Reason} ->
+            % Concrete errors were already logged in 'handle_message' so
+            % terminate gracefully as to not spam more error logs
+            {stop, normal, State}
     end;
 
 handle_info({Error, Socket, Reason}, State = #state{error = Error}) ->
