@@ -1518,7 +1518,6 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     % NOTE this function changes qos parameters only on node, it was executed
     ok = test_utils:mock_expect(Workers, storage_logic, set_qos_parameters,
         fun(StorageId, QosParameters) ->
-            ?notice("Set qos parameters"),
             PreviousStorageMap = storage_logic:get(all),
             PreviousStorageDesc = maps:get(StorageId, PreviousStorageMap, #{}),
             NewStorageDesc = PreviousStorageDesc#{<<"qos_parameters">> => QosParameters},

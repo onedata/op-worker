@@ -60,7 +60,9 @@
 
     reconcile_qos_using_file_meta_posthooks_test/1,
 
-    reevaluate_impossible_qos_test/1
+    reevaluate_impossible_qos_test/1,
+    reevaluate_impossible_qos_race_test/1,
+    reevaluate_impossible_qos_conflict_test/1
 ]).
 
 all() -> [
@@ -94,7 +96,9 @@ all() -> [
 
     reconcile_qos_using_file_meta_posthooks_test,
 
-    reevaluate_impossible_qos_test
+    reevaluate_impossible_qos_test,
+    reevaluate_impossible_qos_race_test,
+    reevaluate_impossible_qos_conflict_test
 ].
 
 
@@ -733,6 +737,126 @@ reconcile_qos_using_file_meta_posthooks_test(Config) ->
 
 
 reevaluate_impossible_qos_test(Config) ->
+    [Worker1, Worker2, _Worker3 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+
+    DirName = <<"dir1">>,
+    DirPath = filename:join(?SPACE_PATH1, DirName),
+    FileName = <<"file1">>,
+
+    QosSpec = #fulfill_qos_test_spec{
+        initial_dir_structure = #test_dir_structure{
+            worker = Worker2,
+            dir_structure = {?SPACE_PATH1, [
+                {DirName, [{FileName, ?TEST_DATA, [?PROVIDER_ID(Worker2)]}]}
+            ]}
+        },
+        qos_to_add = [
+            #qos_to_add{
+                worker = Worker1,
+                qos_name = ?QOS1,
+                path = DirPath,
+                expression = <<"country=PL">>,
+                replicas_num = 2
+            }
+        ],
+        expected_qos_entries = [
+            #expected_qos_entry{
+                workers = Workers,
+                qos_name = ?QOS1,
+                file_key = {path, DirPath},
+                replicas_num = 2,
+                qos_expression_in_rpn = [<<"country=PL">>],
+                possibility_check = {impossible, ?PROVIDER_ID(Worker1)}
+            }
+        ],
+        wait_for_qos_fulfillment = []
+    },
+
+    {_GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
+
+    ok = rpc:call(Worker2, storage, set_qos_parameters, [initializer:get_storage_id(Worker2), #{<<"country">> => <<"PL">>}]),
+    % Impossible qos reevaluation is called after successful set_qos_parameters
+
+    ExpectedQosEntriesAfter = [
+        #expected_qos_entry{
+            workers = Workers,
+            qos_name = ?QOS1,
+            file_key = {path, DirPath},
+            replicas_num = 2,
+            qos_expression_in_rpn = [<<"country=PL">>],
+            possibility_check = {possible, ?PROVIDER_ID(Worker2)}
+        }
+    ],
+    qos_tests_utils:wait_for_qos_fulfillment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntriesAfter),
+
+    ExpectedFileQos = [
+        #expected_file_qos{
+            workers = Workers,
+            path = DirPath,
+            qos_entries = [?QOS1],
+            assigned_entries = #{
+                initializer:get_storage_id(Worker1) => [?QOS1],
+                initializer:get_storage_id(Worker2) => [?QOS1]
+            }
+        }
+    ],
+    qos_tests_utils:assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, true, 10).
+
+
+reevaluate_impossible_qos_race_test(Config) ->
+    % this test checks appropriate handling of situation, when provider, on which entry was created,
+    % do not have full knowledge of remote QoS parameters
+    [Worker1, Worker2, _Worker3 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+
+    DirName = <<"dir1">>,
+    DirPath = filename:join(?SPACE_PATH1, DirName),
+    FileName = <<"file1">>,
+
+    ok = rpc:call(Worker2, storage, set_qos_parameters, [initializer:get_storage_id(Worker2), #{<<"country">> => <<"other">>}]),
+
+    QosSpec = #fulfill_qos_test_spec{
+        initial_dir_structure = #test_dir_structure{
+            worker = Worker2,
+            dir_structure = {?SPACE_PATH1, [
+                {DirName, [{FileName, ?TEST_DATA, [?PROVIDER_ID(Worker2)]}]}
+            ]}
+        },
+        qos_to_add = [
+            #qos_to_add{
+                worker = Worker1,
+                qos_name = ?QOS1,
+                path = DirPath,
+                expression = <<"country=other">>
+            }
+        ],
+        expected_qos_entries = [
+            #expected_qos_entry{
+                workers = Workers,
+                qos_name = ?QOS1,
+                file_key = {path, DirPath},
+                replicas_num = 1,
+                qos_expression_in_rpn = [<<"country=other">>],
+                possibility_check = {possible, ?PROVIDER_ID(Worker2)}
+            }
+        ],
+        wait_for_qos_fulfillment = []
+    },
+
+    {_GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
+
+    ExpectedFileQos = [
+        #expected_file_qos{
+            workers = Workers,
+            path = DirPath,
+            qos_entries = [?QOS1],
+            assigned_entries = #{initializer:get_storage_id(Worker2) => [?QOS1]}
+        }
+    ],
+    qos_tests_utils:assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, true, 10).
+
+
+reevaluate_impossible_qos_conflict_test(Config) ->
+    % this test checks conflict resolution, when multiple providers mark entry as possible
     [Worker1, Worker2, _Worker3 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
 
     DirName = <<"dir1">>,
