@@ -47,6 +47,9 @@
 -define(REMOVE_SESSION, remove_session).
 -define(CHECK_SESSION_ACTIVITY, check_session_activity).
 -define(CHECK_SESSION_VALIDITY, check_session_validity).
+-define(UPDATE_CREDENTIALS_REQ(__AccessToken, __AudienceToken),
+    {update_credentials, __AccessToken, __AudienceToken}
+).
 
 -define(SESSION_REMOVAL_RETRY_DELAY, 15).   % in seconds
 -define(SESSION_VALIDITY_CHECK_INTERVAL,
@@ -79,7 +82,7 @@ request_credentials_update(SessionId, AccessToken, AudienceToken) ->
         {ok, #document{value = #session{watcher = SessionWatcher}}} ->
             gen_server2:cast(
                 SessionWatcher,
-                {update_credentials, AccessToken, AudienceToken}
+                ?UPDATE_CREDENTIALS_REQ(AccessToken, AudienceToken)
             );
         _ ->
             ok
@@ -103,17 +106,16 @@ request_credentials_update(SessionId, AccessToken, AudienceToken) ->
 init([SessId, SessType]) ->
     process_flag(trap_exit, true),
     Self = self(),
-    {ok, _} = session:update(SessId, fun(Session = #session{}) ->
-        {ok, Session#session{
+    {ok, #document{value = Session}} = session:update(SessId, fun(#session{} = Sess) ->
+        {ok, Sess#session{
             status = active,
             watcher = Self
         }}
     end),
 
     GracePeriod = get_session_grace_period(SessType),
-    {ok, #document{value = Session}} = session:get(SessId),
-
     schedule_session_activity_checkup(GracePeriod),
+
     % Auth was checked by auth_manager not so long ago (just before creation
     % of session) so result should be cached and immediate check will not be
     % expensive. Instead, it will allow to fetch TokenTTL and adjust real
@@ -158,7 +160,7 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({update_credentials, AccessToken, AudienceToken}, #state{
+handle_cast(?UPDATE_CREDENTIALS_REQ(AccessToken, AudienceToken), #state{
     session_id = SessionId,
     identity = Identity,
     auth = OldTokenAuth,
@@ -338,7 +340,7 @@ mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
             {ok, Sess#session{status = inactive}}
     end,
     case session:update(SessionId, Diff) of
-        {ok, SessionId} ->
+        {ok, _} ->
             true;
         {error, {grace_period_not_exceeded, RemainingTime}} ->
             {false, RemainingTime};
@@ -374,12 +376,12 @@ check_auth_validity(TokenAuth, Identity) ->
 
 
 %% @private
--spec mark_inactive(SessionId) -> {ok, SessionId} | {error, term()} when
-    SessionId :: session:id().
+-spec mark_inactive(session:id()) -> ok.
 mark_inactive(SessionId) ->
-    session:update(SessionId, fun(#session{} = Sess) ->
+    {ok, _} = session:update(SessionId, fun(#session{} = Sess) ->
         {ok, Sess#session{status = inactive}}
-    end).
+    end),
+    ok.
 
 
 %% @private
