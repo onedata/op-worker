@@ -16,7 +16,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([send/2, forward/1, broadcast/4]).
@@ -114,7 +114,7 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
         case Result of
             ok ->
                 ok;
-            ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER ->
+            ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER ->
                 ?debug("Cannot broadcast changes batch to provider ~p due to "
                        "no available connection", [ProviderId]);
             {error, Reason} ->

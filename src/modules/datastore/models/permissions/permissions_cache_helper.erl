@@ -30,7 +30,8 @@
 -define(CTX, #{
     model => ?MODULE,
     disc_driver => undefined,
-    volatile => true
+    volatile => true,
+    routing => local
 }).
 
 %%%===================================================================

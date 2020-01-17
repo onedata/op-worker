@@ -5,8 +5,8 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model for file's metadata. Implemets low-level metadata operations such as
-%%%      walking through file graph.
+%%% @doc Model for file's metadata. Implements low-level metadata
+%%% operations such as walking through file graph.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta).
@@ -36,8 +36,10 @@
 -export([
     get_child/2, get_child_uuid/2,
     list_children/2, list_children/3, list_children/4,
-    list_children/5, list_children/6
+    list_children/5, list_children/6,
+    list_children_whitelisted/4
 ]).
+-export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
@@ -57,17 +59,22 @@
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
 -type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE.
--type offset() :: non_neg_integer().
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
 -type time() :: non_neg_integer().
 -type file_meta() :: #file_meta{}.
 -type posix_permissions() :: non_neg_integer().
+-type permissions_type() :: posix | acl.
+
+%% @formatter:off
 % Listing options (see datastore_links_iter.erl in cluster_worker for more information about link listing options)
+-type offset() :: integer().
+-type non_neg_offset() :: non_neg_integer().
+-type limit() :: non_neg_integer().
 -type list_opts() :: #{
     token => datastore_links_iter:token() | undefined,
-    size => non_neg_integer(),
-    offset => non_neg_integer(),
+    size => limit(),
+    offset => offset(),
     prev_link_name => name(),
     prev_tree_id => od_provider:id()}.
 % Map returned from listing functions, containing information needed for next batch listing
@@ -75,10 +82,13 @@
     token => datastore_links_iter:token(),
     last_name => name(),
     last_tree => od_provider:id()}.
+%% @formatter:on
 
--export_type([doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
-    offset/0, size/0, mode/0, time/0, posix_permissions/0,
-    file_meta/0]).
+-export_type([
+    doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
+    size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    offset/0, non_neg_offset/0, limit/0, file_meta/0
+]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -87,6 +97,12 @@
     mutator => oneprovider:get_id_or_undefined(),
     local_links_tree_id => oneprovider:get_id_or_undefined()
 }).
+
+% For each "normal" file (including spaces) scope is id of a space to
+% which the file belongs.
+% For root directory and users' root directories we use "special" scope
+% as they don't belong to any space
+-define(ROOT_DIR_SCOPE, <<>>).
 
 %%%===================================================================
 %%% API
@@ -109,7 +125,7 @@ save(Doc) ->
 -spec save(doc(), boolean()) -> {ok, uuid()} | {error, term()}.
 
 save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
-    ?extract_key(datastore_model:save(?CTX, Doc));
+    ?extract_key(datastore_model:save(?CTX#{memory_copies => all}, Doc));
 save(Doc, GeneratedKey) ->
     ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
 
@@ -131,33 +147,23 @@ create(Parent, FileDoc) ->
 %%--------------------------------------------------------------------
 -spec create({uuid, ParentUuid :: uuid()}, doc(), datastore:tree_ids()) ->
     {ok, uuid()} | {error, term()}.
-create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
-    name = FileName,
-    is_scope = IsScope
-}}, CheckTrees) ->
+create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{name = FileName}}, CheckTrees) ->
     ?run(begin
         true = is_valid_filename(FileName),
-        {ok, ParentDoc} = file_meta:get(ParentUuid),
-        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc),
-        SpaceDirUuid = case IsScope of
-            true ->
-                FileDoc2#document.key;
-            false ->
-                {ok, ScopeId} = get_scope_id(ParentDoc),
-                ScopeId
-        end,
-        SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid_no_error(SpaceDirUuid),
+        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
+        {ok, ParentDoc} = file_meta:get({uuid, ParentUuid}),
+        {ok, ParentScopeId} = get_scope_id(ParentDoc),
+        {ok, ScopeId} = get_scope_id(FileDoc2),
+        ScopeId2 = utils:ensure_defined(ScopeId, undefined, ParentScopeId),
         FileDoc3 = FileDoc2#document{
-            scope = SpaceId,
+            scope = ScopeId2,
             value = FileMeta#file_meta{
-                scope = SpaceDirUuid,
                 provider_id = oneprovider:get_id(),
                 parent_uuid = ParentUuid
             }
         },
-
         LocalTreeId = oneprovider:get_id(),
-        Ctx = ?CTX#{scope => ParentDoc#document.scope},
+        Ctx = ?CTX#{scope => ParentScopeId},
         Link = {FileName, FileUuid},
         case datastore_model:check_and_add_links(Ctx, ParentUuid, LocalTreeId, CheckTrees, Link) of
             {ok, #link{}} ->
@@ -191,7 +197,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
 
                         case FileExists of
                             false ->
-                                create({uuid, ParentUuid}, FileDoc, []);
+                                create({uuid, ParentUuid}, FileDoc, [LocalTreeId]);
                             _ ->
                                 Eexists
                         end;
@@ -234,15 +240,15 @@ get(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_including_deleted(uuid()) -> {ok, doc()} | {error, term()}.
-get_including_deleted(?ROOT_DIR_UUID) ->
+get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
     {ok, #document{
-        key = ?ROOT_DIR_UUID,
+        key = ?GLOBAL_ROOT_DIR_UUID,
         value = #file_meta{
-            name = ?ROOT_DIR_NAME,
+            name = ?GLOBAL_ROOT_DIR_NAME,
             is_scope = true,
             mode = 8#111,
             owner = ?ROOT_USER_ID,
-            parent_uuid = ?ROOT_DIR_UUID
+            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     }};
 get_including_deleted(FileUuid) ->
@@ -439,31 +445,31 @@ get_child_uuid(ParentUuid, Name) ->
 %% @equiv list_children_internal(Entry, #{size => Size, token => #link_token{}}).
 %% @end
 %%--------------------------------------------------------------------
--spec list_children(entry(), non_neg_integer()) ->
+-spec list_children(entry(), limit()) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Size) ->
-    list_children_internal(Entry, #{size => Size, token => #link_token{}}).
+list_children(Entry, Limit) ->
+    list_children_internal(Entry, #{size => Limit, token => #link_token{}}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv list_children(Entry, Offset, Size, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec list_children(entry(), integer(), non_neg_integer()) ->
+-spec list_children(entry(), offset(), limit()) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Size) ->
-    list_children_internal(Entry, #{offset => Offset, size => Size}).
+list_children(Entry, Offset, Limit) ->
+    list_children_internal(Entry, #{offset => Offset, size => Limit}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv list_children(Entry, Offset, Size, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec list_children(entry(), integer(), non_neg_integer(),
+-spec list_children(entry(), offset(), limit(),
     datastore_links_iter:token() | undefined) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Size, Token) ->
-    list_children(Entry, Offset, Size, Token, undefined).
+list_children(Entry, Offset, Limit, Token) ->
+    list_children(Entry, Offset, Limit, Token, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -472,14 +478,14 @@ list_children(Entry, Offset, Size, Token) ->
 %%--------------------------------------------------------------------
 -spec list_children(
     Entry :: entry(),
-    Offset :: integer(),
-    Size :: non_neg_integer(),
+    Offset :: offset(),
+    Limit :: limit(),
     Token :: undefined | datastore_links_iter:token(),
     PrevLinkKey :: undefined | name()
 ) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Size, Token, PrevLinkKey) ->
-    list_children(Entry, Offset, Size, Token, PrevLinkKey, undefined).
+list_children(Entry, Offset, Limit, Token, PrevLinkKey) ->
+    list_children(Entry, Offset, Limit, Token, PrevLinkKey, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -488,17 +494,17 @@ list_children(Entry, Offset, Size, Token, PrevLinkKey) ->
 %%--------------------------------------------------------------------
 -spec list_children(
     Entry :: entry(),
-    Offset :: integer(),
-    Size :: non_neg_integer(),
+    Offset :: offset(),
+    Limit :: limit(),
     Token :: undefined | datastore_links_iter:token(),
     PrevLinkKey :: undefined | name(),
     PrevTeeID :: undefined | oneprovider:id()
 ) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Size, Token, PrevLinkKey, PrevTeeID) ->
+list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTeeID) ->
     Opts = case Offset of
-        0 -> #{size => Size};
-        _ -> #{offset => Offset, size => Size}
+        0 -> #{size => Limit};
+        _ -> #{offset => Offset, size => Limit}
     end,
 
     Opts2 = case Token of
@@ -517,6 +523,45 @@ list_children(Entry, Offset, Size, Token, PrevLinkKey, PrevTeeID) ->
     end,
 
     list_children_internal(Entry, Opts4).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists children of given #file_meta bounded by specified AllowedChildren
+%% and given options (PositiveOffset and Limit).
+%% @end
+%%--------------------------------------------------------------------
+-spec list_children_whitelisted(
+    Entry :: entry(),
+    NonNegOffset :: non_neg_offset(),
+    Limit :: limit(),
+    ChildrenWhiteList :: [file_meta:name()]
+) ->
+    {ok, [#child_link_uuid{}]} | {error, term()}.
+list_children_whitelisted(Entry, NonNegOffset, Limit, ChildrenWhiteList) when NonNegOffset >= 0 ->
+    Names = lists:filter(fun(ChildName) ->
+        not (is_hidden(ChildName) orelse is_deletion_link(ChildName))
+    end, ChildrenWhiteList),
+
+    ?run(begin
+        {ok, FileUuid} = get_uuid(Entry),
+
+        ValidLinks = lists:flatmap(fun
+            ({ok, L}) ->
+                L;
+            ({error, not_found}) ->
+                [];
+            ({error, _} = Error) ->
+                error(Error)
+        end, datastore_model:get_links(?CTX, FileUuid, all, Names)),
+
+        case NonNegOffset < length(ValidLinks) of
+            true ->
+                RequestedLinks = lists:sublist(ValidLinks, NonNegOffset+1, Limit),
+                {ok, tag_children(RequestedLinks)};
+            false ->
+                {ok, []}
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -615,7 +660,7 @@ get_ancestors(FileUuid) ->
         {ok, #document{key = Key}} = file_meta:get(FileUuid),
         {ok, get_ancestors2(Key, [])}
     end).
-get_ancestors2(?ROOT_DIR_UUID, Acc) ->
+get_ancestors2(?GLOBAL_ROOT_DIR_UUID, Acc) ->
     Acc;
 get_ancestors2(FileUuid, Acc) ->
     {ok, ParentUuid} = get_parent_uuid({uuid, FileUuid}),
@@ -623,14 +668,20 @@ get_ancestors2(FileUuid, Acc) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets "scope" id of given document. "Scope" document is the nearest ancestor
-%% with #file_meta.is_scope == true.
+%% Gets "scope" id of given document.
 %% @end
 %%--------------------------------------------------------------------
--spec get_scope_id(entry()) -> {ok, ScopeId :: datastore:key()} | {error, term()}.
-get_scope_id(#document{key = FileUuid, value = #file_meta{is_scope = true}}) ->
-    {ok, FileUuid};
-get_scope_id(#document{value = #file_meta{is_scope = false, scope = Scope}}) ->
+-spec get_scope_id(entry()) -> {ok, ScopeId :: od_space:id() | undefined} | {error, term()}.
+get_scope_id(#document{key = FileUuid, value = #file_meta{is_scope = true}, scope = <<>>}) ->
+    % scope has not been set yet
+    case fslogic_uuid:is_space_dir_uuid(FileUuid) of
+        true -> {ok, fslogic_uuid:space_dir_uuid_to_spaceid(FileUuid)};
+        false -> {ok, ?ROOT_DIR_SCOPE}
+    end;
+get_scope_id(#document{value = #file_meta{is_scope = false}, scope = <<>>}) ->
+    % scope has not been set yet
+    {ok, undefined};
+get_scope_id(#document{value = #file_meta{}, scope = Scope}) ->
     {ok, Scope};
 get_scope_id(Entry) ->
     ?run(begin
@@ -657,19 +708,25 @@ setup_onedata_user(UserId, EffSpaces) ->
             end, EffSpaces),
 
             FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
-            ScopeId = <<>>, % TODO - do we need scope for user dir
-            case create({uuid, ?ROOT_DIR_UUID},
-                #document{key = FileUuid,
+            case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
+                #document{
+                    key = FileUuid,
                     value = #file_meta{
-                        name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
-                        owner = ?ROOT_USER_ID, is_scope = true,
-                        parent_uuid = ?ROOT_DIR_UUID
+                        name = UserId,
+                        type = ?DIRECTORY_TYPE,
+                        mode = 8#1755,
+                        owner = ?ROOT_USER_ID,
+                        is_scope = true,
+                        parent_uuid = ?GLOBAL_ROOT_DIR_UUID
                     }
-                }) of
+                })
+            of
                 {ok, _RootUuid} ->
-                    {ok, _} = times:save(#document{key = FileUuid, value =
-                    #times{mtime = CTime, atime = CTime, ctime = CTime},
-                        scope = ScopeId}),
+                    {ok, _} = times:save(#document{
+                        key = FileUuid,
+                        value = #times{mtime = CTime, atime = CTime, ctime = CTime},
+                        scope = ?ROOT_DIR_SCOPE
+                    }),
                     ok;
                 {error, already_exists} ->
                     ok
@@ -724,11 +781,12 @@ make_space_exist(SpaceId) ->
         key = SpaceDirUuid,
         value = #file_meta{
             name = SpaceId, type = ?DIRECTORY_TYPE,
-            mode = ?DEFAULT_SPACE_DIR_MODE, owner = ?ROOT_USER_ID, is_scope = true,
-            parent_uuid = ?ROOT_DIR_UUID
+            mode = ?DEFAULT_SPACE_DIR_MODE,
+            owner = ?ROOT_USER_ID, is_scope = true,
+            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     },
-    case file_meta:create({uuid, ?ROOT_DIR_UUID}, FileDoc) of
+    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
         {ok, _} ->
             TimesDoc = #document{
                 key = SpaceDirUuid,
@@ -752,9 +810,7 @@ make_space_exist(SpaceId) ->
 -spec new_doc(undefined | uuid(), undefined | name(), undefined | type(),
     posix_permissions(), undefined | od_user:id(), undefined | od_group:id(),
     uuid(), od_space:id()) -> doc().
-new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, ParentUuid,
-    SpaceId
-) ->
+new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, ParentUuid, SpaceId) ->
     #document{
         key = FileUuid,
         value = #file_meta{
@@ -764,8 +820,7 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, ParentUuid,
             owner = Owner,
             group_owner = GroupOwner,
             parent_uuid = ParentUuid,
-            provider_id = oneprovider:get_id(),
-            scope = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)
+            provider_id = oneprovider:get_id()
         },
         scope = SpaceId
     }.
@@ -826,6 +881,37 @@ is_child_of_hidden_dir(Path) ->
     {_, ParentPath} = fslogic_path:basename_and_parent(Path),
     {Parent, _} = fslogic_path:basename_and_parent(ParentPath),
     is_hidden(Parent).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file active permissions type, that is info which permissions
+%% are taken into account when checking authorization (acl if it is defined
+%% or posix otherwise).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_active_perms_type(file_meta:uuid()) ->
+    {ok, file_meta:permissions_type()} | {error, term()}.
+get_active_perms_type(FileUuid) ->
+    case file_meta:get({uuid, FileUuid}) of
+        {ok, #document{value = #file_meta{acl = []}}} ->
+            {ok, posix};
+        {ok, _} ->
+            {ok, acl};
+        {error, _} = Error ->
+            Error
+    end.
+
+-spec update_mode(uuid(), posix_permissions()) -> ok | {error, term()}.
+update_mode(FileUuid, NewMode) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
+        {ok, FileMeta#file_meta{mode = NewMode}}
+    end)).
+
+-spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.
+update_acl(FileUuid, NewAcl) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
+        {ok, FileMeta#file_meta{acl = NewAcl}}
+    end)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1018,11 +1104,12 @@ get_uuid(FileUuid) ->
 %% Generates uuid if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec fill_uuid(doc()) -> doc().
-fill_uuid(Doc = #document{key = undefined}) ->
-    NewUuid = datastore_utils:gen_key(),
-    Doc#document{key = NewUuid};
-fill_uuid(Doc) ->
+-spec fill_uuid(doc(), uuid()) -> doc().
+fill_uuid(Doc = #document{key = undefined, value = #file_meta{type = ?DIRECTORY_TYPE}}, _ParentUuid) ->
+    Doc#document{key = datastore_key:new()};
+fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
+    Doc#document{key = datastore_key:new_adjacent_to(ParentUuid)};
+fill_uuid(Doc, _ParentUuid) ->
     Doc.
 
 %%--------------------------------------------------------------------
@@ -1098,7 +1185,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    7.
+    9.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1226,6 +1313,49 @@ get_record_struct(7) ->
         {shares, [string]},
         {deleted, boolean},
         {parent_uuid, string}
+    ]};
+get_record_struct(8) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        % acl has been added in this version
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {owner, string},
+        {group_owner, string},
+        {is_scope, boolean},
+        {scope, string},
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string}
+    ]};
+get_record_struct(9) ->
+    {record, [
+        {name, string},
+        {type, atom},
+        {mode, integer},
+        {acl, [{record, [
+            {acetype, integer},
+            {aceflags, integer},
+            {identifier, string},
+            {name, string},
+            {acemask, integer}
+        ]}]},
+        {owner, string},
+        {group_owner, string},
+        {is_scope, boolean},
+        % scope field has been deleted in this version
+        {provider_id, string},
+        {shares, [string]},
+        {deleted, boolean},
+        {parent_uuid, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -1268,7 +1398,22 @@ upgrade_record(6, {?MODULE, Name, Type, Mode, Owner, GroupOwner, _Size, _Version
 ) ->
     {7, {?MODULE, Name, Type, Mode, Owner, GroupOwner, IsScope,
         Scope, ProviderId, Shares, Deleted, ParentUuid}
-    }.
+    };
+upgrade_record(7, {
+    ?MODULE, Name, Type, Mode, Owner, GroupOwner, IsScope,
+    Scope, ProviderId, Shares, Deleted, ParentUuid
+}) ->
+    {8, {?MODULE, Name, Type, Mode, [],
+        Owner, GroupOwner, IsScope, Scope,
+        ProviderId, Shares, Deleted, ParentUuid
+    }};
+upgrade_record(8, {
+    ?MODULE, Name, Type, Mode, ACL, Owner, GroupOwner, IsScope,
+    _Scope, ProviderId, Shares, Deleted, ParentUuid
+}) ->
+    {9, {?MODULE, Name, Type, Mode, ACL, Owner, GroupOwner, IsScope,
+        ProviderId, Shares, Deleted, ParentUuid
+    }}.
 
 %%--------------------------------------------------------------------
 %% @doc

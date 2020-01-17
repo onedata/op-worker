@@ -30,15 +30,16 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    fold_enabled => true
+    fold_enabled => true,
+    memory_copies => all,
+    disc_driver => undefined
 }).
 
 %% API
 -export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0]).
--export([get_record_struct/1, upgrade_record/2]).
+-export([get_ctx/0]).
 
 %%%===================================================================
 %%% API
@@ -75,120 +76,3 @@ list() ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_version() -> datastore_model:record_version().
-get_record_version() ->
-    3.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_struct(datastore_model:record_version()) ->
-    datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {client_name, string},
-        {urls, [string]},
-
-        {spaces, [string]},
-
-        {public_only, boolean},
-        {revision_history, [term]}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {name, string},
-        {urls, [string]},
-
-        {spaces, #{string => integer}},
-
-        {eff_users, [string]},
-        {eff_groups, [string]},
-
-        {cache_state, #{atom => term}}
-    ]};
-get_record_struct(3) ->
-    {record, [
-        {name, string},
-        {admin_email, string},
-        {subdomain_delegation, boolean},
-        {domain, string},
-        {subdomain, string},
-        {latitude, float},
-        {longitude, float},
-        {online, boolean},
-
-        {spaces, #{string => integer}},
-
-        {eff_users, [string]},
-        {eff_groups, [string]},
-
-        {cache_state, #{atom => term}}
-    ]}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades model's record from provided version to the next one.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, Provider) ->
-    {
-        od_provider,
-        Name,
-        Urls,
-        _Spaces,
-
-        _PublicOnly,
-        _RevisionHistory
-    } = Provider,
-    {2, {od_provider,
-        Name,
-        Urls,
-
-        #{},
-
-        [],
-        [],
-
-        #{}
-    }};
-upgrade_record(2, Provider) ->
-    {
-        od_provider,
-        Name,
-        Urls,
-
-        #{},
-
-        [],
-        [],
-
-        #{}
-    } = Provider,
-    #{host := Domain} = url_utils:parse(hd(Urls)),
-    {3, {od_provider,
-        Name,
-        undefined,
-        false,
-        Domain,
-        undefined,
-        0.0,
-        0.0,
-        false,
-
-        #{},
-
-        [],
-        [],
-
-        #{}
-    }}.

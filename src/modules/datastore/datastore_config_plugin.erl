@@ -30,24 +30,22 @@ get_models() -> [
     od_handle_service,
     od_handle,
     od_harvester,
+    od_storage,
     provider_auth,
-    authorization_nonce,
     file_download_code,
     subscription,
     file_subscription,
     session,
-    user_identity,
     file_meta,
-    storage,
+    storage_config,
     file_location,
     file_local_blocks,
-    space_storage,
     dbsync_state,
     files_to_chown,
     space_quota,
     monitoring_state,
     file_handles,
-    sfm_handle,
+    sd_handle,
     custom_metadata,
     permissions_cache,
     permissions_cache_helper,
@@ -72,7 +70,16 @@ get_models() -> [
     file_popularity_config,
     harvesting_state,
     idp_access_token,
-    tree_traverse_job
+    tree_traverse_job,
+    file_qos,
+    qos_entry,
+    file_meta_posthooks,
+    storage_sync_links,
+    storage_traverse_job,
+
+    %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
+    space_storage,
+    storage
 ].
 
 %%--------------------------------------------------------------------

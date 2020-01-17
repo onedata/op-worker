@@ -18,15 +18,15 @@
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("rest_test_utils.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/posix/acl.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/privileges.hrl").
 
 %% API
 -export([
@@ -312,7 +312,7 @@ posix_mode_put(Config) ->
     NewMode = 8#777,
     Body = json_utils:encode(#{<<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
     {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary>>, put,
-        ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Body),
+        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), Body),
 
     % then
     {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
@@ -393,7 +393,7 @@ xattr_put(Config) ->
     % when
     Body = json_utils:encode(#{<<"k1">> => <<"v1">>}),
     {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary>>, put,
-        ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Body),
+        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), Body),
 
     % then
     {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary, "?attribute=k1">>, get, ?USER_1_AUTH_HEADERS(Config), []),
@@ -587,7 +587,7 @@ create_share_base(Config, RestPathType) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
     SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
@@ -666,7 +666,7 @@ get_file_share_base(Config, RestPathType) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
     SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
@@ -748,7 +748,7 @@ get_share_public_id(Config) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
     SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
@@ -820,7 +820,7 @@ delete_file_share_base(Config, RestPathType) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
     SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
@@ -886,7 +886,7 @@ delete_share_public_id(Config) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
     SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
@@ -942,7 +942,7 @@ update_share_name_base(Config, RestPathType) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
     SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
@@ -1013,7 +1013,7 @@ update_share_name_public_id(Config) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
     SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
@@ -1069,12 +1069,12 @@ set_get_json_metadata(Config) ->
     % when
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), "{\"key\": \"value\"}")),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), "{\"key\": \"value\"}")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         #{
@@ -1086,7 +1086,7 @@ set_get_json_metadata(Config) ->
     % then
     ?assertMatch({ok, 200, _, <<"\"value\"">>},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])).
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), [])).
 
 set_get_json_metadata_id(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -1097,12 +1097,12 @@ set_get_json_metadata_id(Config) ->
     % when
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata-id/json/", ObjectId/binary>>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), "{\"key\": \"value\"}")),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), "{\"key\": \"value\"}")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata-id/json/", ObjectId/binary>>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         #{
@@ -1114,7 +1114,7 @@ set_get_json_metadata_id(Config) ->
     % then
     ?assertMatch({ok, 200, _, <<"\"value\"">>},
         rest_test_utils:request(WorkerP1, <<"metadata-id/json/", ObjectId/binary, "?filter_type=keypath&filter=key">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])).
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), [])).
 
 set_get_rdf_metadata(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -1122,12 +1122,12 @@ set_get_rdf_metadata(Config) ->
     % when
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/rdf/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/rdf+xml">>}]), "some_xml")),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/rdf+xml">>}]), "some_xml")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/rdf/space2">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/rdf+xml">>}]), [])),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/rdf+xml">>}]), [])),
     ?assertMatch(<<"some_xml">>, Body).
 
 set_get_rdf_metadata_id(Config) ->
@@ -1139,12 +1139,12 @@ set_get_rdf_metadata_id(Config) ->
     % when
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata-id/rdf/", ObjectId/binary>>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/rdf+xml">>}]), "some_xml")),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/rdf+xml">>}]), "some_xml")),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata-id/rdf/", ObjectId/binary>>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/rdf+xml">>}]), [])),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/rdf+xml">>}]), [])),
     ?assertMatch(<<"some_xml">>, Body).
 
 set_get_json_metadata_inherited(Config) ->
@@ -1154,16 +1154,16 @@ set_get_json_metadata_inherited(Config) ->
     % when
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\": {\"a1\": \"b1\"}, \"b\": \"c\", \"e\": \"f\"}">>)),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), <<"{\"a\": {\"a1\": \"b1\"}, \"b\": \"c\", \"e\": \"f\"}">>)),
     {ok, _} = lfm_proxy:mkdir(WorkerP1, SessionId, <<"/space2/dir">>),
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2/dir">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\": {\"a2\": \"b2\"}, \"b\": \"d\"}">>)),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), <<"{\"a\": {\"a2\": \"b2\"}, \"b\": \"d\"}">>)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2/dir?inherited=true">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(
         #{
@@ -1188,24 +1188,24 @@ set_get_xattr_inherited(Config) ->
 
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"a\":5}">>)),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), <<"{\"a\":5}">>)),
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrSpace)),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), XattrSpace)),
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrDir)),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), XattrDir)),
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrChild)),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), XattrChild)),
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), XattrChild2)),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), XattrChild2)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child?inherited=true">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(#{
         <<"k1">> := <<"v1">>,
@@ -1220,35 +1220,35 @@ set_get_json_metadata_using_filter(Config) ->
     % when
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"key1\": \"value1\", \"key2\": \"value2\", \"key3\": [\"v1\", \"v2\"]}">>)),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), <<"{\"key1\": \"value1\", \"key2\": \"value2\", \"key3\": [\"v1\", \"v2\"]}">>)),
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key1">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), [])),
     DecodedBody = json_utils:decode(Body),
     ?assertMatch(<<"value1">>, DecodedBody),
     {_, _, _, Body2} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key3.[1]">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), [])),
     DecodedBody2 = json_utils:decode(Body2),
     ?assertMatch(<<"v2">>, DecodedBody2),
 
     %when
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key1">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"\"value11\"">>)),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), <<"\"value11\"">>)),
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key2">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"{\"key22\": \"value22\"}">>)),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), <<"{\"key22\": \"value22\"}">>)),
     ?assertMatch({ok, 204, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2?filter_type=keypath&filter=key3.[0]">>, put,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), <<"\"v11\"">>)),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), <<"\"v11\"">>)),
 
     %then
     {_, _, _, ReponseBody} = ?assertMatch({ok, 200, _, _},
         rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), [])),
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), [])),
     ?assertMatch(
         #{
             <<"key1">> := <<"value11">>,
@@ -1266,10 +1266,10 @@ primitive_json_metadata_test(Config) ->
     lists:foreach(fun(Primitive) ->
         ?assertMatch({ok, 204, _, _},
             rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-                ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), Primitive)),
+                ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), Primitive)),
         ?assertMatch({ok, 200, _, Primitive},
             rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, get,
-                ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]), []))
+                ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), []))
     end, Primitives).
 
 empty_metadata_invalid_json_test(Config) ->
@@ -1280,7 +1280,7 @@ empty_metadata_invalid_json_test(Config) ->
     lists:foreach(fun(InvalidJson) ->
         ?assertMatch({ok, 400, _, _},
             rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-                ?USER_1_AUTH_HEADERS(Config, [{<<"content-type">>, <<"application/json">>}]), InvalidJson))
+                ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), InvalidJson))
     end, InvalidJsons).
 
 list_transfers(Config) ->
@@ -1500,18 +1500,19 @@ init_per_testcase(list_transfers, Config) ->
     OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [<<"space4">>, <<"user1">>]),
     init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
-init_per_testcase(Case, Config) when Case =:= create_share orelse
-        Case =:= create_share_id orelse
-        Case =:= get_share orelse
-        Case =:= get_share_id orelse
-        Case =:= get_share_public_id orelse
-        Case =:= delete_share orelse
-        Case =:= delete_share_id orelse
-        Case =:= delete_share_public_id orelse
-        Case =:= update_share_name orelse
-        Case =:= update_share_name_id orelse
-        Case =:= update_share_name_public_id->
-    Workers = ?config(op_worker_nodes, Config),
+init_per_testcase(Case, Config) when
+    Case =:= create_share orelse
+    Case =:= create_share_id orelse
+    Case =:= get_share orelse
+    Case =:= get_share_id orelse
+    Case =:= get_share_public_id orelse
+    Case =:= delete_share orelse
+    Case =:= delete_share_id orelse
+    Case =:= delete_share_public_id orelse
+    Case =:= update_share_name orelse
+    Case =:= update_share_name_id orelse
+    Case =:= update_share_name_public_id
+->
     initializer:mock_share_logic(Config),
     init_per_testcase(all, Config);
 
@@ -1538,18 +1539,19 @@ end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     test_utils:mock_unload(Workers, changes),
     end_per_testcase(all, Config);
 
-end_per_testcase(Case, Config)  when Case =:= create_share orelse
-            Case =:= create_share_id orelse
-            Case =:= get_share orelse
-            Case =:= get_share_id orelse
-            Case =:= get_share_public_id orelse
-            Case =:= delete_share orelse
-            Case =:= delete_share_id orelse
-            Case =:= delete_share_public_id orelse
-            Case =:= update_share_name orelse
-            Case =:= update_share_name_id orelse
-            Case =:= update_share_name_public_id ->
-    Workers = ?config(op_worker_nodes, Config),
+end_per_testcase(Case, Config) when
+    Case =:= create_share orelse
+    Case =:= create_share_id orelse
+    Case =:= get_share orelse
+    Case =:= get_share_id orelse
+    Case =:= get_share_public_id orelse
+    Case =:= delete_share orelse
+    Case =:= delete_share_id orelse
+    Case =:= delete_share_public_id orelse
+    Case =:= update_share_name orelse
+    Case =:= update_share_name_id orelse
+    Case =:= update_share_name_public_id
+->
     initializer:unmock_share_logic(Config),
     end_per_testcase(all, Config);
 
@@ -1784,7 +1786,7 @@ mock_get_share_on_other_node(OtherProviderNode, SupportingProviderNode, SessId, 
         true ->
             Res = rpc:call(SupportingProviderNode, share_logic, get, [SessId, ShareId]),
             test_utils:mock_expect(OtherProviderNode, share_logic, get,
-                fun (SessId, ShareId2) when ShareId2 == ShareId ->
+                fun (_SessId, ShareId2) when ShareId2 == ShareId ->
                     Res
                 end);
         false ->

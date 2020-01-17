@@ -46,6 +46,7 @@
     mutator => oneprovider:get_id_or_undefined()
 }).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -71,8 +72,7 @@ key(TransferType, SpaceId) ->
 -spec key(ProviderId :: od_provider:id(), TransferType :: binary(),
     SpaceId :: od_space:id()) -> binary().
 key(ProviderId, TransferType, SpaceId) ->
-    RecordId = op_gui_utils:ids_to_association(TransferType, SpaceId),
-    datastore_utils:gen_key(ProviderId, RecordId).
+    datastore_key:adjacent_from_digest([ProviderId, TransferType], SpaceId).
 
 
 %%-------------------------------------------------------------------
@@ -161,19 +161,19 @@ update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
                 {ok, SpaceTransfers#space_transfer_stats{
                     last_update = maps:merge(LastUpdateMap, NewTimestamps),
                     min_hist = transfer_histograms:update(
-                        BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
+                        BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
                         LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     ),
                     hr_hist = transfer_histograms:update(
-                        BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
+                        BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
                         LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     ),
                     dy_hist = transfer_histograms:update(
-                        BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
+                        BytesPerProvider, DyHistograms, ?DAY_PERIOD,
                         LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     ),
                     mth_hist = transfer_histograms:update(
-                        BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
+                        BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
                         LastUpdateMap, ?START_TIME, ApproxCurrentTime
                     )
                 }}
@@ -184,10 +184,10 @@ update(TransferType, SpaceId, BytesPerProvider, CurrentTime) ->
         key = Key,
         value = #space_transfer_stats{
             last_update = maps:map(fun(_, _) -> CurrentTime end, BytesPerProvider),
-            min_hist = transfer_histograms:new(BytesPerProvider, ?MINUTE_STAT_TYPE),
-            hr_hist = transfer_histograms:new(BytesPerProvider, ?HOUR_STAT_TYPE),
-            dy_hist = transfer_histograms:new(BytesPerProvider, ?DAY_STAT_TYPE),
-            mth_hist = transfer_histograms:new(BytesPerProvider, ?MONTH_STAT_TYPE)
+            min_hist = transfer_histograms:new(BytesPerProvider, ?MINUTE_PERIOD),
+            hr_hist = transfer_histograms:new(BytesPerProvider, ?HOUR_PERIOD),
+            dy_hist = transfer_histograms:new(BytesPerProvider, ?DAY_PERIOD),
+            mth_hist = transfer_histograms:new(BytesPerProvider, ?MONTH_PERIOD)
         }
     },
     case datastore_model:update(?CTX, Key, Diff, Default) of

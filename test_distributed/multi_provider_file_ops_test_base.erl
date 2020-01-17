@@ -16,7 +16,7 @@
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -69,14 +69,6 @@
     end
 ).
 -define(rpcTest(W, Function, Args), rpc:call(W, ?MODULE, Function, Args)).
-
--define(deny_user(UserId),
-    #access_control_entity{
-        acetype = ?deny_mask,
-        aceflags = ?no_flags_mask,
-        identifier = UserId,
-        acemask = (?read_mask bor ?write_mask bor ?execute_mask)
-    }).
 
 %%%===================================================================
 %%% Test skeletons
@@ -172,7 +164,7 @@ synchronizer_test_base(Config0) ->
     Blocks = case {SeparateBlocks, RandomRead} of
         {true, true} ->
             lists:map(fun(_Num) ->
-                random:uniform(FileSizeBytes)
+                rand:uniform(FileSizeBytes)
             end, lists:seq(1, BlocksCount));
         {true, _} ->
             lists:map(fun(Num) ->
@@ -250,7 +242,7 @@ synchronize_stress_test_base(Config0, RandomRead) ->
     Blocks = case RandomRead of
         true ->
             lists:map(fun(_Num) ->
-                random:uniform(FileSizeBytes)
+                rand:uniform(FileSizeBytes)
             end, lists:seq(1, BlocksCount));
         _ ->
             lists:map(fun(Num) ->
@@ -342,7 +334,7 @@ random_read_test_base(Config0, SeparateBlocks, PrintAns) ->
             end, lists:seq(1, BlocksCount));
         random ->
             lists:map(fun(_Num) ->
-                random:uniform(FileSizeBytes)
+                rand:uniform(FileSizeBytes)
             end, lists:seq(1, BlocksCount));
         _ ->
             lists:map(fun(Num) ->
@@ -553,8 +545,8 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
     TransferChunksNum = 1024,
     FileSize = ChunkSize * TransferChunksNum * TransferFileParts,
     SmallFile = {1, 1, false},
-    Transfer = {TransferChunksNum, TransferFileParts, true},
-    Files = [Transfer, SmallFile],
+    TransferredFile = {TransferChunksNum, TransferFileParts, true},
+    Files = [TransferredFile, SmallFile],
 
     Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
     Level2File2 = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -566,7 +558,7 @@ rtransfer_blocking_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
 
     % Init rtransfer using another file
     verify_workers(Workers2, fun(W) ->
-        read_big_file(Config, ChunkSize, Level2File2, W, Transfer)
+        read_big_file(Config, ChunkSize, Level2File2, W, TransferredFile)
     end, timer:minutes(5), true),
 
     lists:foreach(fun({ChunksNum, PartNum, Transfer}) ->
@@ -1106,7 +1098,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
     A1 = rpc:call(Worker1, file_meta, get, [{path, <<"/", SpaceName/binary>>}]),
     ?assertMatch({ok, _}, A1),
     {ok, SpaceDoc} = A1,
-    SpaceKey = SpaceDoc#document.key,
+%%    SpaceKey = SpaceDoc#document.key,
 %%    ct:print("Space key ~p", [SpaceKey]),
 
     DoTest = fun(TaskList) ->
@@ -1114,15 +1106,15 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
 
         GenerateDoc = fun(Type) ->
             Name = generator:gen_name(),
-            Uuid = datastore_utils:gen_key(),
-            Doc = #document{key = Uuid, value =
-            #file_meta{
-                name = Name,
-                type = Type,
-                mode = 8#775,
-                owner = User,
-                scope = SpaceKey
-            },
+            Uuid = datastore_key:new(),
+            Doc = #document{
+                key = Uuid,
+                value = #file_meta{
+                    name = Name,
+                    type = Type,
+                    mode = 8#775,
+                    owner = User
+                },
                 scope = SpaceId
             },
 %%            ct:print("Doc ~p ~p", [Uuid, Name]),
@@ -1808,12 +1800,10 @@ set_parent_link(Doc, ParentDoc, _LocId, _Path) ->
     ok.
 
 create_location(Doc, _ParentDoc, LocId, Path) ->
-    FDoc = Doc#document.value,
     FileUuid = Doc#document.key,
     SpaceId = Doc#document.scope,
-    SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(FDoc#file_meta.scope),
 
-    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
+    {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
     FileId = Path,
     Location0 = #file_location{
         blocks = [#file_block{offset = 0, size = 3}],
@@ -1836,23 +1826,22 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     {ok, _} = datastore_model:save(Ctx, LocationDoc),
 
     LeafLess = filename:dirname(FileId),
-    {ok, #document{key = StorageId} = Storage} = fslogic_storage:select_storage(SpaceId),
-    SFMHandle0 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, LeafLess, undefined),
-    case storage_file_manager:mkdir(SFMHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+    SDHandle0 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, LeafLess, undefined),
+    case storage_driver:mkdir(SDHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
             ok
     end,
 
 
-    SFMHandle1 = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, Storage, FileId, undefined),
+    SDHandle1 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, FileId, undefined),
     FileContent = <<"abc">>,
-    storage_file_manager:unlink(SFMHandle1, size(FileContent)),
-    ok = storage_file_manager:create(SFMHandle1, 8#775),
-    {ok, SFMHandle2} = storage_file_manager:open_insecure(SFMHandle1, write),
-    SFMHandle3 = storage_file_manager:set_size(SFMHandle2),
-    {ok, 3} = storage_file_manager:write(SFMHandle3, 0, FileContent),
-    storage_file_manager:fsync(SFMHandle3, false),
+    storage_driver:unlink(SDHandle1, size(FileContent)),
+    ok = storage_driver:create(SDHandle1, 8#775),
+    {ok, SDHandle2} = storage_driver:open_insecure(SDHandle1, write),
+    SDHandle3 = storage_driver:set_size(SDHandle2),
+    {ok, 3} = storage_driver:write(SDHandle3, 0, FileContent),
+    storage_driver:fsync(SDHandle3, false),
     ok.
 
 extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts) ->

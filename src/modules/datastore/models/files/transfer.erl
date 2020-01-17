@@ -513,19 +513,19 @@ mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
                     bytes_replicated = OldBytes + BytesTransferred,
                     last_update = maps:merge(LastUpdateMap, NewTimestamps),
                     min_hist = transfer_histograms:update(
-                        BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
+                        BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     hr_hist = transfer_histograms:update(
-                        BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
+                        BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     dy_hist = transfer_histograms:update(
-                        BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
+                        BytesPerProvider, DyHistograms, ?DAY_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     mth_hist = transfer_histograms:update(
-                        BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
+                        BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     )
                 }}
@@ -955,7 +955,7 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
 order_transfers(D1, D2) ->
     #document{revs = [Rev1 | _], value = T1} = D1,
     #document{revs = [Rev2 | _], value = T2} = D2,
-    IsGreaterRev = datastore_utils:is_greater_rev(Rev1, Rev2),
+    IsGreaterRev = datastore_rev:is_greater(Rev1, Rev2),
 
     Vec1 = {
         status_to_int(T1#transfer.replication_status),

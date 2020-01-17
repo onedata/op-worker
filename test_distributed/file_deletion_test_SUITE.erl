@@ -13,10 +13,11 @@
 
 -include("fuse_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("proto/common/credentials.hrl").
 
@@ -69,8 +70,6 @@ all() -> ?ALL(?TEST_CASES).
 
 -define(FILE_UUID, <<"file_uuid">>).
 -define(FILE_GUID, file_id:pack_guid(?FILE_UUID, <<"spaceid">>)).
--define(SESSION_ID_1, <<"session_id_1">>).
--define(SESSION_ID_2, <<"session_id_2">>).
 
 -define(req(W, P), rpc:call(W, worker_proxy, call, [fslogic_deletion_worker, P])).
 
@@ -80,102 +79,102 @@ all() -> ?ALL(?TEST_CASES).
 
 counting_file_open_and_release_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    init_session(Worker, ?SESSION_ID_1),
+    {ok, SessId} = init_session(Worker, <<"nonce">>),
     FileCtx = file_ctx:new_by_guid(?FILE_GUID),
 
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 30, undefined])),
+        [FileCtx, SessId, 30, undefined])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 70, undefined])),
+        [FileCtx, SessId, 70, undefined])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileCtx, ?SESSION_ID_1, 50])),
+        [FileCtx, SessId, 50])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileCtx, ?SESSION_ID_1, 30])),
+        [FileCtx, SessId, 30])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileCtx, ?SESSION_ID_1, 20])),
+        [FileCtx, SessId, 20])),
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     %% Release of non existing file should not fail.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileCtx, ?SESSION_ID_1, 50])),
+        [FileCtx, SessId, 50])),
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 1, undefined])),
+        [FileCtx, SessId, 1, undefined])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     %% Release of file marked to remove should trigger call to file deletion worker.
     ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx])),
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
-        [FileCtx, ?SESSION_ID_1, 1])),
+        [FileCtx, SessId, 1])),
 
-    test_utils:mock_assert_num_calls(Worker, fslogic_delete, remove_opened_file, 1, 1).
+    test_utils:mock_assert_num_calls(Worker, fslogic_delete, remove_opened_file, 2, 1).
 
 invalidating_session_open_files_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     FileCtx = file_ctx:new_by_guid(?FILE_GUID),
 
-    init_session(Worker, ?SESSION_ID_1),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     %% With one active session entry for UUID should be removed after its expiration.
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 30, undefined])),
+        [FileCtx, SessId1, 30, undefined])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    ?assertEqual(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
+    ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    init_session(Worker, ?SESSION_ID_1),
-    init_session(Worker, ?SESSION_ID_2),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
+    {ok, SessId2} = init_session(Worker, <<"nonce_2">>),
     %% With few active sessions entry for UUID should be removed only after
     %% all of them expired.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 30, undefined])),
+        [FileCtx, SessId1, 30, undefined])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_2, 30, undefined])),
+        [FileCtx, SessId2, 30, undefined])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    ?assertEqual(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
+    ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    ?assertEqual(ok, rpc:call(Worker, session, delete, [?SESSION_ID_2])),
+    ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId2])),
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    init_session(Worker, ?SESSION_ID_1),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     %% Last session expiration should trigger call to file deletion worker when
     %% file is marked to remove.
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 30, undefined])),
+        [FileCtx, SessId1, 30, undefined])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx])),
-    ?assertEqual(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
+    ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
 
-    test_utils:mock_assert_num_calls(Worker, fslogic_delete, remove_opened_file, 1, 1),
+    test_utils:mock_assert_num_calls(Worker, fslogic_delete, remove_opened_file, 2, 1),
 
     %% Invalidating session when file or session entry not exists should not fail.
 
     ?assertEqual(ok, rpc:call(Worker, file_handles, invalidate_session_entry,
-        [FileCtx, ?SESSION_ID_1])),
+        [FileCtx, SessId1])),
 
-    init_session(Worker, ?SESSION_ID_1),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_open,
-        [FileCtx, ?SESSION_ID_1, 30, undefined])),
+        [FileCtx, SessId1, 30, undefined])),
     ?assertEqual(ok, rpc:call(Worker, file_handles, invalidate_session_entry,
-        [FileCtx, ?SESSION_ID_2])).
+        [FileCtx, SessId1])).
 
 init_should_clear_open_files(Config) ->
     init_should_clear_open_files_test_base(Config, false).
@@ -214,7 +213,7 @@ init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
     case DelayedFileCreation of
         true -> ok;
         false ->
-            test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 2, 1)
+            test_utils:mock_assert_num_calls(Worker, storage_driver, unlink, 2, 1)
     end.
 
 open_file_deletion_request(Config) ->
@@ -231,14 +230,14 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [<<"user1">>]),
     ok = rpc:call(Worker, fslogic_delete, process_file_links, [FileCtx, UserCtx, false]),
 
-    ?assertEqual(ok, rpc:call(Worker, fslogic_delete, remove_opened_file, [FileCtx])),
+    ?assertEqual(ok, rpc:call(Worker, fslogic_delete, remove_opened_file, [FileCtx, true])),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
     case DelayedFileCreation of
         true -> ok;
         false ->
-            test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 2, 1)
+            test_utils:mock_assert_num_calls(Worker, storage_driver, unlink, 2, 1)
     end.
 
 deletion_of_not_open_file(Config) ->
@@ -257,14 +256,14 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
 
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUuid])),
     ?assertEqual(ok, rpc:call(Worker, fslogic_delete, check_if_opened_and_remove,
-        [UserCtx, FileCtx, false, false])),
+        [UserCtx, FileCtx, false, false, true])),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
     case DelayedFileCreation of
         true -> ok;
         false ->
-            test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 2, 1)
+            test_utils:mock_assert_num_calls(Worker, storage_driver, unlink, 2, 1)
     end.
 
 file_shouldnt_be_listed_after_deletion(Config) ->
@@ -329,7 +328,7 @@ remove_file_on_ceph_using_client(Config0) ->
     {ok, _} = lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker, Handle),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker, [{active, true}], SessionId(Worker)),
+    {ok, {Sock, _}} = fuse_test_utils:connect_as_user(Config, Worker, <<"user2">>, [{active, true}]),
 
     L = utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"]),
     ?assertEqual(true, length(L) > 0),
@@ -408,31 +407,31 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
     {ok, H2} = lfm_proxy:open(Worker, SessId, {guid, G2}, rdwr),
 
     FileCtx1 = rpc:call(Worker, file_ctx, new_by_guid, [G1]),
-    {SfmHandle1, _} = rpc:call(Worker, storage_file_manager, new_handle, [SessId, FileCtx1]),
+    {SfmHandle1, _} = rpc:call(Worker, storage_driver, new_handle, [SessId, FileCtx1]),
     FileCtx2 = rpc:call(Worker, file_ctx, new_by_guid, [G2]),
-    {SfmHandle2, _} = rpc:call(Worker, storage_file_manager, new_handle, [SessId, FileCtx2]),
+    {SfmHandle2, _} = rpc:call(Worker, storage_driver, new_handle, [SessId, FileCtx2]),
 
-    ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
-    ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60),
 
     case DeleteNewFileFirst of
         true ->
             ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
             ok = lfm_proxy:close(Worker, H2),
-            ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
-            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+            ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
+            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60),
             ok = lfm_proxy:close(Worker, H1);
 
         false ->
             ok = lfm_proxy:close(Worker, H1),
-            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
-            ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),
+            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
+            ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60),
             ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
             ok = lfm_proxy:close(Worker, H2)
     end,
 
-    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
-    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60).
+    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
+    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60).
     
 
 %===================================================================
@@ -441,7 +440,7 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) -> multi_provider_file_ops_test_base:init_env(NewConfig) end,
-    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
+    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base, fuse_test_utils]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config).
@@ -455,7 +454,7 @@ init_per_testcase(Case, Config) when
         [passthrough]),
 
     test_utils:mock_expect(Worker, fslogic_delete, remove_opened_file,
-        fun(FileCtx) ->
+        fun(FileCtx, _) ->
             true = file_ctx:is_file_ctx_const(FileCtx),
             ?FILE_UUID = file_ctx:get_uuid_const(FileCtx),
             ok
@@ -464,16 +463,10 @@ init_per_testcase(Case, Config) when
 
 
 init_per_testcase(remove_file_on_ceph_using_client, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     ssl:start(),
 
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun(#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
-            {ok, #document{value = #user_identity{user_id = <<"user2">>}}}
-        end
-    ),
+    initializer:mock_auth_manager(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(
         ?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo);
@@ -491,7 +484,7 @@ init_per_testcase(Case, Config) when
     ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    test_utils:mock_new(Worker, [storage_file_manager, rename_req,
+    test_utils:mock_new(Worker, [storage_driver, rename_req,
         worker_proxy, file_meta], [passthrough]),
     test_utils:mock_expect(Worker, worker_proxy, cast,
         fun(W, A) -> worker_proxy:call(W, A) end),
@@ -516,8 +509,10 @@ end_per_testcase(Case, Config) when
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_validate_and_unload(Worker, [fslogic_delete, file_ctx, file_meta]),
-    ?assertMatch(ok, rpc:call(Worker, session, delete, [?SESSION_ID_1])),
-    ?assertMatch(ok, rpc:call(Worker, session, delete, [?SESSION_ID_2])),
+    {ok, SessId1} = init_session(Worker, <<"nonce_1">>),
+    {ok, SessId2} = init_session(Worker, <<"nonce_2">>),
+    ?assertMatch(ok, rpc:call(Worker, session, delete, [SessId1])),
+    ?assertMatch(ok, rpc:call(Worker, session, delete, [SessId2])),
 
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -532,15 +527,14 @@ end_per_testcase(Case, Config) when
     Case =:= file_stat_should_return_enoent_after_deletion;
     Case =:= file_open_should_return_enoent_after_deletion;
     Case =:= file_handle_should_work_after_deletion
-    ->
+->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
 
-    test_utils:mock_validate_and_unload(Worker, [storage_file_manager,
-        rename_req]),
+    test_utils:mock_validate_and_unload(Worker, [storage_driver, rename_req]),
     test_utils:mock_unload(Worker, [worker_proxy, file_meta]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
@@ -556,12 +550,10 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
-init_session(Worker, SessID) ->
-    Self = self(),
-    Iden = #user_identity{user_id = <<"u1">>},
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessID, Iden, undefined, Self]
-    )).
+init_session(Worker, Nonce) ->
+    fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, Nonce, ?SUB(user, <<"u1">>), undefined, self()
+    ).
 
 create_test_file(Config, Worker, SessId, DelayedFileCreation) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),

@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Model that stores list of storage IDs attached to the space.
+%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_storage).
@@ -17,12 +18,11 @@
 -include("global_definitions.hrl").
 
 %% API
--export([add/2, add/3]).
--export([get/1, delete/1, update/2]).
+-export([get/1, delete/1]).
 -export([get_storage_ids/1, get_mounted_in_root/1]).
 
 %% datastore_model callbacks
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type id() :: od_space:id().
 -type record() :: #space_storage{}.
@@ -33,20 +33,9 @@
 
 -define(CTX, #{model => ?MODULE}).
 
--compile({no_auto_import, [get/1]}).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates space storage.
-%% @end
-%%--------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, id()} | {error, term()}.
-update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -66,45 +55,8 @@ get(Key) ->
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
-    delete_associated_documents(Key),
     datastore_model:delete(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds storage to the space.
-%% @end
-%%--------------------------------------------------------------------
--spec add(od_space:id(), storage:id()) ->
-    {ok, od_space:id()} | {error, Reason :: term()}.
-add(SpaceId, StorageId) ->
-    add(SpaceId, StorageId, false).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds storage to the space.
-%% @end
-%%--------------------------------------------------------------------
--spec add(od_space:id(), storage:id(), boolean()) ->
-    {ok, od_space:id()} | {error, Reason :: term()}.
-add(SpaceId, StorageId, MountInRoot) ->
-    % critical section to avoid race in {@link storage:safe_remove/1}
-    critical_section:run({storage_to_space, StorageId}, fun() ->
-        case get(SpaceId) of
-            {error, not_found} ->
-                ok;
-            {ok, #document{value = #space_storage{}}} ->
-                % remove possible remnants of previous support
-                delete_associated_documents(SpaceId)
-        end,
-
-        case datastore_model:save(?CTX, new(SpaceId, StorageId, MountInRoot)) of
-            {ok, _} ->
-                ok = space_strategies:add_storage(SpaceId, StorageId),
-                {ok, SpaceId};
-            {error, _} = Error ->
-                Error
-        end
-   end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -135,37 +87,19 @@ get_mounted_in_root(SpaceId) ->
     {ok, Doc} = ?MODULE:get(SpaceId),
     get_mounted_in_root(Doc).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%% @private
--spec delete_associated_documents(id()) -> ok.
-delete_associated_documents(Key) ->
-    space_strategies:delete(Key),
-    file_popularity_api:disable(Key),
-    file_popularity_api:delete_config(Key),
-    autocleaning_api:delete_config(Key),
-    main_harvesting_stream:space_unsupported(Key).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns space_storage document.
-%% @end
-%%--------------------------------------------------------------------
--spec(new(od_space:id(), storage:id(), boolean()) -> doc()).
-new(SpaceId, StorageId, true) ->
-    #document{key = SpaceId, value = #space_storage{
-        storage_ids = [StorageId],
-        mounted_in_root = [StorageId]}};
-new(SpaceId, StorageId, _) ->
-    #document{key = SpaceId, value = #space_storage{storage_ids = [StorageId]}}.
-
 
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
 
 %%--------------------------------------------------------------------
 %% @doc

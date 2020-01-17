@@ -19,15 +19,15 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
--include_lib("ctool/include/aai/macaroons.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([save/2, delete/0]).
 -export([get_provider_id/0, is_registered/0]).
 -export([clear_provider_id_cache/0]).
--export([get_auth_macaroon/0, get_identity_macaroon/0]).
--export([get_root_macaroon_file_path/0]).
+-export([get_access_token/0, get_identity_token/1]).
+-export([get_root_token_file_path/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -44,21 +44,21 @@
 -define(PROVIDER_ID_CACHE_KEY, provider_id_cache).
 
 -define(PROVIDER_AUTH_KEY, <<"provider_auth">>).
--define(MACAROON_TTL, application:get_env(
-    ?APP_NAME, provider_macaroon_ttl_sec, 900
-)).
-% Macaroons from cache with lower TTL will not be used
+-define(TOKEN_TTL, application:get_env(?APP_NAME, provider_token_ttl_sec, 900)).
+% Tokens from cache with lower TTL will not be used
 % (they might expire before they are consumed), a new one will be generated.
 -define(MIN_TTL_FROM_CACHE, 15).
 
+-define(NOW(), provider_logic:zone_time_seconds()).
+
 -define(FILE_COMMENT,
-    "% Below is the provider root macaroon - a token "
-    "carrying its identity and full authorization.\n"
-    "% It can be used to authorize operations in Onezone's "
-    "REST API on behalf of the provider when sent in the "
-    "\"X-Auth-Token\" or \"Macaroon\" header.\n"
-    "% The root macaroon is highly confidential and must be "
-    "kept secret.\n\n").
+    <<"This file holds the Oneprovider root token "
+    "carrying its identity and full authorization. "
+    "It can be used to authorize operations in Onezone's "
+    "REST API on behalf of the Oneprovider when sent in the "
+    "\"X-Auth-Token\" or \"Authorization: Bearer\" header. "
+    "The root token is highly confidential and must be "
+    "kept secret.">>).
 
 %%%===================================================================
 %%% API
@@ -66,26 +66,26 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Stores provider's id and its authorization root macaroon.
+%% Stores provider's id and its authorization root token.
 %% @end
 %%--------------------------------------------------------------------
--spec save(ProviderId :: od_provider:id(), Macaroon :: binary()) ->
+-spec save(ProviderId :: od_provider:id(), tokens:serialized()) ->
     ok.
-save(ProviderId, Macaroon) ->
+save(ProviderId, RootToken) ->
     {ok, _} = datastore_model:save(?CTX, #document{
         key = ?PROVIDER_AUTH_KEY,
         value = #provider_auth{
             provider_id = ProviderId,
-            root_macaroon = Macaroon
+            root_token = RootToken
         }
     }),
     simple_cache:put(?PROVIDER_ID_CACHE_KEY, ProviderId),
-    write_to_file(ProviderId, Macaroon).
+    write_to_file(ProviderId, RootToken).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns provider Id, or ?ERROR_UNREGISTERED_PROVIDER if it is not yet
+%% Returns provider Id, or ?ERROR_UNREGISTERED_ONEPROVIDER if it is not yet
 %% registered. Upon success, the ProviderId is cached in env variable to be
 %% accessible quickly.
 %% @end
@@ -95,7 +95,7 @@ get_provider_id() ->
     simple_cache:get(?PROVIDER_ID_CACHE_KEY, fun() ->
         case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
             {error, not_found} ->
-                ?ERROR_UNREGISTERED_PROVIDER;
+                ?ERROR_UNREGISTERED_ONEPROVIDER;
             {error, _} = Error ->
                 Error;
             {ok, #document{value = #provider_auth{provider_id = Id}}} ->
@@ -123,51 +123,54 @@ clear_provider_id_cache() ->
 is_registered() ->
     case get_provider_id() of
         {ok, _ProviderId} -> true;
-        ?ERROR_UNREGISTERED_PROVIDER -> false;
+        ?ERROR_UNREGISTERED_ONEPROVIDER -> false;
         {error, _} = Error -> error(Error)
     end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns authorization macaroon for this provider. The macaroon is confined
+%% Returns access token for this provider. The token is confined
 %% with TTL for security.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth_macaroon() -> {ok, Macaroon :: binary()} | {error, term()}.
-get_auth_macaroon() ->
-    get_macaroon(auth).
+-spec get_access_token() -> {ok, tokens:serialized()} | {error, term()}.
+get_access_token() ->
+    get_token(access).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns identity macaroon for this provider. The macaroon can be used solely
-%% to verify provider's identity and carries no authorization. It can be safely
-%% exposed to public view. The macaroon is confined with TTL for security.
+%% Returns identity token for this provider usable only by specified
+%% audience. The token can be used solely to verify this provider's
+%% identity and carries no authorization. The token is confined with
+%% TTL for security.
 %% @end
 %%--------------------------------------------------------------------
--spec get_identity_macaroon() -> {ok, Macaroon :: binary()} | {error, term()}.
-get_identity_macaroon() ->
-    get_macaroon(identity).
+-spec get_identity_token(aai:audience()) ->
+    {ok, tokens:serialized()} | {error, term()}.
+get_identity_token(Audience) ->
+    {ok, Token} = get_token(identity),
+    {ok, tokens:confine(Token, #cv_audience{whitelist = [Audience]})}.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns absolute path to file where provider root macaroon
+%% Returns absolute path to file where provider root token
 %% is saved.
 %% @end
 %%--------------------------------------------------------------------
--spec get_root_macaroon_file_path() -> string().
-get_root_macaroon_file_path() ->
+-spec get_root_token_file_path() -> string().
+get_root_token_file_path() ->
     {ok, ProviderRootMacaroonFile} = application:get_env(?APP_NAME,
-        root_macaroon_path),
+        root_token_path),
     filename:absname(ProviderRootMacaroonFile).
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes provider's identity from database.
-%% Does NOT remove file storing the Oneprovider macaroon,
+%% Does NOT remove file storing the Oneprovider root token,
 %% which is left for recovery purposes.
 %% @end
 %%--------------------------------------------------------------------
@@ -198,7 +201,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -207,14 +210,22 @@ get_record_version() ->
 %%--------------------------------------------------------------------
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
-get_record_struct(_) ->
+get_record_struct(V) when V < 3 ->
     % Versions 1 and 2 are the same, but upgrade is triggered to force overwrite
-    % of the root macaroon file, which has changed.
+    % of the root token file, which has changed.
     {record, [
         {provider_id, string},
         {root_macaroon, string},
         {cached_auth_macaroon, {integer, string}},
         {cached_identity_macaroon, {integer, string}}
+    ]};
+get_record_struct(3) ->
+    % rename the occurrences of macaroon -> token
+    {record, [
+        {provider_id, string},
+        {root_token, string},
+        {cached_auth_token, {integer, string}},
+        {cached_identity_token, {integer, string}}
     ]}.
 
 
@@ -227,10 +238,16 @@ get_record_struct(_) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, ProviderAuth) ->
     % Versions 1 and 2 are the same, but upgrade is triggered to force overwrite
-    % of the root macaroon file, which has changed.
-    #provider_auth{provider_id = ProviderId, root_macaroon = Macaroon} = ProviderAuth,
-    write_to_file(ProviderId, Macaroon),
-    {2, ProviderAuth}.
+    % of the root token file, which has changed.
+    {provider_auth, ProviderId, RootToken, _, _} = ProviderAuth,
+    write_to_file(ProviderId, RootToken),
+    {2, ProviderAuth};
+upgrade_record(2, ProviderAuth) ->
+    % rename the occurrences of macaroon -> token
+    {provider_auth, ProviderId, RootToken, _, _} = ProviderAuth,
+    % file format is also changed to use 'token' rather than 'macaroon'
+    write_to_file(ProviderId, RootToken),
+    {3, #provider_auth{provider_id = ProviderId, root_token = RootToken}}.
 
 
 %%%===================================================================
@@ -243,85 +260,76 @@ upgrade_record(1, ProviderAuth) ->
 %% Stores provider identity in a file on all nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec write_to_file(ProviderId :: od_provider:id(), Macaroon :: binary()) -> ok.
-write_to_file(ProviderId, Macaroon) ->
-    ProviderRootMacaroonFile = get_root_macaroon_file_path(),
-    Map = #{provider_id => ProviderId, root_macaroon => Macaroon},
-    Formatted = io_lib:fwrite("~s~n~p.", [?FILE_COMMENT, Map]),
+-spec write_to_file(od_provider:id(), tokens:serialized()) -> ok.
+write_to_file(ProviderId, RootToken) ->
+    ProviderRootTokenFile = get_root_token_file_path(),
+    Map = #{<<"_comment">> => ?FILE_COMMENT,
+        <<"provider_id">> => ProviderId, <<"root_token">> => RootToken},
+    Formatted = json_utils:encode(Map, [pretty]),
 
     {ok, Nodes} = node_manager:get_cluster_nodes(),
     {Results, BadNodes} = rpc:multicall(Nodes, file, write_file,
-        [ProviderRootMacaroonFile, Formatted]),
-    case lists:filter(fun(ok) -> false; (Error) -> Error end, Results ++ BadNodes) of
+        [ProviderRootTokenFile, Formatted]),
+    case lists:filter(fun(Result) -> Result /= ok end, Results ++ BadNodes) of
         [] -> ok;
         Errors ->
-            ?warning("Errors when writing provider root macaroon to file: ~p", [Errors]),
+            ?alert("Errors when writing provider root token to file: ~p", [Errors]),
             ok
     end.
 
 
--spec get_macaroon(Type :: auth | identity) -> {ok, Macaroon :: binary()} | {error, term()}.
-get_macaroon(Type) ->
+%% @private
+-spec get_token(access | identity) -> {ok, tokens:serialized()} | {error, term()}.
+get_token(Type) ->
     case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
         {error, not_found} ->
-            ?ERROR_UNREGISTERED_PROVIDER;
+            ?ERROR_UNREGISTERED_ONEPROVIDER;
         {error, _} = Error ->
             Error;
         {ok, #document{value = ProviderAuth}} ->
-            {ExpirationTime, CachedMacaroon} = get_cached_macaroon(Type, ProviderAuth),
-            TTL = ExpirationTime - time_utils:cluster_time_seconds(),
-            case TTL > ?MIN_TTL_FROM_CACHE of
+            {ValidUntil, CachedToken} = get_cached_token(Type, ProviderAuth),
+            case ValidUntil - ?NOW() > ?MIN_TTL_FROM_CACHE of
                 true ->
-                    {ok, CachedMacaroon};
+                    {ok, CachedToken};
                 false ->
-                    RootMacaroon = ProviderAuth#provider_auth.root_macaroon,
-                    NewMacaroon = add_caveats(RootMacaroon, caveats_for_macaroon(Type)),
-                    cache_macaroon(Type, NewMacaroon),
-                    {ok, NewMacaroon}
+                    RootToken = ProviderAuth#provider_auth.root_token,
+                    Caveats = caveats_for_token(Type),
+                    NewToken = tokens:confine(RootToken, Caveats),
+                    cache_token(Type, NewToken),
+                    {ok, NewToken}
             end
     end.
 
 
+%% @private
+-spec get_cached_token(access | identity, record()) ->
+    {ValidUntil :: time_utils:seconds(), tokens:serialized()}.
+get_cached_token(access, ProviderAuth) ->
+    ProviderAuth#provider_auth.cached_access_token;
+get_cached_token(identity, ProviderAuth) ->
+    ProviderAuth#provider_auth.cached_identity_token.
 
--spec get_cached_macaroon(Type :: auth | identity, record()) ->
-    {ExpirationTime :: non_neg_integer(), Macaroon :: binary()}.
-get_cached_macaroon(auth, ProviderAuth) ->
-    ProviderAuth#provider_auth.cached_auth_macaroon;
-get_cached_macaroon(identity, ProviderAuth) ->
-    ProviderAuth#provider_auth.cached_identity_macaroon.
 
-
--spec cache_macaroon(Type :: auth | identity, Macaroon :: binary()) -> ok.
-cache_macaroon(Type, Macaroon) ->
-    ExpirationTime = time_utils:cluster_time_seconds() + ?MACAROON_TTL,
+%% @private
+-spec cache_token(access | identity, tokens:serialized()) -> ok.
+cache_token(Type, Token) ->
     {ok, _} = datastore_model:update(?CTX, ?PROVIDER_AUTH_KEY, fun(ProviderAuth) ->
-        CacheValue = {ExpirationTime, Macaroon},
+        CacheValue = {?NOW() + ?TOKEN_TTL, Token},
         {ok, case Type of
-            auth ->
-                ProviderAuth#provider_auth{cached_auth_macaroon = CacheValue};
+            access ->
+                ProviderAuth#provider_auth{cached_access_token = CacheValue};
             identity ->
-                ProviderAuth#provider_auth{cached_identity_macaroon = CacheValue}
+                ProviderAuth#provider_auth{cached_identity_token = CacheValue}
         end}
     end),
     ok.
 
 
--spec caveats_for_macaroon(Type :: auth | identity) -> [macaroons:caveat()].
-caveats_for_macaroon(auth) -> [
-    ?TIME_CAVEAT(provider_logic:zone_time_seconds(), ?MACAROON_TTL)
+-spec caveats_for_token(access | identity) -> [caveats:caveat()].
+caveats_for_token(access) -> [
+    #cv_time{valid_until = ?NOW() + ?TOKEN_TTL}
 ];
-caveats_for_macaroon(identity) -> [
-    ?AUTHORIZATION_NONE_CAVEAT,
-    ?TIME_CAVEAT(provider_logic:zone_time_seconds(), ?MACAROON_TTL)
+caveats_for_token(identity) -> [
+    #cv_time{valid_until = ?NOW() + ?TOKEN_TTL},
+    #cv_authorization_none{}
 ].
-
-
--spec add_caveats(Macaroon :: binary(), [macaroons:caveat()]) ->
-    NewMacaroon :: binary().
-add_caveats(MacaroonBin, Caveats) ->
-    {ok, Macaroon} = macaroons:deserialize(MacaroonBin),
-    NewMacaroon = lists:foldl(fun(Caveat, MacaroonAcc) ->
-        macaroons:add_caveat(MacaroonAcc, Caveat)
-    end, Macaroon, Caveats),
-    {ok, NewMacaroonBin} = macaroons:serialize(NewMacaroon),
-    NewMacaroonBin.

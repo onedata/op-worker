@@ -36,7 +36,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_handle:id()) ->
-    {ok, od_handle:doc()} | gs_protocol:error().
+    {ok, od_handle:doc()} | errors:error().
 get(SessionId, HandleId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -51,7 +51,7 @@ get(SessionId, HandleId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_public_data(gs_client_worker:client(), od_handle:id()) ->
-    {ok, od_handle:doc()} | gs_protocol:error().
+    {ok, od_handle:doc()} | errors:error().
 get_public_data(SessionId, HandleId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -78,7 +78,7 @@ has_eff_user(SessionId, HandleId, UserId) ->
 
 -spec create(gs_client_worker:client(), od_handle_service:id(),
     od_handle:resource_type(), od_handle:resource_id(), od_handle:metadata()) ->
-    {ok, od_handle:id()} | gs_protocol:error().
+    {ok, od_handle:id()} | errors:error().
 create(SessionId, HandleServiceId, ResourceType, ResourceId, Metadata) ->
     {ok, UserId} = session:get_user_id(SessionId),
     Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{

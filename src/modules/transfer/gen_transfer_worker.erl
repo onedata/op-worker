@@ -48,7 +48,7 @@
 %% Callback called to get permissions required to check before starting transfer.
 %% @end
 %%--------------------------------------------------------------------
--callback required_permissions() -> [check_permissions:raw_access_definition()].
+-callback required_permissions() -> [data_access_rights:requirement()].
 
 
 %%--------------------------------------------------------------------
@@ -239,27 +239,30 @@ should_start(NextRetryTimestamp) ->
 %%-------------------------------------------------------------------
 -spec transfer_data(state(), file_ctx:ctx(), transfer_params(), non_neg_integer()) ->
     ok | {retry, file_ctx:ctx()} | {error, term()}.
-transfer_data(State = #state{mod = Mod}, FileCtx, Params, RetriesLeft) ->
-    Args = [Params#transfer_params.user_ctx, FileCtx, State, Params],
-    RequiredPerms = Mod:required_permissions(),
+transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
+    UserCtx = Params#transfer_params.user_ctx,
+    AccessDefinitions = Mod:required_permissions(),
 
-    try check_permissions:execute(RequiredPerms, Args, fun transfer_data_insecure/4) of
+    try
+        FileCtx1 = fslogic_authz:ensure_authorized(UserCtx, FileCtx0, AccessDefinitions),
+        transfer_data_insecure(UserCtx, FileCtx1, State, Params)
+    of
         ok ->
             ok;
         Error = {error, _Reason} ->
-            maybe_retry(FileCtx, Params, RetriesLeft, Error)
+            maybe_retry(FileCtx0, Params, RetriesLeft, Error)
     catch
         throw:cancelled ->
             {error, cancelled};
         throw:already_ended ->
             {error, already_ended};
         error:{badmatch, Error = {error, not_found}} ->
-            maybe_retry(FileCtx, Params, RetriesLeft, Error);
+            maybe_retry(FileCtx0, Params, RetriesLeft, Error);
         Error:Reason ->
             ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [
                 Error, Reason, Params#transfer_params.transfer_id
             ]),
-            maybe_retry(FileCtx, Params, RetriesLeft, {Error, Reason})
+            maybe_retry(FileCtx0, Params, RetriesLeft, {Error, Reason})
     end.
 
 
@@ -404,7 +407,7 @@ transfer_dir(State, FileCtx, Offset, TransferParams = #transfer_params{
 
 %% @private
 -spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
-    file_meta:uuid()) -> ok | {error, term()}.
+    file_meta:uuid() | undefined | doc_id_missing) -> ok | {error, term()}.
 transfer_files_from_view(State = #state{mod = Mod}, FileCtx, Params, LastDocId) ->
     case transfer:is_ongoing(Params#transfer_params.transfer_id) of
         true ->
@@ -417,7 +420,7 @@ transfer_files_from_view(State = #state{mod = Mod}, FileCtx, Params, LastDocId) 
 
 %% @private
 -spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
-    non_neg_integer(), file_meta:uuid()) -> ok | {error, term()}.
+    non_neg_integer(), file_meta:uuid() | undefined | doc_id_missing) -> ok | {error, term()}.
 transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
     #transfer_params{
         transfer_id = TransferId,
@@ -438,13 +441,10 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     case index:query(SpaceId, ViewName, [{limit, Chunk} | QueryViewParams2]) of
-        {ok, {Rows}} ->
+        {ok, #{<<"rows">> := Rows}} ->
             {NewLastDocId, FileCtxs} = lists:foldl(fun(Row, {_LastDocId, FileCtxsIn}) ->
-                {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
-                DocId = case lists:keyfind(<<"id">>, 1, Row) of
-                    {<<"id">>, Id} -> Id;
-                    _ -> doc_id_missing
-                end,
+                Value = maps:get(<<"value">>, Row),
+                DocId = maps:get(<<"id">>, Row, doc_id_missing),
                 ObjectIds = case is_list(Value) of
                     true -> lists:flatten(Value);
                     false -> [Value]

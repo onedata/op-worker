@@ -12,6 +12,8 @@
 -module(lfm_attrs_test_SUITE).
 -author("Tomasz Lichon").
 
+-behaviour(traverse_behaviour).
+
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
@@ -637,11 +639,8 @@ query_index(Worker, SpaceId, ViewName, Options) ->
     rpc:call(Worker, index, query, [SpaceId, ViewName, Options]).
 
 extract_query_values(QueryResult) ->
-    {Rows} = QueryResult,
-    lists:map(fun(Row) ->
-        {<<"value">>, Value} = lists:keyfind(<<"value">>, 1, Row),
-        Value
-    end, Rows).
+    #{<<"rows">> := Rows} = QueryResult,
+    [maps:get(<<"value">>, Row) || Row <- Rows].
 
 cache_proc(Options) ->
     bounded_cache:init_cache(?CACHE, Options),

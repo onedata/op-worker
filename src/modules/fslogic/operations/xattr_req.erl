@@ -33,20 +33,23 @@
 -spec get_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(), Inherited :: boolean()) ->
     fslogic_worker:fuse_response().
 get_xattr(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
-    case acl_req:get_acl(UserCtx, FileCtx) of
-        #provider_response{
-            status = #status{code = ?OK},
-            provider_response = #acl{value = Acl}
-        } ->
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #xattr{
-                    name = ?ACL_KEY,
-                    value = acl_logic:from_acl_to_json_format(Acl)
-                }
-            };
-        Other ->
-            Other
+    case file_ctx:get_active_perms_type(FileCtx, ignore_deleted) of
+        {acl, FileCtx2} ->
+            case acl_req:get_acl(UserCtx, FileCtx2) of
+                #provider_response{
+                    status = #status{code = ?OK},
+                    provider_response = #acl{value = Acl}
+                } ->
+                    #fuse_response{
+                        status = #status{code = ?OK},
+                        fuse_response = #xattr{
+                            name = ?ACL_KEY,
+                            value = acl:to_json(Acl, cdmi)
+                        }
+                    }
+            end;
+        {posix, _} ->
+            #fuse_response{status = #status{code = ?ENOATTR}}
     end;
 get_xattr(UserCtx, FileCtx, ?MIMETYPE_KEY, _Inherited) ->
     case cdmi_metadata_req:get_mimetype(UserCtx, FileCtx) of
@@ -61,8 +64,8 @@ get_xattr(UserCtx, FileCtx, ?MIMETYPE_KEY, _Inherited) ->
                     value = Mimetype
                 }
             };
-        Other ->
-            Other
+        #provider_response{} = Other ->
+            provider_to_fuse_response(Other)
     end;
 get_xattr(UserCtx, FileCtx, ?TRANSFER_ENCODING_KEY, _Inherited) ->
     case cdmi_metadata_req:get_transfer_encoding(UserCtx, FileCtx) of
@@ -77,8 +80,8 @@ get_xattr(UserCtx, FileCtx, ?TRANSFER_ENCODING_KEY, _Inherited) ->
                     value = Encoding
                 }
             };
-        Other ->
-            Other
+        #provider_response{} = Other ->
+            provider_to_fuse_response(Other)
     end;
 get_xattr(UserCtx, FileCtx, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
     case cdmi_metadata_req:get_cdmi_completion_status(UserCtx, FileCtx) of
@@ -92,8 +95,8 @@ get_xattr(UserCtx, FileCtx, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
                     name = ?CDMI_COMPLETION_STATUS_KEY,
                     value = Completion}
             };
-        Other ->
-            Other
+        #provider_response{} = Other ->
+            provider_to_fuse_response(Other)
     end;
 get_xattr(UserCtx, FileCtx, ?JSON_METADATA_KEY, Inherited) ->
     case metadata_req:get_metadata(UserCtx, FileCtx, json, [], Inherited) of
@@ -107,8 +110,8 @@ get_xattr(UserCtx, FileCtx, ?JSON_METADATA_KEY, Inherited) ->
                     name = ?JSON_METADATA_KEY,
                     value = JsonTerm}
             };
-        Other ->
-            Other
+        #provider_response{} = Other ->
+            provider_to_fuse_response(Other)
     end;
 get_xattr(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited) ->
     case metadata_req:get_metadata(UserCtx, FileCtx, rdf, [], Inherited) of
@@ -122,8 +125,8 @@ get_xattr(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited) ->
                     name = ?RDF_METADATA_KEY,
                     value = Rdf}
             };
-        Other ->
-            Other
+        #provider_response{} = Other ->
+            provider_to_fuse_response(Other)
     end;
 get_xattr(_UserCtx, _, <<?CDMI_PREFIX_STR, _/binary>>, _) ->
     throw(?EPERM);
@@ -140,9 +143,9 @@ get_xattr(UserCtx, FileCtx, XattrName, Inherited) ->
 -spec set_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{},
     Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:fuse_response().
-set_xattr(UserCtx, FileCtx, #xattr{name = ?ACL_KEY, value = Acl}, Create, Replace) ->
+set_xattr(UserCtx, FileCtx, #xattr{name = ?ACL_KEY, value = Acl}, _Create, _Replace) ->
     provider_to_fuse_response(
-        acl_req:set_acl(UserCtx, FileCtx, #acl{value = acl_logic:from_json_format_to_acl(Acl)}, Create, Replace)
+        acl_req:set_acl(UserCtx, FileCtx, acl:from_json(Acl, cdmi))
     );
 set_xattr(UserCtx, FileCtx, #xattr{name = ?MIMETYPE_KEY, value = Mimetype}, Create, Replace) ->
     provider_to_fuse_response(
@@ -177,11 +180,22 @@ set_xattr(UserCtx, FileCtx, Xattr, Create, Replace) ->
 %%--------------------------------------------------------------------
 -spec remove_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
     fslogic_worker:fuse_response().
-remove_xattr(_UserCtx, FileCtx, XattrName) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_metadata],
-        [_UserCtx, FileCtx, XattrName],
-        fun remove_xattr_insecure/3).
+remove_xattr(UserCtx, FileCtx, ?ACL_KEY) ->
+    provider_to_fuse_response(acl_req:remove_acl(UserCtx, FileCtx));
+remove_xattr(UserCtx, FileCtx, ?JSON_METADATA_KEY) ->
+    provider_to_fuse_response(
+        metadata_req:remove_metadata(UserCtx, FileCtx, json)
+    );
+remove_xattr(UserCtx, FileCtx, ?RDF_METADATA_KEY) ->
+    provider_to_fuse_response(
+        metadata_req:remove_metadata(UserCtx, FileCtx, rdf)
+    );
+remove_xattr(_UserCtx, _, <<?CDMI_PREFIX_STR, _/binary>>) ->
+    throw(?EPERM);
+remove_xattr(_UserCtx, _, <<?ONEDATA_PREFIX_STR, _/binary>>) ->
+    throw(?EPERM);
+remove_xattr(UserCtx, FileCtx, XattrName) ->
+    remove_custom_xattr(UserCtx, FileCtx, XattrName).
 
 %%--------------------------------------------------------------------
 %% @equiv list_xattr_insecure/4 with permission checks
@@ -189,11 +203,12 @@ remove_xattr(_UserCtx, FileCtx, XattrName) ->
 %%--------------------------------------------------------------------
 -spec list_xattr(user_ctx:ctx(), file_ctx:ctx(), Inherited :: boolean(),
     ShowInternal :: boolean()) -> fslogic_worker:fuse_response().
-list_xattr(_UserCtx, FileCtx, Inherited, ShowInternal) ->
-    check_permissions:execute(
-        [traverse_ancestors],
-        [_UserCtx, FileCtx, Inherited, ShowInternal],
-        fun list_xattr_insecure/4).
+list_xattr(UserCtx, FileCtx0, Inherited, ShowInternal) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors]
+    ),
+    list_xattr_insecure(UserCtx, FileCtx1, Inherited, ShowInternal).
 
 %%%===================================================================
 %%% Internal functions
@@ -211,22 +226,6 @@ provider_to_fuse_response(#provider_response{status = Status}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Removes file's extended attribute by key.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
-    fslogic_worker:fuse_response().
-remove_xattr_insecure(_UserCtx, FileCtx, XattrName) ->
-    case xattr:delete_by_name(FileCtx, XattrName) of
-        ok ->
-            fslogic_times:update_ctime(FileCtx),
-            #fuse_response{status = #status{code = ?OK}};
-        {error, not_found} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns complete list of extended attributes' keys of a file.
 %% @end
 %%--------------------------------------------------------------------
@@ -238,7 +237,17 @@ list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
             {ok, XattrList} = xattr:list(FileCtx, Inherited),
             FilteredXattrList = case ShowInternal of
                 true ->
-                    XattrList;
+                    % acl is kept in file_meta instead of custom_metadata
+                    % but is still treated as metadata so ?ACL_KEY
+                    % is added to listing if active perms type for
+                    % file is acl. Otherwise, to keep backward compatibility,
+                    % it is omitted.
+                    case file_ctx:get_active_perms_type(FileCtx, ignore_deleted) of
+                        {acl, _} ->
+                            [?ACL_KEY | XattrList];
+                        _ ->
+                            XattrList
+                    end;
                 false ->
                     lists:filter(fun(Key) ->
                         not lists:any(
@@ -255,6 +264,7 @@ list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
             #fuse_response{status = #status{code = ?ENOENT}}
     end.
 
+
 %%--------------------------------------------------------------------
 %% @private
 %% @equiv get_custom_xattr_insecure/4 with permission checks
@@ -262,11 +272,12 @@ list_xattr_insecure(_UserCtx, FileCtx, Inherited, ShowInternal) ->
 %%--------------------------------------------------------------------
 -spec get_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name(),
     Inherited :: boolean()) -> fslogic_worker:fuse_response().
-get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?read_metadata],
-        [_UserCtx, FileCtx, XattrName, Inherited],
-        fun get_custom_xattr_insecure/4).
+get_custom_xattr(UserCtx, FileCtx0, XattrName, Inherited) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_metadata]
+    ),
+    get_custom_xattr_insecure(UserCtx, FileCtx1, XattrName, Inherited).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -276,11 +287,26 @@ get_custom_xattr(_UserCtx, FileCtx, XattrName, Inherited) ->
 -spec set_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), #xattr{},
     Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:fuse_response().
-set_custom_xattr(_UserCtx, FileCtx, Xattr, Create, Replace) ->
-    check_permissions:execute(
-        [traverse_ancestors, ?write_metadata],
-        [_UserCtx, FileCtx, Xattr, Create, Replace],
-        fun set_custom_xattr_insecure/5).
+set_custom_xattr(UserCtx, FileCtx0, Xattr, Create, Replace) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_metadata]
+    ),
+    set_custom_xattr_insecure(UserCtx, FileCtx1, Xattr, Create, Replace).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @equiv remove_custom_xattr_insecure/3 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_custom_xattr(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
+    fslogic_worker:fuse_response().
+remove_custom_xattr(UserCtx, FileCtx0, XattrName) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_metadata]
+    ),
+    remove_custom_xattr_insecure(UserCtx, FileCtx1, XattrName).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -310,11 +336,29 @@ get_custom_xattr_insecure(_UserCtx, FileCtx, XattrName, Inherited) ->
 -spec set_custom_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), #xattr{},
     Create :: boolean(), Replace :: boolean()) ->
     fslogic_worker:fuse_response().
-set_custom_xattr_insecure(_UserCtx, FileCtx,
-    #xattr{name = XattrName, value = XattrValue}, Create, Replace
-) ->
+set_custom_xattr_insecure(_UserCtx, FileCtx, #xattr{
+    name = XattrName,
+    value = XattrValue
+}, Create, Replace) ->
     case xattr:set(FileCtx, XattrName, XattrValue, Create, Replace) of
         {ok, _} ->
+            fslogic_times:update_ctime(FileCtx),
+            #fuse_response{status = #status{code = ?OK}};
+        {error, not_found} ->
+            #fuse_response{status = #status{code = ?ENOENT}}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes file's extended attribute by key.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_custom_xattr_insecure(user_ctx:ctx(), file_ctx:ctx(), xattr:name()) ->
+    fslogic_worker:fuse_response().
+remove_custom_xattr_insecure(_UserCtx, FileCtx, XattrName) ->
+    case xattr:delete_by_name(FileCtx, XattrName) of
+        ok ->
             fslogic_times:update_ctime(FileCtx),
             #fuse_response{status = #status{code = ?OK}};
         {error, not_found} ->

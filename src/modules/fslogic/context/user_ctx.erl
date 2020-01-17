@@ -15,7 +15,8 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% Context definition
@@ -28,7 +29,11 @@
 
 %% API
 -export([new/1]).
--export([get_user/1, get_user_id/1, get_session_id/1, get_auth/1]).
+-export([
+    get_user/1, get_user_id/1,
+    get_eff_spaces/1, get_session_id/1,
+    get_auth/1, get_data_constraints/1
+]).
 -export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/2]).
 
 %%%===================================================================
@@ -54,8 +59,12 @@ new(SessId) ->
 %%--------------------------------------------------------------------
 -spec get_user(ctx()) -> od_user:doc().
 get_user(#user_ctx{session = #document{key = SessId, value = #session{
-    identity = #user_identity{user_id = UserId}
-}}}) ->
+    identity = ?SUB(Type, UserId)
+}}}) when
+    (Type =:= root andalso UserId =:= ?ROOT_USER_ID);
+    (Type =:= nobody andalso UserId =:= ?GUEST_USER_ID);
+    Type =:= user
+->
     case get(user_ctx_cache) of
         undefined ->
             {ok, User} = user_logic:get(SessId, UserId),
@@ -77,6 +86,16 @@ get_user_id(#user_ctx{session = Session}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Gets effective spaces from user context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_eff_spaces(ctx()) -> [od_space:id()].
+get_eff_spaces(UserCtx) ->
+    #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
+    Spaces.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Gets SessionId from user context.
 %% @end
 %%--------------------------------------------------------------------
@@ -92,6 +111,15 @@ get_session_id(#user_ctx{session = #document{key = SessId}}) ->
 -spec get_auth(ctx()) -> session:auth().
 get_auth(#user_ctx{session = Session}) ->
     session:get_auth(Session).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets session's data constraints from user context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_data_constraints(ctx()) -> data_constraints:constraints().
+get_data_constraints(#user_ctx{session = Session}) ->
+    session:get_data_constraints(Session).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -128,7 +156,7 @@ is_normal_user(#user_ctx{session = #document{key = SessId}}) ->
 -spec is_direct_io(ctx(), od_space:id()) -> boolean().
 is_direct_io(#user_ctx{session = #document{
     value = #session{direct_io = DirectIO, type = fuse}
-}}, SpaceID) ->
-    maps:get(SpaceID, DirectIO, true);
+}}, SpaceId) ->
+    maps:get(SpaceId, DirectIO, true);
 is_direct_io(_, _) ->
     false.

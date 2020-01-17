@@ -17,19 +17,19 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API - basic model function
 -export([create/1, save/1, get/1, exists/1, list/0, update/2, delete/1]).
 %% API - link functions
--export([add_links/4, get_link/3, fold_links/3, delete_links/3]).
 -export([add_local_links/4, get_local_link/3, fold_local_links/3,
     delete_local_links/3]).
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
--export([get_auth/1, get_user_id/1]).
+-export([get_auth/1, get_data_constraints/1, get_user_id/1]).
 -export([set_direct_io/3]).
 
 % exometer callbacks
@@ -43,7 +43,8 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type ttl() :: non_neg_integer().
--type auth() :: #macaroon_auth{} | ?ROOT_AUTH | ?GUEST_AUTH.
+-type grace_period() :: non_neg_integer().
+-type auth() :: auth_manager:token_auth() | ?ROOT_AUTH | ?GUEST_AUTH.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
@@ -51,14 +52,18 @@
 % meaning entire supervision tree finished getting up, it will set session
 % status to active.
 -type status() :: initializing | active | inactive.
--type identity() :: #user_identity{}.
 
--export_type([id/0, record/0, doc/0, ttl/0, auth/0, type/0, status/0, identity/0]).
+-export_type([
+    id/0, record/0, doc/0,
+    ttl/0, grace_period/0,
+    auth/0, type/0, status/0
+]).
 
 -define(CTX, #{
     model => ?MODULE,
     disc_driver => undefined,
-    fold_enabled => true
+    fold_enabled => true,
+    memory_copies => all
 }).
 
 -define(EXOMETER_NAME(Param), ?exometer_name(?MODULE, Param)).
@@ -156,58 +161,14 @@ delete(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Adds link to a tree.
-%% @end
-%%--------------------------------------------------------------------
--spec add_links(id(), datastore:tree_id(), datastore:link_name(),
-    datastore:link_target()) -> ok | {error, term()}.
-add_links(SessId, TreeID, HandleId, Key) ->
-    ?extract_ok(datastore_model:add_links(?CTX, SessId,
-        TreeID, {HandleId, Key}
-    )).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets link from a tree.
-%% @end
-%%--------------------------------------------------------------------
--spec get_link(id(), datastore:tree_id(), datastore:link_name()) ->
-    {ok, [datastore:link()]} | {error, term()}.
-get_link(SessId, TreeID, HandleId) ->
-    datastore_model:get_links(?CTX, SessId, TreeID, HandleId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Iterates over tree and executes Fun on each link.
-%% @end
-%%--------------------------------------------------------------------
--spec fold_links(id(), datastore:tree_id(),
-    datastore:fold_fun(datastore:link())) ->
-    {ok, datastore:fold_acc()} | {error, term()}.
-fold_links(SessId, TreeID, Fun) ->
-    datastore_model:fold_links(?CTX, SessId, TreeID, Fun, [], #{}).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes link from a tree.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_links
-    (id(), datastore:tree_id(), datastore:link_name()) -> ok | {error, term()};
-    (id(), datastore:tree_id(), [datastore:link_name()]) -> [ok | {error, term()}].
-delete_links(SessId, TreeID, HandleId) ->
-    datastore_model:delete_links(?CTX, SessId, TreeID, HandleId).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Adds local link to a tree.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_local_links(id(), datastore:tree_id(), datastore:link_name(),
     datastore:link_target()) -> ok | {error, term()}.
-add_local_links(SessId, TreeID, HandleId, Key) ->
+add_local_links(SessId, TreeID, LinkName, LinkValue) ->
     ?extract_ok(datastore_model:add_links(?CTX#{routing => local}, SessId,
-        TreeID, {HandleId, Key}
+        TreeID, {LinkName, LinkValue}
     )).
 
 %%--------------------------------------------------------------------
@@ -217,8 +178,8 @@ add_local_links(SessId, TreeID, HandleId, Key) ->
 %%--------------------------------------------------------------------
 -spec get_local_link(id(), datastore:tree_id(), datastore:link_name()) ->
     {ok, [datastore:link()]} | {error, term()}.
-get_local_link(SessId, TreeID, HandleId) ->
-    datastore_model:get_links(?CTX#{routing => local}, SessId, TreeID, HandleId).
+get_local_link(SessId, TreeID, LinkName) ->
+    datastore_model:get_links(?CTX#{routing => local}, SessId, TreeID, LinkName).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -240,9 +201,9 @@ fold_local_links(SessId, TreeID, Fun) ->
 -spec delete_local_links
     (id(), datastore:tree_id(), datastore:link_name()) -> ok | {error, term()};
     (id(), datastore:tree_id(), [datastore:link_name()]) -> [ok | {error, term()}].
-delete_local_links(SessId, TreeID, HandleId) ->
+delete_local_links(SessId, TreeID, LinkName) ->
     datastore_model:delete_links(?CTX#{routing => local},
-        SessId, TreeID, HandleId).
+        SessId, TreeID, LinkName).
 
 %%%===================================================================
 %%% API - field access functions
@@ -260,7 +221,11 @@ get_user_id(<<_/binary>> = SessId) ->
         {ok, Doc} -> get_user_id(Doc);
         {error, Reason} -> {error, Reason}
     end;
-get_user_id(#session{identity = #user_identity{user_id = UserId}}) ->
+get_user_id(#session{identity = ?SUB(root, ?ROOT_USER_ID)}) ->
+    {ok, ?ROOT_USER_ID};
+get_user_id(#session{identity = ?SUB(nobody, ?GUEST_USER_ID)}) ->
+    {ok, ?GUEST_USER_ID};
+get_user_id(#session{identity = ?SUB(user, UserId)}) ->
     {ok, UserId};
 get_user_id(#document{value = #session{} = Value}) ->
     get_user_id(Value).
@@ -332,6 +297,14 @@ get_auth(#session{auth = Auth}) ->
     Auth;
 get_auth(#document{value = Session}) ->
     get_auth(Session).
+
+
+-spec get_data_constraints(record() | doc()) -> data_constraints:constraints().
+get_data_constraints(#session{data_constraints = DataConstraints}) ->
+    DataConstraints;
+get_data_constraints(#document{value = Session}) ->
+    get_data_constraints(Session).
+
 
 %%--------------------------------------------------------------------
 %% @doc

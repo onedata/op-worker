@@ -266,32 +266,28 @@ translate_from_protobuf(#'SubscriptionCancellation'{id = Id}) ->
 %% HANDSHAKE
 translate_from_protobuf(#'ClientHandshakeRequest'{
     macaroon = Macaroon,
-    session_id = SessionId,
+    session_id = Nonce,
     version = Version,
     compatible_oneprovider_versions = CompOpVersions
 }) ->
     #client_handshake_request{
-        auth = translate_from_protobuf(Macaroon),
-        session_id = SessionId,
+        credentials = translate_from_protobuf(Macaroon),
+        nonce = Nonce,
         version = Version,
         compatible_oneprovider_versions = CompOpVersions
     };
 translate_from_protobuf(#'ProviderHandshakeRequest'{
     provider_id = ProviderId,
-    nonce = Nonce
+    token = Token
 }) ->
     #provider_handshake_request{
         provider_id = ProviderId,
-        nonce = Nonce
+        token = Token
     };
 translate_from_protobuf(#'Macaroon'{
-    macaroon = Macaroon,
-    disch_macaroons = DischargeMacaroons
+    macaroon = AccessToken
 }) ->
-    #macaroon_auth{
-        macaroon = Macaroon,
-        disch_macaroons = DischargeMacaroons
-    };
+    #credentials{access_token = AccessToken};
 translate_from_protobuf(#'HandshakeResponse'{status = Status}) ->
     #handshake_response{status = Status};
 
@@ -928,7 +924,7 @@ translate_from_protobuf(#'CdmiCompletionStatus'{value = Value}) ->
 translate_from_protobuf(#'Mimetype'{value = Value}) ->
     #mimetype{value = Value};
 translate_from_protobuf(#'Acl'{value = Value}) ->
-    #acl{value = acl_logic:from_json_format_to_acl(json_utils:decode(Value))};
+    #acl{value = acl:from_json(json_utils:decode(Value), cdmi)};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #file_path{value = Value};
 translate_from_protobuf(#'ProviderFileDistribution'{
@@ -1311,11 +1307,11 @@ translate_to_protobuf(#subscription_cancellation{id = Id}) ->
 %% HANDSHAKE
 translate_to_protobuf(#provider_handshake_request{
     provider_id = ProviderId,
-    nonce = Nonce
+    token = Token
 }) ->
     {provider_handshake_request, #'ProviderHandshakeRequest'{
         provider_id = ProviderId,
-        nonce = Nonce
+        token = Token
     }};
 translate_to_protobuf(#handshake_response{
     status = Status
@@ -1323,13 +1319,11 @@ translate_to_protobuf(#handshake_response{
     {handshake_response, #'HandshakeResponse'{
         status = Status
     }};
-translate_to_protobuf(#macaroon_auth{
-    macaroon = Macaroon,
-    disch_macaroons = DMacaroons
+translate_to_protobuf(#credentials{
+    access_token = SerializedToken
 }) ->
     #'Macaroon'{
-        macaroon = Macaroon,
-        disch_macaroons = DMacaroons
+        macaroon = SerializedToken
     };
 
 
@@ -1941,7 +1935,7 @@ translate_to_protobuf(#mimetype{value = Value}) ->
     {mimetype, #'Mimetype'{value = Value}};
 translate_to_protobuf(#acl{value = Value}) ->
     {acl, #'Acl'{
-        value = json_utils:encode(acl_logic:from_acl_to_json_format(Value))}
+        value = json_utils:encode(acl:to_json(Value, cdmi))}
     };
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};

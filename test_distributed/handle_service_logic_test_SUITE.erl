@@ -20,13 +20,15 @@
 -export([
     get_test/1,
     subscribe_test/1,
-    convenience_functions_test/1
+    convenience_functions_test/1,
+    confined_access_token_test/1
 ]).
 
 all() -> ?ALL([
     get_test,
     subscribe_test,
-    convenience_functions_test
+    convenience_functions_test,
+    confined_access_token_test
 ]).
 
 %%%===================================================================
@@ -170,6 +172,28 @@ convenience_functions_test(Config) ->
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
+
+
+confined_access_token_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    Caveat = #cv_data_path{whitelist = [<<"/spaceid/path">>]},
+    AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), rest, allow_data_access_caveats
+    ),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    % Request should be denied before contacting Onezone because of the
+    % data access caveat
+    ?assertMatch(
+        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
+        rpc:call(Node, handle_service_logic, get, [TokenAuth, ?HANDLE_SERVICE_1])
+    ),
+    % Nevertheless, GraphCalls should be increased as TokenAuth was verified to
+    % retrieve caveats
+    ?assertEqual(GraphCalls+1, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================
