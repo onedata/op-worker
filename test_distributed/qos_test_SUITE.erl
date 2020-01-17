@@ -604,11 +604,11 @@ run_tests(Config, FileTypes, TestSpecFun) ->
         TestSpec = case FileType of
             file ->
                 ct:pal("Starting for file"),
-                {Path, _} = create_test_file(Config),
+                Path = create_test_file(Config),
                 TestSpecFun(Path);
             dir ->
                 ct:pal("Starting for dir"),
-                {Path, _} = create_test_dir_with_file(Config),
+                Path = create_test_dir_with_file(Config),
                 TestSpecFun(Path)
         end,
         add_qos_and_check_qos_docs(Config, TestSpec)
@@ -650,17 +650,17 @@ add_qos_for_dir_and_check_effective_qos(Config, #effective_qos_test_spec{
 create_test_file(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    Guid = qos_tests_utils:create_file(Worker, SessId, ?TEST_FILE_PATH, ?TEST_DATA),
-    {?TEST_FILE_PATH, Guid}.
+    _Guid = qos_tests_utils:create_file(Worker, SessId, ?TEST_FILE_PATH, ?TEST_DATA),
+    ?TEST_FILE_PATH.
 
 
 create_test_dir_with_file(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    DirGuid = qos_tests_utils:create_directory(Worker, SessId, ?TEST_DIR_PATH),
+    _DirGuid = qos_tests_utils:create_directory(Worker, SessId, ?TEST_DIR_PATH),
     FilePath = filename:join(?TEST_DIR_PATH, <<"file1">>),
     _FileGuid = qos_tests_utils:create_file(Worker, SessId, FilePath, ?TEST_DATA),
-    {?TEST_DIR_PATH, DirGuid}.
+    ?TEST_DIR_PATH.
 
 
 mock_storage_get_provider(Config) ->
