@@ -105,7 +105,7 @@ handle(OpReq) ->
 handle(#op_req{gri = #gri{type = EntityType, id = EntityId}} = OpReq0, VersionedEntity) ->
     try
         OpReq1 = case EntityType of
-            op_file ->
+            op_file when EntityId =/= undefined ->
                 % Every req using share guid must be carried with guest auth
                 case file_id:is_share_guid(EntityId) of
                     true -> OpReq0#op_req{auth = ?NOBODY};

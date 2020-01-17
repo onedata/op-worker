@@ -189,7 +189,8 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     case lfm:create_share(SessionId, {guid, FileGuid}, Name) of
         {ok, {ShareId, _ShareGuid}} ->
             case share_logic:get(SessionId, ShareId) of
-                {ok, #document{value = Share}} ->
+                {ok, #document{value = ShareRec}} ->
+                    Share = share_to_json(ShareId, ShareRec),
                     {ok, resource, {GRI#gri{id = ShareId}, Share}};
                 {error, _} = Error ->
                     Error
@@ -205,21 +206,8 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
-    space = SpaceId,
-    root_file = RootFileGuid,
-    name = ShareName,
-    public_url = SharePublicUrl,
-    handle = Handle
-}) ->
-    {ok, #{
-        <<"shareId">> => ShareId,
-        <<"name">> => ShareName,
-        <<"publicUrl">> => SharePublicUrl,
-        <<"rootFileId">> => RootFileGuid,
-        <<"spaceId">> => utils:undefined_to_null(SpaceId),
-        <<"handleId">> => utils:undefined_to_null(Handle)
-    }}.
+get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, Share) ->
+    {ok, share_to_json(ShareId, Share)}.
 
 
 %%--------------------------------------------------------------------
@@ -241,3 +229,26 @@ update(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}} = Req) 
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
     ?check(lfm:remove_share(Auth#auth.session_id, ShareId)).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+share_to_json(ShareId, #od_share{
+    space = SpaceId,
+    root_file = RootFileGuid,
+    name = ShareName,
+    public_url = SharePublicUrl,
+    handle = Handle
+}) ->
+    #{
+        <<"shareId">> => ShareId,
+        <<"name">> => ShareName,
+        <<"publicUrl">> => SharePublicUrl,
+        <<"rootFileId">> => RootFileGuid,
+        <<"spaceId">> => utils:undefined_to_null(SpaceId),
+        <<"handleId">> => utils:undefined_to_null(Handle)
+    }.
