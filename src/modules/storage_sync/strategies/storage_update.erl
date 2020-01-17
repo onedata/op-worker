@@ -251,7 +251,7 @@ start(SpaceId, StorageId, ImportStartTime, ImportFinishTime, LastUpdateStartTime
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_already_imported_file(space_strategy:job(), #file_attr{},
-    file_ctx:ctx()) -> {ok, space_strategy:job()}.
+    file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
 handle_already_imported_file(Job = #space_strategy_job{
     data = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx
@@ -389,7 +389,7 @@ import_children(#space_strategy_job{}, _Type, _Offset, _FileCtx, _) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec handle_already_imported_directory(space_strategy:job(), #file_attr{},
-    file_ctx:ctx()) -> {ok, space_strategy:job()}.
+    file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
 handle_already_imported_directory(Job = #space_strategy_job{
     data = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx
@@ -411,16 +411,20 @@ handle_already_imported_directory(Job = #space_strategy_job{
 %% @end
 %%-------------------------------------------------------------------
 -spec handle_already_imported_directory_changed_mtime(space_strategy:job(),
-    #file_attr{}, file_ctx:ctx()) -> {ok, space_strategy:job()}.
+    #file_attr{}, file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
 handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
     strategy_args = #{delete_enable := true},
     data = Data
 }, FileAttr, FileCtx) ->
-    case maps:get(dir_offset, Data, 0) of
-        0 ->
-            full_update:run(Job, FileCtx);
-        _ ->
-            simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx)
+    Result = case maps:get(dir_offset, Data, 0) of
+        0 -> full_update:run(Job, FileCtx);
+        _ -> ok
+    end,
+    case Result of
+        ok ->
+            simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx);
+        Error = {error, _} ->
+            {Error, Job}
     end;
 handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
     strategy_args = #{delete_enable := false}

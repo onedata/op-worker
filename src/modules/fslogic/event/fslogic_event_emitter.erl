@@ -22,7 +22,7 @@
     emit_file_location_changed/2, emit_file_location_changed/3,
     emit_file_location_changed/4, emit_file_locations_changed/2,
     emit_file_perm_changed/1, emit_file_removed/2,
-    emit_file_renamed_no_exclude/4, emit_file_renamed_to_client/4, emit_quota_exceeded/0,
+    emit_file_renamed_no_exclude/5, emit_file_renamed_to_client/5, emit_quota_exceeded/0,
     emit_helper_params_changed/1]).
 
 %%%===================================================================
@@ -42,8 +42,9 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
         {error, not_found} ->
             ok;
         {#document{}, FileCtx2} ->
-            #fuse_response{fuse_response = #file_attr{} = FileAttr} =
-                attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx2, true),
+            {#fuse_response{fuse_response = #file_attr{} = FileAttr}, OtherFiles} =
+                attr_req:get_file_attr_and_conflicts(user_ctx:new(?ROOT_SESS_ID), FileCtx2, true, true, true),
+            emit_suffixes(OtherFiles, {ctx, FileCtx2}),
             emit_file_attr_changed(FileCtx2, FileAttr, ExcludedSessions);
         Other ->
             Other
@@ -157,8 +158,22 @@ emit_file_perm_changed(FileCtx) ->
 -spec emit_file_removed(file_ctx:ctx(), ExcludedSessions :: [session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_file_removed(FileCtx, ExcludedSessions) ->
-    event:get_subscribers_and_emit(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
-        #{file_ctx => FileCtx}, ExcludedSessions).
+    Ans = event:get_subscribers_and_emit(#file_removed_event{file_guid = file_ctx:get_guid_const(FileCtx)},
+        #{file_ctx => FileCtx}, ExcludedSessions),
+
+    {#document{
+        value = #file_meta{
+            name = Name,
+            parent_uuid = ParentUuid
+        }} = Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    case file_meta:check_name(ParentUuid, Name, Doc) of
+        {conflicting, _, OtherFiles} ->
+            emit_suffixes(OtherFiles, {ctx, FileCtx2});
+        _ ->
+            ok
+    end,
+
+    Ans.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -166,35 +181,21 @@ emit_file_removed(FileCtx, ExcludedSessions) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_renamed_to_client(file_ctx:ctx(), fslogic_worker:file_guid(), file_meta:name(),
-    user_ctx:ctx()) -> ok | {error, Reason :: term()}.
-emit_file_renamed_to_client(FileCtx, NewParentGuid, NewName, UserCtx) ->
+    file_meta:name(), user_ctx:ctx()) -> ok | {error, Reason :: term()}.
+emit_file_renamed_to_client(FileCtx, NewParentGuid, NewName, PrevName, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    Guid = file_ctx:get_guid_const(FileCtx),
     {OldParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
-    event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
-        old_guid = Guid,
-        new_guid = Guid,
-        new_parent_guid = NewParentGuid,
-        new_name = NewName
-    }}, [#{file_ctx => FileCtx, key_base => OldParentGuid},
-        #{file_ctx => FileCtx, key_base => NewParentGuid}], [SessionId]).
+    emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName, [SessionId]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Sends an event informing given client about file rename.
+%% Sends an event informing given client about file rename. No sessions are excluded.
 %% @end
 %%--------------------------------------------------------------------
 -spec emit_file_renamed_no_exclude(file_ctx:ctx(), fslogic_worker:file_guid(), fslogic_worker:file_guid(),
-    file_meta:name()) -> ok | {error, Reason :: term()}.
-emit_file_renamed_no_exclude(FileCtx, OldParentGuid, NewParentGuid, NewName) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
-    event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
-        old_guid = Guid,
-        new_guid = Guid,
-        new_parent_guid = NewParentGuid,
-        new_name = NewName
-    }}, [#{file_ctx => FileCtx, key_base => OldParentGuid},
-        #{file_ctx => FileCtx, key_base => NewParentGuid}], []).
+    file_meta:name(), file_meta:name()) -> ok | {error, Reason :: term()}.
+emit_file_renamed_no_exclude(FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName) ->
+    emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -228,6 +229,32 @@ emit_helper_params_changed(StorageId) ->
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @doc
+%% Sends an event informing given client about file rename.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_file_renamed(file_ctx:ctx(), fslogic_worker:file_guid(), fslogic_worker:file_guid(),
+    file_meta:name(), file_meta:name(), [session:id()]) -> ok | {error, Reason :: term()}.
+emit_file_renamed(FileCtx, OldParentGuid, NewParentGuid, NewName, OldName, Exclude) ->
+    Guid = file_ctx:get_guid_const(FileCtx),
+    {Doc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    FinalName = case file_meta:check_name(file_id:guid_to_uuid(OldParentGuid), OldName, Doc) of
+        {conflicting, ExtendedName, OtherFiles} ->
+            emit_suffixes(OtherFiles, {parent_guid, NewParentGuid}),
+            ExtendedName;
+        _ ->
+            NewName
+    end,
+
+    event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
+        old_guid = Guid,
+        new_guid = Guid,
+        new_parent_guid = NewParentGuid,
+        new_name = FinalName
+    }}, [#{file_ctx => FileCtx2, key_base => OldParentGuid},
+        #{file_ctx => FileCtx2, key_base => NewParentGuid}], Exclude).
+
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Creates #file_location_changed_event.
@@ -241,3 +268,40 @@ create_file_location_changed(Location, Offset, OffsetEnd) ->
         file_location = Location,
         change_beg_offset = Offset, change_end_offset = OffsetEnd
     }.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Emits #file_renamed_event for files that can be viewed with different suffix
+%% after changes represented by other event.
+%% The function is introduced because oneclient does not resolve conflicts on its side.
+%% Can be removed after upgrade of oneclient.
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_suffixes(Files :: [{file_meta:uuid(), file_meta:name()}],
+    {parent_guid, ParentGuid :: fslogic_worker:file_guid()} | {ctx, file_ctx:ctx()}) -> ok.
+emit_suffixes([], _) ->
+    ok;
+emit_suffixes(Files, {parent_guid, ParentGuid}) ->
+    lists:foreach(fun({Uuid, ExtendedName}) ->
+        try
+            Guid = fslogic_uuid:uuid_to_guid(Uuid),
+            FileCtx = file_ctx:new_by_guid(Guid),
+
+            event:get_subscribers_and_emit(#file_renamed_event{top_entry = #file_renamed_entry{
+                old_guid = Guid,
+                new_guid = Guid,
+                new_parent_guid = ParentGuid,
+                new_name = ExtendedName
+            }}, [#{file_ctx => FileCtx, key_base => ParentGuid}], [])
+        catch
+            _:_ -> ok % File not fully synchronized (file_meta is missing)
+        end
+    end, Files);
+emit_suffixes(Files, {ctx, FileCtx}) ->
+    try
+        {ParentCtx, _} = file_ctx:get_parent(FileCtx, user_ctx:new(?ROOT_USER_ID)),
+        emit_suffixes(Files, {parent_guid, file_ctx:get_guid_const(ParentCtx)})
+    catch
+        _:_ -> ok % Parent not fully synchronized
+    end.
