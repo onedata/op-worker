@@ -32,7 +32,7 @@
 %% determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec decode_and_normalize(binary(), od_space:id(), od_storage:id()) ->
+-spec decode_and_normalize(binary(), od_space:id(), storage:id()) ->
     {ok, acl:acl()}.
 decode_and_normalize(ACLBin, SpaceId, StorageId) ->
     {ok, ACL} = decode(ACLBin),
@@ -77,7 +77,7 @@ decode(ACLBin) ->
 %% determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize(acl:acl(), od_space:id(), od_storage:id()) ->
+-spec normalize(acl:acl(), od_space:id(), storage:id()) ->
     {ok, acl:acl()}.
 normalize(Acl, SpaceId, StorageId) ->
     {ok, normalize(Acl, [], SpaceId, StorageId)}.
@@ -155,7 +155,7 @@ encode_ace(#access_control_entity{
 %% Tail-recursive helper function for normalize/2.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize(acl:acl(), acl:acl(), od_space:id(), od_storage:id()) ->
+-spec normalize(acl:acl(), acl:acl(), od_space:id(), storage:id()) ->
     acl:acl().
 normalize([], NormalizedACL, _SpaceId, _StorageId) ->
     lists:reverse(NormalizedACL);
@@ -169,7 +169,7 @@ normalize([ACE | Rest], NormalizedACL, SpaceId, StorageId) ->
 %% Normalizes given #access_control_entity.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize_ace(ace:ace(), od_space:id(), od_storage:id()) -> ace:ace().
+-spec normalize_ace(ace:ace(), od_space:id(), storage:id()) -> ace:ace().
 normalize_ace(ACE = #access_control_entity{identifier = ?owner}, _SpaceId, _StorageId) ->
     ACE;
 normalize_ace(ACE = #access_control_entity{identifier = ?group}, _SpaceId, _StorageId) ->
@@ -191,7 +191,7 @@ normalize_ace(ACE = #access_control_entity{
 %% user or group is determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize_who(non_neg_integer(), binary(), od_space:id(), od_storage:id()) ->
+-spec normalize_who(non_neg_integer(), binary(), od_space:id(), storage:id()) ->
     od_user:id() | od_group:id().
 normalize_who(Flags, Who, SpaceId, StorageId) when ?has_flag(Flags, ?identifier_group_mask) ->
     {ok, GroupId} = reverse_luma:get_group_id_by_name(Who, SpaceId, StorageId),

@@ -167,6 +167,11 @@ route_direct_message(#server_message{message_id = #message_id{
 %%--------------------------------------------------------------------
 -spec route_and_ignore_answer(Msg :: #client_message{}) -> ok.
 route_and_ignore_answer(#client_message{
+    message_body = FuseRequest = #fuse_request{fuse_request = #file_request{context_guid = ContextGuid}}
+} = Msg) ->
+    Req = {fuse_request, effective_session_id(Msg), FuseRequest},
+    worker_proxy:cast(fslogic_ref_by_context_guid(ContextGuid), Req);
+route_and_ignore_answer(#client_message{
     message_body = #fuse_request{} = FuseRequest
 } = Msg) ->
     Req = {fuse_request, effective_session_id(Msg), FuseRequest},
@@ -274,11 +279,18 @@ answer_or_delegate(Msg = #client_message{
 
 answer_or_delegate(#client_message{
     message_id = MsgId,
-    message_body = Request = #get_remote_document{}
+    message_body = Request = #get_remote_document{key = Key}
 }, RIB) ->
-    delegate_request(proc, fun() ->
+    delegate_request({proc, Key}, fun() ->
         datastore_remote_driver:handle(Request)
     end, MsgId, RIB);
+
+answer_or_delegate(Msg = #client_message{
+    message_id = MsgId,
+    message_body = FuseRequest = #fuse_request{fuse_request = #file_request{context_guid = ContextGuid}}
+}, RIB) ->
+    Req = {fuse_request, effective_session_id(Msg), FuseRequest},
+    delegate_request(fslogic_ref_by_context_guid(ContextGuid), Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
@@ -289,10 +301,10 @@ answer_or_delegate(Msg = #client_message{
 
 answer_or_delegate(Msg = #client_message{
     message_id = MsgId,
-    message_body = ProviderRequest = #provider_request{}
+    message_body = ProviderRequest = #provider_request{context_guid = ContextGuid}
 }, RIB) ->
     Req = {provider_request, effective_session_id(Msg), ProviderRequest},
-    delegate_request(fslogic_worker, Req, MsgId, RIB);
+    delegate_request(fslogic_ref_by_context_guid(ContextGuid), Req, MsgId, RIB);
 
 answer_or_delegate(Msg = #client_message{
     message_id = Id,
@@ -322,3 +334,8 @@ delegate_request(WorkerRef, Req, MsgId, RIB) ->
     async_request_manager:delegate_and_supervise(
         WorkerRef, Req, MsgId, RIB#rib.respond_via
     ).
+
+%% @private
+-spec fslogic_ref_by_context_guid(file_id:file_guid()) -> {id, module(), datastore:key()}.
+fslogic_ref_by_context_guid(ContextGuid) ->
+    {id, fslogic_worker, file_id:guid_to_uuid(ContextGuid)}.

@@ -42,6 +42,8 @@ end).
 -spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
     fslogic_worker:provider_response().
 create_share(UserCtx, FileCtx0, Name) ->
+    data_constraints:is_in_readonly_mode(UserCtx) andalso throw(?EACCES),
+
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors]
@@ -56,6 +58,7 @@ create_share(UserCtx, FileCtx0, Name) ->
 -spec remove_share(user_ctx:ctx(), file_ctx:ctx(), od_share:id()) ->
     fslogic_worker:provider_response().
 remove_share(UserCtx, FileCtx0, ShareId) ->
+    data_constraints:is_in_readonly_mode(UserCtx) andalso throw(?EACCES),
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors]
@@ -97,7 +100,7 @@ remove_share_internal(UserCtx, FileCtx, ShareId) ->
     fslogic_worker:provider_response().
 create_share_insecure(UserCtx, FileCtx, Name) ->
     Guid = file_ctx:get_guid_const(FileCtx),
-    ShareId = datastore_utils:gen_key(),
+    ShareId = datastore_key:new(),
     ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
     SessionId = user_ctx:get_session_id(UserCtx),
     UserId = user_ctx:get_user_id(UserCtx),

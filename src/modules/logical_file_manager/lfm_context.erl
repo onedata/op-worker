@@ -20,7 +20,7 @@
     open_flag :: fslogic_worker:open_flag(),
     session_id :: session:id(),
     file_id :: helpers:file_id(),
-    storage_id :: od_storage:id()
+    storage_id :: storage:id()
 }).
 
 -type ctx() :: #lfm_context{}.
@@ -44,7 +44,7 @@
 %%--------------------------------------------------------------------
 -spec new(handle_id(), od_provider:id(), session:id(),
     fslogic_worker:file_guid(), fslogic_worker:open_flag(),
-    helpers:file_id(), od_storage:id()) -> ctx().
+    helpers:file_id(), storage:id()) -> ctx().
 new(HandleId, ProviderId, SessionId, FileGuid, OpenFlag, FileId, StorageId) ->
     #lfm_context{
         handle_id = HandleId,
@@ -115,7 +115,7 @@ get_file_id(#lfm_context{file_id = FileId}) ->
 %% Returns storage_id from context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_id(ctx()) -> od_storage:id().
+-spec get_storage_id(ctx()) -> storage:id().
 get_storage_id(#lfm_context{storage_id = StorageId}) ->
     StorageId.
 

@@ -17,10 +17,10 @@
 
 %% API
 -export([
-    get_user_id/2, get_user_id/3,
-    get_user_id_by_name/2, get_user_id_by_name/3,
-    get_group_id/3, get_group_id/4,
-    get_group_id_by_name/3, get_group_id_by_name/4
+    get_user_id/2,
+    get_user_id_by_name/2,
+    get_group_id/3,
+    get_group_id_by_name/3
 ]).
 
 
@@ -35,12 +35,15 @@
 %% Ids are cached for timeout defined in #luma_config{} record.
 %% If reverse LUMA is disabled, function returns ?ROOT USER_ID.
 %% @end
-%%--------------------------------------------------------------------
--spec get_user_id(integer(), od_storage:id(), storage_config:record()) ->
+-spec get_user_id(integer(), storage:id() | storage:data()) ->
     {ok, od_user:id()} | {error, Reason :: term()}.
-get_user_id(Uid, StorageId, Storage = #storage_config{}) ->
+get_user_id(Uid, StorageId) when is_binary(StorageId) ->
+    {ok, Storage} = storage:get(StorageId),
+    get_user_id(Uid, Storage);
+get_user_id(Uid, Storage) ->
+    StorageId = storage:get_id(Storage),
     luma_cache:get_user_id(Uid, StorageId, fun() ->
-        case storage_config:is_luma_enabled(Storage) of
+        case storage:is_luma_enabled(Storage) of
             false ->
                 {ok, ?ROOT_USER_ID};
             true ->
@@ -56,30 +59,20 @@ get_user_id(Uid, StorageId, Storage = #storage_config{}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv get_user_id(Uid, Gid, StorageId, Storage = #storage{}).
-%% @end
-%%--------------------------------------------------------------------
--spec get_user_id(integer(), od_storage:id() | storage_config:doc()) ->
-    {ok, od_user:id()} | {error, Reason :: term()}.
-get_user_id(Uid, #document{key = StorageId, value = Storage = #storage_config{}}) ->
-    get_user_id(Uid, StorageId, Storage);
-get_user_id(Uid, StorageId) ->
-    {ok, StorageConfig} = storage_config:get(StorageId),
-    get_user_id(Uid, StorageConfig).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns od_user:id() for storage user associated with given
 %% NFSv4 ACL name which is appropriate for the local server operations.
 %% Ids are cached for timeout defined in #luma_config{} record.
 %% If reverse LUMA is disabled, function returns ?ROOT USER_ID.
 %% @end
-%%--------------------------------------------------------------------
--spec get_user_id_by_name(binary(), od_storage:id(), storage_config:record()) ->
+-spec get_user_id_by_name(binary(), storage:id() | storage:data()) ->
     {ok, od_user:id()} | {error, Reason :: term()}.
-get_user_id_by_name(Name, StorageId, Storage = #storage_config{}) ->
+get_user_id_by_name(Name, StorageId) when is_binary(StorageId) ->
+    {ok, Storage} = storage:get(StorageId),
+    get_user_id_by_name(Name, Storage);
+get_user_id_by_name(Name, Storage) ->
+    StorageId = storage:get_id(Storage),
     luma_cache:get_user_id(Name, StorageId, fun() ->
-        case storage_config:is_luma_enabled(Storage) of
+        case storage:is_luma_enabled(Storage) of
             false ->
                 {error, luma_disabled};
             true ->
@@ -95,30 +88,20 @@ get_user_id_by_name(Name, StorageId, Storage = #storage_config{}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv get_user_id_by_name(Name, StorageId, Storage = #storage{}).
-%% @end
-%%--------------------------------------------------------------------
--spec get_user_id_by_name(binary(), od_storage:id() | storage_config:doc()) ->
-    {ok, od_user:id()} | {error, Reason :: term()}.
-get_user_id_by_name(Name, #document{key = StorageId, value = Storage = #storage_config{}}) ->
-    get_user_id_by_name(Name, StorageId, Storage);
-get_user_id_by_name(Name, StorageId) ->
-    {ok, StorageConfig} = storage_config:get(StorageId),
-    get_user_id_by_name(Name, StorageConfig).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns od_group:id() for storage group associated with given Gid.
 %% which is appropriate for the local server operations.
 %% Ids are cached for timeout defined in #luma_config{} record.
 %% If reverse LUMA is disabled, function returns error.
 %% @end
-%%--------------------------------------------------------------------
--spec get_group_id(integer(), od_space:id(), od_storage:id(), storage_config:record()) ->
+-spec get_group_id(integer(), od_space:id(), storage:data() | storage:id()) ->
     {ok, od_group:id() | undefined} | {error, Reason :: term()}.
-get_group_id(Gid, SpaceId, StorageId, Storage = #storage_config{}) ->
+get_group_id(Gid, SpaceId, StorageId) when is_binary(StorageId) ->
+    {ok, Storage} = storage:get(StorageId),
+    get_group_id(Gid, SpaceId, Storage);
+get_group_id(Gid, SpaceId, Storage) ->
+    StorageId = storage:get_id(Storage),
     luma_cache:get_group_id(Gid, StorageId, fun() ->
-        case storage_config:is_luma_enabled(Storage) of
+        case storage:is_luma_enabled(Storage) of
             false ->
                 {ok, undefined};
             true ->
@@ -133,30 +116,20 @@ get_group_id(Gid, SpaceId, StorageId, Storage = #storage_config{}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv get_group_id(Gid, StorageId, Storage = #storage{}).
-%% @end
-%%--------------------------------------------------------------------
--spec get_group_id(integer(), od_space:id(), storage_config:doc() | od_storage:id()) ->
-    {ok, od_group:id() | undefined} | {error, Reason :: term()}.
-get_group_id(Gid, SpaceId, #document{key = StorageId, value = Storage = #storage_config{}}) ->
-    get_group_id(Gid, SpaceId, StorageId, Storage);
-get_group_id(Gid, SpaceId, StorageId) ->
-    {ok, StorageConfig} = storage_config:get(StorageId),
-    get_group_id(Gid, SpaceId, StorageConfig).
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns od_group:id() for storage group associated with given
 %% NFSv4 ACL name which is appropriate for the local server operations.
 %% Ids are cached for timeout defined in #luma_config{} record.
 %% If reverse LUMA is disabled, function returns ?ROOT USER_ID.
 %% @end
-%%--------------------------------------------------------------------
--spec get_group_id_by_name(binary(), od_space:id(), od_storage:id(), storage_config:record()) ->
+-spec get_group_id_by_name(binary(), od_space:id(), storage:id() | storage:data()) ->
     {ok, od_group:id() | undefined} | {error, Reason :: term()}.
-get_group_id_by_name(Name, SpaceId, StorageId, Storage = #storage_config{}) ->
+get_group_id_by_name(Name, SpaceId, StorageId) when is_binary(StorageId) ->
+    {ok, Storage} = storage:get(StorageId),
+    get_group_id_by_name(Name, SpaceId, Storage);
+get_group_id_by_name(Name, SpaceId, Storage) ->
+    StorageId = storage:get_id(Storage),
     luma_cache:get_group_id(Name, StorageId, fun() ->
-        case storage_config:is_luma_enabled(Storage) of
+        case storage:is_luma_enabled(Storage) of
             false ->
                 {error, luma_disabled};
             true ->
@@ -170,19 +143,6 @@ get_group_id_by_name(Name, SpaceId, StorageId, Storage = #storage_config{}) ->
         end
     end).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv get_group_id_by_name(Name, StorageId, Storage = #storage{}).
-%% @end
-%%--------------------------------------------------------------------
--spec get_group_id_by_name(binary(), od_space:id(), od_storage:id() | storage_config:doc()) ->
-    {ok, od_group:id() | undefined} | {error, Reason :: term()}.
-get_group_id_by_name(Name, SpaceId, #document{key = StorageId, value = Storage = #storage_config{}}) ->
-    get_group_id_by_name(Name, SpaceId, StorageId, Storage);
-get_group_id_by_name(Name, SpaceId, StorageId) ->
-    {ok, StorageConfig} = storage_config:get(StorageId),
-    get_group_id_by_name(Name, SpaceId, StorageConfig).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -193,12 +153,11 @@ get_group_id_by_name(Name, SpaceId, StorageId) ->
 %% Maps user credentials on supported storage to onedata user id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id_from_supported_storage_credentials(integer(), od_storage:id(),
-    storage_config:record()) -> {ok, od_user:id()} | {error, term()}.
-get_user_id_from_supported_storage_credentials(Uid, StorageId, #storage_config{
-    name = StorageName,
-    luma_config = LumaConfig
-}) ->
+-spec get_user_id_from_supported_storage_credentials(integer(), storage:id(),
+    storage:data()) -> {ok, od_user:id()} | {error, term()}.
+get_user_id_from_supported_storage_credentials(Uid, StorageId, Storage) ->
+    StorageName = storage:fetch_name(StorageId),
+    LumaConfig = storage:get_luma_config(Storage),
     case reverse_luma_proxy:get_user_id(Uid, StorageId, StorageName, LumaConfig) of
         {error, Reason} ->
             {error, {luma_server, Reason}};
@@ -212,12 +171,11 @@ get_user_id_from_supported_storage_credentials(Uid, StorageId, #storage_config{
 %% Maps user credentials on supported storage to onedata user id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id_from_supported_storage_acl_name(binary(), od_storage:id(),
-    storage_config:record()) -> {ok, od_user:id()} | {error, term()}.
-get_user_id_from_supported_storage_acl_name(Name, StorageId, #storage_config{
-    name = StorageName,
-    luma_config = LumaConfig
-}) ->
+-spec get_user_id_from_supported_storage_acl_name(binary(), storage:id(),
+    storage:data()) -> {ok, od_user:id()} | {error, term()}.
+get_user_id_from_supported_storage_acl_name(Name, StorageId, Storage) ->
+    StorageName = storage:fetch_name(StorageId),
+    LumaConfig = storage:get_luma_config(Storage),
     case reverse_luma_proxy:get_user_id_by_name(Name, StorageId, StorageName,
         LumaConfig)
     of
@@ -234,11 +192,10 @@ get_user_id_from_supported_storage_acl_name(Name, StorageId, #storage_config{
 %% @end
 %%--------------------------------------------------------------------
 -spec get_group_id_from_supported_storage_credentials(integer(), od_space:id(),
-    od_storage:id(), storage_config:record()) -> {ok, od_group:id()} | {error, term()}.
-get_group_id_from_supported_storage_credentials(Gid, SpaceId, StorageId, #storage_config{
-    name = StorageName,
-    luma_config = LumaConfig
-}) ->
+    storage:id(), storage:data()) -> {ok, od_group:id()} | {error, term()}.
+get_group_id_from_supported_storage_credentials(Gid, SpaceId, StorageId, Storage) ->
+    StorageName = storage:fetch_name(StorageId),
+    LumaConfig = storage:get_luma_config(Storage),
     case reverse_luma_proxy:get_group_id(Gid, SpaceId, StorageId, StorageName,
         LumaConfig)
     of
@@ -255,11 +212,10 @@ get_group_id_from_supported_storage_credentials(Gid, SpaceId, StorageId, #storag
 %% @end
 %%--------------------------------------------------------------------
 -spec get_group_id_from_supported_storage_acl_name(binary(), od_space:id(),
-    od_storage:id(), storage_config:record()) -> {ok, od_group:id()} | {error, term()}.
-get_group_id_from_supported_storage_acl_name(Name, SpaceId, StorageId, #storage_config{
-    name = StorageName,
-    luma_config = LumaConfig
-}) ->
+    storage:id(), storage:data()) -> {ok, od_group:id()} | {error, term()}.
+get_group_id_from_supported_storage_acl_name(Name, SpaceId, StorageId, Storage) ->
+    StorageName = storage:fetch_name(StorageId),
+    LumaConfig = storage:get_luma_config(Storage),
     case reverse_luma_proxy:get_group_id_by_name(Name, SpaceId, StorageId,
         StorageName, LumaConfig)
     of
@@ -275,10 +231,10 @@ get_group_id_from_supported_storage_acl_name(Name, SpaceId, StorageId, #storage_
 %% Checks whether given storage is supported.
 %% @end
 %%-------------------------------------------------------------------
--spec is_storage_supported(storage_config:record()) -> boolean().
-is_storage_supported(#storage_config{
-    helpers = [#helper{name = HelperName} | _]
-}) ->
+-spec is_storage_supported(storage:data()) -> boolean().
+is_storage_supported(Storage) ->
+    Helper = storage:get_helper(Storage),
+    HelperName = helper:get_name(Helper),
     lists:member(HelperName, supported_storages()).
 
 %%-------------------------------------------------------------------

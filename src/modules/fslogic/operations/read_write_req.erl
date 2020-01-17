@@ -72,7 +72,7 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
 %%--------------------------------------------------------------------
 -spec get_proxyio_node(file_meta:uuid()) -> node().
 get_proxyio_node(Uuid) ->
-    consistent_hashing:get_node(Uuid).
+    datastore_key:responsible_node(Uuid).
 
 %%%===================================================================
 %%% Internal functions
@@ -91,7 +91,7 @@ get_handle(UserCtx, FileCtx, HandleId, Operation) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case session_handles:get(SessId, HandleId) of
         {error, not_found} ->
-            ?warning("Handle not found, session id: ~p, handle id: ~p",
+            ?debug("Handle not found, session id: ~p, handle id: ~p",
                 [SessId, HandleId]),
             create_handle(UserCtx, FileCtx, HandleId, Operation),
             session_handles:get(SessId, HandleId);
@@ -109,10 +109,16 @@ get_handle(UserCtx, FileCtx, HandleId, Operation) ->
     HandleId :: storage_driver:handle_id(), operation()) -> ok.
 create_handle(UserCtx, FileCtx, HandleId, Operation) ->
     try
-        create_handle_helper(UserCtx, FileCtx, HandleId, rdwr)
+        create_handle_helper(UserCtx, FileCtx, HandleId, rdwr, open_file)
     catch
         _:?EACCES ->
-            create_handle_helper(UserCtx, FileCtx, HandleId, Operation)
+            case file_handles:get_creation_handle(file_ctx:get_uuid_const(FileCtx)) of
+                % opening file with handle received from creation procedure
+                % (should open even if the user does not have permissions)
+                {ok, HandleId} -> create_handle_helper(UserCtx, FileCtx, HandleId, rdwr, open_file_insecure);
+                % try opening for limited usage (read or write only)
+                _ -> create_handle_helper(UserCtx, FileCtx, HandleId, Operation, open_file)
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -123,11 +129,11 @@ create_handle(UserCtx, FileCtx, HandleId, Operation) ->
 %%--------------------------------------------------------------------
 -spec create_handle_helper(user_ctx:ctx(), file_ctx:ctx(),
     HandleId :: storage_driver:handle_id(),
-    fslogic_worker:open_flag()) -> ok.
-create_handle_helper(UserCtx, FileCtx, HandleId, Flag) ->
+    fslogic_worker:open_flag(), open_file | open_file_insecure) -> ok.
+create_handle_helper(UserCtx, FileCtx, HandleId, Flag, OpenFun) ->
     #fuse_response{
         status = #status{code = ?OK}
-    } = file_req:open_file(UserCtx, FileCtx, Flag, HandleId),
+    } = file_req:OpenFun(UserCtx, FileCtx, Flag, HandleId),
     ok.
 
 %%--------------------------------------------------------------------

@@ -65,7 +65,7 @@
     file_ctx :: file_ctx:ctx(),
     file_guid :: undefined | fslogic_worker:file_guid(),
     space_id :: undefined | od_space:id(),
-    dest_storage_id :: od_storage:id() | undefined,
+    dest_storage_id :: storage:id() | undefined,
     dest_file_id :: helpers:file_id() | undefined,
     last_transfer :: undefined | block(),
     in_progress :: ordsets:ordset({block(), fetch_ref(), priority()}),
@@ -312,7 +312,7 @@ apply_or_run_locally(Uuid, InCacheFun, ApplyOnCacheFun, FallbackFun) ->
 -spec apply_if_alive_no_check(file_meta:uuid(), term()) ->
     term().
 apply_if_alive_no_check(Uuid, FunOrMsg) ->
-    Node = consistent_hashing:get_node(Uuid),
+    Node = datastore_key:responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_if_alive_internal, [Uuid, FunOrMsg]).
 
 %%--------------------------------------------------------------------
@@ -325,7 +325,7 @@ apply_if_alive_no_check(Uuid, FunOrMsg) ->
     term().
 apply_no_check(FileCtx, FunOrMsg) ->
     Uuid = file_ctx:get_uuid_const(FileCtx),
-    Node = consistent_hashing:get_node(Uuid),
+    Node = datastore_key:responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_internal, [FileCtx, FunOrMsg]).
 
 %%--------------------------------------------------------------------
@@ -337,7 +337,7 @@ apply_no_check(FileCtx, FunOrMsg) ->
 -spec apply_or_run_locally_no_check(file_meta:uuid(), fun(() -> term()), fun(() -> term())) ->
     term().
 apply_or_run_locally_no_check(Uuid, Fun, FallbackFun) ->
-    Node = consistent_hashing:get_node(Uuid),
+    Node = datastore_key:responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_or_run_locally_internal, [Uuid, Fun, FallbackFun]).
 
 %%%===================================================================

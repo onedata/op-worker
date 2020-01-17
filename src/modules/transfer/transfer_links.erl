@@ -159,8 +159,7 @@ list(SpaceId, ListDocId, StartId, Offset, Limit) ->
 
 
 -spec link_key(transfer:id(), non_neg_integer()) -> link_key().
-link_key(TransferId0, Timestamp) ->
-    TransferId = consistent_hashing:get_random_label_part(TransferId0),
+link_key(TransferId, Timestamp) ->
     TimestampPart = (integer_to_binary(?EPOCH_INFINITY - Timestamp)),
     IdPart = binary:part(TransferId, 0, ?LINK_NAME_ID_PART_LENGTH),
     <<TimestampPart/binary, IdPart/binary>>.

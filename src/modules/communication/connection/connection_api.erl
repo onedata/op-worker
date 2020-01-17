@@ -102,7 +102,7 @@ send_via_any(Msg, [Conn | Cons]) ->
 send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
     case session_connections:list(SessionId) of
         {ok, AllCons} ->
-            Cons = utils:random_shuffle(AllCons -- ExcludedCons),
+            Cons = lists_utils:shuffle(AllCons -- ExcludedCons),
             send_via_any(Msg, Cons);
         Error ->
             Error

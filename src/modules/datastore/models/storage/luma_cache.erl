@@ -25,7 +25,7 @@
 -export([get_ctx/0, get_record_struct/1]).
 
 -type tree_root_id_prefix() :: binary(). % ?LUMA_USER_ROOT | ?REV_LUMA_USER_ROOT | REV_LUMA_GROUP_ROOT
--type tree_root_id() :: binary().   % tree_root_id_prefix() concatenated with od_storage:id()
+-type tree_root_id() :: binary().   % tree_root_id_prefix() concatenated with storage:id()
 -type link_id() :: binary().
 -type link_target() :: od_user:id() | od_group:id()| luma:user_ctx().
 -type query_fun() :: fun(() -> {ok, luma:user_ctx() |od_user:id() | od_group:id()}
@@ -60,7 +60,7 @@
 %% On success, value returned from QueryFun will be cached.
 %% @end
 %%-------------------------------------------------------------------
--spec get_user_ctx(od_user:id(), od_storage:id(), query_fun(), helper:name()) ->
+-spec get_user_ctx(od_user:id(), storage:id(), query_fun(), helper:name()) ->
     {ok, luma:user_ctx()} | {error, term()}.
 get_user_ctx(UserId, StorageId, QueryFun, HelperName) ->
     case get_links(?LUMA_USER_ROOT_PREFIX, StorageId, UserId) of
@@ -94,7 +94,7 @@ get_user_ctx(UserId, StorageId, QueryFun, HelperName) ->
 %% On success, value returned from QueryFun will be cached.
 %% @end
 %%-------------------------------------------------------------------
--spec get_user_ctx(od_user:id(), od_storage:id(), od_group:id() | od_space:id(),
+-spec get_user_ctx(od_user:id(), storage:id(), od_group:id() | od_space:id(),
     query_fun(), helper:name()) -> {ok, luma:user_ctx()} | {error, term()}.
 get_user_ctx(UserId, StorageId, GroupOrSpaceId, QueryFun, HelperName) ->
     case get_links(?LUMA_USER_ROOT_PREFIX, StorageId, UserId) of
@@ -128,7 +128,7 @@ get_user_ctx(UserId, StorageId, GroupOrSpaceId, QueryFun, HelperName) ->
 %% On success, value returned from QueryFun will be cached.
 %% @end
 %%-------------------------------------------------------------------
--spec get_user_id(non_neg_integer() | binary(), od_storage:id(), query_fun()) ->
+-spec get_user_id(non_neg_integer() | binary(), storage:id(), query_fun()) ->
     {ok, od_user:id()} | {error, term()}.
 get_user_id(UidOrName, StorageId, QueryFun) ->
     UidOrNameBin = str_utils:to_binary(UidOrName),
@@ -160,7 +160,7 @@ get_user_id(UidOrName, StorageId, QueryFun) ->
 %% On success, value returned from QueryFun will be cached.
 %% @end
 %%-------------------------------------------------------------------
--spec get_group_id(non_neg_integer() | binary(), od_storage:id(), query_fun()) ->
+-spec get_group_id(non_neg_integer() | binary(), storage:id(), query_fun()) ->
     {ok, od_group:id()} | {error, term()}.
 get_group_id(GidOrName, StorageId, QueryFun) ->
     GidOrNameBin = str_utils:to_binary(GidOrName),
@@ -193,7 +193,7 @@ get_group_id(GidOrName, StorageId, QueryFun) ->
 %% Deletes all cached mappings for given StorageId.
 %% @end
 %%-------------------------------------------------------------------
--spec invalidate(od_storage:id()) -> ok.
+-spec invalidate(storage:id()) -> ok.
 invalidate(StorageId) ->
     lists:foreach(fun(RootId) ->
         {ok, LinkIds} = for_each(RootId, StorageId, fun(LinkId, Acc) ->
@@ -215,7 +215,7 @@ invalidate(StorageId) ->
 %% Adds reverse user mapping to cache if user_ctx is a POSIX user_ctx.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_add_reverse_mapping(od_storage:id(), luma:user_ctx(),
+-spec maybe_add_reverse_mapping(storage:id(), luma:user_ctx(),
     od_user:id()) -> ok.
 maybe_add_reverse_mapping(StorageId, #{<<"uid">> := Uid}, UserId) ->
     add_link(?REV_LUMA_USER_ROOT_PREFIX, StorageId, Uid, UserId);
@@ -229,7 +229,7 @@ maybe_add_reverse_mapping(_StorageId, _UserCtx, _UserId) ->
 %% POSIX user_ctx.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_add_reverse_mapping(od_storage:id(), luma:user_ctx(), od_user:id(),
+-spec maybe_add_reverse_mapping(storage:id(), luma:user_ctx(), od_user:id(),
     od_group:id() | od_space:id()) -> ok.
 maybe_add_reverse_mapping(StorageId, #{<<"uid">> := Uid, <<"gid">> := Gid},
     UserId, GroupOrSpaceId) ->
@@ -326,7 +326,7 @@ decode(EncodedValues) ->
 %% Wrapper for datastore_model:get_links/4.
 %% @end
 %%-------------------------------------------------------------------
--spec get_links(tree_root_id_prefix(), od_storage:id(), link_id()) ->
+-spec get_links(tree_root_id_prefix(), storage:id(), link_id()) ->
     {ok, link_target()} | {error, term()}.
 get_links(RootId, StorageId, LinkId) ->
     TreeRoot = tree_root(RootId, StorageId),
@@ -343,7 +343,7 @@ get_links(RootId, StorageId, LinkId) ->
 %% Wrapper for datastore_model:add_links/4.
 %% @end
 %%--------------------------------------------------------------------
--spec add_link(tree_root_id_prefix(), od_storage:id(), link_id(), link_target()) -> ok.
+-spec add_link(tree_root_id_prefix(), storage:id(), link_id(), link_target()) -> ok.
 add_link(RootId, StorageId, LinkId, LinkTarget) ->
     TreeId = oneprovider:get_id(),
     TreeRoot = tree_root(RootId, StorageId),
@@ -358,7 +358,7 @@ add_link(RootId, StorageId, LinkId, LinkTarget) ->
 %% Wrapper for datastore_model:delete_links/4.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_link(tree_root_id_prefix(), od_storage:id(), link_id()) -> ok.
+-spec delete_link(tree_root_id_prefix(), storage:id(), link_id()) -> ok.
 delete_link(RootId, StorageId, LinkId) ->
     TreeId = oneprovider:get_id(),
     TreeRoot = tree_root(RootId, StorageId),
@@ -376,7 +376,7 @@ delete_link(RootId, StorageId, LinkId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec for_each(
-    tree_root_id_prefix(), od_storage:id(),
+    tree_root_id_prefix(), storage:id(),
     Callback :: fun((link_id(), Acc0 :: term()) -> Acc :: term()),
     Acc0 :: term()) -> {ok, Acc :: term()} | {error, term()}.
 for_each(RootId, StorageId, Callback, Acc0) ->
@@ -393,7 +393,7 @@ for_each(RootId, StorageId, Callback, Acc0) ->
 %% Returns link's tree root id based on given RootPrefix and StorageId.
 %% @end
 %%-------------------------------------------------------------------
--spec tree_root(binary(), od_storage:id()) -> tree_root_id().
+-spec tree_root(binary(), storage:id()) -> tree_root_id().
 tree_root(RootPrefix, StorageId) ->
     <<RootPrefix/binary, StorageId/binary>>.
 

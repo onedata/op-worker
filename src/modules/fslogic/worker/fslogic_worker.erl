@@ -423,13 +423,14 @@ handle_fuse_request(UserCtx, #verify_storage_test_file{
     file_id = FileId,
     file_content = FileContent
 }, undefined) ->
+    Session = user_ctx:get_session_id(UserCtx),
     case storage_req:verify_storage_test_file(UserCtx, SpaceId,
         StorageId, FileId, FileContent) of
         #fuse_response{status = #status{code = ?OK}} = Ans ->
-            Session = user_ctx:get_session_id(UserCtx),
-            session:set_direct_io(Session, true),
+            session:set_direct_io(Session, SpaceId, true),
             Ans;
         Error ->
+            session:set_direct_io(Session, SpaceId, false),
             Error
     end.
 
@@ -646,7 +647,7 @@ periodical_spaces_autocleaning_check() ->
         {ok, SpaceIds} ->
             MyNode = node(),
             lists:foreach(fun(SpaceId) ->
-                case consistent_hashing:get_node(SpaceId) of
+                case datastore_key:responsible_node(SpaceId) of
                     MyNode -> autocleaning_api:maybe_check_and_start_autocleaning(SpaceId);
                     _ -> ok
                 end

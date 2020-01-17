@@ -108,7 +108,7 @@
     version_vector:version_vector(), replica_deletion:report_id(),
     replica_deletion:type(), od_space:id()) -> ok.
 enqueue_task(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
-    Node = consistent_hashing:get_node(SpaceId),
+    Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, ?MODULE, enqueue_task_internal,
         [FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId]).
 
@@ -131,7 +131,7 @@ enqueue_task_internal(FileUuid, ProviderId, Blocks, Version, ReportId, Type, Spa
 %%-------------------------------------------------------------------
 -spec cancel(replica_deletion:report_id(), od_space:id()) -> ok.
 cancel(ReportId, SpaceId) ->
-    Node = consistent_hashing:get_node(SpaceId),
+    Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, ?MODULE, cancel_internal, [ReportId, SpaceId]).
 
 %%-------------------------------------------------------------------
@@ -154,7 +154,7 @@ cancel_internal(ReportId, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec cancelling_finished(replica_deletion:report_id(), od_space:id()) -> ok.
 cancelling_finished(ReportId, SpaceId) ->
-    Node = consistent_hashing:get_node(SpaceId),
+    Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, ?MODULE, cancelling_finished_internal, [ReportId, SpaceId]).
 
 %%-------------------------------------------------------------------
@@ -173,7 +173,7 @@ cancelling_finished_internal(ReportId, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec notify_finished_task(od_space:id()) -> ok.
 notify_finished_task(SpaceId) ->
-    Node = consistent_hashing:get_node(SpaceId),
+    Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, ?MODULE, notify_finished_task_internal, [SpaceId]).
 
 %%-------------------------------------------------------------------
@@ -192,7 +192,7 @@ notify_finished_task_internal(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec notify_finished_task_async(od_space:id()) -> ok.
 notify_finished_task_async(SpaceId) ->
-    Node = consistent_hashing:get_node(SpaceId),
+    Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, ?MODULE, notify_finished_task_async_internal, [SpaceId]).
 
 %%-------------------------------------------------------------------
@@ -211,7 +211,7 @@ notify_finished_task_async_internal(SpaceId) ->
 %%-------------------------------------------------------------------
 -spec check(od_space:id()) -> ok.
 check(SpaceId) ->
-    Node = consistent_hashing:get_node(SpaceId),
+    Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, ?MODULE, check_internal, [SpaceId]).
 
 %%-------------------------------------------------------------------
@@ -244,7 +244,7 @@ process_result(eviction, _SpaceId, FileUuid, Result, TransferId) ->
 -spec(start_link(od_space:id()) ->
     {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link(SpaceId) ->
-    Node = consistent_hashing:get_node(SpaceId),
+    Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, gen_server2, start_link, [?SERVER(SpaceId), ?MODULE, [SpaceId], []]).
 
 %%-------------------------------------------------------------------
@@ -465,16 +465,13 @@ handle_task(#task{
     },
     id = ReportId
 } = Task, SpaceId) ->
-    % TODO: VFS-5573 use actual storage id
-    StorageId = oneprovider:get_id(),
+    {StorageId, _} = file_ctx:get_storage_id(file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))),
     case file_qos:is_replica_protected(FileUuid, StorageId) of
         false ->
             {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
                 Type, SpaceId),
             ok;
         true ->
-            % This is needed to avoid deadlock as cancel_task
-            % makes a synchronous call to this process.
             cancel_task(Task, SpaceId)
     end.
 

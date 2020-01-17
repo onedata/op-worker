@@ -70,7 +70,7 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
 -spec reconcile_qos_for_entry(file_ctx:ctx(), qos_entry:id()) -> ok.
 reconcile_qos_for_entry(FileCtx, QosEntryId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    TaskId = datastore_utils:gen_key(),
+    TaskId = datastore_key:new(),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     Options = #{
         task_id => TaskId,
@@ -141,7 +141,8 @@ task_finished(TaskId, _PoolName) ->
 update_job_progress(Id, Job, Pool, TaskId, Status) ->
     tree_traverse:update_job_progress(Id, Job, Pool, TaskId, Status, ?MODULE).
 
--spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
+-spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
+    {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
     tree_traverse:do_master_job(Job, MasterJobArgs).
 

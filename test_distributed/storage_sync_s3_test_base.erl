@@ -65,7 +65,7 @@ import_file_with_link_but_no_doc_test(Config, MountSpaceInRoot) ->
 
     Ctx = rpc:call(W1, file_meta, get_ctx, []),
     TreeId = rpc:call(W1, oneprovider, get_id, []),
-    FileUuid = datastore_utils:gen_key(),
+    FileUuid = datastore_key:new(),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
     {ok, _} = rpc:call(W1, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_FILE1, FileUuid}]),
@@ -1344,7 +1344,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
 
     ?assertEqual(true, 10 =< rpc:call(W1, storage_sync_monitoring, get_unhandled_jobs_value,
-        [?SPACE_ID, sd_test_utils:get_storage_id(W1, ?SPACE_ID)]), ?ATTEMPTS),
+        [?SPACE_ID, initializer:get_supporting_storage_id(W1, ?SPACE_ID)]), ?ATTEMPTS),
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
     ?assertMatch({ok, []}, sd_test_utils:listobjects(W1, SDHandle, ?SPACE_PATH, 0, 100)),

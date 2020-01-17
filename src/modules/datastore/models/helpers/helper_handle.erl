@@ -41,12 +41,12 @@
 %% Creates and caches helper handle.
 %% @end
 %%--------------------------------------------------------------------
--spec create(session:id(), od_user:id(), od_space:id(), od_storage:id()) ->
+-spec create(session:id(), od_user:id(), od_space:id(), storage:id()) ->
     {ok, doc()}.
 create(SessionId, UserId, SpaceId, StorageId) ->
-    {ok, StorageConfig} = storage_config:get(StorageId),
-    Helper = storage_config:get_helper(StorageConfig),
-    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, StorageConfig),
+    {ok, Storage} = storage:get(StorageId),
+    Helper = storage:get_helper(Storage),
+    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, Storage),
     HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
     HelperDoc = #document{value = HelperHandle},
     datastore_model:create(?CTX, HelperDoc).

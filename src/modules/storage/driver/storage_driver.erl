@@ -61,7 +61,7 @@ new_handle(SessionId, FileCtx) ->
 new_handle(SessionId, FileCtx, Generate) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+    {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
     case file_ctx:get_storage_file_id(FileCtx2, Generate) of
         {undefined, FileCtx3} ->
             {undefined, FileCtx3};
@@ -78,7 +78,7 @@ new_handle(SessionId, FileCtx, Generate) ->
 %% Handle created by this function may not be used for remote files.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(session:id(), od_space:id(), file_meta:uuid(), od_storage:id(),
+-spec new_handle(session:id(), od_space:id(), file_meta:uuid(), storage:id(),
     helpers:file_id(), od_share:id() | undefined) -> handle().
 new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId, ShareId) ->
     #sd_handle{

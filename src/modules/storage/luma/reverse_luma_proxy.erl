@@ -34,7 +34,7 @@
 %% with given Uid and Gid on storage named StorageId.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id(integer(), od_storage:id(), storage_config:name(), luma_config:config()) ->
+-spec get_user_id(integer(), storage:id(), storage:name(), luma_config:config()) ->
     {ok, od_user:id()} | {error, term()}.
 get_user_id(Uid, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl}) ->
     Url = str_utils:format_bin("~s/resolve_user", [LumaUrl]),
@@ -59,7 +59,7 @@ get_user_id(Uid, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl
 %% with given Uid and Gid on storage named StorageId.
 %% @end
 %%--------------------------------------------------------------------
--spec get_user_id_by_name(binary(), od_storage:id(), storage_config:name(),
+-spec get_user_id_by_name(binary(), storage:id(), storage:name(),
     luma_config:config()) -> {ok, od_user:id()} | {error, term()}.
 get_user_id_by_name(Name, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl}) ->
     Url = str_utils:format_bin("~s/resolve_acl_user", [LumaUrl]),
@@ -84,7 +84,7 @@ get_user_id_by_name(Name, StorageId, StorageName, LumaConfig = #luma_config{url 
 %% with given Gid on storage named StorageId
 %% @end
 %%--------------------------------------------------------------------
--spec get_group_id(integer(), od_space:id(), od_storage:id(), storage_config:name(),
+-spec get_group_id(integer(), od_space:id(), storage:id(), storage:name(),
     luma_config:config()) -> {ok, od_user:id()} |  {error, term()}.
 get_group_id(Gid, SpaceId, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl}) ->
     Url = str_utils:format_bin("~s/resolve_group", [LumaUrl]),
@@ -113,7 +113,7 @@ get_group_id(Gid, SpaceId, StorageId, StorageName, LumaConfig = #luma_config{url
 %% with given Gid on storage named StorageId
 %% @end
 %%--------------------------------------------------------------------
--spec get_group_id_by_name(binary(), od_space:id(), od_storage:id(), storage_config:name(),
+-spec get_group_id_by_name(binary(), od_space:id(), storage:id(), storage:name(),
     luma_config:config()) -> {ok, od_user:id()} |  {error, term()}.
 get_group_id_by_name(Name, SpaceId, StorageId, StorageName,
     LumaConfig = #luma_config{url = LumaUrl}
@@ -164,9 +164,9 @@ http_client_post(Url, ReqHeaders, ReqBody) ->
 idp_to_onedata_user_id(<<"onedata">>, IdpUserId) ->
     IdpUserId;
 idp_to_onedata_user_id(Idp, IdpUserId) ->
-    datastore_utils:gen_key(<<"">>, str_utils:format_bin("~p:~s",
-        [Idp, IdpUserId]
-    )).
+    % NOTE: legacy key generation must always be used to ensure that user
+    % mappings are not lost after system upgrade from version pre 19.02.1
+    datastore_key:gen_legacy_key(<<"">>, str_utils:format_bin("~ts:~s", [Idp, IdpUserId])).
 
 
 %%-------------------------------------------------------------------
@@ -176,8 +176,8 @@ idp_to_onedata_user_id(Idp, IdpUserId) ->
 %% by given storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_group_request_body(integer(), od_space:id(), od_storage:id(),
-    storage_config:name()) -> binary().
+-spec get_group_request_body(integer(), od_space:id(), storage:id(),
+    storage:name()) -> binary().
 get_group_request_body(Gid, SpaceId, StorageId, StorageName) ->
     Body = get_posix_generic_request_body_part(StorageId, StorageName),
     json_utils:encode(Body#{
@@ -192,8 +192,8 @@ get_group_request_body(Gid, SpaceId, StorageId, StorageName) ->
 %% by given storage.
 %% @end
 %%-------------------------------------------------------------------
--spec get_group_request_body_by_name(binary(), od_space:id(), od_storage:id(),
-    storage_config:name()) -> binary().
+-spec get_group_request_body_by_name(binary(), od_space:id(), storage:id(),
+    storage:name()) -> binary().
 get_group_request_body_by_name(Name, SpaceId, StorageId, StorageName) ->
     Body = get_posix_generic_request_body_part(StorageId, StorageName),
     json_utils:encode(Body#{
@@ -207,7 +207,7 @@ get_group_request_body_by_name(Name, SpaceId, StorageId, StorageName) ->
 %% Prepares request body for resolving user uid.
 %% @end
 %%-------------------------------------------------------------------
--spec get_user_request_body(integer(), od_storage:id(), helper:name()) -> binary().
+-spec get_user_request_body(integer(), storage:id(), helper:name()) -> binary().
 get_user_request_body(Uid, StorageId, StorageName) ->
     Body = get_posix_generic_request_body_part(StorageId, StorageName),
     json_utils:encode(Body#{<<"uid">> => Uid}).
@@ -218,7 +218,7 @@ get_user_request_body(Uid, StorageId, StorageName) ->
 %% Prepares request body for resolving user aclname.
 %% @end
 %%-------------------------------------------------------------------
--spec get_user_request_body_by_name(binary(), od_storage:id(), storage_config:name()) -> binary().
+-spec get_user_request_body_by_name(binary(), storage:id(), storage:name()) -> binary().
 get_user_request_body_by_name(Name, StorageId, StorageName) ->
     Body = get_posix_generic_request_body_part(StorageId, StorageName),
     json_utils:encode(Body#{<<"name">> => Name}).
@@ -229,7 +229,7 @@ get_user_request_body_by_name(Name, StorageId, StorageName) ->
 %% Returns generic arguments for given POSIX storage in request body.
 %% @end
 %%-------------------------------------------------------------------
--spec get_posix_generic_request_body_part(od_storage:id(), storage_config:name()) -> map().
+-spec get_posix_generic_request_body_part(storage:id(), storage:name()) -> map().
 get_posix_generic_request_body_part(StorageId, StorageName) ->
     #{
         <<"storageId">> => StorageId,

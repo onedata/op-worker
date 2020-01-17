@@ -1106,7 +1106,7 @@ file_consistency_test_skeleton(Config, Worker1, Worker2, Worker3, ConfigsNum) ->
 
         GenerateDoc = fun(Type) ->
             Name = generator:gen_name(),
-            Uuid = datastore_utils:gen_key(),
+            Uuid = datastore_key:new(),
             Doc = #document{
                 key = Uuid,
                 value = #file_meta{
@@ -1803,7 +1803,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     FileUuid = Doc#document.key,
     SpaceId = Doc#document.scope,
 
-    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
+    {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
     FileId = Path,
     Location0 = #file_location{
         blocks = [#file_block{offset = 0, size = 3}],
@@ -1826,7 +1826,6 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     {ok, _} = datastore_model:save(Ctx, LocationDoc),
 
     LeafLess = filename:dirname(FileId),
-    {ok, #document{key = StorageId}} = fslogic_storage:select_storage(SpaceId),
     SDHandle0 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, LeafLess, undefined),
     case storage_driver:mkdir(SDHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;

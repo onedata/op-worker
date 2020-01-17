@@ -41,7 +41,7 @@
     storage_posix_user_context :: undefined | luma:posix_user_ctx(),
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
-    storage_doc :: undefined | storage_config:doc(),
+    storage :: undefined | storage:data(),
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
     is_space_synced :: undefined | boolean(),
@@ -75,13 +75,13 @@
     get_parent_guid/2, get_child/3,
     get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
     get_logical_path/2,
-    get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
+    get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2, fill_location_gaps/4,
     get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
     get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3, get_file_location_ids/1,
     get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/1, get_acl/1, get_mode/1, get_child_canonical_path/2,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2,
     get_file_size/1, get_file_size_from_remote_locations/1, get_owner/1,
     get_group_owner/1, get_local_storage_file_size/1,
     is_space_synced/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1
@@ -348,8 +348,8 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 %%--------------------------------------------------------------------
 -spec is_imported_storage(ctx()) -> {boolean(), ctx()}.
 is_imported_storage(FileCtx = #file_ctx{is_imported_storage = undefined}) ->
-    {StorageConfig, FileCtx2} = get_storage_doc(FileCtx),
-    ImportedStorage = storage_config:is_imported_storage(StorageConfig),
+    {Storage, FileCtx2} = get_storage(FileCtx),
+    ImportedStorage = storage:is_imported_storage(Storage),
     {ImportedStorage, FileCtx2#file_ctx{is_imported_storage = ImportedStorage}};
 is_imported_storage(FileCtx = #file_ctx{is_imported_storage = ImportedStorage}) ->
     {ImportedStorage, FileCtx}.
@@ -404,7 +404,7 @@ get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
     ParentGuid =
         case fslogic_uuid:is_root_dir_uuid(ParentUuid) of
             true ->
-                case ParentUuid =:= ?ROOT_DIR_UUID
+                case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
                     andalso UserCtx =/= undefined
                     andalso user_ctx:is_normal_user(UserCtx)
                 of
@@ -433,7 +433,7 @@ get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
 %% Returns GUID of parent or undefined when the file is a root dir.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent_guid(ctx(), user_ctx:ctx()) -> {fslogic_worker:file_guid(), ctx()}.
+-spec get_parent_guid(ctx(), user_ctx:ctx() | undefined) -> {fslogic_worker:file_guid() | undefined, ctx()}.
 get_parent_guid(FileCtx, UserCtx) ->
     case is_root_dir_const(FileCtx) of
         true ->
@@ -497,8 +497,8 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
 
 -spec get_new_storage_file_id(ctx()) -> {helpers:file_id(), ctx()}.
 get_new_storage_file_id(FileCtx) ->
-    {StorageConfig, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
-    Helper = storage_config:get_helper(StorageConfig),
+    {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
+    Helper = storage:get_helper(Storage),
     case helper:get_storage_path_type(Helper) of
         ?FLAT_STORAGE_PATH ->
             {FileId, FileCtx3} = storage_file_id:flat(FileCtx2),
@@ -750,24 +750,24 @@ get_file_children_whitelisted(
 %% Returns storage id.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_id(ctx()) -> {od_storage:id(), ctx()}.
+-spec get_storage_id(ctx()) -> {storage:id(), ctx()}.
 get_storage_id(FileCtx) ->
-    {#document{key = StorageId}, FileCtx2} = get_storage_doc(FileCtx),
-    {StorageId, FileCtx2}.
+    {Storage, FileCtx2} = get_storage(FileCtx),
+    {storage:get_id(Storage), FileCtx2}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns local storage_config document of file's space.
-%% @TODO VFS-5853 return here higher level storage record
+%% Returns record of storage supporting space in which file was created.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage_doc(ctx()) -> {storage_config:doc(), ctx()}.
-get_storage_doc(FileCtx = #file_ctx{storage_doc = undefined}) ->
+-spec get_storage(ctx()) -> {storage:data(), ctx()}.
+get_storage(FileCtx = #file_ctx{storage = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
-    {ok, StorageConfig} = fslogic_storage:select_storage(SpaceId),
-    {StorageConfig, FileCtx#file_ctx{storage_doc = StorageConfig}};
-get_storage_doc(FileCtx = #file_ctx{storage_doc = StorageConfig}) ->
-    {StorageConfig, FileCtx}.
+    {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
+    {ok, Storage} = storage:get(StorageId),
+    {Storage, FileCtx#file_ctx{storage = Storage}};
+get_storage(FileCtx = #file_ctx{storage = Storage}) ->
+    {Storage, FileCtx}.
 
 
 %%--------------------------------------------------------------------
@@ -975,18 +975,21 @@ get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts, IncludeLocal) ->
 %% or posix otherwise).
 %% @end
 %%--------------------------------------------------------------------
--spec get_active_perms_type(ctx()) -> {file_meta:permissions_type(), ctx()}.
-get_active_perms_type(FileCtx = #file_ctx{file_doc = #document{
-    value = #file_meta{acl = []}
-}}) ->
+-spec get_active_perms_type(ctx(), include_deleted | ignore_deleted) -> {file_meta:permissions_type(), ctx()}.
+get_active_perms_type(FileCtx = #file_ctx{file_doc = undefined}, GetMode) ->
+    {Doc, FileCtx2} = case GetMode of
+        include_deleted -> get_file_doc_including_deleted(FileCtx);
+        _ -> get_file_doc(FileCtx)
+    end,
+    get_active_perms_type_from_doc(Doc, FileCtx2);
+get_active_perms_type(FileCtx = #file_ctx{file_doc = Doc}, _) ->
+    get_active_perms_type_from_doc(Doc, FileCtx).
+
+-spec get_active_perms_type_from_doc(file_meta:doc(), ctx()) -> {file_meta:permissions_type(), ctx()}.
+get_active_perms_type_from_doc(#document{value = #file_meta{acl = []}}, FileCtx) ->
     {posix, FileCtx};
-get_active_perms_type(FileCtx = #file_ctx{file_doc = #document{
-    value = #file_meta{}
-}}) ->
-    {acl, FileCtx};
-get_active_perms_type(FileCtx) ->
-    {_, FileCtx2} = get_file_doc(FileCtx),
-    get_active_perms_type(FileCtx2).
+get_active_perms_type_from_doc(#document{value = #file_meta{}}, FileCtx) ->
+    {acl, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc

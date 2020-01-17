@@ -464,7 +464,7 @@ get_providers(SpaceId) ->
         (<<"s3">>) -> [<<"p1">>, <<"p4">>, <<"p5">>];
         (<<"s4">>) -> [<<"p2">>, <<"p3">>, <<"p4">>, <<"p5">>]
     end,
-    utils:random_shuffle(ProviderIds).
+    lists_utils:shuffle(ProviderIds).
 
 get_provider_session(ProviderId) ->
     <<"s", ProviderId/binary>>.

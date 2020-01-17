@@ -43,11 +43,13 @@
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
-
+-export([check_name/3, has_suffix/1]).
+% For tests
+-export([get_all_links/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
 
 -type doc() :: datastore:doc().
 -type diff() :: datastore_doc:diff(file_meta()).
@@ -238,15 +240,15 @@ get(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_including_deleted(uuid()) -> {ok, doc()} | {error, term()}.
-get_including_deleted(?ROOT_DIR_UUID) ->
+get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
     {ok, #document{
-        key = ?ROOT_DIR_UUID,
+        key = ?GLOBAL_ROOT_DIR_UUID,
         value = #file_meta{
-            name = ?ROOT_DIR_NAME,
+            name = ?GLOBAL_ROOT_DIR_NAME,
             is_scope = true,
             mode = 8#111,
             owner = ?ROOT_USER_ID,
-            parent_uuid = ?ROOT_DIR_UUID
+            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     }};
 get_including_deleted(FileUuid) ->
@@ -658,7 +660,7 @@ get_ancestors(FileUuid) ->
         {ok, #document{key = Key}} = file_meta:get(FileUuid),
         {ok, get_ancestors2(Key, [])}
     end).
-get_ancestors2(?ROOT_DIR_UUID, Acc) ->
+get_ancestors2(?GLOBAL_ROOT_DIR_UUID, Acc) ->
     Acc;
 get_ancestors2(FileUuid, Acc) ->
     {ok, ParentUuid} = get_parent_uuid({uuid, FileUuid}),
@@ -706,7 +708,7 @@ setup_onedata_user(UserId, EffSpaces) ->
             end, EffSpaces),
 
             FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
-            case create({uuid, ?ROOT_DIR_UUID},
+            case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
                 #document{
                     key = FileUuid,
                     value = #file_meta{
@@ -715,7 +717,7 @@ setup_onedata_user(UserId, EffSpaces) ->
                         mode = 8#1755,
                         owner = ?ROOT_USER_ID,
                         is_scope = true,
-                        parent_uuid = ?ROOT_DIR_UUID
+                        parent_uuid = ?GLOBAL_ROOT_DIR_UUID
                     }
                 })
             of
@@ -787,10 +789,10 @@ make_space_exist(SpaceId) ->
             name = SpaceId, type = ?DIRECTORY_TYPE,
             mode = ?DEFAULT_SPACE_DIR_MODE,
             owner = ?ROOT_USER_ID, is_scope = true,
-            parent_uuid = ?ROOT_DIR_UUID
+            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     },
-    case file_meta:create({uuid, ?ROOT_DIR_UUID}, FileDoc) of
+    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
         {ok, _} ->
             TimesDoc = #document{
                 key = SpaceDirUuid,
@@ -800,7 +802,8 @@ make_space_exist(SpaceId) ->
             case times:save(TimesDoc) of
                 {ok, _} -> ok;
                 {error, already_exists} -> ok
-            end;
+            end,
+            emit_space_dir_created(SpaceDirUuid, SpaceId);
         {error, already_exists} ->
             ok
     end.
@@ -916,6 +919,69 @@ update_acl(FileUuid, NewAcl) ->
         {ok, FileMeta#file_meta{acl = NewAcl}}
     end)).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given file has conflicts with other files on name field.
+%% ParentUuid and Name cannot be got from document as this function may be used
+%% as a result of conflict resolving that involve renamed file document.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_name(ParentUuid :: uuid(), name(), CheckDoc :: doc()) ->
+    ok | {conflicting, ExtendedName :: name(), Conflicts :: [{uuid(), name()}]}.
+check_name(undefined, _Name, _ChildDoc) ->
+    ok; % Root directory
+check_name(ParentUuid, Name, #document{
+    key = ChildUuid,
+    value = #file_meta{
+        provider_id = ChildProvider
+    }
+}) ->
+    case file_meta:get_all_links(ParentUuid, Name) of
+        {ok, [#link{target = ChildUuid}]} ->
+            ok;
+        {ok, []} ->
+            ok;
+        {ok, Links} ->
+            Links2 = case lists:any(fun(#link{tree_id = TreeID}) -> TreeID =:= ChildProvider end, Links) of
+                false ->
+                    % Link is missing, possible race on dbsync
+                    [#link{tree_id = ChildProvider, name = Name, target = ChildUuid} | Links];
+                _ ->
+                    Links
+            end,
+            WithTag = tag_children(Links2),
+            {NameAns, OtherFiles} = lists:foldl(fun
+                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) when Uuid =:= ChildUuid->
+                    {ExtendedName, OtherAcc};
+                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) ->
+                    {NameAcc, [{Uuid, ExtendedName} | OtherAcc]}
+            end, {Name, []}, WithTag),
+            {conflicting, NameAns, OtherFiles};
+        {error, _Reason} ->
+            ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function created to be mocked during tests.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_all_links(uuid(), name()) -> {ok, [datastore:link()]} | {error, term()}.
+get_all_links(Uuid, Name) ->
+    datastore_model:get_links(?CTX, Uuid, all, Name).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if file has suffix. Returns name without suffix if true.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_suffix(name()) -> {true, NameWithoutSuffix :: name()} | false.
+has_suffix(Name) ->
+    case binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR) of
+        [BaseName | _] -> {true, BaseName};
+        _ -> false
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1012,7 +1078,9 @@ tag_children(Links) ->
                 }, Children2) ->
                     [#child_link_uuid{
                         uuid = FileUuid,
-                        name = <<Name/binary, "@", TreeId:Len2/binary>>
+                        name = <<Name/binary,
+                            ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR_CHAR,
+                            TreeId:Len2/binary>>
                     } | Children2]
             end, Children, LocalLinks ++ RemoteLinks)
     end, [], [Group2 | Groups2]).
@@ -1044,10 +1112,9 @@ get_uuid(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec fill_uuid(doc(), uuid()) -> doc().
 fill_uuid(Doc = #document{key = undefined, value = #file_meta{type = ?DIRECTORY_TYPE}}, _ParentUuid) ->
-    Doc#document{key = datastore_utils:gen_key()};
+    Doc#document{key = datastore_key:new()};
 fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
-    HashPart = consistent_hashing:get_hashing_key(ParentUuid),
-    Doc#document{key = datastore_utils:gen_key(HashPart)};
+    Doc#document{key = datastore_key:new_adjacent_to(ParentUuid)};
 fill_uuid(Doc, _ParentUuid) ->
     Doc.
 
@@ -1089,6 +1156,20 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends event about space dir creation
+%% @end
+%%--------------------------------------------------------------------
+-spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: datastore:key()) -> ok | no_return().
+emit_space_dir_created(DirUuid, SpaceId) ->
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
+    #fuse_response{fuse_response = FileAttr} =
+        attr_req:get_file_attr_light(user_ctx:new(?ROOT_USER_ID), FileCtx, false),
+    FileAttr2 = FileAttr#file_attr{size = 0},
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -1339,3 +1420,28 @@ upgrade_record(8, {
     {9, {?MODULE, Name, Type, Mode, ACL, Owner, GroupOwner, IsScope,
         ProviderId, Shares, Deleted, ParentUuid
     }}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function called when saving changes from other providers (checks conflicts: local doc vs. remote changes).
+%% It is used to check if file has been renamed remotely to send appropriate event.
+%% TODO - VFS-5962 - delete when event emission is possible in dbsync_events.
+%% @end
+%%--------------------------------------------------------------------
+-spec resolve_conflict(datastore_model:ctx(), doc(), doc()) -> default.
+resolve_conflict(_Ctx, #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}},
+    #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}) ->
+    case NewName =/= PrevName of
+        true ->
+            spawn(fun() ->
+                FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid)),
+                OldParentGuid = fslogic_uuid:uuid_to_guid(PrevParentUuid),
+                NewParentGuid = fslogic_uuid:uuid_to_guid(NewParentUuid),
+                fslogic_event_emitter:emit_file_renamed_no_exclude(
+                    FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName)
+            end);
+        _ ->
+            ok
+    end,
+
+    default.
