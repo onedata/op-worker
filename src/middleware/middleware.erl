@@ -108,8 +108,13 @@ handle(#op_req{gri = #gri{type = EntityType, id = EntityId}} = OpReq0, Versioned
             op_file when EntityId =/= undefined ->
                 % Every req using share guid must be carried with guest auth
                 case file_id:is_share_guid(EntityId) of
-                    true -> OpReq0#op_req{auth = ?NOBODY};
-                    false -> OpReq0
+                    true ->
+                        OpReq0#op_req{auth = #auth{
+                            subject = #subject{type = nobody, id = ?GUEST_USER_ID},
+                            session_id = ?GUEST_SESS_ID
+                        }};
+                    false ->
+                        OpReq0
                 end;
             _ ->
                 OpReq0
