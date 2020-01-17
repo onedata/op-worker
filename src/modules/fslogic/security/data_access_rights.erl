@@ -167,12 +167,26 @@ check_access(UserCtx, FileCtx0, traverse_ancestors) ->
         true ->
             {ok, FileCtx0};
         false ->
-            {ParentCtx0, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
-            ParentCtx1 = check_and_cache_result(
-                UserCtx, ParentCtx0, ?traverse_container
-            ),
-            check_and_cache_result(UserCtx, ParentCtx1, traverse_ancestors),
-            {ok, FileCtx1}
+            {IsShareRootDir, FileCtx2} = case file_ctx:get_share_id_const(FileCtx0) of
+                undefined ->
+                    {false, FileCtx0};
+                ShareId ->
+                    {#document{value = #file_meta{
+                        shares = Shares
+                    }}, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
+                    {lists:member(ShareId, Shares), FileCtx1}
+            end,
+            case IsShareRootDir of
+                true ->
+                    {ok, FileCtx2};
+                false ->
+                    {ParentCtx0, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+                    ParentCtx1 = check_and_cache_result(
+                        UserCtx, ParentCtx0, ?traverse_container
+                    ),
+                    check_and_cache_result(UserCtx, ParentCtx1, traverse_ancestors),
+                    {ok, FileCtx3}
+            end
     end;
 
 check_access(UserCtx, FileCtx0, Permission) ->

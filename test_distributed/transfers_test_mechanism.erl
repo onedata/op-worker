@@ -1431,7 +1431,7 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, C
 
         initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, UserId, SpacePrivs ++ RequiredPrivs),
         case rest_test_utils:request(Worker, URL, Method, Headers, []) of
-            {ok, 200, _, Body} ->
+            {ok, 201, _, Body} ->
                 DecodedBody = json_utils:decode(Body),
                 #{<<"transferId">> := Tid} = ?assertMatch(#{<<"transferId">> := _}, DecodedBody),
                 {ok, Tid};

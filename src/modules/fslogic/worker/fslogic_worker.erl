@@ -85,6 +85,35 @@
 % This macro is used to disable automatic rerun of transfers in tests
 -define(SHOULD_RERUN_TRANSFERS, application:get_env(?APP_NAME, rerun_transfers, true)).
 
+-define(AVAILABLE_SHARE_OPERATIONS, [
+    remote_read,
+
+    check_perms,
+    get_metadata,
+    get_mimetype,
+    get_cdmi_completion_status,
+    get_transfer_encoding,
+    get_file_path,
+    get_parent,
+
+    list_xattr,
+    get_xattr,
+    synchronize_block_and_compute_checksum,
+    block_synchronization_request,
+    synchronize_block,
+    get_file_location,
+    release,
+    open_file_with_extended_info,
+    open_file,
+    get_file_children_attrs,
+    get_file_children,
+    get_child_attr,
+    get_file_attr,
+
+    get_helper_params,
+    resolve_guid
+]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -287,19 +316,44 @@ handle_request_and_process_response(SessId, Request) ->
 %%--------------------------------------------------------------------
 -spec handle_request_and_process_response_locally(user_ctx:ctx(), request(),
     file_partial_ctx:ctx() | undefined) -> response().
-handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
-    {FileCtx, _SpaceID} = case FilePartialCtx of
+handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) ->
+    {FileCtx1, ShareId, _SpaceId1} = case FilePartialCtx of
         undefined ->
-            {undefined, undefined};
+            {undefined, undefined, undefined};
         _ ->
-            file_ctx:new_by_partial_context(FilePartialCtx)
+            {FileCtx0, SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
+            {FileCtx0, file_ctx:get_share_id_const(FileCtx0), SpaceId0}
     end,
     try
-        handle_request_locally(UserCtx, Request, FileCtx)
+        UserCtx1 = case ShareId of
+            undefined ->
+                UserCtx0;
+            _ ->
+                Operation = get_operation(Request),
+                case lists:member(Operation, ?AVAILABLE_SHARE_OPERATIONS) of
+                    true -> ok;
+                    false -> throw(?EACCES)
+                end,
+                case user_ctx:is_guest(UserCtx0) of
+                    true -> UserCtx0;
+                    false -> user_ctx:new(?GUEST_SESS_ID)
+                end
+        end,
+        handle_request_locally(UserCtx1, Request, FileCtx1)
     catch
         Type:Error ->
             fslogic_errors:handle_error(Request, Type, Error)
     end.
+
+%% @private
+get_operation(#fuse_request{fuse_request = #file_request{} = Req}) ->
+    element(1, Req);
+get_operation(#fuse_request{fuse_request = Req}) ->
+    element(1, Req);
+get_operation(#provider_request{provider_request = Req}) ->
+    element(1, Req);
+get_operation(#proxyio_request{proxyio_request = Req}) ->
+    element(1, Req), [].
 
 %%--------------------------------------------------------------------
 %% @private
