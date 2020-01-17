@@ -15,7 +15,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([create_share/3, remove_share/2, remove_share_by_guid/2]).
+-export([create_share/3, remove_share/2]).
 
 %%%===================================================================
 %%% API
@@ -33,7 +33,9 @@ create_share(SessId, FileKey, Name) ->
     remote_utils:call_fslogic(SessId, provider_request, GUID,
         #create_share{name = Name},
         fun(#share{share_id = ShareId, root_file_guid = ShareGuid}) ->
-            {ok, {ShareId, ShareGuid}} end).
+            {ok, {ShareId, ShareGuid}}
+        end
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -42,22 +44,16 @@ create_share(SessId, FileKey, Name) ->
 %%--------------------------------------------------------------------
 -spec remove_share(session:id(), od_share:id()) ->
     ok | lfm:error_reply().
-remove_share(SessId, ShareID) ->
-    case share_logic:get(SessId, ShareID) of
+remove_share(SessId, ShareId) ->
+    case share_logic:get(SessId, ShareId) of
         {ok, #document{value = #od_share{root_file = ShareGuid}}} ->
-            remove_share_by_guid(SessId, ShareGuid);
+            remote_utils:call_fslogic(
+                SessId,
+                provider_request,
+                file_id:share_guid_to_guid(ShareGuid),
+                #remove_share{share_id = ShareId},
+                fun(_) -> ok end
+            );
         Error ->
             Error
     end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file share by ShareGuid.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_share_by_guid(session:id(), od_share:root_file_guid()) ->
-    ok | lfm:error_reply().
-remove_share_by_guid(SessId, ShareGuid) ->
-    remote_utils:call_fslogic(SessId, provider_request, ShareGuid,
-        #remove_share{},
-        fun(_) -> ok end).

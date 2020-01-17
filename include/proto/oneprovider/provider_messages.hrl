@@ -109,6 +109,7 @@
 }).
 
 -record(remove_share, {
+    share_id :: od_share:id()
 }).
 
 % messages for adding, getting and removing QoS entry

@@ -1264,12 +1264,7 @@ remove_share(Config) ->
   % Remove share by share Id
   ?assertMatch(ok, lfm_proxy:remove_share(W, SessId, ShareId1)),
   % ShareId no longer exists -> {error, not_found}
-  ?assertMatch({error, not_found}, lfm_proxy:remove_share(W, SessId, ShareId1)),
-
-  % Remove share by Guid
-  ?assertMatch(ok, lfm_proxy:remove_share_by_guid(W, SessId, ShareGuid2)),
-  % ShareGuid no longer points to a shared file -> {error, ?ENOENT}
-  ?assertMatch({error, ?ENOENT}, lfm_proxy:remove_share_by_guid(W, SessId, ShareGuid2)).
+  ?assertMatch({error, not_found}, lfm_proxy:remove_share(W, SessId, ShareId1)).
 
 share_getattr(Config) ->
   [W | _] = ?config(op_worker_nodes, Config),

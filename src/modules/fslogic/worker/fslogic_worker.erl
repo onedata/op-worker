@@ -581,8 +581,8 @@ handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
     permission_req:check_perms(UserCtx, FileCtx, Flag);
 handle_provider_request(UserCtx, #create_share{name = Name}, FileCtx) ->
     share_req:create_share(UserCtx, FileCtx, Name);
-handle_provider_request(UserCtx, #remove_share{}, FileCtx) ->
-    share_req:remove_share(UserCtx, FileCtx);
+handle_provider_request(UserCtx, #remove_share{share_id = ShareId}, FileCtx) ->
+    share_req:remove_share(UserCtx, FileCtx, ShareId);
 handle_provider_request(UserCtx, #add_qos_entry{expression = Expression, replicas_num = ReplicasNum}, FileCtx) ->
     qos_req:add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum);
 handle_provider_request(UserCtx, #get_effective_file_qos{}, FileCtx) ->
