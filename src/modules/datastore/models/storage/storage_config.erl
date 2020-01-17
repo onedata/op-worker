@@ -33,6 +33,8 @@
 -export([update_helper/2, update_luma_config/2,
     set_readonly/2, set_imported_storage/2]).
 
+-export([delete_all/0]).
+
 %% datastore_model callbacks
 -export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1]).
@@ -46,6 +48,8 @@
 
 -define(CTX, #{
     model => ?MODULE,
+    % fold enabled to allow for listing and deleting local
+    % documents after provider was deregistered
     fold_enabled => true,
     memory_copies => all
 }).
@@ -188,6 +192,14 @@ set_imported_storage(StorageId, Value) ->
     ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
         {ok, Storage#storage_config{imported_storage = Value}}
     end)).
+
+
+-spec delete_all() -> ok.
+delete_all() ->
+    {ok, StorageList} = datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []),
+    lists:foreach(fun(#document{key = StorageId}) ->
+        delete(StorageId)
+    end, StorageList).
 
 
 %%%===================================================================
