@@ -406,7 +406,7 @@ maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SyncAcl) ->
 -spec get_attr(file_ctx:ctx()) -> fslogic_worker:fuse_response().
 get_attr(FileCtx) ->
     try
-        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx)
+        attr_req:get_file_attr_light(user_ctx:new(?ROOT_SESS_ID), FileCtx, true)
     catch
         _:Error ->
             #fuse_response{status = fslogic_errors:gen_status_message(Error)}

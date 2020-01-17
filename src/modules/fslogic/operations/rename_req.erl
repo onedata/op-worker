@@ -305,6 +305,7 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
     {ParentDoc, _TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
     {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
+    {PrevName, SourceFileCtx4} = file_ctx:get_aliased_name(SourceFileCtx3, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     ok = case TargetGuid of
         undefined ->
@@ -314,10 +315,10 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
             ok = lfm:unlink(SessId, {guid, TargetGuid}, false)
     end,
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
-    fslogic_times:update_ctime(SourceFileCtx3, time_utils:cluster_time_seconds()),
+    fslogic_times:update_ctime(SourceFileCtx4, time_utils:cluster_time_seconds()),
     update_parent_times(SourceParentFileCtx2, TargetParentFileCtx),
     ParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
-    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx3, ParentGuid, TargetName, UserCtx),
+    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx4, ParentGuid, TargetName, PrevName, UserCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -503,16 +504,17 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
     {ParentDoc, TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
     {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
+    {PrevName, SourceFileCtx4} = file_ctx:get_aliased_name(SourceFileCtx3, UserCtx),
     {SourceParentDoc, _SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
 
-    SpaceId = file_ctx:get_space_id_const(SourceFileCtx2),
+    SpaceId = file_ctx:get_space_id_const(SourceFileCtx4),
     case InvalidateCache of
         true -> location_and_link_utils:invalidate_cannonical_paths_cache(SpaceId);
         _ -> ok
     end,
 
-    {Storage, SourceFileCtx4} = file_ctx:get_storage(SourceFileCtx3),
+    {Storage, SourceFileCtx5} = file_ctx:get_storage(SourceFileCtx4),
     Helper = storage:get_helper(Storage),
     StorageId = storage:get_id(Storage),
     case helper:get_storage_path_type(Helper) of
@@ -527,8 +529,8 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
         end
     end,
     ParentGuid = file_ctx:get_guid_const(TargetParentFileCtx2),
-    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx4, ParentGuid, TargetName, UserCtx),
-    {SourceFileCtx4, TargetFileId}.
+    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx5, ParentGuid, TargetName, PrevName, UserCtx),
+    {SourceFileCtx5, TargetFileId}.
 
 %%--------------------------------------------------------------------
 %% @private
