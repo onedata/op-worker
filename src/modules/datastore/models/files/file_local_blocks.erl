@@ -185,7 +185,7 @@ update(Key, Blocks, Num) ->
         _ -> {{Blocks, []}, true}
     end,
 
-    DocKey = <<Key/binary, Num/integer>>,
+    DocKey = get_doc_key(Key, Num),
     Diff = fun
         (_) ->
             {ok, #file_local_blocks{
@@ -211,8 +211,7 @@ update(Key, Blocks, Num) ->
 -spec get(id(), non_neg_integer()) ->
     {ok, fslogic_blocks:blocks()} | {error, term()}.
 get(Key, Num) ->
-    DocKey = <<Key/binary, Num/integer>>,
-    case datastore_model:get(?CTX, DocKey) of
+    case datastore_model:get(?CTX, get_doc_key(Key, Num)) of
         {ok, #document{value = #file_local_blocks{
             blocks = Blocks, last = Last
         }}} ->
@@ -230,3 +229,6 @@ get(Key, Num) ->
         Other ->
             Other
     end.
+
+get_doc_key(Key, Num) ->
+    datastore_key:build_adjacent(<<Num/integer>>, Key).
