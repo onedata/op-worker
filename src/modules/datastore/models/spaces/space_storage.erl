@@ -31,7 +31,7 @@
 
 -export_type([id/0, record/0, doc/0, diff/0]).
 
--define(CTX, #{model => ?MODULE, memory_copies => all}).
+-define(CTX, #{model => ?MODULE).
 
 %%%===================================================================
 %%% API
