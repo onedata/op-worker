@@ -75,7 +75,7 @@ delete(FilePath, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec id(file_meta:path(), od_space:id()) -> key().
 id(FilePath, SpaceId) ->
-    datastore_utils:gen_key(SpaceId, FilePath).
+    datastore_key:adjacent_from_digest([FilePath], SpaceId).
 
 %%===================================================================
 %% Internal functions

@@ -450,7 +450,7 @@ import_file(#space_strategy_job{
     {GroupId, StorageFileCtx4} = get_group_owner_id(StorageFileCtx3),
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     {FileUuid2, CreateLinks} = case FileUuid =:= undefined of
-        true -> {datastore_utils:gen_key(), true};
+        true -> {datastore_key:new(), true};
         false -> {FileUuid, false}
     end,
     {ParentStorageFileId, ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),

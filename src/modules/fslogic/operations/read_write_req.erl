@@ -72,7 +72,7 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
 %%--------------------------------------------------------------------
 -spec get_proxyio_node(file_meta:uuid()) -> node().
 get_proxyio_node(Uuid) ->
-    consistent_hashing:get_node(Uuid).
+    datastore_key:responsible_node(Uuid).
 
 %%%===================================================================
 %%% Internal functions
@@ -91,7 +91,7 @@ get_handle(UserCtx, FileCtx, HandleId, Operation) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case session_handles:get(SessId, HandleId) of
         {error, not_found} ->
-            ?warning("Handle not found, session id: ~p, handle id: ~p",
+            ?debug("Handle not found, session id: ~p, handle id: ~p",
                 [SessId, HandleId]),
             create_handle(UserCtx, FileCtx, HandleId, Operation),
             session_handles:get(SessId, HandleId);

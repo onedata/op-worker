@@ -72,7 +72,7 @@ remote_document_msg_should_be_serializable(_Config) ->
 get_remote_document_should_return_document(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, datastore_router),
-    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _, _, _) ->
+    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _) ->
         {ok, #document{
             key = <<"some_key">>,
             value = #custom_metadata{
@@ -95,7 +95,7 @@ get_remote_document_should_return_document(Config) ->
 get_remote_document_should_return_missing_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, datastore_router),
-    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _, _, _) ->
+    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _) ->
         {error, not_found}
     end),
     ?assertMatch(#remote_document{
@@ -110,7 +110,7 @@ get_remote_document_should_return_missing_error(Config) ->
 get_remote_document_should_return_internal_error(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, datastore_router),
-    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _, _, _) ->
+    test_utils:mock_expect(Worker, datastore_router, route, fun(_, _) ->
         {error, internal}
     end),
     ?assertMatch(#remote_document{

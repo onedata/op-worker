@@ -138,7 +138,7 @@ reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
 -spec reuse_or_create_gui_session(Iden :: session:identity(), Auth :: session:auth()) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_gui_session(Iden, Auth) ->
-    SessId = datastore_utils:gen_key(<<"">>, term_to_binary({Iden, Auth})),
+    SessId = datastore_key:new_from_digest([Iden, Auth]),
     reuse_or_create_session(SessId, gui, Iden, Auth).
 
 %%--------------------------------------------------------------------

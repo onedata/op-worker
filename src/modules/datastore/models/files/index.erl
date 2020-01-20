@@ -76,7 +76,7 @@
     options(), boolean(), providers()) -> ok | {error, term()}.
 save(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) ->
     ToCreate = #document{
-        key = ViewId = datastore_utils:gen_key(),
+        key = ViewId = datastore_key:new(),
         value = #index{
             name = Name,
             space_id = SpaceId,

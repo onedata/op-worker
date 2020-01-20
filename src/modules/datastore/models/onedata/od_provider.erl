@@ -30,7 +30,8 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    fold_enabled => true
+    fold_enabled => true,
+    memory_copies => all
 }).
 
 %% API

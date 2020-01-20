@@ -71,8 +71,7 @@ key(TransferType, SpaceId) ->
 -spec key(ProviderId :: od_provider:id(), TransferType :: binary(),
     SpaceId :: od_space:id()) -> binary().
 key(ProviderId, TransferType, SpaceId) ->
-    RecordId = op_gui_utils:ids_to_association(TransferType, SpaceId),
-    datastore_utils:gen_key(ProviderId, RecordId).
+    datastore_key:adjacent_from_digest([ProviderId, TransferType], SpaceId).
 
 
 %%-------------------------------------------------------------------

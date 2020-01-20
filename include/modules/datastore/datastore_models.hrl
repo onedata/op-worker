@@ -223,7 +223,6 @@
     proxy_via :: oneprovider:id() | undefined,
     % Key-value in-session memory
     memory = #{} :: map(),
-    open_files = sets:new() :: sets:set(fslogic_worker:file_guid()),
     direct_io = #{} :: #{od_space:id() => boolean()}
 }).
 
@@ -520,7 +519,7 @@
 -record(file_handles, {
     is_removed = false :: boolean(),
     descriptors = #{} :: file_descriptors(),
-    creation_handle :: file_req:handle_id()
+    creation_handle :: file_handles:creation_handle()
 }).
 
 %% Model that holds file's custom metadata

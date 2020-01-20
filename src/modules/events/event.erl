@@ -19,7 +19,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API
--export([emit/1, emit/2, get_subscribers_and_emit/3, flush/2, flush/5, subscribe/2, unsubscribe/2]).
+-export([emit/1, emit/2, emit_to_filtered_subscribers/3, flush/2, flush/5, subscribe/2, unsubscribe/2]).
 -export([get_event_managers/1]).
 
 -export([init_counters/0, init_report/0]).
@@ -55,7 +55,7 @@
 %%--------------------------------------------------------------------
 -spec emit(Evt :: base() | type()) -> ok | {error, Reason :: term()}.
 emit(Evt) ->
-    get_subscribers_and_emit(Evt, undefined, []).
+    emit_to_filtered_subscribers(Evt, undefined, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -65,7 +65,7 @@ emit(Evt) ->
 -spec emit(Evt :: base() | aggregated() | type(), MgrRef :: manager_ref()) ->
     ok | {error, Reason :: term()}.
 emit(Evt, {exclude, MgrRef}) ->
-    get_subscribers_and_emit(Evt, undefined, MgrRef);
+    emit_to_filtered_subscribers(Evt, undefined, MgrRef);
 
 emit(#event{} = Evt, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
@@ -85,17 +85,18 @@ emit(Evt, MgrRef) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets subscribers and sends an event to event managers that represent subscribers.
+%% Filters subscribers list if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec get_subscribers_and_emit(Evt :: base() | aggregated() | type(), event_type:routing_info(),
+-spec emit_to_filtered_subscribers(Evt :: base() | aggregated() | type(), subscription_manager:routing_info(),
     ExcludedRef :: pid() | session:id() | [pid() | session:id()]) ->
     ok | {error, Reason :: term()}.
-get_subscribers_and_emit(Evt, RoutingInfo, []) ->
+emit_to_filtered_subscribers(Evt, RoutingInfo, []) ->
     case subscription_manager:get_subscribers(Evt, RoutingInfo) of
         {ok, SessIds} -> emit(Evt, SessIds);
         {error, Reason} -> {error, Reason}
     end;
-get_subscribers_and_emit(Evt, RoutingInfo, ExcludedRef) ->
+emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
     case subscription_manager:get_subscribers(Evt, RoutingInfo) of
         {ok, SessIds} ->
             Excluded = get_event_managers(ExcludedRef),

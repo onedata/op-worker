@@ -44,12 +44,12 @@
 -export([receive_server_message/0, receive_server_message/1, receive_server_message/2]).
 
 %% Fuse request messages
--export([generate_create_file_message/3, generate_create_dir_message/3, generate_delete_file_message/2, 
-    generate_open_file_message/2, generate_open_file_message/3, generate_release_message/3, 
+-export([generate_create_file_message/3, generate_create_dir_message/3, generate_delete_file_message/2,
+    generate_open_file_message/2, generate_open_file_message/3, generate_release_message/3,
     generate_get_children_attrs_message/2, generate_get_children_message/2, generate_fsync_message/2]).
 
 %% Subscription messages
--export([generate_file_renamed_subscription_message/4, generate_file_removed_subscription_message/4, 
+-export([generate_file_renamed_subscription_message/4, generate_file_removed_subscription_message/4,
     generate_file_attr_changed_subscription_message/5, generate_file_location_changed_subscription_message/5]).
 -export([generate_subscription_cancellation_message/3, generate_quota_exceeded_subscription_message/3]).
 
@@ -60,7 +60,7 @@
 -export([generate_write_message/5, generate_read_message/5]).
 
 -export([
-    create_file/3, create_file/4, 
+    create_file/3, create_file/4,
     create_directory/3, create_directory/4,
     open/2, open/3, open/4,
     close/3, close/4,
@@ -279,7 +279,7 @@ receive_server_message(IgnoredMsgList) ->
     receive_server_message(IgnoredMsgList, ?TIMEOUT).
 
 receive_server_message(IgnoredMsgList, Timeout) ->
-    Now = os:timestamp(),
+    Now = time_utils:system_time_millis(),
     receive
         {_, _, Data} ->
             % ignore listed messages
@@ -287,7 +287,7 @@ receive_server_message(IgnoredMsgList, Timeout) ->
             MsgType = element(1, Msg#'ServerMessage'.message_body),
             case lists:member(MsgType, IgnoredMsgList) of
                 true ->
-                    NewTimeout = max(0, Timeout - timer:now_diff(os:timestamp(), Now) div 1000),
+                    NewTimeout = max(0, Timeout - (time_utils:system_time_millis() - Now)),
                     receive_server_message(IgnoredMsgList, NewTimeout);
                 false ->
                     Msg
@@ -303,7 +303,7 @@ generate_create_file_message(RootGuid, MsgId, File) ->
         context_guid = RootGuid,
         file_request = {create_file, #'CreateFile'{
             name = File,
-            mode = 8#644, 
+            mode = 8#644,
             flag = 'READ_WRITE'}
         }}
     },
@@ -319,7 +319,7 @@ generate_create_dir_message(RootGuid, MsgId, Name) ->
 generate_get_children_attrs_message(RootGuid, MsgId) ->
     FuseRequest = {file_request, #'FileRequest'{
         context_guid = RootGuid,
-        file_request = {get_file_children_attrs, 
+        file_request = {get_file_children_attrs,
             #'GetFileChildrenAttrs'{offset = 0, size = 100}}
     }},
     generate_fuse_request_message(MsgId, FuseRequest).
@@ -361,7 +361,7 @@ generate_release_message(HandleId, FileGuid, MsgId) ->
         file_request = {release, #'Release'{handle_id = HandleId}}
     }},
     generate_fuse_request_message(MsgId, FuseRequest).
-    
+
 generate_delete_file_message(FileGuid, MsgId) ->
     FuseRequest = {file_request, #'FileRequest'{
         context_guid = FileGuid,
@@ -370,7 +370,7 @@ generate_delete_file_message(FileGuid, MsgId) ->
     generate_fuse_request_message(MsgId, FuseRequest).
 
 generate_fuse_request_message(MsgId, FuseRequest) ->
-    Message = #'ClientMessage'{message_id = MsgId, 
+    Message = #'ClientMessage'{message_id = MsgId,
         message_body = {fuse_request, #'FuseRequest'{fuse_request = FuseRequest}}
     },
     messages:encode_msg(Message).
@@ -400,7 +400,7 @@ generate_file_location_changed_subscription_message(StreamId, SequenceNumber, Su
 generate_quota_exceeded_subscription_message(StreamId, SequenceNumber, SubId) ->
     Type = {quota_exceeded, #'QuotaExceededSubscription'{}},
     generate_subscription_message(StreamId, SequenceNumber, SubId, Type).
-    
+
 generate_subscription_message(StreamId, SequenceNumber, SubId, Type) ->
     Message = #'ClientMessage'{
         message_stream = #'MessageStream'{stream_id = StreamId, sequence_number = SequenceNumber},
@@ -414,7 +414,7 @@ generate_subscription_cancellation_message(StreamId, SequenceNumber, SubId) ->
         message_body = {subscription_cancellation, #'SubscriptionCancellation'{id = SubId}}
     },
     messages:encode_msg(Message).
-    
+
 
 %% ProxyIO messages
 generate_write_message(MsgId, HandleId, FileGuid, Offset, Data) ->
@@ -436,7 +436,7 @@ generate_read_message(MsgId, HandleId, FileGuid, Offset, Size) ->
     generate_proxyio_message(MsgId, Parameters, ProxyIORequest).
 
 generate_proxyio_message(MsgId, Parameters, ProxyIORequest) ->
-    Message = #'ClientMessage'{message_id = MsgId, 
+    Message = #'ClientMessage'{message_id = MsgId,
         message_body = {proxyio_request, #'ProxyIORequest'{
             storage_id = ?IRRELEVANT_FIELD_VALUE,
             file_id = ?IRRELEVANT_FIELD_VALUE,
@@ -572,7 +572,7 @@ ls(Conn, DirId, MsgId) ->
         message_id = MsgId
     }, fuse_test_utils:receive_server_message()),
     ChildLinks.
-    
+
 
 emit_file_read_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
     {BlocksRead, BlocksSize} = lists:foldr(

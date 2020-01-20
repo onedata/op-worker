@@ -128,7 +128,7 @@ to_uuid(ParentUuid, Name) ->
 -spec resolve(file_meta:path()) ->
     {ok, file_meta:doc()} | {error, term()}.
 resolve(Path) ->
-    resolve({uuid, ?ROOT_DIR_UUID}, Path).
+    resolve({uuid, ?GLOBAL_ROOT_DIR_UUID}, Path).
 
 -spec resolve(file_meta:entry(), file_meta:path()) ->
     {ok, file_meta:doc()} | {error, term()}.

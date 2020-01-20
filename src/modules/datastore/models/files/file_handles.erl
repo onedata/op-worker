@@ -29,10 +29,16 @@
 -type key() :: datastore:key().
 -type record() :: #file_handles{}.
 -type doc() :: datastore_doc:doc(record()).
+% Handle created during file creation.
+% Read/write with this handle should be allowed even if file permissions forbid them.
+-type creation_handle() :: file_req:handle_id().
+
+-export_type([creation_handle/0]).
 
 -define(CTX, #{
     model => ?MODULE,
-    fold_enabled => true
+    fold_enabled => true,
+    local_fold => true
 }).
 
 %%%===================================================================
@@ -65,7 +71,21 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [doc()]} | {error, term()}.
 list() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+    {AnsList, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(), datastore_model, fold,
+        [?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []]),
+    case BadNodes of
+        [] ->
+            lists:foldl(fun
+                ({ok, List}, {ok, Acc}) ->
+                    {ok, List ++ Acc};
+                (Error, {ok, _}) ->
+                    Error;
+                (_, Error) ->
+                    Error
+            end, {ok, []}, AnsList);
+        _ ->
+            {error, {bad_nodes, BadNodes}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -73,7 +93,7 @@ list() ->
 %% FileCtx and SessionId.
 %% @end
 %%--------------------------------------------------------------------
--spec register_open(file_ctx:ctx(), session:id(), pos_integer(), file_req:handle_id()) ->
+-spec register_open(file_ctx:ctx(), session:id(), pos_integer(), creation_handle()) ->
     ok | {error, term()}.
 register_open(FileCtx, SessId, Count, CreateHandleID) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -218,7 +238,7 @@ invalidate_session_entry(FileCtx, SessId) ->
 %% Returns handle connected with file creation.
 %% @end
 %%--------------------------------------------------------------------
--spec get_creation_handle(key()) -> {ok, storage_file_manager:handle_id()} | {error, term()}.
+-spec get_creation_handle(key()) -> {ok, creation_handle()} | {error, term()}.
 get_creation_handle(Key) ->
     case datastore_model:get(?CTX, Key) of
         {ok, #document{value = #file_handles{creation_handle = Handle}}} -> {ok, Handle};

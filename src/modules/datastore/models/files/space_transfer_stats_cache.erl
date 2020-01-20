@@ -527,9 +527,7 @@ merge_histograms(Hist1, LastUpdate1, Hist2, LastUpdate2, TimeWindow) ->
 key(undefined, SpaceId, TransferType, StatsType) ->
     key(<<"all">>, SpaceId, TransferType, StatsType);
 key(TargetProvider, SpaceId, TransferType, StatsType) ->
-    Seed = op_gui_utils:ids_to_association(TargetProvider, SpaceId),
-    Key0 = op_gui_utils:ids_to_association(TransferType, StatsType),
-    datastore_utils:gen_key(Seed, Key0).
+    datastore_key:adjacent_from_digest([TargetProvider, TransferType, StatsType], SpaceId).
 
 
 %%--------------------------------------------------------------------

@@ -109,7 +109,7 @@ save(Doc) ->
 -spec save(doc(), boolean()) -> {ok, uuid()} | {error, term()}.
 
 save(#document{value = #file_meta{is_scope = true}} = Doc, _GeneratedKey) ->
-    ?extract_key(datastore_model:save(?CTX, Doc));
+    ?extract_key(datastore_model:save(?CTX#{memory_copies => all}, Doc));
 save(Doc, GeneratedKey) ->
     ?extract_key(datastore_model:save(?CTX#{generated_key => GeneratedKey}, Doc)).
 
@@ -138,7 +138,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{
     ?run(begin
         true = is_valid_filename(FileName),
         {ok, ParentDoc} = file_meta:get(ParentUuid),
-        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc),
+        FileDoc2 = #document{key = FileUuid} = fill_uuid(FileDoc, ParentUuid),
         SpaceDirUuid = case IsScope of
             true ->
                 FileDoc2#document.key;
@@ -234,15 +234,15 @@ get(FileUuid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_including_deleted(uuid()) -> {ok, doc()} | {error, term()}.
-get_including_deleted(?ROOT_DIR_UUID) ->
+get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
     {ok, #document{
-        key = ?ROOT_DIR_UUID,
+        key = ?GLOBAL_ROOT_DIR_UUID,
         value = #file_meta{
-            name = ?ROOT_DIR_NAME,
+            name = ?GLOBAL_ROOT_DIR_NAME,
             is_scope = true,
             mode = 8#111,
             owner = ?ROOT_USER_ID,
-            parent_uuid = ?ROOT_DIR_UUID
+            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     }};
 get_including_deleted(FileUuid) ->
@@ -615,7 +615,7 @@ get_ancestors(FileUuid) ->
         {ok, #document{key = Key}} = file_meta:get(FileUuid),
         {ok, get_ancestors2(Key, [])}
     end).
-get_ancestors2(?ROOT_DIR_UUID, Acc) ->
+get_ancestors2(?GLOBAL_ROOT_DIR_UUID, Acc) ->
     Acc;
 get_ancestors2(FileUuid, Acc) ->
     {ok, ParentUuid} = get_parent_uuid({uuid, FileUuid}),
@@ -658,12 +658,12 @@ setup_onedata_user(UserId, EffSpaces) ->
 
             FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
             ScopeId = <<>>, % TODO - do we need scope for user dir
-            case create({uuid, ?ROOT_DIR_UUID},
+            case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
                 #document{key = FileUuid,
                     value = #file_meta{
                         name = UserId, type = ?DIRECTORY_TYPE, mode = 8#1755,
                         owner = ?ROOT_USER_ID, is_scope = true,
-                        parent_uuid = ?ROOT_DIR_UUID
+                        parent_uuid = ?GLOBAL_ROOT_DIR_UUID
                     }
                 }) of
                 {ok, _RootUuid} ->
@@ -725,10 +725,10 @@ make_space_exist(SpaceId) ->
         value = #file_meta{
             name = SpaceId, type = ?DIRECTORY_TYPE,
             mode = ?DEFAULT_SPACE_DIR_MODE, owner = ?ROOT_USER_ID, is_scope = true,
-            parent_uuid = ?ROOT_DIR_UUID
+            parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     },
-    case file_meta:create({uuid, ?ROOT_DIR_UUID}, FileDoc) of
+    case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
         {ok, _} ->
             TimesDoc = #document{
                 key = SpaceDirUuid,
@@ -1018,11 +1018,12 @@ get_uuid(FileUuid) ->
 %% Generates uuid if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec fill_uuid(doc()) -> doc().
-fill_uuid(Doc = #document{key = undefined}) ->
-    NewUuid = datastore_utils:gen_key(),
-    Doc#document{key = NewUuid};
-fill_uuid(Doc) ->
+-spec fill_uuid(doc(), uuid()) -> doc().
+fill_uuid(Doc = #document{key = undefined, value = #file_meta{type = ?DIRECTORY_TYPE}}, _ParentUuid) ->
+    Doc#document{key = datastore_key:new()};
+fill_uuid(Doc = #document{key = undefined}, ParentUuid) ->
+    Doc#document{key = datastore_key:new_adjacent_to(ParentUuid)};
+fill_uuid(Doc, _ParentUuid) ->
     Doc.
 
 %%--------------------------------------------------------------------

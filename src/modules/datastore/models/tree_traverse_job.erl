@@ -29,7 +29,8 @@
 -export_type([doc/0]).
 
 -define(CTX, #{
-    model => ?MODULE
+    model => ?MODULE,
+    routing => local
 }).
 -define(SYNC_CTX, #{
     model => ?MODULE,
@@ -137,7 +138,7 @@ get_record_struct(1) ->
 %%--------------------------------------------------------------------
 -spec save(datastore:key() | main_job, datastore_doc:scope(), record()) -> {ok, key()} | {error, term()}.
 save(main_job, Scope, Value) ->
-    RandomPart = datastore_utils:gen_key(),
+    RandomPart = datastore_key:new(),
     GenKey = <<?MAIN_JOB_PREFIX, RandomPart/binary>>,
     ?extract_key(datastore_model:save(?SYNC_CTX#{generated_key => true},
         #document{key = GenKey, scope = Scope, value = Value}));

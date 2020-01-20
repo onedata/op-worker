@@ -17,6 +17,8 @@
 
 %% API
 -export([add/3, remove/2, get/2, remove_handles/1]).
+%% For RPC
+-export([remove_local_handles/1]).
 
 -define(FILE_HANDLES_TREE_ID, <<"storage_file_handles">>).
 
@@ -34,7 +36,7 @@
 add(SessId, HandleId, Handle) ->
     case sfm_handle:create(#document{value = Handle}) of
         {ok, Key} ->
-            session:add_links(SessId, ?FILE_HANDLES_TREE_ID, HandleId, Key);
+            session:add_local_links(SessId, ?FILE_HANDLES_TREE_ID, HandleId, Key);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -47,11 +49,11 @@ add(SessId, HandleId, Handle) ->
 -spec remove(SessId :: session:id(), HandleId :: storage_file_manager:handle_id()) ->
     ok | {error, term()}.
 remove(SessId, HandleId) ->
-    case session:get_link(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
+    case session:get_local_link(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
         {ok, [#link{target = HandleKey}]} ->
             case sfm_handle:delete(HandleKey) of
                 ok ->
-                    session:delete_links(SessId, ?FILE_HANDLES_TREE_ID, HandleId);
+                    session:delete_local_links(SessId, ?FILE_HANDLES_TREE_ID, HandleId);
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -67,7 +69,7 @@ remove(SessId, HandleId) ->
 -spec get(SessId :: session:id(), HandleId :: storage_file_manager:handle_id()) ->
     {ok, storage_file_manager:handle()} | {error, term()}.
 get(SessId, HandleId) ->
-    case session:get_link(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
+    case session:get_local_link(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
         {ok, [#link{target = HandleKey}]} ->
             case sfm_handle:get(HandleKey) of
                 {ok, #document{value = Handle}} ->
@@ -86,12 +88,23 @@ get(SessId, HandleId) ->
 %%--------------------------------------------------------------------
 -spec remove_handles(SessId :: session:id()) -> ok.
 remove_handles(SessId) ->
-    {ok, Links} = session:fold_links(SessId, ?FILE_HANDLES_TREE_ID,
+    {AnsList, []} = rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, remove_local_handles, [SessId]),
+    lists:foreach(fun(Ans) -> ok = Ans end, AnsList).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes all associated sfm handles on node.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_local_handles(SessId :: session:id()) -> ok.
+remove_local_handles(SessId) ->
+    {ok, Links} = session:fold_local_links(SessId, ?FILE_HANDLES_TREE_ID,
         fun(Link = #link{}, Acc) -> {ok, [Link | Acc]} end
     ),
     Names = lists:map(fun(#link{name = Name, target = HandleKey}) ->
         sfm_handle:delete(HandleKey),
         Name
     end, Links),
-    session:delete_links(SessId, ?FILE_HANDLES_TREE_ID, Names),
+    session:delete_local_links(SessId, ?FILE_HANDLES_TREE_ID, Names),
     ok.
