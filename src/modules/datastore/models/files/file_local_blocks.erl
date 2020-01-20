@@ -230,5 +230,6 @@ get(Key, Num) ->
             Other
     end.
 
+-spec get_doc_key(id(), non_neg_integer()) -> id().
 get_doc_key(Key, Num) ->
     datastore_key:build_adjacent(<<Num/integer>>, Key).
