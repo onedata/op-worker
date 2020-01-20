@@ -24,9 +24,6 @@
     canceled_replica_deletion_test/1
 ]).
 
-%% export for RPC
--export([request_deletion/5, successful_replica_deletion_test_base/3]).
-
 all() -> [
     successful_replica_deletion_test,
     failed_replica_deletion_test,
@@ -42,15 +39,16 @@ all() -> [
 -define(VV, #{}).
 
 -define(SETUPS, [
-  % {FileNums, JobNums}
-    {1, 1},    
+%   {FileNums, JobNums}
+    {1, 1},
     {10, 1},
     {100, 1},
     {1000, 1},
     {10000, 1},
-    {100, 10},
-    {10, 100},
-    {1, 1000}
+    {1000, 10},
+    {100, 100},
+    {10, 1000},
+    {1, 10000}
 ]).
 
 %%%===================================================================
@@ -171,10 +169,7 @@ init_per_suite(Config) ->
 
         application:start(ssl),
         hackney:start(),
-        NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
-        {ok, _} = application:ensure_all_started(worker_pool),
-        worker_pool:start_sup_pool(?MODULE, [{workers, 100}]),
-        NewConfig3
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
@@ -194,7 +189,6 @@ end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
-    worker_pool:stop_sup_pool(?MODULE),
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
@@ -206,8 +200,7 @@ prepare_deletion_request(Worker, FileUuid, Requestee, Blocks, VersionVector) ->
     rpc:call(Worker, replica_deletion_master, prepare_deletion_request, [FileUuid, Requestee, Blocks, VersionVector]).
 
 request_deletion(Worker, Req, SpaceId, JobId, JobType) ->
-    rpc:call(Worker, replica_deletion_master, request_deletion, [SpaceId, Req, JobId, JobType]).
-
+    rpc:call(Worker, replica_deletion_master, request_deletion, [SpaceId, Req, JobId, JobType], infinity).
 
 mock_replica_deletion_request_confirmation(Worker) ->
     ok = test_utils:mock_new(Worker, replica_deletion_changes),
@@ -245,7 +238,9 @@ mock_process_result(Worker, CountdownServer, JobIdsToCounters, ExpectedResult) -
 
 mock_deletion_predicate(Worker, Result) ->
     ok = test_utils:mock_new(Worker, replica_deletion_worker),
-    ok = test_utils:mock_expect(Worker, replica_deletion_worker, custom_predicate, fun(_JobType, _JobId) -> Result end).
+    ok = test_utils:mock_expect(Worker, replica_deletion_worker, custom_predicate,
+        fun(_SpaceId, _JobType, _JobId) -> Result end
+    ).
 
 is_replica_deletion_master_alive(Worker, SpaceId) ->
     is_pid(rpc:call(Worker, global, whereis_name, [{replica_deletion_master, SpaceId}])).

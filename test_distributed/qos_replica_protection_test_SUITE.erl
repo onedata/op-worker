@@ -716,7 +716,7 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
         threshold => 100
     },
     rpc:call(RunNode, autocleaning_api, configure, [?SPACE_ID, Configuration]),
-    {ok, ARId} = rpc:call(RunNode, autocleaning_api, force_start, [?SPACE_ID]),
+    {ok, ARId} = rpc:call(RunNode, autocleaning_api, force_run, [?SPACE_ID]),
 
     F = fun() ->
         {ok, #{stopped_at := StoppedAt}} = rpc:call(RunNode, autocleaning_api, get_run_report, [ARId]),

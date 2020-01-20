@@ -7,9 +7,23 @@
 %%% @doc
 %%% gen_server responsible for requesting support for deletion of files,
 %%% in the given space, from other providers.
-%%% It is responsible for limiting number of
-%%% concurrent requests so that remote provider won't be flooded with them.
 %%% One such server is started in the cluster.
+%%% It is responsible for limiting number of
+%%% concurrent requests so that DBSync won't be flooded with them.
+%%% The mechanism of limiting number of requests works as follows:
+%%%   * when number of currently processed deletion requests is lesser
+%%%     than ?MAX_REQUESTS_NUM, the requesting process is replied immediately
+%%%     with an 'ok' (similarly to "cast")
+%%%   * when number of currently processed deletion requests is equal to
+%%%     ?MAX_REQUESTS_NUM, the requesting process is not replied, and the
+%%%     request is queued. As a result, the requesting process is blocked.
+%%%     As both mechanisms that use replica_deletion
+%%%     (autocleaning and replica_eviction) use pool of workers, all processes
+%%%     in the corresponding pools will be blocked and DBSync won't be flooded.
+%%%     Blocked request will be popped from the queue when any of currently
+%%%     processed requests is finished. When request is popped from the
+%%%     queue, requesting process is replied and is no longer blocked.
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_deletion_master).
@@ -24,7 +38,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/1,
+-export([start/1,
     request_autocleaning_deletion/3,
     request_eviction_deletion/3,
     cancel_autocleaning_request/2,
@@ -36,9 +50,6 @@
 
 %% functions exported for RPC
 -export([call/2]).
-
-%% function exported for monitoring performance
--export([check/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -88,7 +99,6 @@
 }).
 -record(deletion, {
     uuid :: file_meta:uuid(),
-    file :: file_ctx:ctx() | undefined,
     supporting_provider :: od_provider:id(),
     blocks :: fslogic_blocks:blocks(),
     version :: version_vector:version_vector()
@@ -108,12 +118,12 @@
 %%% API
 %%%===================================================================
 
--spec(start_link(od_space:id()) -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(SpaceId) ->
+-spec(start(od_space:id()) -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
+start(SpaceId) ->
     Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, gen_server2, start_link, [?SERVER(SpaceId), ?MODULE, [SpaceId], []]).
+    rpc:call(Node, gen_server2, start, [?SERVER(SpaceId), ?MODULE, [SpaceId], []]).
 
--spec request_autocleaning_deletion(od_space:id(), deletion(), autocleaning_controller:batch_id()) -> ok.
+-spec request_autocleaning_deletion(od_space:id(), deletion(), autocleaning_run_controller:batch_id()) -> ok.
 request_autocleaning_deletion(SpaceId, DeletionRequest, BatchId) ->
     request_deletion(SpaceId, DeletionRequest, BatchId, ?AUTOCLEANING_JOB).
 
@@ -121,7 +131,7 @@ request_autocleaning_deletion(SpaceId, DeletionRequest, BatchId) ->
 request_eviction_deletion(SpaceId, DeletionRequest, TransferId) ->
     request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB).
 
--spec cancel_autocleaning_request(od_space:id(), autocleaning_controller:batch_id()) -> ok.
+-spec cancel_autocleaning_request(od_space:id(), autocleaning_run_controller:batch_id()) -> ok.
 cancel_autocleaning_request(SpaceId, BatchId) ->
     cancel(SpaceId, BatchId, ?AUTOCLEANING_JOB).
 
@@ -131,8 +141,7 @@ cancel_eviction_request(SpaceId, TransferId) ->
 
 -spec notify_handled_request(od_space:id(), replica_deletion:job_id(), replica_deletion:job_type()) -> ok.
 notify_handled_request(SpaceId, JobId, JobType) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, call, [SpaceId, ?REQUEST(?FINISHED, JobId, JobType)]).
+    call(SpaceId, ?REQUEST(?FINISHED, JobId, JobType)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -142,7 +151,7 @@ notify_handled_request(SpaceId, JobId, JobType) ->
 -spec process_result(od_space:id(), file_meta:uuid(), replica_deletion:result(), replica_deletion:job_id(),
     replica_deletion:job_type()) -> ok.
 process_result(SpaceId, FileUuid, Result, BatchId, ?AUTOCLEANING_JOB) ->
-    autocleaning_controller:process_replica_deletion_result(Result, SpaceId, FileUuid, BatchId);
+    autocleaning_run_controller:process_replica_deletion_result(Result, SpaceId, FileUuid, BatchId);
 process_result(_SpaceId, FileUuid, Result, TransferId, ?EVICTION_JOB) ->
     replica_eviction_worker:process_replica_deletion_result(Result, FileUuid, TransferId).
 
@@ -173,41 +182,22 @@ find_supporter_and_prepare_deletion_request(FileCtx) ->
 prepare_deletion_request(FileUuid, Provider, Blocks, VV) ->
     ?DELETION(FileUuid, Provider, Blocks, VV).
 
--spec check(od_space:id()) -> ok.
-check(SpaceId) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, call, [SpaceId, check]).
-
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%% @end
-%%--------------------------------------------------------------------
--spec(init(Args :: term()) ->
-    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore).
+-spec(init([od_space:id()]) -> {ok, state()} |{stop, Reason :: term()} | ignore).
 init([SpaceId]) ->
     {ok, #state{space_id = SpaceId}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-    {stop, Reason :: term(), NewState :: #state{}}).
+
+-spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
+    {reply, Reply :: term(), state()} |
+    {reply, Reply :: term(), state(), timeout() | hibernate} |
+    {noreply, state()} |
+    {noreply, state(), timeout() | hibernate} |
+    {stop, Reason :: term(), Reply :: term(), state()} |
+    {stop, Reason :: term(), state()}).
 handle_call(Request = ?REQUEST(#deletion{}, JobId, JobType), From, State = #state{
     active_requests_num = RequestsNum,
     max_requests_num = MaxRequestsNum
@@ -230,20 +220,11 @@ handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
     handle_cast(Request, State).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_cast(Request :: term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}).
-handle_cast(check, State = #state{queue = Queue, active_requests_num = Active, request_counters = RequestCounters}) ->
-    % TODO wywalić ten clause przed końcem ticketa !!!
-    ?critical("~nQueue: ~p~nActive: ~p~nReqCounters: ~p~n", [queue:len(Queue), Active, map_size(RequestCounters)]),
-    {noreply, State};
+
+-spec(handle_cast(Request :: term(), state()) ->
+    {noreply, state()} |
+    {noreply, state(), timeout() | hibernate} |
+    {stop, Reason :: term(), state()}).
 handle_cast(?REQUEST(?FINISHED, JobId, JobType), State = #state{
     active_requests_num = ActiveRequestsNum,
     queue = Queue
@@ -263,7 +244,7 @@ handle_cast(?REQUEST(?FINISHED, JobId, JobType), State = #state{
             State2 = State#state{queue = Queue2},
             State3 = decrease_request_counter(JobId, JobType, State2),
             handle_deletion_request(Request, State3),
-            {noreply, State2}
+            {noreply, State3}
     end;
 handle_cast(?REQUEST(?CANCEL, JobId, JobType), State = #state{jobs_to_cancel = JobsToCancel}) ->
     {noreply, State#state{jobs_to_cancel = gb_sets:add(?JOB_KEY(JobId, JobType), JobsToCancel)}};
@@ -271,42 +252,25 @@ handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_info(Info :: timeout() | term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}).
-handle_info(_Info, State) ->
+
+-spec(handle_info(Info :: timeout() | term(), state()) ->
+    {noreply, state()} |
+    {noreply, state(), timeout() | hibernate} |
+    {stop, Reason :: term(), state()}).
+handle_info(Info, State) ->
+    ?log_bad_request(Info),
     {noreply, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%% @end
-%%--------------------------------------------------------------------
--spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #state{}) -> term()).
-terminate(_Reason, _State) ->
-    ok.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%% @end
-%%--------------------------------------------------------------------
--spec(code_change(OldVsn :: term() | {down, term()}, State :: #state{},
+-spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
+    state()) -> term()).
+terminate(Reason, State) ->
+    ?log_terminate(Reason, State).
+
+
+-spec(code_change(OldVsn :: term() | {down, term()}, state(),
     Extra :: term()) ->
-    {ok, NewState :: #state{}} | {error, Reason :: term()}).
+    {ok, state()} | {error, Reason :: term()}).
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -320,8 +284,7 @@ notify_handled_request_async(SpaceId, JobId, JobType) ->
 
 -spec request_deletion(od_space:id(), deletion(), replica_deletion:job_id(), replica_deletion:job_type()) -> ok.
 request_deletion(SpaceId, DeletionRequest, JobId, JobType) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, call, [SpaceId, ?REQUEST(DeletionRequest, JobId, JobType)]).
+    call(SpaceId, ?REQUEST(DeletionRequest, JobId, JobType)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -334,8 +297,7 @@ request_deletion(SpaceId, DeletionRequest, JobId, JobType) ->
 %%-------------------------------------------------------------------
 -spec cancel(od_space:id(), replica_deletion:job_id(), replica_deletion:job_type()) -> ok.
 cancel(SpaceId, JobId, JobType) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, call, [SpaceId, ?REQUEST(?CANCEL, JobId, JobType)]).
+    call(SpaceId, ?REQUEST(?CANCEL, JobId, JobType)).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -351,13 +313,13 @@ call(SpaceId, Request) ->
         gen_server2:call(?SERVER(SpaceId), Request, infinity)
     catch
         exit:{noproc, _} ->
-            start_link(SpaceId),
+            start(SpaceId),
             call(SpaceId, Request);
         exit:{normal, _} ->
-            start_link(SpaceId),
+            start(SpaceId),
             call(SpaceId, Request);
         exit:{{shutdown, timeout}, _} ->
-            start_link(SpaceId),
+            start(SpaceId),
             call(SpaceId, Request)
     end.
 

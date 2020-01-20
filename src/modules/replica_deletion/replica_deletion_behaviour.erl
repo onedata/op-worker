@@ -24,7 +24,7 @@
 %% before deleting the file.
 %% @end
 %%-------------------------------------------------------------------
--callback replica_deletion_predicate(replica_deletion:job_id()) -> boolean().
+-callback replica_deletion_predicate(od_space:id(), replica_deletion:job_id()) -> boolean().
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -35,4 +35,4 @@
 -callback process_replica_deletion_result(replica_deletion:result(), od_space:id(),
     file_meta:uuid(), replica_deletion:job_id()) -> ok.
 
--optional_callbacks([replica_deletion_predicate/1]).
+-optional_callbacks([replica_deletion_predicate/2]).

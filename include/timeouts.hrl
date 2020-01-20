@@ -11,7 +11,7 @@
 -author("Jakub Kudzia").
 
 -ifndef(TIMEOUTS_HRL).
--define(OP_GUI_HRL, 1).
+-define(TIMEOUTS_HRL, 1).
 
 -include("global_definitions.hrl").
 

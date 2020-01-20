@@ -6,7 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% This module implements view_traverse behaviour (see view_traverse.erl).
+%%% It is used by autocleaning mechanism to traverse over file_popularity_view
+%%% in given space and schedule deletions of the least popular file replicas.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(autocleaning_view_traverse).
@@ -19,10 +21,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_pool/0, stop_pool/0, run/5, cancel/1]).
+-export([init_pool/0, stop_pool/0, run/5, cancel/2, task_canceled/1]).
 
 %% view_traverse callbacks
--export([process_row/3, batch_prehook/3, task_finished/1]).
+-export([process_row/3, batch_prehook/4, on_batch_canceled/4, task_finished/1]).
 
 -type task_id() :: binary().
 
@@ -58,7 +60,7 @@ stop_pool() ->
     view_traverse:stop(?MODULE).
 
 -spec run(od_space:id(), autocleaning:run_id(), autocleaning_config:rules(), non_neg_integer(),
-    view_traverse:token() | undefined) -> ok | {error, term()}.
+    view_traverse:token() | undefined) -> {ok, view_traverse:task_id()} | {error, term()}.
 run(SpaceId, AutocleaningRunId, AutocleaningRules, BatchSize, Token) ->
     TaskId = pack_task_id(SpaceId, AutocleaningRunId),
     view_traverse:run(?MODULE, ?FILE_POPULARITY_VIEW(SpaceId), TaskId, #{
@@ -72,9 +74,9 @@ run(SpaceId, AutocleaningRunId, AutocleaningRules, BatchSize, Token) ->
         token => Token
     }).
 
--spec cancel(autocleaning:run_id()) -> ok.
-cancel(AutocleaningRunId) ->
-    view_traverse:cancel(?MODULE, AutocleaningRunId).
+-spec cancel(od_space:id(), autocleaning:run_id()) -> ok.
+cancel(SpaceId, AutocleaningRunId) ->
+    ok = view_traverse:cancel(?MODULE, pack_task_id(SpaceId, AutocleaningRunId)).
 
 %%%===================================================================
 %%% view_traverse callbacks
@@ -95,16 +97,17 @@ process_row(Row, #{
     FileId = maps:get(<<"value">>, Row),
     {ok, Guid} = file_id:objectid_to_guid(FileId),
     FileCtx = file_ctx:new_by_guid(Guid),
-    BatchNo = RowNumber div BatchSize,
+    BatchNo = autocleaning_run_controller:batch_no(RowNumber, BatchSize),
     try autocleaning_rules:are_all_rules_satisfied(FileCtx, AutocleaningRules) of
         true ->
             maybe_schedule_replica_deletion_task(FileCtx, AutocleaningRunId, SpaceId, BatchNo);
         false ->
-            autocleaning_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo)
+            autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo)
         catch
         Error:Reason ->
             Uuid = file_ctx:get_uuid_const(FileCtx),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
+            autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo),
             ?error_stacktrace("Filtering preselected file with uuid ~p in space ~p failed due to ~p:~p",
                 [Uuid, SpaceId, Error, Reason]),
             ok
@@ -112,17 +115,35 @@ process_row(Row, #{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% {@link view_traverse} callback batch_prehook/3.
+%% {@link view_traverse} callback batch_prehook/4.
 %% @end
 %%--------------------------------------------------------------------
--spec batch_prehook([json_utils:json_map()], view_traverse:token(), info()) -> ok.
-batch_prehook([], _Token, _Info) ->
+-spec batch_prehook(non_neg_integer(), [json_utils:json_map()], view_traverse:token(), info()) -> ok.
+batch_prehook(_BatchOffset, [], _Token, _Info) ->
     ok;
-batch_prehook(Rows, Token, #{
+batch_prehook(BatchOffset, Rows, Token, #{
     run_id := AutocleaningRunId,
-    space_id := SpaceId
+    space_id := SpaceId,
+    batch_size := BatchSize
 }) ->
-    autocleaning_controller:notify_files_to_process(SpaceId, AutocleaningRunId, length(Rows), Token).
+    BatchNo = autocleaning_run_controller:batch_no(BatchOffset, BatchSize),
+    autocleaning_run_controller:notify_files_to_process(SpaceId, AutocleaningRunId, length(Rows), BatchNo, Token).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link view_traverse} callback on_batch_canceled/4.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_batch_canceled(non_neg_integer(), non_neg_integer(), view_traverse:token(), info()) -> ok.
+on_batch_canceled(_BatchOffset, 0, _Token, _Info) ->
+    ok;
+on_batch_canceled(BatchOffset, RowJobsCancelled, _Token, #{
+    run_id := AutocleaningRunId,
+    space_id := SpaceId,
+    batch_size := BatchSize
+}) ->
+    BatchNo = autocleaning_run_controller:batch_no(BatchOffset, BatchSize),
+    autocleaning_run_controller:notify_processed_files(SpaceId, AutocleaningRunId, RowJobsCancelled, BatchNo).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -131,6 +152,15 @@ batch_prehook(Rows, Token, #{
 %%--------------------------------------------------------------------
 -spec task_finished(task_id()) -> ok.
 task_finished(TaskId) ->
+    notify_finished_traverse(TaskId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link view_traverse} callback task_canceled/1.
+%% @end
+%%--------------------------------------------------------------------
+-spec task_canceled(task_id()) -> ok.
+task_canceled(TaskId) ->
     notify_finished_traverse(TaskId).
 
 %%%===================================================================
@@ -150,13 +180,13 @@ unpack_task_id(TaskId) ->
 maybe_schedule_replica_deletion_task(FileCtx, ARId, SpaceId, BatchNo) ->
     case replica_deletion_master:find_supporter_and_prepare_deletion_request(FileCtx) of
         undefined ->
-            autocleaning_controller:notify_processed_file(SpaceId, ARId, BatchNo);
+            autocleaning_run_controller:notify_processed_file(SpaceId, ARId, BatchNo);
         DeletionRequest ->
-            BatchId = autocleaning_controller:pack_batch_id(ARId, BatchNo),
+            BatchId = autocleaning_run_controller:pack_batch_id(ARId, BatchNo),
             ok = replica_deletion_master:request_autocleaning_deletion(SpaceId, DeletionRequest, BatchId)
     end.
 
 -spec notify_finished_traverse(task_id()) -> ok.
 notify_finished_traverse(TaskId) ->
     {SpaceId, AutocleaningRunId} = unpack_task_id(TaskId),
-    autocleaning_controller:notify_finished_traverse(SpaceId, AutocleaningRunId).
+    autocleaning_run_controller:notify_finished_traverse(SpaceId, AutocleaningRunId).

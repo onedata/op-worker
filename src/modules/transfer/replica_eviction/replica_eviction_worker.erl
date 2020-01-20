@@ -65,6 +65,10 @@ process_replica_deletion_result({error, canceled}, FileUuid, TransferId) ->
     ?debug("Replica eviction of file ~p in transfer ~p was canceled.", [FileUuid, TransferId]),
     {ok, _} = transfer:increment_files_processed_counter(TransferId),
     ok;
+process_replica_deletion_result({error, file_opened}, FileUuid, TransferId) ->
+    ?debug("Replica eviction of file ~p in transfer ~p skipped because the file is opened.", [FileUuid, TransferId]),
+    {ok, _} = transfer:increment_files_processed_counter(TransferId),
+    ok;
 process_replica_deletion_result(Error, FileUuid, TransferId) ->
     ?error("Error ~p occurred during replica eviction of file ~p in procedure ~p", [
         Error, FileUuid, TransferId

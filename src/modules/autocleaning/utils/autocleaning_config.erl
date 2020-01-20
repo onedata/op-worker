@@ -23,7 +23,7 @@
 %% API
 -export([is_enabled/1, create_or_update/3, to_map/1,
     is_threshold_exceeded/2, is_target_reached/2,
-    get_target/1, get_threshold/1]).
+    get_rules/1, get_target/1, get_threshold/1]).
 
 %%%===================================================================
 %%% API
@@ -80,6 +80,10 @@ is_threshold_exceeded(CurrentSize, #autocleaning_config{threshold = Threshold}) 
 -spec is_target_reached(non_neg_integer(), config()) -> boolean().
 is_target_reached(CurrentSize, #autocleaning_config{target = Target}) ->
     CurrentSize =< Target.
+
+-spec get_rules(config()) -> rules().
+get_rules(#autocleaning_config{rules = Rules}) ->
+    Rules.
 
 -spec get_target(config()) -> non_neg_integer().
 get_target(#autocleaning_config{target = Target}) ->

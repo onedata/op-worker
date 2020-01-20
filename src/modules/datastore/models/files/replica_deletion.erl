@@ -62,7 +62,7 @@
 -type action() :: ?REQUEST_DELETION_SUPPORT | ?CONFIRM_DELETION_SUPPORT | ?REFUSE_DELETION_SUPPORT | ?RELEASE_DELETION_LOCK.
 -type diff() :: datastore_doc:diff(record()).
 -type job_type() :: ?AUTOCLEANING_JOB | ?EVICTION_JOB.
--type job_id() :: autocleaning_controller:batch_id() | transfer:id().
+-type job_id() :: autocleaning_run_controller:batch_id() | transfer:id().
 -type result() :: {ok, non_neg_integer()} | {error, term()}.
 
 -export_type([id/0, record/0, doc/0, action/0, job_type/0, job_id/0, result/0]).

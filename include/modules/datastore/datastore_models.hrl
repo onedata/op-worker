@@ -431,7 +431,7 @@
     bytes_to_release = 0 :: non_neg_integer(),
     released_files = 0 :: non_neg_integer(),
 
-    query_view_token :: undefined | view_traverse:token()
+    view_traverse_token :: undefined | view_traverse:token()
 }).
 
 %% Model which stores information about auto-cleaning per given space.
@@ -580,8 +580,7 @@
 
 %% Model for holding current quota state for spaces
 -record(space_quota, {
-    current_size = 0 :: non_neg_integer(),
-    last_autocleaning_check = 0 :: non_neg_integer()
+    current_size = 0 :: non_neg_integer()
 }).
 
 %% Record that holds monitoring id
