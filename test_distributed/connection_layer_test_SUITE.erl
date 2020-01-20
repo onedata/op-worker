@@ -566,9 +566,15 @@ init_per_testcase(heartbeats_test, Config) ->
     end),
 
     test_utils:mock_new(Workers, attr_req),
-    test_utils:mock_expect(Workers, attr_req, get_file_attr_insecure, fun
-        (UserCtx, FileCtx) ->
-            get_file_attr_insecure(UserCtx, FileCtx, CP_Pid)
+    test_utils:mock_expect(Workers, attr_req, get_file_attr_light, fun
+        (UserCtx, FileCtx, IncludeSize) ->
+            case get_cp_settings(CP_Pid) of
+                attr_delay ->
+                    timer:sleep(timer:seconds(70)),
+                    meck:passthrough([UserCtx, FileCtx, IncludeSize]);
+                _ ->
+                    meck:passthrough([UserCtx, FileCtx, IncludeSize])
+            end
     end),
 
     test_utils:mock_new(Workers, fslogic_event_handler),
@@ -861,15 +867,6 @@ apply_helper(Handle, Timeout, Function, Args, CP_Pid) ->
         _ ->
             {ok, ResponseRef} = apply(helpers_nif, Function, [Handle | Args]),
             helpers:receive_loop(ResponseRef, Timeout)
-    end.
-
-get_file_attr_insecure(UserCtx, FileCtx, CP_Pid) ->
-    case get_cp_settings(CP_Pid) of
-        attr_delay ->
-            timer:sleep(timer:seconds(70)),
-            attr_req:get_file_attr_insecure(UserCtx, FileCtx, false);
-        _ ->
-            attr_req:get_file_attr_insecure(UserCtx, FileCtx, false)
     end.
 
 handle_file_written_events(CP_Pid) ->

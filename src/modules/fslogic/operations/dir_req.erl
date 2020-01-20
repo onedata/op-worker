@@ -113,7 +113,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
     #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_insecure(UserCtx, FileCtx, false, false),
+        attr_req:get_file_attr_light(UserCtx, FileCtx, false),
     FileAttr2 = FileAttr#file_attr{size = 0},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
     #fuse_response{status = #status{code = ?OK},
@@ -194,7 +194,7 @@ read_dir_plus_insecure(UserCtx, FileCtx, Offset, Limit, Token) ->
             #fuse_response{
                 status = #status{code = ?OK},
                 fuse_response = Attrs
-            } = attr_req:get_file_attr_insecure(UserCtx, ChildCtx),
+            } = attr_req:get_file_attr_light(UserCtx, ChildCtx, true),
             Attrs
         catch
             _:_ ->

@@ -290,6 +290,7 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
     {ParentDoc, _TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
     {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
+    {PrevName, SourceFileCtx4} = file_ctx:get_aliased_name(SourceFileCtx3, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     ok = case TargetGuid of
         undefined ->
@@ -299,10 +300,10 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
             ok = lfm:unlink(SessId, {guid, TargetGuid}, false)
     end,
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
-    fslogic_times:update_ctime(SourceFileCtx3, time_utils:cluster_time_seconds()),
+    fslogic_times:update_ctime(SourceFileCtx4, time_utils:cluster_time_seconds()),
     update_parent_times(SourceParentFileCtx2, TargetParentFileCtx),
     ParentGuid = file_ctx:get_guid_const(TargetParentFileCtx),
-    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx3, ParentGuid, TargetName, UserCtx),
+    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx4, ParentGuid, TargetName, PrevName, UserCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_renamed{
@@ -458,6 +459,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
     {ParentDoc, TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
     {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
+    {PrevName, SourceFileCtx4} = file_ctx:get_aliased_name(SourceFileCtx3, UserCtx),
     {SourceParentDoc, _SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
 
@@ -481,7 +483,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
         end
     end,
     ParentGuid = file_ctx:get_guid_const(TargetParentFileCtx2),
-    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx3, ParentGuid, TargetName, UserCtx),
+    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx4, ParentGuid, TargetName, PrevName, UserCtx),
     {SourceFileCtx2, TargetFileId}.
 
 %%--------------------------------------------------------------------
