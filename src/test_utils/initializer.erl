@@ -1472,9 +1472,9 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     end, #{}, SpacesToStorages),
 
     GetStorageFun = fun(SM) ->
-        fun (all) ->
+        fun (<<"all">>) ->
                 % This is useful when changing storage parameters. Used only in mock.
-                SM;
+            {ok, SM};
             (StorageId) ->
                 StorageDesc = maps:get(StorageId, SM, #{}),
                 {ok, #document{value = #od_storage{
@@ -1515,10 +1515,11 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     ok = test_utils:mock_expect(Workers, storage_logic, get_spaces,
         fun(StorageId) -> {ok, maps:get(StorageId, StoragesToSpaces, [])} end),
 
-    % NOTE this function changes qos parameters only on node, it was executed
+    % NOTE this function changes qos parameters only on the node where it was executed
     ok = test_utils:mock_expect(Workers, storage_logic, set_qos_parameters,
         fun(StorageId, QosParameters) ->
-            PreviousStorageMap = storage_logic:get(all),
+            % erlang:apply needed to evade dialyzer warnings
+            {ok, PreviousStorageMap} = erlang:apply(storage_logic, get, [<<"all">>]),
             PreviousStorageDesc = maps:get(StorageId, PreviousStorageMap, #{}),
             NewStorageDesc = PreviousStorageDesc#{<<"qos_parameters">> => QosParameters},
             NewStorageMap = PreviousStorageMap#{StorageId => NewStorageDesc},

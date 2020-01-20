@@ -774,7 +774,7 @@ reevaluate_impossible_qos_test(Config) ->
 
     {_GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
 
-    ok = rpc:call(Worker2, storage, set_qos_parameters, [initializer:get_storage_id(Worker2), #{<<"country">> => <<"PL">>}]),
+    ok = qos_tests_utils:set_qos_parameters(Worker2, #{<<"country">> => <<"PL">>}),
     % Impossible qos reevaluation is called after successful set_qos_parameters
 
     ExpectedQosEntriesAfter = [
@@ -812,7 +812,7 @@ reevaluate_impossible_qos_race_test(Config) ->
     DirPath = filename:join(?SPACE_PATH1, DirName),
     FileName = <<"file1">>,
 
-    ok = rpc:call(Worker2, storage, set_qos_parameters, [initializer:get_storage_id(Worker2), #{<<"country">> => <<"other">>}]),
+    ok = qos_tests_utils:set_qos_parameters(Worker2, #{<<"country">> => <<"other">>}),
 
     QosSpec = #fulfill_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
@@ -894,7 +894,7 @@ reevaluate_impossible_qos_conflict_test(Config) ->
     {_GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
 
     utils:pforeach(fun(Worker) ->
-        ok = rpc:call(Worker, storage, set_qos_parameters, [initializer:get_storage_id(Worker), #{<<"country">> => <<"other">>}])
+        ok = qos_tests_utils:set_qos_parameters(Worker, #{<<"country">> => <<"other">>})
         % Impossible qos reevaluation is called after successful set_qos_parameters
     end, Workers),
 

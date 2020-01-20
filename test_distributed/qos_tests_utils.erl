@@ -36,7 +36,8 @@
     create_file/4, create_directory/3,
     wait_for_qos_fulfillment_in_parallel/4,
     add_qos/2, add_multiple_qos_in_parallel/2,
-    map_qos_names_to_ids/2
+    map_qos_names_to_ids/2,
+    set_qos_parameters/2
 ]).
 
 -define(ATTEMPTS, 60).
@@ -280,6 +281,11 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
 
 map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->
     [maps:get(QosName, QosNameIdMapping) || QosName <- QosNamesList].
+
+
+set_qos_parameters(Worker, QosParameters) ->
+    ok = rpc:call(Worker, storage, set_qos_parameters,
+        [initializer:get_storage_id(Worker), QosParameters]).
 
 
 %%%====================================================================
