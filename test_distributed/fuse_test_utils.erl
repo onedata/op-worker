@@ -23,20 +23,24 @@
 -include("proto/common/handshake_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("clproto/include/messages.hrl").
 
 -export([
+    reuse_or_create_fuse_session/4, reuse_or_create_fuse_session/5,
+
     connect_as_provider/3, connect_as_client/4,
 
-    connect_via_macaroon/1, connect_via_macaroon/2,
-    connect_via_macaroon/3, connect_via_macaroon/4,
-    connect_via_custom_macaroon/4,
+    connect_via_token/1, connect_via_token/2,
+    connect_via_token/3, connect_via_token/4,
+
+    connect_as_user/4,
 
     generate_msg_id/0
 ]).
@@ -91,6 +95,34 @@
 %% API
 %% ====================================================================
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates FUSE session or if session exists reuses it
+%% and registers connection for it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_fuse_session(Nonce :: binary(), session:auth(),
+    session:credentials() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
+reuse_or_create_fuse_session(Nonce, Iden, Auth, Conn) ->
+    {ok, SessId} = session_manager:reuse_or_create_fuse_session(Nonce, Iden, Auth),
+    session_connections:register(SessId, Conn),
+    {ok, SessId}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls reuse_or_create_fuse_session/4 on specified Worker.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_fuse_session(node(), Nonce :: binary(), session:auth(),
+    session:credentials() | undefined, pid()) -> {ok, session:id()} | {error, term()}.
+reuse_or_create_fuse_session(Worker, Nonce, Iden, Auth, Conn) ->
+    ?assertMatch({ok, _}, rpc:call(Worker, ?MODULE,
+        reuse_or_create_fuse_session, [Nonce, Iden, Auth, Conn]
+    )).
+
+
 generate_msg_id() ->
     ID = case get(msg_id_generator) of
         undefined -> 1;
@@ -101,14 +133,14 @@ generate_msg_id() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using a providerId and nonce.
+%% Connect to given node using a providerId and token.
 %% @end
 %%--------------------------------------------------------------------
-connect_as_provider(Node, ProviderId, Nonce) ->
+connect_as_provider(Node, ProviderId, Token) ->
     HandshakeReqMsg = #'ClientMessage'{
         message_body = {provider_handshake_request, #'ProviderHandshakeRequest'{
             provider_id = ProviderId,
-            nonce = Nonce
+            token = Token
         }
         }},
     RawMsg = messages:encode_msg(HandshakeReqMsg),
@@ -138,18 +170,18 @@ connect_as_provider(Node, ProviderId, Nonce) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using a macaroon, sessionId and version.
+%% Connect to given node using a token, nonce and version.
 %% @end
 %%--------------------------------------------------------------------
-connect_as_client(Node, SessId, Macaroon, Version) ->
-    MacaroonAuthMessage = #'ClientMessage'{
+connect_as_client(Node, Nonce, Token, Version) ->
+    HandshakeMessage = #'ClientMessage'{
         message_body = {client_handshake_request, #'ClientHandshakeRequest'{
-            session_id = SessId,
-            macaroon = Macaroon,
+            session_id = Nonce,
+            macaroon = Token,
             version = Version
         }
         }},
-    RawMsg = messages:encode_msg(MacaroonAuthMessage),
+    RawMsg = messages:encode_msg(HandshakeMessage),
 
     % when
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
@@ -175,77 +207,71 @@ connect_as_client(Node, SessId, Macaroon, Version) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using macaroon, with default socket_opts
-%% @equiv connect_via_macaroon(Node, [{active, true}])
+%% Connect to given node using a token, with default socket_opts
+%% @equiv connect_via_token(Node, [{active, true}])
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_macaroon(Node :: node()) ->
+-spec connect_via_token(Node :: node()) ->
     {ok, {Sock :: ssl:sslsocket(), SessId :: session:id()}} | no_return().
-connect_via_macaroon(Node) ->
-    connect_via_macaroon(Node, [{active, true}]).
+connect_via_token(Node) ->
+    connect_via_token(Node, [{active, true}]).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using macaroon, with custom socket opts
-%% @equiv connect_via_macaroon(Node, SocketOpts, crypto:strong_rand_bytes(10))
+%% Connect to given node using a token, with custom socket opts
+%% @equiv connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10))
 %% @end
 %%--------------------------------------------------------------------
-connect_via_macaroon(Node, SocketOpts) ->
-    connect_via_macaroon(Node, SocketOpts, crypto:strong_rand_bytes(10)).
+connect_via_token(Node, SocketOpts) ->
+    connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10)).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv connect_via_custom_macaroon(Node, SocketOpts, SessionId, 1)
+%% Connect to given node using a token, with custom socket opts
+%% @equiv connect_via_token(Node, SocketOpts, crypto:strong_rand_bytes(10))
 %% @end
 %%--------------------------------------------------------------------
-connect_via_macaroon(Node, SocketOpts, SessionId) ->
-    connect_via_custom_macaroon(Node, SocketOpts, SessionId, 1).
+connect_via_token(Node, SocketOpts, Nonce) ->
+    UserId = <<"default_user">>,
+    AccessToken = initializer:create_access_token(UserId),
+    connect_via_token(Node, SocketOpts, Nonce, AccessToken).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Connect to given node using predefined macaroon, with custom socket opts
-%% @end
-connect_via_custom_macaroon(Node, SocketOpts, SessionId, MacaroonNum) ->
-    {Macaroon, DischMacaroon} = lists:nth(MacaroonNum, ?TEST_MACAROONS),
-    connect_via_macaroon(Node, SocketOpts, SessionId, #macaroon_auth{
-        macaroon = Macaroon,
-        disch_macaroons = DischMacaroon
-    }).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Connect to given node using a macaroon, with custom socket opts and session id.
+%% Connect to given node using a token, with custom socket opts and nonce.
 %% @end
 %%--------------------------------------------------------------------
--spec connect_via_macaroon(Node :: node(), SocketOpts :: list(), session:id(), #macaroon_auth{}) ->
-    {ok, {Sock :: term(), SessId :: session:id()}}.
-connect_via_macaroon(Node, SocketOpts, SessId, #macaroon_auth{
-    macaroon = Macaroon,
-    disch_macaroons = DischMacaroons}
+-spec connect_via_token(
+    Node :: node(),
+    SocketOpts :: list(),
+    Nonce :: binary(),
+    AccessToken :: tokens:serialized()
 ) ->
+    {ok, {Sock :: term(), SessId :: session:id()}}.
+connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
     % given
     OpVersion = rpc:call(Node, oneprovider, get_version, []),
     {ok, [Version | _]} = rpc:call(
         Node, compatibility, get_compatible_versions, [?ONEPROVIDER, OpVersion, ?ONECLIENT]
     ),
 
-    MacaroonAuthMessage = #'ClientMessage'{message_body = {client_handshake_request,
+    HandshakeMessage = #'ClientMessage'{message_body = {client_handshake_request,
         #'ClientHandshakeRequest'{
-            session_id = SessId,
-            macaroon = #'Macaroon'{macaroon = Macaroon, disch_macaroons = DischMacaroons},
+            session_id = Nonce,
+            macaroon = #'Macaroon'{macaroon = AccessToken},
             version = Version
         }
     }},
-    MacaroonAuthMessageRaw = messages:encode_msg(MacaroonAuthMessage),
+    HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
     ActiveOpt = case proplists:get_value(active, SocketOpts) of
-                    undefined -> [];
-                    Other -> [{active, Other}]
-                end,
+        undefined -> [];
+        Other -> [{active, Other}]
+    end,
     {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
 
     % when
     {ok, Sock} = connect_and_upgrade_proto(utils:get_host(Node), Port),
-    ok = ssl:send(Sock, MacaroonAuthMessageRaw),
+    ok = ssl:send(Sock, HandshakeMessageRaw),
 
     % then
     RM = receive_server_message(),
@@ -254,6 +280,8 @@ connect_via_macaroon(Node, SocketOpts, SessId, #macaroon_auth{
     }}},
         RM
     ),
+
+    SessId = datastore_key:new_from_digest([<<"fuse">>, Nonce]),
     ssl:setopts(Sock, ActiveOpt),
     {ok, {Sock, SessId}}.
 
@@ -270,6 +298,25 @@ connect_and_upgrade_proto(Hostname, Port) ->
     after timer:minutes(1) ->
         exit(timeout)
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Connect to given node with specified user authorization.
+%% @end
+%%--------------------------------------------------------------------
+-spec connect_as_user(Config :: term(), node(), User :: binary(),  SocketOpts :: list()) ->
+    {ok, {Sock :: term(), SessId :: session:id()}}.
+connect_as_user(Config, Node, User, SocketOpts) ->
+    SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
+    Nonce = ?config({session_nonce, {User, ?GET_DOMAIN(Node)}}, Config),
+    AccessToken = initializer:create_access_token(User),
+
+    ?assertMatch(
+        {ok, {_, SessId}},
+        fuse_test_utils:connect_via_token(Node, SocketOpts, Nonce, AccessToken)
+    ).
+
 
 receive_server_message() ->
     receive_server_message([message_stream_reset, subscription, message_request,
@@ -579,7 +626,7 @@ emit_file_read_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
         fun(#file_block{offset = O, size = S}, {AccBlocks, AccSize}) ->
             {[#'FileBlock'{offset = O, size = S} | AccBlocks], AccSize + S}
         end,
-    {[], 0}, Blocks),
+        {[], 0}, Blocks),
 
     Msg = #'ClientMessage'{
         message_stream = #'MessageStream'{
@@ -604,7 +651,7 @@ emit_file_written_event(Conn, StreamId, Seq, FileGuid, Blocks) ->
         fun(#file_block{offset = O, size = S}, {AccBlocks, AccSize}) ->
             {[#'FileBlock'{offset = O, size = S} | AccBlocks], AccSize + S}
         end,
-    {[], 0}, Blocks),
+        {[], 0}, Blocks),
 
     Msg = #'ClientMessage'{
         message_stream = #'MessageStream'{

@@ -17,6 +17,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
@@ -28,7 +29,7 @@
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
--export([get_auth/1, get_user_id/1]).
+-export([get_auth/1, get_data_constraints/1, get_user_id/1]).
 -export([set_direct_io/3]).
 
 % exometer callbacks
@@ -42,7 +43,8 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type ttl() :: non_neg_integer().
--type auth() :: #macaroon_auth{} | ?ROOT_AUTH | ?GUEST_AUTH.
+-type grace_period() :: non_neg_integer().
+-type auth() :: auth_manager:token_auth() | ?ROOT_AUTH | ?GUEST_AUTH.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
@@ -50,9 +52,12 @@
 % meaning entire supervision tree finished getting up, it will set session
 % status to active.
 -type status() :: initializing | active | inactive.
--type identity() :: #user_identity{}.
 
--export_type([id/0, record/0, doc/0, ttl/0, auth/0, type/0, status/0, identity/0]).
+-export_type([
+    id/0, record/0, doc/0,
+    ttl/0, grace_period/0,
+    auth/0, type/0, status/0
+]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -216,7 +221,11 @@ get_user_id(<<_/binary>> = SessId) ->
         {ok, Doc} -> get_user_id(Doc);
         {error, Reason} -> {error, Reason}
     end;
-get_user_id(#session{identity = #user_identity{user_id = UserId}}) ->
+get_user_id(#session{identity = ?SUB(root, ?ROOT_USER_ID)}) ->
+    {ok, ?ROOT_USER_ID};
+get_user_id(#session{identity = ?SUB(nobody, ?GUEST_USER_ID)}) ->
+    {ok, ?GUEST_USER_ID};
+get_user_id(#session{identity = ?SUB(user, UserId)}) ->
     {ok, UserId};
 get_user_id(#document{value = #session{} = Value}) ->
     get_user_id(Value).
@@ -288,6 +297,14 @@ get_auth(#session{auth = Auth}) ->
     Auth;
 get_auth(#document{value = Session}) ->
     get_auth(Session).
+
+
+-spec get_data_constraints(record() | doc()) -> data_constraints:constraints().
+get_data_constraints(#session{data_constraints = DataConstraints}) ->
+    DataConstraints;
+get_data_constraints(#document{value = Session}) ->
+    get_data_constraints(Session).
+
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -16,8 +16,11 @@
 
 %% API
 -export([is_special/1, is_root/1, is_guest/1, is_provider_session_id/1]).
--export([root_session_id/0, get_rest_session_id/1,
-    get_provider_session_id/2, session_id_to_provider_id/1]).
+-export([
+    root_session_id/0,
+    get_provider_session_id/2,
+    session_id_to_provider_id/1
+]).
 
 -define(PROVIDER_SESSION_PREFIX, "$$PRV$$__").
 
@@ -83,15 +86,6 @@ is_provider_session_id(_) ->
 -spec root_session_id() -> session:id().
 root_session_id() ->
     ?ROOT_SESS_ID.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns rest session id for given identity.
-%% @end
-%%--------------------------------------------------------------------
--spec get_rest_session_id(session:identity()) -> session:id().
-get_rest_session_id(#user_identity{user_id = Uid}) ->
-    <<(oneprovider:get_id())/binary, "_", Uid/binary, "_rest_session">>.
 
 %%--------------------------------------------------------------------
 %% @doc

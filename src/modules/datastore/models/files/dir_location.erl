@@ -26,10 +26,7 @@
 
 -export_type([key/0, dir_location/0, doc/0]).
 
--define(CTX, #{
-    model => ?MODULE,
-    routing => global
-}).
+-define(CTX, #{model => ?MODULE}).
 
 %%%===================================================================
 %%% API

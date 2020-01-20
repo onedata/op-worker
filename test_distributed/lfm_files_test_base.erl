@@ -82,13 +82,6 @@
   lfm_rmdir/1
 ]).
 
-
--define(STORAGE_ID(Worker), begin
-  {ok, [__Storage]} = rpc:call(Worker, storage, list, []),
-  storage:get_id(__Storage)
-  end
-).
-
 -define(TIMEOUT, timer:seconds(10)).
 -define(REPEATS, 3).
 -define(SUCCESS_RATE, 100).
@@ -246,7 +239,7 @@ lfm_open_multiple_times_failure(Config) ->
   ),
 
   % unload mock for open so that it will succeed again
-  test_utils:mock_unload(W, storage_file_manager),
+  test_utils:mock_unload(W, storage_driver),
 
   {ok, Handle2} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
   ?assertEqual({ok, 11}, lfm_proxy:write(W, Handle2, 9, <<" test_data2">>)),
@@ -289,7 +282,7 @@ lfm_open_failure_multiple_users(Config) ->
   ?assertEqual(1, get_session_file_handles_num(W, FileGuid, SessId1)),
 
   % unload mock for open so that operations will succeed again
-  test_utils:mock_unload(W, storage_file_manager),
+  test_utils:mock_unload(W, storage_driver),
 
   % check that user1 can still use his handle
   ?assertEqual({ok, 11}, lfm_proxy:write(W, Handle, 9, <<" test_data2">>)),
@@ -312,9 +305,7 @@ lfm_open_in_direct_mode(Config) ->
   },
   {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
 
-  {ok, Handle} = ?assertMatch({ok, Handle}, lfm_proxy:open(
-    W, SessId1, {guid, FileGuid}, rdwr)
-  ),
+  {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
 
   Context = rpc:call(W, ets, lookup_element, [lfm_handles, Handle, 2]),
   HandleId = lfm_context:get_handle_id(Context),
@@ -377,7 +368,7 @@ lfm_copy_failure_multiple_users(Config) ->
   ?assertEqual(1, length(Docs)),
 
   % unload mock for open so that operations will succeed again
-  test_utils:mock_unload(W, storage_file_manager),
+  test_utils:mock_unload(W, storage_driver),
 
   % user1 handle should still exists
   ?assertEqual(1, get_session_file_handles_num(W, FileGuid, SessId1)),
@@ -815,7 +806,7 @@ fslogic_new_file(Config) ->
   ?assertNotMatch(undefined, FileId11),
   ?assertNotMatch(undefined, FileId21),
 
-  TestStorageId = ?STORAGE_ID(Worker),
+  TestStorageId = initializer:get_storage_id(Worker),
   ?assertMatch(TestStorageId, StorageId11),
   ?assertMatch(TestStorageId, StorageId21),
 
@@ -936,11 +927,11 @@ lfm_basic_rdwr_opens_file_once(Config) ->
   [W | _] = ?config(op_worker_nodes, Config),
   {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
   {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
-  test_utils:mock_new(W, storage_file_manager, [passthrough]),
-  test_utils:mock_assert_num_calls(W, storage_file_manager, open, 2, 0),
+  test_utils:mock_new(W, storage_driver, [passthrough]),
+  test_utils:mock_assert_num_calls(W, storage_driver, open, 2, 0),
 
   {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
-  test_utils:mock_assert_num_calls(W, storage_file_manager, open, 2, 1),
+  test_utils:mock_assert_num_calls(W, storage_driver, open, 2, 1),
 
   ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle, 0, <<"11111">>)),
   ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle, 5, <<"22222">>)),
@@ -949,8 +940,8 @@ lfm_basic_rdwr_opens_file_once(Config) ->
   verify_file_content(Config, Handle, <<"11111">>, 0, 5),
 
   ?assertEqual(ok, lfm_proxy:close(W, Handle)),
-  test_utils:mock_assert_num_calls(W, storage_file_manager, open, 2, 1),
-  test_utils:mock_validate_and_unload(W, storage_file_manager).
+  test_utils:mock_assert_num_calls(W, storage_driver, open, 2, 1),
+  test_utils:mock_validate_and_unload(W, storage_driver).
 
 lfm_basic_rdwr_after_file_delete(Config) ->
   [W | _] = ?config(op_worker_nodes, Config),
@@ -961,8 +952,8 @@ lfm_basic_rdwr_after_file_delete(Config) ->
 
   %remove file
   FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
-  {SfmHandle, _} = rpc:call(W, storage_file_manager, new_handle, [SessId1, FileCtx]),
-  ok = rpc:call(W, storage_file_manager, unlink, [SfmHandle, size(FileContent)]),
+  {SfmHandle, _} = rpc:call(W, storage_driver, new_handle, [SessId1, FileCtx]),
+  ok = rpc:call(W, storage_driver, unlink, [SfmHandle, size(FileContent)]),
 
   %read opened file
   ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, FileContent)),
@@ -1117,8 +1108,8 @@ lfm_acl(Config) ->
 
   % test setting and getting acl
   Acl = [
-    #access_control_entity{acetype = ?allow_mask, identifier = UserId1, name = UserName1, aceflags = ?no_flags_mask, acemask = ?read_mask bor ?write_mask},
-    #access_control_entity{acetype = ?deny_mask, identifier = GroupId1, name = GroupName1, aceflags = ?identifier_group_mask, acemask = ?write_mask}
+    #access_control_entity{acetype = ?allow_mask, identifier = UserId1, name = UserName1, aceflags = ?no_flags_mask, acemask = ?read_all_object_mask bor ?write_all_object_mask},
+    #access_control_entity{acetype = ?deny_mask, identifier = GroupId1, name = GroupName1, aceflags = ?identifier_group_mask, acemask = ?write_all_object_mask}
   ],
   ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, Acl)),
   ?assertEqual({ok, Acl}, lfm_proxy:get_acl(W, SessId1, {guid, FileGUID})).
@@ -1344,17 +1335,17 @@ storage_file_creation_should_be_delayed_until_open(Config) ->
   {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
   {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read1">>, 8#755),
   FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
-  {SfmHandle, _} = rpc:call(W, storage_file_manager, new_handle, [SessId1, FileCtx]),
+  {SfmHandle, _} = rpc:call(W, storage_driver, new_handle, [SessId1, FileCtx]),
 
   % verify that storage file does not exist
-  ?assertEqual({error, ?ENOENT}, rpc:call(W, storage_file_manager, stat, [SfmHandle])),
+  ?assertEqual({error, ?ENOENT}, rpc:call(W, storage_driver, stat, [SfmHandle])),
 
   % open file
   {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
   ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
 
   % verify that storage file exists
-  ?assertMatch({ok, _}, rpc:call(W, storage_file_manager, stat, [SfmHandle])),
+  ?assertMatch({ok, _}, rpc:call(W, storage_driver, stat, [SfmHandle])),
   verify_file_content(Config, Handle, <<"test_data">>),
   ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
@@ -1529,9 +1520,9 @@ file_popularity_should_have_correct_file_size(Config) ->
 open_failure_mock(Worker) ->
   % mock for open error - note that error is raised after
   % register_open is performed
-  test_utils:mock_expect(Worker, storage_file_manager, open,
-    fun(SFMHandle2, Flag) ->
-      meck:passthrough([SFMHandle2, Flag]),
+  test_utils:mock_expect(Worker, storage_driver, open,
+    fun(SDHandle2, Flag) ->
+      meck:passthrough([SDHandle2, Flag]),
       throw(error)
     end).
 

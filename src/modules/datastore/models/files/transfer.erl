@@ -513,19 +513,19 @@ mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
                     bytes_replicated = OldBytes + BytesTransferred,
                     last_update = maps:merge(LastUpdateMap, NewTimestamps),
                     min_hist = transfer_histograms:update(
-                        BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
+                        BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     hr_hist = transfer_histograms:update(
-                        BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
+                        BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     dy_hist = transfer_histograms:update(
-                        BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
+                        BytesPerProvider, DyHistograms, ?DAY_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     mth_hist = transfer_histograms:update(
-                        BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
+                        BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     )
                 }}

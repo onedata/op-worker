@@ -156,7 +156,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata)
     User = <<"user1">>,
 
     [SessId | _] = SessIds =
-        lists:map(fun(Worker) -> ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config) end, Workers),
+        lists:map(fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end, Workers),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
 
     Master = self(),
@@ -577,6 +577,6 @@ get_param_value(ParamName, ParamsList) ->
 get_worker_and_session([W], [S]) ->
     {W, S};
 get_worker_and_session(Workers, Sessions) ->
-    Num = random:uniform(length(Workers)),
+    Num = rand:uniform(length(Workers)),
     {lists:nth(Num, Workers), lists:nth(Num, Sessions)}.
 

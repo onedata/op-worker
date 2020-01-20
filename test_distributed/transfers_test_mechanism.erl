@@ -15,17 +15,16 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("transfers_test_mechanism.hrl").
 -include("countdown_server.hrl").
 -include("rest_test_utils.hrl").
+-include("proto/common/credentials.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include("proto/common/credentials.hrl").
--include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/privileges.hrl").
 
 %% API
 -export([run_test/2]).
@@ -208,7 +207,7 @@ change_storage_params(Config, #scenario{
     end, ReplicatingNodes),
 
     lists:foreach(fun(Node) ->
-        [StorageId | _] = rpc:call(Node, space_storage, get_storage_ids, [SpaceId]),
+        StorageId = initializer:get_supporting_storage_id(Node, SpaceId),
         modify_storage_timeout(Node, StorageId, <<"100000">>)
     end, ReplicatingNodes),
 
@@ -365,7 +364,7 @@ evict_each_file_replica_separately(Config, #scenario{
         lists:map(fun({Guid, Path}) ->
             FileKey = file_key(Guid, Path, FileKeyType),
             EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type),
+            {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
             {EvictingNode, Tid, Guid, Path}
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
@@ -387,7 +386,7 @@ schedule_replica_eviction_without_permissions(Config, #scenario{
             EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
             ?assertMatch({error, _},
                 ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, 8#644),
-                schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type))
+                schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type))
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
     Config.
@@ -403,7 +402,7 @@ cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, #scenario{
     FileKey = file_key(Guid, Path, FileKeyType),
     NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
         EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type),
+        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
         {EvictingNode, Tid, Guid, Path}
     end, EvictingNodes),
 
@@ -497,7 +496,7 @@ remove_file_during_eviction(Config, #scenario{
         lists:map(fun({Guid, Path}) ->
             FileKey = file_key(Guid, Path, FileKeyType),
             EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type),
+            {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
             {EvictingNode, Tid, Guid, Path}
         end, FilesGuidsAndPaths)
     end, EvictingNodes),
@@ -577,7 +576,7 @@ schedule_replica_migration_without_permissions(Config, #scenario{
                 EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
                 ?assertMatch({error, _},
                     ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, 8#644),
-                    schedule_replica_migration(ScheduleNode, EvictingProviderId,  User, FileKey, Config, Type, ReplicatingProviderId))
+                    schedule_replica_migration(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type, ReplicatingProviderId))
             end, FilesGuidsAndPaths)
         end, ReplicatingNodes)
     end, EvictingNodes),
@@ -826,6 +825,19 @@ assert_transfer_state(Node, TransferId, SpaceId, FileGuid, FilePath, TargetNode,
                     ct:fail("assertion failed")
             end
     end.
+
+create_files(Config, #setup{
+    root_directory = {RootDirGuid, RootDirPath},
+    files_structure = {pre_created, GuidsAndPaths}
+}) ->
+    DirsGuidsAndPaths = maps:get(dirs, GuidsAndPaths, []),
+    FilesGuidsAndPaths = maps:get(files, GuidsAndPaths, []),
+
+    [
+        {?ROOT_DIR_KEY, {RootDirGuid, RootDirPath}},
+        {?DIRS_KEY, DirsGuidsAndPaths},
+        {?FILES_KEY, FilesGuidsAndPaths} | Config
+    ];
 
 create_files(Config, #setup{
     user = User,
@@ -1434,16 +1446,14 @@ schedule_transfer_by_rest(Worker, SpaceId, UserId, RequiredPrivs, URL, Method, C
 %% trigger helper reload and restore previous value.
 -spec modify_storage_timeout(node(), storage:id(), NewValue :: binary()) -> ok.
 modify_storage_timeout(Node, StorageId, NewValue) ->
-    {ok, Doc} = rpc:call(Node, storage, get, [StorageId]),
-    [Helper] = storage:get_helpers(Doc),
-    HelperName = helper:get_name(Helper),
+    Helper = rpc:call(Node, storage, get_helper, [StorageId]),
     OldValue = maps:get(<<"timeout">>, helper:get_args(Helper),
         integer_to_binary(?DEFAULT_HELPER_TIMEOUT)),
 
     ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
-        [StorageId, HelperName, #{<<"timeout">> => NewValue}])),
+        [StorageId, #{<<"timeout">> => NewValue}])),
     ?assertEqual(ok, rpc:call(Node, storage, update_helper_args,
-        [StorageId, HelperName, #{<<"timeout">> => OldValue}])),
+        [StorageId, #{<<"timeout">> => OldValue}])),
     ok.
 
 

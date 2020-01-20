@@ -28,6 +28,7 @@
     cancel/2, cancel_internal/2,
     cancelling_finished/2, cancelling_finished_internal/2,
     notify_finished_task/1, notify_finished_task_internal/1,
+    notify_finished_task_async/1, notify_finished_task_async_internal/1,
     process_result/5, get_setting_for_deletion_task/1]).
 
 %% function exported for monitoring performance
@@ -186,6 +187,25 @@ notify_finished_task_internal(SpaceId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
+%% @equiv notify_finished_task_async_internal(SpaceId) on chosen node.
+%% @end
+%%-------------------------------------------------------------------
+-spec notify_finished_task_async(od_space:id()) -> ok.
+notify_finished_task_async(SpaceId) ->
+    Node = datastore_key:responsible_node(SpaceId),
+    rpc:call(Node, ?MODULE, notify_finished_task_async_internal, [SpaceId]).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Sends asynchronous message to server to notify about finished task.
+%% @end
+%%-------------------------------------------------------------------
+-spec notify_finished_task_async_internal(od_space:id()) -> ok.
+notify_finished_task_async_internal(SpaceId) ->
+    gen_server2:cast(?SERVER(SpaceId), ?FINISHED).
+
+%%-------------------------------------------------------------------
+%% @doc
 %% @equiv check_internal(SpaceId)
 %% @end
 %%-------------------------------------------------------------------
@@ -316,9 +336,9 @@ handle_cast(Task = #task{id = ReportId}, State = #state{
     % handle task
     case gb_sets:is_element(ReportId, IdsToCancel) of
         true ->
-            cancel_task(Task, SpaceId);
+            ok = cancel_task(Task, SpaceId);
         false ->
-            handle_task(Task, SpaceId)
+            ok = handle_task(Task, SpaceId)
     end,
     {noreply, State#state{active_tasks = ActiveTasks + 1}, ?DIE_AFTER};
 handle_cast(Task = #task{id = ReportId}, State = #state{
@@ -444,10 +464,16 @@ handle_task(#task{
         type = Type
     },
     id = ReportId
-}, SpaceId) ->
-    {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
-        Type, SpaceId),
-    ok.
+} = Task, SpaceId) ->
+    {StorageId, _} = file_ctx:get_storage_id(file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))),
+    case file_qos:is_replica_protected(FileUuid, StorageId) of
+        false ->
+            {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
+                Type, SpaceId),
+            ok;
+        true ->
+            cancel_task(Task, SpaceId)
+    end.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -476,7 +502,7 @@ request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
 -spec cancel_task(task(), od_space:id()) -> ok.
 cancel_task(#task{task = #deletion_task{type = Type}, id = ReportId}, SpaceId) ->
     mark_processed_file(Type, ReportId, SpaceId),
-    notify_finished_task(SpaceId).
+    notify_finished_task_async(SpaceId).
 
 %%-------------------------------------------------------------------
 %% @private

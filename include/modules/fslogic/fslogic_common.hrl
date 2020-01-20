@@ -15,7 +15,7 @@
 -define(FSLOGIC_COMMON_HRL, 1).
 
 -include("modules/datastore/datastore_models.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 
 %% helper macro for not implemented functions
 -define(NOT_IMPLEMENTED, erlang:error(not_yet_implemented)).
@@ -38,7 +38,6 @@
 -define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_SESS_ID, <<"nobody">>).
 -define(GUEST_AUTH, guest_auth).
--define(GUEST_IDENTITY, #user_identity{user_id = ?GUEST_USER_ID}).
 
 -define(DEFAULT_SPACE_DIR_MODE, 8#775).
 

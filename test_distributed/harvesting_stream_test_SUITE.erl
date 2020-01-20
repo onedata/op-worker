@@ -124,10 +124,10 @@ all() -> ?ALL([
                 ?HARVEST_METADATA_CALLED(
                     __SpaceId,
                     __Destination,
-                    __ReceivedChanges,
+                    __ReceivedBatch,
                     __HarvestingStreamPid
                 ) ->
-                    __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedChanges],
+                    __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedBatch],
                     AssertFun(__SpaceId, __Destination, sequential_subtract(__Seqs, __ReceivedSeqs),
                         __HarvestingStreamPid, __Timeout)
             after
@@ -153,10 +153,10 @@ all() -> ?ALL([
             ?HARVEST_METADATA_CALLED(
                 __SpaceId,
                 __Destination,
-                __ReceivedChanges,
+                __ReceivedBatch,
                 __HarvestingStreamPid
             ) ->
-                __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedChanges],
+                __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedBatch],
                 case sequential_subtract(__Seqs, __ReceivedSeqs) of
                     __Seqs -> ok;
                     _ ->
@@ -191,7 +191,7 @@ stream_supervisor_should_be_restarted(Config) ->
 
 main_harvesting_stream_should_not_be_started_if_space_is_not_supported(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     {HarvestersConfig, SpacesConfig} = harvesters_and_spaces_config(#{
         ?HARVESTER_ID(1) => #{indices => 1, spaces => 1}
     }),
@@ -311,14 +311,14 @@ start_stop_streams_mixed_test(Config) ->
     DeletedSpaces = maps:keys(SpacesConfig2) -- maps:keys(SpacesConfig3),
 
     lists:foreach(fun(SpaceId) ->
-        pretend_space_deletion(utils:random_element(Nodes), SpaceId)
+        pretend_space_deletion(lists_utils:random_element(Nodes), SpaceId)
     end, DeletedSpaces),
 
     ?assertMatch(5, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     update_harvesters_structure(Config, #{}, #{}),
     lists:foreach(fun(SpaceId) ->
-        pretend_space_deletion(utils:random_element(Nodes), SpaceId)
+        pretend_space_deletion(lists_utils:random_element(Nodes), SpaceId)
     end, maps:keys(SpacesConfig3)),
     ?assertMatch(0, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS).
 
@@ -397,7 +397,7 @@ adding_index_should_start_aux_stream_to_catch_up_with_main_stream(Config) ->
 
 aux_stream_should_be_started_test(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     ok = rpc:call(Node, harvesting_state, ensure_created, [?SPACE_ID(1)]),
     Dest = harvesting_destination:init(?HARVESTER_ID(1), ?INDEX_ID(1)),
     ok = rpc:call(Node, harvesting_state, set_seen_seq, [?SPACE_ID(1), Dest, 1000000]),
@@ -411,7 +411,7 @@ aux_stream_should_be_started_test(Config) ->
 
 aux_stream_should_not_be_started_test(Config) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     ok = rpc:call(Node, harvesting_state, ensure_created, [?SPACE_ID(1)]),
     Dest = harvesting_destination:init(?HARVESTER_ID(1), [?INDEX_ID(1), ?INDEX_ID(2)]),
     ok = rpc:call(Node, harvesting_state, set_seen_seq, [?SPACE_ID(1), Dest, 1000000]),
@@ -894,7 +894,10 @@ error_mix_test2(Config) ->
     RelevantSeqs3 = relevant_seqs(Changes3, false),
 
     % choose random seq on which harvesting will fail
-    FailedSeq = random_custom_metadata_seq(Changes),
+    % ensure that it is not first custom_metadata seq in the batch as it is handled
+    % another way and it is checked in another test
+    [_ | RestRelevantChanges] = relevant_changes(Changes, true),
+    FailedSeq = random_custom_metadata_seq(RestRelevantChanges),
     RetriedSeqsMain = get_seqs(strip_after(RelevantChanges1, FailedSeq)),
     RetriedSeqsAux = get_seqs(strip_before(RelevantChanges1, FailedSeq)),
 
@@ -1011,17 +1014,16 @@ error_mix_test3(Config) ->
         ?HARVESTER_ID(2) => [?INDEX_ID(1)]
     }, RelevantSeqs1, MainStreamPid),
 
-    % aux_streams should be started to catch up with main stream
-    % main_stream will wait for aux_streams
+    % aux_streams should not be started
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
-    % stream next changes to main stream, so that aux stream won't catch up with previously set Until
+    % stream next changes to main stream
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes2),
 
     %"fix" aux_stream
     mock_harvest_metadata_success(Nodes),
 
-    % main_stream should takeover responsibility of harvesting
+    % aux_streams should not be started
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes3),
@@ -1087,7 +1089,7 @@ error_mix_test4(Config) ->
 
     ?assertHarvestMetadataCalled(SpaceId,
         #{?HARVESTER_ID(2) => [?INDEX_ID(1)]},
-        get_seqs(RetriedSeqsMain), MainStreamPid
+        RetriedSeqsMain, MainStreamPid
     ),
 
     mock_harvest_metadata(Nodes, fun(_SpaceId, Destination, _Batch, _MaxStreamSeq, _MaxSeq) ->
@@ -1241,10 +1243,12 @@ main_stream_test_base(Config, HarvestersConfig, SpacesConfig) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer, couchbase_changes_stream_mock,
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, couchbase_changes_stream_mock,
         couchbase_changes_stream_mock_registry]} | Config].
 
 init_per_testcase(harvesting_stream_batch_test, Config) ->
+    ct:timetrap({minutes, 10}),
     Nodes = ?config(op_worker_nodes, Config),
     ok = test_utils:set_env(Nodes, op_worker, harvesting_flush_timeout_seconds, 3600),
     init_per_testcase(default, Config);
@@ -1291,7 +1295,7 @@ end_per_suite(_Config) ->
 
 update_harvesters_structure(Config, HarvestersConfig, SpacesConfig) ->
     Nodes = ?config(op_worker_nodes, Config),
-    Node = utils:random_element(Nodes),
+    Node = lists_utils:random_element(Nodes),
     Spaces = maps:keys(SpacesConfig),
     mock_harvester_logic_get(Nodes, HarvestersConfig),
     mock_space_logic_get_harvesters(Nodes, SpacesConfig),
@@ -1480,7 +1484,7 @@ random_custom_metadata_seqs(Changes, Count) when Count =< length(Changes) ->
 random_custom_metadata_seqs(_RelevantChanges, 0, RandomSeqs) ->
     RandomSeqs;
 random_custom_metadata_seqs(RelevantChanges, Count, RandomSeqs) ->
-    Doc = #document{seq = Seq} = utils:random_element(RelevantChanges),
+    Doc = #document{seq = Seq} = lists_utils:random_element(RelevantChanges),
     random_custom_metadata_seqs(RelevantChanges -- [Doc], Count - 1, [Seq | RandomSeqs]).
 
 
@@ -1525,8 +1529,11 @@ relevant_changes(Changes, __IgnoreDeleted = true) ->
     CustomMetadataChanges = filter_custom_metadata_changes(Changes),
     filter_deleted_changes_before_first_not_deleted(CustomMetadataChanges).
 
+get_seq(#document{seq = Seq}) ->
+    Seq.
+
 get_seqs(Changes) ->
-    [Seq || #document{seq = Seq} <- Changes].
+    [get_seq(Change) || Change <- Changes].
 
 filter_custom_metadata_changes(Changes) ->
     lists:filter(fun

@@ -394,7 +394,7 @@ init_per_testcase(_Case, Config) ->
     ]),
 
     initializer:mock_provider_id(
-        Workers, <<"p1">>, <<"auth-macaroon">>, <<"identity-macaroon">>
+        Workers, <<"p1">>, <<"access-token">>, <<"identity-token">>
     ),
 
     test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
@@ -464,7 +464,7 @@ get_providers(SpaceId) ->
         (<<"s3">>) -> [<<"p1">>, <<"p4">>, <<"p5">>];
         (<<"s4">>) -> [<<"p2">>, <<"p3">>, <<"p4">>, <<"p5">>]
     end,
-    utils:random_shuffle(ProviderIds).
+    lists_utils:shuffle(ProviderIds).
 
 get_provider_session(ProviderId) ->
     <<"s", ProviderId/binary>>.

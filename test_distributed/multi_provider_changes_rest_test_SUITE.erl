@@ -13,8 +13,12 @@
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
+-include("proto/common/handshake_messages.hrl").
 -include("rest_test_utils.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -28,6 +32,7 @@
 ]).
 
 -export([
+    token_auth_test/1,
     invalid_request_should_fail/1,
     unauthorized_request_should_fail/1,
     changes_stream_file_meta_create_test/1,
@@ -43,6 +48,7 @@
 
 all() ->
     ?ALL([
+        token_auth_test,
         invalid_request_should_fail,
         unauthorized_request_should_fail,
         changes_stream_file_meta_create_test,
@@ -56,14 +62,51 @@ all() ->
         changes_stream_closed_on_disconnection
     ]).
 
+-define(USER_1, <<"user1">>).
 -define(USER_1_AUTH_HEADERS(Config), ?USER_1_AUTH_HEADERS(Config, [])).
 -define(USER_1_AUTH_HEADERS(Config, OtherHeaders),
-    ?USER_AUTH_HEADERS(Config, <<"user1">>, OtherHeaders)).
+    ?USER_AUTH_HEADERS(Config, ?USER_1, OtherHeaders)).
 
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+
+token_auth_test(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    Json = #{<<"fileMeta">> => #{
+        <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
+    }},
+    Token = ?config({access_token, ?USER_1}, Config),
+
+    % Request containing data caveats should be rejected
+    DataCaveat = #cv_data_path{whitelist = [<<"/", SpaceId/binary>>]},
+    TokenWithDataCaveat = tokens:confine(Token, DataCaveat),
+    ExpRestError1 = rest_test_utils:get_rest_error(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat)),
+    ?assertMatch(ExpRestError1, get_changes(
+        [{{access_token, ?USER_1}, TokenWithDataCaveat} | Config],
+        WorkerP1, SpaceId, Json
+    )),
+
+    % Request containing invalid api caveat should be rejected
+    GRIPattern = #gri_pattern{type = op_metrics, id = SpaceId, aspect = changes},
+    InvalidApiCaveat = #cv_api{whitelist = [{all, all, GRIPattern#gri_pattern{id = <<"ASD">>}}]},
+    TokenWithInvalidApiCaveat = tokens:confine(Token, InvalidApiCaveat),
+    ExpRestError2 = rest_test_utils:get_rest_error(?ERROR_TOKEN_CAVEAT_UNVERIFIED(InvalidApiCaveat)),
+    ?assertMatch(ExpRestError2, get_changes(
+        [{{access_token, ?USER_1}, TokenWithInvalidApiCaveat} | Config],
+        WorkerP1, SpaceId, Json
+    )),
+
+    % Request containing valid api caveat should succeed
+    ValidApiCaveat = #cv_api{whitelist = [{all, all, GRIPattern}]},
+    TokenWithValidApiCaveat = tokens:confine(Token, ValidApiCaveat),
+    ?assertMatch({ok, _}, get_changes(
+        [{{access_token, ?USER_1}, TokenWithValidApiCaveat} | Config],
+        WorkerP1, SpaceId, Json
+    )).
 
 
 invalid_request_should_fail(Config) ->
@@ -498,6 +541,10 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 
+init_per_testcase(token_auth_test, Config) ->
+    initializer:mock_auth_manager(Config),
+    init_per_testcase(all, Config);
+
 init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     ct:timetrap(timer:minutes(3)),
     Workers = ?config(op_worker_nodes, Config),
@@ -529,6 +576,10 @@ init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config).
 
+
+end_per_testcase(token_auth_test, Config) ->
+    initializer:unmock_auth_manager(Config),
+    end_per_testcase(all, Config);
 
 end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -582,7 +633,7 @@ get_changes(Config, Worker, SpaceId, Json, Timeout, Opts) ->
     Path = <<"changes/metadata/", SpaceId/binary, Qs/binary>>,
     Payload = json_utils:encode(Json),
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/json">>}
+        {?HDR_CONTENT_TYPE, <<"application/json">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, post, Headers, Payload, Opts) of

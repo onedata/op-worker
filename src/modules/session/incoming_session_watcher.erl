@@ -8,7 +8,7 @@
 %%% @doc
 %%% This module implements gen_server behaviour and is responsible for removal
 %%% of incoming session (gui/rest/fuse/incoming provider) that has been
-%%% inactive longer that allowed period.
+%%% inactive longer that allowed grace period.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(incoming_session_watcher).
@@ -29,18 +29,23 @@
     terminate/2, code_change/3
 ]).
 
-%% session watcher state:
-%% session_id - ID of session associated with sequencer manager
 -record(state, {
     session_id :: session:id(),
-    session_ttl :: non_neg_integer()
+    session_grace_period :: session:grace_period()
 }).
 
--define(SESSION_REMOVAL_RETRY_DELAY, timer:seconds(15)).
+-define(REMOVE_SESSION, remove_session).
+-define(CHECK_SESSION_ACTIVITY, check_session_activity).
+
+-define(SESSION_REMOVAL_RETRY_DELAY, 15).   % in seconds
+
+-type state() :: #state{}.
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -52,9 +57,11 @@
 start_link(SessId, SessType) ->
     gen_server2:start_link(?MODULE, [SessId, SessType], []).
 
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -63,7 +70,7 @@ start_link(SessId, SessType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init(Args :: term()) ->
-    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
+    {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SessId, SessType]) ->
     process_flag(trap_exit, true),
@@ -74,9 +81,13 @@ init([SessId, SessType]) ->
             watcher = Self
         }}
     end),
-    TTL = get_session_ttl(SessType),
-    schedule_session_status_checkup(TTL),
-    {ok, #state{session_id = SessId, session_ttl = TTL}}.
+    GracePeriod = get_session_grace_period(SessType),
+    schedule_session_activity_checkup(GracePeriod),
+    {ok, #state{
+        session_id = SessId,
+        session_grace_period = GracePeriod
+    }}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -85,16 +96,17 @@ init([SessId, SessType]) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+    State :: state()) ->
+    {reply, Reply :: term(), NewState :: state()} |
+    {reply, Reply :: term(), NewState :: state(), timeout() | hibernate} |
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
+    {stop, Reason :: term(), NewState :: state()}.
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
     {reply, ok, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -102,13 +114,14 @@ handle_call(Request, _From, State) ->
 %% Handles cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_cast(Request :: term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
+-spec handle_cast(Request :: term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}.
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -116,41 +129,41 @@ handle_cast(Request, State) ->
 %% Handles all non call/cast messages.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_info(Info :: timeout() | term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}.
-handle_info(remove_session, #state{session_id = SessId} = State) ->
+-spec handle_info(Info :: timeout() | term(), State :: state()) ->
+    {noreply, NewState :: state()} |
+    {noreply, NewState :: state(), timeout() | hibernate} |
+    {stop, Reason :: term(), NewState :: state()}.
+handle_info(?REMOVE_SESSION, #state{session_id = SessionId} = State) ->
     spawn(fun() ->
-        session_manager:remove_session(SessId)
+        session_manager:remove_session(SessionId)
     end),
     schedule_session_removal(?SESSION_REMOVAL_RETRY_DELAY),
     {noreply, State, hibernate};
 
-handle_info(check_session_status, #state{
-    session_id = SessId,
-    session_ttl = TTL
+handle_info(?CHECK_SESSION_ACTIVITY, #state{
+    session_id = SessionId,
+    session_grace_period = GracePeriod
 } = State) ->
-    RemoveSession = case session:get(SessId) of
+    IsSessionInactive = case session:get(SessionId) of
         {ok, #document{value = #session{status = inactive}}} ->
             true;
         {ok, #document{value = #session{connections = [_ | _]}}} ->
-            {false, TTL};
+            {false, GracePeriod};
         {ok, #document{value = #session{status = active}}} ->
-            is_session_ttl_exceeded(SessId, TTL);
+            maybe_mark_inactive(SessionId, GracePeriod);
         {error, _} = Error ->
             {false, Error}
     end,
 
-    case RemoveSession of
+    case IsSessionInactive of
         true ->
             schedule_session_removal(0),
             {noreply, State};
+        {false, RemainingTime} when is_integer(RemainingTime) ->
+            schedule_session_activity_checkup(RemainingTime),
+            {noreply, State, hibernate};
         {false, {error, Reason}} ->
-            {stop, Reason, State};
-        {false, RemainingTime} ->
-            schedule_session_status_checkup(RemainingTime),
-            {noreply, State, hibernate}
+            {stop, Reason, State}
     end;
 
 handle_info({'EXIT', _, shutdown}, State) ->
@@ -159,6 +172,7 @@ handle_info({'EXIT', _, shutdown}, State) ->
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -170,12 +184,13 @@ handle_info(Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #state{}) -> term().
+    State :: state()) -> term().
 terminate(Reason, #state{session_id = SessId} = State) ->
     ?log_terminate(Reason, State),
     spawn(fun() ->
         session_manager:remove_session(SessId)
     end).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -183,84 +198,77 @@ terminate(Reason, #state{session_id = SessId} = State) ->
 %% Converts process state when code is changed.
 %% @end
 %%--------------------------------------------------------------------
--spec code_change(OldVsn :: term() | {down, term()}, State :: #state{},
-    Extra :: term()) -> {ok, NewState :: #state{}} | {error, Reason :: term()}.
+-spec code_change(OldVsn :: term() | {down, term()}, State :: state(),
+    Extra :: term()) -> {ok, NewState :: state()} | {error, Reason :: term()}.
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
+
 %% @private
-%% @doc
-%% Returns session TTL for given session type.
-%% @end
-%%--------------------------------------------------------------------
--spec get_session_ttl(SessType :: session:type()) ->
-    Seconds :: non_neg_integer().
-get_session_ttl(gui) ->
-    {ok, Period} = application:get_env(?APP_NAME, gui_session_ttl_seconds),
+-spec get_session_grace_period(session:type()) -> session:grace_period().
+get_session_grace_period(gui) ->
+    {ok, Period} = application:get_env(?APP_NAME, gui_session_grace_period_seconds),
     Period;
-get_session_ttl(rest) ->
-    {ok, Period} = application:get_env(?APP_NAME, rest_session_ttl_seconds),
+get_session_grace_period(rest) ->
+    {ok, Period} = application:get_env(?APP_NAME, rest_session_grace_period_seconds),
     Period;
-get_session_ttl(provider_incoming) ->
-    {ok, Period} = application:get_env(?APP_NAME, provider_session_ttl_seconds),
+get_session_grace_period(provider_incoming) ->
+    {ok, Period} = application:get_env(?APP_NAME, provider_session_grace_period_seconds),
     Period;
-get_session_ttl(_) ->
-    {ok, Period} = application:get_env(?APP_NAME, fuse_session_ttl_seconds),
+get_session_grace_period(_) ->
+    {ok, Period} = application:get_env(?APP_NAME, fuse_session_grace_period_seconds),
     Period.
+
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether session inactivity period exceeds TTL. If session TTL is
-%% exceeded, session is marked as 'inactive' for later removal. Returns false and
-%% remaining time to removal for session that does not exceed TTL
-%% and true for inactive session that exceeded TTL.
+%% Checks whether session inactivity period exceeds grace period. If
+%% session grace period is exceeded, session is marked as 'inactive'
+%% for later removal.
+%% Returns false and remaining time to removal for session that does not
+%% exceed grace period and true for inactive session that exceeded it.
 %% @end
 %%--------------------------------------------------------------------
--spec is_session_ttl_exceeded(SessId :: session:id(), TTL :: session:ttl()) ->
-    true | {false, RemainingTime :: non_neg_integer()}.
-is_session_ttl_exceeded(SessId, TTL) ->
+-spec maybe_mark_inactive(session:id(), session:grace_period()) ->
+    true | {false, RemainingTime :: time_utils:seconds()}.
+maybe_mark_inactive(SessionId, GracePeriod) ->
     Diff = fun
         (#session{status = active, accessed = Accessed} = Sess) ->
             InactivityPeriod = time_utils:cluster_time_seconds() - Accessed,
-            case InactivityPeriod >= TTL of
-                true -> {ok, Sess#session{status = inactive}};
-                false -> {error, {ttl_not_exceeded, TTL - InactivityPeriod}}
+            case InactivityPeriod >= GracePeriod of
+                true ->
+                    {ok, Sess#session{status = inactive}};
+                false ->
+                    {error, {grace_period_not_exceeded, GracePeriod - InactivityPeriod}}
             end;
         (#session{} = Sess) ->
             {ok, Sess#session{status = inactive}}
     end,
-    case session:update(SessId, Diff) of
-        {ok, SessId} -> true;
-        {error, {ttl_not_exceeded, RemainingTime}} -> {false, RemainingTime};
-        {error, _} -> true
+    case session:update(SessionId, Diff) of
+        {ok, SessionId} ->
+            true;
+        {error, {grace_period_not_exceeded, RemainingTime}} ->
+            {false, RemainingTime};
+        {error, _} ->
+            true
     end.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Schedules session status checkup that should take place after 'Delay'
-%% milliseconds.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_session_status_checkup(Delay :: non_neg_integer()) ->
-    TimeRef :: reference().
-schedule_session_status_checkup(Delay) ->
-    erlang:send_after(timer:seconds(Delay), self(), check_session_status).
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Schedules session removal that should take place after 'Delay'
-%% milliseconds.
-%% @end
-%%--------------------------------------------------------------------
--spec schedule_session_removal(Delay :: non_neg_integer()) ->
+-spec schedule_session_activity_checkup(Delay :: time_utils:seconds()) ->
+    TimeRef :: reference().
+schedule_session_activity_checkup(Delay) ->
+    erlang:send_after(timer:seconds(Delay), self(), ?CHECK_SESSION_ACTIVITY).
+
+
+%% @private
+-spec schedule_session_removal(Delay :: time_utils:seconds()) ->
     TimeRef :: reference().
 schedule_session_removal(Delay) ->
-    erlang:send_after(Delay, self(), remove_session).
+    erlang:send_after(timer:seconds(Delay), self(), ?REMOVE_SESSION).

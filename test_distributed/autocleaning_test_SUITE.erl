@@ -15,7 +15,7 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
@@ -81,13 +81,11 @@ all() -> [
 -define(RULE_SETTING(Value), ?RULE_SETTING(true, Value)).
 -define(RULE_SETTING(Enabled, Value), #{enabled => Enabled, value => Value}).
 
--define(DIST(ProviderId, __Size),
-    case __Size == 0 of
-        true ->
-            [#{<<"providerId">> => ProviderId, <<"blocks">> => []}];
-        false ->
-            [#{<<"providerId">> => ProviderId, <<"blocks">> => [[0, __Size]]}]
-    end).
+-define(DIST(__ProviderId, __Size),
+    (fun
+        (P, 0) -> [#{<<"providerId">> => P, <<"blocks">> => []}];
+        (P, S) -> [#{<<"providerId">> => P, <<"blocks">> => [[0, S]]}]
+    end)(__ProviderId, __Size)).
 
 -define(DISTS(ProviderIds, Sizes), lists:flatmap(fun({PId, __Size}) ->
     ?DIST(PId, __Size)
@@ -146,7 +144,7 @@ autocleaning_run_should_not_start_when_file_popularity_is_disabled(Config) ->
 
 forcefully_started_autocleaning_should_return_error_when_file_popularity_is_disabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual({error, file_popularity_disabled}, force_start(W, ?SPACE_ID)).
+    ?assertEqual(?ERROR_FILE_POPULARITY_DISABLED, force_start(W, ?SPACE_ID)).
 
 autocleaning_run_should_not_start_when_autocleaning_is_disabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -163,7 +161,7 @@ autocleaning_run_should_not_start_when_autocleaning_is_disabled(Config) ->
 forcefully_started_autocleaning_should_return_error_when_autocleaning_is_disabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     enable_file_popularity(W, ?SPACE_ID),
-    ?assertEqual({error, autocleaning_disabled}, force_start(W, ?SPACE_ID)).
+    ?assertEqual(?ERROR_AUTO_CLEANING_DISABLED, force_start(W, ?SPACE_ID)).
 
 autocleaning_should_not_evict_file_replica_when_it_is_not_replicated(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),

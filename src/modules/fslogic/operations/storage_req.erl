@@ -16,7 +16,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 
@@ -68,23 +68,15 @@ get_configuration(SessId) ->
 -spec get_helper_params(user_ctx:ctx(), storage:id(),
     od_space:id(), atom()) -> #fuse_response{}.
 get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
-    {ok, Helper} = case storage:get(StorageId) of
-        {ok, StorageDoc} ->
-            fslogic_storage:select_helper(StorageDoc);
-        {error, not_found} ->
-            {ok, undefined}
-    end,
+    {ok, Storage} = storage:get(StorageId),
+    Helper = storage:get_helper(Storage),
     case HelperMode of
         ?FORCE_DIRECT_HELPER_MODE ->
             SessionId = user_ctx:get_session_id(UserCtx),
             UserId = user_ctx:get_user_id(UserCtx),
-            HelperName = helper:get_name(Helper),
-            {ok, StorageDoc2} = storage:get(StorageId),
-            case luma:get_client_user_ctx(SessionId, UserId, SpaceId,
-                StorageDoc2, HelperName) of
+            case luma:get_client_user_ctx(SessionId, UserId, SpaceId, Storage) of
                 {ok, ClientStorageUserCtx} ->
-                    HelperParams = helper:get_params(Helper,
-                        ClientStorageUserCtx),
+                    HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
                     #fuse_response{
                         status = #status{code = ?OK},
                         fuse_response = HelperParams};
@@ -110,24 +102,23 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
     FileCtx = file_ctx:new_by_guid(Guid),
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
-    SpaceId = case file_ctx:get_space_id_const(FileCtx) of
-        undefined -> throw(?ENOENT);
-        <<_/binary>> = Id -> Id
+    SpaceId = try
+        file_ctx:get_space_id_const(FileCtx)
+    catch
+        _:_ ->
+            throw(?ENOENT)
     end,
 
-    {ok, StorageDoc} = storage:get(StorageId),
-    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helper:get_name(Helper),
+    {ok, Storage} = storage:get(StorageId),
+    Helper = storage:get_helper(Storage),
 
-    case luma:get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) of
+    case luma:get_client_user_ctx(SessionId, UserId, SpaceId, Storage) of
         {ok, ClientStorageUserCtx} ->
-            {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId,
-                StorageDoc, HelperName),
+            {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, Storage),
             HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
-
-            {RawStoragePath, FileCtx2} = file_ctx:get_raw_storage_path(FileCtx),
-            Dirname = filename:dirname(RawStoragePath),
-            FileCtx3 = sfm_utils:create_parent_dirs(FileCtx2),
+            {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx, true),
+            Dirname = filename:dirname(StorageFileId),
+            FileCtx3 = sd_utils:create_parent_dirs(FileCtx2),
             {Size, _} = file_ctx:get_file_size(FileCtx3),
             TestFileName = storage_detector:generate_file_id(),
             TestFileId = fslogic_path:join([Dirname, TestFileName]),
@@ -158,10 +149,9 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
 verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
-    {ok, StorageDoc} = storage:get(StorageId),
-    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helper:get_name(Helper),
-    {ok, StorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName),
+    {ok, Storage} = storage:get(StorageId),
+    Helper = storage:get_helper(Storage),
+    {ok, StorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, Storage),
     verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 

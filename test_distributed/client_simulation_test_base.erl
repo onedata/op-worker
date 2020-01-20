@@ -14,7 +14,9 @@
 -include("fuse_test_utils.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
+-include("test_utils/initializer.hrl").
 -include_lib("clproto/include/messages.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -211,27 +213,17 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils, ?MODULE]} | Config].
 
 init_per_testcase(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     initializer:remove_pending_messages(),
     ssl:start(),
     Config2 = lfm_proxy:init(Config),
 
-    test_utils:mock_new(Workers, user_identity),
-    test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-        fun
-            (#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
-                {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
-            (#macaroon_auth{macaroon = ?MACAROON2, disch_macaroons = ?DISCH_MACAROONS2}) ->
-                {ok, #document{value = #user_identity{user_id = <<"user2">>}}}
-        end
-    ),
+    initializer:mock_auth_manager(Config),
     initializer:create_test_users_and_spaces(?TEST_FILE(Config2, "env_desc.json"),
-        % Shorten ttl to force quicker client session removal
-        [{fuse_session_ttl_seconds, 10} | Config2]).
+        % Shorten grace period to force quicker client session removal
+        [{fuse_session_grace_period_seconds, 10} | Config2]).
 
 end_per_testcase(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     ssl:stop(),
-    test_utils:mock_validate_and_unload(Workers, [user_identity]),
+    initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config).

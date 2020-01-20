@@ -17,13 +17,18 @@
 -include("proto/oneclient/common_messages.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/common/credentials.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 %% tests
 -export([
@@ -49,7 +54,7 @@ all() ->
     ?ALL(?TEST_CASES, ?TEST_CASES).
 
 -define(TIMEOUT, timer:minutes(1)).
--define(FILE_GUID(Id), file_id:pack_guid(<<"file_id_", (integer_to_binary(Id))/binary>>, <<"spaceid">>)).
+-define(FILE_GUID(Id), file_id:pack_guid(<<"file_id_", (integer_to_binary(Id))/binary>>, <<"space1">>)).
 -define(STM_ID(N), list_to_atom("stream_id_" ++ integer_to_list(N))).
 -define(CTR_THR(Value), [
     {name, ctr_thr}, {value, Value}, {description, "Summary events counter threshold."}
@@ -301,9 +306,9 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
 
     initializer:remove_pending_messages(),
     Sessions = lists:map(fun(N) ->
-        SessId = <<"session_id_", (integer_to_binary(N))/binary>>,
-        Iden = #user_identity{user_id = <<"user_id_", (integer_to_binary(N))/binary>>},
-        session_setup(Worker, SessId, Iden, Self),
+        Nonce = <<"nonce_", (integer_to_binary(N))/binary>>,
+        Iden = ?SUB(user, <<"user_id_", (integer_to_binary(N))/binary>>),
+        {ok, SessId} = session_setup(Worker, Nonce, Iden, Self),
         SubId = subscribe(Worker, SessId,
             fun(Meta) -> Meta >= CtrThr end,
             forward_events_handler(Self)
@@ -362,7 +367,7 @@ init_per_suite(Config) ->
         initializer:clear_subscriptions(Worker),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 
 init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
@@ -380,13 +385,14 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
         {ok, [oneprovider:get_id()]}
     end),
     initializer:mock_test_file_context(Config, <<"file_id">>),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config);
+    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:mock_auth_manager(Config),
+    Config;
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     Self = self(),
-    SessId = <<"session_id">>,
-    Iden = #user_identity{user_id = <<"user_id">>},
+    Iden = ?SUB(user, <<"user_id">>),
     initializer:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send_to_oneclient, fun
@@ -396,13 +402,23 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
         {ok, [oneprovider:get_id()]}
     end),
-    session_setup(Worker, SessId, Iden, Self),
+    Nonce = <<"nonce">>,
+    initializer:mock_auth_manager(Config),
+    {ok, SessId} = session_setup(Worker, Nonce, Iden, Self),
     initializer:mock_test_file_context(Config, <<"file_id">>),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
-        [{session_id, SessId} | Config]).
+    initializer:create_test_users_and_spaces(
+        ?TEST_FILE(Config, "env_desc.json"),
+        [{session_id, SessId} | Config]
+    ).
+
+
+end_per_suite(_Config) ->
+    ok.
+
 
 end_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unmock_test_file_context(Config),
     test_utils:mock_unload(Workers, space_logic),
@@ -412,6 +428,7 @@ end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session_id, Config),
     session_teardown(Worker, SessId),
+    initializer:unmock_auth_manager(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unmock_test_file_context(Config),
     test_utils:mock_unload(Workers, space_logic),
@@ -427,11 +444,16 @@ end_per_testcase(_Case, Config) ->
 %% Creates session document in datastore.
 %% @end
 %%--------------------------------------------------------------------
--spec session_setup(Worker :: node(), SessId :: session:id(),
-    Iden :: session:identity(), Conn :: pid()) -> ok.
-session_setup(Worker, SessId, Iden, Conn) ->
-    ?assertMatch({ok, _}, rpc:call(Worker, session_manager,
-        reuse_or_create_fuse_session, [SessId, Iden, #macaroon_auth{}, Conn]
+-spec session_setup(Worker :: node(), Nonce :: binary(),
+    Iden :: session:auth(), Conn :: pid()) -> {ok, session:id()}.
+session_setup(Worker, Nonce, ?SUB(user, UserId) = Iden, Conn) ->
+    AccessToken = initializer:create_access_token(UserId),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
+    ?assertMatch({ok, _}, fuse_test_utils:reuse_or_create_fuse_session(
+        Worker, Nonce, Iden, TokenAuth, Conn
     )).
 
 %%--------------------------------------------------------------------
