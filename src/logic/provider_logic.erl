@@ -846,25 +846,27 @@ assert_zone_compatibility() ->
                 true ->
                     ok;
                 {false, CompOzVersions} ->
-                    ?critical("This provider is not compatible with its Onezone "
+                    ?critical("This Oneprovider is not compatible with its Onezone "
                     "service.~n"
                     "Oneprovider version: ~s, supports zones: ~p~n"
                     "Onezone version: ~s~n"
-                    "The application will be terminated.", [
+                    "The service will not be operational until the problem is resolved "
+                    "(may require Oneprovider / Onezone upgrade or compatibility registry refresh).", [
                         OpVersion,
                         binaries_to_strings(CompOzVersions),
                         OzVersion
                     ]),
-                    init:stop();
+                    error(incompatible_oneprovider_version);
                 {error, Error} ->
                     error(Error)
             end;
         {error, {bad_response, Code, ResponseBody}} ->
-            ?critical("Failure while checking Onezone version. The application "
-            "will be terminated. HTTP response: ~B: ~s", [
+            ?critical("Failure while checking Onezone version. "
+            "The service will not be operational until the problem is resolved.~n"
+            "HTTP response: ~B: ~s", [
                 Code, ResponseBody
             ]),
-            init:stop();
+            error(cannot_check_onezone_version);
         {error, Error} ->
             error(Error)
     end.
