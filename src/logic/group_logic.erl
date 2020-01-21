@@ -18,13 +18,14 @@
 -author("Lukasz Opiola").
 
 -include("graph_sync/provider_graph_sync.hrl").
--include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("proto/common/credentials.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 -export([get_shared_data/3]).
--export([get_name/2, get_name/3]).
+-export([get_name/1, get_name/3]).
 
 %%%===================================================================
 %%% API
@@ -51,10 +52,9 @@ get_shared_data(SessionId, GroupId, AuthHint) ->
 %% Retrieves group name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_name(gs_client_worker:client(), od_group:id()) ->
-    {ok, od_group:name()} | gs_protocol:error().
-get_name(SessionId, GroupId) ->
-    get_name(SessionId, GroupId, undefined).
+-spec get_name(od_group:id()) -> {ok, od_group:name()} | gs_protocol:error().
+get_name(GroupId) ->
+    get_name(?ROOT_SESS_ID, GroupId, ?THROUGH_PROVIDER(oneprovider:get_id())).
 
 -spec get_name(gs_client_worker:client(), od_group:id(), gs_protocol:auth_hint()) ->
     {ok, od_group:name()} | gs_protocol:error().

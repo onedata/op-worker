@@ -72,7 +72,7 @@ uid_to_ace_name(?everyone) ->
 uid_to_ace_name(?group) ->
     undefined;
 uid_to_ace_name(Uid) ->
-    case user_logic:get_full_name(?ROOT_SESS_ID, Uid) of
+    case user_logic:get_full_name(Uid) of
         {ok, FullName} -> FullName;
         {error, _} -> undefined
     end.
@@ -81,7 +81,7 @@ uid_to_ace_name(Uid) ->
 %% @private
 -spec gid_to_ace_name(GroupId :: binary()) -> undefined | binary().
 gid_to_ace_name(GroupId) ->
-    case group_logic:get_name(?ROOT_SESS_ID, GroupId) of
+    case group_logic:get_name(GroupId) of
         {ok, Name} -> Name;
         {error, _} -> undefined
     end.

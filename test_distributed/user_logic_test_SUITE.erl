@@ -456,7 +456,12 @@ convenience_functions_test(Config) ->
     % Full name is within shared scope
     ?assertMatch(
         {ok, ?USER_FULL_NAME(?USER_1)},
-        rpc:call(Node, user_logic, get_full_name, [User1Sess, ?USER_1])
+        rpc:call(Node, user_logic, get_full_name, [?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertMatch(
+        {ok, ?USER_FULL_NAME(?USER_1)},
+        rpc:call(Node, user_logic, get_full_name, [User1Sess, ?USER_1, ?THROUGH_SPACE(?SPACE_1)])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 

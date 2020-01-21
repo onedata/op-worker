@@ -56,7 +56,10 @@ oneprovider_should_not_connect_to_incompatible_onezone(Config) ->
 is_connected_to_oz(Worker) ->
     Domain = ?GET_DOMAIN(Worker),
     Url = str_utils:format_bin("https://~s~s", [Domain, ?NAGIOS_OZ_CONNECTIVITY_PATH]),
-    case http_client:get(Url) of
+    CaCerts = rpc:call(Worker, https_listener, get_cert_chain_pems, []),
+    {ok, Domain} = test_utils:get_env(Worker, ?APP_NAME, test_web_cert_domain),
+    Opts = [{ssl_options, [{cacerts, CaCerts}, {hostname, str_utils:to_binary(Domain)}]}],
+    case http_client:get(Url, #{}, <<>>, Opts) of
         {ok, 200, _, Body} ->
             case json_utils:decode(Body) of
                 #{<<"status">> := <<"ok">>} -> true;
