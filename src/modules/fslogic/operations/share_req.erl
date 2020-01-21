@@ -98,19 +98,25 @@ remove_share_internal(UserCtx, FileCtx, ShareId) ->
 %% @private
 -spec create_share_insecure(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
     fslogic_worker:provider_response().
-create_share_insecure(UserCtx, FileCtx, Name) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
+create_share_insecure(UserCtx, FileCtx0, Name) ->
+    Guid = file_ctx:get_guid_const(FileCtx0),
     ShareId = datastore_key:new(),
     ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
     SessionId = user_ctx:get_session_id(UserCtx),
     UserId = user_ctx:get_user_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx0),
+
+    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
+    FileType = case IsDir of
+        true -> dir;
+        false -> file
+    end,
 
     assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
-    case share_logic:create(SessionId, ShareId, Name, SpaceId, ShareGuid) of
+    case share_logic:create(SessionId, ShareId, Name, SpaceId, ShareGuid, FileType) of
         {ok, _} ->
-            case file_meta:add_share(FileCtx, ShareId) of
+            case file_meta:add_share(FileCtx1, ShareId) of
                 {error, _} ->
                     ok = share_logic:delete(SessionId, ShareId),
                     ?ERROR(?EAGAIN);

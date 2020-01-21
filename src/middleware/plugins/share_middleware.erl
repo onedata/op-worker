@@ -242,11 +242,13 @@ share_to_json(ShareId, #od_share{
     root_file = RootFileGuid,
     name = ShareName,
     public_url = SharePublicUrl,
+    file_type = FileType,
     handle = Handle
 }) ->
     #{
         <<"shareId">> => ShareId,
         <<"name">> => ShareName,
+        <<"fileType">> => FileType,
         <<"publicUrl">> => SharePublicUrl,
         <<"rootFileId">> => RootFileGuid,
         <<"spaceId">> => utils:undefined_to_null(SpaceId),

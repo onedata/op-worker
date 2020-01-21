@@ -696,6 +696,7 @@ get_share(Config) ->
             <<"shareId">> := ShareId,
             <<"name">> := ShareName,
             <<"publicUrl">> := ExpectedPublicUrl,
+            <<"fileType">> := <<"dir">>,
             <<"rootFileId">> := ExpectedRootFileObjectId,
             <<"spaceId">> := ?SPACE1_ID,
             <<"handleId">> := ExpectedHandleId

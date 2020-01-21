@@ -43,6 +43,6 @@ create_response(#gri{aspect = instance}, _, resource, {#gri{id = ShareId}, _}) -
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(_, #{<<"rootFileId">> := RootFileGuid} = ShareData) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(RootFileGuid),
+get_response(_, #{<<"rootFileId">> := RootFileShareGuid} = ShareData) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(RootFileShareGuid),
     ?OK_REPLY(ShareData#{<<"rootFileId">> => ObjectId}).

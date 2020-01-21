@@ -120,6 +120,7 @@
 -record(od_share, {
     name = undefined :: undefined | binary(),
     public_url = undefined :: undefined | binary(),
+    file_type = dir :: od_share:file_type(),
 
     % Direct relations to other entities
     space = undefined :: undefined | od_space:id(),

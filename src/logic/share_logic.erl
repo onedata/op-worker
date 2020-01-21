@@ -22,7 +22,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 -export([get/2, get_public_data/2]).
--export([create/5, update_name/3, delete/2]).
+-export([create/6, update_name/3, delete/2]).
 
 %%%===================================================================
 %%% API
@@ -59,9 +59,10 @@ get_public_data(SessionId, ShareId) ->
 
 
 -spec create(gs_client_worker:client(), od_share:id(), od_share:name(),
-    od_space:id(), od_share:root_file_guid()) ->
+    od_space:id(), od_share:root_file_guid(), od_share:file_type()
+) ->
     {ok, od_share:id()} | errors:error().
-create(SessionId, ShareId, Name, SpaceId, ShareFileGuid) ->
+create(SessionId, ShareId, Name, SpaceId, ShareFileGuid, FileType) ->
     Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_share, id = undefined, aspect = instance},
@@ -69,7 +70,8 @@ create(SessionId, ShareId, Name, SpaceId, ShareFileGuid) ->
             <<"shareId">> => ShareId,
             <<"name">> => Name,
             <<"rootFileId">> => ShareFileGuid,
-            <<"spaceId">> => SpaceId
+            <<"spaceId">> => SpaceId,
+            <<"fileType">> => FileType
         },
         subscribe = true
     })),
