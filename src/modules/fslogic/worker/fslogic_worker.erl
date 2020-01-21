@@ -86,32 +86,26 @@
 -define(SHOULD_RERUN_TRANSFERS, application:get_env(?APP_NAME, rerun_transfers, true)).
 
 -define(AVAILABLE_SHARE_OPERATIONS, [
-    remote_read,
-
     check_perms,
-    get_metadata,
-    get_mimetype,
-    get_cdmi_completion_status,
-    get_transfer_encoding,
+    resolve_guid,
     get_file_path,
     get_parent,
 
     list_xattr,
     get_xattr,
-    synchronize_block_and_compute_checksum,
-    block_synchronization_request,
-    synchronize_block,
-    get_file_location,
-    release,
-    open_file_with_extended_info,
+    get_metadata,
+
     open_file,
-    get_file_children_attrs,
+    open_file_with_extended_info,
+    synchronize_block,
+    remote_read,
+    fsync,
+    release,
+
+    get_file_attr,
     get_file_children,
     get_child_attr,
-    get_file_attr,
-
-    get_helper_params,
-    resolve_guid
+    get_file_children_attrs
 ]).
 
 %%%===================================================================
@@ -346,14 +340,14 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
     end.
 
 %% @private
-get_operation(#fuse_request{fuse_request = #file_request{} = Req}) ->
+get_operation(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
     element(1, Req);
 get_operation(#fuse_request{fuse_request = Req}) ->
     element(1, Req);
 get_operation(#provider_request{provider_request = Req}) ->
     element(1, Req);
 get_operation(#proxyio_request{proxyio_request = Req}) ->
-    element(1, Req), [].
+    element(1, Req).
 
 %%--------------------------------------------------------------------
 %% @private

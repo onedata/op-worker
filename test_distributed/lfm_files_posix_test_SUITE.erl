@@ -76,7 +76,6 @@
     lfm_open_and_create_open_failure_test/1,
     lfm_copy_failure_multiple_users_test/1,
     lfm_rmdir_test/1
-
 ]).
 
 -define(TEST_CASES, [
