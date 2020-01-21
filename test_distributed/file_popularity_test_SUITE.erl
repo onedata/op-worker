@@ -422,9 +422,9 @@ collector_loop(TestMaster, RowsMap) ->
 query2(Worker, SpaceId, Opts) ->
     start_collector_remote(Worker),
     case run(Worker, SpaceId, Opts) of
-        ok ->
+        {ok, _} ->
             receive ?COLLECTED_RESULTS(Rows) -> Rows end;
-        Error ->
+        Error  = {error, _} ->
             Error
     end.
 

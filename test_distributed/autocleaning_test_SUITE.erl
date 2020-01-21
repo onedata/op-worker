@@ -789,7 +789,8 @@ init_per_testcase(default, Config) ->
     ct:timetrap({minutes, 10}),
     Workers = [W | _] = ?config(op_worker_nodes, Config),
     % ensure that all file blocks will be public
-    ok = test_utils:set_env(Workers, ?APP_NAME, public_block_size_treshold, 1),
+    ok = test_utils:set_env(Workers, ?APP_NAME, public_block_size_treshold, 0),
+    ok = test_utils:set_env(Workers, ?APP_NAME, public_block_percent_treshold, 0),
     ensure_controller_stopped(W, ?SPACE_ID),
     clean_autocleaning_run_model(W, ?SPACE_ID),
     Config2 = lfm_proxy:init(Config),
