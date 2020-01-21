@@ -151,7 +151,7 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
             }),
             <<"mtime">> => ModificationTime,
             <<"size">> => Size,
-            <<"share">> => SharesGRI,
+            <<"shareList">> => SharesGRI,
             <<"distribution">> => gri:serialize(#gri{
                 type = op_replica,
                 id = Guid,

@@ -191,6 +191,8 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 -spec get_plugin(gri:entity_type()) -> module() | no_return().
 get_plugin(op_file) -> file_middleware;
 get_plugin(op_group) -> group_middleware;
+get_plugin(op_handle) -> handle_middleware;
+get_plugin(op_handle_service) -> handle_service_middleware;
 get_plugin(op_metrics) -> metrics_middleware;
 get_plugin(op_provider) -> provider_middleware;
 get_plugin(op_qos) -> qos_middleware;
