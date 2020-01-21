@@ -536,16 +536,35 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
             transfer:list_ended_transfers(SpaceId, StartId, Offset, Limit)
     end,
 
-    NextPageToken = case length(Transfers) of
+    Result = case length(Transfers) of
         Limit ->
-            {ok, LinkKey} = transfer:get_link_key_by_state(
-                lists:last(Transfers), TransferState
+            % The list returned by the link tree can contain transfers for which
+            % the doc was not synchronized yet. In such case it is not possible
+            % to get it's link key. Find the last transfer id for which the doc
+            % is synchronized and drop the remaining ids from the result
+            {SynchronizedTransfers, NextPageToken} = lists:foldr(
+                fun
+                    (Tid, {TransfersAcc, undefined}) ->
+                        case transfer:get_link_key_by_state(Tid, TransferState) of
+                            {ok, LinkName} ->
+                                {[Tid | TransfersAcc], LinkName};
+                            {error, not_found} ->
+                                {TransfersAcc, undefined}
+                        end;
+                    (Tid, {TransfersAcc, LinkName}) ->
+                        {[Tid | TransfersAcc], LinkName}
+                end,
+                {[], undefined},
+                Transfers
             ),
-            #{<<"nextPageToken">> => LinkKey};
+            #{
+                <<"transfers">> => SynchronizedTransfers,
+                <<"nextPageToken">> => NextPageToken
+            };
         _ ->
-            #{}
+            #{<<"transfers">> => Transfers}
     end,
-    {ok, value, maps:merge(#{<<"transfers">> => Transfers}, NextPageToken)};
+    {ok, Result};
 
 get(#op_req{gri = #gri{id = SpaceId, aspect = transfers_active_channels}}, _) ->
     {ok, ActiveChannels} = space_transfer_stats_cache:get_active_channels(SpaceId),
