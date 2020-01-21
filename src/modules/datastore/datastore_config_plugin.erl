@@ -79,7 +79,8 @@ get_models() -> [
 
     %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
     space_storage,
-    storage
+    storage,
+    qos_status
 ].
 
 %%--------------------------------------------------------------------

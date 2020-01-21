@@ -21,13 +21,14 @@
 -export([
     build_traverse_reqs/2, remove_req/2,
     select_traverse_reqs/2, get_storage/1,
+    get_traverse_ids/1,
     are_all_finished/1,
     start_applicable_traverses/3
 ]).
 
 -type id() :: traverse:id().
 -type traverse_req() :: #qos_traverse_req{}.
--type traverse_reqs() :: #{id() => #qos_traverse_req{}}.
+-opaque traverse_reqs() :: #{id() => #qos_traverse_req{}}.
 
 -export_type([id/0, traverse_req/0, traverse_reqs/0]).
 
@@ -74,6 +75,11 @@ select_traverse_reqs(TraverseIds, TraverseReqs) ->
 -spec get_storage(traverse_req()) -> storage:id().
 get_storage(#qos_traverse_req{storage_id = StorageId}) ->
     StorageId.
+
+
+-spec get_traverse_ids(traverse_reqs()) -> [id()].
+get_traverse_ids(TraverseReqs) ->
+    maps:keys(TraverseReqs).
 
 
 -spec are_all_finished(traverse_reqs()) -> boolean().

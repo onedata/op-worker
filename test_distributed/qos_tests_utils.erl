@@ -461,7 +461,7 @@ assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssi
         end, Workers)
     end, ExpectedEffQosEntries).
 
-assert_effective_qos(Config, Worker, FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts) ->
+assert_effective_qos(Config, Worker,  FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts) ->
     ExpectedEffectiveQos = #effective_file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of

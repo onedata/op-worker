@@ -15,6 +15,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([
@@ -54,7 +55,11 @@ handle_qos_entry_change(SpaceId, #document{
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs);
         false ->
-            ok = qos_entry:add_to_impossible_list(QosEntryId, SpaceId),
+            ok = case qos_entry:add_to_impossible_list(QosEntryId, SpaceId) of
+                ok -> ok;
+                ?ERROR_ALREADY_EXISTS -> ok;
+                Error -> Error
+            end,
             ok = reevaluate_impossible_qos(QosEntryDoc)
     end.
 

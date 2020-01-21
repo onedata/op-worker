@@ -48,8 +48,7 @@
 
 %% functions operating on document using datastore model API
 -export([
-    get/1, delete/1, create/5, create/7,
-    add_synced_links/4, delete_synced_links/4, fold_links/5
+    get/1, delete/1, create/5, create/7
 ]).
 
 %% higher-level functions operating on qos_entry document
@@ -146,13 +145,6 @@ add_local_links(Key, TreeId, Links) ->
     datastore_model:add_links(?LOCAL_CTX, Key, TreeId, Links).
 
 
--spec add_synced_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    one_or_many({datastore:link_name(), datastore:link_target()})) ->
-    one_or_many({ok, datastore:link()} | {error, term()}).
-add_synced_links(Scope, Key, TreeId, Links) ->
-    datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
-
-
 -spec delete_local_links(datastore:key(), datastore:tree_id(),
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
@@ -160,18 +152,11 @@ delete_local_links(Key, TreeId, Links) ->
     datastore_model:delete_links(?LOCAL_CTX, Key, TreeId, Links).
 
 
--spec delete_synced_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
-    one_or_many(ok | {error, term()}).
-delete_synced_links(Scope, Key, TreeId, Links) ->
-    datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
-
-
--spec fold_links(id(), datastore_model:tree_ids(), datastore:fold_fun(datastore:link()),
+-spec fold_local_links(id(), datastore_model:tree_ids(), datastore:fold_fun(datastore:link()),
     datastore:fold_acc(), datastore:fold_opts()) -> {ok, datastore:fold_acc()} |
     {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
-fold_links(Key, TreeIds, Fun, Acc, Opts) ->
-    datastore_model:fold_links(?CTX, Key, TreeIds, Fun, Acc, Opts).
+fold_local_links(Key, TreeIds, Fun, Acc, Opts) ->
+    datastore_model:fold_links(?LOCAL_CTX, Key, TreeIds, Fun, Acc, Opts).
 
 
 %%%===================================================================
@@ -223,7 +208,7 @@ delete_from_impossible_list(QosEntryId, SpaceId) ->
 
 -spec get_impossible_list(od_space:id()) ->  {ok, [id()]} | {error, term()}.
 get_impossible_list(SpaceId) ->
-    fold_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(),
+    fold_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(),
         fun(#link{target = T}, Acc) -> {ok, [T | Acc]} end,
         [], #{}
     ).

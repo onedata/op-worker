@@ -22,7 +22,11 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+
 -include_lib("ctool/include/logging.hrl").
+
+% fixme
+-include("tree_traverse.hrl").
 
 %% API
 -export([reconcile_qos_for_entry/2, start_initial_traverse/3, init_pool/0,
@@ -58,7 +62,13 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
             <<"task_type">> => <<"traverse">>
         }
     },
-    {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
+    FileCtx2 = case file_ctx:is_dir(FileCtx) of
+        {true, FC} ->
+            qos_status:report_traverse_started(TaskId, FC),
+            FC;
+        {false, FC} -> FC
+    end,
+    {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx2, Options),
     ok.
 
 %%--------------------------------------------------------------------
@@ -124,6 +134,7 @@ task_finished(TaskId, _PoolName) ->
         <<"qos_entry_id">> := QosEntryId,
         <<"task_type">> := TaskType
     } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    % fixme remove dir traverse link
     case TaskType of
         <<"traverse">> ->
             ok = qos_entry:remove_traverse_req(QosEntryId, TaskId);
@@ -143,8 +154,66 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(Job, MasterJobArgs) ->
-    tree_traverse:do_master_job(Job, MasterJobArgs).
+% fixme reuse from tree traverse
+do_master_job(#tree_traverse{
+    doc = #document{key = DirUuid, scope = SpaceId, value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
+    token = Token,
+    last_name = LN,
+    last_tree = LT,
+    execute_slave_on_dir = OnDir,
+    batch_size = BatchSize,
+    traverse_info = TraverseInfo
+} = TT, MasterJobArgs) ->
+
+    {ok, Children, ExtendedInfo} = case {Token, LN} of
+        {undefined, <<>>} ->
+            file_meta:list_children(Doc, BatchSize);
+        _ ->
+            file_meta:list_children(Doc, 0, BatchSize, Token, LN, LT)
+    end,
+    #{token := Token2, last_name := LN2, last_tree := LT2} = maps:merge(#{token => undefined}, ExtendedInfo),
+
+    {SlaveJobs, MasterJobs} = lists:foldl(fun(#child_link_uuid{
+        uuid = UUID}, {Slaves, Masters} = Acc) ->
+        case {file_meta:get({uuid, UUID}), OnDir} of
+            {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, true} ->
+                {[{ChildDoc, TraverseInfo} | Slaves], [get_child_job(TT, ChildDoc) | Masters]};
+            {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, _} ->
+                {Slaves, [get_child_job(TT, ChildDoc) | Masters]};
+            {{ok, ChildDoc}, _} ->
+                {[{ChildDoc, TraverseInfo} | Slaves], Masters};
+            {{error, not_found}, _} ->
+                Acc
+        end
+    end, {[], []}, Children),
+    
+    #{task_id := TaskId} = MasterJobArgs,
+    ChildrenFiles = lists:map(fun({#document{key = ChildFileUuid}, _}) ->
+        ChildFileUuid
+    end, SlaveJobs),
+    ChildrenDirs = lists:map(fun(#tree_traverse{doc = #document{key = ChildDirUuid}}) ->
+        ChildDirUuid
+    end, MasterJobs),
+    qos_status:report_traverse_batch_calculated(
+        SpaceId, TaskId, DirUuid, ChildrenDirs, ChildrenFiles, LN
+    ),
+
+    FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of
+        true ->
+            qos_status:report_last_batch_for_dir(TaskId, DirUuid, SpaceId),
+            lists:reverse(MasterJobs);
+        false -> [TT#tree_traverse{
+            token = Token2,
+            last_name = LN2,
+            last_tree = LT2
+        } | lists:reverse(MasterJobs)]
+    end,
+    {ok, #{slave_jobs => lists:reverse(SlaveJobs), master_jobs => FinalMasterJobs}};
+do_master_job(#tree_traverse{
+    doc = Doc,
+    traverse_info = TraverseInfo
+}, _MasterJobArgs) ->
+    {ok, #{slave_jobs => [{Doc, TraverseInfo}], master_jobs => []}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -153,13 +222,23 @@ do_master_job(Job, MasterJobArgs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_slave_job(traverse:job(), traverse:id()) -> ok.
-do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskId) ->
+do_slave_job({#document{key = FileUuid, scope = SpaceId} = FileDoc, _TraverseInfo}, TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     % TODO: add space check and optionally choose other storage
+    ok = synchronize_file(UserCtx, FileCtx),
 
-    ok = synchronize_file(UserCtx, FileCtx).
+    % fixme maybe use traverse info or sth else
+    {ok, #{
+        <<"task_type">> := TaskType
+    }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    case TaskType of
+        <<"traverse">> ->
+            ok = qos_status:report_file_transferred_in_traverse(TaskId, FileDoc);
+        <<"reconcile">> -> ok
+    end.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -188,3 +267,16 @@ synchronize_file(UserCtx, FileCtx) ->
             Error
     end,
     ok.
+
+% fixme
+get_child_job(#tree_traverse{
+    execute_slave_on_dir = OnDir,
+    batch_size = BatchSize,
+    traverse_info = TraverseInfo
+}, ChildDoc) ->
+    #tree_traverse{
+        doc = ChildDoc,
+        execute_slave_on_dir = OnDir,
+        batch_size = BatchSize,
+        traverse_info = TraverseInfo
+    }.
