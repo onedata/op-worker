@@ -472,7 +472,7 @@ mock_provider_ids(Config) ->
 mock_provider_id(Workers, ProviderId, AuthMacaroon, IdentityMacaroon) ->
     % Mock cached auth and identity macaroons with large TTL
     ExpirationTime = time_utils:system_time_seconds() + 999999999,
-    rpc:call(hd(Workers), datastore_model, save, [#{model => provider_auth}, #document{
+    rpc:multicall(Workers, datastore_model, save, [#{model => provider_auth}, #document{
         key = <<"provider_auth">>,
         value = #provider_auth{
             provider_id = ProviderId,

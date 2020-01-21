@@ -46,11 +46,10 @@ all() ->
 
 oneprovider_should_not_connect_to_incompatible_onezone(Config) ->
     [P1Worker, P2Worker] = ?config(op_worker_nodes, Config),
-    timer:sleep(15),
     % One of providers should not connect because of mocked compatibility
     % check function in init_per_testcase.
-    ?assertMatch(false, is_connected_to_oz(P1Worker), 30),
-    ?assertMatch(true, is_connected_to_oz(P2Worker), 30).
+    ?assertMatch(true, is_connected_to_oz(P2Worker), 60),
+    ?assertMatch(false, is_connected_to_oz(P1Worker), 60).
 
 
 is_connected_to_oz(Worker) ->
@@ -73,15 +72,19 @@ is_connected_to_oz(Worker) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-% Mock oz endpoint returning its versions and for one of providers
-% mock compatibility check function so it should go down
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
         hackney:start(),
+        Workers = ?config(op_worker_nodes, NewConfig),
+        logic_tests_common:mock_gs_client(NewConfig),
+        % this is mocked in logic_tests_common:mock_gs_client to return ok; re-mock
+        ok = test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
+            meck:passthrough([])
+        end),
         NewConfig
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, logic_tests_common]} | Config].
 
 
 init_per_testcase(_Case, Config) ->
@@ -114,7 +117,7 @@ init_per_testcase(_Case, Config) ->
                     meck:passthrough([Url, Headers, Body, Options])
             end
         end),
-    initializer:mock_provider_ids(Config),
+    logic_tests_common:set_envs_for_correct_connection(Config),
     Config.
 
 
@@ -123,6 +126,7 @@ end_per_testcase(_, Config) ->
     test_utils:mock_validate_and_unload(P1Worker, compatibility).
 
 
-end_per_suite(_Config) ->
+end_per_suite(Config) ->
+    logic_tests_common:unmock_gs_client(Config),
     ssl:stop(),
     hackney:stop().
