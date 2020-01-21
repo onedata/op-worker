@@ -465,7 +465,7 @@ get_rtransfer_port(ProviderId) ->
             {ok, #{<<"rtransferPort">> := RtransferPort}} ->
                 RtransferPort;
             _ ->
-                ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~p", 
+                ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~p",
                     [to_string(ProviderId), ?RTRANSFER_PORT]),
                 ?RTRANSFER_PORT
         end,
@@ -848,27 +848,31 @@ assert_zone_compatibility() ->
                 {false, CompOzVersions} ->
                     ?critical("This Oneprovider is not compatible with its Onezone "
                     "service.~n"
-                    "Oneprovider version: ~s, supports zones: ~p~n"
+                    "Oneprovider version: ~s, supports zones: ~s~n"
                     "Onezone version: ~s~n"
                     "The service will not be operational until the problem is resolved "
                     "(may require Oneprovider / Onezone upgrade or compatibility registry refresh).", [
                         OpVersion,
-                        binaries_to_strings(CompOzVersions),
+                        string:join(binaries_to_strings(CompOzVersions), ", "),
                         OzVersion
                     ]),
-                    error(incompatible_oneprovider_version);
+                    throw({error, incompatible_oneprovider_version});
                 {error, Error} ->
-                    error(Error)
+                    ?critical("Cannot check Oneprovider's compatibility due to ~w."
+                    "The service will not be operational until the problem is resolved.", [
+                        {error, Error}
+                    ]),
+                    throw({error, Error})
             end;
         {error, {bad_response, Code, ResponseBody}} ->
             ?critical("Failure while checking Onezone version. "
             "The service will not be operational until the problem is resolved.~n"
-            "HTTP response: ~B: ~s", [
+            "HTTP response: ~B ~s", [
                 Code, ResponseBody
             ]),
-            error(cannot_check_onezone_version);
+            throw({error, cannot_check_onezone_version});
         {error, Error} ->
-            error(Error)
+            throw({error, Error})
     end.
 
 

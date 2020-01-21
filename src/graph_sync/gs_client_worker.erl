@@ -360,6 +360,8 @@ start_gs_connection() ->
             fun process_push_message/1, Opts
         )
     catch
+        throw:{error, _} = Error ->
+            Error;
         Type:Reason ->
             ?error_stacktrace("Cannot start gs connection due to ~p:~p", [
                 Type, Reason
