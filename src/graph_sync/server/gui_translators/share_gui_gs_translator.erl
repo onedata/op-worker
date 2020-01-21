@@ -29,17 +29,30 @@
 translate_resource(#gri{aspect = instance, scope = Scope}, #{
     <<"name">> := ShareName,
     <<"publicUrl">> := SharePublicUrl,
-    <<"rootFileId">> := RootFileGuid
+    <<"rootFileId">> := RootFileShareGuid
 }) when
     Scope =:= private;
     Scope =:= public
 ->
-    #{
+    ShareInfo = case Scope of
+        public ->
+            #{};
+        private ->
+            RootFileGuid = file_id:share_guid_to_guid(RootFileShareGuid),
+            #{<<"privateRootFile">> => gri:serialize(#gri{
+                type = op_file,
+                id = RootFileGuid,
+                aspect = instance,
+                scope = private
+            })}
+    end,
+
+    ShareInfo#{
         <<"name">> => ShareName,
         <<"publicUrl">> => SharePublicUrl,
         <<"rootFile">> => gri:serialize(#gri{
             type = op_file,
-            id = RootFileGuid,
+            id = RootFileShareGuid,
             aspect = instance,
             scope = public
         })
