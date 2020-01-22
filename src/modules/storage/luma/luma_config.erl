@@ -22,7 +22,7 @@
 -export_type([url/0, api_key/0, config/0]).
 
 %% API
--export([new/2]).
+-export([new/2, get_url/1, get_api_key/1]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -35,3 +35,11 @@ new(URL, ApiKey) ->
         url = URL,
         api_key = ApiKey
     }.
+
+-spec get_url(config()) -> url().
+get_url(#luma_config{url = LumaUrl}) ->
+    LumaUrl.
+
+-spec get_api_key(config()) -> api_key().
+get_api_key(#luma_config{api_key = ApiKey}) ->
+    ApiKey.

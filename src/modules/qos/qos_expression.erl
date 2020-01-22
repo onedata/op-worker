@@ -14,25 +14,28 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/qos.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([raw_to_rpn/1, calculate_storages/4]).
+-export([raw_to_rpn/1, calculate_assigned_storages/3]).
 
-% the raw type stores expression as single binary. It is used to store input
+
+% The raw type stores expression as single binary. It is used to store input
 % from user. In the process of adding new qos_entry raw expression is
-% parsed to rpn form (list of key-value binaries separated by operators)
+% parsed to rpn form (list of "key=value" binaries separated by operators)
 -type raw() :: binary(). % e.g. <<"country=FR&type=disk">>
--type rpn() :: [binary()]. % e.g. [<<"country=FR">>, <<"&">>, <<"type=disk">>]
+-type rpn() :: [binary()]. % e.g. [<<"country=FR">>, <<"type=disk">>, <<"&">>]
+
+-export_type([rpn/0, raw/0]).
 
 -type operator_stack() :: [operator_or_paren()].
--type operand_stack() :: [binary()].
 -type operator_or_paren() :: operator() | paren().
 -type paren() :: binary().
 -type operator() :: binary().
-
--export_type([rpn/0, raw/0]).
+-type expr_token() :: operator() | binary().
+-type storages_with_params() :: #{storage:id() => storage:qos_parameters()}.
 
 %%%===================================================================
 %%% API
@@ -41,16 +44,16 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Transforms QoS expression from infix notation to reverse polish notation.
-%% % TODO: VFS-5569 improve handling invalid QoS expressions
 %% @end
 %%--------------------------------------------------------------------
 -spec raw_to_rpn(raw()) -> {ok, rpn()} | ?ERROR_INVALID_QOS_EXPRESSION.
 raw_to_rpn(Expression) ->
     OperatorsBin = <<?UNION/binary, ?INTERSECTION/binary, ?COMPLEMENT/binary>>,
     ParensBin = <<?L_PAREN/binary, ?R_PAREN/binary>>,
-    Tokens = re:split(Expression, <<"([", ParensBin/binary, OperatorsBin/binary, "])">>),
+    NormalizedExpression = re:replace(Expression, "\s", "", [global, {return, binary}]),
+    Tokens = re:split(NormalizedExpression, <<"([", ParensBin/binary, OperatorsBin/binary, "])">>),
     try
-        {ok, transform_to_rpn_internal(Tokens, [], [])}
+        {ok, raw_to_rpn_internal(Tokens, [], [])}
     catch
         throw:?ERROR_INVALID_QOS_EXPRESSION ->
             ?ERROR_INVALID_QOS_EXPRESSION
@@ -59,58 +62,57 @@ raw_to_rpn(Expression) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Calculate list of storages on which file should be replicated according to given
-%% QoS expression and number of replicas.
-%% Takes into consideration actual file locations.
+%% Calculate list of storages, on which file should be present according to
+%% given QoS expression and number of replicas.
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_storages(rpn(), pos_integer(), [od_storage:id()], [#file_location{}]) ->
-    {ture, [od_storage:id()]} | false | ?ERROR_INVALID_QOS_EXPRESSION.
-calculate_storages(_Expression, _ReplicasNum, [], _FileLocations) ->
-    false;
+-spec calculate_assigned_storages(file_ctx:ctx(), rpn(), qos_entry:replicas_num()) ->
+    {true, [storage:id()]} | false | {error, term()}.
+calculate_assigned_storages(FileCtx, Expression, ReplicasNum) ->
+    % TODO: VFS-5574 add check if storage has enough free space
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {ok, SpaceStorages} = space_logic:get_all_storage_ids(SpaceId),
 
-calculate_storages(Expression, ReplicasNum, SpaceStorages, FileLocations) ->
-    % TODO: VFS-5734 choose storages for dirs according to current files distribution
+    AllStoragesWithParams = lists:foldl(fun(StorageId, Acc) ->
+        Acc#{StorageId => storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId)}
+    end, #{}, SpaceStorages),
+
     try
-        StorageList = eval_rpn(Expression, SpaceStorages),
-        select(StorageList, ReplicasNum, FileLocations)
+        EligibleStorages = filter_storages(AllStoragesWithParams, Expression),
+        choose_storages(EligibleStorages, ReplicasNum)
     catch
         throw:?ERROR_INVALID_QOS_EXPRESSION ->
             ?ERROR_INVALID_QOS_EXPRESSION
     end.
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% internal version of transform_to_rpn/2
-%% @end
-%%--------------------------------------------------------------------
--spec transform_to_rpn_internal([binary()], operator_stack(), rpn()) -> rpn().
-transform_to_rpn_internal([<<>>], [], []) ->
+-spec raw_to_rpn_internal([expr_token()], operator_stack(), rpn()) -> rpn().
+raw_to_rpn_internal([<<>>], [], []) ->
     [];
-transform_to_rpn_internal([<<>> | Expression], Stack, RPNExpression) ->
-    transform_to_rpn_internal(Expression, Stack, RPNExpression);
-transform_to_rpn_internal([], Stack, RPNExpression) ->
+raw_to_rpn_internal([<<>> | Expression], Stack, RPNExpression) ->
+    raw_to_rpn_internal(Expression, Stack, RPNExpression);
+raw_to_rpn_internal([], Stack, RPNExpression) ->
     RPNExpression ++ Stack;
-transform_to_rpn_internal([Operator | Expression], Stack, RPNExpression) when
-        Operator =:= ?INTERSECTION orelse
+raw_to_rpn_internal([Operator | Expression], Stack, RPNExpression) when
+    Operator =:= ?INTERSECTION orelse
         Operator =:= ?UNION orelse
         Operator =:= ?COMPLEMENT ->
     {Stack2, RPNExpression2} = handle_operator(Operator, Stack, RPNExpression),
-    transform_to_rpn_internal(Expression, Stack2, RPNExpression2);
-transform_to_rpn_internal([?L_PAREN | Expression], Stack, RPNExpression) ->
-    transform_to_rpn_internal(Expression, [?L_PAREN|Stack], RPNExpression);
-transform_to_rpn_internal([?R_PAREN | Expression], Stack, RPNExpression) ->
+    raw_to_rpn_internal(Expression, Stack2, RPNExpression2);
+raw_to_rpn_internal([?L_PAREN | Expression], Stack, RPNExpression) ->
+    raw_to_rpn_internal(Expression, [?L_PAREN|Stack], RPNExpression);
+raw_to_rpn_internal([?R_PAREN | Expression], Stack, RPNExpression) ->
     {Stack2, RPNExpression2} = handle_right_paren(Stack, RPNExpression),
-    transform_to_rpn_internal(Expression, Stack2, RPNExpression2);
-transform_to_rpn_internal([Operand | Expression], Stack, RPNExpression) ->
+    raw_to_rpn_internal(Expression, Stack2, RPNExpression2);
+raw_to_rpn_internal([Operand | Expression], Stack, RPNExpression) ->
     case binary:split(Operand, [?EQUALITY], [global]) of
         [_Key, _Val] ->
-            transform_to_rpn_internal(Expression, Stack, RPNExpression ++ [Operand]);
+            raw_to_rpn_internal(Expression, Stack, RPNExpression ++ [Operand]);
         _ ->
             throw(?ERROR_INVALID_QOS_EXPRESSION)
     end.
@@ -149,7 +151,7 @@ handle_right_paren([], _RPNExpression) ->
 %%--------------------------------------------------------------------
 -spec handle_operator(operator(), operator_stack(), rpn()) -> {operator_stack(), rpn()}.
 handle_operator(ParsedOp, [StackOperator | Stack], RPNExpression) when
-        StackOperator =:= ?INTERSECTION orelse
+    StackOperator =:= ?INTERSECTION orelse
         StackOperator =:= ?UNION orelse
         StackOperator =:= ?COMPLEMENT ->
     handle_operator(ParsedOp, Stack, RPNExpression ++ [StackOperator]);
@@ -158,100 +160,78 @@ handle_operator(ParsedOperator, Stack, RPNExpression) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
-%% Filters given providers list using QoS expression so that only providers
-%% fulfilling QoS left.
+%% @doc
+%% Filters storages list using QoS expression so that only storages
+%% fulfilling QoS are left.
 %% @end
 %%--------------------------------------------------------------------
--spec eval_rpn(rpn(), [od_storage:id()]) -> [od_storage:id()].
-eval_rpn(RPNExpression, StorageList) ->
-    StorageSet = sets:from_list(StorageList),
-    [ResSet] = lists:foldl(
-        fun (ExpressionElem, ResPartial) ->
-            eval_rpn(ExpressionElem, ResPartial, StorageSet)
-        end , [], RPNExpression),
-    sets:to_list(ResSet).
+-spec filter_storages(storages_with_params(), [expr_token()]) -> [storage:id()].
+filter_storages(AllStoragesWithParams, RPNExpression) ->
+    FinalStack = lists:foldl(fun(ExprToken, Stack) ->
+        case lists:member(ExprToken, ?OPERATORS) of
+            true ->
+                apply_operator(ExprToken, Stack);
+            false ->
+                [select_storages_with_param(AllStoragesWithParams, ExprToken) | Stack]
+        end
+    end , [], RPNExpression),
 
--spec eval_rpn(binary(), operand_stack(), sets:set(od_storage:id())) ->
-    [sets:set(od_storage:id())] | no_return().
-eval_rpn(?UNION, [Operand1, Operand2 | StackTail], _AvailableStorage) ->
-    [sets:union(Operand1, Operand2)| StackTail];
-eval_rpn(?INTERSECTION, [Operand1, Operand2 | StackTail], _AvailableStorage) ->
-    [sets:intersection(Operand1, Operand2)| StackTail];
-eval_rpn(?COMPLEMENT, [Operand1, Operand2 | StackTail], _AvailableStorage) ->
-    [sets:subtract(Operand2, Operand1)| StackTail];
-eval_rpn(Operand, Stack, AvailableStorage) ->
-    case binary:split(Operand, [?EQUALITY], [global]) of
+    case FinalStack of
+        [Result] -> Result;
+        _ -> throw(?ERROR_INVALID_QOS_EXPRESSION)
+    end.
+
+
+%% @private
+-spec apply_operator(operator(), [[storage:id()]]) ->
+    [[storage:id()]] | no_return().
+apply_operator(?UNION, [StoragesList1, StoragesList2 | StackTail]) ->
+    [lists_utils:union(StoragesList1, StoragesList2)| StackTail];
+apply_operator(?INTERSECTION, [StoragesList1, StoragesList2 | StackTail]) ->
+    [lists_utils:intersect(StoragesList1, StoragesList2) | StackTail];
+apply_operator(?COMPLEMENT, [StoragesList1, StoragesList2 | StackTail]) ->
+    [lists_utils:subtract(StoragesList2, StoragesList1) | StackTail];
+apply_operator(_, _) ->
+    throw(?ERROR_INVALID_QOS_EXPRESSION).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Selects all storages with given parameter("key=value" token).
+%% @end
+%%--------------------------------------------------------------------
+-spec select_storages_with_param(storages_with_params(), expr_token()) ->
+    [[storage:id()] | expr_token()].
+select_storages_with_param(AllStoragesWithParams, ExprToken) ->
+    case binary:split(ExprToken, [?EQUALITY], [global]) of
         [Key, Val] ->
-            [filter_storage(Key, Val, AvailableStorage) | Stack];
+            maps:keys(maps:filter(fun(_StorageId, StorageQosParameters) ->
+                case maps:find(Key, StorageQosParameters) of
+                    {ok, Val} -> true;
+                    _ -> false
+                end
+            end, AllStoragesWithParams));
         _ ->
             throw(?ERROR_INVALID_QOS_EXPRESSION)
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% @private
-%% Filters given storage list so that only storage with key equal
-%% to value are left.
-%% @end
-%%--------------------------------------------------------------------
--spec filter_storage(binary(), binary(), sets:set(od_storage:id())) -> sets:set(od_storage:id()).
-filter_storage(Key, Val, StorageSet) ->
-    sets:filter(fun (StorageId) ->
-        StorageQos = providers_qos:get_storage_qos(StorageId, StorageSet),
-        case maps:find(Key, StorageQos) of
-            {ok, Val} ->
-                true;
-            _ ->
-                false
-        end
-    end, StorageSet).
-
 
 %%--------------------------------------------------------------------
-%% @doc
 %% @private
-%% Selects required number of storage from list of storage.
-%% Storage with higher current blocks size are preferred.
+%% @doc
+%% Selects required number of storage from list of storages.
 %% If there are no enough storages on list returns false otherwise returns
 %% {true, StorageList}.
 %% @end
 %%--------------------------------------------------------------------
--spec select([od_storage:id()], pos_integer(), [#file_location{}]) ->
-    {true, [od_storage:id()]} | false.
-select([], _ReplicasNum, _FileLocations) ->
-    false;
-select(StorageList, ReplicasNum, FileLocations) ->
-    StorageListWithBlocksSize = lists:map(fun (StorageId) ->
-        {get_storage_blocks_size(StorageId, FileLocations), StorageId}
-    end, StorageList),
-
-    SortedStorageListWithBlocksSize = lists:reverse(lists:sort(StorageListWithBlocksSize)),
-    StorageSublist = [StorageId ||
-        {_, StorageId} <- lists:sublist(SortedStorageListWithBlocksSize, ReplicasNum)],
+-spec choose_storages([storage:id()], qos_entry:replicas_num()) ->
+    {true, [storage:id()]} | false.
+choose_storages(EligibleStoragesList, ReplicasNum) ->
+    % TODO: VFS-5734 choose storages according to current files distribution
+    StorageSublist = lists:sublist(EligibleStoragesList, ReplicasNum),
     case length(StorageSublist) of
-        ReplicasNum ->
-            {true, StorageSublist};
-        _ ->
-            false
+        ReplicasNum -> {true, StorageSublist};
+        _ -> false
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @private
-%% Returns blocks sum for given storage according to file_locations.
-%% @end
-%%--------------------------------------------------------------------
--spec get_storage_blocks_size(od_storage:id(), [#file_location{}]) -> integer().
-get_storage_blocks_size(StorageId, FileLocations) ->
-    lists:foldl(fun (FileLocation, PartialStorageBlockSize) ->
-        % TODO: VFS-5573 use storage qos
-        case maps:get(<<"providerId">>, FileLocation) of
-            StorageId ->
-                PartialStorageBlockSize + maps:get(<<"totalBlocksSize">>, FileLocation);
-            _ ->
-                PartialStorageBlockSize
-        end
-     end, 0, FileLocations).

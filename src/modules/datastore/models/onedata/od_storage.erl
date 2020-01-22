@@ -23,11 +23,15 @@
 -type record() :: #od_storage{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type qos_parameters() :: #{binary() => binary()}.
 
+-type name() :: binary().
+
+-type qos_param_key() :: binary().
+-type qos_param_value() :: binary().
+-type qos_parameters() :: #{qos_param_key() => qos_param_value()}.
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([qos_parameters/0]).
+-export_type([name/0, qos_parameters/0]).
 
 -define(CTX, #{
     model => ?MODULE,

@@ -43,7 +43,9 @@
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
-
+-export([check_name/3, has_suffix/1]).
+% For tests
+-export([get_all_links/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -914,6 +916,69 @@ update_acl(FileUuid, NewAcl) ->
         {ok, FileMeta#file_meta{acl = NewAcl}}
     end)).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if given file has conflicts with other files on name field.
+%% ParentUuid and Name cannot be got from document as this function may be used
+%% as a result of conflict resolving that involve renamed file document.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_name(ParentUuid :: uuid(), name(), CheckDoc :: doc()) ->
+    ok | {conflicting, ExtendedName :: name(), Conflicts :: [{uuid(), name()}]}.
+check_name(undefined, _Name, _ChildDoc) ->
+    ok; % Root directory
+check_name(ParentUuid, Name, #document{
+    key = ChildUuid,
+    value = #file_meta{
+        provider_id = ChildProvider
+    }
+}) ->
+    case file_meta:get_all_links(ParentUuid, Name) of
+        {ok, [#link{target = ChildUuid}]} ->
+            ok;
+        {ok, []} ->
+            ok;
+        {ok, Links} ->
+            Links2 = case lists:any(fun(#link{tree_id = TreeID}) -> TreeID =:= ChildProvider end, Links) of
+                false ->
+                    % Link is missing, possible race on dbsync
+                    [#link{tree_id = ChildProvider, name = Name, target = ChildUuid} | Links];
+                _ ->
+                    Links
+            end,
+            WithTag = tag_children(Links2),
+            {NameAns, OtherFiles} = lists:foldl(fun
+                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) when Uuid =:= ChildUuid->
+                    {ExtendedName, OtherAcc};
+                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) ->
+                    {NameAcc, [{Uuid, ExtendedName} | OtherAcc]}
+            end, {Name, []}, WithTag),
+            {conflicting, NameAns, OtherFiles};
+        {error, _Reason} ->
+            ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function created to be mocked during tests.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_all_links(uuid(), name()) -> {ok, [datastore:link()]} | {error, term()}.
+get_all_links(Uuid, Name) ->
+    datastore_model:get_links(?CTX, Uuid, all, Name).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if file has suffix. Returns name without suffix if true.
+%% @end
+%%--------------------------------------------------------------------
+-spec has_suffix(name()) -> {true, NameWithoutSuffix :: name()} | false.
+has_suffix(Name) ->
+    case binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR) of
+        [BaseName | _] -> {true, BaseName};
+        _ -> false
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1010,7 +1075,9 @@ tag_children(Links) ->
                 }, Children2) ->
                     [#child_link_uuid{
                         uuid = FileUuid,
-                        name = <<Name/binary, "@", TreeId:Len2/binary>>
+                        name = <<Name/binary,
+                            ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR_CHAR,
+                            TreeId:Len2/binary>>
                     } | Children2]
             end, Children, LocalLinks ++ RemoteLinks)
     end, [], [Group2 | Groups2]).
@@ -1097,7 +1164,7 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
 emit_space_dir_created(DirUuid, SpaceId) ->
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
     #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_USER_ID), FileCtx, false, false),
+        attr_req:get_file_attr_light(user_ctx:new(?ROOT_USER_ID), FileCtx, false),
     FileAttr2 = FileAttr#file_attr{size = 0},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
 
@@ -1367,7 +1434,8 @@ resolve_conflict(_Ctx, #document{key = Uuid, value = #file_meta{name = NewName, 
                 FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid)),
                 OldParentGuid = fslogic_uuid:uuid_to_guid(PrevParentUuid),
                 NewParentGuid = fslogic_uuid:uuid_to_guid(NewParentUuid),
-                fslogic_event_emitter:emit_file_renamed_no_exclude(FileCtx, OldParentGuid, NewParentGuid, NewName)
+                fslogic_event_emitter:emit_file_renamed_no_exclude(
+                    FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName)
             end);
         _ ->
             ok

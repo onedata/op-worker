@@ -48,7 +48,7 @@
 
 %% higher-level functions operating on effective_file_qos record.
 -export([
-    get_qos_to_update/2, get_qos_entries/1, get_assigned_entries/1
+    get_assigned_entries_for_storage/2, get_qos_entries/1, get_assigned_entries/1
 ]).
 
 %% datastore_model callbacks
@@ -57,7 +57,7 @@
 -type key() :: file_meta:uuid().
 -type record() :: #file_qos{}.
 -type effective_file_qos() :: #effective_file_qos{}.
--type assigned_entries() :: #{od_storage:id() => [qos_entry:id()]}.
+-type assigned_entries() :: #{storage:id() => [qos_entry:id()]}.
 
 -export_type([assigned_entries/0]).
 
@@ -144,7 +144,7 @@ add_qos_entry_id(FileUuid, SpaceId, QosEntryId) ->
 %% Creates file_qos document if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_id(file_meta:uuid(), od_space:id(), qos_entry:id(), od_storage:id() | undefined) -> ok.
+-spec add_qos_entry_id(file_meta:uuid(), od_space:id(), qos_entry:id(), storage:id() | undefined) -> ok.
 add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage) ->
     NewDoc = #document{
         key = FileUuid,
@@ -182,7 +182,7 @@ add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage) ->
 %% Checks whether given file is protected on given storage by QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec is_replica_protected(file_meta:uuid(), od_storage:id()) -> boolean().
+-spec is_replica_protected(file_meta:uuid(), storage:id()) -> boolean().
 is_replica_protected(FileUuid, StorageId) ->
     QosStorages = case get_effective(FileUuid) of
         {ok, #effective_file_qos{assigned_entries = AssignedEntries}} -> AssignedEntries;
@@ -196,18 +196,19 @@ is_replica_protected(FileUuid, StorageId) ->
 %%%===================================================================
 
 -spec get_qos_entries(effective_file_qos()) -> [qos_entry:id()].
-get_qos_entries(FileQos) ->
-    FileQos#effective_file_qos.qos_entries.
+get_qos_entries(EffectiveFileQos) ->
+    EffectiveFileQos#effective_file_qos.qos_entries.
 
 
 -spec get_assigned_entries(effective_file_qos()) -> assigned_entries().
-get_assigned_entries(FileQos) ->
-    FileQos#effective_file_qos.assigned_entries.
+get_assigned_entries(EffectiveFileQos) ->
+    EffectiveFileQos#effective_file_qos.assigned_entries.
 
 
--spec get_qos_to_update(od_storage:id(), effective_file_qos()) -> [qos_entry:id()].
-get_qos_to_update(StorageId, EffectiveFileQos) ->
-    maps:get(StorageId, EffectiveFileQos#effective_file_qos.assigned_entries, []).
+-spec get_assigned_entries_for_storage(effective_file_qos(), storage:id()) ->
+    [qos_entry:id()].
+get_assigned_entries_for_storage(EffectiveFileQos, StorageId) ->
+    maps:get(StorageId, get_assigned_entries(EffectiveFileQos), []).
 
 
 %%%===================================================================

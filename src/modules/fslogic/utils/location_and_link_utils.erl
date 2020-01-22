@@ -101,7 +101,7 @@ mark_location_created(FileUuid, FileLocationId, StorageFileId) ->
 %% Creates file_location
 %% @end
 %%--------------------------------------------------------------------
--spec create_imported_file_location(od_space:id(), od_storage:id(), file_meta:uuid(),
+-spec create_imported_file_location(od_space:id(), storage:id(), file_meta:uuid(),
     file_meta:path(), file_meta:size(), od_user:id()) -> ok.
 create_imported_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size, OwnerId) ->
     Location = #file_location{

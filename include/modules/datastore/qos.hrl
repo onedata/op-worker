@@ -39,9 +39,6 @@
 -define(QOS_BOUNDED_CACHE_GROUP, <<"qos_bonded_cache_group">>).
 
 
--define(IMPOSSIBLE_QOS_KEY, <<"impossible_qos_key">>).
-
-
 % Request to remote providers to start QoS traverse.
 % This record is used as an element of datastore document (qos_entry).
 % Traverse is started in response to change of qos_entry document. (see qos_hooks.erl)
@@ -50,7 +47,7 @@
     % TODO: This field will be necessary after resolving VFS-5567. For now all
     % traverses starts from file/directory for which QoS has been added.
     start_file_uuid :: file_meta:uuid(),
-    storage_id :: od_storage:id()
+    storage_id :: storage:id()
 }).
 
 % This record has the same fields as file_qos record (see file_qos.erl).

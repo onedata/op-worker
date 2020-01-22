@@ -50,8 +50,10 @@ configure(SpaceId, NewConfiguration) ->
 -spec disable(file_popularity_config:id()) -> ok | {error, term()}.
 disable(SpaceId) ->
     autocleaning_api:disable(SpaceId),
-    file_popularity_config:maybe_create_or_update(SpaceId, #{enabled => false}),
-    file_popularity_view:delete(SpaceId).
+    case file_popularity_config:maybe_create_or_update(SpaceId, #{enabled => false}) of
+        {ok, _} -> ok;
+        {error, _} = Error ->  Error
+    end.
 
 -spec delete_config(file_popularity_config:id()) -> ok.
 delete_config(SpaceId) ->

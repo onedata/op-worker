@@ -27,7 +27,7 @@
     name :: helpers:file_id(),
     storage_file_id :: helpers:file_id(),
     space_id :: od_space:id(),
-    storage_id :: od_storage:id(),
+    storage_id :: storage:id(),
     stat :: undefined | helpers:stat(),
     % field used to store timestamp of cached stat structure
     stat_timestamp :: undefined | non_neg_integer(),
@@ -52,7 +52,7 @@
 %%% API functions
 %%%===================================================================
 
--spec new(file_meta:name(), od_space:id(), od_storage:id()) -> ctx().
+-spec new(file_meta:name(), od_space:id(), storage:id()) -> ctx().
 new(StorageFileId, SpaceId, StorageId) ->
     FileName = filename:basename(StorageFileId),
     #storage_file_ctx{
@@ -70,7 +70,7 @@ get_file_name_const(#storage_file_ctx{name = FileName}) ->
 get_storage_file_id_const(#storage_file_ctx{storage_file_id = StorageFileId}) ->
     StorageFileId.
 
--spec get_storage_id_const(ctx()) -> od_storage:id().
+-spec get_storage_id_const(ctx()) -> storage:id().
 get_storage_id_const(#storage_file_ctx{storage_id = StorageId}) ->
     StorageId.
 

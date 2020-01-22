@@ -36,7 +36,7 @@ init(StorageTraverse = #storage_traverse_master{storage_file_ctx = StorageFileCt
         undefined ->
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-            StorageTraverse#storage_traverse_master{marker = storage_file_id:space_id(SpaceId, StorageId)};
+            StorageTraverse#storage_traverse_master{marker = storage_file_id:space_dir_id(SpaceId, StorageId)};
         Marker ->
             StorageTraverse#storage_traverse_master{marker = Marker}
     end.

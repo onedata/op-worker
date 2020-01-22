@@ -29,7 +29,8 @@
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
 -export([has_eff_privilege/3, has_eff_privileges/3]).
--export([get_eff_groups/2, get_shares/2, get_local_storage_ids/1, get_local_storage_id/1]).
+-export([get_eff_groups/2, get_shares/2, get_local_storage_ids/1,
+    get_local_storage_id/1, get_all_storage_ids/1]).
 -export([get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
 -export([is_supported_by_storage/2]).
@@ -168,7 +169,7 @@ get_shares(SessionId, SpaceId) ->
 %% This function returns StorageId for given SpaceId.
 %% @end
 %%-------------------------------------------------------------------
--spec get_local_storage_id(od_space:id()) -> {ok, od_storage:id()} | errors:error().
+-spec get_local_storage_id(od_space:id()) -> {ok, storage:id()} | errors:error().
 get_local_storage_id(SpaceId) ->
     case get_local_storage_ids(SpaceId) of
         {ok, []} -> {error, space_not_supported};
@@ -181,7 +182,7 @@ get_local_storage_id(SpaceId) ->
 %% Returns list of storage ids supporting given space under this provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
+-spec get_local_storage_ids(od_space:id()) -> {ok, [storage:id()]} | errors:error().
 get_local_storage_ids(SpaceId) ->
     case get(?ROOT_SESS_ID, SpaceId) of
         {ok, #document{value = #od_space{local_storages = LocalStorages}}} ->
@@ -191,7 +192,7 @@ get_local_storage_ids(SpaceId) ->
     end.
 
 
--spec get_all_storage_ids(od_space:id()) -> {ok, [od_storage:id()]} | errors:error().
+-spec get_all_storage_ids(od_space:id()) -> {ok, [storage:id()]} | errors:error().
 get_all_storage_ids(SpaceId) ->
     case get(?ROOT_SESS_ID, SpaceId) of
         {ok, #document{value = #od_space{storages = AllStorages}}} ->
@@ -231,7 +232,7 @@ is_supported(SessionId, SpaceId, ProviderId) ->
     end.
 
 
--spec is_supported_by_storage(od_space:id(), od_storage:id()) -> boolean().
+-spec is_supported_by_storage(od_space:id(), storage:id()) -> boolean().
 is_supported_by_storage(SpaceId, StorageId) ->
     case get_all_storage_ids(SpaceId) of
         {ok, AllStorageIds} -> lists:member(StorageId, AllStorageIds);

@@ -52,11 +52,6 @@ all() -> [
 ].
 
 -define(SPACE_ID, <<"space1">>).
--define(STORAGE_ID(Worker), begin
-    {ok, [__Storage]} = rpc:call(Worker, storage_config, list, []),
-    storage_config:get_id(__Storage)
-    end
-).
 -define(STORAGE_FILE_ID, filename:join(["/", ?SPACE_ID, <<"dummyFile">>])).
 -define(USER, <<"user1">>).
 -define(SESSION(Worker, Config), ?SESSION(?USER, Worker, Config)).
@@ -109,7 +104,7 @@ root_operation_succeeds_with_refreshed_token_on_insecure_storage(Config) ->
 user_operation_fails_with_expired_token_on_secure_storage(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessionId = ?SESSION(W, Config),
-    StorageId = ?STORAGE_ID(W),
+    StorageId = initializer:get_storage_id(W),
     TTL = 0,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
@@ -130,7 +125,7 @@ root_operation_fails_with_expired_token_on_secure_storage(Config) ->
 user_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessionId = ?SESSION(W, Config),
-    StorageId = ?STORAGE_ID(W),
+    StorageId = initializer:get_storage_id(W),
     TTL = 5,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
@@ -160,7 +155,7 @@ root_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
 
 operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StorageId = ?STORAGE_ID(W),
+    StorageId = initializer:get_storage_id(W),
     TTL = 0,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
@@ -178,7 +173,7 @@ operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
 
 operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StorageId = ?STORAGE_ID(W),
+    StorageId = initializer:get_storage_id(W),
     TTL = 5,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
@@ -218,7 +213,7 @@ init_per_testcase(Case, Config) when
     Case =:= root_operation_succeeds_with_refreshed_token_on_insecure_storage
     ->
     [W | _] = ?config(op_worker_nodes, Config),
-    enable_webdav_test_mode_insecure_storage(W, ?STORAGE_ID(W)),
+    enable_webdav_test_mode_insecure_storage(W, initializer:get_storage_id(W)),
     test_utils:mock_new(W, [helpers, helpers_fallback, helpers_reload], [passthrough]),
     Config;
 
@@ -229,7 +224,7 @@ init_per_testcase(Case, Config) when
     Case =:= root_operation_succeeds_with_refreshed_token_on_secure_storage
     ->
     [W | _] = ?config(op_worker_nodes, Config),
-    enable_webdav_test_mode_secure_storage(W, ?STORAGE_ID(W)),
+    enable_webdav_test_mode_secure_storage(W, initializer:get_storage_id(W)),
     test_utils:mock_new(W, [helpers, helpers_fallback, helpers_reload], [passthrough]),
     mock_luma(W),
     Config.
@@ -264,9 +259,6 @@ mock_fetch_token(Worker, Token, TTL) ->
     ok = test_utils:mock_expect(Worker, user_logic, fetch_idp_access_token,
         fun (_, _, _) -> {ok, {Token, TTL}} end).
 
-storage_update(Worker, StorageId, UpdateFun) ->
-    rpc:call(Worker, storage_config, update, [StorageId, UpdateFun]).
-
 enable_webdav_test_mode_secure_storage(Worker, StorageId) ->
     enable_webdav_test_mode(Worker, StorageId, false).
 
@@ -279,13 +271,12 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
         false -> #luma_config{}
     end,
 
-    {ok, _} = storage_update(Worker, StorageId, fun(Storage = #storage_config{helpers = [Helper]}) ->
-        #helper{args = Args, admin_ctx = AdminCtx}  = Helper,
+    UpdateHelperFun = fun(#helper{args = Args, admin_ctx = AdminCtx}  = Helper) ->
         Args2 = Args#{
             <<"testTokenRefreshMode">> => <<"true">>,
             <<"oauth2IdP">> => ?IDP
         },
-        {ok, Storage#storage_config{helpers = [Helper#helper{
+        {ok, Helper#helper{
             args = Args2,
             admin_ctx = AdminCtx#{
                 <<"credentialsType">> => <<"oauth2">>,
@@ -294,10 +285,11 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
                 <<"credentials">> => <<"ADMIN">>
             },
             insecure = Insecure
-        }],
-            luma_config = LumaConfig
         }}
-    end).
+    end,
+    rpc:call(Worker, storage, update_helper, [StorageId, UpdateHelperFun]),
+    rpc:call(Worker, storage, update_luma_config, [StorageId, LumaConfig]).
+
 
 get_sd_handle(Worker, SpaceId, SessionId, Uuid, StorageId, FilePath) ->
     rpc:call(Worker, storage_driver, new_handle,

@@ -349,8 +349,7 @@ maybe_send_request(Request = #request{
     job_type = JobType
 }, SpaceId
 ) ->
-    % TODO: VFS-5573 use actual storage id
-    StorageId = oneprovider:get_id(),
+    {StorageId, _} = file_ctx:get_storage_id(file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))),
     case file_qos:is_replica_protected(FileUuid, StorageId) of
         false ->
             {ok, _} = request_deletion_support(SpaceId, FileUuid, ProviderId, Blocks, Version, JobId, JobType),

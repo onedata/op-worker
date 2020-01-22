@@ -159,7 +159,7 @@ validate_user_ctx(StorageType, UserCtx) ->
 %% Checks whether user context is valid for the storage helper.
 %% @end
 %%--------------------------------------------------------------------
--spec validate_group_ctx(storage_config:helper(), group_ctx()) ->
+-spec validate_group_ctx(helpers:helper(), group_ctx()) ->
     ok | {error, Reason :: term()}.
 validate_group_ctx(#helper{name = ?POSIX_HELPER_NAME}, GroupCtx) ->
     validate_fields([<<"gid">>], GroupCtx);

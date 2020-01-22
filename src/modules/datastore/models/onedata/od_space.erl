@@ -26,9 +26,10 @@
 
 -type alias() :: binary().
 -type name() :: binary().
+-type support_size() :: pos_integer().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([alias/0, name/0]).
+-export_type([alias/0, name/0, support_size/0]).
 
 -define(CTX, #{
     model => ?MODULE,
