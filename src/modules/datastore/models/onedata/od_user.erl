@@ -41,7 +41,8 @@
 
 -define(CTX, #{
     model => ?MODULE,
-    fold_enabled => true
+    fold_enabled => true,
+    memory_copies => all
 }).
 
 %% API
@@ -116,7 +117,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    5.
+    6.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -195,6 +196,23 @@ get_record_struct(5) ->
         {linked_accounts, [ #{string => term} ]},
 
         {default_space, string},
+        {space_aliases, #{string => string}},
+
+        {eff_groups, [string]},
+        {eff_spaces, [string]},
+        {eff_handle_services, [string]},
+        {eff_handles, [string]},
+
+        {cache_state, #{atom => term}}
+    ]};
+get_record_struct(6) ->
+    % Removed default_space field
+    {record, [
+        {full_name, string},
+        {username, string},
+        {emails, [string]},
+        {linked_accounts, [ #{string => term} ]},
+
         {space_aliases, #{string => string}},
 
         {eff_groups, [string]},
@@ -341,13 +359,46 @@ upgrade_record(4, User) ->
         CacheState
     } = User,
 
-    {5, #od_user{
+    {5, {od_user,
+        Name,
+        Alias,
+        Emails,
+        LinkedAccounts,
+
+        DefaultSpace,
+        SpaceAliases,
+
+        EffGroups,
+        EffSpaces,
+        EffHandleServices,
+        EffHandles,
+
+        CacheState
+    }};
+upgrade_record(5, User) ->
+    {od_user,
+        Name,
+        Alias,
+        Emails,
+        LinkedAccounts,
+        _DefaultSpace,
+
+        SpaceAliases,
+
+        EffGroups,
+        EffSpaces,
+        EffHandleServices,
+        EffHandles,
+
+        CacheState
+    } = User,
+
+    {6, #od_user{
         full_name = Name,
         username = Alias,
         emails = Emails,
         linked_accounts = LinkedAccounts,
 
-        default_space = DefaultSpace,
         space_aliases = SpaceAliases,
 
         eff_groups = EffGroups,

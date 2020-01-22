@@ -287,7 +287,7 @@ import_file_with_link_but_no_doc_test(Config, MountSpaceInRoot) ->
     ok = file:make_dir(StorageTestDirPath),
     Ctx = rpc:call(W1, file_meta, get_ctx, []),
     TreeId = rpc:call(W1, oneprovider, get_id, []),
-    FileUuid = datastore_utils:gen_key(),
+    FileUuid = datastore_key:new(),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
     {ok, _} = rpc:call(W1, datastore_model, add_links,
         [Ctx#{scope=>?SPACE_ID}, SpaceUuid, TreeId, {?TEST_DIR, FileUuid}]),

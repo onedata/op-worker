@@ -89,7 +89,6 @@
 -define(USER_EMAIL_LIST(__User), [__User]).
 -define(USER_LINKED_ACCOUNTS_VALUE(__User), [#{<<"userId">> => __User}]).
 -define(USER_LINKED_ACCOUNTS_MATCHER(__User), [#{<<"userId">> := __User}]).
--define(USER_DEFAULT_SPACE(__User), __User).
 -define(USER_SPACE_ALIASES(__User), #{}).
 -define(USER_EFF_GROUPS(__User), [?GROUP_1, ?GROUP_2]).
 -define(USER_EFF_SPACES(__User), [?SPACE_1, ?SPACE_2]).
@@ -203,7 +202,6 @@
     username = ?USER_USERNAME(__User),
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
-    default_space = ?USER_DEFAULT_SPACE(__User),
     space_aliases = ?USER_SPACE_ALIASES(__User),
     eff_groups = ?USER_EFF_GROUPS(__User),
     eff_spaces = ?USER_EFF_SPACES(__User),
@@ -215,7 +213,6 @@
     username = ?USER_USERNAME(__User),
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
-    default_space = undefined,
     space_aliases = #{},
     eff_groups = [],
     eff_spaces = [],
@@ -227,7 +224,6 @@
     username = ?USER_USERNAME(__User),
     emails = [],
     linked_accounts = [],
-    default_space = undefined,
     space_aliases = #{},
     eff_groups = [],
     eff_spaces = [],
@@ -357,7 +353,6 @@ end).
     __ProtectedData = ?USER_PROTECTED_DATA_VALUE(__UserId),
     __ProtectedData#{
         <<"gri">> => gs_protocol:gri_to_string(#gri{type = od_user, id = __UserId, aspect = instance, scope = private}),
-        <<"defaultSpaceId">> => ?USER_DEFAULT_SPACE(__UserId),
         <<"spaceAliases">> => ?USER_SPACE_ALIASES(__UserId),
 
         <<"effectiveGroups">> => ?USER_EFF_GROUPS(__UserId),

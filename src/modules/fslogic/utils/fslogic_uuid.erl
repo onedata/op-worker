@@ -37,7 +37,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec is_root_dir_uuid(FileUuid :: file_meta:uuid()) -> boolean().
-is_root_dir_uuid(?ROOT_DIR_UUID) ->
+is_root_dir_uuid(?GLOBAL_ROOT_DIR_UUID) ->
     true;
 is_root_dir_uuid(FileUuid) ->
     is_user_root_dir_uuid(FileUuid).
@@ -171,7 +171,7 @@ space_dir_uuid_to_spaceid_no_error(SpaceUuid) ->
 gen_path(Entry, SessionId, Tokens) ->
     {ok, #document{key = Uuid, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
     case file_meta:get_parent(Doc) of
-        {ok, #document{key = ?ROOT_DIR_UUID}} ->
+        {ok, #document{key = ?GLOBAL_ROOT_DIR_UUID}} ->
             SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Uuid),
             {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
             {ok, fslogic_path:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
@@ -188,7 +188,7 @@ gen_path(Entry, SessionId, Tokens) ->
     SpaceId :: od_space:id().
 uuid_to_space_id(FileUuid) ->
     case FileUuid of
-        ?ROOT_DIR_UUID ->
+        ?GLOBAL_ROOT_DIR_UUID ->
             undefined;
         _ ->
             {ok, Doc} = file_meta:get_including_deleted(FileUuid),

@@ -27,9 +27,11 @@
 %% Hidden file prefix
 -define(HIDDEN_FILE_PREFIX, ".__onedata__").
 
+% Global root - parent of all spaces
+% note: spaces are also linked to virtual root directories of each user belonging to space
+-define(GLOBAL_ROOT_DIR_UUID, <<"">>).
+-define(GLOBAL_ROOT_DIR_NAME, <<"">>).
 %% root user definitions
--define(ROOT_DIR_UUID, <<"">>).
--define(ROOT_DIR_NAME, <<"">>).
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
 -define(ROOT_AUTH, root_auth).

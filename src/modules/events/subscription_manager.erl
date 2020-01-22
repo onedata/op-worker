@@ -17,9 +17,11 @@
 %% API
 -export([add_subscriber/2, get_subscribers/2, remove_subscriber/2]).
 
--export_type([key/0]).
-
 -type key() :: binary().
+% routing can require connection of several contexts, e.g., old and new parent when moving file
+-type routing_info() :: event_type:routing_ctx() | [event_type:routing_ctx()].
+
+-export_type([key/0, routing_info/0]).
 
 %%%===================================================================
 %%% API
@@ -61,7 +63,7 @@ add_subscriber(Sub, SessId) ->
 %% Returns list of event subscribers.
 %% @end
 %%--------------------------------------------------------------------
--spec get_subscribers(Key :: key() | event:base() | event:aggregated() | event:type(), event_type:routing_info()) ->
+-spec get_subscribers(Key :: key() | event:base() | event:aggregated() | event:type(), routing_info()) ->
     {ok, SessIds :: [session:id()]} | {error, Reason :: term()}.
 get_subscribers(<<_/binary>> = Key, _) ->
     case file_subscription:get(Key) of
@@ -96,9 +98,11 @@ get_subscribers(Evt, RoutingCtx) ->
         {ok, Key, SpaceIDFilter} ->
             case get_subscribers(Key, RoutingCtx) of
                 {ok, SessIds} ->
+                    % Filter sessions when information about space dirs is broadcast
+                    % (not all clients are allowed to see particular space)
                     {ok, lists:filter(fun(SessId) ->
                         UserCtx = user_ctx:new(SessId),
-                        #document{value = #od_user{eff_spaces = Spaces}} = user_ctx:get_user(UserCtx),
+                        Spaces = user_ctx:get_eff_spaces(UserCtx),
                         lists:member(SpaceIDFilter, Spaces)
                     end, SessIds)};
                 Other ->

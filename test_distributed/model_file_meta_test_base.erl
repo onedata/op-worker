@@ -51,7 +51,8 @@ basic_operations_test_core(Config, LastLevel) ->
     RootUuid = <<>>,
     {{ok, Space1Uuid}, CreateLevel1} = ?assertMatch(
         {{ok, _}, _},
-        ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{value = #file_meta{name = <<"Space 1">>, is_scope = true}}])
+        ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{key = <<"space basic 1">>,
+            value = #file_meta{name = <<"Space 1">>, is_scope = true}}])
     ),
     {{ok, Dir1Uuid}, CreateLevel2} = ?assertMatch(
         {{ok, _}, _},

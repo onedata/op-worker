@@ -483,7 +483,7 @@ get_metric(SpaceId, Type, Window) ->
 %%-------------------------------------------------------------------
 -spec id(od_space:id(), storage:id()) -> id().
 id(SpaceId, StorageId) ->
-    datastore_utils:gen_key(SpaceId, StorageId).
+    datastore_key:build_adjacent(SpaceId, StorageId).
 
 %%-------------------------------------------------------------------
 %% @private

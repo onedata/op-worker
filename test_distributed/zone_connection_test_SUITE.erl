@@ -31,12 +31,12 @@
 ]).
 
 -export([
-    incompatible_zone_should_not_connect/1
+    oneprovider_should_not_connect_to_incompatible_onezone/1
 ]).
 
 all() ->
     ?ALL([
-        incompatible_zone_should_not_connect
+        oneprovider_should_not_connect_to_incompatible_onezone
     ]).
 
 
@@ -44,35 +44,59 @@ all() ->
 %%% Test functions
 %%%===================================================================
 
-% One of providers should not connect (and go down) because mocked
-% compatibility check function in init_per_testcase.
-incompatible_zone_should_not_connect(Config) ->
-    [P1, P2] = ?config(op_worker_nodes, Config),
-    ?assertMatch(true, is_down(P1), 180),
-    ?assertMatch(true, is_alive(P2)),
-    ok.
+oneprovider_should_not_connect_to_incompatible_onezone(Config) ->
+    [P1Worker, P2Worker] = ?config(op_worker_nodes, Config),
+    % One of providers should not connect because of mocked compatibility
+    % check function in init_per_testcase.
+    ?assertMatch(true, is_connected_to_oz(P2Worker), 60),
+    ?assertMatch(false, is_connected_to_oz(P1Worker), 60).
+
+
+is_connected_to_oz(Worker) ->
+    {ok, Domain} = test_utils:get_env(Worker, ?APP_NAME, test_web_cert_domain),
+    Url = str_utils:format_bin("https://~s~s", [Domain, ?NAGIOS_OZ_CONNECTIVITY_PATH]),
+    CaCerts = rpc:call(Worker, https_listener, get_cert_chain_pems, []),
+    Opts = [{ssl_options, [{cacerts, CaCerts}, {hostname, str_utils:to_binary(Domain)}]}],
+    case http_client:get(Url, #{}, <<>>, Opts) of
+        {ok, 200, _, Body} ->
+            case json_utils:decode(Body) of
+                #{<<"status">> := <<"ok">>} -> true;
+                #{<<"status">> := <<"error">>} -> false
+            end;
+        _ ->
+            error
+    end.
 
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
-% Mock oz endpoint returning its versions and for one of providers
-% mock compatibility check function so it should go down
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer]} | Config].
+    Posthook = fun(NewConfig) ->
+        ssl:start(),
+        hackney:start(),
+        Workers = ?config(op_worker_nodes, NewConfig),
+        logic_tests_common:mock_gs_client(NewConfig),
+        % this is mocked in logic_tests_common:mock_gs_client to return ok; re-mock
+        ok = test_utils:mock_expect(Workers, provider_logic, assert_zone_compatibility, fun() ->
+            meck:passthrough([])
+        end),
+        NewConfig
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, logic_tests_common]} | Config].
 
 
 init_per_testcase(_Case, Config) ->
-    Workers = [P1 | _] = ?config(op_worker_nodes, Config),
+    Workers = [P1Worker | _] = ?config(op_worker_nodes, Config),
     % Mock OZ version
     {_AppId, _AppName, AppVersion} = lists:keyfind(
         ?APP_NAME, 1, rpc:call(hd(Workers), application, loaded_applications, [])
     ),
-    test_utils:mock_new(P1, compatibility),
-    test_utils:mock_expect(P1, compatibility, check_products_compatibility,
-        fun(?ONEPROVIDER,_,?ONEZONE,_) -> {false, []} ;
-           (S1,V1,S2,V2) -> meck:passthrough([S1, V1, S2, V2])
+    test_utils:mock_new(P1Worker, compatibility),
+    test_utils:mock_expect(P1Worker, compatibility, check_products_compatibility,
+        fun(?ONEPROVIDER, _, ?ONEZONE, _) -> {false, []};
+            (S1, V1, S2, V2) -> meck:passthrough([S1, V1, S2, V2])
         end),
     ZoneDomain = rpc:call(hd(Workers), oneprovider, get_oz_domain, []),
     ZoneConfigurationURL = str_utils:format_bin("https://~s~s", [
@@ -93,29 +117,16 @@ init_per_testcase(_Case, Config) ->
                     meck:passthrough([Url, Headers, Body, Options])
             end
         end),
-    initializer:mock_provider_ids(Config),
+    logic_tests_common:set_envs_for_correct_connection(Config),
     Config.
 
 
-end_per_testcase(_Case, _Config) ->
-    % Because one of the providers has died (due to incompatible version with
-    % oz) cleanup would fail, so skip it
-    ok.
+end_per_testcase(_, Config) ->
+    [P1Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_validate_and_unload(P1Worker, compatibility).
 
 
-end_per_suite(_Config) ->
-    ok.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-is_alive(Provider) ->
-    not is_down(Provider).
-
-is_down(Provider) ->
-    case rpc:call(Provider, erlang, node, []) of
-        {badrpc, nodedown} -> true;
-        _ -> false
-    end.
+end_per_suite(Config) ->
+    logic_tests_common:unmock_gs_client(Config),
+    ssl:stop(),
+    hackney:stop().
