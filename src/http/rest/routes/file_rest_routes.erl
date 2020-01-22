@@ -41,7 +41,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% List files and folders
+    %% List files and directories
     {<<"/files/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -52,7 +52,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% List files and folders by Id
+    %% List files and directories by Id
     {<<"/files-id/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -60,6 +60,28 @@ routes() -> [
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
             aspect = list, 
+            scope = private
+        }
+    }},
+    %% List shares associated with specified file or directory
+    {<<"/file-shares/[...]">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?PATH_BINDING, 
+            aspect = shares, 
+            scope = private
+        }
+    }},
+    %% List shares associated with specified file or directory by Id
+    {<<"/file-id-shares/:id">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = shares, 
             scope = private
         }
     }},

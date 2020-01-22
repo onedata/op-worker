@@ -53,6 +53,7 @@
     get_space/1,
     create_share/1,
     get_share/1,
+    get_file_shares/1,
     update_share_name/1,
     delete_share/1,
     set_get_json_metadata/1,
@@ -94,6 +95,7 @@ all() ->
         get_space,
         create_share,
         get_share,
+        get_file_shares,
         update_share_name,
         delete_share,
         set_get_json_metadata,
@@ -716,6 +718,53 @@ get_share(Config) ->
     ).
 
 
+get_file_shares(Config) ->
+    {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
+
+    % create file
+    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_file"])),
+    {ok, SharedFileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, FilePath, 8#700),
+    {ok, SharedFileObjectId} = file_id:guid_to_objectid(SharedFileGuid),
+
+    RestPath1 = str_utils:format_bin("file-shares/~s", [FilePath]),
+    RestPath2 = str_utils:format_bin("file-id-shares/~s", [SharedFileObjectId]),
+
+    lists:foreach(fun(RestPath) ->
+        % getting share from provider that does not support space should fail
+        ?assertMatch(true, rest_test_utils:assert_request_error(
+            ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
+            {OtherProviderNode, RestPath, get, Headers, <<>>}
+        )),
+
+        % getting shares for file not yet shared should return empty list
+        ?assertMatch(
+            {ok, 200, _, <<"[]">>},
+            rest_test_utils:request(SupportingProviderNode, RestPath, get, Headers, <<>>)
+        )
+    end, [RestPath1, RestPath2]),
+
+    ShareIds = lists:map(fun(_) ->
+        {ok, {ShareId, _}} = ?assertMatch(
+            {ok, {_, _ }},
+            lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedFileGuid}, <<"share">>)
+        ),
+        ShareId
+    end, lists:seq(1, 10)),
+    ExpShareIds = lists:reverse(ShareIds),
+
+    lists:foreach(fun(RestPath) ->
+        % getting shares for file not yet shared should return empty list
+        {ok, 200, _, Response} = ?assertMatch(
+            {ok, 200, _, _},
+            rest_test_utils:request(SupportingProviderNode, RestPath, get, Headers, <<>>)
+        ),
+        ?assertEqual(ExpShareIds, json_utils:decode(Response))
+    end, [RestPath1, RestPath2]).
+
+
 update_share_name(Config) ->
     {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
@@ -1262,17 +1311,11 @@ init_per_testcase(list_transfers, Config) ->
     init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
 init_per_testcase(Case, Config) when
-    Case =:= create_share orelse
-    Case =:= create_share_id orelse
-    Case =:= get_share orelse
-    Case =:= get_share_id orelse
-    Case =:= get_share_public_id orelse
-    Case =:= delete_share orelse
-    Case =:= delete_share_id orelse
-    Case =:= delete_share_public_id orelse
-    Case =:= update_share_name orelse
-    Case =:= update_share_name_id orelse
-    Case =:= update_share_name_public_id
+    Case =:= create_share;
+    Case =:= get_share;
+    Case =:= get_file_shares;
+    Case =:= update_share_name;
+    Case =:= delete_share
 ->
     initializer:mock_share_logic(Config),
     init_per_testcase(all, Config);
@@ -1301,17 +1344,11 @@ end_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     end_per_testcase(all, Config);
 
 end_per_testcase(Case, Config) when
-    Case =:= create_share orelse
-    Case =:= create_share_id orelse
-    Case =:= get_share orelse
-    Case =:= get_share_id orelse
-    Case =:= get_share_public_id orelse
-    Case =:= delete_share orelse
-    Case =:= delete_share_id orelse
-    Case =:= delete_share_public_id orelse
-    Case =:= update_share_name orelse
-    Case =:= update_share_name_id orelse
-    Case =:= update_share_name_public_id
+    Case =:= create_share;
+    Case =:= get_share;
+    Case =:= get_file_shares;
+    Case =:= update_share_name;
+    Case =:= delete_share
 ->
     initializer:unmock_share_logic(Config),
     end_per_testcase(all, Config);

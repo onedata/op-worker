@@ -30,9 +30,11 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(#gri{aspect = object_id}, Result) ->
-    ?OK_REPLY(Result);
-get_response(#gri{aspect = list}, Result) ->
+get_response(#gri{aspect = As}, Result) when
+    As =:= object_id;
+    As =:= list;
+    As =:= shares
+->
     ?OK_REPLY(Result);
 get_response(#gri{aspect = As}, Metadata) when
     As =:= attrs;
