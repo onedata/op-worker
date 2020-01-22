@@ -27,41 +27,49 @@
 
 
 -define(assert_match(__Expect, __Expression, __ScenarioName, __PermsPerGuid),
-    try
-        ?assertMatch(__Expect, __Expression)
-    catch _:_ ->
-        ct:pal(
-            "PERMISSIONS TESTS FAILURE~n"
-            "   Scenario: ~p~n"
-            "   Perms per file: ~p~n",
-            [
-                __ScenarioName,
-                maps:fold(fun(G, SetPerms, Acc) ->
-                    Acc#{get_file_path(Node, OwnerSessId, G) => SetPerms}
-                end, #{}, __PermsPerGuid)
-            ]
-        ),
-        erlang:error(perms_test_failed)
-    end
+    (fun() ->
+        try
+            ?assertMatch(__Expect, __Expression)
+        catch _:__Reason ->
+            ct:pal(
+                "PERMISSIONS TESTS FAILURE~n"
+                "   Scenario: ~p~n"
+                "   Perms per file: ~p~n"
+                "   Reason: ~p~n",
+                [
+                    __ScenarioName,
+                    maps:fold(fun(G, SetPerms, Acc) ->
+                        Acc#{get_file_path(Node, OwnerSessId, G) => SetPerms}
+                    end, #{}, __PermsPerGuid),
+                    __Reason
+                ]
+            ),
+            erlang:error(perms_test_failed)
+        end
+    end)()
 ).
 
 -define(assert_not_match(__Expect, __Expression, __ScenarioName, __PermsPerGuid),
-    try
-        ?assertNotMatch(__Expect, __Expression)
-    catch _:_ ->
-        ct:pal(
-            "PERMISSIONS TESTS FAILURE~n"
-            "   Scenario: ~p~n"
-            "   Perms per file: ~p~n",
-            [
-                __ScenarioName,
-                maps:fold(fun(Guid, SetPerms, Acc) ->
-                    Acc#{get_file_path(Node, OwnerSessId, Guid) => SetPerms}
-                end, #{}, __PermsPerGuid)
-            ]
-        ),
-        erlang:error(perms_test_failed)
-    end
+    (fun() ->
+        try
+            ?assertNotMatch(__Expect, __Expression)
+        catch _:__Reason ->
+            ct:pal(
+                "PERMISSIONS TESTS FAILURE~n"
+                "   Scenario: ~p~n"
+                "   Perms per file: ~p~n"
+                "   Reason: ~p~n",
+                [
+                    __ScenarioName,
+                    maps:fold(fun(Guid, SetPerms, Acc) ->
+                        Acc#{get_file_path(Node, OwnerSessId, Guid) => SetPerms}
+                    end, #{}, __PermsPerGuid),
+                    __Reason
+                ]
+            ),
+            erlang:error(perms_test_failed)
+        end
+    end)()
 ).
 
 -define(SCENARIO_NAME(__PREFIX, __TYPE),
@@ -170,24 +178,24 @@ run_space_privs_scenario(
             Operation, ScenarioRootDirPath, ExtraData,
             RequiredPrivs, Config
         )
-    catch T:R ->
+    catch _:Reason ->
         ct:pal(
             "SPACE PRIVS TEST FAILURE~n"
             "   Scenario: ~p~n"
             "   Owner: ~p~n"
-            "   User: ~p~n"
+            "   Test User: ~p~n"
             "   Root path: ~p~n"
             "   Required space priv: ~p~n"
-            "   Stacktrace: ~p~n",
+            "   Reason: ~p~n",
             [
                 ScenarioName,
                 Owner, SpaceUser,
                 ScenarioRootDirPath,
                 RequiredPrivs,
-                erlang:get_stacktrace()
+                Reason
             ]
         ),
-        erlang:T(R)
+        erlang:error(space_privs_test_failed)
     after
         initializer:testmaster_mock_space_user_privileges(
             [Node], SpaceId, Owner, privileges:space_admin()
@@ -198,7 +206,7 @@ run_space_privs_scenario(
     end.
 
 
-% Some operations can be performed only by owner which doesn't need any space privs.
+% Some operations can be performed only by who which doesn't need any space privs.
 space_privs_test(
     Node, SpaceId, OwnerId, UserId, Operation,
     RootDirPath, ExtraData, owner, Config
@@ -251,13 +259,15 @@ space_privs_test(
     OwnerSessId = ?config({session_id, {OwnerId, ?GET_DOMAIN(Node)}}, Config),
 
     % If operation requires space priv it should fail without it and succeed with it
-    initializer:testmaster_mock_space_user_privileges(
-        [Node], SpaceId, UserId, AllSpacePrivs -- RequiredPrivs
-    ),
-    ?assertMatch(
-        {error, ?EACCES},
-        Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
-    ),
+    lists:foreach(fun(SomeOfRequiredPrivs) ->
+        initializer:testmaster_mock_space_user_privileges(
+            [Node], SpaceId, UserId, AllSpacePrivs -- SomeOfRequiredPrivs
+        ),
+        ?assertMatch(
+            {error, ?EACCES},
+            Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
+        )
+    end, combinations(RequiredPrivs) -- [[]]),
 
     % invalidate permission cache as it is not done due to initializer mocks
     invalidate_perms_cache(Node),
@@ -473,7 +483,7 @@ run_posix_perms_scenario(
             Operation, ComplementaryPosixPermsPerFile,
             RequiredPosixPerms, ExtraData, Type
         )
-    catch T:R ->
+    catch _:Reason ->
         FilePathsToRequiredPerms = maps:fold(fun(Guid, RequiredPerms, Acc) ->
             Acc#{get_file_path(Node, OwnerSessId, Guid) => RequiredPerms}
         end, #{}, PosixPermsPerFile),
@@ -483,14 +493,14 @@ run_posix_perms_scenario(
             "   Type: ~p~n"
             "   Root path: ~p~n"
             "   Required Perms: ~p~n"
-            "   Stacktrace: ~p~n",
+            "   Reason: ~p~n",
             [
                 Type, TestCaseRootDirPath,
                 FilePathsToRequiredPerms,
-                erlang:get_stacktrace()
+                Reason
             ]
         ),
-        erlang:T(R)
+        erlang:error(posix_perms_test_failed)
     end.
 
 
@@ -529,7 +539,7 @@ run_posix_tests(
 
     case OperationRequiresOwnership of
         true ->
-            % If operation requires ownership then for group member it should failed
+            % If operation requires ownership then for group member it should fail
             % even if all files modes are set to 777
             lfm_permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
             ?assertMatch(
@@ -583,9 +593,11 @@ run_standard_posix_tests(
             Acc#{Guid => Mode bor maps:get(Guid, Acc)}
         end, ComplementaryModesPerFile, EaccessModeComb),
         lfm_permissions_test_utils:set_modes(Node, EaccesModesPerFile),
-        ?assertMatch(
+        ?assert_match(
             {error, ?EACCES},
-            Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+            Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
+            <<"standard_posix_perms_test">>,
+            EaccesModesPerFile
         )
     end, EaccesModesCombs),
 
@@ -594,10 +606,23 @@ run_standard_posix_tests(
         Acc#{Guid => Mode bor maps:get(Guid, Acc, 0)}
     end, #{}, RequiredModesComb),
     lfm_permissions_test_utils:set_modes(Node, RequiredModesPerFile),
-    ?assertNotMatch(
+    ?assert_not_match(
         {error, _},
-        Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+        Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
+        <<"standard_posix_perms_test">>,
+        RequiredModesPerFile
     ).
+
+
+-spec posix_perm_to_mode(PosixPerm :: atom(), Type :: owner | group) ->
+    non_neg_integer().
+posix_perm_to_mode(read, owner) -> 8#4 bsl 6;
+posix_perm_to_mode(write, owner) -> 8#2 bsl 6;
+posix_perm_to_mode(exec, owner) -> 8#1 bsl 6;
+posix_perm_to_mode(read, group) -> 8#4 bsl 3;
+posix_perm_to_mode(write, group) -> 8#2 bsl 3;
+posix_perm_to_mode(exec, group) -> 8#1 bsl 3;
+posix_perm_to_mode(_, _) -> 8#0.
 
 
 %%%===================================================================
@@ -756,7 +781,7 @@ get_complementary_perms(Node, PermsPerFile)->
 
 
 -spec create_files(node(), session:id(), file_meta:path(), #dir{} | #file{}) ->
-    {PermsPerFile :: map(), ExtraData :: map()}.
+    {#{file_id:file_guid() => [FilePerm :: binary()]}, ExtraData :: map()}.
 create_files(Node, OwnerSessId, ParentDirPath, #file{
     name = FileName,
     perms = FilePerms,
@@ -830,17 +855,6 @@ set_full_perms(acl, Node, Files) ->
 -spec invalidate_perms_cache(node()) -> ok.
 invalidate_perms_cache(Node) ->
     rpc:call(Node, permissions_cache, invalidate, []).
-
-
--spec posix_perm_to_mode(PosixPerm :: atom(), Type :: owner | group) ->
-    non_neg_integer().
-posix_perm_to_mode(read, owner) -> 8#4 bsl 6;
-posix_perm_to_mode(write, owner) -> 8#2 bsl 6;
-posix_perm_to_mode(exec, owner) -> 8#1 bsl 6;
-posix_perm_to_mode(read, group) -> 8#4 bsl 3;
-posix_perm_to_mode(write, group) -> 8#2 bsl 3;
-posix_perm_to_mode(exec, group) -> 8#1 bsl 3;
-posix_perm_to_mode(_, _) -> 8#0.
 
 
 -spec combinations([term()]) -> [[term()]].
