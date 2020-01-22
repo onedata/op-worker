@@ -104,6 +104,9 @@ fetch_entity(_) ->
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
+authorize(#op_req{operation = create, gri = #gri{aspect = instance}}, _) ->
+    true;
+
 authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % authorization was checked by oz in `fetch_entity`
     true.
@@ -115,6 +118,8 @@ authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
+validate(#op_req{operation = create, gri = #gri{aspect = instance}}, _) ->
+    ok;
 validate(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % validation was checked by oz in `fetch_entity`
     ok.
