@@ -88,8 +88,9 @@
 -define(AVAILABLE_SHARE_OPERATIONS, [
     check_perms,
     resolve_guid,
-    get_file_path,
     get_parent,
+    % TODO VFS-6057 resolve share path up to share not user root dir
+%%    get_file_path,
 
     list_xattr,
     get_xattr,
@@ -328,6 +329,7 @@ handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) -
                     true -> ok;
                     false -> throw(?EACCES)
                 end,
+                % Operations concerning shares must be carried with GUEST auth
                 case user_ctx:is_guest(UserCtx0) of
                     true -> UserCtx0;
                     false -> user_ctx:new(?GUEST_SESS_ID)
