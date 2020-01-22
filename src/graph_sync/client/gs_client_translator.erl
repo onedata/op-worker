@@ -126,7 +126,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = private}, Re
         value = #od_share{
             name = maps:get(<<"name">>, Result),
             public_url = maps:get(<<"publicUrl">>, Result),
-            file_type = maps:get(<<"fileType">>, Result),
+            file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
             space = maps:get(<<"spaceId">>, Result),
             handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result)),
             root_file = maps:get(<<"rootFileId">>, Result)
@@ -138,7 +138,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = public}, Res
         value = #od_share{
             name = maps:get(<<"name">>, Result),
             public_url = maps:get(<<"publicUrl">>, Result),
-            file_type = maps:get(<<"fileType">>, Result),
+            file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
             handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result)),
             root_file = maps:get(<<"rootFileId">>, Result)
         }

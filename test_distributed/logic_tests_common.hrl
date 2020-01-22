@@ -119,6 +119,7 @@
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
 -define(SHARE_PUBLIC_URL(__Share), __Share).
+-define(SHARE_FILE_TYPE(__Share), dir).
 -define(SHARE_SPACE(__Share), ?SPACE_1).
 -define(SHARE_HANDLE(__Share), ?HANDLE_1).
 -define(SHARE_ROOT_FILE(__Share), __Share).
@@ -272,6 +273,7 @@
 -define(SHARE_PRIVATE_DATA_MATCHER(__Share), #document{key = __Share, value = #od_share{
     name = ?SHARE_NAME(__Share),
     public_url = ?SHARE_PUBLIC_URL(__Share),
+    file_type = ?SHARE_FILE_TYPE(__ShareId),
     space = ?SHARE_SPACE(__Share),
     handle = ?SHARE_HANDLE(__Share),
     root_file = ?SHARE_ROOT_FILE(__Share)
@@ -279,6 +281,7 @@
 -define(SHARE_PUBLIC_DATA_MATCHER(__Share), #document{key = __Share, value = #od_share{
     name = ?SHARE_NAME(__Share),
     public_url = ?SHARE_PUBLIC_URL(__Share),
+    file_type = ?SHARE_FILE_TYPE(__ShareId),
     space = undefined,
     handle = ?SHARE_HANDLE(__Share),
     root_file = ?SHARE_ROOT_FILE(__Share)
@@ -417,6 +420,7 @@ end).
     <<"gri">> => gri:serialize(#gri{type = od_share, id = __ShareId, aspect = instance, scope = public}),
     <<"name">> => ?SHARE_NAME(__ShareId),
     <<"publicUrl">> => ?SHARE_PUBLIC_URL(__ShareId),
+    <<"fileType">> => atom_to_binary(?SHARE_FILE_TYPE(__ShareId), utf8),
     <<"handleId">> => ?SHARE_HANDLE(__ShareId),
     <<"rootFileId">> => ?SHARE_ROOT_FILE(__ShareId)
 }).
