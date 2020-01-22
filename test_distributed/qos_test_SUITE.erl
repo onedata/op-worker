@@ -561,11 +561,18 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    Posthook = fun(NewConfig) ->
+        NewConfig1 = initializer:setup_storage(NewConfig),
+        hackney:start(),
+        application:start(ssl),
+        NewConfig1
+    end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, qos_tests_utils]} | Config].
 
 
 end_per_suite(Config) ->
+    hackney:stop(),
+    application:stop(ssl),
     initializer:teardown_storage(Config).
 
 
@@ -597,12 +604,12 @@ run_tests(Config, FileTypes, TestSpecFun) ->
         TestSpec = case FileType of
             file ->
                 ct:pal("Starting for file"),
-                create_test_file(Config),
-                TestSpecFun(?TEST_FILE_PATH);
+                Path = create_test_file(Config),
+                TestSpecFun(Path);
             dir ->
                 ct:pal("Starting for dir"),
-                create_test_dir_with_file(Config),
-                TestSpecFun(?TEST_DIR_PATH)
+                Path = create_test_dir_with_file(Config),
+                TestSpecFun(Path)
         end,
         add_qos_and_check_qos_docs(Config, TestSpec)
     end, FileTypes).
@@ -614,7 +621,7 @@ add_qos_and_check_qos_docs(Config, #qos_spec{
     expected_file_qos = ExpectedFileQos
 } ) ->
     % add QoS for file and wait for appropriate QoS status
-    QosNameIdMapping = qos_tests_utils:add_multiple_qos_in_parallel(Config, QosToAddList),
+    QosNameIdMapping = qos_tests_utils:add_multiple_qos(Config, QosToAddList),
     qos_tests_utils:wait_for_qos_fulfillment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntries),
 
     % check qos documents
@@ -632,7 +639,7 @@ add_qos_for_dir_and_check_effective_qos(Config, #effective_qos_test_spec{
     qos_tests_utils:create_dir_structure(Config, InitialDirStructure),
 
     % add QoS and wait for appropriate QoS status
-    QosNameIdMapping = qos_tests_utils:add_multiple_qos_in_parallel(Config, QosToAddList),
+    QosNameIdMapping = qos_tests_utils:add_multiple_qos(Config, QosToAddList),
     qos_tests_utils:wait_for_qos_fulfillment_in_parallel(Config, undefined, QosNameIdMapping, ExpectedQosEntries),
 
     % check qos_entry documents and effective QoS
@@ -643,16 +650,17 @@ add_qos_for_dir_and_check_effective_qos(Config, #effective_qos_test_spec{
 create_test_file(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    qos_tests_utils:create_file(Worker, SessId, ?TEST_FILE_PATH, ?TEST_DATA).
+    _Guid = qos_tests_utils:create_file(Worker, SessId, ?TEST_FILE_PATH, ?TEST_DATA),
+    ?TEST_FILE_PATH.
 
 
 create_test_dir_with_file(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    DirGuid = qos_tests_utils:create_directory(Worker, SessId, ?TEST_DIR_PATH),
+    _DirGuid = qos_tests_utils:create_directory(Worker, SessId, ?TEST_DIR_PATH),
     FilePath = filename:join(?TEST_DIR_PATH, <<"file1">>),
     _FileGuid = qos_tests_utils:create_file(Worker, SessId, FilePath, ?TEST_DATA),
-    DirGuid.
+    ?TEST_DIR_PATH.
 
 
 mock_storage_get_provider(Config) ->
