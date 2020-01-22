@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles translation of middleware results concerning
-%%% handle serive entities into GUI GRAPH SYNC responses.
+%%% handle service entities into GUI GRAPH SYNC responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(handle_service_gui_gs_translator).

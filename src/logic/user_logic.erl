@@ -32,6 +32,7 @@
 -export([get_eff_spaces/1, get_eff_spaces/2]).
 -export([has_eff_space/2, has_eff_space/3]).
 -export([get_space_by_name/3]).
+-export([get_eff_handle_services/1]).
 
 %%%===================================================================
 %%% API
@@ -235,3 +236,11 @@ get_space_by_name_internal(Client, SpaceName, [SpaceId | Rest]) ->
         _ ->
             get_space_by_name_internal(Client, SpaceName, Rest)
     end.
+
+
+-spec get_eff_handle_services(od_user:doc() | od_user:record()) ->
+    {ok, [od_handle_service:id()]} | errors:error().
+get_eff_handle_services(#od_user{eff_handle_services = HServices}) ->
+    {ok, HServices};
+get_eff_handle_services(#document{value = User}) ->
+    get_eff_handle_services(User).
