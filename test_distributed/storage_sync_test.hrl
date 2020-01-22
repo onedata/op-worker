@@ -27,7 +27,7 @@
 -define(MAX_DEPTH, 9999999999999999999999).
 
 %% test data
--define(USER, <<"user1">>).
+-define(USER1, <<"user1">>).
 -define(USER2, <<"user2">>).
 -define(GROUP, <<"group1">>).
 -define(GROUP2, <<"group2">>).
