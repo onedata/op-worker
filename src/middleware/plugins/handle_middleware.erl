@@ -104,7 +104,7 @@ fetch_entity(_) ->
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = shared}}, _) ->
+authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % authorization was checked by oz in `fetch_entity`
     true.
 

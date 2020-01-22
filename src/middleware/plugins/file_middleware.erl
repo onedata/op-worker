@@ -415,6 +415,8 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     has_access_to_file(Auth, Guid);
 
 authorize_get(#op_req{gri = #gri{aspect = object_id}}, _) ->
+    % File path must have been resolved to guid by rest_handler already (to
+    % get to this point), so authorization is surely granted.
     true;
 
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = transfers}}, _) ->
@@ -440,7 +442,9 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     assert_file_managed_locally(Guid);
 
 validate_get(#op_req{gri = #gri{aspect = object_id}}, _) ->
-    true.
+    % File path must have been resolved to guid by rest_handler already (to
+    % get to this point), so file must be managed locally.
+    ok.
 
 
 %%--------------------------------------------------------------------

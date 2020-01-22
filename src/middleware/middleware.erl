@@ -102,28 +102,10 @@ handle(OpReq) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(req(), versioned_entity()) -> result().
-handle(#op_req{gri = #gri{type = EntityType, id = EntityId} = GRI} = OpReq0, VersionedEntity) ->
+handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
     try
-        OpReq1 = case EntityType of
-            op_file when EntityId =/= undefined ->
-                % Every req using share guid must be carried with guest auth
-                case file_id:is_share_guid(EntityId) of
-                    true ->
-                        OpReq0#op_req{
-                            auth = #auth{
-                                subject = #subject{type = nobody, id = ?GUEST_USER_ID},
-                                session_id = ?GUEST_SESS_ID
-                            },
-                            gri = GRI#gri{scope = public}
-                        };
-                    false ->
-                        OpReq0
-                end;
-            _ ->
-                OpReq0
-        end,
         ReqCtx0 = #req_ctx{
-            req = OpReq1,
+            req = ensure_proper_request(OpReq),
             plugin = get_plugin(EntityType),
             versioned_entity = VersionedEntity
         },
@@ -185,6 +167,28 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec ensure_proper_request(req()) -> req().
+ensure_proper_request(#op_req{gri = #gri{type = op_file, id = undefined}} = OpReq) ->
+    OpReq;
+ensure_proper_request(#op_req{gri = #gri{type = op_file, id = FileGuid} = GRI} = OpReq) ->
+    % Every request concerning shared files must be carried with guest auth
+    case file_id:is_share_guid(FileGuid) of
+        true ->
+            OpReq#op_req{
+                auth = #auth{
+                    subject = ?GUEST_IDENTITY,
+                    session_id = ?GUEST_SESS_ID
+                },
+                gri = GRI#gri{scope = public}
+            };
+        false ->
+            OpReq
+    end;
+ensure_proper_request(OpReq) ->
+    OpReq.
 
 
 %% @private

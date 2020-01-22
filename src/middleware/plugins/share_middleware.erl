@@ -90,9 +90,6 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
-fetch_entity(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
-    {ok, {undefined, 1}};
-
 fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     id = ShareId,
     aspect = instance,
