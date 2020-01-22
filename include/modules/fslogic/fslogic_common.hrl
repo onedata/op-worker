@@ -16,6 +16,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 
 %% helper macro for not implemented functions
 -define(NOT_IMPLEMENTED, erlang:error(not_yet_implemented)).
@@ -35,9 +36,12 @@
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_SESS_ID, <<"0">>).
 -define(ROOT_AUTH, root_auth).
+-define(ROOT_IDENTITY, ?SUB(root, ?ROOT_USER_ID)).
+%% guest user definitions
 -define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_SESS_ID, <<"nobody">>).
 -define(GUEST_AUTH, guest_auth).
+-define(GUEST_IDENTITY, ?SUB(nobody, ?GUEST_USER_ID)).
 
 -define(DEFAULT_SPACE_DIR_MODE, 8#775).
 
