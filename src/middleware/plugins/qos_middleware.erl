@@ -19,6 +19,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([
     operation_supported/3,
@@ -110,33 +111,33 @@ fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
 authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
-authorize(#op_req{operation = create, auth = Auth, gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     id = FileGuid,
     aspect = instance
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    middleware_utils:is_eff_space_member(Auth, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_QOS);
 
-authorize(#op_req{operation = get, auth = Auth, gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = QosEntryId,
     aspect = instance
 }}, _QosEntry) ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
-    middleware_utils:is_eff_space_member(Auth, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
 
-authorize(#op_req{operation = get, auth = Auth, gri = #gri{
+authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     id = FileGuid,
     aspect = effective_qos
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    middleware_utils:is_eff_space_member(Auth, SpaceId);
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
 
-authorize(#op_req{operation = delete, auth = Auth, gri = #gri{
+authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
     id = QosEntryId,
     aspect = instance
 }}, _QosEntry) ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
-    middleware_utils:is_eff_space_member(Auth, SpaceId).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_QOS).
 
 
 %%--------------------------------------------------------------------
