@@ -27,7 +27,7 @@
 
 %% Record containing the state of REST request.
 -record(rest_req, {
-    method = get :: rest_handler:method(),
+    method = 'GET' :: rest_handler:method(),
     parse_body = ignore :: rest_handler:parse_body(),
     consumes = ['*'] :: ['*'] | [binary()],
     produces = [<<"application/json">>] :: [binary()],
@@ -36,7 +36,7 @@
 
 %% Record representing REST response.
 -record(rest_resp, {
-    code = 200 :: integer(),
+    code = ?HTTP_200_OK :: integer(),
     headers = #{} :: #{binary() => binary()},
     body = {binary, <<"">>} :: json_utils:json_term() | {binary, binary()}
 }).
