@@ -102,25 +102,10 @@ handle(OpReq) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(req(), versioned_entity()) -> result().
-handle(#op_req{gri = #gri{type = EntityType, id = EntityId} = GRI} = OpReq0, VersionedEntity) ->
+handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
     try
-        OpReq1 = case EntityType of
-            op_file when EntityId =/= undefined ->
-                % Every request concerning shared files must be carried with guest auth
-                case file_id:is_share_guid(EntityId) of
-                    true ->
-                        OpReq0#op_req{
-                            auth = ?GUEST(?GUEST_SESS_ID),
-                            gri = GRI#gri{scope = public}
-                        };
-                    false ->
-                        OpReq0
-                end;
-            _ ->
-                OpReq0
-        end,
         ReqCtx0 = #req_ctx{
-            req = OpReq1,
+            req = switch_context_if_shared_file_request(OpReq),
             plugin = get_plugin(EntityType),
             versioned_entity = VersionedEntity
         },
@@ -182,6 +167,25 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec switch_context_if_shared_file_request(req()) -> req().
+switch_context_if_shared_file_request(#op_req{gri = #gri{type = op_file, id = undefined}} = OpReq) ->
+    OpReq;
+switch_context_if_shared_file_request(#op_req{gri = #gri{type = op_file} = GRI} = OpReq) ->
+    % Every request concerning shared files must be carried with guest auth
+    case file_id:is_share_guid(GRI#gri.id) of
+        true ->
+            OpReq#op_req{
+                auth = ?GUEST(?GUEST_SESS_ID),
+                gri = GRI#gri{scope = public}
+            };
+        false ->
+            OpReq
+    end;
+switch_context_if_shared_file_request(OpReq) ->
+    OpReq.
 
 
 %% @private

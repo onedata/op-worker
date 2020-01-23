@@ -32,19 +32,14 @@ translate_resource(#gri{aspect = instance, scope = private}, #od_handle{
     handle_service = HandleServiceId
 }) ->
     #{
-        <<"url">> => utils:undefined_to_null(PublicHandle),
+        <<"url">> => PublicHandle,
         <<"metadataString">> => utils:undefined_to_null(Metadata),
-        <<"handleService">> => case HandleServiceId of
-            undefined ->
-                null;
-            _ ->
-                gri:serialize(#gri{
-                    type = op_handle_service,
-                    id = HandleServiceId,
-                    aspect = instance,
-                    scope = private
-                })
-        end
+        <<"handleService">> => gri:serialize(#gri{
+            type = op_handle_service,
+            id = HandleServiceId,
+            aspect = instance,
+            scope = private
+        })
     };
 translate_resource(#gri{aspect = instance, scope = public}, HandleInfo) ->
     HandleInfo.
