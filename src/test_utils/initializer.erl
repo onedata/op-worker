@@ -1446,7 +1446,6 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
         {ok, _} = put_into_cache(Doc),
         {ok, Doc}
     end).
--include_lib("ctool/include/logging.hrl").
 
 
 -spec storage_logic_mock_setup(node() | [node()], map(),
@@ -1474,7 +1473,7 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     GetStorageFun = fun(SM) ->
         fun (<<"all">>) ->
                 % This is useful when changing storage parameters. Used only in mock.
-            {ok, SM};
+                {ok, SM};
             (StorageId) ->
                 StorageDesc = maps:get(StorageId, SM, #{}),
                 {ok, #document{value = #od_storage{
