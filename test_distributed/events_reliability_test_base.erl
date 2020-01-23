@@ -190,7 +190,7 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
-    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), binary_to_list(generator:gen_name())])),
+    FilePath = filename:join(["/", SpaceName, generator:gen_name()]),
     {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 
     % Mock function calls to check
@@ -234,7 +234,7 @@ events_aggregation_test_base(Config, ConnectionWorker, AssertionWorker) ->
 %%    SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
 %%    [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 %%
-%%    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), binary_to_list(generator:gen_name())])),
+%%    FilePath = filename:join(["/", SpaceName, generator:gen_name()]),
 %%    {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 %%
 %%    {ok, {Sock, TestSessionID}} = fuse_test_utils:connect_via_token(
@@ -256,7 +256,7 @@ events_flush_test_base(Config, ConnectionWorker, AssertionWorker, MockError, Flu
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(AssertionWorker)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
-    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), binary_to_list(generator:gen_name())])),
+    FilePath = filename:join(["/", SpaceName, generator:gen_name()]),
     {ok, FileGuid} = lfm_proxy:create(AssertionWorker, SessionId, FilePath, 8#700),
 
     % Mock function calls to check

@@ -312,12 +312,12 @@ handle_request_and_process_response(SessId, Request) ->
 -spec handle_request_and_process_response_locally(user_ctx:ctx(), request(),
     file_partial_ctx:ctx() | undefined) -> response().
 handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) ->
-    {FileCtx1, ShareId, _SpaceId1} = case FilePartialCtx of
+    {FileCtx1, ShareId} = case FilePartialCtx of
         undefined ->
-            {undefined, undefined, undefined};
+            {undefined, undefined};
         _ ->
-            {FileCtx0, SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
-            {FileCtx0, file_ctx:get_share_id_const(FileCtx0), SpaceId0}
+            {FileCtx0, _SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
+            {FileCtx0, file_ctx:get_share_id_const(FileCtx0)}
     end,
     try
         UserCtx1 = case ShareId of

@@ -26,7 +26,7 @@
 -export([run_scenarios/2]).
 
 
--define(assert_match(__Expect, __Expression, __ScenarioName, __PermsPerGuid),
+-define(assert_match_with_perms(__Expect, __Expression, __ScenarioName, __PermsPerGuid),
     (fun() ->
         try
             ?assertMatch(__Expect, __Expression)
@@ -49,7 +49,7 @@
     end)()
 ).
 
--define(assert_not_match(__Expect, __Expression, __ScenarioName, __PermsPerGuid),
+-define(assert_not_match_with_perms(__Expect, __Expression, __ScenarioName, __PermsPerGuid),
     (fun() ->
         try
             ?assertNotMatch(__Expect, __Expression)
@@ -593,7 +593,7 @@ run_standard_posix_tests(
             Acc#{Guid => Mode bor maps:get(Guid, Acc)}
         end, ComplementaryModesPerFile, EaccessModeComb),
         lfm_permissions_test_utils:set_modes(Node, EaccesModesPerFile),
-        ?assert_match(
+        ?assert_match_with_perms(
             {error, ?EACCES},
             Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
             <<"standard_posix_perms_test">>,
@@ -606,7 +606,7 @@ run_standard_posix_tests(
         Acc#{Guid => Mode bor maps:get(Guid, Acc, 0)}
     end, #{}, RequiredModesComb),
     lfm_permissions_test_utils:set_modes(Node, RequiredModesPerFile),
-    ?assert_not_match(
+    ?assert_not_match_with_perms(
         {error, _},
         Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
         <<"standard_posix_perms_test">>,
@@ -706,7 +706,7 @@ run_acl_perms_scenario(
         lfm_permissions_test_utils:set_acls(
             Node, EaccesPermsPerFile, #{}, AceWho, AceFlags
         ),
-        ?assert_match(
+        ?assert_match_with_perms(
             {error, ?EACCES},
             Operation(OwnerSessId, SessId, ScenarioRootDirPath, ExtraData),
             ScenarioName,
@@ -722,7 +722,7 @@ run_acl_perms_scenario(
     lfm_permissions_test_utils:set_acls(
         Node, RequiredPermsPerFile, #{}, AceWho, AceFlags
     ),
-    ?assert_not_match(
+    ?assert_not_match_with_perms(
         {error, _},
         Operation(OwnerSessId, SessId, ScenarioRootDirPath, ExtraData),
         ScenarioName,
@@ -744,7 +744,7 @@ run_acl_perms_scenario(
         lfm_permissions_test_utils:set_acls(
             Node, AllPermsPerFile, EaccesPermsPerFile, AceWho, AceFlags
         ),
-        ?assert_match(
+        ?assert_match_with_perms(
             {error, ?EACCES},
             Operation(OwnerSessId, SessId, ScenarioRootDirPath, ExtraData),
             ScenarioName,
@@ -756,7 +756,7 @@ run_acl_perms_scenario(
     lfm_permissions_test_utils:set_acls(
         Node, #{}, ComplementaryPermsPerFile, AceWho, AceFlags
     ),
-    ?assert_not_match(
+    ?assert_not_match_with_perms(
         {error, _},
         Operation(OwnerSessId, SessId, ScenarioRootDirPath, ExtraData),
         ScenarioName,

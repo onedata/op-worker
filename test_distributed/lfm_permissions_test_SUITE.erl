@@ -1248,7 +1248,7 @@ remove_share_test(Config) ->
         files = [#dir{
             name = <<"dir1">>,
             on_create = fun(OwnerSessId, Guid) ->
-                {ok, {ShareId, _}} = ?assertMatch({ok, _}, lfm_proxy:create_share(
+                {ok, ShareId} = ?assertMatch({ok, _}, lfm_proxy:create_share(
                     W, OwnerSessId, {guid, Guid}, <<"share_to_remove">>
                 )),
                 ShareId

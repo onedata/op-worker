@@ -174,7 +174,7 @@ get_file_objectid(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "get_file_objectid"])),
+    FilePath = filename:join(["/", SpaceName, "get_file_objectid"]),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath, 8#700),
     {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
         WorkerP1, <<"file-id/", FilePath/binary>>, get,
@@ -188,7 +188,7 @@ get_simple_file_distribution(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file0_gsfd"])),
+    File = filename:join(["/", SpaceName, "file0_gsfd"]),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
@@ -289,7 +289,7 @@ posix_mode_get(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_pmg"])),
+    File = filename:join(["/", SpaceName, "file1_pmg"]),
     Mode = 8#700,
     {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
 
@@ -309,7 +309,7 @@ posix_mode_put(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file2_pmp"])),
+    File = filename:join(["/", SpaceName, "file2_pmp"]),
     Mode = 8#700,
     {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
 
@@ -334,7 +334,7 @@ attributes_list(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     UserId1 = ?config({user_id, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_al"])),
+    File = filename:join(["/", SpaceName, "file1_al"]),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
 
     % when
@@ -372,7 +372,7 @@ xattr_get(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_xg"])),
+    File = filename:join(["/", SpaceName, "file1_xg"]),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k1">>, value = <<"v1">>}),
 
@@ -392,7 +392,7 @@ xattr_put(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file2_xp"])),
+    File = filename:join(["/", SpaceName, "file2_xp"]),
     {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
 
     % when
@@ -414,7 +414,7 @@ xattr_list(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1_xl"])),
+    File = filename:join(["/", SpaceName, "file1_xl"]),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
     ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k1">>, value = <<"v1">>}),
     ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k2">>, value = <<"v2">>}),
@@ -590,17 +590,17 @@ create_share(Config) ->
     Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
-    DirPath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
+    DirPath = filename:join(["/", SpaceName, "shared_dir"]),
     {ok, DirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, DirPath, 8#700),
 
     % create regular file
-    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file1"])),
+    FilePath = filename:join(["/", SpaceName, "file1"]),
     {ok, FileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, FilePath, 8#600),
 
     RestPath = <<"shares/">>,
     ShareName = <<"Share name">>,
 
-    lists:foreach(fun(Guid) ->
+    lists:foreach(fun({Guid, FileType}) ->
         PayloadWithNameOnly = json_utils:encode(#{
             <<"name">> => ShareName
         }),
@@ -633,7 +633,10 @@ create_share(Config) ->
         % check that share with given name and id has been created
         ?assertMatch(
             {ok, #document{key = ShareId1, value = #od_share{
-                root_file = ShareGuid, name = ShareName, space = SpaceId
+                name = ShareName,
+                space = SpaceId,
+                root_file = ShareGuid,
+                file_type = FileType
             }}},
             rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId1])
         ),
@@ -645,8 +648,11 @@ create_share(Config) ->
         ),
         #{<<"shareId">> := ShareId2} = json_utils:decode(Response2),
 
-        ?assertNot(ShareId1 == ShareId2)
-    end, [DirGuid, FileGuid]).
+        ?assertNotEqual(ShareId1, ShareId2)
+    end, [
+        {DirGuid, dir},
+        {FileGuid, file}
+    ]).
 
 
 get_share(Config) ->
@@ -656,19 +662,22 @@ get_share(Config) ->
     Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
-    SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
-    {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
+    SharedDir = filename:join(["/", SpaceName, "shared_dir"]),
+    {ok, DirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
 
     % get invalid rest path
     InvalidRestPath = str_utils:format_bin("shares/~s", [<<"invalid_share_id">>]),
 
     % create share for directory
     ShareName = <<"Share name">>,
-    {ok, {ShareId, ShareGuid }} = ?assertMatch({ok, {_, _ }},
-        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, ShareName)),
+    {ok, ShareId} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, DirGuid}, ShareName)
+    ),
+    ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
     ExpectedPublicUrl = ?SHARE_PUBLIC_URL(ShareId),
     ExpectedHandleId = ?SHARE_HANDLE_ID(ShareId),
-    {ok, ExpectedRootFileObjectId} = file_id:guid_to_objectid(ShareGuid),
+    {ok, ExpectedRootFileObjectId} = file_id:guid_to_objectid(ShareDirGuid),
 
     % getting not existing share should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
@@ -708,7 +717,7 @@ get_share(Config) ->
 
     ?assertMatch(
         {ok, #document{key = ShareId, value = #od_share{
-            root_file = ShareGuid,
+            root_file = ShareDirGuid,
             name = ShareName,
             space = ?SPACE1_ID,
             public_url = ExpectedPublicUrl,
@@ -725,7 +734,7 @@ get_file_shares(Config) ->
     Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create file
-    FilePath = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_file"])),
+    FilePath = filename:join(["/", SpaceName, "shared_file"]),
     {ok, SharedFileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, FilePath, 8#700),
     {ok, SharedFileObjectId} = file_id:guid_to_objectid(SharedFileGuid),
 
@@ -740,20 +749,22 @@ get_file_shares(Config) ->
         )),
 
         % getting shares for file not yet shared should return empty list
-        ?assertMatch(
-            {ok, 200, _, <<"[]">>},
+        {ok, 200, _, Response} = ?assertMatch(
+            {ok, 200, _, Response},
             rest_test_utils:request(SupportingProviderNode, RestPath, get, Headers, <<>>)
-        )
+        ),
+        #{<<"shares">> := Shares} = json_utils:decode(Response),
+        ?assertEqual([], Shares)
     end, [RestPath1, RestPath2]),
 
     ShareIds = lists:map(fun(_) ->
-        {ok, {ShareId, _}} = ?assertMatch(
-            {ok, {_, _ }},
+        {ok, ShareId} = ?assertMatch(
+            {ok, _},
             lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedFileGuid}, <<"share">>)
         ),
         ShareId
     end, lists:seq(1, 10)),
-    ExpShareIds = lists:reverse(ShareIds),
+    ExpShareIds = lists:sort(ShareIds),
 
     lists:foreach(fun(RestPath) ->
         % getting shares for file not yet shared should return empty list
@@ -761,7 +772,8 @@ get_file_shares(Config) ->
             {ok, 200, _, _},
             rest_test_utils:request(SupportingProviderNode, RestPath, get, Headers, <<>>)
         ),
-        ?assertEqual(ExpShareIds, json_utils:decode(Response))
+        #{<<"shares">> := Shares} = json_utils:decode(Response),
+        ?assertEqual(ExpShareIds, lists:sort(Shares))
     end, [RestPath1, RestPath2]).
 
 
@@ -772,7 +784,7 @@ update_share_name(Config) ->
     Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
-    SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
+    SharedDir = filename:join(["/", SpaceName, "shared_dir"]),
     {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
 
     % get invalid rest paths
@@ -787,8 +799,10 @@ update_share_name(Config) ->
     )),
 
     % create share for directory
-    {ok, {ShareId, _ShareGuid}} = ?assertMatch({ok, {_, _ }},
-        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)),
+    {ok, ShareId} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)
+    ),
 
     % get valid rest path
     RestPath = str_utils:format_bin("shares/~s", [ShareId]),
@@ -827,7 +841,7 @@ delete_share(Config) ->
     Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
 
     % create directory
-    SharedDir = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "shared_dir"])),
+    SharedDir = filename:join(["/", SpaceName, "shared_dir"]),
     {ok, SharedDirGuid} = lfm_proxy:mkdir(SupportingProviderNode, SessionId, SharedDir, 8#700),
 
     % get invalid rest paths
@@ -840,8 +854,10 @@ delete_share(Config) ->
     )),
 
     % create share for directory
-    {ok, {ShareId, _ShareGuid}} = ?assertMatch({ok, {_, _ }},
-        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)),
+    {ok, ShareId} = ?assertMatch(
+        {ok, _},
+        lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)
+    ),
 
     % get valid rest path
     RestPath = str_utils:format_bin("shares/~s", [ShareId]),
@@ -868,7 +884,7 @@ delete_share(Config) ->
 
     % recreating share after delete should succeed
     ?assertMatch(
-        {ok, {_, _ }},
+        {ok, _},
         lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)
     ).
 

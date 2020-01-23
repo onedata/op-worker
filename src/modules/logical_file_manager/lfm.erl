@@ -671,7 +671,7 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name()) ->
-    {ok, {od_share:id(), od_share:root_file_guid()}} | error_reply().
+    {ok, od_share:id()} | error_reply().
 create_share(SessId, FileKey, Name) ->
     ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name) end).
 

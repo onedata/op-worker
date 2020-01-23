@@ -105,6 +105,7 @@ authorize(#op_req{auth = ?NOBODY}, _) ->
     false;
 
 authorize(#op_req{operation = create, gri = #gri{aspect = instance}}, _) ->
+    % authorization will be checked by oz in during handle creation
     true;
 
 authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->

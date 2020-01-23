@@ -69,8 +69,8 @@ create(SessionId, ShareId, Name, SpaceId, ShareFileGuid, FileType) ->
         data = #{
             <<"shareId">> => ShareId,
             <<"name">> => Name,
-            <<"rootFileId">> => ShareFileGuid,
             <<"spaceId">> => SpaceId,
+            <<"rootFileId">> => ShareFileGuid,
             <<"fileType">> => FileType
         },
         subscribe = true

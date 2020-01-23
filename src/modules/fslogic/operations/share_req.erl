@@ -123,10 +123,7 @@ create_share_insecure(UserCtx, FileCtx0, Name) ->
                 {ok, _} ->
                     #provider_response{
                         status = #status{code = ?OK},
-                        provider_response = #share{
-                            share_id = ShareId,
-                            root_file_guid = ShareGuid
-                        }
+                        provider_response = #share{share_id = ShareId}
                     }
             end;
         _ ->

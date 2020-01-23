@@ -441,7 +441,7 @@ check_perms(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker, lfm:check_perms(SessId, FileKey, OpenFlag)).
 
 -spec create_share(node(), session:id(), lfm:file_key(), od_share:name()) ->
-    {ok, {od_share:id(), od_share:root_file_guid()}} | {error, term()}.
+    {ok, od_share:id()} | {error, term()}.
 create_share(Worker, SessId, FileKey, Name) ->
     ?EXEC(Worker, lfm:create_share(SessId, FileKey, Name)).
 

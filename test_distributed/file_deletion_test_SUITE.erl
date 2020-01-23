@@ -557,7 +557,7 @@ init_session(Worker, Nonce) ->
 
 create_test_file(Config, Worker, SessId, DelayedFileCreation) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "file0"])),
+    File = filename:join(["/", SpaceName, "file0"]),
 
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File, 8#770)),
     case DelayedFileCreation of

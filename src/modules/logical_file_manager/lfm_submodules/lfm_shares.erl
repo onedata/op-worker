@@ -27,13 +27,13 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name()) ->
-    {ok, {od_share:id(), od_share:root_file_guid()}} | lfm:error_reply().
+    {ok, od_share:id()} | lfm:error_reply().
 create_share(SessId, FileKey, Name) ->
     {guid, GUID} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, GUID,
         #create_share{name = Name},
-        fun(#share{share_id = ShareId, root_file_guid = ShareGuid}) ->
-            {ok, {ShareId, ShareGuid}}
+        fun(#share{share_id = ShareId}) ->
+            {ok, ShareId}
         end
     ).
 

@@ -184,7 +184,7 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     FileGuid = maps:get(<<"fileId">>, Req#op_req.data),
 
     case lfm:create_share(SessionId, {guid, FileGuid}, Name) of
-        {ok, {ShareId, _ShareGuid}} ->
+        {ok, ShareId} ->
             case share_logic:get(SessionId, ShareId) of
                 {ok, #document{value = ShareRec}} ->
                     Share = share_to_json(ShareId, ShareRec),
