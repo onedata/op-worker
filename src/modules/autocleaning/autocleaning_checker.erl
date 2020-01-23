@@ -9,6 +9,8 @@
 %%% checking autocleaning in given space.
 %%% One such gen_server is started per Oneprovider cluster.
 %%% The gen_server checks autocleaning when shutting down.
+%%% see autocleaning_run_controller.erl for more information on
+%%% autocleaning mechanism.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(autocleaning_checker).
