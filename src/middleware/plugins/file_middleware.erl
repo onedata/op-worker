@@ -732,7 +732,7 @@ delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec has_access_to_file(aai:auth(), file_id:file_guid()) -> boolean().
-has_access_to_file(?NOBODY, _Guid) ->
+has_access_to_file(?GUEST, _Guid) ->
     false;
 has_access_to_file(?USER(UserId) = Auth, Guid) ->
     case fslogic_uuid:user_root_dir_guid(UserId) of

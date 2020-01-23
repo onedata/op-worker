@@ -107,7 +107,7 @@ fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
-authorize(#op_req{auth = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
 authorize(#op_req{operation = create, auth = Auth, gri = #gri{

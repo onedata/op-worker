@@ -33,10 +33,7 @@
 authenticate(Req, Interface, DataCaveatsPolicy) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
-            {ok, #auth{
-                subject = ?GUEST_IDENTITY,
-                session_id = ?GUEST_SESS_ID
-            }};
+            {ok, ?GUEST(?GUEST_SESS_ID)};
         SubjectAccessToken ->
             {PeerIp, _} = cowboy_req:peer(Req),
             TokenAuth = auth_manager:build_token_auth(

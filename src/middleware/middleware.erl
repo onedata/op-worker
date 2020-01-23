@@ -102,10 +102,25 @@ handle(OpReq) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(req(), versioned_entity()) -> result().
-handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
+handle(#op_req{gri = #gri{type = EntityType, id = EntityId} = GRI} = OpReq0, VersionedEntity) ->
     try
+        OpReq1 = case EntityType of
+            op_file when EntityId =/= undefined ->
+                % Every request concerning shared files must be carried with guest auth
+                case file_id:is_share_guid(EntityId) of
+                    true ->
+                        OpReq0#op_req{
+                            auth = ?GUEST(?GUEST_SESS_ID),
+                            gri = GRI#gri{scope = public}
+                        };
+                    false ->
+                        OpReq0
+                end;
+            _ ->
+                OpReq0
+        end,
         ReqCtx0 = #req_ctx{
-            req = ensure_proper_request(OpReq),
+            req = OpReq1,
             plugin = get_plugin(EntityType),
             versioned_entity = VersionedEntity
         },
@@ -159,7 +174,7 @@ is_authorized(#op_req{gri = #gri{type = EntityType} = GRI} = OpReq, VersionedEnt
 %% @end
 %%--------------------------------------------------------------------
 -spec client_to_string(aai:auth()) -> string().
-client_to_string(?NOBODY) -> "nobody (unauthenticated client)";
+client_to_string(?GUEST) -> "nobody (unauthenticated client)";
 client_to_string(?ROOT) -> "root";
 client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 
@@ -167,28 +182,6 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec ensure_proper_request(req()) -> req().
-ensure_proper_request(#op_req{gri = #gri{type = op_file, id = undefined}} = OpReq) ->
-    OpReq;
-ensure_proper_request(#op_req{gri = #gri{type = op_file, id = FileGuid} = GRI} = OpReq) ->
-    % Every request concerning shared files must be carried with guest auth
-    case file_id:is_share_guid(FileGuid) of
-        true ->
-            OpReq#op_req{
-                auth = #auth{
-                    subject = ?GUEST_IDENTITY,
-                    session_id = ?GUEST_SESS_ID
-                },
-                gri = GRI#gri{scope = public}
-            };
-        false ->
-            OpReq
-    end;
-ensure_proper_request(OpReq) ->
-    OpReq.
 
 
 %% @private
@@ -312,7 +305,7 @@ ensure_authorized(#req_ctx{
             ok;
         false ->
             case Auth of
-                ?NOBODY ->
+                ?GUEST ->
                     % The client was not authenticated -> unauthorized
                     throw(?ERROR_UNAUTHORIZED);
                 _ ->

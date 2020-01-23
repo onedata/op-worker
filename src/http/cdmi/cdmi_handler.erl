@@ -166,7 +166,7 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
 %%--------------------------------------------------------------------
 %% @doc Cowboy callback function.
 %% Returns whether the user is authorized to perform the action.
-%% CDMI requests, beside capabilities ones (?NOBODY authentication is
+%% CDMI requests, beside capabilities ones (?GUEST authentication is
 %% associated with them at init/2 fun), require concrete user
 %% authentication.
 %% NOTE: The name and description of this function is actually misleading;
@@ -181,7 +181,7 @@ is_authorized(Req, #cdmi_req{auth = undefined} = CdmiReq) ->
     case http_auth:authenticate(Req, rest, allow_data_access_caveats) of
         {ok, ?USER = Auth} ->
             {true, Req, CdmiReq#cdmi_req{auth = Auth}};
-        {ok, ?NOBODY} ->
+        {ok, ?GUEST} ->
             {stop, send_error_response(?ERROR_UNAUTHORIZED, Req), CdmiReq};
         {error, _} = Error ->
             {stop, send_error_response(Error, Req), CdmiReq}
@@ -460,13 +460,13 @@ resolve_resource_by_id(Req) ->
                         {error, Errno} ->
                             throw(?ERROR_POSIX(Errno))
                     end;
-                {ok, ?NOBODY} ->
+                {ok, ?GUEST} ->
                     throw(?ERROR_UNAUTHORIZED);
                 {error, _} = Error ->
                     throw(Error)
             end;
         CapabilityPath ->
-            {?NOBODY, CapabilityPath}
+            {?GUEST(?GUEST_SESS_ID), CapabilityPath}
     end,
 
     {Path, _} = get_path_of_id_request(Req),
@@ -486,23 +486,23 @@ resolve_resource_by_id(Req) ->
 %% @doc
 %% Resolves resource accessed (capability, container or dataobject) using
 %% specified absolute path (it must begin with /).
-%% For capability requests ?NOBODY authorization is additionally added.
+%% For capability requests ?GUEST authorization is additionally added.
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_resource_by_path(file_meta:path()) -> cdmi_req().
 resolve_resource_by_path(<<"/", ?ROOT_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        auth = ?NOBODY,
+        auth = ?GUEST(?GUEST_SESS_ID),
         resource = {capabilities, root}
     };
 resolve_resource_by_path(<<"/", ?CONTAINER_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        auth = ?NOBODY,
+        auth = ?GUEST(?GUEST_SESS_ID),
         resource = {capabilities, container}
     };
 resolve_resource_by_path(<<"/", ?DATAOBJECT_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        auth = ?NOBODY,
+        auth = ?GUEST(?GUEST_SESS_ID),
         resource = {capabilities, dataobject}
     };
 resolve_resource_by_path(Path) ->

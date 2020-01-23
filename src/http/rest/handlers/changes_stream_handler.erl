@@ -202,7 +202,7 @@ is_authorized(Req, State) ->
                 {error, _} = Error ->
                     {stop, send_error_response(Req, Error), State}
             end;
-        {ok, ?NOBODY} ->
+        {ok, ?GUEST} ->
             {stop, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), State};
         {error, _} = Error ->
             {stop, send_error_response(Req, Error), Req}

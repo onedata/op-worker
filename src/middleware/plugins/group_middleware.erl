@@ -83,7 +83,7 @@ fetch_entity(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
-authorize(#op_req{auth = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
 authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = shared}}, _) ->

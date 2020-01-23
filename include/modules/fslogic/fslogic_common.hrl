@@ -38,10 +38,12 @@
 -define(ROOT_AUTH, root_auth).
 -define(ROOT_IDENTITY, ?SUB(root, ?ROOT_USER_ID)).
 %% guest user definitions
--define(GUEST_USER_ID, <<"nobody">>).
--define(GUEST_SESS_ID, <<"nobody">>).
 -define(GUEST_AUTH, guest_auth).
+-define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_IDENTITY, ?SUB(nobody, ?GUEST_USER_ID)).
+-define(GUEST_SESS_ID, <<"nobody">>).
+-define(GUEST, #auth{subject = ?GUEST_IDENTITY}).
+-define(GUEST(SessionId), #auth{subject = ?GUEST_IDENTITY, session_id = SessionId}).
 
 -define(DEFAULT_SPACE_DIR_MODE, 8#775).
 
