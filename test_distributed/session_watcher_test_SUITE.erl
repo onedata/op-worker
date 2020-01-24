@@ -105,7 +105,7 @@ session_update_should_update_session_access_time(Config) ->
     Accessed1 = get_session_access_time(Config),
     timer:sleep(timer:seconds(1)),
     ?assertMatch(
-        {ok, SessId},
+        {ok, #document{key = SessId}},
         ?call(Worker, update, [SessId, fun(Sess) -> {ok, Sess} end])
     ),
     Accessed2 = get_session_access_time(Config),
