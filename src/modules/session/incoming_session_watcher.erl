@@ -35,9 +35,9 @@
     session_grace_period :: session:grace_period(),
     identity :: aai:subject(),
     % Possible auth values:
-    % token_auth -> for user sessions (gui, rest, fuse). It needs to be
-    %               periodically verified whether it's still valid (it
-    %               could be revoked)
+    % #token_auth{} -> for user sessions (gui, rest, fuse). It needs to be
+    %                  periodically verified whether it's still valid (it
+    %                  could be revoked)
     % undefined  -> for provider_incoming sessions. No periodic peer
     %               verification is needed.
     auth :: undefined | session:auth(),
@@ -365,7 +365,7 @@ check_auth_validity(TokenAuth, Identity) ->
             ),
             {true, schedule_session_validity_checkup(NextCheckupDelay)};
         {ok, #auth{subject = Subject}, _} ->
-            ?debug("Token identity verification failure.~nExpected ~p.~nGot: ~p", [
+            ?warning("Token identity verification failure.~nExpected ~p.~nGot: ~p", [
                 Identity, Subject
             ]),
             false;
