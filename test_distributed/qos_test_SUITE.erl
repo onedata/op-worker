@@ -113,7 +113,9 @@ all() -> [
     effective_qos_for_files_in_different_directories_of_tree_structure
 ].
 
-% QoS for test providers
+% Although this test SUITE is single provider, QoS parameters
+% for multiple providers are mocked for QoS target storages
+% calculation so more complex examples can be tested.
 -define(P1_TEST_QOS, #{
     <<"country">> => <<"PL">>,
     <<"type">> => <<"disk">>,
