@@ -37,7 +37,7 @@
 -export([update_space_support_size/2]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
 -export([get_support_size/1]).
--export([map_idp_group_to_onedata/2]).
+-export([map_idp_user_to_onedata/2, map_idp_group_to_onedata/2]).
 -export([get_domain/0, get_domain/1, get_domain/2]).
 -export([set_domain/1, set_delegated_subdomain/1]).
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
@@ -646,6 +646,24 @@ set_subdomain_delegation(Subdomain, IPs) ->
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Calls OZ to learn what's the onedata id of given user from certain IdP.
+%% @end
+%%--------------------------------------------------------------------
+-spec map_idp_user_to_onedata(Idp :: binary(), IdpGroupId :: binary()) ->
+    {ok, od_user:id()} | gs_protocol:error().
+map_idp_user_to_onedata(Idp, IdpUserId) ->
+    ?CREATE_RETURN_DATA(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_provider, id = undefined, aspect = map_idp_user},
+        data = #{
+            <<"idp">> => Idp,
+            <<"userId">> => IdpUserId
+        }
+    })).
 
 
 %%--------------------------------------------------------------------
