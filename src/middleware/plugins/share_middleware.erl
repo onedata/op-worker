@@ -234,6 +234,7 @@ delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
 
 
 %% @private
+-spec share_to_json(od_share:id(), od_share:record()) -> map().
 share_to_json(ShareId, #od_share{
     space = SpaceId,
     root_file = RootFileGuid,
