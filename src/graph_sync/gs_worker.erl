@@ -137,7 +137,7 @@ handle({connection_healthcheck, FailedRetries}) ->
             {?GS_HEALTHCHECK_INTERVAL, 0};
         alive ->
             {?GS_HEALTHCHECK_INTERVAL, 0};
-        connection_error ->
+        error ->
             FailedRetries2 = FailedRetries + 1,
             BackoffFactor = math:pow(?GS_RECONNECT_BACKOFF_RATE, FailedRetries2),
             Interval2 = min(
@@ -179,7 +179,7 @@ cleanup() ->
 %% be run on all nodes to ensure that the connection is restarted.
 %% @end
 %%--------------------------------------------------------------------
--spec connection_healthcheck() -> unregistered | skipped | alive | connection_error.
+-spec connection_healthcheck() -> unregistered | skipped | alive | error.
 connection_healthcheck() ->
     try
         case get_connection_status() of
@@ -187,10 +187,10 @@ connection_healthcheck() ->
             Status -> Status
         end
     catch
-        _:Reason ->
+        Type:Reason ->
             ?error_stacktrace(
-                "Failed to start connection to Onezone due to: ~p",
-                [Reason]
+                "Failed to start connection to Onezone due to ~p:~p",
+                [Type, Reason]
             ),
             error
     end.
@@ -227,11 +227,26 @@ get_gs_client_node() ->
     consistent_hashing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 
--spec start_gs_client_worker() -> alive | connection_error.
+-spec start_gs_client_worker() -> alive | error.
 start_gs_client_worker() ->
     case supervisor:start_child(?GS_WORKER_SUP, gs_client_worker_spec()) of
-        {ok, _} -> alive;
-        {error, _} -> connection_error
+        {ok, _} ->
+            try
+                ?info("Running on-connect procedures"),
+                oneprovider:on_connect_to_oz(),
+                alive
+            catch Type:Reason ->
+                ?error_stacktrace(
+                    "Failed to execute on-connect procedures, disconnecting - ~p:~p",
+                    [Type, Reason]
+                ),
+                % Kill the connection to Onezone, which will cause a
+                % connection retry during the next healthcheck
+                gs_client_worker:force_terminate(),
+                error
+            end;
+        {error, _} ->
+            error
     end.
 
 

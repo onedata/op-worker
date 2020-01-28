@@ -45,8 +45,7 @@ get_user_id(Uid, StorageId, StorageName, LumaConfig = #luma_config{url = LumaUrl
             Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
             SubjectId = maps:get(<<"subjectId">>, Response),
-            UserId = idp_to_onedata_user_id(Idp, SubjectId),
-            {ok, UserId};
+            idp_to_onedata_user_id(Idp, SubjectId);
         {ok, Code, _RespHeaders, RespBody} ->
             {error, {Code, json_utils:decode(RespBody)}};
         {error, Reason} ->
@@ -70,8 +69,7 @@ get_user_id_by_name(Name, StorageId, StorageName, LumaConfig = #luma_config{url 
             Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
             SubjectId = maps:get(<<"subjectId">>, Response),
-            UserId = idp_to_onedata_user_id(Idp, SubjectId),
-            {ok, UserId};
+            idp_to_onedata_user_id(Idp, SubjectId);
         {ok, Code, _RespHeaders, RespBody} ->
             {error, {Code, json_utils:decode(RespBody)}};
         {error, Reason} ->
@@ -95,12 +93,7 @@ get_group_id(Gid, SpaceId, StorageId, StorageName, LumaConfig = #luma_config{url
             Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
             IdpGroupId = maps:get(<<"groupId">>, Response),
-            case Idp of
-                <<"onedata">> ->
-                    {ok, IdpGroupId};
-                _ ->
-                    provider_logic:map_idp_group_to_onedata(Idp, IdpGroupId)
-            end;
+            idp_to_onedata_group_id(Idp, IdpGroupId);
         {ok, Code, _RespHeaders, RespBody} ->
             {error, {Code, json_utils:decode(RespBody)}};
         {error, Reason} ->
@@ -126,12 +119,7 @@ get_group_id_by_name(Name, SpaceId, StorageId, StorageName,
             Response = json_utils:decode(RespBody),
             Idp = maps:get(<<"idp">>, Response),
             IdpGroupId = maps:get(<<"groupId">>, Response),
-            case Idp of
-                <<"onedata">> ->
-                    {ok, IdpGroupId};
-                _ ->
-                    provider_logic:map_idp_group_to_onedata(Idp, IdpGroupId)
-            end;
+            idp_to_onedata_group_id(Idp, IdpGroupId);
         {ok, Code, _RespHeaders, RespBody} ->
             {error, {Code, json_utils:decode(RespBody)}};
         {error, Reason} ->
@@ -154,19 +142,18 @@ http_client_post(Url, ReqHeaders, ReqBody) ->
 %%% Internal functions
 %%%===================================================================
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts idp and user id from idp to onedata user id.
-%% @end
-%%-------------------------------------------------------------------
--spec idp_to_onedata_user_id(binary(), binary()) -> od_user:id().
+-spec idp_to_onedata_user_id(binary(), binary()) -> {ok, od_user:id()} | {error, term()}.
 idp_to_onedata_user_id(<<"onedata">>, IdpUserId) ->
-    IdpUserId;
+    {ok, IdpUserId};
 idp_to_onedata_user_id(Idp, IdpUserId) ->
-    % NOTE: legacy key generation must always be used to ensure that user
-    % mappings are not lost after system upgrade from version pre 19.02.1
-    datastore_key:gen_legacy_key(<<"">>, str_utils:format_bin("~ts:~s", [Idp, IdpUserId])).
+    provider_logic:map_idp_user_to_onedata(Idp, IdpUserId).
+
+
+-spec idp_to_onedata_group_id(binary(), binary()) -> {ok, od_group:id()} | {error, term()}.
+idp_to_onedata_group_id(<<"onedata">>, IdpGroupId) ->
+    {ok, IdpGroupId};
+idp_to_onedata_group_id(Idp, IdpGroupId) ->
+    provider_logic:map_idp_group_to_onedata(Idp, IdpGroupId).
 
 
 %%-------------------------------------------------------------------

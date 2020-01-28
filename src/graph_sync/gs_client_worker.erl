@@ -173,20 +173,7 @@ init([]) ->
             {stop, normal};
         {ok, ClientRef, #gs_resp_handshake{identity = ?SUB(?ONEPROVIDER)}} ->
             yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
-            ?info("Started connection to Onezone: ~p, running post-init procedures", [
-                ClientRef
-            ]),
-            % Post-init procedures are run in different process to avoid deadlocks.
-            spawn(fun() -> try
-                oneprovider:on_connect_to_oz()
-            catch Type:Message ->
-                ?error_stacktrace(
-                    "Connection to Onezone lost due to unexpected error in post-init - ~p:~p",
-                    [Type, Message]
-                ),
-                % Kill the connection to Onezone, which will cause a reconnection and retry
-                gen_server2:call({global, ?GS_CLIENT_WORKER_GLOBAL_NAME}, {terminate, normal})
-            end end),
+            ?info("Started connection to Onezone: ~p", [ClientRef]),
             {ok, #state{client_ref = ClientRef}};
         {error, unauthorized} ->
             ?info("Unauthorized to start connection to Onezone"),
@@ -223,8 +210,12 @@ handle_call({async_request, GsReq, Timeout}, {From, _}, #state{client_ref = Clie
         }
     }};
 
-handle_call({terminate, Reason}, _From, State) ->
+handle_call({terminate, Reason}, _From, State = #state{client_ref = ClientRef}) ->
     ?warning("Connection to Onezone terminated"),
+    case ClientRef of
+        undefined -> ok;
+        _ -> gs_client:kill(ClientRef)
+    end,
     {stop, Reason, ok, State};
 
 handle_call(Request, _From, #state{} = State) ->
