@@ -26,6 +26,8 @@
 
 %% Hidden file prefix
 -define(HIDDEN_FILE_PREFIX, ".__onedata__").
+-define(DELETED_OPENED_FILES_DIR_STRING, ".__onedata__deleted__").
+-define(DELETED_OPENED_FILES_DIR, <<?DELETED_OPENED_FILES_DIR_STRING>>).
 
 % Global root - parent of all spaces
 % note: spaces are also linked to virtual root directories of each user belonging to space

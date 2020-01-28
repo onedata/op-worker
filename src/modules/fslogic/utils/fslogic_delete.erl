@@ -17,15 +17,18 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-
 %% API
 -export([check_if_opened_and_remove/4, remove_opened_file/1, remove_file/4,
     remove_file_handles/1, remove_auxiliary_documents/1, delete_all_opened_files/0]).
 
 %% Test API
--export([process_file_links/3]).
+-export([process_file_links/4, get_open_file_handling_method/1]).
+
+-define(RENAME_HANDLING_METHOD, rename).
+-define(LINK_HANDLING_METHOD, deletion_link).
 
 -type delete_filemeta_opts() :: boolean() | deletion_link.
+-type handling_method() :: ?RENAME_HANDLING_METHOD | ?LINK_HANDLING_METHOD.
 
 %%%===================================================================
 %%% API
@@ -44,8 +47,19 @@ check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
         FileUuid = file_ctx:get_uuid_const(FileCtx),
         case file_handles:exists(FileUuid) of
             true ->
-                process_file_links(FileCtx, UserCtx, RemoteDelete),
-                ok = file_handles:mark_to_remove(FileCtx);
+                {HandlingMethod, FileCtx2} = ?MODULE:get_open_file_handling_method(FileCtx),
+                process_file_links(FileCtx2, UserCtx, RemoteDelete, HandlingMethod),
+                ok = file_handles:mark_to_remove(FileCtx2),
+                RenameResult = rename_storage_file(FileCtx2, HandlingMethod),
+
+                case {file_handles:exists(FileUuid), RenameResult} of
+                    {true, _} ->
+                        ok;
+                    {false, {renamed, NewFileId, Size}} ->
+                        delete_renamed_storage_file(FileCtx2, NewFileId, Size);
+                    {false, _} ->
+                        remove_opened_file(FileCtx2)
+                end;
             _ ->
                 ok = remove_file(FileCtx, UserCtx, true, not RemoteDelete)
         end,
@@ -135,20 +149,20 @@ remove_auxiliary_documents(FileCtx) ->
 remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
     % TODO VFS-5270
     replica_synchronizer:apply(FileCtx, fun() ->
-        {FileDoc, FileCtx4} = case DeleteFileMeta of
+        FileCtx4 = case DeleteFileMeta of
             true ->
-                {FD = #document{value = #file_meta{
+                {#document{value = #file_meta{
                     shares = Shares
                 }}, FileCtx2} = file_ctx:get_file_doc(FileCtx),
                 {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
                 ok = delete_shares(UserCtx, Shares),
 
                 fslogic_times:update_mtime_ctime(ParentCtx),
-                {FD, FileCtx3};
+                FileCtx3;
             deletion_link ->
-                file_ctx:get_file_doc_including_deleted(FileCtx);
+                FileCtx;
             _ ->
-                {undefined, FileCtx}
+                FileCtx
         end,
 
         ok = case RemoveStorageFile of
@@ -159,13 +173,21 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
 
         case {DeleteFileMeta, RemoveStorageFile} of
             {true, _} ->
+                {FileDoc, _} = file_ctx:get_file_doc(FileCtx4),
                 ok = file_meta:delete(FileDoc);
             {deletion_link, _} ->
+                {HandlingMethod, FileCtx5} = ?MODULE:get_open_file_handling_method(FileCtx4),
+                {FileDoc, FileCtx6} = file_ctx:get_file_doc_including_deleted(FileCtx5),
                 file_meta:delete_without_link(FileDoc), % do not match, document may not exist
-                {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
-                ParentUuid = file_id:guid_to_uuid(ParentGuid),
-                link_utils:remove_deletion_link(FileCtx5, ParentUuid),
-                ok;
+                case HandlingMethod of
+                    ?RENAME_HANDLING_METHOD ->
+                        ok;
+                    ?LINK_HANDLING_METHOD ->
+                        {ParentGuid, FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
+                        ParentUuid = file_id:guid_to_uuid(ParentGuid),
+                        link_utils:remove_deletion_link(FileCtx7, ParentUuid),
+                        ok
+                end;
             {_, true} ->
                 FileUuid = file_ctx:get_uuid_const(FileCtx4),
                 LocalLocationId = file_location:local_id(FileUuid),
@@ -186,20 +208,30 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
 %% It can also delete normal link from parent to the file.
 %% @end
 %%-------------------------------------------------------------------
--spec process_file_links(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
-process_file_links(FileCtx, UserCtx, KeepParentLink) ->
-    {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
-    ParentUuid = file_id:guid_to_uuid(ParentGuid),
-    FileCtx3 = link_utils:add_deletion_link(FileCtx2, ParentUuid),
-    ok = case KeepParentLink of
-             false ->
-                 FileUuid = file_ctx:get_uuid_const(FileCtx3),
-                 Scope = file_ctx:get_space_id_const(FileCtx3),
-                 {FileName, _FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
-                 file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName);
-             _ ->
-                 ok
-         end.
+-spec process_file_links(file_ctx:ctx(), user_ctx:ctx(), boolean(), handling_method()) -> ok.
+process_file_links(FileCtx, UserCtx, KeepParentLink, HandlingMethod) ->
+    {FileCtx3, ParentUuid2}  = case {HandlingMethod, KeepParentLink} of
+        {?LINK_HANDLING_METHOD, _} ->
+            {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+            ParentUuid = file_id:guid_to_uuid(ParentGuid),
+            {link_utils:add_deletion_link(FileCtx2, ParentUuid), ParentUuid};
+        {_, false} ->
+            {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+            ParentUuid = file_id:guid_to_uuid(ParentGuid),
+            {FileCtx2, ParentUuid};
+        _ ->
+            {FileCtx, undefined}
+    end,
+
+    case KeepParentLink of
+        false ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx3),
+            Scope = file_ctx:get_space_id_const(FileCtx3),
+            {FileName, _FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
+            ok = file_meta:delete_child_link(ParentUuid2, Scope, FileUuid, FileName);
+        _ ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -250,9 +282,76 @@ delete_shares(UserCtx, Shares) ->
 %% be emitted.
 %% @end
 %%--------------------------------------------------------------------
+-spec maybe_emit_event(file_ctx:ctx(), user_ctx:ctx(), boolean()) -> ok.
 maybe_emit_event(FileCtx, UserCtx, false) ->
     SessId = user_ctx:get_session_id(UserCtx),
     fslogic_event_emitter:emit_file_removed(FileCtx, [SessId]),
     ok;
 maybe_emit_event(_FileCtx, _UserCtx, _) ->
     ok.
+
+-spec get_open_file_handling_method(file_ctx:ctx()) -> {handling_method(), file_ctx:ctx()}.
+get_open_file_handling_method(FileCtx) ->
+    {#document{
+        value = #storage{helpers = [#helper{name = HelperName} | _]}
+    }, FileCtx2} =
+        file_ctx:get_storage_doc(FileCtx),
+    case lists:member(HelperName,
+        [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
+            ?WEBDAV_HELPER_NAME]) of
+        true -> {?RENAME_HANDLING_METHOD, FileCtx2};
+        _ -> {?LINK_HANDLING_METHOD, FileCtx2}
+    end.
+
+-spec rename_storage_file(file_ctx:ctx(), handling_method()) ->
+    {renamed, helpers:file_id(), non_neg_integer()} | file_not_found | ignored.
+rename_storage_file(FileCtx, ?RENAME_HANDLING_METHOD) ->
+    SessId = ?ROOT_SESS_ID,
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
+    {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {Size, _} = file_ctx:get_file_size(FileCtx2),
+    TargetFileId = filename:join(?DELETED_OPENED_FILES_DIR, FileGuid),
+
+    Handle = storage_file_manager:new_handle(SessId, SpaceId, FileUuid, Storage, FileId, undefined),
+    case rename_storage_file(Handle, FileUuid, TargetFileId, Size) of
+        file_not_found ->
+            RootHandle = storage_file_manager:new_handle(SessId, SpaceId, FileUuid,
+                Storage, ?DELETED_OPENED_FILES_DIR, undefined),
+            case storage_file_manager:mkdir(RootHandle, 8#777, false) of
+                ok -> ok;
+                {error, ?EEXIST} -> ok
+            end,
+
+            rename_storage_file(Handle, FileUuid, TargetFileId, Size);
+        Other ->
+            Other
+    end;
+rename_storage_file(_, _) ->
+    ignored.
+
+-spec rename_storage_file(storage_file_manager:handle(), file_meta:uuid(), helpers:file_id(), non_neg_integer()) ->
+    {renamed, helpers:file_id(), non_neg_integer()} | file_not_found.
+rename_storage_file(Handle, FileUuid, TargetFileId, Size) ->
+    case storage_file_manager:mv(Handle, TargetFileId) of
+        ok ->
+            LocId = file_location:local_id(FileUuid),
+            fslogic_location_cache:update_location(FileUuid, LocId, fun(FileLocation) ->
+                {ok, FileLocation#file_location{file_id = TargetFileId}}
+            end, false),
+            {renamed, TargetFileId, Size};
+        {error, ?ENOENT} ->
+            file_not_found
+    end.
+
+-spec delete_renamed_storage_file(file_ctx:ctx(), helpers:file_id(), non_neg_integer()) -> ok.
+delete_renamed_storage_file(FileCtx, FileId, Size) ->
+    SessId = ?ROOT_SESS_ID,
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    ShareId = file_ctx:get_share_id_const(FileCtx),
+    {Storage, _FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+    SFMHandle = storage_file_manager:new_handle(SessId, SpaceId, FileUuid, Storage, FileId, ShareId),
+    ok = storage_file_manager:unlink(SFMHandle, Size).

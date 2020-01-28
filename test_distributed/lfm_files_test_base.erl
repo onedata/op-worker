@@ -28,6 +28,7 @@
   fslogic_new_file/1,
   lfm_create_and_unlink/1,
   lfm_create_and_access/1,
+  lfm_create_failure/1,
   lfm_basic_rename/1,
   lfm_basic_rdwr/1,
   lfm_basic_rdwr_opens_file_once/1,
@@ -909,6 +910,16 @@ lfm_create_and_unlink(Config) ->
 
   ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath11, 8#755)),
   ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath21, 8#755)).
+
+lfm_create_failure(Config) ->
+  [W | _] = ?config(op_worker_nodes, Config),
+  {SessId1, _UserId1} = {
+    ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    ?config({user_id, <<"user1">>}, Config)
+  },
+
+  ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test_create_fail_dir">>, 8#755)),
+  ?assertEqual({error, ?ENOTDIR}, lfm_proxy:create(W, SessId1, <<"/space_name1/test_create_fail_dir/file">>, 8#755)).
 
 lfm_basic_rename(Config) ->
   [W | _] = ?config(op_worker_nodes, Config),

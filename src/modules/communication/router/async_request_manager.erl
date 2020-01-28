@@ -433,6 +433,8 @@ respond({Conn, AsyncReqManager, SessionId}, {_Ref, MsgId} = ReqId, Response) ->
                 ok ->
                     report_response_sent(AsyncReqManager, ReqId);
                 Error ->
+                    ?warning("Sending response on request ~p error: ~p", [ReqId, Error]),
+                    report_response_sent(AsyncReqManager, ReqId),
                     Error
             end;
         Error ->
