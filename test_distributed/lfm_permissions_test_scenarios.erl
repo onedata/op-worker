@@ -107,6 +107,7 @@ run_scenarios(#perms_test_spec{
 
     run_space_privs_scenarios(ScenariosRootDirPath, Spec, Config),
     run_data_access_caveats_scenarios(ScenariosRootDirPath, Spec, Config),
+    run_share_test_scenarios(ScenariosRootDirPath, Spec, Config),
     run_posix_perms_scenarios(ScenariosRootDirPath, Spec, Config),
     run_acl_perms_scenarios(ScenariosRootDirPath, Spec, Config).
 
@@ -222,13 +223,13 @@ space_privs_test(
     ),
     ?assertMatch(
         {error, _},
-        Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
+        Operation(OwnerSessId, UserSessId, RootDirPath, undefined, ExtraData)
     ),
 
     initializer:testmaster_mock_space_user_privileges([Node], SpaceId, OwnerId, []),
     ?assertNotMatch(
         {error, _},
-        Operation(OwnerSessId, OwnerSessId, RootDirPath, ExtraData)
+        Operation(OwnerSessId, OwnerSessId, RootDirPath, undefined, ExtraData)
     );
 
 % When no space privs are required operation should succeed even with
@@ -245,7 +246,7 @@ space_privs_test(
     OwnerSessId = ?config({session_id, {OwnerId, ?GET_DOMAIN(Node)}}, Config),
     ?assertNotMatch(
         {error, _},
-        Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
+        Operation(OwnerSessId, UserSessId, RootDirPath, undefined, ExtraData)
     );
 
 % When specific space privs are required, the operation should fail if
@@ -265,7 +266,7 @@ space_privs_test(
         ),
         ?assertMatch(
             {error, ?EACCES},
-            Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
+            Operation(OwnerSessId, UserSessId, RootDirPath, undefined, ExtraData)
         )
     end, combinations(RequiredPrivs) -- [[]]),
 
@@ -277,7 +278,7 @@ space_privs_test(
     ),
     ?assertNotMatch(
         {error, _},
-        Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
+        Operation(OwnerSessId, UserSessId, RootDirPath, undefined, ExtraData)
     ).
 
 
@@ -345,7 +346,7 @@ run_caveats_scenario(
     SessId1 = lfm_permissions_test_utils:create_session(Node, User, Token1),
     ?assertMatch(
         {error, ?EACCES},
-        Operation(OwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
+        Operation(OwnerUserSessId, SessId1, ScenarioRootDirPath, undefined, ExtraData)
     ),
 
     Token2 = tokens:confine(MainToken, #cv_data_path{
@@ -354,7 +355,7 @@ run_caveats_scenario(
     SessId2 = lfm_permissions_test_utils:create_session(Node, User, Token2),
     ?assertNotMatch(
         {error, ?EACCES},
-        Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData)
+        Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, undefined, ExtraData)
     );
 run_caveats_scenario(
     Node, MainToken, OwnerUserSessId, User, Operation, data_objectid,
@@ -370,7 +371,7 @@ run_caveats_scenario(
     SessId1 = lfm_permissions_test_utils:create_session(Node, User, Token1),
     ?assertMatch(
         {error, ?EACCES},
-        Operation(OwnerUserSessId, SessId1, ScenarioRootDirPath, ExtraData)
+        Operation(OwnerUserSessId, SessId1, ScenarioRootDirPath, undefined, ExtraData)
     ),
 
     Token2 = tokens:confine(MainToken, #cv_data_objectid{
@@ -379,7 +380,7 @@ run_caveats_scenario(
     SessId2 = lfm_permissions_test_utils:create_session(Node, User, Token2),
     ?assertNotMatch(
         {error, ?EACCES},
-        Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData), 100
+        Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, undefined, ExtraData), 100
     );
 run_caveats_scenario(
     Node, MainToken, OwnerUserSessId, User, Operation, data_readonly,
@@ -392,15 +393,123 @@ run_caveats_scenario(
             % Operation should succeed
             ?assertNotMatch(
                 {error, ?EACCES},
-                Operation(OwnerUserSessId, SessId, ScenarioRootDirPath, ExtraData)
+                Operation(OwnerUserSessId, SessId, ScenarioRootDirPath, undefined, ExtraData)
             );
         false ->
             % Operation should fail
             ?assertMatch(
                 {error, ?EACCES},
-                Operation(OwnerUserSessId, SessId, ScenarioRootDirPath, ExtraData)
+                Operation(OwnerUserSessId, SessId, ScenarioRootDirPath, undefined, ExtraData)
             )
     end.
+
+
+%%%===================================================================
+%%% SHARE TESTS SCENARIOS MECHANISM
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% TODO WRITEME.
+%% @end
+%%--------------------------------------------------------------------
+run_share_test_scenarios(_ScenariosRootDirPath, #perms_test_spec{
+    available_in_share_mode = inapplicable
+}, _Config) ->
+    ok;
+run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
+    test_node = Node,
+    owner_user = Owner,
+    space_user = SpaceUser,
+    other_user = OtherUser,
+    available_in_share_mode = IsAvailableInShareMode,
+    requires_traverse_ancestors = RequiresTraverseAncestors,
+    files = Files,
+    operation = Operation
+}, Config) ->
+    OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
+    SpaceUserSessId = ?config({session_id, {SpaceUser, ?GET_DOMAIN(Node)}}, Config),
+    OtherUserSessId = ?config({session_id, {OtherUser, ?GET_DOMAIN(Node)}}, Config),
+
+    lists:foreach(fun({SessId, PermsType, ScenarioName}) ->
+        ScenarioRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
+
+        % Create necessary file hierarchy
+        {PermsPerFile, ExtraData} = create_files(
+            Node, OwnerUserSessId, ScenariosRootDirPath, #dir{
+                name = ScenarioName,
+                perms = case RequiresTraverseAncestors of
+                    true -> [?traverse_container];
+                    false -> []
+                end,
+                children = Files
+            }
+        ),
+
+        ScenarioDirGuid = maps:get(ScenarioRootDirPath, ExtraData),
+        {ok, ShareId} = lfm_proxy:create_share(Node, OwnerUserSessId, {guid, ScenarioDirGuid}, ScenarioName),
+
+        run_share_test_scenario(
+            Node, OwnerUserSessId, SessId, ScenarioRootDirPath, ScenarioName, Operation,
+            PermsPerFile, ShareId, ExtraData, PermsType, IsAvailableInShareMode
+        )
+    end, [
+        {OwnerUserSessId, posix, <<"owner_posix_share">>},
+        {SpaceUserSessId, posix, <<"space_user_posix_share">>},
+        {OtherUserSessId, posix, <<"other_user_posix_share">>},
+        {?GUEST_SESS_ID, posix, <<"guest_posix_share">>},
+        {OwnerUserSessId, acl, <<"owner_acl_share">>},
+        {SpaceUserSessId, acl, <<"space_user_acl_share">>},
+        {OtherUserSessId, acl, <<"other_user_acl_share">>},
+        {?GUEST_SESS_ID, acl, <<"guest_acl_share">>}
+    ]).
+
+
+run_share_test_scenario(
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
+    PermsPerFile, ShareId, ExtraData, PermsType, _IsAvailableInShareMode = false
+) ->
+    % Set all posix or acl (depending on scenario) perms to files
+    set_full_perms(PermsType, Node, maps:keys(PermsPerFile)),
+
+    % Even with all perms set operation should fail
+    ?assert_match_with_perms(
+        {error, ?EACCES},
+        Operation(OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData),
+        ScenarioName,
+        maps:map(fun(_, _) -> <<"all">> end, PermsPerFile)
+    );
+run_share_test_scenario(
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
+    PermsPerFile, ShareId, ExtraData, posix, _IsAvailableInShareMode = true
+) ->
+    PosixPermsPerFile = maps:map(fun(_, Perms) ->
+        lists:usort(lists:flatmap(
+            fun lfm_permissions_test_utils:perm_to_posix_perms/1, Perms
+        ))
+    end, PermsPerFile),
+    {ComplementaryPosixPermsPerFile, RequiredPosixPerms} = maps:fold(
+        fun(FileGuid, FileRequiredPerms, {BasePermsPerFileAcc, RequiredPermsAcc}) ->
+            {
+                BasePermsPerFileAcc#{FileGuid => ?ALL_POSIX_PERMS -- FileRequiredPerms},
+                    [{FileGuid, Perm} || Perm <- FileRequiredPerms] ++ RequiredPermsAcc
+            }
+        end,
+        {#{}, []},
+        PosixPermsPerFile
+    ),
+
+    run_standard_posix_tests(
+        Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
+        Operation, ComplementaryPosixPermsPerFile, RequiredPosixPerms,
+        ShareId, ExtraData, other
+    );
+run_share_test_scenario(
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
+    PermsPerFile, ShareId, ExtraData, acl, _IsAvailableInShareMode = true
+) ->
+    ok.
 
 
 %%%===================================================================
@@ -452,7 +561,7 @@ run_posix_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
         end, PermsPerFile),
 
         run_posix_perms_scenario(
-            Node, OwnerUserSessId, SessId, ScenarioRootDirPath,
+            Node, OwnerUserSessId, SessId, ScenarioRootDirPath, ScenarioName,
             Operation, PosixPermsPerFile, ExtraData, ScenarioType
         )
     end, [
@@ -463,7 +572,7 @@ run_posix_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
 
 run_posix_perms_scenario(
-    Node, OwnerSessId, SessId, TestCaseRootDirPath,
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
     Operation, PosixPermsPerFile, ExtraData, Type
 ) ->
     {ComplementaryPosixPermsPerFile, RequiredPosixPerms} = maps:fold(
@@ -479,7 +588,7 @@ run_posix_perms_scenario(
 
     try
         run_posix_tests(
-            Node, OwnerSessId, SessId, TestCaseRootDirPath,
+            Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
             Operation, ComplementaryPosixPermsPerFile,
             RequiredPosixPerms, ExtraData, Type
         )
@@ -505,7 +614,7 @@ run_posix_perms_scenario(
 
 
 run_posix_tests(
-    Node, OwnerSessId, SessId, TestCaseRootDirPath, Operation,
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, owner
 ) ->
     RequiredPermsWithoutOwnership = lists:filter(fun({_, Perm}) ->
@@ -519,18 +628,18 @@ run_posix_tests(
             lfm_permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 0 end, ComplementaryPermsPerFile)),
             ?assertNotMatch(
                 {error, _},
-                Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+                Operation(OwnerSessId, SessId, TestCaseRootDirPath, undefined, ExtraData)
             );
         _ ->
             run_standard_posix_tests(
-                Node, OwnerSessId, SessId, TestCaseRootDirPath,
+                Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
                 Operation, ComplementaryPermsPerFile, RequiredPermsWithoutOwnership,
-                ExtraData, owner
+                undefined, ExtraData, owner
             )
     end;
 
 run_posix_tests(
-    Node, OwnerSessId, SessId, TestCaseRootDirPath, Operation,
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, group
 ) ->
     OperationRequiresOwnership = lists:any(fun({_, Perm}) ->
@@ -544,37 +653,38 @@ run_posix_tests(
             lfm_permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
             ?assertMatch(
                 {error, ?EACCES},
-                Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+                Operation(OwnerSessId, SessId, TestCaseRootDirPath, undefined, ExtraData)
             );
         false ->
             RequiredNormalPosixPerms = lists:filter(fun({_, Perm}) ->
                 Perm == read orelse Perm == write orelse Perm == exec
             end, AllRequiredPerms),
             run_standard_posix_tests(
-                Node, OwnerSessId, SessId, TestCaseRootDirPath,
-                Operation, ComplementaryPermsPerFile, RequiredNormalPosixPerms, ExtraData, group
+                Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName,
+                Operation, ComplementaryPermsPerFile, RequiredNormalPosixPerms,
+                undefined, ExtraData, group
             )
     end;
 
 % Users not belonging to space or unauthorized should not be able to conduct any operation
 run_posix_tests(
-    Node, OwnerSessId, SessId, TestCaseRootDirPath, Operation,
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, _ScenarioName, Operation,
     ComplementaryPermsPerFile, _AllRequiredPerms, ExtraData, other
 ) ->
     lfm_permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
     ?assertMatch(
         {error, _},
-        Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
+        Operation(OwnerSessId, SessId, TestCaseRootDirPath, undefined, ExtraData)
     ),
     ?assertMatch(
         {error, _},
-        Operation(OwnerSessId, ?GUEST_SESS_ID, TestCaseRootDirPath, ExtraData)
+        Operation(OwnerSessId, ?GUEST_SESS_ID, TestCaseRootDirPath, undefined, ExtraData)
     ).
 
 
 run_standard_posix_tests(
-    Node, OwnerSessId, SessId, TestCaseRootDirPath, Operation,
-    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, Type
+    Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
+    ComplementaryPermsPerFile, AllRequiredPerms, ShareId, ExtraData, Type
 ) ->
     AllRequiredModes = lists:map(fun({Guid, PosixPerm}) ->
         {Guid, posix_perm_to_mode(PosixPerm, Type)}
@@ -595,8 +705,8 @@ run_standard_posix_tests(
         lfm_permissions_test_utils:set_modes(Node, EaccesModesPerFile),
         ?assert_match_with_perms(
             {error, ?EACCES},
-            Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
-            <<"standard_posix_perms_test">>,
+            Operation(OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData),
+            ScenarioName,
             EaccesModesPerFile
         )
     end, EaccesModesCombs),
@@ -608,8 +718,8 @@ run_standard_posix_tests(
     lfm_permissions_test_utils:set_modes(Node, RequiredModesPerFile),
     ?assert_not_match_with_perms(
         {error, _},
-        Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
-        <<"standard_posix_perms_test">>,
+        Operation(OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData),
+        ScenarioName,
         RequiredModesPerFile
     ).
 
@@ -622,6 +732,9 @@ posix_perm_to_mode(exec, owner) -> 8#1 bsl 6;
 posix_perm_to_mode(read, group) -> 8#4 bsl 3;
 posix_perm_to_mode(write, group) -> 8#2 bsl 3;
 posix_perm_to_mode(exec, group) -> 8#1 bsl 3;
+posix_perm_to_mode(read, other) -> 8#4;
+posix_perm_to_mode(write, other) -> 8#2;
+posix_perm_to_mode(exec, other) -> 8#1;
 posix_perm_to_mode(_, _) -> 8#0.
 
 
@@ -708,7 +821,7 @@ run_acl_perms_scenario(
         ),
         ?assert_match_with_perms(
             {error, ?EACCES},
-            Operation(OwnerSessId, SessId, ScenarioRootDirPath, ExtraData),
+            Operation(OwnerSessId, SessId, ScenarioRootDirPath, undefined, ExtraData),
             ScenarioName,
             EaccesPermsPerFile
         )
@@ -724,7 +837,7 @@ run_acl_perms_scenario(
     ),
     ?assert_not_match_with_perms(
         {error, _},
-        Operation(OwnerSessId, SessId, ScenarioRootDirPath, ExtraData),
+        Operation(OwnerSessId, SessId, ScenarioRootDirPath, undefined, ExtraData),
         ScenarioName,
         RequiredPermsPerFile
     );
@@ -746,7 +859,7 @@ run_acl_perms_scenario(
         ),
         ?assert_match_with_perms(
             {error, ?EACCES},
-            Operation(OwnerSessId, SessId, ScenarioRootDirPath, ExtraData),
+            Operation(OwnerSessId, SessId, ScenarioRootDirPath, undefined, ExtraData),
             ScenarioName,
             EaccesPermsPerFile
         )
@@ -758,7 +871,7 @@ run_acl_perms_scenario(
     ),
     ?assert_not_match_with_perms(
         {error, _},
-        Operation(OwnerSessId, SessId, ScenarioRootDirPath, ExtraData),
+        Operation(OwnerSessId, SessId, ScenarioRootDirPath, undefined, ExtraData),
         ScenarioName,
         ComplementaryPermsPerFile
     ).

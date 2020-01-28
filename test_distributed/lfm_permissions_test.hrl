@@ -134,6 +134,11 @@
     % Tells whether operation should work in readonly mode (readonly caveats set)
     available_in_readonly_mode = false :: boolean(),
 
+    % Tells whether operation should work in share mode. For some operation this
+    % check is entirely inapplicable due to operation call not using file guid
+    % (can't be called via shared guid == no share mode).
+    available_in_share_mode = false :: boolean() | inapplicable,
+
     % Operation being tested. It will be called for various combinations of
     % either posix or acl permissions. It is expected to fail for combinations
     % not having all perms specified in `files` and space privileges and
@@ -142,6 +147,7 @@
     % - OwnerSessId - session id of user which creates files for this test,
     % - SessId - session id of user which should perform operation,
     % - TestCaseRootDirPath - absolute path to root dir of testcase,
+    % - ShareId - Id only in case of share tests. Otherwise left as `undefined`,
     % - ExtraData - mapping of file path (for every file specified in `files`) to
     %               term returned from `on_create` #dir{} or #file{} fun.
     %               If mentioned fun is left undefined then by default GUID will
