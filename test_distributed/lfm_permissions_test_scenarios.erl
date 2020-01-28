@@ -411,7 +411,9 @@ run_caveats_scenario(
 
 %%--------------------------------------------------------------------
 %% @doc
-%% TODO WRITEME.
+%% Tests permissions needed to perform operation in share mode.
+%% If operation is not nat available in share mode then checks
+%% that even with all perms set ?EACCES should be returned.
 %% @end
 %%--------------------------------------------------------------------
 run_share_test_scenarios(_ScenariosRootDirPath, #perms_test_spec{
@@ -459,19 +461,27 @@ run_share_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
         {SpaceUserSessId, posix, <<"space_user_posix_share">>},
         {OtherUserSessId, posix, <<"other_user_posix_share">>},
         {?GUEST_SESS_ID, posix, <<"guest_posix_share">>},
-        {OwnerUserSessId, acl, <<"owner_acl_share">>},
-        {SpaceUserSessId, acl, <<"space_user_acl_share">>},
-        {OtherUserSessId, acl, <<"other_user_acl_share">>},
-        {?GUEST_SESS_ID, acl, <<"guest_acl_share">>}
+        {OwnerUserSessId, {acl, allow}, <<"owner_acl_allow_share">>},
+        {OwnerUserSessId, {acl, deny}, <<"owner_acl_deny_share">>},
+        {SpaceUserSessId, {acl, allow}, <<"space_user_acl_allow_share">>},
+        {SpaceUserSessId, {acl, deny}, <<"space_user_acl_deny_share">>},
+        {OtherUserSessId, {acl, allow}, <<"other_user_acl_allow_share">>},
+        {OtherUserSessId, {acl, deny}, <<"other_user_acl_deny_share">>},
+        {?GUEST_SESS_ID, {acl, allow}, <<"guest_acl_allow_share">>},
+        {?GUEST_SESS_ID, {acl, deny}, <<"guest_acl_deny_share">>}
     ]).
 
 
 run_share_test_scenario(
     Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    PermsPerFile, ShareId, ExtraData, PermsType, _IsAvailableInShareMode = false
+    PermsPerFile, ShareId, ExtraData, PermsType0, _IsAvailableInShareMode = false
 ) ->
     % Set all posix or acl (depending on scenario) perms to files
-    set_full_perms(PermsType, Node, maps:keys(PermsPerFile)),
+    PermsType1 = case PermsType0 of
+        posix -> posix;
+        {acl, _} -> acl
+    end,
+    set_full_perms(PermsType1, Node, maps:keys(PermsPerFile)),
 
     % Even with all perms set operation should fail
     ?assert_match_with_perms(
@@ -507,9 +517,16 @@ run_share_test_scenario(
     );
 run_share_test_scenario(
     Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
-    PermsPerFile, ShareId, ExtraData, acl, _IsAvailableInShareMode = true
+    PermsPerFile, ShareId, ExtraData, {acl, AllowOrDeny}, _IsAvailableInShareMode = true
 ) ->
-    ok.
+    {ComplementaryPermsPerFile, AllRequiredPerms} = get_complementary_perms(
+        Node, PermsPerFile
+    ),
+    run_acl_perms_scenario(
+        Node, OwnerSessId, SessId, TestCaseRootDirPath, ScenarioName, Operation,
+        ComplementaryPermsPerFile, AllRequiredPerms, ShareId, ExtraData,
+        ?everyone, ?no_flags_mask, AllowOrDeny
+    ).
 
 
 %%%===================================================================
@@ -789,7 +806,7 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
         run_acl_perms_scenario(
             Node, OwnerSessId, SessId, ScenarioRootDirPath, ScenarioName,
             Operation, ComplementaryPermsPerFile, AllRequiredPerms,
-            ExtraData, AceWho, AceFlags, ScenarioType
+            undefined, ExtraData, AceWho, AceFlags, ScenarioType
         )
     end, [
         {OwnerSessId, allow, <<"acl_owner_allow">>, ?owner, ?no_flags_mask},
@@ -806,7 +823,7 @@ run_acl_perms_scenarios(ScenariosRootDirPath, #perms_test_spec{
 
 run_acl_perms_scenario(
     Node, OwnerSessId, SessId, ScenarioRootDirPath, ScenarioName, Operation,
-    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, allow
+    ComplementaryPermsPerFile, AllRequiredPerms, ShareId, ExtraData, AceWho, AceFlags, allow
 ) ->
     [AllRequiredPermsComb | EaccesPermsCombs] = combinations(AllRequiredPerms),
 
@@ -821,7 +838,7 @@ run_acl_perms_scenario(
         ),
         ?assert_match_with_perms(
             {error, ?EACCES},
-            Operation(OwnerSessId, SessId, ScenarioRootDirPath, undefined, ExtraData),
+            Operation(OwnerSessId, SessId, ScenarioRootDirPath, ShareId, ExtraData),
             ScenarioName,
             EaccesPermsPerFile
         )
@@ -837,14 +854,14 @@ run_acl_perms_scenario(
     ),
     ?assert_not_match_with_perms(
         {error, _},
-        Operation(OwnerSessId, SessId, ScenarioRootDirPath, undefined, ExtraData),
+        Operation(OwnerSessId, SessId, ScenarioRootDirPath, ShareId, ExtraData),
         ScenarioName,
         RequiredPermsPerFile
     );
 
 run_acl_perms_scenario(
     Node, OwnerSessId, SessId, ScenarioRootDirPath, ScenarioName, Operation,
-    ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, AceWho, AceFlags, deny
+    ComplementaryPermsPerFile, AllRequiredPerms, ShareId, ExtraData, AceWho, AceFlags, deny
 ) ->
     AllPermsPerFile = maps:map(fun(Guid, _) ->
         lfm_permissions_test_utils:all_perms(Node, Guid)
@@ -859,7 +876,7 @@ run_acl_perms_scenario(
         ),
         ?assert_match_with_perms(
             {error, ?EACCES},
-            Operation(OwnerSessId, SessId, ScenarioRootDirPath, undefined, ExtraData),
+            Operation(OwnerSessId, SessId, ScenarioRootDirPath, ShareId, ExtraData),
             ScenarioName,
             EaccesPermsPerFile
         )
@@ -871,7 +888,7 @@ run_acl_perms_scenario(
     ),
     ?assert_not_match_with_perms(
         {error, _},
-        Operation(OwnerSessId, SessId, ScenarioRootDirPath, undefined, ExtraData),
+        Operation(OwnerSessId, SessId, ScenarioRootDirPath, ShareId, ExtraData),
         ScenarioName,
         ComplementaryPermsPerFile
     ).
