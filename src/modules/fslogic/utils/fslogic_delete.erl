@@ -48,9 +48,9 @@ check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
         case file_handles:exists(FileUuid) of
             true ->
                 {HandlingMethod, FileCtx2} = ?MODULE:get_open_file_handling_method(FileCtx),
+                RenameResult = rename_storage_file(FileCtx2, HandlingMethod),
                 process_file_links(FileCtx2, UserCtx, RemoteDelete, HandlingMethod),
                 ok = file_handles:mark_to_remove(FileCtx2),
-                RenameResult = rename_storage_file(FileCtx2, HandlingMethod),
 
                 case {file_handles:exists(FileUuid), RenameResult} of
                     {true, _} ->
