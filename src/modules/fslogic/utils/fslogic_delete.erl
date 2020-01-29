@@ -52,6 +52,7 @@ check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
                 process_file_links(FileCtx2, UserCtx, RemoteDelete, HandlingMethod),
                 ok = file_handles:mark_to_remove(FileCtx2),
 
+                % Check once more to prevent race with last handle closing
                 case {file_handles:exists(FileUuid), RenameResult} of
                     {true, _} ->
                         ok;
@@ -304,7 +305,7 @@ get_open_file_handling_method(FileCtx) ->
     end.
 
 -spec rename_storage_file(file_ctx:ctx(), handling_method()) ->
-    {renamed, helpers:file_id(), non_neg_integer()} | file_not_found | ignored.
+    {renamed, helpers:file_id(), non_neg_integer()} | {error, ?ENOENT} | ignored.
 rename_storage_file(FileCtx, ?RENAME_HANDLING_METHOD) ->
     SessId = ?ROOT_SESS_ID,
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -317,14 +318,8 @@ rename_storage_file(FileCtx, ?RENAME_HANDLING_METHOD) ->
 
     Handle = storage_file_manager:new_handle(SessId, SpaceId, FileUuid, Storage, FileId, undefined),
     case rename_storage_file(Handle, FileUuid, TargetFileId, Size) of
-        file_not_found ->
-            RootHandle = storage_file_manager:new_handle(SessId, SpaceId, FileUuid,
-                Storage, ?DELETED_OPENED_FILES_DIR, undefined),
-            case storage_file_manager:mkdir(RootHandle, 8#777, false) of
-                ok -> ok;
-                {error, ?EEXIST} -> ok
-            end,
-
+        {error, ?ENOENT} ->
+            ensure_dir_for_deleted_files_created(SessId, SpaceId, FileUuid, Storage),
             rename_storage_file(Handle, FileUuid, TargetFileId, Size);
         Other ->
             Other
@@ -332,8 +327,18 @@ rename_storage_file(FileCtx, ?RENAME_HANDLING_METHOD) ->
 rename_storage_file(_, _) ->
     ignored.
 
+-spec ensure_dir_for_deleted_files_created(session:id(), od_space:id(), file_meta:uuid(), Storage :: datastore:doc()) ->
+    ok.
+ensure_dir_for_deleted_files_created(SessId, SpaceId, FileUuid, Storage) ->
+    RootHandle = storage_file_manager:new_handle(SessId, SpaceId, FileUuid,
+        Storage, ?DELETED_OPENED_FILES_DIR, undefined),
+    case storage_file_manager:mkdir(RootHandle, 8#777, false) of
+        ok -> ok;
+        {error, ?EEXIST} -> ok
+    end.
+
 -spec rename_storage_file(storage_file_manager:handle(), file_meta:uuid(), helpers:file_id(), non_neg_integer()) ->
-    {renamed, helpers:file_id(), non_neg_integer()} | file_not_found.
+    {renamed, helpers:file_id(), non_neg_integer()} | {error, ?ENOENT}.
 rename_storage_file(Handle, FileUuid, TargetFileId, Size) ->
     case storage_file_manager:mv(Handle, TargetFileId) of
         ok ->
@@ -342,8 +347,8 @@ rename_storage_file(Handle, FileUuid, TargetFileId, Size) ->
                 {ok, FileLocation#file_location{file_id = TargetFileId}}
             end, false),
             {renamed, TargetFileId, Size};
-        {error, ?ENOENT} ->
-            file_not_found
+        {error, ?ENOENT} = Error->
+            Error
     end.
 
 -spec delete_renamed_storage_file(file_ctx:ctx(), helpers:file_id(), non_neg_integer()) -> ok.
