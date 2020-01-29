@@ -387,7 +387,7 @@ setup_storage([Worker | Rest], Config) ->
     StorageName = <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
     {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, false, undefined, false]),
     rpc:call(Worker, storage, on_storage_created, [StorageId]),
-    storage_mock_setup(Worker, #{?GET_DOMAIN_BIN(Worker) => #{StorageId => #{}}}),
+    storage_logic_mock_setup(Worker, #{?GET_DOMAIN_BIN(Worker) => #{StorageId => #{}}}, []),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).
 
@@ -816,7 +816,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
 
     cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
-    storage_mock_setup(AllWorkers, StoragesSetupMap),
+    storage_logic_mock_setup(AllWorkers, StoragesSetupMap, SpacesSupports),
     ok = init_qos_bounded_cache(Config),
 
     %% Setup storage
@@ -1448,8 +1448,9 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
     end).
 
 
--spec storage_mock_setup(Workers :: node() | [node()], map()) -> ok.
-storage_mock_setup(Workers, StoragesSetupMap) ->
+-spec storage_logic_mock_setup(node() | [node()], map(),
+    [{binary(), [#{{binary(), binary()} => non_neg_integer()}]}]) -> ok.
+storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     StorageMap = maps:fold(fun(ProviderId, InitialStorageDesc, Acc) ->
         NewStorageDesc = maps:map(fun(_StorageId, Desc) ->
             Desc1 = case Desc of
@@ -1461,22 +1462,36 @@ storage_mock_setup(Workers, StoragesSetupMap) ->
         maps:merge(Acc, NewStorageDesc)
     end, #{}, StoragesSetupMap),
 
-    GetStorageFun = fun(StorageId) ->
-        StorageDesc = maps:get(StorageId, StorageMap, #{}),
-        {ok, #document{value = #od_storage{
-            % storage name is equal to its id
-            name = StorageId,
-            qos_parameters = maps:get(<<"qos_parameters">>, StorageDesc, #{})
-    }}} end,
+
+    StoragesToSpaces = lists:foldl(fun({SpaceId, Map}, AccOut) ->
+        Storages = lists:map(fun({S, _}) -> S end, maps:keys(Map)),
+        lists:foldl(fun(Storage, AccIn) ->
+            maps:update_with(Storage, fun(Spaces) -> [SpaceId | Spaces] end, [SpaceId], AccIn)
+        end, AccOut, Storages)
+    end, #{}, SpacesToStorages),
+
+    GetStorageFun = fun(SM) ->
+        fun (<<"all">>) ->
+                % This is useful when changing storage parameters. Used only in mock.
+                {ok, SM};
+            (StorageId) ->
+                StorageDesc = maps:get(StorageId, SM, #{}),
+                {ok, #document{value = #od_storage{
+                    % storage name is equal to its id
+                    name = StorageId,
+                    qos_parameters = maps:get(<<"qos_parameters">>, StorageDesc, #{})
+                }}}
+        end
+    end,
 
     GetQosParametersFun = fun(StorageId) ->
-        {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} = GetStorageFun(StorageId),
+        {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} = storage_logic:get(StorageId),
         {ok, QosParameters}
     end,
 
     ok = test_utils:mock_new(Workers, storage_logic),
 
-    ok = test_utils:mock_expect(Workers, storage_logic, get, GetStorageFun),
+    ok = test_utils:mock_expect(Workers, storage_logic, get, GetStorageFun(StorageMap)),
 
     ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_local_storage, GetQosParametersFun),
 
@@ -1493,7 +1508,21 @@ storage_mock_setup(Workers, StoragesSetupMap) ->
     ok = test_utils:mock_expect(Workers, storage_logic, get_name,
         % storage name is equal to its id
         fun(#document{key = Id}) -> {ok, Id};
-           (Id) -> {ok, Id}
+            (Id) -> {ok, Id}
+        end),
+
+    ok = test_utils:mock_expect(Workers, storage_logic, get_spaces,
+        fun(StorageId) -> {ok, maps:get(StorageId, StoragesToSpaces, [])} end),
+
+    % NOTE this function changes qos parameters only on the node where it was executed
+    ok = test_utils:mock_expect(Workers, storage_logic, set_qos_parameters,
+        fun(StorageId, QosParameters) ->
+            % erlang:apply needed to evade dialyzer warnings
+            {ok, PreviousStorageMap} = erlang:apply(storage_logic, get, [<<"all">>]),
+            PreviousStorageDesc = maps:get(StorageId, PreviousStorageMap, #{}),
+            NewStorageDesc = PreviousStorageDesc#{<<"qos_parameters">> => QosParameters},
+            NewStorageMap = PreviousStorageMap#{StorageId => NewStorageDesc},
+            ok = meck:expect(storage_logic, get, GetStorageFun(NewStorageMap))
         end).
 
 
