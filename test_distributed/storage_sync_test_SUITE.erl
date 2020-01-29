@@ -69,7 +69,7 @@
     update_syncs_files_after_import_failed_test/1,
     update_syncs_files_after_previous_update_failed_test/1,
     create_delete_import2_test/1,
-    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes/1,
+    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed/1,
     sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage/1,
     recreate_file_deleted_by_sync_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
@@ -111,7 +111,7 @@
     create_delete_import_test_read_both,
     create_delete_import_test_read_remote_only,
     create_delete_import2_test,
-    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes,
+    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed,
     sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
@@ -847,8 +847,8 @@ create_delete_import_test_read_remote_only(Config) ->
 create_delete_import2_test(Config) ->
     storage_sync_test_base:create_delete_import2_test(Config, false, true).
 
-sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes(Config) ->
-    storage_sync_test_base:sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes(Config, false).
+sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed(Config) ->
+    storage_sync_test_base:sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed(Config, false).
 
 create_file_import_check_user_id_test(Config) ->
     storage_sync_test_base:create_file_import_check_user_id_test(Config, false).
@@ -1268,6 +1268,10 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, fslogic_delete, [passthrough]),
+    test_utils:mock_expect(Workers, fslogic_delete, get_open_file_handling_method,
+        fun(Ctx) -> {deletion_link, Ctx} end),
     ct:timetrap({minutes, 20}),
     ConfigWithProxy = lfm_proxy:init(Config),
     Config2 = storage_sync_test_base:add_workers_storage_mount_points(ConfigWithProxy),
@@ -1306,7 +1310,7 @@ end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
     ok = test_utils:mock_unload(Workers, [storage_file_manager]),
     end_per_testcase(default, Config);
 
-end_per_testcase(sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes, Config) ->
+end_per_testcase(sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [fslogic_path]),
     end_per_testcase(default, Config);
@@ -1319,9 +1323,9 @@ end_per_testcase(_Case, Config) ->
     storage_sync_test_base:clean_storage(Config, false),
     storage_sync_test_base:clean_space(Config),
     storage_sync_test_base:cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
-    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils, helpers]),
-    timer:sleep(timer:seconds(1)),
-    lfm_proxy:teardown(Config).
+    lfm_proxy:teardown(Config),
+    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils, fslogic_delete, helpers]),
+    timer:sleep(timer:seconds(1)).
 
 %%%===================================================================
 %%% Internal functions

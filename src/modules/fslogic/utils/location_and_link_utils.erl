@@ -133,7 +133,7 @@ update_imported_file_location(FileCtx, StorageSize) ->
     NewFileBlocks = create_file_blocks(StorageSize),
     replica_updater:update(FileCtx, NewFileBlocks, StorageSize, true),
     ok = lfm_event_emitter:emit_file_written(
-        FileGuid, NewFileBlocks, StorageSize, {exclude, ?ROOT_SESS_ID}).
+        FileGuid, NewFileBlocks, StorageSize, {exclude, []}).
 
 %%-------------------------------------------------------------------
 %% @doc

@@ -860,7 +860,7 @@ check_name(ParentUuid, Name, #document{
             end,
             WithTag = tag_children(Links2),
             {NameAns, OtherFiles} = lists:foldl(fun
-                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) when Uuid =:= ChildUuid->
+                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {_NameAcc, OtherAcc}) when Uuid =:= ChildUuid->
                     {ExtendedName, OtherAcc};
                 (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) ->
                     {NameAcc, [{Uuid, ExtendedName} | OtherAcc]}
