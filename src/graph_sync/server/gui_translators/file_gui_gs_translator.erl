@@ -32,6 +32,12 @@
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
 translate_value(#gri{aspect = children}, Children) ->
     #{<<"children">> => lists:map(fun({Guid, _Name}) -> Guid end, Children)};
+translate_value(#gri{aspect = As}, Metadata) when
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadata
+->
+    #{<<"metadata">> => Metadata};
 translate_value(#gri{aspect = transfers}, TransfersForFile) ->
     TransfersForFile;
 translate_value(#gri{aspect = download_url}, URL) ->
@@ -75,6 +81,9 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = public}, #file_att
                     scope = public
                 })
         end,
+        {ok, HasMetadata} = ?check(lfm:has_custom_metadata(
+            SessId, {guid, Guid}
+        )),
 
         #{
             <<"name">> => Name,
@@ -83,6 +92,7 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = public}, #file_att
             <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
             <<"mtime">> => ModificationTime,
             <<"size">> => Size,
+            <<"hasMetadata">> => HasMetadata,
             <<"parent">> => Parent
         }
     end;
@@ -118,7 +128,9 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
                     scope = private
                 })
         end,
-
+        {ok, HasMetadata} = ?check(lfm:has_custom_metadata(
+            SessId, {guid, Guid}
+        )),
         SharesGRI = case Shares of
             [] ->
                 null;
@@ -151,6 +163,7 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
             }),
             <<"mtime">> => ModificationTime,
             <<"size">> => Size,
+            <<"hasMetadata">> => HasMetadata,
             <<"shareList">> => SharesGRI,
             <<"distribution">> => gri:serialize(#gri{
                 type = op_replica,
