@@ -122,7 +122,7 @@ routes() -> [
     %% Set file extended attribute
     {<<"/metadata/xattrs/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -145,7 +145,7 @@ routes() -> [
     %% Set file json metadata
     {<<"/metadata/json/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -168,7 +168,7 @@ routes() -> [
     %% Set file rdf metadata
     {<<"/metadata/rdf/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/rdf+xml">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -214,7 +214,7 @@ routes() -> [
     %% Set file extended attribute by Id
     {<<"/metadata-id/xattrs/:id">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -237,7 +237,7 @@ routes() -> [
     %% Set file json metadata by Id
     {<<"/metadata-id/json/:id">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -260,7 +260,7 @@ routes() -> [
     %% Set file rdf metadata by Id
     {<<"/metadata-id/rdf/:id">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/rdf+xml">>],
         b_gri = #b_gri{
             type = op_file, 

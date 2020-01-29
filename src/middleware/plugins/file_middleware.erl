@@ -182,11 +182,11 @@ data_spec_create(#gri{aspect = attrs}) -> #{
 };
 
 data_spec_create(#gri{aspect = xattrs}) -> #{
-    required => #{<<"application/json">> => {json, any}}
+    required => #{<<"metadata">> => {json, any}}
 };
 
 data_spec_create(#gri{aspect = json_metadata}) -> #{
-    required => #{<<"application/json">> => {any, any}},
+    required => #{<<"metadata">> => {any, any}},
     optional => #{
         <<"filter_type">> => {binary, [<<"keypath">>]},
         <<"filter">> => {binary, any}
@@ -194,7 +194,7 @@ data_spec_create(#gri{aspect = json_metadata}) -> #{
 };
 
 data_spec_create(#gri{aspect = rdf_metadata}) -> #{
-    required => #{<<"application/rdf+xml">> => {binary, any}}
+    required => #{<<"metadata">> => {binary, any}}
 }.
 
 
@@ -274,10 +274,10 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = xattrs}}
             #xattr{name = XattrName, value = XattrValue},
             false, false
         ))
-    end, maps:to_list(maps:get(<<"application/json">>, Data)));
+    end, maps:to_list(maps:get(<<"metadata">>, Data)));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_metadata}}) ->
-    JSON = maps:get(<<"application/json">>, Data),
+    JSON = maps:get(<<"metadata">>, Data),
     Filter = maps:get(<<"filter">>, Data, undefined),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
     FilterList = case {FilterType, Filter} of
@@ -294,11 +294,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_met
     ));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
-    Rdf = maps:get(<<"application/rdf+xml">>, Data),
-    ?check(lfm:set_metadata(
-        Auth#auth.session_id, {guid, Guid},
-        rdf, Rdf, []
-    )).
+    Rdf = maps:get(<<"metadata">>, Data),
+    ?check(lfm:set_metadata(Auth#auth.session_id, {guid, Guid}, rdf, Rdf, [])).
 
 
 %%%===================================================================

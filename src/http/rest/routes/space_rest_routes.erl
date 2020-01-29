@@ -87,7 +87,7 @@ routes() -> [
     %% Update index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
         method = 'PATCH',
-        parse_body = as_is,
+        parse_body = {as_is, <<"mapFunction">>},
         consumes = [<<"application/javascript">>],
         b_gri = #b_gri{
             type = op_space, 
@@ -99,7 +99,7 @@ routes() -> [
     %% Create index (deprecated)
     {<<"/spaces/:sid/indexes/:index_name">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"mapFunction">>},
         consumes = [<<"application/javascript">>],
         b_gri = #b_gri{
             type = op_space, 
@@ -121,7 +121,7 @@ routes() -> [
     %% Update index reduce function (deprecated)
     {<<"/spaces/:sid/indexes/:index_name/reduce">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"reduceFunction">>},
         consumes = [<<"application/javascript">>],
         b_gri = #b_gri{
             type = op_space, 
@@ -176,7 +176,7 @@ routes() -> [
     %% Update view
     {<<"/spaces/:sid/views/:view_name">>, rest_handler, #rest_req{
         method = 'PATCH',
-        parse_body = as_is,
+        parse_body = {as_is, <<"mapFunction">>},
         consumes = [<<"application/javascript">>],
         b_gri = #b_gri{
             type = op_space, 
@@ -188,7 +188,7 @@ routes() -> [
     %% Create view
     {<<"/spaces/:sid/views/:view_name">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"mapFunction">>},
         consumes = [<<"application/javascript">>],
         b_gri = #b_gri{
             type = op_space, 
@@ -210,7 +210,7 @@ routes() -> [
     %% Update view reduce function
     {<<"/spaces/:sid/views/:view_name/reduce">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"reduceFunction">>},
         consumes = [<<"application/javascript">>],
         b_gri = #b_gri{
             type = op_space, 
