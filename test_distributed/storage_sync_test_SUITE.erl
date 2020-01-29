@@ -1169,6 +1169,10 @@ init_per_testcase(Case, Config) when
     init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, fslogic_delete, [passthrough]),
+    test_utils:mock_expect(Workers, fslogic_delete, get_open_file_handling_method,
+        fun(Ctx) -> {deletion_link, Ctx} end),
     ct:timetrap({minutes, 20}),
     ConfigWithProxy = lfm_proxy:init(Config),
     Config2 = storage_sync_test_base:add_workers_storage_mount_points(ConfigWithProxy),
@@ -1220,9 +1224,9 @@ end_per_testcase(_Case, Config) ->
     storage_sync_test_base:clean_storage(Config, false),
     storage_sync_test_base:clean_space(Config),
     storage_sync_test_base:cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
-    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils]),
-    timer:sleep(timer:seconds(1)),
-    lfm_proxy:teardown(Config).
+    lfm_proxy:teardown(Config),
+    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils, fslogic_delete]),
+    timer:sleep(timer:seconds(1)).
 
 %%%===================================================================
 %%% Internal functions

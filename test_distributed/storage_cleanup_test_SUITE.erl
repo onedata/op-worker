@@ -630,13 +630,19 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 init_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, fslogic_delete, [passthrough]),
+    test_utils:mock_expect(Workers, fslogic_delete, get_open_file_handling_method,
+        fun(Ctx) -> {deletion_link, Ctx} end),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(NewConfig).
 
 end_per_testcase(_Case, Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    lfm_proxy:teardown(Config).
+    lfm_proxy:teardown(Config),
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [fslogic_delete]).
 
 %%%===================================================================
 %%% Internal functions

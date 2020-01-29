@@ -183,11 +183,11 @@ release(UserCtx, FileCtx, HandleId) ->
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
-    FileCtx = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    {FileCtx, ParentFileCtx2} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
         % TODO VFS-5267 - default open mode will fail if read-only file is created
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true, false),
-        fslogic_times:update_mtime_ctime(ParentFileCtx),
+        fslogic_times:update_mtime_ctime(ParentFileCtx2),
 
         #fuse_response{fuse_response = FileAttr} = attr_req:get_file_attr_light(UserCtx, FileCtx2, false),
         FileAttr2 = FileAttr#file_attr{size = 0},
@@ -266,10 +266,10 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 -spec make_file_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
-    FileCtx = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    {FileCtx, ParentFileCtx2} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
         {_, FileCtx2, _} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
-        fslogic_times:update_mtime_ctime(ParentFileCtx),
+        fslogic_times:update_mtime_ctime(ParentFileCtx2),
         #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_light(UserCtx, FileCtx2, false),
         FileAttr2 = FileAttr#file_attr{size = 0},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
@@ -509,24 +509,29 @@ create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_file_doc(user_ctx:ctx(), file_ctx:ctx(), file_meta:name(), file_meta:mode()) ->
-    ChildFile :: file_ctx:ctx().
+    {ChildFile :: file_ctx:ctx(), ParentFileCtx2 :: file_ctx:ctx()} | no_return().
 create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
-    File = #document{value = #file_meta{
-        name = Name,
-        type = ?REGULAR_FILE_TYPE,
-        mode = Mode,
-        owner = user_ctx:get_user_id(UserCtx)
-    }},
-    ParentFileUuid = file_ctx:get_uuid_const(ParentFileCtx),
-    {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
+    case file_ctx:is_dir(ParentFileCtx) of
+        {true, ParentFileCtx2} ->
+            File = #document{value = #file_meta{
+                name = Name,
+                type = ?REGULAR_FILE_TYPE,
+                mode = Mode,
+                owner = user_ctx:get_user_id(UserCtx)
+            }},
+            ParentFileUuid = file_ctx:get_uuid_const(ParentFileCtx2),
+            {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
 
-    CTime = time_utils:cluster_time_seconds(),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
-    {ok, _} = times:save(#document{key = FileUuid, value = #times{
-        mtime = CTime, atime = CTime, ctime = CTime
-    }, scope = SpaceId}),
+            CTime = time_utils:cluster_time_seconds(),
+            SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
+            {ok, _} = times:save(#document{key = FileUuid, value = #times{
+                mtime = CTime, atime = CTime, ctime = CTime
+            }, scope = SpaceId}),
 
-    file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)).
+            {file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)), ParentFileCtx2};
+        {false, _} ->
+            throw(?ENOTDIR)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
