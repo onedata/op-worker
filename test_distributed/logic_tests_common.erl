@@ -22,6 +22,7 @@
     init_per_testcase/1,
     get_user_session/2,
     mock_gs_client/1, unmock_gs_client/1,
+    set_envs_for_correct_connection/1,
     wait_for_mocked_connection/1,
     create_user_session/2,
     count_reqs/2,
@@ -97,7 +98,7 @@ mock_gs_client(Config) ->
     end),
 
     % Fetch dummy provider so it is cached and does not generate Graph Sync requests.
-    rpc:call(hd(Nodes), provider_logic, get, []).
+    rpc:multicall(Nodes, provider_logic, get, []).
 
 
 unmock_gs_client(Config) ->
@@ -107,22 +108,25 @@ unmock_gs_client(Config) ->
     ok.
 
 
-wait_for_mocked_connection(Config) ->
+set_envs_for_correct_connection(Config) ->
     Nodes = ?NODES(Config),
     % Modify env variables to ensure frequent reconnect attempts
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_healthcheck_interval, 1000),
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_backoff_rate, 1),
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_max_backoff, 1000),
     % Use graph sync path that allows correct mocked connection
-    test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_CORRECT_CONNECTION),
+    test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_CORRECT_CONNECTION).
 
+
+wait_for_mocked_connection(Config) ->
+    set_envs_for_correct_connection(Config),
+    Nodes = ?NODES(Config),
     CheckConnection = fun() ->
         case rpc:call(hd(Nodes), global, whereis_name, [?GS_CLIENT_WORKER_GLOBAL_NAME]) of
             Pid when is_pid(Pid) -> ok;
             _ -> error
         end
     end,
-
     ?assertMatch(ok, CheckConnection(), 60).
 
 

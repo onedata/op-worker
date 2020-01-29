@@ -146,11 +146,6 @@
         }
     },
     "test_global_setup": {
-        "users": {
-            "user1": {
-                "default_space": "space1"
-            }
-        },
         "groups": {
         },
         "spaces": {
