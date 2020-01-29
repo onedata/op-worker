@@ -14,10 +14,12 @@
 -author("Michal Stanisz").
 
 -include("qos_tests_utils.hrl").
+-include("rest_test_utils.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/test/test_utils.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 
 % assertions
@@ -42,16 +44,20 @@
     create_dir_structure/2, create_dir_structure/4,
     create_file/4, create_directory/3,
     wait_for_qos_fulfillment_in_parallel/4,
-    add_qos/2, add_multiple_qos_in_parallel/2,
+    add_qos/2, add_multiple_qos/2,
     map_qos_names_to_ids/2,
     get_provider_storage/1,
     inject_storage_id/2
 ]).
 
 -define(ATTEMPTS, 60).
--define(SESS_ID(Config, Worker), ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config)).
+-define(USER_ID, <<"user1">>).
+-define(SESS_ID(Config, Worker), ?config({session_id, {?USER_ID, ?GET_DOMAIN(Worker)}}, Config)).
 -define(GET_FILE_UUID(Worker, SessId, FilePath),
     file_id:guid_to_uuid(qos_tests_utils:get_guid(Worker, SessId, FilePath))
+).
+-define(GET_SPACE_ID(Worker, SessId, FilePath),
+    file_id:guid_to_space_id(qos_tests_utils:get_guid(Worker, SessId, FilePath))
 ).
 
 
@@ -72,7 +78,7 @@ fulfill_qos_test_base(Config, #fulfill_qos_test_spec{
     ?assertMatch(true, assert_distribution_in_dir_structure(Config, InitialDirStructure, GuidsAndPaths)),
 
     % add QoS and w8 for fulfillment
-    QosNameIdMapping = add_multiple_qos_in_parallel(Config, QosToAddList),
+    QosNameIdMapping = add_multiple_qos(Config, QosToAddList),
     wait_for_qos_fulfillment_in_parallel(Config, WaitForQos, QosNameIdMapping, ExpectedQosEntries),
 
     % check file distribution and qos documents
@@ -94,17 +100,11 @@ get_op_nodes_sorted(Config) ->
     lists:sort(SortingFun, Workers).
 
 
-add_multiple_qos_in_parallel(Config, QosToAddList) ->
-    Results = utils:pmap(fun(QosToAdd) -> add_qos(Config, QosToAdd) end, QosToAddList),
-    ?assert(lists:all(fun(Result) ->
-        case Result of
-            {ok, {_QosName, _QosEntryId}} ->
-                true;
-            _ ->
-                false
-        end
-    end, Results)),
-    maps:from_list(lists:map(fun({ok, Result}) -> Result end, Results)).
+add_multiple_qos(Config, QosToAddList) ->
+    lists:foldl(fun(QosToAdd, Acc) ->
+        {ok, {QosName, QosEntryId}} =  add_qos(Config, QosToAdd),
+        Acc#{QosName => QosEntryId}
+    end, #{}, QosToAddList).
 
 
 add_qos(Config, #qos_to_add{
@@ -121,12 +121,24 @@ add_qos(Config, #qos_to_add{
     % ensure file exists
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, {path, FilePath}), ?ATTEMPTS),
 
-    {ok, QosEntryId} = ?assertMatch(
-        {ok, _QosEntryId},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, FilePath}, QosExpression, ReplicasNum)
-    ),
+    case add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) of
+        {ok, RespBody} ->
+            DecodedBody = json_utils:decode(RespBody),
+            #{<<"qosEntryId">> := QosEntryId} = ?assertMatch(#{<<"qosEntryId">> := _}, DecodedBody),
+            {ok, {QosName, QosEntryId}};
+        {error, _} = Error -> Error
+    end.
 
-    {ok, {QosName, QosEntryId}}.
+
+add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) ->
+    URL = <<"qos", FilePath/binary>>,
+    Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID), {<<"Content-type">>, <<"application/json">>}],
+    ReqBody = #{
+        <<"expression">> => QosExpression,
+        <<"replicasNum">> => ReplicasNum
+    },
+    SpaceId = ?GET_SPACE_ID(Worker, ?SESS_ID(Config, Worker), FilePath),
+    make_rest_request(Config, Worker, URL, post, Headers, ReqBody, SpaceId, [?SPACE_MANAGE_QOS]).
 
 
 create_dir_structure(Config, #test_dir_structure{
@@ -332,12 +344,12 @@ assert_qos_entry_documents(Config, ExpectedQosEntries, QosNameIdMapping, Attempt
                     Uuid
             end,
             assert_qos_entry_document(
-                Worker, QosEntryId, FileUuid, QosExpressionRPN, ReplicasNum, Attempts, PossibilityCheck
+                Config, Worker, QosEntryId, FileUuid, QosExpressionRPN, ReplicasNum, Attempts, PossibilityCheck
             )
         end, Workers)
     end, ExpectedQosEntries).
 
-assert_qos_entry_document(Worker, QosEntryId, FileUuid, Expression, ReplicasNum, Attempts, PossibilityCheck) ->
+assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, ReplicasNum, Attempts, PossibilityCheck) ->
     ExpectedQosEntry = #qos_entry{
         file_uuid = FileUuid,
         expression = Expression,
@@ -346,7 +358,8 @@ assert_qos_entry_document(Worker, QosEntryId, FileUuid, Expression, ReplicasNum,
     },
     GetQosEntryFun = fun() ->
         ?assertMatch({ok, _Doc}, rpc:call(Worker, qos_entry, get, [QosEntryId]), Attempts),
-        {ok, #document{value = QosEntry}} = rpc:call(Worker, qos_entry, get, [QosEntryId]),
+        {ok, #document{value = QosEntry, scope = SpaceId}} = rpc:call(Worker, qos_entry, get, [QosEntryId]),
+        {ok, {Expression, ReplicasNum}} = get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId),
         ErrMsg = str_utils:format(
             "Worker: ~p ~n"
             "Expected qos_entry: ~p ~n"
@@ -355,6 +368,22 @@ assert_qos_entry_document(Worker, QosEntryId, FileUuid, Expression, ReplicasNum,
         {QosEntry, ErrMsg}
     end,
     assert_match_with_err_msg(GetQosEntryFun, ExpectedQosEntry, Attempts, 200).
+
+
+get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId) ->
+    URL = <<"qos-entry/", QosEntryId/binary>>,
+    Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
+    case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
+        {ok, RespBody} ->
+            DecodedBody = json_utils:decode(RespBody),
+            #{
+                <<"qosEntryId">> := QosEntryId,
+                <<"expression">> := Expression,
+                <<"replicasNum">> := ReplicasNum
+            } = DecodedBody,
+            {ok, {Expression, ReplicasNum}};
+        {error, _} = Error -> Error
+    end.
 
 
 assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, FilterOther) ->
@@ -375,7 +404,7 @@ assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, FilterOther
         end, ExpectedAssignedEntries),
 
         lists:foreach(fun(W) ->
-            SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+            SessId = ?config({session_id, {?USER_ID, ?GET_DOMAIN(W)}}, Config),
             FileUuid = ?GET_FILE_UUID(W, SessId, FilePath),
             assert_file_qos_document(
                 W, FileUuid, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
@@ -435,10 +464,10 @@ assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssi
         end, ExpectedAssignedEntries),
 
         lists:foreach(fun(Worker) ->
-            SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+            SessId = ?SESS_ID(Config, Worker),
             FileUuid = ?GET_FILE_UUID(Worker, SessId, FilePath),
             assert_effective_qos(
-                Worker, FileUuid, FilePath, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
+                Config, Worker, FilePath, ExpectedQosEntriesId, ExpectedAssignedEntriesId,
                 FilterAssignedEntries, Attempts
             ),
 
@@ -448,9 +477,7 @@ assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssi
         end, Workers)
     end, ExpectedEffQosEntries).
 
-assert_effective_qos(
-    Worker, FileUuid, FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts
-) ->
+assert_effective_qos(Config, Worker, FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts) ->
     ExpectedEffectiveQos = #effective_file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
@@ -461,7 +488,7 @@ assert_effective_qos(
     ExpectedEffectiveQosSorted = sort_effective_qos(ExpectedEffectiveQos),
 
     GetSortedEffectiveQos = fun() ->
-        {ok, EffQos} = rpc:call(Worker, file_qos, get_effective, [FileUuid]),
+        {ok, EffQos} = get_effective_qos_by_rest(Config, Worker, FilePath),
         EffQosSorted = sort_effective_qos(EffQos),
         ErrMsg = str_utils:format(
             "Worker: ~p~n"
@@ -473,6 +500,25 @@ assert_effective_qos(
         {EffQosSorted, ErrMsg}
     end,
     assert_match_with_err_msg(GetSortedEffectiveQos, ExpectedEffectiveQosSorted, Attempts, 500).
+
+
+get_effective_qos_by_rest(Config, Worker, FilePath) ->
+    URL = <<"qos", FilePath/binary>>,
+    Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
+    SpaceId = ?GET_SPACE_ID(Worker, ?SESS_ID(Config, Worker), FilePath),
+    case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
+        {ok, RespBody} ->
+            DecodedBody = json_utils:decode(RespBody),
+            #{
+                <<"assignedEntries">> := AssignedEntries,
+                <<"qosEntries">> := QosList
+            } = DecodedBody,
+            {ok, #effective_file_qos{
+                assigned_entries = AssignedEntries,
+                qos_entries = QosList
+            }};
+        {error, _} = Error -> Error
+    end.
 
 
 assert_distribution_in_dir_structure(_, undefined, _) ->
@@ -642,4 +688,27 @@ assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected , Attempts, Sleep) 
         _ ->
             timer:sleep(Sleep),
             assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts - 1, Sleep)
+    end.
+
+
+make_rest_request(Config, Worker, URL, Method, Headers, ReqBody, SpaceId, RequiredPrivs) ->
+    UserSpacePrivs = rpc:call(Worker, initializer, node_get_mocked_space_user_privileges, [SpaceId, ?USER_ID]),
+    AllWorkers = ?config(op_worker_nodes, Config),
+    ErrorForbidden = rest_test_utils:get_rest_error(?ERROR_FORBIDDEN),
+    AllSpacePrivs = privileges:space_privileges(),
+    EncodedReqBody = json_utils:encode(ReqBody),
+    try
+        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, ?USER_ID, AllSpacePrivs -- RequiredPrivs),
+        {ok, Code, _, Resp} = rest_test_utils:request(Worker, URL, Method, Headers, EncodedReqBody),
+        ?assertMatch(ErrorForbidden, {Code, json_utils:decode(Resp)}),
+
+        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, ?USER_ID, AllSpacePrivs),
+        case rest_test_utils:request(Worker, URL, Method, Headers, EncodedReqBody) of
+            {ok, 200, _, RespBody} ->
+                {ok, RespBody};
+            {ok, Code1, _, RespBody} ->
+                {error, {Code1, RespBody}}
+        end
+    after
+        initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, ?USER_ID, UserSpacePrivs)
     end.

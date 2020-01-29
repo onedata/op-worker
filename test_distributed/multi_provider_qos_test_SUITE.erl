@@ -880,7 +880,7 @@ add_qos_for_dir_and_check_effective_qos(Config, TestSpec) ->
     ?assertMatch(true, qos_tests_utils:assert_distribution_in_dir_structure(Config, InitialDirStructure, GuidsAndPaths)),
 
     % add QoS and wait for fulfillment
-    QosNameIdMapping = qos_tests_utils:add_multiple_qos_in_parallel(Config, QosToAddList),
+    QosNameIdMapping = qos_tests_utils:add_multiple_qos(Config, QosToAddList),
     qos_tests_utils:wait_for_qos_fulfillment_in_parallel(Config, WaitForQosFulfillment, QosNameIdMapping, ExpectedQosEntries),
 
     % check documents
