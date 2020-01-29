@@ -408,9 +408,9 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
     {ok, H2} = lfm_proxy:open(Worker, SessId, {guid, G2}, rdwr),
 
     FileCtx1 = rpc:call(Worker, file_ctx, new_by_guid, [G1]),
-    {SfmHandle1, _} = rpc:call(Worker, storage_file_manager, new_handle, [SessId, FileCtx1]),
+    {SfmHandle1, _} = rpc:call(Worker, storage_file_manager, new_handle, [?ROOT_SESS_ID, FileCtx1]),
     FileCtx2 = rpc:call(Worker, file_ctx, new_by_guid, [G2]),
-    {SfmHandle2, _} = rpc:call(Worker, storage_file_manager, new_handle, [SessId, FileCtx2]),
+    {SfmHandle2, _} = rpc:call(Worker, storage_file_manager, new_handle, [?ROOT_SESS_ID, FileCtx2]),
 
     ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle1]), 60),
     ?assertMatch({ok, _}, rpc:call(Worker, storage_file_manager, stat, [SfmHandle2]), 60),

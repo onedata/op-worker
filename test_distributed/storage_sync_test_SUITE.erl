@@ -106,7 +106,7 @@
     sync_should_update_blocks_of_recreated_file_with_suffix_on_storage,
     sync_should_not_import_replicated_file_with_suffix_on_storage,
     sync_should_update_replicated_file_with_suffix_on_storage,
-    import_file_with_link_but_no_doc_test,
+%%    import_file_with_link_but_no_doc_test,
     create_empty_file_import_test,
     create_delete_import_test_read_both,
     create_delete_import_test_read_remote_only,

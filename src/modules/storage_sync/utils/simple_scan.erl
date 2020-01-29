@@ -380,23 +380,21 @@ run_internal(Job = #space_strategy_job{
     {space_strategy:job_result(), file_ctx:ctx(), space_strategy:job()}.
 maybe_sync_file_with_existing_metadata(Job, FileCtx) ->
     CallbackModule = storage_sync_utils:module(Job),
-    #fuse_response{
-        status = #status{code = StatusCode},
-        fuse_response = FileAttr
-    } = get_attr(FileCtx),
-    case StatusCode of
-        ?OK ->
-            {LocalResult, Job2} = delegate(CallbackModule, handle_already_imported_file, [
-                Job, FileAttr, FileCtx], 3),
+    case get_attr_including_deleted(FileCtx) of
+        {ok, _FileAttr, true} ->
+            {processed, undefined, Job};
+        {ok, FileAttr, false} ->
+            {LocalResult, Job2} = delegate(CallbackModule, handle_already_imported_file, [Job, FileAttr, FileCtx], 3),
             {LocalResult, FileCtx, Job2};
-        ErrorCode when
-            ErrorCode =:= ?ENOENT;
-            ErrorCode =:= ?EAGAIN
-        ->
-            % TODO VFS-5273
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            {LocalResult, FileCtx3} = import_file_safe(Job, FileUuid),
-            {LocalResult, FileCtx3, Job}
+        error ->
+            % TODO VFS-6087 how should we handle conflict between sync and remotely created file?
+            % TODO Such conflict occurs when:
+            % TODO   1) file with name File is created on storage and detected by sync
+            % TODO   2) simultaneously, File (the same name!) is created in remote provider
+            % TODO   3) link to the file is synced but file_meta is not synced yet
+            % TODO We have file on storage, link from parent, but we do not have file_meta.
+            % TODO Currently we ignore such file on storage.
+            {processed, undefined, Job}
     end.
 
 %%--------------------------------------------------------------------
@@ -651,13 +649,22 @@ maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SyncAcl) ->
 %% Get file attr, catching all exceptions and returning always fuse_response
 %% @end
 %%--------------------------------------------------------------------
--spec get_attr(file_ctx:ctx()) -> fslogic_worker:fuse_response().
-get_attr(FileCtx) ->
+-spec get_attr_including_deleted(file_ctx:ctx()) -> {ok, fslogic_worker:fuse_response_type(), boolean()} | error.
+get_attr_including_deleted(FileCtx) ->
     try
-        attr_req:get_file_attr_light(user_ctx:new(?ROOT_SESS_ID), FileCtx, true)
+        {#fuse_response{
+            status = #status{code = ?OK},
+            fuse_response = FileAttr
+        }, _, IsDeleted} =
+            attr_req:get_file_attr_and_conflicts(user_ctx:new(?ROOT_SESS_ID), FileCtx, true, true, false),
+        {ok, FileAttr, IsDeleted}
     catch
-        _:Error ->
-            #fuse_response{status = fslogic_errors:gen_status_message(Error)}
+        Error:Reason ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            ?warning_stacktrace("Error ~p occured when getting attr of file: ~p during storage sync procedure in space: ~p.",
+                [{Error, Reason}, FileUuid, SpaceId]),
+            error
     end.
 
 %%--------------------------------------------------------------------
