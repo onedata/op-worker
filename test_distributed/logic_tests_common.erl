@@ -63,7 +63,6 @@ mock_gs_client(Config) ->
     Nodes = ?NODES(Config),
     ok = test_utils:mock_new(Nodes, gs_client, []),
     ok = test_utils:mock_new(Nodes, provider_logic, [passthrough]),
-    ok = test_utils:mock_new(Nodes, token_logic, [passthrough]),
     ok = test_utils:mock_new(Nodes, oneprovider, [passthrough]),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, async_request, fun mock_async_request/2),
@@ -78,11 +77,6 @@ mock_gs_client(Config) ->
     initializer:mock_provider_id(
         Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_ACCESS_TOKEN(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_TOKEN(?PROVIDER_1)
     ),
-
-    ok = test_utils:mock_expect(Nodes, token_logic, verify_access_token, fun(AccessToken, _, _, _) ->
-        {ok, #token{subject = ?SUB(user, UserId)}} = tokens:deserialize(AccessToken),
-        {ok, ?SUB(user, UserId), undefined}
-    end),
 
     % gs_client requires successful setting of subdomain delegation IPs, but it cannot
     % be achieved in test environment
@@ -289,7 +283,7 @@ mock_graph_request(GsGraph = #gs_req_graph{operation = delete}, AuthOverride) ->
     mock_graph_delete(GsGraph#gs_req_graph.gri, AuthOverride).
 
 
-mock_graph_create(#gri{type = od_token, id = undefined, aspect = preauthorize, scope = public}, _, Data) ->
+mock_graph_create(#gri{type = od_token, id = undefined, aspect = verify_access_token, scope = public}, _, Data) ->
     #{<<"token">> := Token} = Data,
     {ok, #token{subject = ?SUB(user, UserId)}} = tokens:deserialize(Token),
     {ok, #gs_resp_graph{data_format = value, data = #{

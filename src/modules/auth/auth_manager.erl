@@ -130,9 +130,7 @@ build_token_auth(AccessToken, AudienceToken, PeerIp, Interface, DataAccessCaveat
     }.
 
 
--spec is_token_auth
-    (token_auth()) -> true;
-    (any()) -> false.
+-spec is_token_auth(token_auth() | any()) -> boolean().
 is_token_auth(#token_auth{}) -> true;
 is_token_auth(_) -> false.
 
