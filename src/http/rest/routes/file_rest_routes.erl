@@ -30,9 +30,9 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Get file id
-    {<<"/file-id/[...]">>, rest_handler, #rest_req{
-        method = 'GET',
+    %% Lookup file id
+    {<<"/lookup-file-id/[...]">>, rest_handler, #rest_req{
+        method = 'POST',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -63,7 +63,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% List shares associated with specified file or directory
+    %% List file shares by path
     {<<"/file-shares/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -74,7 +74,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% List shares associated with specified file or directory by Id
+    %% List file shares by Id
     {<<"/file-id-shares/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],

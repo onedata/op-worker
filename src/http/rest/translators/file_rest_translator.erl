@@ -16,12 +16,24 @@
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
 
--export([get_response/2]).
+-export([create_response/4, get_response/2]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link rest_translator_behaviour} callback create_response/4.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_response(gri:gri(), middleware:auth_hint(),
+    middleware:data_format(), Result :: term() | {gri:gri(), term()} |
+    {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
+create_response(#gri{aspect = object_id}, _, value, ObjectId) ->
+    ?OK_REPLY(#{<<"fileId">> => ObjectId}).
 
 
 %%--------------------------------------------------------------------
