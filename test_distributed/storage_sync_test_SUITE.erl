@@ -70,6 +70,7 @@
     update_syncs_files_after_previous_update_failed_test/1,
     create_delete_import2_test/1,
     sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes/1,
+    sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage/1,
     recreate_file_deleted_by_sync_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
@@ -84,7 +85,8 @@
     append_file_not_changing_mtime_update_test/1,
     sync_should_not_invalidate_file_after_replication/1,
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
-    delete_many_subfiles_test/1, sync_should_not_reimport_deleted_but_still_opened_file/1,
+    delete_many_subfiles_test/1,
+    sync_should_not_reimport_deleted_but_still_opened_file/1,
     create_file_import_race_test/1, close_file_import_race_test/1]).
 
 -define(TEST_CASES, [
@@ -110,6 +112,7 @@
     create_delete_import_test_read_remote_only,
     create_delete_import2_test,
     sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes,
+    sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
     create_file_export_test,
@@ -178,7 +181,7 @@ create_file_import_race_test(Config) ->
                     {ok, _} = lfm_proxy:write(W1, Handle, 0, ?WRITE_TEXT),
                     ok = lfm_proxy:close(W1, Handle)
                 catch
-                    E1:E2  ->
+                    E1:E2 ->
                         {E1, E2}
                 end
         after
@@ -206,10 +209,10 @@ create_file_import_race_test(Config) ->
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     CreateAns = receive
-                    {create_ans, A} -> A
-                after
-                    60000 -> timeout
-                end,
+        {create_ans, A} -> A
+    after
+        60000 -> timeout
+    end,
     ?assertEqual(ok, CreateAns),
 
     %% Check if file was imported on W1
@@ -266,7 +269,7 @@ close_file_import_race_test(Config) ->
                 try
                     ok = lfm_proxy:close(W1, CreateHandle)
                 catch
-                    E1:E2  ->
+                    E1:E2 ->
                         {E1, E2}
                 end
         after
@@ -284,17 +287,17 @@ close_file_import_race_test(Config) ->
             meck:passthrough([?TEST_FILE1, ParentCtx]);
         (FileName, ParentCtx) ->
             meck:passthrough([FileName, ParentCtx])
-        end),
+    end),
 
     storage_sync_test_base:enable_storage_import(Config),
 
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     ActionResult = receive
-                       {action_result, A} -> A
-                   after
-                       60000 -> timeout
-                   end,
+        {action_result, A} -> A
+    after
+        60000 -> timeout
+    end,
     ?assertEqual(ok, ActionResult),
     timer:sleep(10000),
 
@@ -407,6 +410,102 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
+
+sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage(Config) ->
+    MountSpaceInRoot = false,
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    % we give directory a random name because deletion link to it will stay forever and
+    % we don't want to influence other test cases
+    TestDir = <<"<random_dir", (integer_to_binary(rand:uniform(1000)))/binary>>,
+    StorageTestDirPath =
+        storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, TestDir, MountSpaceInRoot),
+    StorageSpaceDirPath =
+        storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, <<"">>, MountSpaceInRoot),
+    SpaceTetDirPath = ?SPACE_TEST_DIR_PATH(TestDir),
+    ok = file:make_dir(StorageTestDirPath),
+    storage_sync_test_base:enable_storage_import(Config),
+
+    % wait till scan is finished
+    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
+
+    %% Check if dir was imported
+    ?assertMatch({ok, [{_, TestDir}]},
+        lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, SpaceTetDirPath}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W2, SessId2, {path, SpaceTetDirPath}), ?ATTEMPTS),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 0,
+        <<"importedSum">> => 1,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 1,
+        <<"importedDayHist">> => 1,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+    % mock error from helpers:rmdir
+    ok = test_utils:mock_new(W1, helpers),
+    ok = test_utils:mock_expect(W1, helpers, rmdir, fun(_, _) -> {error, ?ENOTEMPTY} end),
+
+    ?assertEqual(ok,
+        lfm_proxy:rm_recursive(W1, SessId, {path, SpaceTetDirPath})),
+
+    % touch space dir to make sure that it will be updated
+    {ok, #file_info{mtime = StMtime}} = file:read_file_info(StorageSpaceDirPath, [{time, posix}]),
+    timer:sleep(timer:seconds(1)),
+    storage_sync_test_base:change_time(StorageSpaceDirPath, StMtime + 1),
+
+    storage_sync_test_base:enable_storage_update(Config),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:disable_storage_update(Config),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 2,
+        <<"toProcess">> => 2,
+        <<"imported">> => 0,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 1,
+        <<"importedSum">> => 1,
+        <<"updatedSum">> => 2,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 1,
+        <<"importedDayHist">> => 1,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 2,
+        <<"updatedDayHist">> => 2,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+    % TestDir should not be reimported
+    ?assertMatch({ok, []},
+        lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, SpaceTetDirPath}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W2, SessId2, {path, SpaceTetDirPath}), ?ATTEMPTS).
 
 
 sync_should_not_import_recreated_file_with_suffix_on_storage(Config) ->
@@ -835,25 +934,25 @@ copy_file_update_test(Config) ->
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     ?assertMonitoring(W1, #{
-        <<"scans">> =>1,
-        <<"toProcess">> =>2,
-        <<"imported">> =>1,
-        <<"updated">> =>1,
-        <<"deleted">> =>0,
-        <<"failed">> =>0,
-        <<"otherProcessed">> =>0,
-        <<"importedSum">> =>1,
-        <<"updatedSum">> =>1,
-        <<"deletedSum">> =>0,
-        <<"importedMinHist">> =>1,
-        <<"importedHourHist">> =>1,
-        <<"importedDayHist">> =>1,
-        <<"updatedMinHist">> =>1,
-        <<"updatedHourHist">> =>1,
-        <<"updatedDayHist">> =>1,
-        <<"deletedMinHist">> =>0,
-        <<"deletedHourHist">> =>0,
-        <<"deletedDayHist">> =>0
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 0,
+        <<"importedSum">> => 1,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 1,
+        <<"importedDayHist">> => 1,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Check if file was imported
@@ -873,25 +972,25 @@ copy_file_update_test(Config) ->
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
 
     ?assertMonitoring(W1, #{
-        <<"scans">> =>2,
-        <<"toProcess">> =>3,
-        <<"imported">> =>1,
-        <<"updated">> =>1,
-        <<"deleted">> =>0,
-        <<"failed">> =>0,
-        <<"otherProcessed">> =>1,
-        <<"importedSum">> =>2,
-        <<"updatedSum">> =>2,
-        <<"deletedSum">> =>0,
-        <<"importedMinHist">> =>1,
-        <<"importedHourHist">> =>2,
-        <<"importedDayHist">> =>2,
-        <<"updatedMinHist">> =>1,
-        <<"updatedHourHist">> =>2,
-        <<"updatedDayHist">> =>2,
-        <<"deletedMinHist">> =>0,
-        <<"deletedHourHist">> =>0,
-        <<"deletedDayHist">> =>0
+        <<"scans">> => 2,
+        <<"toProcess">> => 3,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 1,
+        <<"importedSum">> => 2,
+        <<"updatedSum">> => 2,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 2,
+        <<"importedDayHist">> => 2,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 2,
+        <<"updatedDayHist">> => 2,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
     }, ?SPACE_ID),
 
     %% Check if copied file was imported
@@ -1220,7 +1319,7 @@ end_per_testcase(_Case, Config) ->
     storage_sync_test_base:clean_storage(Config, false),
     storage_sync_test_base:clean_space(Config),
     storage_sync_test_base:cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
-    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils]),
+    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils, helpers]),
     timer:sleep(timer:seconds(1)),
     lfm_proxy:teardown(Config).
 

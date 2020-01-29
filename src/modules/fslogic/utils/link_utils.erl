@@ -56,7 +56,10 @@ add_deletion_link(FileCtx, ParentUuid) ->
     {DeletionLinkName, FileCtx2} = file_deletion_link_name(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx2),
     Scope = file_ctx:get_space_id_const(FileCtx2),
-    ok = file_meta:add_child_link(ParentUuid, Scope, DeletionLinkName, FileUuid),
+    case file_meta:add_child_link(ParentUuid, Scope, DeletionLinkName, FileUuid) of
+        ok -> ok;
+        {error, already_exists} -> ok
+    end,
     FileCtx2.
 
 %%-------------------------------------------------------------------

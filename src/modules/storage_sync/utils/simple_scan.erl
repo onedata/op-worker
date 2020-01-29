@@ -413,7 +413,7 @@ import_file_safe(Job = #space_strategy_job{
         parent_ctx := ParentCtx
 }}, FileUuid) ->
     try
-        ?MODULE:import_file(Job, FileUuid)
+        simple_scan:import_file(Job, FileUuid)
     catch
         Error:Reason ->
             ?error_stacktrace("importing file ~p in space ~p failed with ~p:~p", [FileName, SpaceId, Error, Reason]),
@@ -565,7 +565,7 @@ generate_jobs_for_subfiles(Job = #space_strategy_job{
             throw:?ENOENT ->
                 FileId = storage_file_ctx:get_file_id_const(ChildStorageCtx),
                 {ParentPath, _} = file_ctx:get_canonical_path(FileCtx),
-                ?warning_stacktrace(
+                ?debug_stacktrace(
                     "File ~p not found when generating jobs for syncing children of ~p",
                     [FileId, ParentPath]
                 ),

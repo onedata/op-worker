@@ -31,16 +31,19 @@
     directory_should_be_deleted_from_storage_after_deletion/1,
     empty_directory_should_be_deleted_from_storage_after_deletion/1,
     file_should_be_deleted_from_storage_after_releasing_handle/1,
+    directory_should_be_deleted_from_storage_after_releasing_handle_to_its_child/1,
     remote_replica_should_be_deleted_from_storage_after_deletion/1,
     remote_directory_replica_should_be_deleted_from_storage_after_deletion/1,
     remote_replica_should_be_truncated_on_storage_after_truncate/1,
     replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file/1,
+    parent_dir_of_replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file/1,
     empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion/1,
-    
+
+    % Tests of conflicting files
     file_with_suffix_is_deleted_from_storage_after_deletion/1,
     deleted_open_file_with_suffix_is_deleted_from_storage_after_release/1,
-    sufix_in_metadata_and_storage_test/1,
-    sufix_in_dir_metadata_test/1
+    suffix_in_metadata_and_storage_test/1,
+    suffix_in_dir_metadata_test/1
 ]).
 
 -define(ATTEMPTS, 60).
@@ -60,16 +63,19 @@ all() -> [
     directory_should_be_deleted_from_storage_after_deletion,
     empty_directory_should_be_deleted_from_storage_after_deletion,
     file_should_be_deleted_from_storage_after_releasing_handle,
+    directory_should_be_deleted_from_storage_after_releasing_handle_to_its_child,
     remote_replica_should_be_deleted_from_storage_after_deletion,
     remote_replica_should_be_truncated_on_storage_after_truncate,
     remote_directory_replica_should_be_deleted_from_storage_after_deletion,
-    empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion,
     replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file,
+    parent_dir_of_replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file,
+    empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion,
 
+    % Tests of conflicting files
     file_with_suffix_is_deleted_from_storage_after_deletion,
     deleted_open_file_with_suffix_is_deleted_from_storage_after_release,
-    sufix_in_metadata_and_storage_test,
-    sufix_in_dir_metadata_test
+    suffix_in_metadata_and_storage_test,
+    suffix_in_dir_metadata_test
 ].
 
 %%%===================================================================
@@ -200,6 +206,48 @@ file_should_be_deleted_from_storage_after_releasing_handle(Config) ->
     % then
     ?assertEqual({error, ?ENOENT}, read_file(Worker, StorageFilePath), ?ATTEMPTS),
     ?assertEqual({error, ?ENOENT}, read_file_info(Worker, StorageFilePath), ?ATTEMPTS).
+
+directory_should_be_deleted_from_storage_after_releasing_handle_to_its_child(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    DirPath = filename:join([<<"/">>, SpaceName, ?DIR_NAME]),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    StorageDirPath = storage_file_path(Worker, SpaceId, ?DIR_NAME),
+    StorageFilePath = storage_file_path(Worker, SpaceId, filename:join(?DIR_NAME, ?FILE_NAME)),
+
+    % when
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath, 8#775),
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, 8#664),
+    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
+    {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
+    ok = lfm_proxy:fsync(Worker, FileHandle),
+    ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, list_dir(Worker, StorageDirPath)),
+    ?assertMatch({ok, _}, read_file_info(Worker, StorageDirPath)),
+    ?assertEqual({ok, ?TEST_DATA}, read_file(Worker, StorageFilePath)),
+    ?assertMatch({ok, _}, read_file_info(Worker, StorageFilePath)),
+
+    % and
+    ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, {guid, DirGuid})),
+
+    % then
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, {guid, DirGuid})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:ls(Worker, SessId, {guid, DirGuid}, 0, 1)),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, {guid, FileGuid})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, read)),
+
+    ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, list_dir(Worker, StorageDirPath)),
+    ?assertMatch({ok, _}, read_file_info(Worker, StorageDirPath)),
+    ?assertEqual({ok, ?TEST_DATA}, read_file(Worker, StorageFilePath)),
+    ?assertMatch({ok, _}, read_file_info(Worker, StorageFilePath)),
+
+    % and
+    lfm_proxy:close(Worker, FileHandle),
+
+    % then
+    ?assertEqual({error, ?ENOENT}, list_dir(Worker, StorageDirPath)),
+    ?assertEqual({error, ?ENOENT}, read_file_info(Worker, StorageFilePath)),
+    ?assertEqual({error, ?ENOENT}, read_file(Worker, StorageFilePath)),
+    ?assertEqual({error, ?ENOENT}, read_file_info(Worker, StorageDirPath)).
 
 remote_replica_should_be_deleted_from_storage_after_deletion(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -362,7 +410,59 @@ replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_delete
     ?assertMatch({ok, ?TEST_DATA}, read_file(WorkerP2, StorageFilePath2)),
 
     ok = lfm_proxy:close(WorkerP2, FileHandle2),
-    ?assertMatch({error, ?ENOENT}, read_file(WorkerP2, StorageFilePath1)).
+    ?assertMatch({error, ?ENOENT}, read_file(WorkerP2, StorageFilePath2)).
+
+parent_dir_of_replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_deleted_file(Config) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    DirPath = filename:join([<<"/">>, SpaceName, ?DIR_NAME]),
+    FilePath = filename:join([DirPath, ?FILE_NAME]),
+    StorageDirPath = storage_file_path(WorkerP1, SpaceId, ?DIR_NAME),
+    StorageFilePath1 = filename:join([StorageDirPath, ?FILE_NAME]),
+    StorageDirPath2 = storage_file_path(WorkerP2, SpaceId, ?DIR_NAME),
+    StorageFilePath2 = filename:join([StorageDirPath2, ?FILE_NAME]),
+
+    % when
+    {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, DirPath, 8#775),
+    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath, 8#644),
+    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
+    ok = lfm_proxy:close(WorkerP1, FileHandle),
+
+    % and
+    {ok, FileHandle2} = ?assertMatch({ok, _},
+        lfm_proxy:open(WorkerP2, SessionId2, {guid, FileGuid}, read), ?ATTEMPTS),
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(WorkerP2, FileHandle2, 0, ?TEST_DATA_LENGTH), ?ATTEMPTS),
+
+
+    % File is intentionally left opened on WorkerP2
+    ?assertMatch({ok, ?TEST_DATA}, read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS),
+    ok = lfm_proxy:rm_recursive(WorkerP1, SessionId, {guid, DirGuid}),
+
+    %then
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP1, SessionId, {guid, DirGuid})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP1, SessionId, {guid, FileGuid})),
+    ?assertMatch({error, ?ENOENT}, list_dir(WorkerP1, StorageDirPath)),
+    ?assertMatch({error, ?ENOENT}, read_file(WorkerP1, StorageFilePath1)),
+
+    % ensure that directory was removed on 2nd provider
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, DirGuid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS),
+
+    % but not on it's storage as the file is still opened
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(WorkerP2, FileHandle2, 0, ?TEST_DATA_LENGTH), ?ATTEMPTS),
+    ?assertMatch({ok, ?TEST_DATA}, read_file(WorkerP2, StorageFilePath2)),
+    ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, list_dir(WorkerP2, StorageDirPath2)),
+
+    ok = lfm_proxy:close(WorkerP2, FileHandle2),
+
+    % after closing the file, it should be deleted, as well as its parent directory
+    ?assertMatch({error, ?ENOENT}, list_dir(WorkerP2, StorageDirPath2)),
+    ?assertMatch({error, ?ENOENT}, read_file(WorkerP2, StorageFilePath2)).
 
 file_with_suffix_is_deleted_from_storage_after_deletion(Config) ->
     file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, true).
@@ -448,7 +548,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     ?assertEqual([], ListDir(Worker1, SessionId1, SpacePath), ?ATTEMPTS),
     ?assertEqual([], ListStorageDir(), ?ATTEMPTS).
 
-sufix_in_metadata_and_storage_test(Config) ->
+suffix_in_metadata_and_storage_test(Config) ->
     [Worker2, Worker1] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
@@ -515,7 +615,7 @@ sufix_in_metadata_and_storage_test(Config) ->
     ok = lfm_proxy:close_all(Worker1),
     ok = lfm_proxy:unlink(Worker1, SessionId1, {path, FilePath}).
 
-sufix_in_dir_metadata_test(Config) ->
+suffix_in_dir_metadata_test(Config) ->
     [Worker2, Worker1] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 

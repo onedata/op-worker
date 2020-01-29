@@ -34,7 +34,7 @@
     delayed_open_file_deletion_request/1,
     deletion_of_not_open_file/1,
     deletion_of_not_open_delayed_file/1,
-    file_shouldnt_be_listed_after_deletion/1,
+    file_should_not_be_listed_after_deletion/1,
     file_stat_should_return_enoent_after_deletion/1,
     file_open_should_return_enoent_after_deletion/1,
     file_handle_should_work_after_deletion/1,
@@ -54,7 +54,7 @@
     delayed_open_file_deletion_request,
     deletion_of_not_open_file,
     deletion_of_not_open_delayed_file,
-    file_shouldnt_be_listed_after_deletion,
+    file_should_not_be_listed_after_deletion,
     file_stat_should_return_enoent_after_deletion,
     file_open_should_return_enoent_after_deletion,
     file_handle_should_work_after_deletion,
@@ -267,7 +267,7 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
             test_utils:mock_assert_num_calls(Worker, storage_file_manager, unlink, 2, 1)
     end.
 
-file_shouldnt_be_listed_after_deletion(Config) ->
+file_should_not_be_listed_after_deletion(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
@@ -484,7 +484,7 @@ init_per_testcase(Case, Config) when
     Case =:= delayed_open_file_deletion_request;
     Case =:= deletion_of_not_open_file;
     Case =:= deletion_of_not_open_delayed_file;
-    Case =:= file_shouldnt_be_listed_after_deletion;
+    Case =:= file_should_not_be_listed_after_deletion;
     Case =:= file_stat_should_return_enoent_after_deletion;
     Case =:= file_open_should_return_enoent_after_deletion;
     Case =:= file_handle_should_work_after_deletion
@@ -528,7 +528,7 @@ end_per_testcase(Case, Config) when
     Case =:= delayed_open_file_deletion_request;
     Case =:= deletion_of_not_open_file;
     Case =:= deletion_of_not_open_delayed_file;
-    Case =:= file_shouldnt_be_listed_after_deletion;
+    Case =:= file_should_not_be_listed_after_deletion;
     Case =:= file_stat_should_return_enoent_after_deletion;
     Case =:= file_open_should_return_enoent_after_deletion;
     Case =:= file_handle_should_work_after_deletion

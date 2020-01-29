@@ -382,10 +382,10 @@ get_mounted_in_root(FileCtx = #file_ctx{mounted_in_root = MiR}) ->
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
     {ok, Doc} = file_meta:get_including_deleted(FileUuid),
-    case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
-        {false, false} ->
+    case file_meta:is_deleted(Doc) of
+        false ->
             {Doc, FileCtx#file_ctx{file_doc = Doc}};
-        _ ->
+        true ->
             {Doc, FileCtx}
     end;
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
@@ -1242,7 +1242,7 @@ generate_canonical_path(FileCtx) ->
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),
             {Path, FileCtx2};
         _ ->
-            {ok, ParentDoc} = file_meta:get_parent(Doc),
+            {ok, ParentDoc} = file_meta:get_parent_including_deleted(Doc),
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
             {Path ++ [FileName], FileCtx2}
     end.

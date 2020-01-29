@@ -357,7 +357,7 @@ filter_children_in_db(LinkName, FileCtx, UserCtx, TableName) ->
         end
     catch
         throw:?ENOENT ->
-            ?warning_stacktrace("full_update:filter_children_in_db failed with enoent for file ~p", [LinkName]),
+            ?debug_stacktrace("full_update:filter_children_in_db failed with enoent for file ~p", [LinkName]),
             ets:delete(TableName, LinkName);
         Error:Reason  ->
             ?error_stacktrace("full_update:filter_children_in_db failed with unexpected ~p:~p for file ~p", [Error, Reason, LinkName]),

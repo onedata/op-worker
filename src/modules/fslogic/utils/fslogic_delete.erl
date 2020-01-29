@@ -25,7 +25,9 @@
 %% Test API
 -export([process_file_links/3]).
 
--type delete_filemeta_opts() :: boolean() | deletion_link.
+-define(DELETION_LINK_FLAG, deletion_link).
+
+-type remove_file_meta_flag() :: boolean() | ?DELETION_LINK_FLAG.
 
 %%%===================================================================
 %%% API
@@ -63,7 +65,7 @@ check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
 -spec remove_opened_file(file_ctx:ctx()) -> ok.
 remove_opened_file(FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    ok = remove_file(FileCtx, UserCtx, true, deletion_link).
+    ok = remove_file(FileCtx, UserCtx, true, ?DELETION_LINK_FLAG).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -83,7 +85,7 @@ delete_all_opened_files() ->
                 try
                     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
-                    ok = remove_file(FileCtx, UserCtx, true, deletion_link)
+                    ok = remove_file(FileCtx, UserCtx, true, ?DELETION_LINK_FLAG)
                 catch
                     E1:E2 ->
                         ?warning_stacktrace("Cannot remove old opened file ~p: ~p:~p",
@@ -131,7 +133,7 @@ remove_auxiliary_documents(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(),
-    delete_filemeta_opts()) -> ok.
+    remove_file_meta_flag()) -> ok.
 remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
     % TODO VFS-5270
     replica_synchronizer:apply(FileCtx, fun() ->
@@ -145,31 +147,42 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
 
                 fslogic_times:update_mtime_ctime(ParentCtx),
                 {FD, FileCtx3};
-            deletion_link ->
+            ?DELETION_LINK_FLAG ->
                 file_ctx:get_file_doc_including_deleted(FileCtx);
             _ ->
                 {undefined, FileCtx}
         end,
 
-        ok = case RemoveStorageFile of
+        RemoveStorageFileResult = case RemoveStorageFile of
             true ->
                 maybe_remove_file_on_storage(FileCtx4, UserCtx);
             _ -> ok
         end,
+        FileUuid = file_ctx:get_uuid_const(FileCtx4),
 
-        case {DeleteFileMeta, RemoveStorageFile} of
-            {true, _} ->
+        FileCtx5 = case RemoveStorageFileResult of
+            ok -> FileCtx4;
+            {error, _} -> maybe_add_deletion_link(FileCtx4, UserCtx)
+        end,
+
+        case {DeleteFileMeta, RemoveStorageFile, RemoveStorageFileResult} of
+            {true, _, _} ->
+                ok = fslogic_location_cache:delete_local_location(FileUuid),
                 ok = file_meta:delete(FileDoc);
-            {deletion_link, _} ->
+            {deletion_link, _, ok} ->
+                ok = fslogic_location_cache:delete_local_location(FileUuid),
                 file_meta:delete_without_link(FileDoc), % do not match, document may not exist
-                {ParentGuid, FileCtx5} = file_ctx:get_parent_guid(FileCtx4, UserCtx),
-                ParentUuid = file_id:guid_to_uuid(ParentGuid),
-                link_utils:remove_deletion_link(FileCtx5, ParentUuid),
-                ok;
-            {_, true} ->
-                FileUuid = file_ctx:get_uuid_const(FileCtx4),
-                LocalLocationId = file_location:local_id(FileUuid),
-                ok = fslogic_location_cache:delete_location(FileUuid, LocalLocationId);
+                FileCtx6 = remove_deletion_link(FileCtx5, UserCtx),
+                try_to_delete_parent(FileCtx6, UserCtx);
+            {deletion_link, _, {error, _}} ->
+                % TODO VFS-6082 deletion links are left forever when deleting file on storage failed
+                ok = fslogic_location_cache:delete_local_location(FileUuid),
+                file_meta:delete_without_link(FileDoc); % do not match, document may not exist
+            {_, true, ok} ->
+                ok = fslogic_location_cache:delete_local_location(FileUuid),
+                try_to_delete_parent(FileCtx5, UserCtx);
+            {_, true, {error, _}} ->
+                ok = fslogic_location_cache:delete_local_location(FileUuid);
             _ ->
                 ok
         end
@@ -178,6 +191,38 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec maybe_add_deletion_link(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
+maybe_add_deletion_link(FileCtx, UserCtx) ->
+    case file_ctx:is_space_dir_const(FileCtx) orelse file_ctx:is_root_dir_const(FileCtx) of
+        true ->
+            FileCtx;
+        false ->
+            {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+            {ParentUuid, _} = file_id:unpack_guid(ParentGuid),
+            link_utils:add_deletion_link(FileCtx2, ParentUuid)
+    end.
+
+
+-spec try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx()) -> ok.
+try_to_delete_parent(FileCtx, UserCtx) ->
+    {ParentCtx, _FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
+    try
+        {ParentDoc, ParentCtx2} = file_ctx:get_file_doc_including_deleted(ParentCtx),
+            case file_meta:is_deleted(ParentDoc) of
+                true -> remove_file(ParentCtx2, UserCtx, true, ?DELETION_LINK_FLAG);
+                false -> ok
+            end
+    catch
+        error:{badmatch, {error, not_found}} ->
+            ok
+    end.
+
+-spec remove_deletion_link(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
+remove_deletion_link(FileCtx, UserCtx) ->
+    {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+    ParentUuid = file_id:guid_to_uuid(ParentGuid),
+    link_utils:remove_deletion_link(FileCtx2, ParentUuid).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -190,16 +235,16 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteFileMeta) ->
 process_file_links(FileCtx, UserCtx, KeepParentLink) ->
     {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
-    FileCtx3 = link_utils:add_deletion_link(FileCtx2, ParentUuid),
+    link_utils:add_deletion_link(FileCtx2, ParentUuid),
     ok = case KeepParentLink of
-             false ->
-                 FileUuid = file_ctx:get_uuid_const(FileCtx3),
-                 Scope = file_ctx:get_space_id_const(FileCtx3),
-                 {FileName, _FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),
-                 file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName);
-             _ ->
-                 ok
-         end.
+        false ->
+             FileUuid = file_ctx:get_uuid_const(FileCtx2),
+             Scope = file_ctx:get_space_id_const(FileCtx2),
+             {FileName, _FileCtx4} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
+             file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName);
+         _ ->
+             ok
+     end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -208,25 +253,21 @@ process_file_links(FileCtx, UserCtx, KeepParentLink) ->
 %% Returns ok if file doesn't exist or if it was successfully deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx())
-        -> ok | {error, term()}.
+-spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
 maybe_remove_file_on_storage(FileCtx, UserCtx) ->
     try
         case sfm_utils:recursive_delete(FileCtx, UserCtx) of
             ok -> ok;
             {error, ?ENOENT} -> ok;
-            OtherError -> OtherError
+            {error, _} = Error -> Error
         end
     catch
-        _:{badmatch, {error, not_found}} ->
-            ?error_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
-            ok;
-        _:{badmatch, {error, ?ENOENT}} ->
-            ?debug_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
-            ok;
-        _:{badmatch, {error, ?EROFS}} ->
-            ?warning_stacktrace("Cannot delete file at storage ~p", [FileCtx]),
-            ok
+        throw:{delete_child_error, Error2} ->
+            Error2;
+        Error3:Reason3 ->
+            FileGuid = file_ctx:get_guid_const(FileCtx),
+            ?error_stacktrace("Unexpected error ~p:~p occured when deleting ~p", [Error3, Reason3, FileGuid]),
+            {error, Reason3}
     end.
 
 %%--------------------------------------------------------------------
