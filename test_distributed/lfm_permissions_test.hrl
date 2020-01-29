@@ -150,8 +150,10 @@
     % - ShareId - Id only in case of share tests. Otherwise left as `undefined`,
     % - ExtraData - mapping of file path (for every file specified in `files`) to
     %               term returned from `on_create` #dir{} or #file{} fun.
-    %               If mentioned fun is left undefined then by default GUID will
+    %               If mentioned fun is left undefined then by default {guid, GUID} will
     %               be used.
+    %               If `on_create` fun returns FileGuid it should be returned as
+    %               following tuple {guid, FileGuid}, which is required by framework.
     operation :: fun((OwnerSessId :: binary(), SessId :: binary(), TestCaseRootDirPath :: binary(), ExtraData :: map()) ->
         ok |
         {ok, term()} |

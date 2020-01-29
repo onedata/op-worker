@@ -651,11 +651,10 @@ mkdir_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            ParentDirGuid = maps:get(ParentDirPath, ExtraData),
-            ShareParentDirGuid = file_id:guid_to_share_guid(ParentDirGuid, ShareId),
-            lfm_proxy:mkdir(W, SessId, ShareParentDirGuid, <<"dir2">>, 8#777)
+            {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
+            lfm_proxy:mkdir(W, SessId, ParentDirGuid, <<"dir2">>, 8#777)
         end
     }, Config).
 
@@ -674,11 +673,10 @@ ls_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            DirGuid = maps:get(DirPath, ExtraData),
-            ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
-            lfm_proxy:ls(W, SessId, {guid, ShareDirGuid}, 0, 100)
+            DirKey = maps:get(DirPath, ExtraData),
+            lfm_proxy:ls(W, SessId, DirKey, 0, 100)
         end
     }, Config).
 
@@ -697,11 +695,10 @@ readdir_plus_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            DirGuid = maps:get(DirPath, ExtraData),
-            ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
-            lfm_proxy:read_dir_plus(W, SessId, {guid, ShareDirGuid}, 0, 100)
+            DirKey = maps:get(DirPath, ExtraData),
+            lfm_proxy:read_dir_plus(W, SessId, DirKey, 0, 100)
         end
     }, Config).
 
@@ -719,11 +716,10 @@ get_child_attr_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            ParentDirGuid = maps:get(ParentDirPath, ExtraData),
-            ShareParentDirGuid = file_id:guid_to_share_guid(ParentDirGuid, ShareId),
-            lfm_proxy:get_child_attr(W, SessId, ShareParentDirGuid, <<"file1">>)
+            {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
+            lfm_proxy:get_child_attr(W, SessId, ParentDirGuid, <<"file1">>)
         end
     }, Config).
 
@@ -754,14 +750,12 @@ mv_dir_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             SrcDirPath = <<TestCaseRootDirPath/binary, "/dir1/dir11">>,
-            SrcDirGuid = maps:get(SrcDirPath, ExtraData),
-            SrcShareDirGuid = file_id:guid_to_share_guid(SrcDirGuid, ShareId),
+            SrcDirKey = maps:get(SrcDirPath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
-            DstDirGuid = maps:get(DstDirPath, ExtraData),
-            DstShareDirGuid = file_id:guid_to_share_guid(DstDirGuid, ShareId),
-            lfm_proxy:mv(W, SessId, {guid, SrcShareDirGuid}, {guid, DstShareDirGuid}, <<"dir21">>)
+            DstDirKey = maps:get(DstDirPath, ExtraData),
+            lfm_proxy:mv(W, SessId, SrcDirKey, DstDirKey, <<"dir21">>)
         end
     }, Config).
 
@@ -788,11 +782,10 @@ rm_dir_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
-            DirGuid = maps:get(DirPath, ExtraData),
-            ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
-            lfm_proxy:unlink(W, SessId, {guid, ShareDirGuid})
+            DirKey = maps:get(DirPath, ExtraData),
+            lfm_proxy:unlink(W, SessId, DirKey)
         end
     }, Config).
 
@@ -811,11 +804,10 @@ create_file_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            ParentDirGuid = maps:get(ParentDirPath, ExtraData),
-            ShareParentDirGuid = file_id:guid_to_share_guid(ParentDirGuid, ShareId),
-            lfm_proxy:create(W, SessId, ShareParentDirGuid, <<"file1">>, 8#777)
+            {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
+            lfm_proxy:create(W, SessId, ParentDirGuid, <<"file1">>, 8#777)
         end
     }, Config).
 
@@ -833,18 +825,17 @@ open_for_read_test(Config) ->
                 % write to file to force its creation on storage. Otherwise it
                 % may be not possible during tests without necessary perms.
                 fill_file_with_dummy_data(W, OwnerSessId, Guid),
-                Guid
+                {guid, Guid}
             end
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:open(W, SessId, {guid, ShareFileGuid}, read)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:open(W, SessId, FileKey, read)
         end
     }, Config).
 
@@ -862,18 +853,17 @@ open_for_write_test(Config) ->
                 % write to file to force its creation on storage. Otherwise it
                 % may be not possible during tests without necessary perms.
                 fill_file_with_dummy_data(W, OwnerSessId, Guid),
-                Guid
+                {guid, Guid}
             end
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:open(W, SessId, {guid, ShareFileGuid}, write)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:open(W, SessId, FileKey, write)
         end
     }, Config).
 
@@ -891,18 +881,17 @@ open_for_rdwr_test(Config) ->
                 % write to file to force its creation on storage. Otherwise it
                 % may be not possible during tests without necessary perms.
                 fill_file_with_dummy_data(W, OwnerSessId, Guid),
-                Guid
+                {guid, Guid}
             end
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:open(W, SessId, {guid, ShareFileGuid}, rdwr)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:open(W, SessId, FileKey, rdwr)
         end
     }, Config).
 
@@ -921,11 +910,10 @@ create_and_open_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            ParentDirGuid = maps:get(ParentDirPath, ExtraData),
-            ShareParentDirGuid = file_id:guid_to_share_guid(ParentDirGuid, ShareId),
-            lfm_proxy:create_and_open(W, SessId, ShareParentDirGuid, <<"file1">>, 8#777)
+            {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
+            lfm_proxy:create_and_open(W, SessId, ParentDirGuid, <<"file1">>, 8#777)
         end
     }, Config).
 
@@ -944,11 +932,10 @@ truncate_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:truncate(W, SessId, {guid, ShareFileGuid}, 0)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:truncate(W, SessId, FileKey, 0)
         end
     }, Config).
 
@@ -979,14 +966,12 @@ mv_file_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             SrcFilePath = <<TestCaseRootDirPath/binary, "/dir1/file11">>,
-            SrcFileGuid = maps:get(SrcFilePath, ExtraData),
-            SrcShareFileGuid = file_id:guid_to_share_guid(SrcFileGuid, ShareId),
+            SrcFileKey = maps:get(SrcFilePath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
-            DstDirGuid = maps:get(DstDirPath, ExtraData),
-            DstShareDirGuid = file_id:guid_to_share_guid(DstDirGuid, ShareId),
-            lfm_proxy:mv(W, SessId, {guid, SrcShareFileGuid}, {guid, DstShareDirGuid}, <<"file21">>)
+            DstDirKey = maps:get(DstDirPath, ExtraData),
+            lfm_proxy:mv(W, SessId, SrcFileKey, DstDirKey, <<"file21">>)
         end
     }, Config).
 
@@ -1013,11 +998,10 @@ rm_file_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:unlink(W, SessId, {guid, ShareFileGuid})
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:unlink(W, SessId, FileKey)
         end
     }, Config).
 
@@ -1031,11 +1015,10 @@ get_parent_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:get_parent(W, SessId, {guid, ShareFileGuid})
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_parent(W, SessId, FileKey)
         end
     }, Config).
 
@@ -1049,11 +1032,10 @@ get_file_path_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = false, % TODO VFS-6057
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:get_file_path(W, SessId, ShareFileGuid)
+            {guid, FileGuid} = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_file_path(W, SessId, FileGuid)
         end
     }, Config).
 
@@ -1067,7 +1049,7 @@ get_file_guid_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ShareId, _ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             lfm_proxy:resolve_guid(W, SessId, FilePath)
         end
@@ -1083,11 +1065,10 @@ get_file_attr_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:stat(W, SessId, {guid, ShareFileGuid})
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:stat(W, SessId, FileKey)
         end
     }, Config).
 
@@ -1106,11 +1087,10 @@ get_file_distribution_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:get_file_distribution(W, SessId, {guid, ShareFileGuid})
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_file_distribution(W, SessId, FileKey)
         end
     }, Config).
 
@@ -1213,11 +1193,10 @@ check_read_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:check_perms(W, SessId, {guid, ShareFileGuid}, read)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:check_perms(W, SessId, FileKey, read)
         end
     }, Config).
 
@@ -1236,11 +1215,10 @@ check_write_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:check_perms(W, SessId, {guid, ShareFileGuid}, write)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:check_perms(W, SessId, FileKey, write)
         end
     }, Config).
 
@@ -1259,11 +1237,10 @@ check_rdwr_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:check_perms(W, SessId, {guid, ShareFileGuid}, rdwr)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:check_perms(W, SessId, FileKey, rdwr)
         end
     }, Config).
 
@@ -1279,11 +1256,10 @@ create_share_test(Config) ->
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
-            DirGuid = maps:get(DirPath, ExtraData),
-            ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
-            lfm_proxy:create_share(W, SessId, {guid, ShareDirGuid}, <<"create_share">>)
+            DirKey = maps:get(DirPath, ExtraData),
+            lfm_proxy:create_share(W, SessId, DirKey, <<"create_share">>)
         end
     }, Config).
 
@@ -1307,7 +1283,7 @@ remove_share_test(Config) ->
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         available_in_readonly_mode = false,
         available_in_share_mode = inapplicable,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ShareId = maps:get(DirPath, ExtraData),
             lfm_proxy:remove_share(W, SessId, ShareId)
@@ -1327,11 +1303,10 @@ get_acl_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:get_acl(W, SessId, {guid, ShareFileGuid})
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_acl(W, SessId, FileKey)
         end
     }, Config).
 
@@ -1350,11 +1325,10 @@ set_acl_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:set_acl(W, SessId, {guid, ShareFileGuid}, [
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:set_acl(W, SessId, FileKey, [
                 ?ALLOW_ACE(
                     ?group,
                     ?no_flags_mask,
@@ -1379,11 +1353,10 @@ remove_acl_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:remove_acl(W, SessId, {guid, ShareFileGuid})
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:remove_acl(W, SessId, FileKey)
         end
     }, Config).
 
@@ -1399,16 +1372,15 @@ get_transfer_encoding_test(Config) ->
             perms = [?read_attributes],
             on_create = fun(OwnerSessId, Guid) ->
                 lfm_proxy:set_transfer_encoding(W, OwnerSessId, {guid, Guid}, <<"base64">>),
-                Guid
+                {guid, Guid}
             end
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:get_transfer_encoding(W, SessId, {guid, ShareFileGuid})
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_transfer_encoding(W, SessId, FileKey)
         end
     }, Config).
 
@@ -1427,11 +1399,10 @@ set_transfer_encoding_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:set_transfer_encoding(W, SessId, {guid, ShareFileGuid}, <<"base64">>)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:set_transfer_encoding(W, SessId, FileKey, <<"base64">>)
         end
     }, Config).
 
@@ -1447,16 +1418,15 @@ get_cdmi_completion_status_test(Config) ->
             perms = [?read_attributes],
             on_create = fun(OwnerSessId, Guid) ->
                 lfm_proxy:set_cdmi_completion_status(W, OwnerSessId, {guid, Guid}, <<"Completed">>),
-                Guid
+                {guid, Guid}
             end
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:get_cdmi_completion_status(W, SessId, {guid, ShareFileGuid})
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_cdmi_completion_status(W, SessId, FileKey)
         end
     }, Config).
 
@@ -1475,11 +1445,10 @@ set_cdmi_completion_status_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:set_cdmi_completion_status(W, SessId, {guid, ShareFileGuid}, <<"Completed">>)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:set_cdmi_completion_status(W, SessId, FileKey, <<"Completed">>)
         end
     }, Config).
 
@@ -1495,16 +1464,15 @@ get_mimetype_test(Config) ->
             perms = [?read_attributes],
             on_create = fun(OwnerSessId, Guid) ->
                 lfm_proxy:set_mimetype(W, OwnerSessId, {guid, Guid}, <<"mimetype">>),
-                Guid
+                {guid, Guid}
             end
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:get_mimetype(W, SessId, {guid, ShareFileGuid})
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_mimetype(W, SessId, FileKey)
         end
     }, Config).
 
@@ -1523,11 +1491,10 @@ set_mimetype_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:set_mimetype(W, SessId, {guid, ShareFileGuid}, <<"mimetype">>)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:set_mimetype(W, SessId, FileKey, <<"mimetype">>)
         end
     }, Config).
 
@@ -1543,18 +1510,17 @@ get_metadata_test(Config) ->
             perms = [?read_metadata],
             on_create = fun(OwnerSessId, Guid) ->
                 lfm_proxy:set_metadata(W, OwnerSessId, {guid, Guid}, json, <<"VAL">>, []),
-                Guid
+                {guid, Guid}
             end
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:get_metadata(W, SessId, {guid, ShareFileGuid}, json, [], false)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_metadata(W, SessId, FileKey, json, [], false)
         end
     }, Config).
 
@@ -1573,11 +1539,10 @@ set_metadata_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:set_metadata(W, SessId, {guid, ShareFileGuid}, json, <<"VAL">>, [])
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:set_metadata(W, SessId, FileKey, json, <<"VAL">>, [])
         end
     }, Config).
 
@@ -1593,18 +1558,17 @@ remove_metadata_test(Config) ->
             perms = [?write_metadata],
             on_create = fun(OwnerSessId, Guid) ->
                 lfm_proxy:set_metadata(W, OwnerSessId, {guid, Guid}, json, <<"VAL">>, []),
-                Guid
+                {guid, Guid}
             end
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:remove_metadata(W, SessId, {guid, ShareFileGuid}, json)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:remove_metadata(W, SessId, FileKey, json)
         end
     }, Config).
 
@@ -1621,18 +1585,17 @@ get_xattr_test(Config) ->
             on_create = fun(OwnerSessId, Guid) ->
                 Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
                 lfm_proxy:set_xattr(W, OwnerSessId, {guid, Guid}, Xattr),
-                Guid
+                {guid, Guid}
             end
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:get_xattr(W, SessId, {guid, ShareFileGuid}, <<"myxattr">>)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_xattr(W, SessId, FileKey, <<"myxattr">>)
         end
     }, Config).
 
@@ -1648,16 +1611,15 @@ list_xattr_test(Config) ->
             on_create = fun(OwnerSessId, Guid) ->
                 Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
                 lfm_proxy:set_xattr(W, OwnerSessId, {guid, Guid}, Xattr),
-                Guid
+                {guid, Guid}
             end
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:list_xattr(W, SessId, {guid, ShareFileGuid}, false, false)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:list_xattr(W, SessId, FileKey, false, false)
         end
     }, Config).
 
@@ -1676,14 +1638,10 @@ set_xattr_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:set_xattr(
-                W, SessId, {guid, ShareFileGuid},
-                #xattr{name = <<"myxattr">>, value = <<"VAL">>}
-            )
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:set_xattr(W, SessId, FileKey, #xattr{name = <<"myxattr">>, value = <<"VAL">>})
         end
     }, Config).
 
@@ -1700,18 +1658,17 @@ remove_xattr_test(Config) ->
             on_create = fun(OwnerSessId, Guid) ->
                 Xattr = #xattr{name = <<"myxattr">>, value = <<"VAL">>},
                 lfm_proxy:set_xattr(W, OwnerSessId, {guid, Guid}, Xattr),
-                Guid
+                {guid, Guid}
             end
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:remove_xattr(W, SessId, {guid, ShareFileGuid}, <<"myxattr">>)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:remove_xattr(W, SessId, FileKey, <<"myxattr">>)
         end
     }, Config).
 
@@ -1730,11 +1687,10 @@ add_qos_entry_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:add_qos_entry(W, SessId, {guid, ShareFileGuid}, <<"country=FR">>, 1)
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:add_qos_entry(W, SessId, FileKey, <<"country=FR">>, 1)
         end
     }, Config).
 
@@ -1759,7 +1715,7 @@ get_qos_entry_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
             lfm_proxy:get_qos_entry(W, SessId, QosEntryId)
@@ -1787,7 +1743,7 @@ remove_qos_entry_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = inapplicable,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
             lfm_proxy:remove_qos_entry(W, SessId, QosEntryId)
@@ -1808,18 +1764,17 @@ get_effective_file_qos_test(Config) ->
                 {ok, _QosEntryId} = lfm_proxy:add_qos_entry(
                     W, OwnerSessId, {guid, Guid}, <<"country=FR">>, 1
                 ),
-                Guid
+                {guid, Guid}
             end
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            FileGuid = maps:get(FilePath, ExtraData),
-            ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-            lfm_proxy:get_effective_file_qos(W, SessId, {guid, ShareFileGuid})
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_effective_file_qos(W, SessId, FileKey)
         end
     }, Config).
 
@@ -1844,7 +1799,7 @@ check_qos_fulfillment_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ShareId, ExtraData) ->
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
             lfm_proxy:check_qos_fulfilled(W, SessId, QosEntryId)
