@@ -68,6 +68,17 @@ get_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
+    AccessToken = initializer:create_access_token(?USER_1),
+    TokenAuth = auth_manager:build_token_auth(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
+    ),
+    ?assertMatch(
+        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
+        rpc:call(Node, user_logic, get, [TokenAuth, ?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+
     % Make sure that provider and other users cannot access cached data
     ?assertMatch(
         ?ERROR_FORBIDDEN,

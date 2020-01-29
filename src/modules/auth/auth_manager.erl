@@ -34,6 +34,7 @@
 %% API
 -export([
     build_token_auth/5,
+    is_token_auth/1,
 
     get_access_token/1,
     get_peer_ip/1,
@@ -127,6 +128,13 @@ build_token_auth(AccessToken, AudienceToken, PeerIp, Interface, DataAccessCaveat
         interface = Interface,
         data_access_caveats_policy = DataAccessCaveatsPolicy
     }.
+
+
+-spec is_token_auth
+    (token_auth()) -> true;
+    (any()) -> false.
+is_token_auth(#token_auth{}) -> true;
+is_token_auth(_) -> false.
 
 
 -spec get_access_token(token_auth()) -> access_token().
