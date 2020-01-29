@@ -766,8 +766,18 @@ is_authorized_to_get(SessionId, AuthHint, GRI, CachedDoc) when is_binary(Session
     {ok, UserId} = session:get_user_id(SessionId),
     is_user_authorized_to_get(UserId, SessionId, AuthHint, GRI, CachedDoc);
 
-is_authorized_to_get(_, _, _, _) ->
-    unknown.
+is_authorized_to_get(TokenAuth, AuthHint, GRI, CachedDoc) ->
+    case auth_manager:is_token_auth(TokenAuth) of
+        true ->
+            case auth_manager:verify(TokenAuth) of
+                {ok, ?USER(UserId), _} ->
+                    is_user_authorized_to_get(UserId, TokenAuth, AuthHint, GRI, CachedDoc);
+                {error, _} = Error ->
+                    throw(Error)
+            end;
+        false ->
+            unknown
+    end.
 
 
 -spec is_user_authorized_to_get(od_user:id(), client(), gs_protocol:auth_hint(), gri:gri(), doc()) ->
