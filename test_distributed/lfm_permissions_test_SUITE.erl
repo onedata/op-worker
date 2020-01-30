@@ -188,22 +188,26 @@ data_access_caveats_test(Config) ->
     {ok, DirGuid} = lfm_proxy:mkdir(W, OwnerUserSessId, DirPath),
     {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
 
+    {ok, ShareId} = lfm_proxy:create_share(W, OwnerUserSessId, {guid, DirGuid}, <<"share">>),
+    ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
+
     DirName2 = <<ScenarioName/binary, "2">>,
     DirPath2 = <<"/space1/", DirName2/binary>>,
     {ok, _DirGuid2} = lfm_proxy:mkdir(W, OwnerUserSessId, DirPath2),
 
     [
-        {Path1, ObjectId1, F1},
-        {Path2, ObjectId2, F2},
-        {Path3, ObjectId3, F3},
-        {Path4, ObjectId4, F4},
-        {Path5, ObjectId5, F5}
+        {Path1, ObjectId1, F1, ShareF1},
+        {Path2, ObjectId2, F2, ShareF2},
+        {Path3, ObjectId3, F3, ShareF3},
+        {Path4, ObjectId4, F4, ShareF4},
+        {Path5, ObjectId5, F5, ShareF5}
     ] = lists:map(fun(Num) ->
         FileName = <<"file", ($0 + Num)>>,
         FilePath = <<DirPath/binary, "/", FileName/binary>>,
         {ok, FileGuid} = lfm_proxy:create(W, OwnerUserSessId, FilePath, 8#777),
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-        {FilePath, FileObjectId, {FileGuid, FileName}}
+        ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+        {FilePath, FileObjectId, {FileGuid, FileName}, {ShareFileGuid, FileName}}
     end, lists:seq(1, 5)),
 
     MainToken = initializer:create_access_token(UserId),
@@ -225,6 +229,13 @@ data_access_caveats_test(Config) ->
         LsWithConfinedToken(DirGuid, #cv_data_objectid{whitelist = [DirObjectId]})
     ),
 
+    % Nevertheless token confinements have no effects on accessing files via shared guid -
+    % all operations are automatically performed with ?GUEST perms
+    ?assertMatch(
+        {ok, [ShareF1, ShareF2, ShareF3, ShareF4, ShareF5]},
+        LsWithConfinedToken(ShareDirGuid, #cv_data_path{whitelist = [DirPath]})
+    ),
+
     % Whitelisting concrete files should result in listing only them
     ?assertMatch(
         {ok, [F1, F3, F5]},
@@ -233,6 +244,13 @@ data_access_caveats_test(Config) ->
     ?assertMatch(
         {ok, [F1, F3, F5]},
         LsWithConfinedToken(DirGuid, #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId5]})
+    ),
+
+    % Nevertheless token confinements have no effects on accessing files via shared guid -
+    % all operations are automatically performed with ?GUEST perms
+    ?assertMatch(
+        {ok, [ShareF1, ShareF2, ShareF3, ShareF4, ShareF5]},
+        LsWithConfinedToken(ShareDirGuid, #cv_data_path{whitelist = [Path1, Path3, Path5]})
     ),
 
     % Using several caveats should result in listing only their intersection
@@ -268,7 +286,18 @@ data_access_caveats_test(Config) ->
         ])
     ),
 
-    % Children of dir being listed that don't exist should be omitted from  results
+    % Nevertheless token confinements have no effects on accessing files via shared guid -
+    % all operations are automatically performed with ?GUEST perms
+    ?assertMatch(
+        {ok, [ShareF1, ShareF2, ShareF3, ShareF4, ShareF5]},
+        LsWithConfinedToken(ShareDirGuid, [
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId3, ObjectId4, ObjectId5]},
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId2, ObjectId5]},
+            #cv_data_objectid{whitelist = [ObjectId1, ObjectId5]}
+        ])
+    ),
+
+    % Children of dir being listed that don't exist should be omitted from results
     ?assertMatch(
         {ok, [F1, F5]},
         LsWithConfinedToken(DirGuid, [
@@ -280,6 +309,13 @@ data_access_caveats_test(Config) ->
     ?assertMatch(
         {error, ?EACCES},
         LsWithConfinedToken(DirGuid, #cv_data_path{whitelist = [<<"/space1/qwe">>]})
+    ),
+
+    % Nevertheless token confinements have no effects on accessing files via shared guid -
+    % all operations are automatically performed with ?GUEST perms
+    ?assertMatch(
+        {ok, [ShareF1, ShareF2, ShareF3, ShareF4, ShareF5]},
+        LsWithConfinedToken(ShareDirGuid, #cv_data_path{whitelist = [<<"/space1/qwe">>]})
     ),
 
     % With no caveats listing user root dir should list all user spaces
