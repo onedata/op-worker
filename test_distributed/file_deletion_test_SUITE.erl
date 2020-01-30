@@ -229,7 +229,7 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
     FileGuid = create_test_file(Config, Worker, SessId, DelayedFileCreation),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = rpc:call(Worker, user_ctx, new, [<<"user1">>]),
-    ok = rpc:call(Worker, fslogic_delete, process_file_links, [FileCtx, UserCtx, false]),
+    ok = rpc:call(Worker, fslogic_delete, process_file_links, [FileCtx, UserCtx, false, deletion_link]),
 
     ?assertEqual(ok, rpc:call(Worker, fslogic_delete, remove_opened_file, [FileCtx])),
 
@@ -366,7 +366,7 @@ remove_opened_file_test_base(Config, SpaceName) ->
     {ok, Guid1} = lfm_proxy:create(Worker, SessId(User1), FilePath, 8#777),
     {ok, Handle1} = lfm_proxy:open(Worker, SessId(User1), {path, FilePath}, rdwr),
     {ok, _} = lfm_proxy:write(Worker, Handle1, 0, Content1),
-    
+
     % File2
     ok = lfm_proxy:unlink(Worker, SessId(User2), {path, FilePath}),
     {ok, _} = lfm_proxy:create(Worker, SessId(User2), FilePath, 8#777),
