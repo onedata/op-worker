@@ -564,7 +564,7 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
         _ ->
             #{<<"transfers">> => Transfers}
     end,
-    {ok, Result};
+    {ok, value, Result};
 
 get(#op_req{gri = #gri{id = SpaceId, aspect = transfers_active_channels}}, _) ->
     {ok, ActiveChannels} = space_transfer_stats_cache:get_active_channels(SpaceId),
