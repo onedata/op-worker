@@ -1114,6 +1114,8 @@ set_perms_test(Config) ->
         {ok, _},
         lfm_proxy:create(W, OwnerUserSessId, FilePath, 8#777)
     ),
+    {ok, ShareId} = ?assertMatch({ok, _}, lfm_proxy:create_share(W, OwnerUserSessId, {guid, FileGuid}, <<"share">>)),
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     %% POSIX
 
@@ -1125,6 +1127,13 @@ set_perms_test(Config) ->
     ),
     lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#100, FileGuid => 8#000}),
     ?assertMatch(ok, lfm_proxy:set_perms(W, OwnerUserSessId, {guid, FileGuid}, 8#000)),
+
+    % but not if that access is via shared guid
+    lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:set_perms(W, OwnerUserSessId, {guid, ShareFileGuid}, 8#000)
+    ),
 
     % other users from space can't change perms no matter what
     lfm_permissions_test_utils:set_modes(W, #{DirGuid => 8#777, FileGuid => 8#777}),
@@ -1157,6 +1166,12 @@ set_perms_test(Config) ->
         FileGuid => []
     }, #{}, ?everyone, ?no_flags_mask),
     ?assertMatch(ok, lfm_proxy:set_perms(W, OwnerUserSessId, {guid, FileGuid}, 8#000)),
+
+    % but not if that access is via shared guid
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:set_perms(W, OwnerUserSessId, {guid, ShareFileGuid}, 8#000)
+    ),
 
     % other users from space can't change perms no matter what
     lfm_permissions_test_utils:set_acls(W, #{
