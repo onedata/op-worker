@@ -211,6 +211,10 @@ check_access(UserCtx, FileCtx0, traverse_ancestors) ->
                 undefined ->
                     {false, FileCtx0};
                 ShareId ->
+                    % ShareId as added to file_meta.shares of directly shared file or
+                    % directory, not to it's descendants. So if ShareId is not in
+                    % file_meta.shares that means that file is not directly shared but
+                    % rather descendant of shared dir
                     {#document{value = #file_meta{
                         shares = Shares
                     }}, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
