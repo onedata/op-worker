@@ -58,17 +58,6 @@
         }
     },
     "test_global_setup": {
-        "users": {
-            "user1": {
-                "default_space": "space_name1"
-            },
-            "user2": {
-                "default_space": "space_name2"
-            },
-            "user3": {
-                "default_space": "space_name3"
-            }
-        },
         "groups": {
             "group1": {
                 "users": [

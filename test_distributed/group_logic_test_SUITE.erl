@@ -147,6 +147,10 @@ convenience_functions_test(Config) ->
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
+    % Spaces need to be fetched for provider to be able to assert
+    % THROUGH_SPACE authorization without making additional requests.
+    rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1]),
+
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
     % Test convenience functions and if they fetch correct scopes
@@ -154,7 +158,12 @@ convenience_functions_test(Config) ->
     % Name is within shared scope
     ?assertMatch(
         {ok, ?GROUP_NAME(?GROUP_1)},
-        rpc:call(Node, group_logic, get_name, [User1Sess, ?GROUP_1])
+        rpc:call(Node, group_logic, get_name, [?GROUP_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertMatch(
+        {ok, ?GROUP_NAME(?GROUP_1)},
+        rpc:call(Node, group_logic, get_name, [User1Sess, ?GROUP_1, ?THROUGH_SPACE(?SPACE_1)])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 

@@ -18,15 +18,15 @@
 -author("Lukasz Opiola").
 
 -include("graph_sync/provider_graph_sync.hrl").
--include("proto/common/credentials.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("proto/common/credentials.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 
 -export([get/2, get_protected_data/2, get_shared_data/3]).
 -export([exists/2]).
--export([get_full_name/2, get_full_name/3]).
+-export([get_full_name/1, get_full_name/3]).
 -export([fetch_idp_access_token/3]).
 -export([has_eff_group/2, has_eff_group/3]).
 -export([get_eff_spaces/1, get_eff_spaces/2]).
@@ -127,10 +127,9 @@ exists(Client, UserId) ->
     end.
 
 
--spec get_full_name(gs_client_worker:client(), od_user:id()) ->
-    {ok, od_user:full_name()} | errors:error().
-get_full_name(Client, UserId) ->
-    get_full_name(Client, UserId, undefined).
+-spec get_full_name(od_user:id()) -> {ok, od_user:full_name()} | errors:error().
+get_full_name(UserId) ->
+    get_full_name(?ROOT_SESS_ID, UserId, ?THROUGH_PROVIDER(oneprovider:get_id())).
 
 
 -spec get_full_name(gs_client_worker:client(), od_user:id(), gs_protocol:auth_hint()) ->
