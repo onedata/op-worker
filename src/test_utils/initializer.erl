@@ -839,6 +839,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         Val ->
             Val
     end,
+    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, session_validity_check_interval_seconds, 24 * 60 * 60]),
     {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_grace_period_seconds, FuseSessionTTL]),
 
     lists:foreach(fun(Worker) ->

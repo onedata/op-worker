@@ -128,7 +128,7 @@ list() ->
 %% Updates session.
 %% @end
 %%--------------------------------------------------------------------
--spec update(id(), diff()) -> {ok, id()} | {error, term()}.
+-spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(SessId, Diff) when is_function(Diff) ->
     Diff2 = fun(Sess) ->
         case Diff(Sess) of
@@ -140,7 +140,7 @@ update(SessId, Diff) when is_function(Diff) ->
                 {error, Reason}
         end
     end,
-    ?extract_key(datastore_model:update(?CTX, SessId, Diff2)).
+    datastore_model:update(?CTX, SessId, Diff2).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -317,7 +317,7 @@ set_direct_io(SessId, SpaceId, Value) ->
         {ok, Sess#session{direct_io = DirectIO#{SpaceId => Value}}}
     end,
     case session:update(SessId, Diff) of
-        {ok, SessId} -> ok;
+        {ok, #document{key = SessId}} -> ok;
         Other -> Other
     end.
 
