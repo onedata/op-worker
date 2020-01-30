@@ -466,7 +466,7 @@ resolve_resource_by_id(Req) ->
                     throw(Error)
             end;
         CapabilityPath ->
-            {?GUEST(?GUEST_SESS_ID), CapabilityPath}
+            {?GUEST, CapabilityPath}
     end,
 
     {Path, _} = get_path_of_id_request(Req),
@@ -492,17 +492,17 @@ resolve_resource_by_id(Req) ->
 -spec resolve_resource_by_path(file_meta:path()) -> cdmi_req().
 resolve_resource_by_path(<<"/", ?ROOT_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        auth = ?GUEST(?GUEST_SESS_ID),
+        auth = ?GUEST,
         resource = {capabilities, root}
     };
 resolve_resource_by_path(<<"/", ?CONTAINER_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        auth = ?GUEST(?GUEST_SESS_ID),
+        auth = ?GUEST,
         resource = {capabilities, container}
     };
 resolve_resource_by_path(<<"/", ?DATAOBJECT_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        auth = ?GUEST(?GUEST_SESS_ID),
+        auth = ?GUEST,
         resource = {capabilities, dataobject}
     };
 resolve_resource_by_path(Path) ->

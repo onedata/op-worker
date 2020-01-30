@@ -42,8 +42,7 @@
 -define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_IDENTITY, ?SUB(nobody, ?GUEST_USER_ID)).
 -define(GUEST_SESS_ID, <<"nobody">>).
--define(GUEST, #auth{subject = ?GUEST_IDENTITY}).
--define(GUEST(SessionId), #auth{subject = ?GUEST_IDENTITY, session_id = SessionId}).
+-define(GUEST, #auth{subject = ?GUEST_IDENTITY, session_id = ?GUEST_SESS_ID}).
 
 -define(DEFAULT_SPACE_DIR_MODE, 8#775).
 

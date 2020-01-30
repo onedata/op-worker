@@ -177,10 +177,7 @@ switch_context_if_shared_file_request(#op_req{gri = #gri{type = op_file} = GRI} 
     % Every request concerning shared files must be carried with guest auth
     case file_id:is_share_guid(GRI#gri.id) of
         true ->
-            OpReq#op_req{
-                auth = ?GUEST(?GUEST_SESS_ID),
-                gri = GRI#gri{scope = public}
-            };
+            OpReq#op_req{auth = ?GUEST, gri = GRI#gri{scope = public}};
         false ->
             OpReq
     end;

@@ -44,9 +44,9 @@
 -spec verify_handshake_auth(gs_protocol:client_auth(), ip_utils:ip()) ->
     {ok, aai:auth()} | errors:error().
 verify_handshake_auth(undefined, _) ->
-    {ok, ?GUEST(?GUEST_SESS_ID)};
+    {ok, ?GUEST};
 verify_handshake_auth(nobody, _) ->
-    {ok, ?GUEST(?GUEST_SESS_ID)};
+    {ok, ?GUEST};
 verify_handshake_auth({token, AccessToken}, PeerIp) ->
     TokenAuth = auth_manager:build_token_auth(
         AccessToken, undefined,

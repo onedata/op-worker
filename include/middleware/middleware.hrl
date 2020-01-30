@@ -21,7 +21,7 @@
 
 % Record expressing middleware request
 -record(op_req, {
-    auth = ?GUEST(?GUEST_SESS_ID) :: aai:auth(),
+    auth = ?GUEST :: aai:auth(),
     gri :: gri:gri(),
     operation = create :: middleware:operation(),
     data = #{} :: middleware:data(),
