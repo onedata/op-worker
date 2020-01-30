@@ -41,7 +41,7 @@ translate_value(#gri{aspect = download_url}, URL) ->
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{id = Guid, aspect = instance, scope = public}, #file_attr{
-    name = Name,
+    name = FileName,
     type = TypeAttr,
     mode = Mode,
     size = SizeAttr,
@@ -54,9 +54,19 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = public}, #file_att
         _ ->
             {<<"file">>, SizeAttr}
     end,
-    {_, _, ShareId} = file_id:unpack_share_guid(Guid),
+    {_, SpaceId, ShareId} = file_id:unpack_share_guid(Guid),
+    IsSpaceDir = fslogic_uuid:is_space_dir_guid(Guid),
 
     fun(#auth{session_id = SessId}) ->
+        DisplayedName = case IsSpaceDir of
+            true ->
+                case space_logic:get_name(SessId, SpaceId) of
+                    {ok, SpaceName} -> SpaceName;
+                    {error, _} = Error -> throw(Error)
+                end;
+            false ->
+                FileName
+        end,
         IsRootDir = case ShareId of
             undefined ->
                 fslogic_uuid:is_space_dir_guid(Guid);
@@ -77,8 +87,8 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = public}, #file_att
         end,
 
         #{
-            <<"name">> => Name,
-            <<"index">> => Name,
+            <<"name">> => DisplayedName,
+            <<"index">> => FileName,
             <<"type">> => Type,
             <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
             <<"mtime">> => ModificationTime,
@@ -87,7 +97,7 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = public}, #file_att
         }
     end;
 translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
-    name = Name,
+    name = FileName,
     owner_id = Owner,
     type = TypeAttr,
     mode = Mode,
@@ -101,22 +111,28 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
         _ ->
             {<<"file">>, SizeAttr}
     end,
+    {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
 
     fun(#auth{session_id = SessId}) ->
-        FileUuid = file_id:guid_to_uuid(Guid),
         {ok, ActivePermsType} = file_meta:get_active_perms_type(FileUuid),
 
-        Parent = case fslogic_uuid:is_space_dir_guid(Guid) of
+        {Parent, DisplayedName} = case fslogic_uuid:is_space_dir_guid(Guid) of
             true ->
-                null;
+                case space_logic:get_name(SessId, SpaceId) of
+                    {ok, SpaceName} ->
+                        {null, SpaceName};
+                    {error, _} = Error ->
+                        throw(Error)
+                end;
             false ->
                 {ok, ParentGuid} = ?check(lfm:get_parent(SessId, {guid, Guid})),
-                gri:serialize(#gri{
+                ParentGRI = gri:serialize(#gri{
                     type = op_file,
                     id = ParentGuid,
                     aspect = instance,
                     scope = private
-                })
+                }),
+                {ParentGRI, FileName}
         end,
 
         SharesGRI = case Shares of
@@ -132,14 +148,14 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
         end,
 
         #{
-            <<"name">> => Name,
+            <<"name">> => DisplayedName,
             <<"owner">> => gri:serialize(#gri{
                 type = op_user,
                 id = Owner,
                 aspect = instance,
                 scope = shared
             }),
-            <<"index">> => Name,
+            <<"index">> => FileName,
             <<"type">> => Type,
             <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
             <<"activePermissionsType">> => ActivePermsType,
