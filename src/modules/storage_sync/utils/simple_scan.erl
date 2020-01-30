@@ -30,7 +30,7 @@
 %% API
 -export([run/1, maybe_sync_storage_file_and_children/1,
     maybe_sync_storage_file/1, import_children/5,
-    handle_already_imported_file/3, generate_jobs_for_importing_children/4,
+    maybe_update_file/3, generate_jobs_for_importing_children/4,
     import_regular_subfiles/1, import_file_safe/2, import_file/2]).
 
 %%--------------------------------------------------------------------
@@ -150,7 +150,7 @@ maybe_sync_storage_file(Job = #space_strategy_job{
                         false ->
                             {SFMHandle, _} = storage_file_ctx:get_handle(StorageFileCtx),
                             case storage_file_manager:stat(SFMHandle) of
-                                {ok, _} -> maybe_import_file(Job2);
+                                {ok, _} -> maybe_import_file(Job2, undefined);
                                 _ -> {processed, undefined, Job2}
                             end
                     end;
@@ -175,30 +175,25 @@ maybe_sync_storage_file(Job = #space_strategy_job{
 %% This functions import the file, if it hasn't been synchronized yet.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_import_file(space_strategy:job()) ->
+-spec maybe_import_file(space_strategy:job(), file_meta:uuid() | undefined) ->
     {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()} | no_return().
 maybe_import_file(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
         parent_ctx := ParentCtx,
-        storage_file_ctx := StorageFileCtx,
         space_id := SpaceId
-}}) ->
-    {#statbuf{st_mtime = StMTime}, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
-    Job2 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx2, Job),
+}}, FileUuid) ->
     {ParentStorageId, _} = file_ctx:get_storage_file_id(ParentCtx),
     FileStorageId = filename:join([ParentStorageId, FileName]),
-    case storage_sync_info:get(FileStorageId, SpaceId) of
-        {error, _} ->
-            {LocalResult, FileCtx} = import_file_safe(Job2, undefined),
-            {LocalResult, FileCtx, Job2};
-        {ok, #document{value = #storage_sync_info{mtime = LastMTime}}}
-            when StMTime =:= LastMTime
-        ->
-            {processed, undefined, Job2};
-        _ ->
-            {LocalResult, FileCtx} = import_file_safe(Job2, undefined),
-            {LocalResult, FileCtx, Job2}
+    % We must ensure that there was no race with deleting file.
+    % We check whether file that we found on storage and that we want to import
+    % is not associated with file that has been deleted from the system.
+    case {storage_sync_info:get(FileStorageId, SpaceId), has_file_ever_existed(FileUuid)} of
+        {{error, _}, false} ->
+            {LocalResult, FileCtx} = import_file_safe(Job, FileUuid),
+            {LocalResult, FileCtx, Job};
+        _->
+            {processed, undefined, Job}
     end.
 
 %%-------------------------------------------------------------------
@@ -213,14 +208,16 @@ maybe_import_file(Job = #space_strategy_job{
 -spec sync_if_file_is_not_being_replicated(space_strategy:job(), file_ctx:ctx(), file_meta:type()) ->
     {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()} | no_return().
 sync_if_file_is_not_being_replicated(Job, FileCtx, ?DIRECTORY_TYPE) ->
-    maybe_sync_file_with_existing_metadata(Job, FileCtx);
+    maybe_update_file(Job, FileCtx);
 sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
-    storage_id := StorageId, parent_ctx := ParentCtx, file_name := FileName
-}}, FileCtx, ?REGULAR_FILE_TYPE) ->
+    storage_id := StorageId,
+    parent_ctx := ParentCtx,
+    file_name := FileName
+    }}, FileCtx, ?REGULAR_FILE_TYPE) ->
     % Get only two blocks - it is enough to verify if file can be imported
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case fslogic_location_cache:get_location(
-        file_location:id(FileUuid, oneprovider:get_id()), FileUuid, {blocks_num, 2}) of
+        file_location:local_id(FileUuid), FileUuid, {blocks_num, 2}) of
         {ok, #document{
             value = #file_location{
                 file_id = FileId,
@@ -234,17 +231,23 @@ sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
                 true ->
                     case fslogic_location_cache:get_blocks(FL, #{count => 2}) of
                         [#file_block{offset = 0, size = Size}] ->
-                            maybe_sync_file_with_existing_metadata(Job, FileCtx);
+                            maybe_update_file(Job, FileCtx);
                         [] when Size =:= 0 ->
-                            maybe_sync_file_with_existing_metadata(Job, FileCtx);
+                            maybe_update_file(Job, FileCtx);
                         _ ->
                             {processed, FileCtx, Job}
                     end;
-                _ ->
-                    maybe_import_file(Job)
+                false ->
+                    % this may happen in 2 cases:
+                    %  * when file has been moved because it was deleted and still opened
+                    %    in such case, its storage_file_id in file_location has been changed
+                    %  * when there was a conflict between creation of file on storage and by remote provider
+                    %    in such case, if file was replicated from the remote provider and
+                    %    it must have been created on storage with a suffix
+                    maybe_import_file(Job, FileUuid)
             end;
         {error, not_found} ->
-            maybe_import_file(Job);
+            maybe_import_file(Job, FileUuid);
         _Other ->
             {processed, FileCtx, Job}
     end.
@@ -372,19 +375,18 @@ run_internal(Job = #space_strategy_job{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks if file (which metadata exists in onedata) is fully imported
-%% (.i.e. for regular files checks if its file_location exists).
+%% Checks if file (which metadata exists in onedata) is synchronized.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_sync_file_with_existing_metadata(space_strategy:job(), file_ctx:ctx()) ->
+-spec maybe_update_file(space_strategy:job(), file_ctx:ctx()) ->
     {space_strategy:job_result(), file_ctx:ctx(), space_strategy:job()}.
-maybe_sync_file_with_existing_metadata(Job, FileCtx) ->
+maybe_update_file(Job, FileCtx) ->
     CallbackModule = storage_sync_utils:module(Job),
     case get_attr_including_deleted(FileCtx) of
         {ok, _FileAttr, true} ->
             {processed, undefined, Job};
         {ok, FileAttr, false} ->
-            {LocalResult, Job2} = delegate(CallbackModule, handle_already_imported_file, [Job, FileAttr, FileCtx], 3),
+            {LocalResult, Job2} = delegate(CallbackModule, maybe_update_file, [Job, FileAttr, FileCtx], 3),
             {LocalResult, FileCtx, Job2};
         error ->
             % TODO VFS-6087 how should we handle conflict between sync and remotely created file?
@@ -594,9 +596,9 @@ new_job(Job, Data, StorageFileCtx) ->
 %% Updates mode, times and size of already imported file.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_already_imported_file(space_strategy:job(), #file_attr{},
+-spec maybe_update_file(space_strategy:job(), #file_attr{},
     file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
-handle_already_imported_file(Job = #space_strategy_job{
+maybe_update_file(Job = #space_strategy_job{
     strategy_args = Args,
     data = #{
         file_name := FileName,
@@ -1049,4 +1051,15 @@ is_suffixed(FileName) ->
         [FileUuid | Tokens2] ->
             FileName2 = list_to_binary(lists:reverse(Tokens2)),
             {true, FileUuid, FileName2}
+    end.
+
+-spec has_file_ever_existed(undefined | file_meta:uuid()) -> boolean().
+has_file_ever_existed(undefined) ->
+    false;
+has_file_ever_existed(FileUuid) ->
+    case file_meta:get_including_deleted(FileUuid) of
+        {error, ?ENOENT} ->
+            false;
+        {ok, _} ->
+            true
     end.

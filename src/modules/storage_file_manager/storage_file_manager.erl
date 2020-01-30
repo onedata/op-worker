@@ -545,10 +545,6 @@ unlink(SFMHandle = #sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }, CurrentSize) ->
-    case storage_sync_info:delete(FileId, SpaceId) of
-        ok -> ok;
-        {error, not_found} -> ok
-    end,
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     ?RUN(SFMHandle, fun() ->
         case helpers:unlink(HelperHandle, FileId, CurrentSize) of

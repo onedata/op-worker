@@ -31,8 +31,8 @@
 %% tests
 -export([
     create_directory_import_test/1,
-    create_file_import_test/1,
-    import_file_with_link_but_no_doc_test/1,
+    create_file_import_test/1
+    ,
     create_file_in_dir_update_test/1,
     delete_file_update_test/1,
     append_file_update_test/1,
@@ -85,7 +85,6 @@
     create_directory_import_without_read_permission_test,
     create_directory_import_many_test,
     create_file_import_test,
-    import_file_with_link_but_no_doc_test,
     create_empty_file_import_test,
     sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed,
     create_file_import_check_user_id_test,
@@ -344,9 +343,6 @@ create_directory_import_many_test(Config) ->
 
 create_file_import_test(Config) ->
     storage_sync_test_base:create_file_import_test(Config, true).
-
-import_file_with_link_but_no_doc_test(Config) ->
-    storage_sync_test_base:import_file_with_link_but_no_doc_test(Config, true).
 
 create_empty_file_import_test(Config) ->
     storage_sync_test_base:create_empty_file_import_test(Config, true).

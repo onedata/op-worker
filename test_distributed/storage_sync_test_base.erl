@@ -71,7 +71,7 @@
     create_delete_import_test_read_remote_only/2, copy_file_update_test/2,
     change_file_content_constant_size_test/2, change_file_content_update_test/2,
     create_empty_file_import_test/2,
-    append_empty_file_update_test/2, import_file_with_link_but_no_doc_test/2,
+    append_empty_file_update_test/2,
     append_file_not_changing_mtime_update_test/2,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/2,
     sync_should_not_invalidate_file_after_replication/1,
@@ -252,54 +252,6 @@ create_directory_import_test(Config, MountSpaceInRoot) ->
         lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-
-    ?assertMonitoring(W1, #{
-        <<"scans">> => 1,
-        <<"toProcess">> => 2,
-        <<"imported">> => 1,
-        <<"updated">> => 1,
-        <<"deleted">> => 0,
-        <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
-        <<"importedSum">> => 1,
-        <<"updatedSum">> => 1,
-        <<"deletedSum">> => 0,
-        <<"importedMinHist">> => 1,
-        <<"importedHourHist">> => 1,
-        <<"importedDayHist">> => 1,
-        <<"updatedMinHist">> => 1,
-        <<"updatedHourHist">> => 1,
-        <<"updatedDayHist">> => 1,
-        <<"deletedMinHist">> => 0,
-        <<"deletedHourHist">> => 0,
-        <<"deletedDayHist">> => 0
-    }, ?SPACE_ID).
-
-import_file_with_link_but_no_doc_test(Config, MountSpaceInRoot) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    W1MountPoint = get_host_mount_point(W1, Config),
-    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
-    StorageTestDirPath =
-        storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
-    ok = file:make_dir(StorageTestDirPath),
-    Ctx = rpc:call(W1, file_meta, get_ctx, []),
-    TreeId = rpc:call(W1, oneprovider, get_id, []),
-    FileUuid = datastore_key:new(),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
-    {ok, _} = rpc:call(W1, datastore_model, add_links,
-        [Ctx#{scope=>?SPACE_ID}, SpaceUuid, TreeId, {?TEST_DIR, FileUuid}]),
-    storage_sync_test_base:enable_storage_import(Config),
-
-    % wait till scan is finished
-    assertImportTimes(W1, ?SPACE_ID),
-
-    %% Check if dir was imported
-    {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch(FileUuid, file_id:guid_to_uuid(FileGuid)),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 

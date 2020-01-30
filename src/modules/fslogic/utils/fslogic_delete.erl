@@ -194,38 +194,42 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, RemoveFileMetadataPolicy) ->
                 ok
         end,
 
-        FileCtx5 = case RemoveStorageFileResult of
+        {StorageFileId, FileCtx5} = file_ctx:get_storage_file_id(FileCtx4),
+        SpaceId = file_ctx:get_space_id_const(FileCtx5),
+        storage_sync_info:delete(StorageFileId, SpaceId),
+
+        FileCtx6 = case RemoveStorageFileResult of
             {error, _} ->
                 % add deletion_link even if open_file_handling method is rename
                 % this way we are sure that remotely deleted file won't be reimported
                 % even if it hasn't been deleted because it's not empty yet
-                maybe_add_deletion_link(FileCtx4, UserCtx);
+                maybe_add_deletion_link(FileCtx5, UserCtx);
             _ ->
-                FileCtx4
+                FileCtx5
         end,
 
-        FileUuid = file_ctx:get_uuid_const(FileCtx4),
+        FileUuid = file_ctx:get_uuid_const(FileCtx6),
         case {RemoveFileMetadataPolicy, RemoveStorageFileResult} of
             {?REMOVE_ALL_POLICY, _} ->
-                {FileDoc, _} = file_ctx:get_file_doc(FileCtx4),
+                {FileDoc, _} = file_ctx:get_file_doc(FileCtx6),
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
                 ok = file_meta:delete(FileDoc);
             {?DELETION_LINK_POLICY, ok} ->
-                {FileDoc, FileCtx6} = file_ctx:get_file_doc_including_deleted(FileCtx5),
+                {FileDoc, FileCtx7} = file_ctx:get_file_doc_including_deleted(FileCtx6),
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
                 file_meta:delete_without_link(FileDoc), % do not match, document may not exist
                 % remove deletion_link even if open_file_handling method is rename
                 % as deletion_link may have been created when error occurred on deleting file on storage
-                FileCtx7 = remove_deletion_link(FileCtx6, UserCtx),
-                try_to_delete_parent(FileCtx7, UserCtx);
+                FileCtx8 = remove_deletion_link(FileCtx7, UserCtx),
+                try_to_delete_parent(FileCtx8, UserCtx);
             {?DELETION_LINK_POLICY, {error, _}} ->
                 % TODO VFS-6082 deletion links are left forever when deleting file on storage failed
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
-                {FileDoc, _FileCtx6} = file_ctx:get_file_doc_including_deleted(FileCtx5),
+                {FileDoc, _FileCtx6} = file_ctx:get_file_doc_including_deleted(FileCtx6),
                 file_meta:delete_without_link(FileDoc); % do not match, document may not exist
             {?REMOVE_NONE_POLICY, ok} ->
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
-                try_to_delete_parent(FileCtx5, UserCtx);
+                try_to_delete_parent(FileCtx6, UserCtx);
             {?REMOVE_NONE_POLICY, {error, _}} ->
                 ok = fslogic_location_cache:delete_local_location(FileUuid)
         end
@@ -370,6 +374,7 @@ rename_storage_file(FileCtx, ?RENAME_HANDLING_METHOD) ->
     TargetFileId = filename:join(?DELETED_OPENED_FILES_DIR, FileGuid),
 
     Handle = storage_file_manager:new_handle(SessId, SpaceId, FileUuid, Storage, FileId, undefined),
+    storage_sync_info:delete(FileId, SpaceId),
     case rename_storage_file(Handle, FileUuid, TargetFileId, Size) of
         {error, ?ENOENT} ->
             ensure_dir_for_deleted_files_created(SessId, SpaceId, FileUuid, Storage),

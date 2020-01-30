@@ -80,8 +80,8 @@
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
-    append_empty_file_update_test/1,
-    import_file_with_link_but_no_doc_test/1,
+    append_empty_file_update_test/1
+    ,
     append_file_not_changing_mtime_update_test/1,
     sync_should_not_invalidate_file_after_replication/1,
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
@@ -106,7 +106,6 @@
     sync_should_update_blocks_of_recreated_file_with_suffix_on_storage,
     sync_should_not_import_replicated_file_with_suffix_on_storage,
     sync_should_update_replicated_file_with_suffix_on_storage,
-%%    import_file_with_link_but_no_doc_test,
     create_empty_file_import_test,
     create_delete_import_test_read_both,
     create_delete_import_test_read_remote_only,
@@ -831,9 +830,6 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
         lfm_proxy:open(W2, SessId2, {guid, G2}, read)),
     ?assertMatch({ok, ?TEST_DATA_ONE_BYTE_CHANGED},
         lfm_proxy:read(W2, H5, 0, 100), ?ATTEMPTS).
-
-import_file_with_link_but_no_doc_test(Config) ->
-    storage_sync_test_base:import_file_with_link_but_no_doc_test(Config, false).
 
 create_empty_file_import_test(Config) ->
     storage_sync_test_base:create_empty_file_import_test(Config, false).
