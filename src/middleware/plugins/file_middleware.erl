@@ -365,7 +365,8 @@ data_spec_get(#gri{aspect = attrs}) -> #{
 data_spec_get(#gri{aspect = xattrs}) -> #{
     optional => #{
         <<"attribute">> => {binary, any},
-        <<"inherited">> => {boolean, any}
+        <<"inherited">> => {boolean, any},
+        <<"show_internal">> => {boolean, any}
     }
 };
 
@@ -499,11 +500,12 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
     SessionId = Auth#auth.session_id,
     Inherited = maps:get(<<"inherited">>, Data, false),
+    ShowInternal = maps:get(<<"show_internal">>, Data, false),
 
     case maps:get(<<"attribute">>, Data, undefined) of
         undefined ->
             {ok, Xattrs} = ?check(lfm:list_xattr(
-                SessionId, {guid, FileGuid}, Inherited, true
+                SessionId, {guid, FileGuid}, Inherited, ShowInternal
             )),
             {ok, value, lists:foldl(fun(XattrName, Acc) ->
                 {ok, #xattr{value = Value}} = ?check(lfm:get_xattr(
