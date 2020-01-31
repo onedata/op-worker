@@ -224,13 +224,13 @@ validate_create(#op_req{data = Data, gri = #gri{aspect = instance}}, _) ->
     SpaceId = file_id:guid_to_space_id(maps:get(<<"parent">>, Data)),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
+validate_create(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_file_managed_locally(Auth, Guid);
+    assert_file_managed_locally(Guid);
 
 validate_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
     % File path must have been resolved to guid by rest_handler already (to
@@ -428,7 +428,7 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = trans
 
 %% @private
 -spec validate_get(middleware:req(), middleware:entity()) -> ok | no_return().
-validate_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
+validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= list;
     As =:= children;
@@ -441,7 +441,7 @@ validate_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= transfers;
     As =:= download_url
 ->
-    assert_file_managed_locally(Auth, Guid).
+    assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -647,11 +647,11 @@ authorize_update(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
 
 %% @private
 -spec validate_update(middleware:req(), middleware:entity()) -> ok | no_return().
-validate_update(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
+validate_update(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= acl
 ->
-    assert_file_managed_locally(Auth, Guid).
+    assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -717,13 +717,13 @@ authorize_delete(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
 
 %% @private
 -spec validate_delete(middleware:req(), middleware:entity()) -> ok | no_return().
-validate_delete(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
+validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_file_managed_locally(Auth, Guid).
+    assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -780,14 +780,14 @@ has_access_to_file(?USER(UserId) = Auth, Guid) ->
 %% and can be reached from any provider.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_file_managed_locally(aai:auth(), file_id:file_guid()) ->
+-spec assert_file_managed_locally(file_id:file_guid()) ->
     ok | no_return().
-assert_file_managed_locally(?USER(UserId), Guid) ->
-    case fslogic_uuid:user_root_dir_guid(UserId) of
-        Guid ->
+assert_file_managed_locally(FileGuid) ->
+    {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
+    case fslogic_uuid:is_root_dir_uuid(FileUuid) of
+        true ->
             ok;
-        _ ->
-            SpaceId = file_id:guid_to_space_id(Guid),
+        false ->
             middleware_utils:assert_space_supported_locally(SpaceId)
     end.
 
