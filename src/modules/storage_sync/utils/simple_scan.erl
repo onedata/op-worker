@@ -33,6 +33,9 @@
     maybe_update_file/3, generate_jobs_for_importing_children/4,
     import_regular_subfiles/1, import_file_safe/2, import_file/2]).
 
+%% exported for mocking in tests
+-export([sync_if_file_is_not_being_replicated/3]).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% calls ?MODULE:run_internal/1 and catches exceptions
@@ -163,7 +166,7 @@ maybe_sync_storage_file(Job = #space_strategy_job{
                 {error, not_found} ->
                     FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
-                    sync_if_file_is_not_being_replicated(Job2, FileCtx, FileType);
+                    simple_scan:sync_if_file_is_not_being_replicated(Job2, FileCtx, FileType);
                 {ok, _} ->
                     {processed, undefined, Job2}
             end
@@ -226,7 +229,6 @@ sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
         }} = FL} ->
             {ParentStorageFileId, _ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),
             FileIdCheck = filename:join([ParentStorageFileId, FileName]),
-
             case FileId =:= FileIdCheck of
                 true ->
                     case fslogic_location_cache:get_blocks(FL, #{count => 2}) of

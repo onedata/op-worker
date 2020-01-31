@@ -56,7 +56,7 @@ change_replicated_internal(SpaceId, #document{
 } = FileDoc) when Del1 or Del2 ->
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
-    fslogic_delete:check_if_opened_and_remove(user_ctx:new(?ROOT_SESS_ID), FileCtx, false, true),
+    fslogic_delete:check_if_opened_and_remove(user_ctx:new(?ROOT_SESS_ID), FileCtx, false, true, ?REMOVE_NONE_POLICY),
     file_popularity:delete(FileUuid),
     ok;
 change_replicated_internal(SpaceId, #document{

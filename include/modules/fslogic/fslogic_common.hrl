@@ -26,6 +26,8 @@
 
 %% Hidden file prefix
 -define(HIDDEN_FILE_PREFIX, ".__onedata__").
+
+%% Directory name for deleted opened files
 -define(DELETED_OPENED_FILES_DIR, <<?HIDDEN_FILE_PREFIX, "deleted">>).
 -define(DELETED_OPENED_FILES_DIR_STRING, binary_to_list(?DELETED_OPENED_FILES_DIR)).
 
@@ -46,6 +48,14 @@
 
 %% Mode for automatically created parent directory while creating file/directory.
 -define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).
+
+%% Mode of deleted opened files directory
+-define(DELETED_OPENED_FILES_DIR_MODE, 8#700).
+
+% macros defining policies for removing metadata associated with file
+-define(REMOVE_ALL_POLICY, remove_all_policy).
+-define(DELETION_LINK_POLICY, deletion_link_policy).
+-define(REMOVE_NONE_POLICY, remove_none_policy).
 
 %% Allowed parameter keys
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).

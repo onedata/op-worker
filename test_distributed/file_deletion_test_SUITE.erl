@@ -257,7 +257,7 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
 
     ?assertEqual(false, rpc:call(Worker, file_handles, exists, [FileUuid])),
     ?assertEqual(ok, rpc:call(Worker, fslogic_delete, check_if_opened_and_remove,
-        [UserCtx, FileCtx, false, false])),
+        [UserCtx, FileCtx, false, false, ?REMOVE_ALL_POLICY])),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),

@@ -26,7 +26,7 @@
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
     create_delayed_storage_file/1, create_delayed_storage_file/4,
-    delete_storage_file/2, create_parent_dirs/1, recursive_delete/2]).
+    delete_storage_file/2, create_parent_dirs/1, delete/2]).
 
 % Test API
 -export([create_storage_file/3]).
@@ -204,7 +204,7 @@ delete_storage_file(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case storage_file_manager:new_handle(SessId, FileCtx, false) of
         {undefined, _} ->
-            ok;
+            {error, ?ENOENT};
         {SFMHandle, _} ->
             {Size, _} = file_ctx:get_file_size(FileCtx),
             storage_file_manager:unlink(SFMHandle, Size)
@@ -216,8 +216,8 @@ delete_storage_file(FileCtx, UserCtx) ->
 %% deleted to.
 %% @end
 %%--------------------------------------------------------------------
--spec recursive_delete(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
-recursive_delete(FileCtx, UserCtx) ->
+-spec delete(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
+delete(FileCtx, UserCtx) ->
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
     case IsDir of
         true -> delete_storage_dir(FileCtx2, UserCtx);

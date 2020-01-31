@@ -80,14 +80,17 @@
     change_file_content_constant_size_test/1,
     change_file_content_update_test/1,
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
-    append_empty_file_update_test/1
-    ,
+    append_empty_file_update_test/1,
     append_file_not_changing_mtime_update_test/1,
     sync_should_not_invalidate_file_after_replication/1,
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
     delete_many_subfiles_test/1,
     sync_should_not_reimport_deleted_but_still_opened_file/1,
-    create_file_import_race_test/1, close_file_import_race_test/1]).
+    create_file_import_race_test/1,
+    close_file_import_race_test/1,
+    delete_file_reimport_race_test/1,
+    delete_opened_file_reimport_race_test/1
+]).
 
 -define(TEST_CASES, [
     create_directory_import_test,
@@ -153,7 +156,8 @@
     should_not_sync_file_during_replication,
     sync_should_not_invalidate_file_after_replication,
     create_file_import_race_test,
-    close_file_import_race_test
+    close_file_import_race_test,
+    delete_file_reimport_race_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -326,6 +330,162 @@ close_file_import_race_test(Config) ->
     ?assertMatch({error, enoent},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})).
 
+delete_file_reimport_race_test(Config) ->
+    % in this test, we check whether sync does not reimport file that is deleted between checking links and file_location
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    MountInRoot = false,
+    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    StorageSpacePath = storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, <<"">>, MountInRoot),
+
+    %% Create file
+    {ok, FileGuid} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#644),
+    {ok, Handle1} = lfm_proxy:open(W1, SessId, {guid, FileGuid}, write),
+    {ok, _} = lfm_proxy:write(W1, Handle1, 0, ?TEST_DATA),
+    ok = lfm_proxy:close(W1, Handle1),
+
+    timer:sleep(timer:seconds(1)),
+
+    TestProcess = self(),
+    ok = test_utils:mock_new(W1, simple_scan),
+    ok = test_utils:mock_expect(W1, simple_scan, sync_if_file_is_not_being_replicated, fun(Job, FileCtx, FileType) ->
+        Guid = file_ctx:get_guid_const(FileCtx),
+        case Guid =:= FileGuid of
+            true ->
+                TestProcess ! {syncing_process, self()},
+                receive
+                    continue ->
+                        meck:passthrough([Job, FileCtx, FileType])
+                end;
+            false ->
+                meck:passthrough([Job, FileCtx, FileType])
+        end
+    end),
+
+    % touch space dir to ensure that it will be scanned
+    {ok, #file_info{mtime = Mtime}} = file:read_file_info(StorageSpacePath, [{time, posix}]),
+    ok = storage_sync_test_base:change_time(StorageSpacePath, Mtime + 1),
+
+    storage_sync_test_base:enable_storage_import(Config),
+    receive
+        {syncing_process, SyncingProcess} ->
+            ok = lfm_proxy:unlink(W1, SessId, {guid, FileGuid}),
+            SyncingProcess ! continue
+    end,
+
+    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
+
+    %% Check if file was not reimported on W1
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 0,
+        <<"updated">> => 1, % space_dir will have updated time
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 1,
+        <<"importedSum">> => 0,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 0,
+        <<"importedHourHist">> => 0,
+        <<"importedDayHist">> => 0,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+    %% Check if file was deleted on W2
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:ls(W2, SessId2, {path, ?SPACE_PATH}, 0, 1)).
+
+delete_opened_file_reimport_race_test(Config) ->
+    % in this test, we check whether sync does not reimport file that is deleted while still opened and moved
+    % to hidden directory between checking links and file_location
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    MountInRoot = false,
+    W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    StorageSpacePath = storage_sync_test_base:storage_test_file_path(W1MountPoint, ?SPACE_ID, <<"">>, MountInRoot),
+
+    %% Create file
+    {ok, FileGuid} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#644),
+    {ok, Handle1} = lfm_proxy:open(W1, SessId, {guid, FileGuid}, write),
+    {ok, _} = lfm_proxy:write(W1, Handle1, 0, ?TEST_DATA),
+
+    timer:sleep(timer:seconds(1)),
+
+    TestProcess = self(),
+    ok = test_utils:mock_new(W1, simple_scan),
+    ok = test_utils:mock_expect(W1, simple_scan, sync_if_file_is_not_being_replicated, fun(Job, FileCtx, FileType) ->
+        Guid = file_ctx:get_guid_const(FileCtx),
+        case Guid =:= FileGuid of
+            true ->
+                TestProcess ! {syncing_process, self()},
+                receive
+                    continue ->
+                        meck:passthrough([Job, FileCtx, FileType])
+                end;
+            false ->
+                meck:passthrough([Job, FileCtx, FileType])
+        end
+    end),
+
+    % touch space dir to ensure that it will be scanned
+    {ok, #file_info{mtime = Mtime}} = file:read_file_info(StorageSpacePath, [{time, posix}]),
+    ok = storage_sync_test_base:change_time(StorageSpacePath, Mtime + 1),
+
+    storage_sync_test_base:enable_storage_import(Config),
+    receive
+        {syncing_process, SyncingProcess} ->
+            ok = lfm_proxy:unlink(W1, SessId, {guid, FileGuid}),
+            SyncingProcess ! continue
+    end,
+
+    storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
+
+    %% Check if file was not reimported on W1
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 0,
+        <<"updated">> => 1, % space_dir will have updated time
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 1,
+        <<"importedSum">> => 0,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 0,
+        <<"importedHourHist">> => 0,
+        <<"importedDayHist">> => 0,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+    %% Check if file was deleted on W2
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:ls(W2, SessId2, {path, ?SPACE_PATH}, 0, 1)).
+
 create_directory_import_test(Config) ->
     storage_sync_test_base:create_directory_import_test(Config, false).
 
@@ -480,10 +640,10 @@ sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storag
         <<"scans">> => 2,
         <<"toProcess">> => 2,
         <<"imported">> => 0,
-        <<"updated">> => 1,
+        <<"updated">> => 1, % space dir was updated because we performed "touch" on it
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 1, % test dir was ignored
         <<"importedSum">> => 1,
         <<"updatedSum">> => 2,
         <<"deletedSum">> => 0,

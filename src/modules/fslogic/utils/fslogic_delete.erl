@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([check_if_opened_and_remove/4, remove_opened_file/1, remove_file/3,
+-export([check_if_opened_and_remove/5, remove_opened_file/1, remove_file/3,
     remove_file_handles/1, remove_auxiliary_documents/1, delete_all_opened_files/0]).
 
 %% Test API
@@ -30,14 +30,7 @@
 
 -type handling_method() :: ?RENAME_HANDLING_METHOD | ?LINK_HANDLING_METHOD.
 
-% macros defining policies for removing metadata associated with file
--define(REMOVE_ALL_POLICY, remove_all_policy).
--define(DELETION_LINK_POLICY, deletion_link_policy).
--define(REMOVE_NONE_POLICY, remove_none_policy).
-
 -type remove_file_metadata_policy() :: ?REMOVE_ALL_POLICY | ?DELETION_LINK_POLICY | ?REMOVE_NONE_POLICY.
-
--define(DELETED_OPENED_FILES_DIR_MODE, 8#700).
 
 %%%===================================================================
 %%% API
@@ -49,9 +42,9 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec check_if_opened_and_remove(user_ctx:ctx(), file_ctx:ctx(),
-    Silent :: boolean(), RemoteDelete :: boolean()) -> ok.
+    Silent :: boolean(), RemoteDelete :: boolean(), remove_file_metadata_policy()) -> ok.
 % TODO VFS-5268 - prevent reimport connected with remote delete
-check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
+check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete, RemoveFileMetadataPolicy) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
         case file_handles:exists(FileUuid) of
@@ -71,10 +64,6 @@ check_if_opened_and_remove(UserCtx, FileCtx, Silent, RemoteDelete) ->
                         remove_opened_file(FileCtx3)
                 end;
             _ ->
-                RemoveFileMetadataPolicy = case RemoteDelete of
-                    true -> ?REMOVE_NONE_POLICY;
-                    false -> ?REMOVE_ALL_POLICY
-                end,
                 ok = remove_file(FileCtx, UserCtx, true, RemoveFileMetadataPolicy)
         end,
         maybe_emit_event(FileCtx, UserCtx, Silent)
@@ -189,6 +178,9 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, RemoveFileMetadataPolicy) ->
 
         RemoveStorageFileResult = case RemoveStorageFile of
             true ->
+                % TODO VFS-6091 if there is a race between deleting nonempty directory
+                % TODO and creating the new one with the same name, the deletion link
+                % TODO will stay forever
                 maybe_remove_file_on_storage(FileCtx4, UserCtx);
             _ ->
                 ok
@@ -213,11 +205,13 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, RemoveFileMetadataPolicy) ->
             {?REMOVE_ALL_POLICY, _} ->
                 {FileDoc, _} = file_ctx:get_file_doc(FileCtx6),
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
-                ok = file_meta:delete(FileDoc);
+                ok = file_meta:delete(FileDoc),
+                ok = times:delete(FileUuid);
             {?DELETION_LINK_POLICY, ok} ->
                 {FileDoc, FileCtx7} = file_ctx:get_file_doc_including_deleted(FileCtx6),
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
                 file_meta:delete_without_link(FileDoc), % do not match, document may not exist
+                ok = times:delete(FileUuid),
                 % remove deletion_link even if open_file_handling method is rename
                 % as deletion_link may have been created when error occurred on deleting file on storage
                 FileCtx8 = remove_deletion_link(FileCtx7, UserCtx),
@@ -226,7 +220,8 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, RemoveFileMetadataPolicy) ->
                 % TODO VFS-6082 deletion links are left forever when deleting file on storage failed
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
                 {FileDoc, _FileCtx6} = file_ctx:get_file_doc_including_deleted(FileCtx6),
-                file_meta:delete_without_link(FileDoc); % do not match, document may not exist
+                file_meta:delete_without_link(FileDoc), % do not match, document may not exist
+                ok = times:delete(FileUuid);
             {?REMOVE_NONE_POLICY, ok} ->
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
                 try_to_delete_parent(FileCtx6, UserCtx);
@@ -305,18 +300,16 @@ process_file_links(FileCtx, UserCtx, KeepParentLink, HandlingMethod) ->
 -spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
 maybe_remove_file_on_storage(FileCtx, UserCtx) ->
     try
-        case sfm_utils:recursive_delete(FileCtx, UserCtx) of
+        case sfm_utils:delete(FileCtx, UserCtx) of
             ok -> ok;
             {error, ?ENOENT} -> ok;
-            {error, _} = Error -> Error
+            {error, _} = OtherError -> OtherError
         end
     catch
-        throw:{delete_child_error, Error2} ->
-            Error2;
-        Error3:Reason3 ->
+        Error:Reason ->
             FileGuid = file_ctx:get_guid_const(FileCtx),
-            ?error_stacktrace("Unexpected error ~p:~p occured when deleting ~p", [Error3, Reason3, FileGuid]),
-            {error, Reason3}
+            ?error_stacktrace("Unexpected error ~p:~p occured when deleting ~p", [Error, Reason, FileGuid]),
+            {error, Reason}
     end.
 
 %%--------------------------------------------------------------------
