@@ -291,7 +291,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 -spec get_file_location_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_location_insecure(UserCtx, FileCtx) ->
-    {ok, FileCtx2} = throw_if_not_exists(FileCtx, user_ctx:get_session_id(UserCtx)),
+    {ok, FileCtx2} = check_if_file_exists_or_is_opened(FileCtx, user_ctx:get_session_id(UserCtx)),
     {#document{key = StorageId}, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
     {#document{
         value = #file_location{
@@ -679,17 +679,18 @@ flush_event_queue(UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Throws ?ENOENT if file does not exist.
+%% Throws ?ENOENT if file does not exist or
+%% has been deleted and is not opened within session.
 %% @end
 %%--------------------------------------------------------------------
--spec throw_if_not_exists(file_ctx:ctx(), session:id()) -> {ok, file_ctx:ctx()} | no_return().
-throw_if_not_exists(FileCtx, SessionId) ->
+-spec check_if_file_exists_or_is_opened(file_ctx:ctx(), session:id()) -> {ok, file_ctx:ctx()} | no_return().
+check_if_file_exists_or_is_opened(FileCtx, SessionId) ->
     case file_ctx:file_exists_or_is_deleted(FileCtx) of
-        {true, FileCtx2} ->
+        {?FILE_EXISTS, FileCtx2} ->
             {ok, FileCtx2};
-        {false, _} ->
+        {?FILE_NEVER_EXISTED, _} ->
             throw(?ENOENT);
-        {deleted, FileCtx2} ->
+        {?FILE_DELETED, FileCtx2} ->
             case file_handles:is_used_by_session(FileCtx2, SessionId) of
                 true -> {ok, FileCtx2};
                 false -> throw(?ENOENT)

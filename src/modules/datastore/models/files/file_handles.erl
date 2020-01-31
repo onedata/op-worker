@@ -235,7 +235,7 @@ invalidate_session_entry(FileCtx, SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns information if filed is opened by particular session.
+%% Returns information if file is opened by particular session.
 %% @end
 %%--------------------------------------------------------------------
 -spec is_used_by_session(file_ctx:ctx(), session:id()) -> boolean() | {error, term()}.

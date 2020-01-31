@@ -1166,22 +1166,22 @@ file_exists_const(_) ->
 %% Checks if file exists. Returns 'deleted' if files was created and then deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec file_exists_or_is_deleted(ctx()) -> {boolean() | deleted, ctx()}.
+-spec file_exists_or_is_deleted(ctx()) -> {?FILE_EXISTS | ?FILE_DELETED | ?FILE_NEVER_EXISTED, ctx()}.
 file_exists_or_is_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
     case file_meta:get_including_deleted(FileUuid) of
         {ok, Doc} ->
             case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
                 {false, false} ->
-                    {true, FileCtx#file_ctx{file_doc = Doc}};
+                    {?FILE_EXISTS, FileCtx#file_ctx{file_doc = Doc}};
                 _ ->
-                    {deleted, FileCtx}
+                    {?FILE_DELETED, FileCtx}
             end;
         {error, not_found} ->
-            {false, FileCtx}
+            {?FILE_NEVER_EXISTED, FileCtx}
     end;
 file_exists_or_is_deleted(_) ->
-    true.
+    ?FILE_EXISTS.
 
 %%--------------------------------------------------------------------
 %% @doc
