@@ -66,7 +66,8 @@
     set_storage_path_type/2, get_storage_path_type_const/1, get_mounted_in_root/1,
     get_canonical_path_tokens/1]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
-    is_root_dir_const/1, has_acl_const/1, file_exists_const/1, is_in_user_space_const/2]).
+    is_root_dir_const/1, has_acl_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
+    is_in_user_space_const/2]).
 -export([equals/2]).
 
 %% Functions modifying context
@@ -1158,6 +1159,28 @@ file_exists_const(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
     file_meta:exists(FileUuid);
 file_exists_const(_) ->
+    true.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if file exists. Returns 'deleted' if files was created and then deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_exists_or_is_deleted(ctx()) -> {boolean() | deleted, ctx()}.
+file_exists_or_is_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
+    FileUuid = get_uuid_const(FileCtx),
+    case file_meta:get_including_deleted(FileUuid) of
+        {ok, Doc} ->
+            case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
+                {false, false} ->
+                    {true, FileCtx#file_ctx{file_doc = Doc}};
+                _ ->
+                    {deleted, FileCtx}
+            end;
+        {error, not_found} ->
+            {false, FileCtx}
+    end;
+file_exists_or_is_deleted(_) ->
     true.
 
 %%--------------------------------------------------------------------

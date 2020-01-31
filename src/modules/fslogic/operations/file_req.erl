@@ -290,16 +290,16 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %%--------------------------------------------------------------------
 -spec get_file_location_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
-get_file_location_insecure(_UserCtx, FileCtx) ->
-    throw_if_not_exists(FileCtx),
-    {#document{key = StorageId}, FileCtx2} = file_ctx:get_storage_doc(FileCtx),
+get_file_location_insecure(UserCtx, FileCtx) ->
+    {ok, FileCtx2} = throw_if_not_exists(FileCtx, user_ctx:get_session_id(UserCtx)),
+    {#document{key = StorageId}, FileCtx3} = file_ctx:get_storage_doc(FileCtx2),
     {#document{
         value = #file_location{
             blocks = Blocks,
             file_id = FileId
-    }}, FileCtx3} = file_ctx:get_or_create_local_file_location_doc(FileCtx2),
-    FileUuid = file_ctx:get_uuid_const(FileCtx3),
-    SpaceId = file_ctx:get_space_id_const(FileCtx3),
+    }}, FileCtx4} = file_ctx:get_or_create_local_file_location_doc(FileCtx3),
+    FileUuid = file_ctx:get_uuid_const(FileCtx4),
+    SpaceId = file_ctx:get_space_id_const(FileCtx4),
 
     #fuse_response{
         status = #status{code = ?OK},
@@ -682,9 +682,16 @@ flush_event_queue(UserCtx, FileCtx) ->
 %% Throws ?ENOENT if file does not exist.
 %% @end
 %%--------------------------------------------------------------------
--spec throw_if_not_exists(file_ctx:ctx()) -> ok | no_return().
-throw_if_not_exists(FileCtx) ->
-    case file_ctx:file_exists_const(FileCtx) of
-        true -> ok;
-        false -> throw(?ENOENT)
+-spec throw_if_not_exists(file_ctx:ctx(), session:id()) -> {ok, file_ctx:ctx()} | no_return().
+throw_if_not_exists(FileCtx, SessionId) ->
+    case file_ctx:file_exists_or_is_deleted(FileCtx) of
+        {true, FileCtx2} ->
+            {ok, FileCtx2};
+        {false, _} ->
+            throw(?ENOENT);
+        {deleted, FileCtx2} ->
+            case file_handles:is_used_by_session(FileCtx2, SessionId) of
+                true -> {ok, FileCtx2};
+                false -> throw(?ENOENT)
+            end
     end.

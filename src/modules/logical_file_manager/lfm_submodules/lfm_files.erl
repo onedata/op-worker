@@ -22,7 +22,7 @@
     get_file_guid/2, schedule_file_replication/4, schedule_replica_eviction/4,
     schedule_replication_by_view/6]).
 %% Functions operating on files
--export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3,
+-export([create/2, create/3, create/4, open/3, get_file_location/2, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read/4, check_size_and_read/3, read_without_events/3,
     read_without_events/4, silent_read/3, silent_read/4,
     truncate/3, release/1, get_file_distribution/2, create_and_open/5,
@@ -380,6 +380,18 @@ release(Handle) ->
                 FileGuid, #release{handle_id = HandleId},
                 fun(_) -> ok end)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns location to file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, file_location:record()} | lfm:error_reply().
+get_file_location(SessId, FileKey) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
+        #get_file_location{}, fun(#file_location{} = FL) -> {ok, FL} end).
 
 %%--------------------------------------------------------------------
 %% @doc

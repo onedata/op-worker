@@ -340,15 +340,20 @@ ensure_dir_for_deleted_files_created(SessId, SpaceId, FileUuid, Storage) ->
 -spec rename_storage_file(storage_file_manager:handle(), file_meta:uuid(), helpers:file_id(), non_neg_integer()) ->
     {renamed, helpers:file_id(), non_neg_integer()} | {error, ?ENOENT}.
 rename_storage_file(Handle, FileUuid, TargetFileId, Size) ->
-    case storage_file_manager:mv(Handle, TargetFileId) of
-        ok ->
-            LocId = file_location:local_id(FileUuid),
-            fslogic_location_cache:update_location(FileUuid, LocId, fun(FileLocation) ->
-                {ok, FileLocation#file_location{file_id = TargetFileId}}
-            end, false),
-            {renamed, TargetFileId, Size};
-        {error, ?ENOENT} = Error->
-            Error
+    LocId = file_location:local_id(FileUuid),
+    case fslogic_location_cache:update_location(FileUuid, LocId, fun(FileLocation) ->
+        {ok, FileLocation#file_location{file_id = TargetFileId}}
+    end, false) of
+        {ok, #document{value = NewFL}} ->
+            case storage_file_manager:mv(Handle, TargetFileId) of
+                ok ->
+                    fslogic_event_emitter:emit_file_location_changed(NewFL#file_location{blocks = []}, [], 0, 0),
+                    {renamed, TargetFileId, Size};
+                {error, ?ENOENT} = Error ->
+                    Error
+            end;
+        {error, ?ENOENT} = Error2->
+            Error2
     end.
 
 -spec delete_renamed_storage_file(file_ctx:ctx(), helpers:file_id(), non_neg_integer()) -> ok.

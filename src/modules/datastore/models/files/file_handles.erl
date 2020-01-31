@@ -20,7 +20,7 @@
 %% API
 -export([delete/1, exists/1, list/0]).
 -export([register_open/4, register_release/3, mark_to_remove/1,
-    invalidate_session_entry/2, get_creation_handle/1]).
+    invalidate_session_entry/2, is_used_by_session/2, get_creation_handle/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -230,6 +230,20 @@ invalidate_session_entry(FileCtx, SessId) ->
     case register_release(FileCtx, SessId, infinity) of
         ok -> ok;
         {error, not_found} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns information if filed is opened by particular session.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_used_by_session(file_ctx:ctx(), session:id()) -> boolean() | {error, term()}.
+is_used_by_session(FileCtx, SessId) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    case datastore_model:get(?CTX, FileUuid) of
+        {ok, #document{value = #file_handles{descriptors = Fds}}} -> maps:is_key(SessId, Fds);
+        {error, not_found} -> false;
         {error, Reason} -> {error, Reason}
     end.
 
