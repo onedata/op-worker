@@ -172,6 +172,7 @@ rename_removed_opened_file_test(Config) ->
     FileNameString = binary_to_list(FileName),
     FilePath = <<"/space_name1/",  FileName/binary>>,
     User = <<"user1">>,
+    User2 = <<"user2">>,
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])]) of
@@ -200,6 +201,10 @@ rename_removed_opened_file_test(Config) ->
     {ok, ListAns3} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])])),
     ?assertEqual([Guid1String], ListAns3 -- InitialDeletedDir),
+    RenamedStorageID = filename:join([?DELETED_OPENED_FILES_DIR, Guid1]),
+    ?assertMatch({ok, #file_location{file_id = RenamedStorageID}},
+        lfm_proxy:get_file_location(Worker, SessId(User), {guid, Guid1})),
+    ?assertMatch({error, enoent}, lfm_proxy:get_file_location(Worker, SessId(User2), {guid, Guid1})),
 
     lfm_proxy:close_all(Worker),
     {ok, ListAns4} = ?assertMatch({ok, _},

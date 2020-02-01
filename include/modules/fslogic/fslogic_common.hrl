@@ -51,4 +51,9 @@
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).
 -define(PROXYIO_PARAMETER_FILE_GUID, <<"file_uuid">>).
 
+%% Macros for file lifecycle
+-define(FILE_EXISTS, exists).
+-define(FILE_DELETED, deleted).
+-define(FILE_NEVER_EXISTED, never_existed).
+
 -endif.
