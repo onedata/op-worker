@@ -199,15 +199,16 @@ create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_storage_file(file_ctx:ctx(), user_ctx:ctx()) ->
-    ok | {error, term()}.
+    {ok, file_ctx:ctx()} | {error, term()}.
 delete_storage_file(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case storage_file_manager:new_handle(SessId, FileCtx, false) of
-        {undefined, _} ->
+        {undefined, _FileCtx2} ->
             {error, ?ENOENT};
-        {SFMHandle, _} ->
-            {Size, _} = file_ctx:get_file_size(FileCtx),
-            storage_file_manager:unlink(SFMHandle, Size)
+        {SFMHandle, FileCtx2} ->
+            {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
+            storage_file_manager:unlink(SFMHandle, Size),
+            {ok, FileCtx3}
     end.
 
 %%--------------------------------------------------------------------
@@ -216,7 +217,7 @@ delete_storage_file(FileCtx, UserCtx) ->
 %% deleted to.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
+-spec delete(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
 delete(FileCtx, UserCtx) ->
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
     case IsDir of
@@ -230,19 +231,21 @@ delete(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_storage_dir(file_ctx:ctx(), user_ctx:ctx()) ->
-    ok | {error, term()}.
+    {ok, file_ctx:ctx()} | {error, term()}.
 delete_storage_dir(DirCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     FileUuid = file_ctx:get_uuid_const(DirCtx),
     case storage_file_manager:new_handle(SessId, DirCtx, false) of
-        {undefined, _} ->
-            ok;
-        {SFMHandle, _} ->
+        {undefined, FileCtx2} ->
+            {ok, FileCtx2};
+        {SFMHandle, FileCtx2} ->
             case storage_file_manager:rmdir(SFMHandle) of
                 ok ->
-                    dir_location:delete(FileUuid);
+                    dir_location:delete(FileUuid),
+                    {ok, FileCtx2};
                 {error, ?ENOENT} ->
-                    dir_location:delete(FileUuid);
+                    dir_location:delete(FileUuid),
+                    {ok, FileCtx2};
                 {error, ?ENOTEMPTY} = Error ->
                     ?debug("sfm_utils:delete_storage_dir failed with ~p", [Error]),
                     Error;

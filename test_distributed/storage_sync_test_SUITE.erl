@@ -576,9 +576,7 @@ sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storag
     W1MountPoint = storage_sync_test_base:get_host_mount_point(W1, Config),
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
-    % we give directory a random name because deletion link to it will stay forever and
-    % we don't want to influence other test cases
-    TestDir = <<"<random_dir", (integer_to_binary(rand:uniform(1000)))/binary>>,
+    TestDir = ?config(test_dir, Config),
     StorageTestDirPath =
         storage_sync_test_base:storage_test_dir_path(W1MountPoint, ?SPACE_ID, TestDir, MountSpaceInRoot),
     StorageSpaceDirPath =
@@ -1423,6 +1421,11 @@ init_per_testcase(Case, Config) when
     end),
     init_per_testcase(default, Config);
 
+init_per_testcase(sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage, Config) ->
+    % generate random dir name
+    TestDir = <<"<random_dir", (integer_to_binary(rand:uniform(1000)))/binary>>,
+    init_per_testcase(default, [{test_dir, TestDir} | Config]);
+
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, fslogic_delete, [passthrough]),
@@ -1469,6 +1472,19 @@ end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
 end_per_testcase(sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [fslogic_path]),
+    end_per_testcase(default, Config);
+
+end_per_testcase(sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage, Config) ->
+    [W1| _] = ?config(op_worker_nodes, Config),
+    % remove stalled deletion link
+    TestDir = ?config(test_dir, Config),
+    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
+    SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
+    {ok, DirUuid} = rpc:call(W1, link_utils, try_to_resolve_child_deletion_link, [TestDir, SpaceCtx]),
+    DirGuid = file_id:pack_guid(DirUuid, ?SPACE_ID),
+    FileCtx = file_ctx:new_by_guid(DirGuid),
+    rpc:call(W1, link_utils, remove_deletion_link, [FileCtx, SpaceUuid]),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->

@@ -176,6 +176,10 @@ maybe_sync_storage_file(Job = #space_strategy_job{
 %% @private
 %% @doc
 %% This functions import the file, if it hasn't been synchronized yet.
+%% 'undefined' FileUuid means that link for the file with given name
+%% was not found.
+%% If FileUuid is not `undefined` check will be performed to ensure
+%% that file will no be reimported.
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_import_file(space_strategy:job(), file_meta:uuid() | undefined) ->
@@ -214,6 +218,7 @@ sync_if_file_is_not_being_replicated(Job, FileCtx, ?DIRECTORY_TYPE) ->
     maybe_update_file(Job, FileCtx);
 sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
     storage_id := StorageId,
+    storage_file_ctx := StorageFileCtx,
     parent_ctx := ParentCtx,
     file_name := FileName
     }}, FileCtx, ?REGULAR_FILE_TYPE) ->
@@ -240,13 +245,21 @@ sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
                             {processed, FileCtx, Job}
                     end;
                 false ->
+                    {SFMHandle, StorageFileCtx2} = storage_file_ctx:get_handle(StorageFileCtx),
+                    Job2 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx2, Job),
                     % this may happen in 2 cases:
-                    %  * when file has been moved because it was deleted and still opened
-                    %    in such case, its storage_file_id in file_location has been changed
-                    %  * when there was a conflict between creation of file on storage and by remote provider
-                    %    in such case, if file was replicated from the remote provider and
-                    %    it must have been created on storage with a suffix
-                    maybe_import_file(Job, FileUuid)
+                    case storage_file_manager:stat(SFMHandle) of
+                        {ok, _} ->
+                            % when there was a conflict between creation of file on storage and by remote provider
+                            % in such case, if file was replicated from the remote provider
+                            % it must have been created on storage with a suffix
+                            maybe_import_file(Job2, undefined);
+                        _ ->
+                            % when file has been moved because it was deleted and still opened
+                            % in such case, its storage_file_id in file_location has been changed
+                            % such file should be ignored
+                            {processed, undefined, Job2}
+                    end
             end;
         {error, not_found} ->
             maybe_import_file(Job, FileUuid);

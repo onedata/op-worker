@@ -237,7 +237,7 @@
     file_handle :: undefined | helpers:file_handle(),
     file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),
-    file_uuid :: file_meta:uuid(),
+    file_uuid :: undefined | file_meta:uuid(),
     space_id :: undefined | od_space:id(),
     storage :: undefined | storage:doc(),
     storage_id :: undefined | storage:id(),

@@ -31,7 +31,7 @@
     delete_without_link/1]).
 -export([delete_child_link/4, foreach_child/3, add_child_link/4, delete_deletion_link/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
--export([add_share/2, remove_share/2]).
+-export([add_share/2, remove_share/2, get_shares/1]).
 -export([get_parent/1, get_parent_uuid/1, get_parent_including_deleted/1]).
 -export([
     get_child/2, get_child_uuid/2,
@@ -711,6 +711,12 @@ remove_share(FileCtx, ShareId) ->
             _ -> {error, not_found}
         end
     end).
+
+-spec get_shares(doc() | file_meta()) -> {ok, [od_share:id()]}.
+get_shares(#document{value = FileMeta}) ->
+    get_shares(FileMeta);
+get_shares(#file_meta{shares = Shares}) ->
+    {ok, Shares}.
 
 %%--------------------------------------------------------------------
 %% @doc

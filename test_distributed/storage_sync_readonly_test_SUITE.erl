@@ -31,8 +31,7 @@
 %% tests
 -export([
     create_directory_import_test/1,
-    create_file_import_test/1
-    ,
+    create_file_import_test/1,
     create_file_in_dir_update_test/1,
     delete_file_update_test/1,
     append_file_update_test/1,

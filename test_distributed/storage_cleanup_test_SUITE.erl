@@ -497,6 +497,8 @@ race_on_remote_deletion_of_parent_and_child(Config) ->
     {ok, DirDoc} = rpc:call(Worker, file_meta, get_including_deleted, [DirUuid]),
     {ok, FileDoc} = rpc:call(Worker, file_meta, get_including_deleted, [FileUuid]),
     ok = rpc:call(Worker, dbsync_events, change_replicated, [SpaceId, DirDoc]),
+    % check that directory was not deleted from storage
+    ?assertMatch({ok, _}, read_file_info(Worker, StorageDirPath), 10),
     ok = rpc:call(Worker, dbsync_events, change_replicated, [SpaceId, FileDoc]),
 
     % then
