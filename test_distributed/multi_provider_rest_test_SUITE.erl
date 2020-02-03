@@ -1042,15 +1042,34 @@ set_get_xattr_inherited(Config) ->
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child?inherited=true">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), [])),
+        rest_test_utils:request(
+            WorkerP1, <<"metadata/xattrs/space2/dir_test/child?inherited=true">>, get,
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), []
+        )
+    ),
     DecodedBody = json_utils:decode(Body),
+    ?assertNotMatch(#{
+        <<"onedata_json">> := #{<<"a">> := 5}
+    }, DecodedBody),
+    ?assertMatch(#{
+        <<"k1">> := <<"v1">>,
+        <<"k2">> := <<"v22">>,
+        <<"k3">> := <<"v3">>
+    }, DecodedBody),
+
+    {_, _, _, Body2} = ?assertMatch({ok, 200, _, _},
+        rest_test_utils:request(
+            WorkerP1, <<"metadata/xattrs/space2/dir_test/child?inherited=true&show_internal=true">>, get,
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), []
+        )
+    ),
+    DecodedBody2 = json_utils:decode(Body2),
     ?assertMatch(#{
         <<"k1">> := <<"v1">>,
         <<"k2">> := <<"v22">>,
         <<"k3">> := <<"v3">>,
         <<"onedata_json">> := #{<<"a">> := 5}
-    }, DecodedBody).
+    }, DecodedBody2).
 
 set_get_json_metadata_using_filter(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
