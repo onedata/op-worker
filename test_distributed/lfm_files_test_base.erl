@@ -45,6 +45,7 @@
     create_share_file/1,
     remove_share/1,
     share_getattr/1,
+    share_get_parent/1,
     share_list/1,
     share_read/1,
     share_child_getattr/1,
@@ -1291,6 +1292,32 @@ share_getattr(Config) ->
         },
         lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareGuid})
     ).
+
+share_get_parent(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    UserId = <<"user1">>,
+    SessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
+
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    DirPath = <<SpaceName/binary, "/share_get_parent">>,
+    {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId, <<DirPath/binary, "/file">>, 8#700),
+
+    {ok, ShareId} = lfm_proxy:create_share(W, SessId, {guid, DirGuid}, <<"share_name">>),
+    ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+
+    % Getting parent of dir should return space guid
+    ?assertMatch({ok, SpaceGuid}, lfm_proxy:get_parent(W, SessId, {guid, DirGuid})),
+    % Getting parent of dir when accessing it in share mode should return undefined
+    % as dir is share root
+    ?assertMatch({ok, undefined}, lfm_proxy:get_parent(W, SessId, {guid, ShareDirGuid})),
+
+    % Getting file parent in normal mode should return dir guid
+    ?assertMatch({ok, DirGuid}, lfm_proxy:get_parent(W, SessId, {guid, FileGuid})),
+    % Getting file parent in share mode should return share dir guid
+    ?assertMatch({ok, ShareDirGuid}, lfm_proxy:get_parent(W, SessId, {guid, ShareFileGuid})).
 
 share_list(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
