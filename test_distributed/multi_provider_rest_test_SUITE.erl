@@ -416,18 +416,30 @@ xattr_list(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     File = filename:join(["/", SpaceName, "file1_xl"]),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+
+    Rdf = <<"<test></test>">>,
     ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k1">>, value = <<"v1">>}),
     ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {guid, FileGuid}, #xattr{name = <<"k2">>, value = <<"v2">>}),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, FileGuid}, rdf, Rdf, []),
 
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary>>, get, ?USER_1_AUTH_HEADERS(Config), []),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
+    % Simple get without specifying attribute name should list all non-masked xattrs
+    {ok, 200, _, Response1} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary>>, get, ?USER_1_AUTH_HEADERS(Config), []),
+    DecodedResponse1 = json_utils:decode(Response1),
     ?assertMatch(#{
         <<"k1">> := <<"v1">>,
         <<"k2">> := <<"v2">>
-    }, DecodedBody).
+    }, DecodedResponse1),
+    ?assertMatch(error, maps:take(<<"rdf">>, DecodedResponse1)),
+
+    {ok, 200, _, Response2} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary, "?show_internal=true">>, get, ?USER_1_AUTH_HEADERS(Config), []),
+
+    % Get without specifying attribute but with show_internal set to true should
+    % list all attributes including those normally masked like rdf metadata
+    ?assertMatch(#{
+        <<"k1">> := <<"v1">>,
+        <<"k2">> := <<"v2">>,
+        <<"onedata_rdf">> := Rdf
+    }, json_utils:decode(Response2)).
 
 metric_get(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -1030,15 +1042,34 @@ set_get_xattr_inherited(Config) ->
 
     % then
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
-        rest_test_utils:request(WorkerP1, <<"metadata/xattrs/space2/dir_test/child?inherited=true">>, get,
-            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), [])),
+        rest_test_utils:request(
+            WorkerP1, <<"metadata/xattrs/space2/dir_test/child?inherited=true">>, get,
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), []
+        )
+    ),
     DecodedBody = json_utils:decode(Body),
+    ?assertNotMatch(#{
+        <<"onedata_json">> := #{<<"a">> := 5}
+    }, DecodedBody),
+    ?assertMatch(#{
+        <<"k1">> := <<"v1">>,
+        <<"k2">> := <<"v22">>,
+        <<"k3">> := <<"v3">>
+    }, DecodedBody),
+
+    {_, _, _, Body2} = ?assertMatch({ok, 200, _, _},
+        rest_test_utils:request(
+            WorkerP1, <<"metadata/xattrs/space2/dir_test/child?inherited=true&show_internal=true">>, get,
+            ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), []
+        )
+    ),
+    DecodedBody2 = json_utils:decode(Body2),
     ?assertMatch(#{
         <<"k1">> := <<"v1">>,
         <<"k2">> := <<"v22">>,
         <<"k3">> := <<"v3">>,
         <<"onedata_json">> := #{<<"a">> := 5}
-    }, DecodedBody).
+    }, DecodedBody2).
 
 set_get_json_metadata_using_filter(Config) ->
     [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),

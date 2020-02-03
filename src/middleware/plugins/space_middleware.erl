@@ -81,7 +81,7 @@ operation_supported(_, _, _) -> false.
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = {view, _}}}) -> #{
     required => #{
-        <<"application/javascript">> => {binary, non_empty}
+        <<"mapFunction">> => {binary, non_empty}
     },
     optional => #{
         <<"spatial">> => {boolean, any},
@@ -101,7 +101,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = {view, _}}}) -> #{
 };
 
 data_spec(#op_req{operation = create, gri = #gri{aspect = {view_reduce_function, _}}}) -> #{
-    required => #{<<"application/javascript">> => {binary, non_empty}}
+    required => #{<<"reduceFunction">> => {binary, non_empty}}
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = list}}) ->
@@ -184,7 +184,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_cha
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = {view, _}}}) -> #{
     optional => #{
-        <<"application/javascript">> => {binary, any},
+        <<"mapFunction">> => {binary, any},
         <<"spatial">> => {boolean, any},
         <<"update_min_changes">> => {integer, {not_lower_than, 1}},
         <<"replica_update_min_changes">> => {integer, {not_lower_than, 1}},
@@ -413,14 +413,14 @@ validate(#op_req{operation = delete, gri = #gri{
 create(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
     index:save(
         SpaceId, ViewName,
-        maps:get(<<"application/javascript">>, Data), undefined,
+        maps:get(<<"mapFunction">>, Data), undefined,
         prepare_view_options(Data),
         maps:get(<<"spatial">>, Data, false),
         maps:get(<<"providers[]">>, Data, [oneprovider:get_id()])
     );
 
 create(#op_req{gri = #gri{id = SpaceId, aspect = {view_reduce_function, ViewName}}} = Req) ->
-    ReduceFunction = maps:get(<<"application/javascript">>, Req#op_req.data),
+    ReduceFunction = maps:get(<<"reduceFunction">>, Req#op_req.data),
     case index:update_reduce_function(SpaceId, ViewName, ReduceFunction) of
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
@@ -616,7 +616,7 @@ get(#op_req{data = Data, gri = #gri{
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
-    MapFunctionRaw = maps:get(<<"application/javascript">>, Data),
+    MapFunctionRaw = maps:get(<<"mapFunction">>, Data),
     MapFun = utils:ensure_defined(MapFunctionRaw, <<>>, undefined),
 
     case index:update(

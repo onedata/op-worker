@@ -24,7 +24,7 @@
 -include_lib("ctool/include/http/headers.hrl").
 
 -type method() :: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'.
--type parse_body() :: ignore | as_json_params | as_is.
+-type parse_body() :: ignore | as_json_params | {as_is, KeyName :: binary()}.
 -type binding() :: {binding, atom()} | {objectid_binding, atom()} | path_binding.
 -type bound_gri() :: #b_gri{}.
 
@@ -347,7 +347,7 @@ get_data(Req, as_json_params, _Consumes) ->
     end,
     is_map(ParsedBody) orelse throw(?ERROR_MALFORMED_DATA),
     {maps:merge(ParsedBody, QueryParams), Req2};
-get_data(Req, as_is, Consumes) ->
+get_data(Req, {as_is, KeyName}, Consumes) ->
     QueryParams = parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ContentType = case Consumes of
@@ -367,7 +367,7 @@ get_data(Req, as_is, Consumes) ->
         _ ->
             Body
     end,
-    {QueryParams#{ContentType => ParsedBody}, Req2}.
+    {QueryParams#{KeyName => ParsedBody}, Req2}.
 
 
 %%--------------------------------------------------------------------

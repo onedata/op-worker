@@ -182,23 +182,11 @@ data_spec_create(#gri{aspect = attrs}) -> #{
 };
 
 data_spec_create(#gri{aspect = xattrs}) -> #{
-    required => #{<<"application/json">> => {json,
-        % Accept only one xattr to set
-        fun(JSON) ->
-            case maps:to_list(JSON) of
-                [{Key, _Val}] when not is_binary(Key) ->
-                    throw(?ERROR_BAD_VALUE_BINARY(<<"extended attribute name">>));
-                [{_, _}] ->
-                    true;
-                _ ->
-                    false
-            end
-        end
-    }}
+    required => #{<<"metadata">> => {json, any}}
 };
 
 data_spec_create(#gri{aspect = json_metadata}) -> #{
-    required => #{<<"application/json">> => {any, any}},
+    required => #{<<"metadata">> => {any, any}},
     optional => #{
         <<"filter_type">> => {binary, [<<"keypath">>]},
         <<"filter">> => {binary, any}
@@ -206,7 +194,7 @@ data_spec_create(#gri{aspect = json_metadata}) -> #{
 };
 
 data_spec_create(#gri{aspect = rdf_metadata}) -> #{
-    required => #{<<"application/rdf+xml">> => {binary, any}}
+    required => #{<<"metadata">> => {binary, any}}
 }.
 
 
@@ -280,15 +268,16 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = attrs}})
     ?check(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, Mode));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = xattrs}}) ->
-    [{Name, Value}] = maps:to_list(maps:get(<<"application/json">>, Data)),
-    ?check(lfm:set_xattr(
-        Auth#auth.session_id, {guid, Guid},
-        #xattr{name = Name, value = Value},
-        false, false
-    ));
+    lists:foreach(fun({XattrName, XattrValue}) ->
+        ?check(lfm:set_xattr(
+            Auth#auth.session_id, {guid, Guid},
+            #xattr{name = XattrName, value = XattrValue},
+            false, false
+        ))
+    end, maps:to_list(maps:get(<<"metadata">>, Data)));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_metadata}}) ->
-    JSON = maps:get(<<"application/json">>, Data),
+    JSON = maps:get(<<"metadata">>, Data),
     Filter = maps:get(<<"filter">>, Data, undefined),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
     FilterList = case {FilterType, Filter} of
@@ -305,11 +294,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_met
     ));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
-    Rdf = maps:get(<<"application/rdf+xml">>, Data),
-    ?check(lfm:set_metadata(
-        Auth#auth.session_id, {guid, Guid},
-        rdf, Rdf, []
-    )).
+    Rdf = maps:get(<<"metadata">>, Data),
+    ?check(lfm:set_metadata(Auth#auth.session_id, {guid, Guid}, rdf, Rdf, [])).
 
 
 %%%===================================================================
@@ -326,8 +312,11 @@ get_operation_supported(children, private) -> true;
 get_operation_supported(children, public) -> true;
 get_operation_supported(attrs, private) -> true;
 get_operation_supported(xattrs, private) -> true;
+get_operation_supported(xattrs, public) -> true;
 get_operation_supported(json_metadata, private) -> true;
+get_operation_supported(json_metadata, public) -> true;
 get_operation_supported(rdf_metadata, private) -> true;
+get_operation_supported(rdf_metadata, public) -> true;
 get_operation_supported(acl, private) -> true;
 get_operation_supported(shares, private) -> true;
 get_operation_supported(transfers, private) -> true;
@@ -376,7 +365,8 @@ data_spec_get(#gri{aspect = attrs}) -> #{
 data_spec_get(#gri{aspect = xattrs}) -> #{
     optional => #{
         <<"attribute">> => {binary, any},
-        <<"inherited">> => {boolean, any}
+        <<"inherited">> => {boolean, any},
+        <<"show_internal">> => {boolean, any}
     }
 };
 
@@ -410,6 +400,9 @@ data_spec_get(#gri{aspect = download_url}) ->
 authorize_get(#op_req{gri = #gri{aspect = As, scope = public}}, _) when
     As =:= instance;
     As =:= children;
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadata;
     As =:= download_url
 ->
     true;
@@ -507,13 +500,14 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
     SessionId = Auth#auth.session_id,
     Inherited = maps:get(<<"inherited">>, Data, false),
+    ShowInternal = maps:get(<<"show_internal">>, Data, false),
 
     case maps:get(<<"attribute">>, Data, undefined) of
         undefined ->
             {ok, Xattrs} = ?check(lfm:list_xattr(
-                SessionId, {guid, FileGuid}, Inherited, true
+                SessionId, {guid, FileGuid}, Inherited, ShowInternal
             )),
-            {ok, lists:foldl(fun(XattrName, Acc) ->
+            {ok, value, lists:foldl(fun(XattrName, Acc) ->
                 {ok, #xattr{value = Value}} = ?check(lfm:get_xattr(
                     SessionId,
                     {guid, FileGuid},
@@ -526,7 +520,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}
             {ok, #xattr{value = Val}} = ?check(lfm:get_xattr(
                 SessionId, {guid, FileGuid}, XattrName, Inherited
             )),
-            {ok, #{XattrName => Val}}
+            {ok, value, #{XattrName => Val}}
     end;
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}, _) ->
@@ -545,16 +539,18 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
             binary:split(Filter, <<".">>, [global])
     end,
 
-    ?check(lfm:get_metadata(
+    {ok, Result} = ?check(lfm:get_metadata(
         SessionId, {guid, FileGuid},
         json, FilterList, Inherited
-    ));
+    )),
+    {ok, value, Result};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
-    ?check(lfm:get_metadata(
+    {ok, Result} = ?check(lfm:get_metadata(
         Auth#auth.session_id, {guid, FileGuid},
         rdf, [], false
-    ));
+    )),
+    {ok, value, Result};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     ?check(lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}));
@@ -688,24 +684,45 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) -
 -spec delete_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
 delete_operation_supported(instance, private) -> true;
+delete_operation_supported(xattrs, private) -> true;
+delete_operation_supported(json_metadata, private) -> true;
+delete_operation_supported(rdf_metadata, private) -> true;
 delete_operation_supported(_, _) -> false.
 
 
 %% @private
 -spec data_spec_delete(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
-data_spec_delete(#gri{aspect = instance}) ->
-    undefined.
+data_spec_delete(#gri{aspect = As}) when
+    As =:= instance;
+    As =:= json_metadata;
+    As =:= rdf_metadata
+->
+    undefined;
+
+data_spec_delete(#gri{aspect = xattrs}) -> #{
+    required => #{<<"keys">> => {list_of_binaries, any}}
+}.
 
 
 %% @private
 -spec authorize_delete(middleware:req(), middleware:entity()) -> boolean().
-authorize_delete(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = instance}}, _) ->
+authorize_delete(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
+    As =:= instance;
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadata
+->
     has_access_to_file(Auth, Guid).
 
 
 %% @private
 -spec validate_delete(middleware:req(), middleware:entity()) -> ok | no_return().
-validate_delete(#op_req{gri = #gri{id = Guid, aspect = instance}}, _) ->
+validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
+    As =:= instance;
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadata
+->
     assert_file_managed_locally(Guid).
 
 
@@ -716,7 +733,18 @@ validate_delete(#op_req{gri = #gri{id = Guid, aspect = instance}}, _) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
-    ?check(lfm:rm_recursive(Auth#auth.session_id, {guid, FileGuid})).
+    ?check(lfm:rm_recursive(Auth#auth.session_id, {guid, FileGuid}));
+
+delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
+    lists:foreach(fun(XattrName) ->
+        ?check(lfm:remove_xattr(Auth#auth.session_id, {guid, FileGuid}, XattrName))
+    end, maps:get(<<"keys">>, Data));
+
+delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
+    ?check(lfm:remove_metadata(Auth#auth.session_id, {guid, FileGuid}, json));
+
+delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
+    ?check(lfm:remove_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf)).
 
 
 %%%===================================================================
