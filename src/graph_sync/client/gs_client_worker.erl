@@ -478,7 +478,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
         end,
         GsReq = #gs_req{
             subtype = SubType,
-            auth_override = resolve_auth_override(client_to_auth(Client)),
+            auth_override = auth_manager:to_auth_override(client_to_auth(Client)),
             request = Request
         },
         case gen_server2:call(ConnRef, {async_request, GsReq, Timeout}) of
@@ -622,15 +622,6 @@ client_to_auth(?GUEST_AUTH) ->
     ?GUEST_AUTH;
 client_to_auth(TokenAuth) ->
     TokenAuth.
-
-
--spec resolve_auth_override(session:auth()) -> gs_protocol:auth_override().
-resolve_auth_override(?ROOT_AUTH) ->
-    undefined;
-resolve_auth_override(?GUEST_AUTH) ->
-    #auth_override{client_auth = nobody};
-resolve_auth_override(TokenAuth) ->
-    auth_manager:to_auth_override(TokenAuth).
 
 
 -spec put_cache_state(Record :: tuple(), cache_state()) -> Record :: tuple().

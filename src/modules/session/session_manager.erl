@@ -224,8 +224,8 @@ reuse_or_create_session(SessId, SessType, Identity, Auth, ProxyVia) ->
         % Providers sessions are not constrained by any caveats
         undefined ->
             [];
-        TokenAuth ->
-            {ok, TokenCaveats} = auth_manager:get_caveats(TokenAuth),
+        SessionAuth ->
+            {ok, TokenCaveats} = auth_manager:get_caveats(SessionAuth),
             TokenCaveats
     end,
 

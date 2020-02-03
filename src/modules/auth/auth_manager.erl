@@ -25,6 +25,7 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -176,7 +177,11 @@ update_credentials(TokenAuth, AccessToken, AudienceToken) ->
     }.
 
 
--spec to_auth_override(token_auth()) -> gs_protocol:auth_override().
+-spec to_auth_override(session:auth()) -> gs_protocol:auth_override().
+to_auth_override(?ROOT_AUTH) ->
+    undefined;
+to_auth_override(?GUEST_AUTH) ->
+    #auth_override{client_auth = nobody};
 to_auth_override(#token_auth{
     access_token = Token,
     peer_ip = PeerIp,
@@ -193,7 +198,11 @@ to_auth_override(#token_auth{
     }.
 
 
--spec get_caveats(token_auth()) -> {ok, [caveats:caveat()]} | errors:error().
+-spec get_caveats(session:auth()) -> {ok, [caveats:caveat()]} | errors:error().
+get_caveats(?ROOT_AUTH) ->
+    {ok, []};
+get_caveats(?GUEST_AUTH) ->
+    {ok, []};
 get_caveats(TokenAuth) ->
     case verify(TokenAuth) of
         {ok, #auth{caveats = Caveats}, _} ->
