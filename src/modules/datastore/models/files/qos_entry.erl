@@ -163,7 +163,7 @@ fold_local_links(Key, TreeIds, Fun, Acc, Opts) ->
 %%% Higher-level functions operating on qos_entry document.
 %%%===================================================================
 
--spec get_file_guid(id() | doc()) -> {ok, file_id:file_guid()} | {error, term()}.
+-spec get_file_guid(doc() | id()) -> {ok, file_id:file_guid()} | {error, term()}.
 get_file_guid(#document{scope = SpaceId, value = #qos_entry{file_uuid = FileUuid}})  ->
     {ok, file_id:pack_guid(FileUuid, SpaceId)};
 
@@ -176,13 +176,13 @@ get_file_guid(QosEntryId) ->
     end.
 
 
--spec get_space_id(id()) -> {ok, od_space:id()} | {error, term()}.
+-spec get_space_id(doc() | id()) -> {ok, od_space:id()} | {error, term()}.
+get_space_id(#document{scope = SpaceId, value = #qos_entry{}}) ->
+    {ok, SpaceId};
 get_space_id(QosEntryId) ->
     case qos_entry:get(QosEntryId) of
-        {ok, #document{scope = SpaceId}} ->
-            {ok, SpaceId};
-        {error, _} = Error ->
-            Error
+        {ok, Doc} -> get_space_id(Doc);
+        {error, _} = Error -> Error
     end.
 
 

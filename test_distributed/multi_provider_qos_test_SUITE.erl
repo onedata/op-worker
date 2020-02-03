@@ -655,9 +655,10 @@ qos_status_test(Config) ->
 
     % check status after restoration
     FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
-
-    IsAncestor = fun(A, F) ->
-        str_utils:binary_starts_with(F, <<A/binary, "/">>)
+    
+    IsAncestor = fun
+        (F, F) -> true;
+        (A, F) -> str_utils:binary_starts_with(F, <<A/binary, "/">>)
     end,
 
     lists:foreach(fun({FileGuid, FilePath}) ->

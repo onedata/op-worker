@@ -43,7 +43,7 @@
 %% higher-level functions operating on file_qos document
 -export([
     get_effective/1, remove_qos_entry_id/2,
-    add_qos_entry_id/3, add_qos_entry_id/4, is_replica_protected/2
+    add_qos_entry_id/3, add_qos_entry_id/4, is_replica_protected/2, clean_up/1
 ]).
 
 %% higher-level functions operating on effective_file_qos record.
@@ -190,6 +190,30 @@ is_replica_protected(FileUuid, StorageId) ->
     end,
     maps:is_key(StorageId, QosStorages).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Cleans up all QoS documents related to given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec clean_up(file_ctx:ctx()) -> ok.
+clean_up(FileCtx) ->
+    Uuid = file_ctx:get_uuid_const(FileCtx),
+    case get_effective(Uuid) of
+        undefined -> ok;
+        #effective_file_qos{qos_entries = EffectiveQosEntries} ->
+            lists:foreach(fun(EffectiveQosEntryId) ->
+                qos_status:report_file_deleted(FileCtx, EffectiveQosEntryId)
+            end, EffectiveQosEntries)
+    end,
+    case datastore_model:get(?CTX, Uuid) of
+        {ok, #document{value = #file_qos{qos_entries = QosEntries}}} ->
+            lists:foreach(fun(QosEntryId) ->
+                qos_entry:delete(QosEntryId)
+            end, QosEntries);
+        {error, not_found} -> ok
+    end,
+    ok = delete(Uuid).
 
 %%%===================================================================
 %%% Functions operating on effective_file_qos record.

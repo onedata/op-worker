@@ -59,6 +59,8 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
         batch_size => ?TRAVERSE_BATCH_SIZE,
         additional_data => #{
             <<"qos_entry_id">> => QosEntryId,
+            <<"space_id">> => file_ctx:get_space_id_const(FileCtx),
+            <<"uuid">> => file_ctx:get_uuid_const(FileCtx),
             <<"task_type">> => <<"traverse">>
         }
     },
@@ -88,7 +90,7 @@ reconcile_qos_for_entry(FileCtx, QosEntryId) ->
         additional_data => #{
             <<"qos_entry_id">> => QosEntryId,
             <<"space_id">> => SpaceId,
-            <<"file_uuid">> => FileUuid,
+            <<"uuid">> => FileUuid,
             <<"task_type">> => <<"reconcile">>
         }
     },
@@ -132,17 +134,15 @@ get_sync_info(Job) ->
 task_finished(TaskId, _PoolName) ->
     {ok, #{
         <<"qos_entry_id">> := QosEntryId,
+        <<"space_id">> := SpaceId,
+        <<"uuid">> := FileUuid,
         <<"task_type">> := TaskType
-    } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
-    % fixme remove dir traverse link
+    }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     case TaskType of
         <<"traverse">> ->
+            ok = qos_status:report_traverse_finished(SpaceId, TaskId, FileUuid),
             ok = qos_entry:remove_traverse_req(QosEntryId, TaskId);
         <<"reconcile">> ->
-            #{
-                <<"space_id">> := SpaceId,
-                <<"file_uuid">> := FileUuid
-            } = AdditionalData,
             ok = qos_status:report_file_reconciled(QosEntryId, SpaceId, FileUuid, TaskId)
     end.
 
@@ -235,7 +235,9 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId} = FileDoc, _TraverseInf
     }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     case TaskType of
         <<"traverse">> ->
-            ok = qos_status:report_file_transferred_in_traverse(TaskId, FileDoc);
+            ok = qos_status:report_file_finished_in_traverse(
+                TaskId, file_ctx:new_by_doc(FileDoc, SpaceId, undefined)
+            );
         <<"reconcile">> -> ok
     end.
 
