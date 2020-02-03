@@ -1197,11 +1197,23 @@ create_share_dir(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
     ),
+
+    % User root dir can not be shared
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:create_share(W, SessId, {guid, fslogic_uuid:user_root_dir_guid(UserId)}, <<"share_name">>)
+    ),
+    % But space dir can
+    ?assertMatch(
+        {ok, <<_/binary>>},
+        lfm_proxy:create_share(W, SessId, {guid, fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)}, <<"share_name">>)
+    ),
+    % As well as normal directory
     {ok, ShareId1} = ?assertMatch(
         {ok, <<_/binary>>},
         lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)
     ),
-    % Dir can be shared multiple times
+    % Multiple times at that
     {ok, ShareId2} = ?assertMatch(
         {ok, <<_/binary>>},
         lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)

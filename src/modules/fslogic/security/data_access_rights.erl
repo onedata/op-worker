@@ -203,34 +203,19 @@ check_access(UserCtx, FileCtx0, share) ->
     end;
 
 check_access(UserCtx, FileCtx0, traverse_ancestors) ->
-    case file_ctx:is_root_dir_const(FileCtx0) of
-        true ->
-            {ok, FileCtx0};
-        false ->
-            {IsShareRootDir, FileCtx2} = case file_ctx:get_share_id_const(FileCtx0) of
-                undefined ->
-                    {false, FileCtx0};
-                ShareId ->
-                    % ShareId as added to file_meta.shares of directly shared file or
-                    % directory, not to it's descendants. So if ShareId is not in
-                    % file_meta.shares that means that file is not directly shared but
-                    % rather descendant of shared dir
-                    {#document{value = #file_meta{
-                        shares = Shares
-                    }}, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
-                    {lists:member(ShareId, Shares), FileCtx1}
-            end,
-            case IsShareRootDir of
-                true ->
-                    {ok, FileCtx2};
-                false ->
-                    {ParentCtx0, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
-                    ParentCtx1 = check_and_cache_result(
-                        UserCtx, ParentCtx0, ?traverse_container
-                    ),
-                    check_and_cache_result(UserCtx, ParentCtx1, traverse_ancestors),
-                    {ok, FileCtx3}
-            end
+    FileGuid = file_ctx:get_guid_const(FileCtx0),
+    {ParentCtx0, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+
+    case file_ctx:get_guid_const(ParentCtx0) of
+        FileGuid ->
+            % root dir/share root file -> there are no parents
+            {ok, FileCtx1};
+        _ ->
+            ParentCtx1 = check_and_cache_result(
+                UserCtx, ParentCtx0, ?traverse_container
+            ),
+            check_and_cache_result(UserCtx, ParentCtx1, traverse_ancestors),
+            {ok, FileCtx1}
     end;
 
 check_access(UserCtx, FileCtx0, Permission) ->
