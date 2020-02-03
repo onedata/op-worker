@@ -1281,7 +1281,14 @@ share_getattr(Config) ->
     ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
 
     ?assertMatch(
-        {ok, #file_attr{mode = 8#704, name = <<"share_dir2">>, type = ?DIRECTORY_TYPE, guid = ShareGuid, shares = [ShareId]}},
+        {ok, #file_attr{
+            mode = 8#704,
+            name = <<"share_dir2">>,
+            type = ?DIRECTORY_TYPE,
+            guid = ShareGuid,
+            parent_uuid = undefined,   % share root should not point to any parent
+            shares = [ShareId]}
+        },
         lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareGuid})
     ).
 
@@ -1329,12 +1336,19 @@ share_child_getattr(Config) ->
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
     {ok, _} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir5/file">>, 8#700),
     {ok, ShareId} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
-    ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
+    ShareDirGuid = file_id:guid_to_share_guid(Guid, ShareId),
 
-    {ok, [{ShareChildGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
+    {ok, [{ShareChildGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareDirGuid}, 0, 1),
 
     ?assertMatch(
-        {ok, #file_attr{mode = 8#700, name = <<"file">>, type = ?REGULAR_FILE_TYPE, guid = ShareChildGuid, shares = []}},
+        {ok, #file_attr{
+            mode = 8#700,
+            name = <<"file">>,
+            type = ?REGULAR_FILE_TYPE,
+            guid = ShareChildGuid,
+            parent_uuid = ShareDirGuid,
+            shares = []
+        }},
         lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareChildGuid})
     ).
 
