@@ -52,12 +52,6 @@
 %% Mode of deleted opened files directory
 -define(DELETED_OPENED_FILES_DIR_MODE, 8#700).
 
-% macros defining modes of file deletions
--define(LOCAL_DELETE, local_delete).
--define(REMOTE_DELETE, remote_delete).
--define(OPENED_FILE_DELETE, opened_file_delete).
--define(RELEASED_FILE_DELETE, released_file_delete).
-
 %% Allowed parameter keys
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).
 -define(PROXYIO_PARAMETER_FILE_GUID, <<"file_uuid">>).

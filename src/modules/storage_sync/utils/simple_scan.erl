@@ -655,6 +655,7 @@ maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SyncAcl) ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             {StorageFileId, _FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
             storage_sync_utils:log_update(StorageFileId, SpaceId),
+            fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
             updated;
         false ->
             processed
@@ -902,7 +903,7 @@ create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, ParentUuid,
 ) ->
     FileMetaDoc = file_meta:new_doc(FileUuid, FileName, file_meta:type(Mode),
         Mode band 8#1777, OwnerId, GroupId, ParentUuid, SpaceId),
-    case CreateLinks of
+    {ok, FileUuid2} = case CreateLinks of
         true ->
             case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
                 {error, already_exists} ->
@@ -915,7 +916,11 @@ create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, ParentUuid,
             end;
         _ ->
             file_meta:save(FileMetaDoc, false)
-    end.
+    end,
+    FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
+    {ok, FileUuid2}.
 
 %%--------------------------------------------------------------------
 %% @private

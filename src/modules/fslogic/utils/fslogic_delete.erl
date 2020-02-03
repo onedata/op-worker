@@ -18,7 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([check_if_opened_and_remove/4, handle_release_of_deleted_file/1, remove_file/4,
+-export([delete_file_locally/3, handle_remotely_deleted_file/1,
+    handle_release_of_deleted_file/1, handle_file_deleted_on_synced_storage/1,
     remove_file_handles/1, remove_auxiliary_documents/1, cleanup_opened_files/0]).
 
 %% Test API
@@ -28,106 +29,37 @@
 -define(RENAME_HANDLING_METHOD, rename).
 -define(LINK_HANDLING_METHOD, deletion_link).
 
--type opened_file_handling_method() :: ?RENAME_HANDLING_METHOD | ?LINK_HANDLING_METHOD.
+% macros defining modes of file deletions
+-define(LOCAL_DELETE, local_delete).
+-define(REMOTE_DELETE, remote_delete).
+-define(OPENED_FILE_DELETE, opened_file_delete).
+-define(RELEASED_FILE_DELETE, released_file_delete).
 
+-type opened_file_handling_method() :: ?RENAME_HANDLING_METHOD | ?LINK_HANDLING_METHOD.
 -type delete_mode() :: ?LOCAL_DELETE | ?RELEASED_FILE_DELETE | ?REMOTE_DELETE | ?OPENED_FILE_DELETE.
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks if file is opened and deletes it or marks to be deleted.
-%% @end
-%%--------------------------------------------------------------------
--spec check_if_opened_and_remove(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean(), delete_mode()) -> ok.
-% TODO VFS-5268 - prevent reimport connected with remote delete
-check_if_opened_and_remove(UserCtx, FileCtx, Silent, DeleteMode) ->
-    try
-        FileUuid = file_ctx:get_uuid_const(FileCtx),
-        case file_handles:exists(FileUuid) of
-            true ->
-               handle_opened_file(FileCtx, UserCtx, DeleteMode);
-            _ ->
-                ok = remove_file(FileCtx, UserCtx, true, DeleteMode)
-        end,
-        maybe_emit_event(FileCtx, UserCtx, Silent)
-    catch
-        _:{badmatch, {error, not_found}} ->
-            ok
-    end.
+-spec delete_file_locally(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
+delete_file_locally(UserCtx, FileCtx, Silent) ->
+    check_if_opened_and_remove(UserCtx, FileCtx, Silent, ?LOCAL_DELETE).
+
+-spec handle_remotely_deleted_file(file_ctx:ctx()) -> ok.
+handle_remotely_deleted_file(FileCtx) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    check_if_opened_and_remove(UserCtx, FileCtx, false, ?REMOTE_DELETE).
 
 -spec handle_release_of_deleted_file(file_ctx:ctx()) -> ok.
 handle_release_of_deleted_file(FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     ok = remove_file(FileCtx, UserCtx, true, ?RELEASED_FILE_DELETE).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file and file meta.
-%% If parameter RemoveStorageFile is false, file will not be deleted
-%% on storage.
-%% Parameter DeleteMetadata verifies which metadata is deleted with file.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(), delete_mode()) -> ok.
-remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
-    % TODO VFS-5270
-    replica_synchronizer:apply(FileCtx, fun() ->
-        {RemoveStorageFileResult, FileCtx3} = case RemoveStorageFile of
-            true ->
-                % TODO VFS-6091 if there is a race between deleting nonempty directory
-                % and creating the new one with the same name, the deletion link will stay forever
-                case maybe_remove_file_on_storage(FileCtx, UserCtx) of
-                    {ok, FileCtx2} ->
-                        {ok, FileCtx2};
-                    Error = {error, _} ->
-                        % add deletion_link even if open_file_handling method is rename
-                        % this way we are sure that remotely deleted file won't be reimported
-                        % even if it hasn't been deleted because it's not empty yet
-                        % TODO VFS-6082 deletion links are left forever when deleting file on storage failed
-                        FileCtx2 = maybe_add_deletion_link(FileCtx, UserCtx),
-                        {Error, FileCtx2}
-                end;
-            _ ->
-                {ok, FileCtx}
-        end,
-
-        case DeleteMode of
-            ?LOCAL_DELETE ->
-                FileCtx4 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
-                {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
-                FileCtx6 = delete_storage_sync_info(FileCtx5),
-                FileUuid = file_ctx:get_uuid_const(FileCtx6),
-                % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
-                ok = fslogic_location_cache:delete_local_location(FileUuid),
-                ok = file_meta:delete(FileDoc),
-                remove_auxiliary_documents(FileCtx6),
-                FileCtx7 = maybe_remove_deletion_link(FileCtx6, UserCtx, RemoveStorageFileResult),
-                maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult);
-            ?OPENED_FILE_DELETE ->
-                FileCtx5 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
-                delete_storage_sync_info(FileCtx5),
-                ok;
-            ?RELEASED_FILE_DELETE ->
-                {FileDoc, FileCtx4} = file_ctx:get_file_doc_including_deleted(FileCtx3),
-                FileUuid = file_ctx:get_uuid_const(FileCtx4),
-                ok = fslogic_location_cache:delete_local_location(FileUuid),
-                file_meta:delete_without_link(FileDoc), % do not match, document may not exist
-                remove_auxiliary_documents(FileCtx4),
-                % remove deletion_link even if open_file_handling method is rename
-                % as deletion_link may have been created when error occurred on deleting file on storage
-                FileCtx5 = maybe_remove_deletion_link(FileCtx4, UserCtx, RemoveStorageFileResult),
-                maybe_try_to_delete_parent(FileCtx5, UserCtx, RemoveStorageFileResult);
-            ?REMOTE_DELETE ->
-                FileCtx4 = delete_storage_sync_info(FileCtx3),
-                FileUuid = file_ctx:get_uuid_const(FileCtx4),
-                ok = fslogic_location_cache:delete_local_location(FileUuid),
-                remove_auxiliary_documents(FileCtx4),
-                maybe_try_to_delete_parent(FileCtx4, UserCtx, RemoveStorageFileResult)
-        end
-    end).
+-spec handle_file_deleted_on_synced_storage(file_ctx:ctx()) -> ok.
+handle_file_deleted_on_synced_storage(FileCtx) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    ok = fslogic_delete:remove_file(FileCtx, UserCtx, false, ?LOCAL_DELETE).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -191,19 +123,108 @@ remove_auxiliary_documents(FileCtx) ->
 %%% Internal functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if file is opened and deletes it or marks to be deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_if_opened_and_remove(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean(), delete_mode()) -> ok.
+% TODO VFS-5268 - prevent reimport connected with remote delete
+check_if_opened_and_remove(UserCtx, FileCtx, Silent, DeleteMode) ->
+    try
+        FileUuid = file_ctx:get_uuid_const(FileCtx),
+        case file_handles:exists(FileUuid) of
+            true ->
+                handle_opened_file(FileCtx, UserCtx, DeleteMode);
+            _ ->
+                ok = remove_file(FileCtx, UserCtx, true, DeleteMode)
+        end,
+        maybe_emit_event(FileCtx, UserCtx, Silent)
+    catch
+        _:{badmatch, {error, not_found}} ->
+            ok
+    end.
+
 -spec handle_opened_file(file_ctx:ctx(), user_ctx:ctx(), delete_mode()) -> ok.
 handle_opened_file(FileCtx, UserCtx, DeleteMode) ->
     ok = remove_file(FileCtx, UserCtx, false, ?OPENED_FILE_DELETE),
     {HandlingMethod, FileCtx2} = fslogic_delete:get_open_file_handling_method(FileCtx),
-    FileCtx3 = custom_handle_opened_file(FileCtx2, HandlingMethod),
-    FileCtx4 = process_file_links(FileCtx3, UserCtx, DeleteMode == ?REMOTE_DELETE, HandlingMethod),
-    ok = file_handles:mark_to_remove(FileCtx4),
-    FileUuid = file_ctx:get_uuid_const(FileCtx4),
+    FileCtx3 = custom_handle_opened_file(FileCtx2, UserCtx, DeleteMode, HandlingMethod),
+    ok = file_handles:mark_to_remove(FileCtx3),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
     % Check once more to prevent race with last handle closing
     case file_handles:exists(FileUuid) of
         true -> ok;
-        false -> handle_release_of_deleted_file(FileCtx4)
+        false -> handle_release_of_deleted_file(FileCtx3)
     end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Removes file and file meta.
+%% If parameter RemoveStorageFile is false, file will not be deleted
+%% on storage.
+%% Parameter DeleteMode verifies which metadata is deleted with file.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(), delete_mode()) -> ok.
+remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
+    % TODO VFS-5270
+    replica_synchronizer:apply(FileCtx, fun() ->
+        {RemoveStorageFileResult, FileCtx3} = case RemoveStorageFile of
+            true ->
+                % TODO VFS-6091 if there is a race between deleting nonempty directory
+                % and creating the new one with the same name, the deletion link will stay forever
+                case maybe_remove_file_on_storage(FileCtx, UserCtx) of
+                    {ok, FileCtx2} ->
+                        {ok, FileCtx2};
+                    Error = {error, _} ->
+                        % add deletion_link even if open_file_handling method is rename
+                        % this way we are sure that remotely deleted file won't be reimported
+                        % even if it hasn't been deleted because it's not empty yet
+                        % TODO VFS-6082 deletion links are left forever when deleting file on storage failed
+                        FileCtx2 = maybe_add_deletion_link(FileCtx, UserCtx),
+                        {Error, FileCtx2}
+                end;
+            false ->
+                {ignored, FileCtx}
+        end,
+
+        case DeleteMode of
+            ?LOCAL_DELETE ->
+                FileCtx4 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
+                {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
+                FileCtx6 = delete_storage_sync_info(FileCtx5),
+                FileUuid = file_ctx:get_uuid_const(FileCtx6),
+                % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
+                ok = fslogic_location_cache:delete_local_location(FileUuid),
+                ok = file_meta:delete(FileDoc),
+                remove_auxiliary_documents(FileCtx6),
+                FileCtx7 = maybe_remove_deletion_link(FileCtx6, UserCtx, RemoveStorageFileResult),
+                maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult);
+            ?OPENED_FILE_DELETE ->
+                FileCtx5 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
+                delete_storage_sync_info(FileCtx5),
+                ok;
+            ?RELEASED_FILE_DELETE ->
+                {FileDoc, FileCtx4} = file_ctx:get_file_doc_including_deleted(FileCtx3),
+                FileUuid = file_ctx:get_uuid_const(FileCtx4),
+                ok = fslogic_location_cache:delete_local_location(FileUuid),
+                file_meta:delete_without_link(FileDoc), % do not match, document may not exist
+                remove_auxiliary_documents(FileCtx4),
+                % remove deletion_link even if open_file_handling method is rename
+                % as deletion_link may have been created when error occurred on deleting file on storage
+                FileCtx5 = maybe_remove_deletion_link(FileCtx4, UserCtx, RemoveStorageFileResult),
+                maybe_try_to_delete_parent(FileCtx5, UserCtx, RemoveStorageFileResult);
+            ?REMOTE_DELETE ->
+                FileCtx4 = delete_storage_sync_info(FileCtx3),
+                FileUuid = file_ctx:get_uuid_const(FileCtx4),
+                ok = fslogic_location_cache:delete_local_location(FileUuid),
+                remove_auxiliary_documents(FileCtx4),
+                maybe_try_to_delete_parent(FileCtx4, UserCtx, RemoveStorageFileResult)
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -213,14 +234,16 @@ handle_opened_file(FileCtx, UserCtx, DeleteMode) ->
 %% in returned FileCtx.
 %% @end
 %%--------------------------------------------------------------------
--spec custom_handle_opened_file(file_ctx:ctx(), opened_file_handling_method()) -> file_ctx:ctx().
-custom_handle_opened_file(FileCtx, ?RENAME_HANDLING_METHOD) ->
-    case maybe_rename_storage_file(FileCtx) of
+-spec custom_handle_opened_file(file_ctx:ctx(), user_ctx:ctx(), delete_mode(), opened_file_handling_method()) ->
+    file_ctx:ctx().
+custom_handle_opened_file(FileCtx, UserCtx, DeleteMode, HandlingMethod = ?RENAME_HANDLING_METHOD) ->
+    FileCtx3 = case maybe_rename_storage_file(FileCtx) of
         {ok, FileCtx2} -> FileCtx2;
         {error, ?ENOENT} -> FileCtx
-    end;
-custom_handle_opened_file(FileCtx, ?LINK_HANDLING_METHOD) ->
-    FileCtx.
+    end,
+    process_file_links(FileCtx3, UserCtx, DeleteMode == ?REMOTE_DELETE, HandlingMethod);
+custom_handle_opened_file(FileCtx, UserCtx, DeleteMode, HandlingMethod = ?LINK_HANDLING_METHOD) ->
+    process_file_links(FileCtx, UserCtx, DeleteMode == ?REMOTE_DELETE, HandlingMethod).
 
 -spec maybe_add_deletion_link(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
 maybe_add_deletion_link(FileCtx, UserCtx) ->
@@ -236,30 +259,30 @@ maybe_add_deletion_link(FileCtx, UserCtx) ->
     end.
 
 
--spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), RemoveStorageFileResult :: ok | {error, term()}) -> ok.
+-spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), RemoveStorageFileResult :: ok | ignored | {error, term()}) -> ok.
 maybe_try_to_delete_parent(FileCtx, UserCtx, ok) ->
     {ParentCtx, _FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
     try
         {ParentDoc, ParentCtx2} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             case file_meta:is_deleted(ParentDoc) of
-                true -> remove_file(ParentCtx2, UserCtx, true, ?LOCAL_DELETE);
+                true -> remove_file(ParentCtx2, UserCtx, true, ?RELEASED_FILE_DELETE);
                 false -> ok
             end
     catch
         error:{badmatch, {error, not_found}} ->
             ok
     end;
-maybe_try_to_delete_parent(_FileCtx, _UserCtx, {error, _}) ->
+maybe_try_to_delete_parent(_FileCtx, _UserCtx, _) ->
     ok.
 
 
--spec maybe_remove_deletion_link(file_ctx:ctx(), user_ctx:ctx(), RemoveStorageFileResult :: ok | {error, term()}) ->
+-spec maybe_remove_deletion_link(file_ctx:ctx(), user_ctx:ctx(), RemoveStorageFileResult :: ok | ignored | {error, term()}) ->
     file_ctx:ctx().
 maybe_remove_deletion_link(FileCtx, UserCtx, ok) ->
     {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
     link_utils:remove_deletion_link(FileCtx2, ParentUuid);
-maybe_remove_deletion_link(FileCtx, _UserCtx, {error, _}) ->
+maybe_remove_deletion_link(FileCtx, _UserCtx, _) ->
     % TODO VFS-6082 deletion links are left forever when deleting file on storage failed
     FileCtx.
 

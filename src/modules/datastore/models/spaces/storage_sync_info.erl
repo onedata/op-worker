@@ -64,9 +64,7 @@ create_or_update(StorageFileId, Diff, SpaceId) ->
 %% @equiv datastore_model:delete(?CTX, Uuid).
 %% @end
 %%-------------------------------------------------------------------
--spec delete(undefined | helpers:file_id(), od_space:id()) -> ok | error().
-delete(undefined, _SpaceId) ->
-    ok;
+-spec delete(helpers:file_id(), od_space:id()) -> ok | error().
 delete(StorageFileId, SpaceId) ->
     datastore_model:delete(?CTX, id(StorageFileId, SpaceId)).
 

@@ -237,6 +237,9 @@
     file_handle :: undefined | helpers:file_handle(),
     file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),
+    % file_uuid can be `undefined` if sfm_handle is not
+    % associated with any file in the system.
+    % It is associated only with file on storage.
     file_uuid :: undefined | file_meta:uuid(),
     space_id :: undefined | od_space:id(),
     storage :: undefined | storage:doc(),

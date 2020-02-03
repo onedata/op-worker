@@ -142,9 +142,8 @@ delete_imported_file(ChildName, ParentCtx) ->
 %%-------------------------------------------------------------------
 -spec delete_imported_file(file_ctx:ctx()) -> ok.
 delete_imported_file(FileCtx) ->
-    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        ok = fslogic_delete:remove_file(FileCtx, RootUserCtx, false, ?LOCAL_DELETE),
+        ok = fslogic_delete:handle_file_deleted_on_synced_storage(FileCtx),
         fslogic_event_emitter:emit_file_removed(FileCtx, []),
         ok = fslogic_delete:remove_file_handles(FileCtx),
         fslogic_delete:remove_auxiliary_documents(FileCtx)

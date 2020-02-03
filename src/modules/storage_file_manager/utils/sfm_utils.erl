@@ -252,7 +252,7 @@ delete_storage_dir(DirCtx, UserCtx) ->
                 {error,'Function not implemented'} = Error ->
                     % Some helpers do not support rmdir
                     ?debug("sfm_utils:delete_storage_dir failed with ~p", [Error]),
-                    ok;
+                    {ok, FileCtx2};
                 Error ->
                     ?error("sfm_utils:delete_storage_dir failed with ~p", [Error]),
                     Error
