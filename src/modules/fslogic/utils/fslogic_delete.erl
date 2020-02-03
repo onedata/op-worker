@@ -395,14 +395,19 @@ ensure_dir_for_deleted_files_created(SpaceId) ->
 -spec rename_storage_file(file_ctx:ctx(), helpers:file_id()) -> {ok, file_ctx:ctx()} | {error, ?ENOENT}.
 rename_storage_file(FileCtx, TargetFileId) ->
     {SFMHandle, FileCtx2} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx),
-    case storage_file_manager:mv(SFMHandle, TargetFileId) of
-        ok ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx2),
-            LocId = file_location:local_id(FileUuid),
-            fslogic_location_cache:update_location(FileUuid, LocId, fun(FileLocation) ->
-                {ok, FileLocation#file_location{file_id = TargetFileId}}
-            end, false),
-            {ok, file_ctx:set_file_id(FileCtx2, TargetFileId)};
-        {error, ?ENOENT} = Error->
-            Error
+    FileUuid = file_ctx:get_uuid_const(FileCtx2),
+    LocId = file_location:local_id(FileUuid),
+    case fslogic_location_cache:update_location(FileUuid, LocId, fun(FileLocation) ->
+        {ok, FileLocation#file_location{file_id = TargetFileId}}
+    end, false) of
+        {ok, #document{value = NewFL}} ->
+            case storage_file_manager:mv(SFMHandle, TargetFileId) of
+                ok ->
+                    fslogic_event_emitter:emit_file_location_changed(NewFL#file_location{blocks = []}, [], 0, 0),
+                    {ok, file_ctx:set_file_id(FileCtx2, TargetFileId)};
+                {error, ?ENOENT} = Error ->
+                    Error
+            end;
+        {error, ?ENOENT} = Error2->
+            Error2
     end.
