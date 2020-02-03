@@ -1275,23 +1275,42 @@ remove_share(Config) ->
 
 share_getattr(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    DirPath = <<"/space_name1/share_dir2">>,
-    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#704),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
-    ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
+    UserId = <<"user1">>,
+    OwnerSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    DirPath = <<SpaceName/binary, "/share_dir2">>,
+    {ok, DirGuid} = lfm_proxy:mkdir(W, OwnerSessId, DirPath, 8#704),
+    {ok, ShareId1} = lfm_proxy:create_share(W, OwnerSessId, {guid, DirGuid}, <<"share_name">>),
+    {ok, ShareId2} = lfm_proxy:create_share(W, OwnerSessId, {guid, DirGuid}, <<"share_name">>),
+    ?assertNotEqual(ShareId1, ShareId2),
+
+    ShareGuid = file_id:guid_to_share_guid(DirGuid, ShareId1),
 
     ?assertMatch(
         {ok, #file_attr{
             mode = 8#704,
             name = <<"share_dir2">>,
             type = ?DIRECTORY_TYPE,
-            guid = ShareGuid,
-            parent_uuid = undefined,   % share root should not point to any parent
-            shares = [ShareId]}
+            guid = DirGuid,
+            parent_uuid = SpaceGuid,
+            shares = [ShareId2, ShareId1]}
         },
-        lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareGuid})
-    ).
+        lfm_proxy:stat(W, OwnerSessId, {guid, DirGuid})
+    ),
+    lists:foreach(fun(SessId) ->
+        ?assertMatch(
+            {ok, #file_attr{
+                mode = 8#704,
+                name = <<"share_dir2">>,
+                type = ?DIRECTORY_TYPE,
+                guid = ShareGuid,
+                parent_uuid = undefined,   % share root should not point to any parent
+                shares = [ShareId1]}       % other shares shouldn't be shown
+            },
+            lfm_proxy:stat(W, SessId, {guid, ShareGuid})
+        )
+    end, [OwnerSessId, ?GUEST_SESS_ID]).
 
 share_get_parent(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
