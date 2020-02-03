@@ -314,10 +314,9 @@
     possibility_check :: {possible | impossible, od_provider:id()}
 }).
 
-% fixme name and desc
+% fixme desc
 -record(qos_status, {
-    % fixme better field name
-    last_file :: binary() | undefined,
+    previous_batch_last_filename = undefined :: binary() | undefined,
     files_list = [] :: [binary()],
     child_dirs = 0 :: non_neg_integer(),
     is_last_batch = false :: boolean(),

@@ -66,7 +66,7 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
     },
     FileCtx2 = case file_ctx:is_dir(FileCtx) of
         {true, FC} ->
-            qos_status:report_traverse_started(TaskId, FC),
+            ok = qos_status:report_traverse_started(TaskId, FC),
             FC;
         {false, FC} -> FC
     end,
@@ -194,13 +194,13 @@ do_master_job(#tree_traverse{
     ChildrenDirs = lists:map(fun(#tree_traverse{doc = #document{key = ChildDirUuid}}) ->
         ChildDirUuid
     end, MasterJobs),
-    qos_status:report_traverse_batch_calculated(
+    ok = qos_status:report_traverse_batch_calculated(
         SpaceId, TaskId, DirUuid, ChildrenDirs, ChildrenFiles, LN
     ),
 
     FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of
         true ->
-            qos_status:report_last_batch_for_dir(TaskId, DirUuid, SpaceId),
+            ok = qos_status:report_last_batch_for_dir(TaskId, DirUuid, SpaceId),
             lists:reverse(MasterJobs);
         false -> [TT#tree_traverse{
             token = Token2,
@@ -229,7 +229,6 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId} = FileDoc, _TraverseInf
     % TODO: add space check and optionally choose other storage
     ok = synchronize_file(UserCtx, FileCtx),
 
-    % fixme maybe use traverse info or sth else
     {ok, #{
         <<"task_type">> := TaskType
     }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
