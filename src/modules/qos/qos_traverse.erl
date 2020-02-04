@@ -194,13 +194,13 @@ do_master_job(#tree_traverse{
     ChildrenDirs = lists:map(fun(#tree_traverse{doc = #document{key = ChildDirUuid}}) ->
         ChildDirUuid
     end, MasterJobs),
-    ok = qos_status:report_traverse_batch_calculated(
+    ok = qos_status:report_next_traverse_batch(
         SpaceId, TaskId, DirUuid, ChildrenDirs, ChildrenFiles, LN
     ),
 
     FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of
         true ->
-            ok = qos_status:report_last_batch_for_dir(TaskId, DirUuid, SpaceId),
+            ok = qos_status:report_traverse_finished_for_dir(TaskId, DirUuid, SpaceId),
             lists:reverse(MasterJobs);
         false -> [TT#tree_traverse{
             token = Token2,
@@ -234,7 +234,7 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId} = FileDoc, _TraverseInf
     }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     case TaskType of
         <<"traverse">> ->
-            ok = qos_status:report_file_finished_in_traverse(
+            ok = qos_status:report_traverse_finished_for_file(
                 TaskId, file_ctx:new_by_doc(FileDoc, SpaceId, undefined)
             );
         <<"reconcile">> -> ok

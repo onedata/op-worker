@@ -30,6 +30,7 @@
 %%%       It is set to `{possible, ProviderId}` if during evaluation of QoS expression
 %%%       provider ProviderId was able to calculate list of storages that would fulfill
 %%%       QoS requirements, otherwise it is set to `{impossible, ProviderId}`)
+% fixme
 %%%     - there are no traverse requests in qos_entry document. Traverse requests
 %%%       are added to qos_entry document on its creation and removed from document
 %%%       when traverse task for this request is completed
@@ -192,14 +193,14 @@ get_space_id(QosEntryId) ->
 %% qos_entry documents that cannot be fulfilled at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec add_to_impossible_list(id(), od_space:id()) ->  ok.
+-spec add_to_impossible_list(id(), od_space:id()) ->  ok | {error, term()}.
 add_to_impossible_list(QosEntryId, SpaceId) ->
     ?extract_ok(
         add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId})
     ).
 
 
--spec delete_from_impossible_list(id(), od_space:id()) ->  ok.
+-spec delete_from_impossible_list(id(), od_space:id()) ->  ok | {error, term()}.
 delete_from_impossible_list(QosEntryId, SpaceId) ->
     ?extract_ok(
         delete_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)

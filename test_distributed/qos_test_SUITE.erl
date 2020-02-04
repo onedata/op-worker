@@ -67,7 +67,14 @@
     % Effective QoS tests
     effective_qos_for_file_in_directory/1,
     effective_qos_for_file_in_nested_directories/1,
-    effective_qos_for_files_in_different_directories_of_tree_structure/1
+    effective_qos_for_files_in_different_directories_of_tree_structure/1,
+    
+    % fixme add to all
+    % QoS clean up tests
+    qos_cleanup_test/1,
+    
+    % QoS status tests
+    qos_status_during_traverse_test/1
 ]).
 
 all() -> [
@@ -145,7 +152,6 @@ all() -> [
 
 -define(SPACE1_ID, <<"space_id1">>).
 -define(SPACE_PATH1, <<"/space_name1">>).
--define(TEST_DATA, <<"test_data">>).
 -define(TEST_FILE_PATH, filename:join(?SPACE_PATH1, <<"file1">>)).
 -define(TEST_DIR_PATH, filename:join(?SPACE_PATH1, <<"dir1">>)).
 
@@ -584,6 +590,56 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
 
     add_qos_for_dir_and_check_effective_qos(Config, TestSpec).
 
+%%%===================================================================
+%%% Tests that check QoS documents clean up procedure
+%%%===================================================================
+% fixme duplicate
+
+-define(simple_dir_structure(Name, Distribution),
+    {?SPACE_PATH1, [
+        {Name, ?TEST_DATA, Distribution}
+    ]}
+).
+
+qos_cleanup_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Name = generator:gen_name(),
+    QosSpec = #fulfill_qos_test_spec{
+        initial_dir_structure = #test_dir_structure{
+            dir_structure = ?simple_dir_structure(Name, [?GET_DOMAIN_BIN(Worker)])
+        },
+        qos_to_add = [
+            #qos_to_add{
+                worker = Worker,
+                qos_name = ?QOS1,
+                path = filename:join([?SPACE_PATH1, Name]),
+                expression = <<"country=PL">>
+            }
+        ]
+    },
+    
+    {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    
+    #{files := [{FileGuid, _FilePath} | _]} = GuidsAndPaths,
+    
+    ok = lfm_proxy:unlink(Worker, SessId, {guid, FileGuid}),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    QosEntryId = maps:get(?QOS1, QosNameIdMapping),
+    
+    ?assertEqual({error, not_found}, rpc:call(Worker, datastore_model, get, [file_qos:get_ctx(), FileUuid])),
+    ?assertEqual({error, {file_meta_missing, FileUuid}}, rpc:call(Worker, file_qos, get_effective, [FileUuid])),
+    ?assertEqual({error, not_found}, rpc:call(Worker, qos_entry, get, [QosEntryId])).
+
+%fixme effective qos test and for dir
+
+%%%===================================================================
+%%% QoS status tests
+%%%===================================================================
+
+% fixme more tests
+qos_status_during_traverse_test(Config) ->
+    qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_PATH1, 8).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -604,10 +660,17 @@ end_per_suite(Config) ->
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
-
+init_per_testcase(qos_status_during_traverse_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    % do not start file synchronization
+    qos_tests_utils:mock_transfers(Workers),
+    mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
+    mock_storage_qos_parameters(Workers, ?TEST_PROVIDERS_QOS),
+    mock_storage_get_provider(ConfigWithSessionInfo),
+    lfm_proxy:init(ConfigWithSessionInfo);
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     % do not start file synchronization
     mock_synchronize_transfers(ConfigWithSessionInfo),

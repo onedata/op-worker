@@ -204,7 +204,8 @@ clean_up(FileCtx) ->
         #effective_file_qos{qos_entries = EffectiveQosEntries} ->
             lists:foreach(fun(EffectiveQosEntryId) ->
                 qos_status:report_file_deleted(FileCtx, EffectiveQosEntryId)
-            end, EffectiveQosEntries)
+            end, EffectiveQosEntries);
+        {error, {file_meta_missing, _}} -> ok
     end,
     case datastore_model:get(?CTX, Uuid) of
         {ok, #document{value = #file_qos{qos_entries = QosEntries}}} ->

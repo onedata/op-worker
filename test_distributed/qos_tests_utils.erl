@@ -39,10 +39,11 @@
     wait_for_qos_fulfillment_in_parallel/4,
     add_qos/2, add_multiple_qos/2,
     map_qos_names_to_ids/2,
-    set_qos_parameters/2
+    set_qos_parameters/2,
+    mock_transfers/1,
+    finish_all_transfers/1
 ]).
 
--define(ATTEMPTS, 60).
 -define(USER_ID, <<"user1">>).
 -define(SESS_ID(Config, Worker), ?config({session_id, {?USER_ID, ?GET_DOMAIN(Worker)}}, Config)).
 -define(GET_FILE_UUID(Worker, SessId, FilePath),
@@ -299,6 +300,31 @@ set_qos_parameters(Worker, QosParameters) ->
     ok = rpc:call(Worker, storage, set_qos_parameters,
         [initializer:get_storage_id(Worker), QosParameters]).
 
+
+mock_transfers(Workers) ->
+    test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
+    TestPid = self(),
+    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
+        fun(_, FileCtx, _, _, _, _) ->
+            FileGuid = file_ctx:get_guid_const(FileCtx),
+            TestPid ! {qos_slave_job, self(), FileGuid},
+            receive {completed, FileGuid} -> {ok, FileGuid} end
+        end).
+
+
+% above mock required for this function to work
+finish_all_transfers([]) -> ok;
+finish_all_transfers(Files) ->
+    receive {qos_slave_job, Pid, FileGuid} = Msg ->
+        case lists:member(FileGuid, Files) of
+            true ->
+                Pid ! {completed, FileGuid},
+                finish_all_transfers(lists:delete(FileGuid, Files));
+            false ->
+                erlang:send_after(timer:seconds(2), self(), Msg),
+                finish_all_transfers(Files)
+        end
+    end.
 
 %%%====================================================================
 %%% Assertions
