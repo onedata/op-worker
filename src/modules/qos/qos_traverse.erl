@@ -195,7 +195,7 @@ do_master_job(#tree_traverse{
         ChildDirUuid
     end, MasterJobs),
     ok = qos_status:report_next_traverse_batch(
-        SpaceId, TaskId, DirUuid, ChildrenDirs, ChildrenFiles, LN
+        SpaceId, TaskId, DirUuid, ChildrenDirs, ChildrenFiles, LN2
     ),
 
     FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of

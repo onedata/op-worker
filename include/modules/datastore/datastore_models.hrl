@@ -316,7 +316,8 @@
 
 % fixme desc
 -record(qos_status, {
-    previous_batch_last_filename = undefined :: binary() | undefined,
+    previous_batch_last_file = <<>> :: binary(),
+    this_batch_last_file = <<>> :: binary(),
     files_list = [] :: [binary()],
     child_dirs = 0 :: non_neg_integer(),
     is_last_batch = false :: boolean(),

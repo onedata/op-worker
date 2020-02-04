@@ -1064,7 +1064,12 @@ qos_status_during_traverse_test_base(Config, SpaceId, NumberOfFilesInDir) ->
 
     lists:foreach(fun({Guid, Path}) ->
         lists:foreach(fun(Worker) ->
-            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid})),
+            case lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}) of
+                {ok, true} ->
+                    ct:print("checking file: ~p", [Guid]),
+                    timer:sleep(timer:hours(8));
+                _ -> ok
+            end,
             ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, Path}))
         end, Workers)
     end, maps:get(files, GuidsAndPaths)),

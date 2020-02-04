@@ -639,7 +639,7 @@ qos_cleanup_test(Config) ->
 
 % fixme more tests
 qos_status_during_traverse_test(Config) ->
-    qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_PATH1, 8).
+    qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_PATH1, 4).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

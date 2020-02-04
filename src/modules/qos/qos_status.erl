@@ -23,6 +23,10 @@
 %%% given directory relative path. Because status links keys start with relative
 %%% path, if there is unfinished transfer in subtree of this directory next
 %%% status link will start with given parent directory relative path.
+
+% QoS status for given file is 
+
+
 % fixme explain status during traverse
 %%% @end
 %%%-------------------------------------------------------------------
@@ -91,13 +95,14 @@ report_traverse_finished(SpaceId, TraverseId, Uuid) ->
 
 
 -spec report_next_traverse_batch(od_space:id(), traverse:id(), file_meta:uuid(),
-    ChildrenDirs :: [file_meta:uuid()], ChildrenFiles :: [file_meta:uuid()], PreviousBatchLastName :: binary()) -> ok.
-report_next_traverse_batch(SpaceId, TraverseId, Uuid, ChildrenDirs, ChildrenFiles, PreviousBatchLastName) ->
+    ChildrenDirs :: [file_meta:uuid()], ChildrenFiles :: [file_meta:uuid()], BatchLastName :: binary()) -> ok.
+report_next_traverse_batch(SpaceId, TraverseId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastName) ->
     {ok, _} = update(TraverseId, Uuid,
-        fun(#qos_status{files_list = FilesList, child_dirs = ChildDirs} = Value) ->
+        fun(#qos_status{files_list = FilesList, child_dirs = ChildDirs, this_batch_last_file = LN} = Value) ->
             {ok, Value#qos_status{
                 files_list = FilesList ++ ChildrenFiles,
-                previous_batch_last_filename = PreviousBatchLastName,
+                previous_batch_last_file = LN,
+                this_batch_last_file = BatchLastName,
                 child_dirs = ChildDirs + length(ChildrenDirs)}
             }
         end),
@@ -209,11 +214,21 @@ check_during_traverse(TraverseId, FileCtx, QosOriginUuid, _IsDir = false) ->
     Uuid = file_ctx:get_uuid_const(FileCtx1),
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
     case get(TraverseId, ParentUuid) of
-        {ok, #document{value = #qos_status{previous_batch_last_filename = LastFile, files_list = FilesList}}} when is_binary(LastFile) ->
-            FileName =< LastFile orelse not lists:member(Uuid, FilesList);
-        {ok, _} -> false; % doc exists but traverse have not started yet
-        ?ERROR_NOT_FOUND -> check_parents(TraverseId, FileCtx1, QosOriginUuid);
-        {error, _} = Error -> Error
+        {ok, #document{
+            value = #qos_status{
+                previous_batch_last_file = PreviousBatchLastFile, 
+                this_batch_last_file = LastFile,
+                files_list = FilesList
+            }
+        }} when is_binary(PreviousBatchLastFile) ->
+            FileName =< PreviousBatchLastFile orelse 
+                (not FileName > LastFile and not lists:member(Uuid, FilesList));
+        {ok, _} -> 
+            false; 
+        ?ERROR_NOT_FOUND -> 
+            check_parents(TraverseId, FileCtx1, QosOriginUuid);
+        {error, _} = Error -> 
+            Error
     end.
 
 
@@ -411,7 +426,8 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {previous_batch_last_filename, binary},
+        {previous_batch_last_file, binary},
+        {this_batch_last_file, binary},
         {files_list, [string]},
         {child_dirs, integer},
         {is_last_batch, boolean},
