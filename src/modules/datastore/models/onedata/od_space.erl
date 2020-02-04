@@ -85,7 +85,7 @@ run_after(_Function, _Args, Result) ->
 run_after(Doc = #document{key = SpaceId}) ->
     ok = permissions_cache:invalidate(),
     ok = qos_bounded_cache:ensure_exists_on_all_nodes(SpaceId),
-    ok = fslogic_worker:init_cannonical_paths_cache(SpaceId),
+    ok = fslogic_worker:init_canonical_paths_cache(SpaceId),
     emit_monitoring_event(Doc),
     maybe_revise_space_harvesters(Doc),
     {ok, Doc}.

@@ -39,7 +39,7 @@
 -export([report_traverse_started/2, report_traverse_finished/3,
     report_next_traverse_batch/6, report_traverse_finished_for_dir/3,
     report_traverse_finished_for_file/2]).
--export([report_file_changed/4, report_file_reconciled/4]).
+-export([report_file_changed/3, report_file_reconciled/4]).
 -export([report_file_deleted/2]).
 
 %% datastore_model callbacks
@@ -86,7 +86,7 @@ report_traverse_started(TraverseId, FileCtx) ->
 
 -spec report_traverse_finished(od_space:id(), traverse:id(), file_meta:uuid()) -> ok | {error, term()}.
 report_traverse_finished(SpaceId, TraverseId, Uuid) ->
-    {Path, _} = file_ctx:get_canonical_path(file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId))),
+    {Path, _} = file_ctx:get_uuid_path(file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId))),
     delete_synced_links(SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), oneprovider:get_id(), Path).
 
 
@@ -108,7 +108,8 @@ report_next_traverse_batch(SpaceId, TraverseId, Uuid, ChildrenDirs, ChildrenFile
 
 -spec report_traverse_finished_for_dir(traverse:id(), file_meta:uuid(), od_space:id()) -> ok | {error, term()}.
 report_traverse_finished_for_dir(TraverseId, DirUuid, SpaceId) ->
-    update_and_handle_finished(TraverseId, DirUuid, SpaceId,
+    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
+    update_and_handle_finished(TraverseId, FileCtx,
         fun(#qos_status{} = Value) ->
             {ok, Value#qos_status{is_last_batch = true}}
         end
@@ -118,23 +119,19 @@ report_traverse_finished_for_dir(TraverseId, DirUuid, SpaceId) ->
 -spec report_traverse_finished_for_file(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
 report_traverse_finished_for_file(TraverseId, FileCtx) ->
     {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, undefined),
-    SpaceId = file_ctx:get_space_id_const(FileCtx1),
     FileUuid = file_ctx:get_uuid_const(FileCtx1),
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
-    update_and_handle_finished(TraverseId, ParentUuid, SpaceId,
+    update_and_handle_finished(TraverseId, ParentFileCtx,
         fun(#qos_status{files_list = FilesList} = Value) ->
             {ok, Value#qos_status{files_list = FilesList -- [FileUuid]}}
         end
     ).
 
 
--spec report_file_changed(qos_entry:id(), datastore_doc:scope(), file_meta:uuid(), traverse:id()) ->
-    ok | {error, term()}.
-report_file_changed(QosEntryId, SpaceId, FileUuid, TraverseId) ->
-    {ok, OriginFileGuid} = qos_entry:get_file_guid(QosEntryId),
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    RelativePath = get_relative_path(OriginFileGuid, FileGuid),
-    Link = {?RECONCILE_LINK_NAME(RelativePath, TraverseId), TraverseId},
+-spec report_file_changed(qos_entry:id(), file_ctx:ctx(), traverse:id()) -> ok | {error, term()}.
+report_file_changed(QosEntryId, FileCtx, TraverseId) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {UuidPath, _} = file_ctx:get_uuid_path(FileCtx),
+    Link = {?RECONCILE_LINK_NAME(UuidPath, TraverseId), TraverseId},
     {ok, _} = add_synced_links(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), oneprovider:get_id(), Link),
     ok.
 
@@ -142,11 +139,10 @@ report_file_changed(QosEntryId, SpaceId, FileUuid, TraverseId) ->
 -spec report_file_reconciled(qos_entry:id(), datastore_doc:scope(), file_meta:uuid(), traverse:id()) ->
     ok | {error, term()}.
 report_file_reconciled(QosEntryId, SpaceId, FileUuid, TraverseId) ->
-    {ok, OriginFileGuid} = qos_entry:get_file_guid(QosEntryId),
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    RelativePath = get_relative_path(OriginFileGuid, FileGuid),
+    {UuidPath, _} = file_ctx:get_uuid_path(file_ctx:new_by_guid(FileGuid)),
     ok = delete_synced_links(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), oneprovider:get_id(),
-        ?RECONCILE_LINK_NAME(RelativePath, TraverseId)).
+        ?RECONCILE_LINK_NAME(UuidPath, TraverseId)).
 
 
 -spec report_file_deleted(file_ctx:ctx(), qos_entry:id()) -> ok.
@@ -161,11 +157,10 @@ report_file_deleted(FileCtx, QosEntryId) ->
         report_traverse_finished_for_file(TraverseId, FileCtx)
     end, TraverseIds),
     
-    {ok, QosOriginGuid} = qos_entry:get_file_guid(QosDoc),
     {ok, SpaceId} = qos_entry:get_space_id(QosDoc),
-    RelativePath = get_relative_path(QosOriginGuid, file_ctx:get_guid_const(FileCtx)),
+    {UuidPath, _} = file_ctx:get_uuid_path(FileCtx),
     % delete links from all traverses
-    delete_children_links(?RECONCILE_LINKS_KEY(QosEntryId), ?RECONCILE_LINK_NAME(RelativePath, <<"">>), SpaceId).
+    delete_children_links(?RECONCILE_LINKS_KEY(QosEntryId), ?RECONCILE_LINK_NAME(UuidPath, <<"">>), SpaceId).
     
 
 %%%===================================================================
@@ -239,7 +234,7 @@ check_parents(TraverseId, FileCtx, QosOriginUuid) ->
 %% @private
 -spec has_dir_traversed_link(traverse:id(), file_ctx:ctx()) -> boolean().
 has_dir_traversed_link(TraverseId, FileCtx) ->
-    {Path, _} = file_ctx:get_canonical_path(FileCtx),
+    {Path, _} = file_ctx:get_uuid_path(FileCtx),
     case get_next_status_link(?TRAVERSE_LINKS_KEY(TraverseId), Path) of
         {ok, Path} -> true;
         _ -> false
@@ -261,63 +256,40 @@ has_status_doc(TraverseId, Uuid) ->
 % fixme name
 %% @private
 -spec check_reconciling(file_ctx:ctx(), qos_entry:doc()) -> boolean().
-check_reconciling(FileCtx, #document{key = QosEntryId} = QosDoc) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    {ok, OriginGuid} = qos_entry:get_file_guid(QosDoc),
-    RelativePath = get_relative_path(OriginGuid, FileGuid),
-    case get_next_status_link(?RECONCILE_LINKS_KEY(QosEntryId), RelativePath) of
+check_reconciling(FileCtx, #document{key = QosEntryId}) ->
+    {UuidPath, _} = file_ctx:get_uuid_path(FileCtx),
+    case get_next_status_link(?RECONCILE_LINKS_KEY(QosEntryId), UuidPath) of
         {ok, empty} -> true;
-        {ok, Path} ->
-            %% TODO VFS-5633 use uuid instead of filename
-            % check that is not ancestor directory or self
-            not str_utils:binary_starts_with(Path, <<RelativePath/binary, "/">>) andalso
-                not str_utils:binary_starts_with(Path, <<RelativePath/binary, "###">>)
+        {ok, Path} -> not str_utils:binary_starts_with(Path, UuidPath)
     end.
 
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% TODO VFS-5633 use uuid instead of filename
-%% Returns child file path relative to ancestor's, e.g:
-%%    AncestorAbsolutePath: space1/dir1/dir2
-%%    ChildAbsolutePath: space1/dir1/dir2/dir3/file
-%%    Result: dir2/dir3/file
-%% @end
-%%--------------------------------------------------------------------
--spec get_relative_path([binary()] | file_id:file_guid(), file_id:file_guid()) -> path().
-get_relative_path(AncestorPathTokens, ChildGuid) when is_list(AncestorPathTokens) ->
-    {FilePathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(ChildGuid)),
-    filename:join(lists:sublist(FilePathTokens, length(AncestorPathTokens), length(FilePathTokens)));
-get_relative_path(AncestorGuid, ChildGuid) ->
-    {AncestorPathTokens, _FileCtx} = file_ctx:get_canonical_path_tokens(file_ctx:new_by_guid(AncestorGuid)),
-    get_relative_path(AncestorPathTokens, ChildGuid).
 
 %%%===================================================================
 % fixme
 %%%===================================================================
 
 %% @private
--spec update_and_handle_finished(traverse:id(), file_meta:uuid(), od_space:id(), diff()) ->
+-spec update_and_handle_finished(traverse:id(), file_ctx:ctx(), diff()) ->
     ok | {error, term()}.
-update_and_handle_finished(TraverseId, Uuid, SpaceId, UpdateFun) ->
+update_and_handle_finished(TraverseId, FileCtx, UpdateFun) ->
+    Uuid = file_ctx:get_uuid_const(FileCtx),
     case update(TraverseId, Uuid, UpdateFun) of
         {ok, #document{value = #qos_status{child_dirs = 0, files_list = [], is_last_batch = true, is_start_dir = true}}} ->
-            handle_finished(TraverseId, Uuid, SpaceId);
+            handle_finished(TraverseId, FileCtx);
         {ok, #document{value = #qos_status{child_dirs = 0, files_list = [], is_last_batch = true}}} ->
-            handle_finished(TraverseId, Uuid, SpaceId),
-            {ok, ParentUuid} = file_meta:get_parent_uuid({uuid, Uuid}),
-            ok = report_child_dir_traversed(TraverseId, ParentUuid, SpaceId);
+            handle_finished(TraverseId, FileCtx),
+            {ParentFileCtx, _} = file_ctx:get_parent(FileCtx, undefined),
+            ok = report_child_dir_traversed(TraverseId, ParentFileCtx);
         {ok, _} -> ok;
         {error, _} = Error -> Error
     end.
 
 
 %% @private
--spec report_child_dir_traversed(traverse:id(), file_meta:uuid(), od_space:id()) ->
+-spec report_child_dir_traversed(traverse:id(), file_ctx:ctx()) ->
     ok | {error, term()}.
-report_child_dir_traversed(TraverseId, Uuid, SpaceId) ->
-    update_and_handle_finished(TraverseId, Uuid, SpaceId,
+report_child_dir_traversed(TraverseId, FileCtx) ->
+    update_and_handle_finished(TraverseId, FileCtx,
         fun(#qos_status{child_dirs = ChildDirs} = Value) ->
             {ok, Value#qos_status{child_dirs = ChildDirs - 1}}
         end
@@ -325,9 +297,11 @@ report_child_dir_traversed(TraverseId, Uuid, SpaceId) ->
 
 
 %% @private
--spec handle_finished(traverse:id(), file_meta:uuid(), od_space:id()) -> ok.
-handle_finished(TraverseId, Uuid, SpaceId) ->
-    {Path, _} = file_ctx:get_canonical_path(file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId))),
+-spec handle_finished(traverse:id(), file_ctx:ctx()) -> ok.
+handle_finished(TraverseId, FileCtx) ->
+    {Path, FileCtx1} = file_ctx:get_uuid_path(FileCtx),
+    Uuid = file_ctx:get_uuid_const(FileCtx1),
+    SpaceId = file_ctx:get_space_id_const(FileCtx1),
     % fixme
     ?notice("Adding link: {~p ~p}", [Path, Uuid]),
     {ok, _} = add_synced_links(SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), oneprovider:get_id(), {Path, Uuid}),

@@ -510,7 +510,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx4),
     case InvalidateCache of
-        true -> location_and_link_utils:invalidate_cannonical_paths_cache(SpaceId);
+        true -> location_and_link_utils:invalidate_paths_cache(SpaceId);
         _ -> ok
     end,
 

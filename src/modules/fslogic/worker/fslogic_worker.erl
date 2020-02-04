@@ -22,7 +22,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([init_cannonical_paths_cache/1]).
+-export([init_canonical_paths_cache/1]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
@@ -55,7 +55,7 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
--define(INIT_CANONICAL_PATHS_CACHE(Space), {init_cannonical_paths_cache, Space}).
+-define(INIT_CANONICAL_PATHS_CACHE(Space), {init_canonical_paths_cache, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, periodical_spaces_autocleaning_check_enabled, true)).
@@ -94,8 +94,8 @@
 %% Initializes cache on all nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec init_cannonical_paths_cache(od_space:id() | all) -> ok.
-init_cannonical_paths_cache(Space) ->
+-spec init_canonical_paths_cache(od_space:id() | all) -> ok.
+init_canonical_paths_cache(Space) ->
     lists:foreach(fun(Node) ->
         rpc:call(Node, erlang, send_after, [0, fslogic_worker, {sync_timer, ?INIT_CANONICAL_PATHS_CACHE(Space)}])
     end, consistent_hashing:get_all_nodes()).
@@ -112,7 +112,7 @@ init_cannonical_paths_cache(Space) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    location_and_link_utils:init_cannonical_paths_cache_group(),
+    location_and_link_utils:init_paths_cache_group(),
     erlang:send_after(0, self(), {sync_timer, ?INIT_CANONICAL_PATHS_CACHE(all)}),
 
     transfer:init(),
@@ -196,7 +196,7 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
 handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
 handle(?INIT_CANONICAL_PATHS_CACHE(Space)) ->
-    location_and_link_utils:init_cannonical_paths_cache(Space);
+    location_and_link_utils:init_paths_cache(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.

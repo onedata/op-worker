@@ -94,7 +94,7 @@ reconcile_qos_for_entry(FileCtx, QosEntryId) ->
             <<"task_type">> => <<"reconcile">>
         }
     },
-    ok = qos_status:report_file_changed(QosEntryId, SpaceId, FileUuid, TaskId),
+    ok = qos_status:report_file_changed(QosEntryId, FileCtx, TaskId),
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
     ok.
 

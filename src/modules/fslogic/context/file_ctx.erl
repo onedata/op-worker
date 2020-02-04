@@ -33,6 +33,7 @@
 
 -record(file_ctx, {
     canonical_path :: undefined | file_meta:path(),
+    uuid_path :: undefined | file_meta:path(),
     guid :: fslogic_worker:file_guid(),
     file_doc :: undefined | file_meta:doc(),
     parent :: undefined | ctx(),
@@ -88,6 +89,8 @@
 ]).
 -export([is_dir/1]).
 
+% fixme
+-export([get_uuid_path/1]).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -309,6 +312,19 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
     end;
 get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
     {fslogic_path:split(Path), FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file's uuid path (like canonical but instead of filename, uuid is used).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_uuid_path(ctx()) -> {file_meta:path(), ctx()}.
+get_uuid_path(FileCtx = #file_ctx{uuid_path = undefined}) ->
+    {UuidPathTokens, FileCtx2} = generate_uuid_path(FileCtx),
+    UuidPath = filename:join(UuidPathTokens),
+    {UuidPath, FileCtx2#file_ctx{uuid_path = UuidPath}};
+get_uuid_path(FileCtx = #file_ctx{uuid_path = UuidPath}) ->
+    {UuidPath, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1222,9 +1238,38 @@ generate_canonical_path(FileCtx) ->
                 end
         end
     end,
-    {#document{value = #file_meta{name = FileName, type = FileType}, scope = Space} = Doc, FileCtx2} =
+    CacheName = location_and_link_utils:get_canonical_paths_cache_name(file_ctx:get_space_id_const(FileCtx)),
+    generate_and_cache_path(FileCtx, Callback, CacheName).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Generates uuid path
+%% @end
+%%--------------------------------------------------------------------
+-spec generate_uuid_path(ctx()) -> {[file_meta:uuid()], ctx()}.
+generate_uuid_path(FileCtx) ->
+    Callback = fun([#document{key = Uuid, scope = SpaceId}, ParentValue, CalculationInfo]) ->
+        case fslogic_uuid:is_root_dir_uuid(Uuid) of
+            true ->
+                {ok, [<<"/">>], CalculationInfo};
+            false ->
+                case fslogic_uuid:is_space_dir_uuid(Uuid) of
+                    true ->
+                        {ok, [<<"/">>, SpaceId], CalculationInfo};
+                    false ->
+                        {ok, ParentValue ++ [Uuid], CalculationInfo}
+                end
+        end
+    end,
+    CacheName = location_and_link_utils:get_uuid_paths_cache_name(file_ctx:get_space_id_const(FileCtx)),
+    generate_and_cache_path(FileCtx, Callback, CacheName).
+
+-spec generate_and_cache_path(ctx(), bounded_cache:callback(), bounded_cache:cache()) -> 
+    {[file_meta:uuid() | file_meta:name()], ctx()}.
+generate_and_cache_path(FileCtx, Callback, CacheName) ->
+    {#document{key = Uuid, value = #file_meta{type = FileType}} = Doc, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
-    CacheName = location_and_link_utils:get_cannonical_paths_cache_name(Space),
     case FileType of
         ?DIRECTORY_TYPE ->
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),
@@ -1232,7 +1277,7 @@ generate_canonical_path(FileCtx) ->
         _ ->
             {ok, ParentDoc} = file_meta:get_parent(Doc),
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
-            {Path ++ [FileName], FileCtx2}
+            {Path ++ [Uuid], FileCtx2}
     end.
 
 %%--------------------------------------------------------------------
