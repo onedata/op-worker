@@ -24,18 +24,22 @@
 -export([
     get_shared_data_test/1,
     subscribe_test/1,
-    convenience_functions_test/1
+    convenience_functions_test/1,
+    get_temporary_tokens_generation_test/1
 ]).
 
 all() -> ?ALL([
     get_shared_data_test,
     subscribe_test,
-    convenience_functions_test
+    convenience_functions_test,
+    get_temporary_tokens_generation_test
 ]).
+
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
 
 get_shared_data_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
@@ -65,7 +69,6 @@ subscribe_test(Config) ->
 
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
-    % Simulate received updates on different scopes (in rising order)
     Token1SharedGRI = #gri{type = od_token, id = ?TOKEN_1, aspect = instance, scope = shared},
     Token1SharedData = ?TOKEN_SHARED_DATA_VALUE(?TOKEN_1),
 
@@ -130,6 +133,70 @@ convenience_functions_test(Config) ->
         rpc:call(Node, token_logic, is_revoked, [?TOKEN_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+
+    ok.
+
+
+get_temporary_tokens_generation_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    TemporaryTokenSecretSharedGRI = #gri{
+        type = temporary_token_secret,
+        id = ?USER_1,
+        aspect = user,
+        scope = shared
+    },
+    TemporaryTokenSecretSharedData = ?TEMPORARY_TOKENS_SECRET_SHARED_DATA_VALUE(?USER_1),
+
+    % shared scope
+    ?assertMatch(
+        {ok, ?TEMPORARY_TOKENS_SECRET_GENERATION(?USER_1)},
+        rpc:call(Node, token_logic, get_temporary_tokens_generation, [?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+
+    ChangedData1 = TemporaryTokenSecretSharedData#{
+        <<"revision">> => 2,
+        <<"generation">> => 2
+    },
+    PushMessage1 = #gs_push_graph{
+        gri = TemporaryTokenSecretSharedGRI,
+        data = ChangedData1,
+        change_type = updated
+    },
+    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
+
+    ?assertMatch(
+        {ok, 2},
+        rpc:call(Node, token_logic, get_temporary_tokens_generation, [?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+
+    % Simulate a 'deleted' push and see if cache was invalidated
+    PushMessage3 = #gs_push_graph{gri = TemporaryTokenSecretSharedGRI, change_type = deleted},
+    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
+    ?assertMatch(
+        {error, not_found},
+        rpc:call(Node, temporary_token_secret, get_from_cache, [?USER_1])
+    ),
+
+    % Simulate a 'nosub' push and see if cache was invalidated, fetch the
+    % record first.
+    logic_tests_common:invalidate_cache(Config, temporary_token_secret, ?USER_1),
+    ?assertMatch(
+        {ok, ?TEMPORARY_TOKENS_SECRET_GENERATION(?USER_1)},
+        rpc:call(Node, token_logic, get_temporary_tokens_generation, [?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+
+    PushMessage4 = #gs_push_nosub{gri = TemporaryTokenSecretSharedGRI, reason = forbidden},
+    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
+    ?assertMatch(
+        {error, not_found},
+        rpc:call(Node, temporary_token_secret, get_from_cache, [?USER_1])
+    ),
 
     ok.
 

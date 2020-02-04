@@ -146,7 +146,9 @@ request(Client, Req, Timeout) ->
 %%--------------------------------------------------------------------
 -spec invalidate_cache(gri:gri()) -> ok.
 invalidate_cache(#gri{type = Type, id = Id, aspect = instance}) ->
-    invalidate_cache(Type, Id).
+    invalidate_cache(Type, Id);
+invalidate_cache(#gri{type = temporary_token_secret, id = Id, aspect = user}) ->
+    temporary_token_secret:invalidate_cache(Id).
 
 
 %%--------------------------------------------------------------------
@@ -508,7 +510,10 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
 
 -spec maybe_serve_from_cache(client(), gs_protocol:graph_req()) ->
     {true, doc()} | false | errors:error().
-maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{aspect = instance} = GRI, auth_hint = AuthHint}) ->
+maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{type = Type, aspect = As} = GRI, auth_hint = AuthHint}) when
+    As =:= instance;
+    (Type =:= temporary_token_secret andalso As =:= user)
+->
     case get_from_cache(GRI) of
         false ->
             false;
@@ -544,7 +549,10 @@ maybe_serve_from_cache(_, _) ->
 
 -spec coalesce_cache(connection_ref(), gri:gri(), doc(), gs_protocol:revision()) ->
     {ok, doc()} | {error, stale_record}.
-coalesce_cache(ConnRef, GRI = #gri{aspect = instance}, Doc = #document{value = Record}, Rev) ->
+coalesce_cache(ConnRef, GRI = #gri{type = Type, aspect = As}, Doc = #document{value = Record}, Rev) when
+    As =:= instance;
+    (Type =:= temporary_token_secret andalso As =:= user)
+->
     #gri{type = Type, id = Id, scope = Scope} = GRI,
     CacheUpdateFun = fun(CachedRecord) ->
         #{scope := CachedScope} = CacheState = get_cache_state(CachedRecord),
@@ -636,7 +644,9 @@ put_cache_state(Harvester = #od_harvester{}, CacheState) ->
 put_cache_state(Storage = #od_storage{}, CacheState) ->
     Storage#od_storage{cache_state = CacheState};
 put_cache_state(Token = #od_token{}, CacheState) ->
-    Token#od_token{cache_state = CacheState}.
+    Token#od_token{cache_state = CacheState};
+put_cache_state(TTS = #temporary_token_secret{}, CacheState) ->
+    TTS#temporary_token_secret{cache_state = CacheState}.
 
 
 -spec get_cache_state(Record :: tuple() | doc()) -> cache_state().
@@ -661,6 +671,8 @@ get_cache_state(#od_harvester{cache_state = CacheState}) ->
 get_cache_state(#od_storage{cache_state = CacheState}) ->
     CacheState;
 get_cache_state(#od_token{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#temporary_token_secret{cache_state = CacheState}) ->
     CacheState.
 
 
@@ -701,6 +713,9 @@ is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private
     true;
 
 is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_token, scope = shared}, _) ->
+    true;
+
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = temporary_token_secret, scope = shared}, _) ->
     true;
 
 is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_storage, id = StorageId, scope = private}, _) ->

@@ -19,6 +19,8 @@
     get_shared_data/1,
     is_revoked/1,
 
+    get_temporary_tokens_generation/1,
+
     verify_access_token/4,
     verify_provider_identity_token/1
 ]).
@@ -48,6 +50,32 @@ is_revoked(TokenId) ->
     case get_shared_data(TokenId) of
         {ok, #document{value = #od_token{revoked = Revoked}}} ->
             {ok, Revoked};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves temporary tokens generation for specified user.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_temporary_tokens_generation(od_user:id()) ->
+    {ok, temporary_token_secret:generation()} | errors:error().
+get_temporary_tokens_generation(UserId) ->
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{
+            type = temporary_token_secret,
+            id = UserId,
+            aspect = user,
+            scope = shared
+        },
+        subscribe = true
+    }),
+    case Result of
+        {ok, #document{value = #temporary_token_secret{generation = Generation}}} ->
+            {ok, Generation};
         {error, _} = Error ->
             Error
     end.

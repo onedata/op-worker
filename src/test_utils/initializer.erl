@@ -244,7 +244,7 @@ create_access_token(UserId, Caveats) ->
             subject = ?SUB(user, UserId),
             id = UserId,
             type = ?ACCESS_TOKEN,
-            persistent = false
+            persistence = {temporary, 1}
         }, ?TOKENS_SECRET, Caveats))
     ),
     SerializedToken.

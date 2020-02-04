@@ -169,7 +169,8 @@ invalidate_all_test_records(Config) ->
         {od_handle_service, ?HANDLE_SERVICE_1}, {od_handle_service, ?HANDLE_SERVICE_2},
         {od_handle, ?HANDLE_1}, {od_handle, ?HANDLE_2},
         {od_harvester, ?HARVESTER_1},
-        {od_token, ?TOKEN_1}, {od_token, ?TOKEN_2}
+        {od_token, ?TOKEN_1}, {od_token, ?TOKEN_2},
+        {temporary_token_secret, ?USER_1}, {temporary_token_secret, ?USER_2}, {temporary_token_secret, ?USER_3}
     ],
     lists:foreach(
         fun({Type, Id}) ->
@@ -592,8 +593,7 @@ mock_graph_get(#gri{type = od_token, id = TokenId, aspect = instance, scope = sh
         undefined ->
             true;
         {#auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)}, _} ->
-            UserId = token_to_user_id(SerializedToken),
-            UserId == ?USER_1
+            token_to_user_id(SerializedToken) == ?USER_1
     end,
     case Authorized of
         true ->
@@ -603,6 +603,23 @@ mock_graph_get(#gri{type = od_token, id = TokenId, aspect = instance, scope = sh
                 _ ->
                     ?ERROR_NOT_FOUND
             end;
+        false ->
+            ?ERROR_FORBIDDEN
+    end;
+
+mock_graph_get(#gri{type = temporary_token_secret, id = UserId, aspect = user, scope = shared}, AuthOverride, _) ->
+    Authorized = case AuthOverride of
+        undefined ->
+            true;
+        {#auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)}, _} ->
+            token_to_user_id(SerializedToken) == UserId
+    end,
+    case Authorized of
+        true ->
+            {ok, #gs_resp_graph{
+                data_format = resource,
+                data = ?TEMPORARY_TOKENS_SECRET_SHARED_DATA_VALUE(UserId)}
+            };
         false ->
             ?ERROR_FORBIDDEN
     end.

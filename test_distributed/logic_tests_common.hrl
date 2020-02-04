@@ -513,3 +513,12 @@ end).
 -define(TOKEN_SHARED_DATA_MATCHER(__TokenId), #document{key = __TokenId, value = #od_token{
     revoked = false
 }}).
+
+
+-define(TEMPORARY_TOKENS_SECRET_SHARED_DATA_VALUE(__UserId), #{
+    <<"revision">> => 1,
+    <<"gri">> => gri:serialize(#gri{type = temporary_token_secret, id = __UserId, aspect = user, scope = shared}),
+    <<"generation">> => 1
+}).
+
+-define(TEMPORARY_TOKENS_SECRET_GENERATION(__UserId), 1).
