@@ -16,6 +16,9 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 -export([
+    get_shared_data/1,
+    is_revoked/1,
+
     verify_access_token/4,
     verify_provider_identity_token/1
 ]).
@@ -24,6 +27,30 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves token doc restricted to shared data by given TokenId.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_shared_data(od_token:id()) -> {ok, od_token:doc()} | errors:error().
+get_shared_data(TokenId) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_token, id = TokenId, aspect = instance, scope = shared},
+        subscribe = true
+    }).
+
+
+-spec is_revoked(od_token:id()) -> {ok, boolean()} | errors:error().
+is_revoked(TokenId) ->
+    case get_shared_data(TokenId) of
+        {ok, #document{value = #od_token{revoked = Revoked}}} ->
+            {ok, Revoked};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------

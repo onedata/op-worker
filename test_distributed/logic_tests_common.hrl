@@ -55,6 +55,8 @@
 -define(HARVESTER_2, <<"harvester2Id">>).
 -define(STORAGE_1, <<"storage1Id">>).
 -define(STORAGE_2, <<"storage2Id">>).
+-define(TOKEN_1, <<"token1Id">>).
+-define(TOKEN_2, <<"token2Id">>).
 
 % User authorizations
 % Token auth is translated to {token, Token} before graph sync request.
@@ -500,3 +502,14 @@ end).
     <<"spaces">> => [],
     <<"qos_parameters">> => #{}
 }).
+
+
+-define(TOKEN_SHARED_DATA_VALUE(__TokenId), #{
+    <<"revision">> => 1,
+    <<"gri">> => gri:serialize(#gri{type = od_token, id = __TokenId, aspect = instance, scope = shared}),
+    <<"revoked">> => false
+}).
+
+-define(TOKEN_SHARED_DATA_MATCHER(__TokenId), #document{key = __TokenId, value = #od_token{
+    revoked = false
+}}).

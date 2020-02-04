@@ -31,6 +31,7 @@ get_models() -> [
     od_handle,
     od_harvester,
     od_storage,
+    od_token,
     provider_auth,
     file_download_code,
     subscription,

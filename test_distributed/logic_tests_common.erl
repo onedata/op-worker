@@ -168,7 +168,8 @@ invalidate_all_test_records(Config) ->
         {od_provider, ?PROVIDER_1}, {od_provider, ?PROVIDER_2},
         {od_handle_service, ?HANDLE_SERVICE_1}, {od_handle_service, ?HANDLE_SERVICE_2},
         {od_handle, ?HANDLE_1}, {od_handle, ?HANDLE_2},
-        {od_harvester, ?HARVESTER_1}
+        {od_harvester, ?HARVESTER_1},
+        {od_token, ?TOKEN_1}, {od_token, ?TOKEN_2}
     ],
     lists:foreach(
         fun({Type, Id}) ->
@@ -582,6 +583,26 @@ mock_graph_get(GRI = #gri{type = od_storage, id = StorageId, aspect = instance},
                 private -> ?STORAGE_PRIVATE_DATA_VALUE(StorageId)
             end,
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
+        false ->
+            ?ERROR_FORBIDDEN
+    end;
+
+mock_graph_get(#gri{type = od_token, id = TokenId, aspect = instance, scope = shared}, AuthOverride, _) ->
+    Authorized = case AuthOverride of
+        undefined ->
+            true;
+        {#auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)}, _} ->
+            UserId = token_to_user_id(SerializedToken),
+            UserId == ?USER_1
+    end,
+    case Authorized of
+        true ->
+            case lists:member(TokenId, [?TOKEN_1, ?TOKEN_2]) of
+                true ->
+                    {ok, #gs_resp_graph{data_format = resource, data = ?TOKEN_SHARED_DATA_VALUE(TokenId)}};
+                _ ->
+                    ?ERROR_NOT_FOUND
+            end;
         false ->
             ?ERROR_FORBIDDEN
     end.

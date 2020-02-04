@@ -194,6 +194,12 @@
     cache_state = #{} :: cache_state()
 }).
 
+-record(od_token, {
+    revoked = false :: boolean(),
+
+    cache_state = #{} :: cache_state()
+}).
+
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================

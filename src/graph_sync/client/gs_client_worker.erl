@@ -634,7 +634,9 @@ put_cache_state(Handle = #od_handle{}, CacheState) ->
 put_cache_state(Harvester = #od_harvester{}, CacheState) ->
     Harvester#od_harvester{cache_state = CacheState};
 put_cache_state(Storage = #od_storage{}, CacheState) ->
-    Storage#od_storage{cache_state = CacheState}.
+    Storage#od_storage{cache_state = CacheState};
+put_cache_state(Token = #od_token{}, CacheState) ->
+    Token#od_token{cache_state = CacheState}.
 
 
 -spec get_cache_state(Record :: tuple() | doc()) -> cache_state().
@@ -657,6 +659,8 @@ get_cache_state(#od_handle{cache_state = CacheState}) ->
 get_cache_state(#od_harvester{cache_state = CacheState}) ->
     CacheState;
 get_cache_state(#od_storage{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#od_token{cache_state = CacheState}) ->
     CacheState.
 
 
@@ -694,6 +698,9 @@ is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected},
     true;
 
 is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private}, _) ->
+    true;
+
+is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_token, scope = shared}, _) ->
     true;
 
 is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_storage, id = StorageId, scope = private}, _) ->

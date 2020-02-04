@@ -65,4 +65,3 @@ get_name(SessionId, GroupId, AuthHint) ->
         {error, _} = Error ->
             Error
     end.
-
