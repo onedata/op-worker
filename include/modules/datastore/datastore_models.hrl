@@ -222,7 +222,7 @@
     accessed :: undefined | integer(),
     type :: undefined | session:type(),
     identity :: aai:subject(),
-    auth :: undefined | session:auth(),
+    auth :: undefined | auth_manager:auth(),
     data_constraints :: data_constraints:constraints(),
     node :: node(),
     supervisor :: undefined | pid(),

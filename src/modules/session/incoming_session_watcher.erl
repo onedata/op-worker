@@ -40,7 +40,7 @@
     %                  could be revoked)
     % undefined  -> for provider_incoming sessions. No periodic peer
     %               verification is needed.
-    auth :: undefined | session:auth(),
+    auth :: undefined | auth_manager:auth(),
     validity_checkup_timer :: undefined | reference()
 }).
 
@@ -350,7 +350,7 @@ mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
 
 
 %% @private
--spec check_auth_validity(undefined | session:auth(), aai:subject()) ->
+-spec check_auth_validity(undefined | auth_manager:auth(), aai:subject()) ->
     {true, NewTimer :: undefined | reference()} | false.
 check_auth_validity(undefined, _Identity) ->
     {true, undefined};

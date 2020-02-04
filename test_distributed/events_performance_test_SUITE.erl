@@ -444,7 +444,7 @@ end_per_testcase(_Case, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), Nonce :: binary(),
-    Iden :: session:auth(), Conn :: pid()) -> {ok, session:id()}.
+    Iden :: aai:subject(), Conn :: pid()) -> {ok, session:id()}.
 session_setup(Worker, Nonce, ?SUB(user, UserId) = Iden, Conn) ->
     AccessToken = initializer:create_access_token(UserId),
     TokenAuth = auth_manager:build_token_auth(

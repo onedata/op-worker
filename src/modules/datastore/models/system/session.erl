@@ -44,7 +44,6 @@
 -type diff() :: datastore_doc:diff(record()).
 -type ttl() :: non_neg_integer().
 -type grace_period() :: non_neg_integer().
--type auth() :: auth_manager:token_auth() | ?ROOT_AUTH | ?GUEST_AUTH.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
@@ -56,7 +55,7 @@
 -export_type([
     id/0, record/0, doc/0,
     ttl/0, grace_period/0,
-    auth/0, type/0, status/0
+    type/0, status/0
 ]).
 
 -define(CTX, #{
@@ -286,8 +285,12 @@ get_sequencer_manager(SessId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_auth
-    (id()) -> {ok, Auth :: auth()} | {ok, undefined} | {error, term()};
-    (record() | doc()) -> auth().
+    (id()) -> {ok, Auth :: auth_manager:auth()} | {ok, undefined} | {error, term()};
+    (record() | doc()) -> auth_manager:auth().
+get_auth(?ROOT_SESS_ID) ->
+    {ok, auth_manager:root_auth()};
+get_auth(?GUEST_SESS_ID) ->
+    {ok, auth_manager:guest_auth()};
 get_auth(<<_/binary>> = SessId) ->
     case session:get(SessId) of
         {ok, #document{value = #session{auth = Auth}}} -> {ok, Auth};

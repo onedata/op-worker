@@ -33,6 +33,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
+-export([root_auth/0, guest_auth/0]).
 -export([
     build_token_auth/5,
     is_token_auth/1,
@@ -41,10 +42,10 @@
     get_peer_ip/1,
     get_interface/1,
     get_data_access_caveats_policy/1,
-
-    get_credentials/1, update_credentials/3,
+    get_credentials/1, update_credentials/3
+]).
+-export([
     to_auth_override/1,
-
     get_caveats/1,
     verify/1,
 
@@ -97,21 +98,36 @@
 -type audience_token() :: undefined | tokens:serialized().
 
 -type credentials() :: #credentials{}.
+
 -opaque token_auth() :: #token_auth{}.
+-type guest_auth() :: ?GUEST_AUTH.
+-type root_auth() :: ?ROOT_AUTH.
+-type auth() :: token_auth() | guest_auth() | root_auth().
 
 -type verification_result() ::
     {ok, aai:auth(), TokenValidUntil :: undefined | timestamp()}
     | errors:error().
 
 -export_type([
-    access_token/0, audience_token/0,
-    credentials/0, token_auth/0, verification_result/0
+    access_token/0, audience_token/0, credentials/0,
+    token_auth/0, guest_auth/0, root_auth/0, auth/0,
+    verification_result/0
 ]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec root_auth() -> root_auth().
+root_auth() ->
+    ?ROOT_AUTH.
+
+
+-spec guest_auth() -> guest_auth().
+guest_auth() ->
+    ?GUEST_AUTH.
 
 
 -spec build_token_auth(
@@ -177,20 +193,20 @@ update_credentials(TokenAuth, AccessToken, AudienceToken) ->
     }.
 
 
--spec to_auth_override(session:auth()) -> gs_protocol:auth_override().
+-spec to_auth_override(auth()) -> gs_protocol:auth_override().
 to_auth_override(?ROOT_AUTH) ->
     undefined;
 to_auth_override(?GUEST_AUTH) ->
     #auth_override{client_auth = nobody};
 to_auth_override(#token_auth{
-    access_token = Token,
+    access_token = AccessToken,
     peer_ip = PeerIp,
     interface = Interface,
     audience_token = AudienceToken,
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
     #auth_override{
-        client_auth = {token, Token},
+        client_auth = {token, AccessToken},
         peer_ip = PeerIp,
         interface = Interface,
         audience_token = AudienceToken,
@@ -198,7 +214,7 @@ to_auth_override(#token_auth{
     }.
 
 
--spec get_caveats(session:auth()) -> {ok, [caveats:caveat()]} | errors:error().
+-spec get_caveats(auth()) -> {ok, [caveats:caveat()]} | errors:error().
 get_caveats(?ROOT_AUTH) ->
     {ok, []};
 get_caveats(?GUEST_AUTH) ->

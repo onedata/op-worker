@@ -108,7 +108,7 @@ get_session_id(#user_ctx{session = #document{key = SessId}}) ->
 %% Gets session's auth from user context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth(ctx()) -> session:auth().
+-spec get_auth(ctx()) -> auth_manager:auth().
 get_auth(#user_ctx{session = Session}) ->
     session:get_auth(Session).
 

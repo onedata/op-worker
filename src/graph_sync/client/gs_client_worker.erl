@@ -27,7 +27,7 @@
 
 
 %% @formatter:off
--type client() :: session:id() | session:auth().
+-type client() :: session:id() | auth_manager:auth().
 -type create_result() :: {ok, Data :: term()} |
                          {ok, {gri:gri(), doc()}} |
                          errors:error().
@@ -376,7 +376,7 @@ start_gs_connection() ->
 %% exfiltrated from the local provider cache in case of a limited token.
 %% @end
 %%--------------------------------------------------------------------
--spec check_api_authorization(session:auth(), gs_protocol:rpc_req() | gs_protocol:graph_req()) ->
+-spec check_api_authorization(auth_manager:auth(), gs_protocol:rpc_req() | gs_protocol:graph_req()) ->
     ok | errors:error().
 check_api_authorization(?ROOT_AUTH, _) ->
     ok;
@@ -608,20 +608,12 @@ get_connection_pid() ->
     global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 
--spec client_to_auth(client()) -> session:auth().
-client_to_auth(?ROOT_SESS_ID) ->
-    ?ROOT_AUTH;
-client_to_auth(?GUEST_SESS_ID) ->
-    ?GUEST_AUTH;
+-spec client_to_auth(client()) -> auth_manager:auth().
 client_to_auth(SessionId) when is_binary(SessionId) ->
     {ok, Auth} = session:get_auth(SessionId),
     client_to_auth(Auth);
-client_to_auth(?ROOT_AUTH) ->
-    ?ROOT_AUTH;
-client_to_auth(?GUEST_AUTH) ->
-    ?GUEST_AUTH;
-client_to_auth(TokenAuth) ->
-    TokenAuth.
+client_to_auth(SessionAuth) ->
+    SessionAuth.
 
 
 -spec put_cache_state(Record :: tuple(), cache_state()) -> Record :: tuple().
