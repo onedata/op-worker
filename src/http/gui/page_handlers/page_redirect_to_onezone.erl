@@ -43,13 +43,13 @@ handle(<<"GET">>, Req) ->
 %%--------------------------------------------------------------------
 -spec redirect(cowboy_req:req(), Path :: binary()) -> cowboy_req:req().
 redirect(Req, Path) ->
-    OzUrl = oneprovider:get_oz_url(),
     case oneprovider:get_id_or_undefined() of
         undefined ->
             cowboy_req:reply(?HTTP_200_OK, #{
                 ?HDR_CONTENT_TYPE => <<"text/plain">>
             }, <<"This Oneprovider instance is not yet configured.">>, Req);
         ProviderId ->
+            OzUrl = oneprovider:get_oz_url(),
             cowboy_req:reply(?HTTP_302_FOUND, #{
                 ?HDR_LOCATION => str_utils:format_bin("~s/~s/~s~s", [
                     OzUrl, onedata:gui_prefix(?OP_WORKER_GUI), ProviderId, Path
