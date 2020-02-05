@@ -74,7 +74,8 @@
     qos_cleanup_test/1,
     
     % QoS status tests
-    qos_status_during_traverse_test/1
+    qos_status_during_traverse_test/1,
+    qos_status_with_file_deletion/1
 ]).
 
 all() -> [
@@ -639,7 +640,10 @@ qos_cleanup_test(Config) ->
 
 % fixme more tests
 qos_status_during_traverse_test(Config) ->
-    qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_PATH1, 4).
+    qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_PATH1, 10).
+
+qos_status_with_file_deletion(Config) ->
+    qos_test_base:qos_status_with_file_deletion(Config, ?SPACE_PATH1, 10).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -660,7 +664,10 @@ end_per_suite(Config) ->
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
-init_per_testcase(qos_status_during_traverse_test, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= qos_status_during_traverse_test;
+    Case =:= qos_status_with_file_deletion ->
+    
     Workers = ?config(op_worker_nodes, Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     % do not start file synchronization

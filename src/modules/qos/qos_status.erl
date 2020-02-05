@@ -97,6 +97,7 @@ report_traverse_finished(SpaceId, TraverseId, Uuid) ->
 -spec report_next_traverse_batch(od_space:id(), traverse:id(), file_meta:uuid(),
     ChildrenDirs :: [file_meta:uuid()], ChildrenFiles :: [file_meta:uuid()], BatchLastName :: binary()) -> ok.
 report_next_traverse_batch(SpaceId, TraverseId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastName) ->
+    ?notice("next traverse batch: ~p~n~p~n~p~n", [ChildrenDirs, ChildrenFiles, BatchLastName]),
     {ok, _} = update(TraverseId, Uuid,
         fun(#qos_status{files_list = FilesList, child_dirs = ChildDirs, this_batch_last_file = LN} = Value) ->
             {ok, Value#qos_status{
@@ -113,6 +114,7 @@ report_next_traverse_batch(SpaceId, TraverseId, Uuid, ChildrenDirs, ChildrenFile
 
 -spec report_traverse_finished_for_dir(traverse:id(), file_meta:uuid(), od_space:id()) -> ok | {error, term()}.
 report_traverse_finished_for_dir(TraverseId, DirUuid, SpaceId) ->
+    ?notice("report traverse finished for dir"),
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
     update_and_handle_finished(TraverseId, FileCtx,
         fun(#qos_status{} = Value) ->
@@ -125,6 +127,7 @@ report_traverse_finished_for_dir(TraverseId, DirUuid, SpaceId) ->
 report_traverse_finished_for_file(TraverseId, FileCtx) ->
     {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, undefined),
     FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    ?notice("file finished: ~p", [FileUuid]),
     update_and_handle_finished(TraverseId, ParentFileCtx,
         fun(#qos_status{files_list = FilesList} = Value) ->
             {ok, Value#qos_status{files_list = FilesList -- [FileUuid]}}
@@ -159,7 +162,7 @@ report_file_deleted(FileCtx, QosEntryId) ->
     
     lists:foreach(fun(TraverseId) ->
         ok = delete(TraverseId, Uuid),
-        report_traverse_finished_for_file(TraverseId, FileCtx)
+        ok = report_traverse_finished_for_file(TraverseId, FileCtx)
     end, TraverseIds),
     
     {ok, SpaceId} = qos_entry:get_space_id(QosDoc),
@@ -222,7 +225,7 @@ check_during_traverse(TraverseId, FileCtx, QosOriginUuid, _IsDir = false) ->
             }
         }} when is_binary(PreviousBatchLastFile) ->
             FileName =< PreviousBatchLastFile orelse 
-                (not FileName > LastFile and not lists:member(Uuid, FilesList));
+                (not (FileName > LastFile) and not lists:member(Uuid, FilesList));
         {ok, _} -> 
             false; 
         ?ERROR_NOT_FOUND -> 
