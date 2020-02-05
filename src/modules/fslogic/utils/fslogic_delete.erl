@@ -59,7 +59,7 @@ handle_release_of_deleted_file(FileCtx) ->
 -spec handle_file_deleted_on_synced_storage(file_ctx:ctx()) -> ok.
 handle_file_deleted_on_synced_storage(FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    ok = fslogic_delete:remove_file(FileCtx, UserCtx, false, ?LOCAL_DELETE).
+    ok = remove_file(FileCtx, UserCtx, false, ?LOCAL_DELETE).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -394,13 +394,14 @@ get_open_file_handling_method(FileCtx) ->
 
 -spec maybe_rename_storage_file(file_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, ?ENOENT}.
 maybe_rename_storage_file(FileCtx) ->
+    {SourceFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     TargetFileId = filename:join(?DELETED_OPENED_FILES_DIR, FileGuid),
-    case rename_storage_file(FileCtx, TargetFileId) of
+    case rename_storage_file(FileCtx2, SourceFileId, TargetFileId) of
         {error, ?ENOENT} ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            SpaceId = file_ctx:get_space_id_const(FileCtx2),
             ensure_dir_for_deleted_files_created(SpaceId),
-            rename_storage_file(FileCtx, TargetFileId);
+            rename_storage_file(FileCtx2, SourceFileId, TargetFileId);
         Other ->
             Other
     end.
@@ -415,10 +416,13 @@ ensure_dir_for_deleted_files_created(SpaceId) ->
         {error, ?EEXIST} -> ok
     end.
 
--spec rename_storage_file(file_ctx:ctx(), helpers:file_id()) -> {ok, file_ctx:ctx()} | {error, ?ENOENT}.
-rename_storage_file(FileCtx, TargetFileId) ->
-    {SFMHandle, FileCtx2} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx2),
+-spec rename_storage_file(file_ctx:ctx(), helpers:file_id(), helpers:file_id()) ->
+    {ok, file_ctx:ctx()} | {error, ?ENOENT}.
+rename_storage_file(FileCtx, SourceFileId, TargetFileId) ->
+    % ensure SourceFileId is set in FileCtx
+    FileCtx2 = file_ctx:set_file_id(FileCtx, SourceFileId),
+    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx2 ),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
     LocId = file_location:local_id(FileUuid),
     case fslogic_location_cache:update_location(FileUuid, LocId, fun(FileLocation) ->
         {ok, FileLocation#file_location{file_id = TargetFileId}}
@@ -427,7 +431,7 @@ rename_storage_file(FileCtx, TargetFileId) ->
             case storage_file_manager:mv(SFMHandle, TargetFileId) of
                 ok ->
                     fslogic_event_emitter:emit_file_location_changed(NewFL#file_location{blocks = []}, [], 0, 0),
-                    {ok, file_ctx:set_file_id(FileCtx2, TargetFileId)};
+                    {ok, file_ctx:set_file_id(FileCtx3, TargetFileId)};
                 {error, ?ENOENT} = Error ->
                     Error
             end;

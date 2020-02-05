@@ -327,7 +327,7 @@ close_file_import_race_test(Config) ->
     }, ?SPACE_ID, ?ATTEMPTS),
 
     %% Check if file was imported on W1
-    ?assertMatch({error, enoent},
+    ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})).
 
 delete_file_reimport_race_test(Config) ->

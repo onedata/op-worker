@@ -447,7 +447,7 @@ remove_file_on_remote_provider_should_unlock_space(Config) ->
 
     ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessId(P2), f(<<"space3">>, File1)), ?ATTEMPTS),
     ?assertMatch(ok, unlink(P2, SessId(P2), f(<<"space3">>, File1))),
-    ?assertMatch({error, enoent}, lfm_proxy:stat(P1, SessId(P1), f(<<"space3">>, File1)), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1, SessId(P1), f(<<"space3">>, File1)), ?ATTEMPTS),
     ?assertMatch(0, current_size(P2, <<"space_id3">>), ?ATTEMPTS),
     ?assertMatch(0, current_size(P1, <<"space_id3">>), ?ATTEMPTS),
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space3">>, File2), 0, crypto:strong_rand_bytes(20))).
@@ -481,7 +481,7 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessId(P2), {guid, Guid}), ?ATTEMPTS),
     ?assertMatch(ok, unlink(P2, SessId(P2), f(<<"space3">>, File1))),
 
-    ?assertMatch({error, enoent}, lfm_proxy:stat(P1, SessId(P1), {guid, Guid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1, SessId(P1), {guid, Guid}), ?ATTEMPTS),
     ?assertEqual(0, current_size(P2, <<"space_id3">>)),
     ?assertEqual(0, current_size(P1, <<"space_id3">>)).
 
@@ -559,8 +559,8 @@ failed_gui_upload_test(Config) ->
 
     StorageFilePath1 = storage_file_path(P1, <<"space_id4">>, File2),
     ?assertMatch(FileSize, current_size(P1, <<"space_id4">>)),
-    ?assertMatch({error, enoent}, open_storage_file(P1, StorageFilePath1), ?ATTEMPTS),
-    ?assertMatch({error, enoent}, lfm_proxy:stat(P1, User1, f(<<"space4">>, File2)), ?ATTEMPTS).
+    ?assertMatch({error, ?ENOENT}, open_storage_file(P1, StorageFilePath1), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(P1, User1, f(<<"space4">>, File2)), ?ATTEMPTS).
 
 
 events_sent_to_client_directio(Config) ->

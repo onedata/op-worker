@@ -164,8 +164,8 @@ create_delete_import_test(Config, MountSpaceInRoot, ReadBoth) ->
     {ok, #file_attr{guid = GUID}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH})),
     ?assertMatch(ok, lfm_proxy:unlink(W2, <<"0">>, {guid, GUID})),
-    ?assertEqual({error, enoent}, file:read_file(StorageTestFilePath), Attempts),
-    ?assertEqual({error, enoent}, file:read_file(StorageTestFilePath2), Attempts),
+    ?assertEqual({error, ?ENOENT}, file:read_file(StorageTestFilePath), Attempts),
+    ?assertEqual({error, ?ENOENT}, file:read_file(StorageTestFilePath2), Attempts),
 
     ok.
 
@@ -174,11 +174,8 @@ create_delete_import2_test(Config, MountSpaceInRoot, ReadBoth) ->
     W1MountPoint = get_host_mount_point(W1, Config),
     W2MountPoint = get_host_mount_point(W2, Config),
     Attempts = 60,
-
-    StorageTestFilePath =
-        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
-    StorageTestFilePath2 =
-        storage_test_file_path(W2MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath = storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath2 = storage_test_file_path(W2MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     %% Create file on storage
     ?assertEqual(ok, file:write_file(StorageTestFilePath, ?TEST_DATA)),
     Size = byte_size(?TEST_DATA),
@@ -214,24 +211,22 @@ create_delete_import2_test(Config, MountSpaceInRoot, ReadBoth) ->
 
     {ok, #file_attr{guid = GUID}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH})),
-    ?assertMatch(ok, lfm_proxy:unlink(W2, <<"0">>, {guid, GUID})),
+    ?assertMatch(ok, lfm_proxy:unlink(W2, ?ROOT_SESS_ID, {guid, GUID})),
 
-    ?assertEqual({error, enoent}, file:read_file(StorageTestFilePath), Attempts),
-    ?assertEqual({error, enoent}, file:read_file(StorageTestFilePath2), Attempts),
+    ?assertEqual({error, ?ENOENT}, file:read_file(StorageTestFilePath), Attempts),
+    ?assertEqual({error, ?ENOENT}, file:read_file(StorageTestFilePath2), Attempts),
 
     storage_sync_test_base:enable_storage_update(Config),
 
-    {ok, FileGuid} =
-        ?assertMatch({ok, _}, lfm_proxy:create(W2, SessIdW2, ?SPACE_TEST_FILE_PATH, 8#777)),
-    {ok, FileHandle} =
-        ?assertMatch({ok, _}, lfm_proxy:open(W2, SessIdW2, {guid, FileGuid}, write)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W2, SessIdW2, ?SPACE_TEST_FILE_PATH, 8#777)),
+    {ok, FileHandle} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessIdW2, {guid, FileGuid}, write)),
     ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W2, FileHandle, 0, ?TEST_DATA)),
 
-    {ok, FileHandle2} =
-        ?assertMatch({ok, _}, lfm_proxy:open(W1, SessIdW1, {guid, FileGuid}, read), ?ATTEMPTS),
+    {ok, FileHandle2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessIdW1, {guid, FileGuid}, read), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, lfm_proxy:read(W1, FileHandle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     ?assertEqual({ok, ?TEST_DATA}, file:read_file(StorageTestFilePath), Attempts),
     ok = file:delete(StorageTestFilePath),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:open(W1, SessIdW1, {guid, FileGuid}, read), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:open(W2, SessIdW2, {guid, FileGuid}, read), ?ATTEMPTS).
 
 create_directory_import_test(Config, MountSpaceInRoot) ->
@@ -1585,6 +1580,8 @@ sync_works_properly_after_delete_test(Config, MountSpaceInRoot) ->
         <<"deletedDayHist">> => 2
     }, ?SPACE_ID),
 
+    % ensure that space dir mtime on storage will be changed
+    timer:sleep(timer:seconds(1)),
     ok = file:make_dir(StorageTestDirPath2),
     ok = file:write_file(StorageTestFileinDirPath2, ?TEST_DATA),
     SpaceTestFileInDirPath = ?SPACE_TEST_FILE_IN_DIR_PATH(?TEST_DIR2, ?TEST_FILE2),

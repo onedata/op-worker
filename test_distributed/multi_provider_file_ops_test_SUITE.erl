@@ -642,7 +642,7 @@ remove_file_on_remote_provider_ceph(Config0) ->
        
     lfm_proxy:unlink(Worker2, SessionId(Worker2), {guid, Guid}),
 
-    ?assertMatch({error, enoent}, lfm_proxy:ls(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:ls(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 
 evict_on_ceph(Config0) ->

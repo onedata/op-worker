@@ -338,7 +338,7 @@ remove_file_on_ceph_using_client(Config0) ->
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = <<"2">>}, fuse_test_utils:receive_server_message()),
 
-    ?assertMatch({error, enoent}, lfm_proxy:ls(Worker, SessionId(Worker), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:ls(Worker, SessionId(Worker), {guid, Guid}, 0, 0), 60),
 
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 
@@ -374,8 +374,8 @@ remove_opened_file_test_base(Config, SpaceName) ->
     ?assertEqual({ok, Content2}, lfm_proxy:read(Worker, Handle2, 0, Size)),
 
     % File1 
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker, SessId(User1), {guid, Guid1})),
-    ?assertEqual({error, enoent}, lfm_proxy:open(Worker, SessId(User1), {guid, Guid1}, read)),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User1), {guid, Guid1})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:open(Worker, SessId(User1), {guid, Guid1}, read)),
     ?assertEqual({ok, Content1}, lfm_proxy:read(Worker, Handle1, 0, Size)),
     
     {ok, _} = lfm_proxy:write(Worker, Handle1, Size, Content1),
