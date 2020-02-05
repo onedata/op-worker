@@ -23,7 +23,7 @@
     remove_file_handles/1, remove_auxiliary_documents/1, cleanup_opened_files/0]).
 
 %% Test API
--export([process_file_links/4, get_open_file_handling_method/1]).
+-export([delete_parent_link/2, get_open_file_handling_method/1]).
 
 % macros defining methods of handling opened files
 -define(RENAME_HANDLING_METHOD, rename).
@@ -153,7 +153,7 @@ handle_opened_file(FileCtx, UserCtx, DeleteMode) ->
     FileCtx3 = custom_handle_opened_file(FileCtx2, UserCtx, DeleteMode, HandlingMethod),
     ok = file_handles:mark_to_remove(FileCtx3),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
-    % Check once more to prevent race with last handle closing
+    % Check once more to prevent race with last handle being closed
     case file_handles:exists(FileUuid) of
         true -> ok;
         false -> handle_release_of_deleted_file(FileCtx3)
@@ -236,27 +236,17 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
 %%--------------------------------------------------------------------
 -spec custom_handle_opened_file(file_ctx:ctx(), user_ctx:ctx(), delete_mode(), opened_file_handling_method()) ->
     file_ctx:ctx().
-custom_handle_opened_file(FileCtx, UserCtx, DeleteMode, HandlingMethod = ?RENAME_HANDLING_METHOD) ->
+custom_handle_opened_file(FileCtx, UserCtx, DeleteMode, ?RENAME_HANDLING_METHOD) ->
     FileCtx3 = case maybe_rename_storage_file(FileCtx) of
         {ok, FileCtx2} -> FileCtx2;
         {error, ?ENOENT} -> FileCtx
     end,
-    process_file_links(FileCtx3, UserCtx, DeleteMode == ?REMOTE_DELETE, HandlingMethod);
-custom_handle_opened_file(FileCtx, UserCtx, DeleteMode, HandlingMethod = ?LINK_HANDLING_METHOD) ->
-    process_file_links(FileCtx, UserCtx, DeleteMode == ?REMOTE_DELETE, HandlingMethod).
-
--spec maybe_add_deletion_link(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
-maybe_add_deletion_link(FileCtx, UserCtx) ->
-    case file_ctx:is_space_dir_const(FileCtx) orelse file_ctx:is_root_dir_const(FileCtx) of
-        true ->
-            % this case should never happen
-            ?warning("Adding deletion link for space or root directory is not allowed"),
-            FileCtx;
-        false ->
-            {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
-            {ParentUuid, _} = file_id:unpack_guid(ParentGuid),
-            link_utils:add_deletion_link(FileCtx2, ParentUuid)
-    end.
+    maybe_delete_parent_link(FileCtx3, UserCtx, DeleteMode == ?REMOTE_DELETE);
+custom_handle_opened_file(FileCtx, UserCtx, ?REMOTE_DELETE, ?LINK_HANDLING_METHOD) ->
+    maybe_add_deletion_link(FileCtx, UserCtx);
+custom_handle_opened_file(FileCtx, UserCtx, _DeleteMode, ?LINK_HANDLING_METHOD) ->
+    FileCtx2 = maybe_add_deletion_link(FileCtx, UserCtx),
+    delete_parent_link(FileCtx2, UserCtx).
 
 
 -spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), RemoveStorageFileResult :: ok | ignored | {error, term()}) -> ok.
@@ -276,6 +266,20 @@ maybe_try_to_delete_parent(_FileCtx, _UserCtx, _) ->
     ok.
 
 
+-spec maybe_add_deletion_link(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
+maybe_add_deletion_link(FileCtx, UserCtx) ->
+    case file_ctx:is_space_dir_const(FileCtx) orelse file_ctx:is_root_dir_const(FileCtx) of
+        true ->
+            % this case should never happen
+            ?warning("Adding deletion link for space or root directory is not allowed"),
+            FileCtx;
+        false ->
+            {ParentGuid, FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+            {ParentUuid, _} = file_id:unpack_guid(ParentGuid),
+            link_utils:add_deletion_link(FileCtx2, ParentUuid)
+    end.
+
+
 -spec maybe_remove_deletion_link(file_ctx:ctx(), user_ctx:ctx(), RemoveStorageFileResult :: ok | ignored | {error, term()}) ->
     file_ctx:ctx().
 maybe_remove_deletion_link(FileCtx, UserCtx, ok) ->
@@ -286,33 +290,21 @@ maybe_remove_deletion_link(FileCtx, _UserCtx, _) ->
     % TODO VFS-6082 deletion links are left forever when deleting file on storage failed
     FileCtx.
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function adds a deletion_link for the file that is to be deleted.
-%% It can also delete normal link from parent to the file.
-%% @end
-%%-------------------------------------------------------------------
--spec process_file_links(file_ctx:ctx(), user_ctx:ctx(), boolean(), opened_file_handling_method()) -> file_ctx:ctx().
-process_file_links(FileCtx, UserCtx, KeepParentLink, HandlingMethod) ->
-    FileCtx2 = case HandlingMethod of
-        ?LINK_HANDLING_METHOD ->
-            maybe_add_deletion_link(FileCtx, UserCtx);
-        _ ->
-            FileCtx
-    end,
-    case KeepParentLink of
-        false ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx2),
-            Scope = file_ctx:get_space_id_const(FileCtx2),
-            {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
-            {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
-            ParentUuid = file_id:guid_to_uuid(ParentGuid),
-            ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName),
-            FileCtx4;
-        _ ->
-            FileCtx2
-    end.
+-spec delete_parent_link(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
+delete_parent_link(FileCtx, UserCtx) ->
+    maybe_delete_parent_link(FileCtx, UserCtx, false).
+
+-spec maybe_delete_parent_link(file_ctx:ctx(), user_ctx:ctx(), KeepParentLink :: boolean()) -> file_ctx:ctx().
+maybe_delete_parent_link(FileCtx, _UserCtx, true) ->
+    FileCtx;
+maybe_delete_parent_link(FileCtx, UserCtx, false) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    Scope = file_ctx:get_space_id_const(FileCtx),
+    {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx, UserCtx),
+    {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
+    ParentUuid = file_id:guid_to_uuid(ParentGuid),
+    ok = file_meta:delete_child_link(ParentUuid, Scope, FileUuid, FileName),
+    FileCtx4.
 
 %%--------------------------------------------------------------------
 %% @private

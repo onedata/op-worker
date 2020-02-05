@@ -229,7 +229,7 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
     FileGuid = create_test_file(Config, Worker, SessId, DelayedFileCreation),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = rpc:call(Worker, user_ctx, new, [<<"user1">>]),
-    FileCtx2 = rpc:call(Worker, fslogic_delete, process_file_links, [FileCtx, UserCtx, false, deletion_link]),
+    FileCtx2 = rpc:call(Worker, fslogic_delete, delete_parent_link, [FileCtx, UserCtx]),
 
     ?assertEqual(ok, rpc:call(Worker, fslogic_delete, handle_release_of_deleted_file, [FileCtx2])),
 
