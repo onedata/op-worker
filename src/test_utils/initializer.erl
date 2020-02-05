@@ -785,7 +785,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
-        rpc:call(DomainWorker, fslogic_worker, init_canonical_paths_cache, [all])
+        rpc:call(DomainWorker, fslogic_worker, init_paths_cache, [all])
     end, get_different_domain_workers(Config)),
 
     cluster_logic_mock_setup(AllWorkers),

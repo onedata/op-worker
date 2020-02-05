@@ -52,6 +52,7 @@
     qos_status_with_file_deletion/3
 ]).
 
+-define(ATTEMPTS, 60).
 
 %%%===================================================================
 %%% Group of tests that adds single QoS expression for file or directory

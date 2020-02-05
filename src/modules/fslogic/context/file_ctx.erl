@@ -69,7 +69,7 @@
 -export([equals/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_canonical_path_tokens/1, get_file_doc/1,
+-export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
@@ -89,8 +89,6 @@
 ]).
 -export([is_dir/1]).
 
-% fixme
--export([get_uuid_path/1]).
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -315,7 +313,7 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file's uuid path (like canonical but instead of filename, uuid is used).
+%% Returns file's uuid path (similar to canonical but instead of filename, uuid is used).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_uuid_path(ctx()) -> {file_meta:path(), ctx()}.
@@ -1239,7 +1237,7 @@ generate_canonical_path(FileCtx) ->
         end
     end,
     CacheName = location_and_link_utils:get_canonical_paths_cache_name(file_ctx:get_space_id_const(FileCtx)),
-    generate_and_cache_path(FileCtx, Callback, CacheName).
+    generate_and_cache_path(FileCtx, Callback, CacheName, name).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1263,13 +1261,17 @@ generate_uuid_path(FileCtx) ->
         end
     end,
     CacheName = location_and_link_utils:get_uuid_paths_cache_name(file_ctx:get_space_id_const(FileCtx)),
-    generate_and_cache_path(FileCtx, Callback, CacheName).
+    generate_and_cache_path(FileCtx, Callback, CacheName, uuid).
 
--spec generate_and_cache_path(ctx(), bounded_cache:callback(), bounded_cache:cache()) -> 
+-spec generate_and_cache_path(ctx(), bounded_cache:callback(), bounded_cache:cache(), name | uuid) -> 
     {[file_meta:uuid() | file_meta:name()], ctx()}.
-generate_and_cache_path(FileCtx, Callback, CacheName) ->
-    {#document{key = Uuid, value = #file_meta{type = FileType}} = Doc, FileCtx2} =
+generate_and_cache_path(FileCtx, Callback, CacheName, Type) ->
+    {#document{key = Uuid, value = #file_meta{type = FileType, name = Filename}} = Doc, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
+    NameOrUuid = case Type of
+        name -> Filename;
+        uuid -> Uuid
+    end,
     case FileType of
         ?DIRECTORY_TYPE ->
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),
@@ -1277,7 +1279,7 @@ generate_and_cache_path(FileCtx, Callback, CacheName) ->
         _ ->
             {ok, ParentDoc} = file_meta:get_parent(Doc),
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
-            {Path ++ [Uuid], FileCtx2}
+            {Path ++ [NameOrUuid], FileCtx2}
     end.
 
 %%--------------------------------------------------------------------

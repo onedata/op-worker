@@ -27,7 +27,6 @@
 -define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
 
 -define(TEST_DATA, <<"test_data">>).
--define(ATTEMPTS, 60).
 
 -type qos_name() :: binary().
 

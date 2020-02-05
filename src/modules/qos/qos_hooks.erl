@@ -13,9 +13,11 @@
 -author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
@@ -42,7 +44,7 @@ handle_qos_entry_change(SpaceId, #document{
 }) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
     qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-    ok = file_qos:remove_qos_entry_id(FileUuid, QosEntryId);
+    ok = ?not_found_ok(file_qos:remove_qos_entry_id(FileUuid, QosEntryId));
 handle_qos_entry_change(SpaceId, #document{
     key = QosEntryId,
     value = QosEntry
@@ -86,9 +88,7 @@ reconcile_qos(FileCtx) ->
             ok;
         {ok, EffFileQos} ->
             QosToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
-            lists:foreach(fun(QosEntryId) ->
-                ok = qos_traverse:reconcile_qos_for_entry(FileCtx1, QosEntryId)
-            end, QosToUpdate);
+            ok = qos_traverse:reconcile_qos_for_entries(FileCtx1, QosToUpdate);
         undefined ->
             ok
     end.

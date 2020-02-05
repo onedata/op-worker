@@ -72,11 +72,7 @@
 
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
-    case datastore_model:delete(?CTX, Key) of
-        ok -> ok;
-        {error, not_found} -> ok;
-        {error, _} = Error -> Error
-    end.
+    ?not_found_ok(datastore_model:delete(?CTX, Key).
 
 %%%===================================================================
 %%% Higher-level functions operating on file_qos document.
@@ -94,11 +90,12 @@ get_effective(FileUuid) ->
     case file_meta:get(FileUuid) of
         {ok, #document{scope = SpaceId} = FileMeta} ->
             get_effective_internal(FileMeta, SpaceId);
-        {error, not_found} ->
+        ?ERROR_NOT_FOUND ->
             {error, {file_meta_missing, FileUuid}};
         _ ->
             undefined
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -206,7 +203,9 @@ clean_up(FileCtx) ->
             lists:foreach(fun(EffectiveQosEntryId) ->
                 qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId)
             end, EffectiveQosEntries);
-        {error, {file_meta_missing, _}} -> ok
+        {error, _} = Error ->
+            ?warning("Error during QoS clean up procedure:~p", [Error]),
+            ok
     end,
     Uuid = file_ctx:get_uuid_const(FileCtx1),
     case datastore_model:get(?CTX, Uuid) of
@@ -214,7 +213,7 @@ clean_up(FileCtx) ->
             lists:foreach(fun(QosEntryId) ->
                 qos_entry:delete(QosEntryId)
             end, QosEntries);
-        {error, not_found} -> ok
+        ?ERROR_NOT_FOUND -> ok
     end,
     ok = delete(Uuid).
 
@@ -276,7 +275,7 @@ merge_assigned_entries(ParentAssignedEntries, ChildAssignedEntries) ->
 get_effective_internal(FileMeta, SpaceId) ->
     Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
         case {datastore_model:get(?CTX, Uuid), ParentEffQos} of
-            {{error, not_found}, _} ->
+            {?ERROR_NOT_FOUND, _} ->
                 {ok, ParentEffQos, CalculationInfo};
             {{ok, #document{value = FileQos}}, undefined} ->
                 {ok, FileQos, CalculationInfo};

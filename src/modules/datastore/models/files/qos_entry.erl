@@ -136,6 +136,7 @@ get(QosEntryId) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(QosEntryId) ->
+    %TODO VFS-6100 delete all additional documents (qos_status)
     datastore_model:delete(?CTX, QosEntryId).
 
 

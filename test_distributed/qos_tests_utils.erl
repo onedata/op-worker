@@ -53,6 +53,7 @@
     file_id:guid_to_space_id(qos_tests_utils:get_guid(Worker, SessId, FilePath))
 ).
 
+-define(ATTEMPTS, 60).
 
 %%%====================================================================
 %%% Util functions

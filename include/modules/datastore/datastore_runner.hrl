@@ -18,5 +18,6 @@
 
 -define(extract_ok(Result), datastore_runner:extract_ok(Result)).
 -define(extract_key(Result), datastore_runner:extract_key(Result)).
+-define(not_found_ok(Result), datastore_runner:not_found_ok(Result)).
 
 -endif.

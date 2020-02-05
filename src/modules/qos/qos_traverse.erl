@@ -22,14 +22,12 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
-
+-include("tree_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-% fixme
--include("tree_traverse.hrl").
 
 %% API
--export([reconcile_qos_for_entry/2, start_initial_traverse/3, init_pool/0,
+-export([reconcile_qos_for_entries/2, start_initial_traverse/3, init_pool/0,
     stop_pool/0]).
 
 %% Traverse behaviour callbacks
@@ -64,23 +62,21 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
             <<"task_type">> => <<"traverse">>
         }
     },
-    FileCtx2 = case file_ctx:is_dir(FileCtx) of
-        {true, FC} ->
-            ok = qos_status:report_traverse_started(TaskId, FC),
-            FC;
-        {false, FC} -> FC
-    end,
+    {ok, FileCtx2} = qos_status:report_traverse_started(TaskId, FileCtx),
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx2, Options),
     ok.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates traverse task to fulfill requirements defined in qos_entry for
+%% Creates traverse task to fulfill requirements defined in qos_entries for
 %% single file, after its change was synced.
 %% @end
 %%--------------------------------------------------------------------
--spec reconcile_qos_for_entry(file_ctx:ctx(), qos_entry:id()) -> ok.
-reconcile_qos_for_entry(FileCtx, QosEntryId) ->
+-spec reconcile_qos_for_entries(file_ctx:ctx(), [qos_entry:id()]) -> ok.
+reconcile_qos_for_entries(_FileCtx, []) -> 
+    ok;
+reconcile_qos_for_entries(FileCtx, QosEntries) ->
+    ?notice("reconcile qos for entries"),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     TaskId = datastore_key:new(),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -88,13 +84,12 @@ reconcile_qos_for_entry(FileCtx, QosEntryId) ->
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
         additional_data => #{
-            <<"qos_entry_id">> => QosEntryId,
             <<"space_id">> => SpaceId,
             <<"uuid">> => FileUuid,
             <<"task_type">> => <<"reconcile">>
         }
     },
-    ok = qos_status:report_file_changed(QosEntryId, FileCtx, TaskId),
+    ok = qos_status:report_file_changed(QosEntries, FileCtx, TaskId),
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
     ok.
 
@@ -133,17 +128,17 @@ get_sync_info(Job) ->
 -spec task_finished(traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
     {ok, #{
-        <<"qos_entry_id">> := QosEntryId,
         <<"space_id">> := SpaceId,
         <<"uuid">> := FileUuid,
         <<"task_type">> := TaskType
-    }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    }} = AdditionalData = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     case TaskType of
         <<"traverse">> ->
+            {ok, #{<<"qos_entry_id">> := QosEntryId}} = AdditionalData,
             ok = qos_status:report_traverse_finished(SpaceId, TaskId, FileUuid),
             ok = qos_entry:remove_traverse_req(QosEntryId, TaskId);
         <<"reconcile">> ->
-            ok = qos_status:report_file_reconciled(QosEntryId, SpaceId, FileUuid, TaskId)
+            ok = qos_status:report_file_reconciled(SpaceId, FileUuid, TaskId)
     end.
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
@@ -154,40 +149,13 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-% fixme reuse from tree traverse
-do_master_job(#tree_traverse{
-    doc = #document{key = DirUuid, scope = SpaceId, value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
-    token = Token,
-    last_name = LN,
-    last_tree = LT,
-    execute_slave_on_dir = OnDir,
-    batch_size = BatchSize,
-    traverse_info = TraverseInfo
-} = TT, MasterJobArgs) ->
+do_master_job(Job, MasterJobArgs) ->
+    tree_traverse:do_master_job(
+        Job, MasterJobArgs, fun next_batch_callback/6, fun master_job_finished_callback/3
+    ).
 
-    {ok, Children, ExtendedInfo} = case {Token, LN} of
-        {undefined, <<>>} ->
-            file_meta:list_children(Doc, BatchSize);
-        _ ->
-            file_meta:list_children(Doc, 0, BatchSize, Token, LN, LT)
-    end,
-    #{token := Token2, last_name := LN2, last_tree := LT2} = maps:merge(#{token => undefined}, ExtendedInfo),
 
-    {SlaveJobs, MasterJobs} = lists:foldl(fun(#child_link_uuid{
-        uuid = UUID}, {Slaves, Masters} = Acc) ->
-        case {file_meta:get({uuid, UUID}), OnDir} of
-            {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, true} ->
-                {[{ChildDoc, TraverseInfo} | Slaves], [get_child_job(TT, ChildDoc) | Masters]};
-            {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, _} ->
-                {Slaves, [get_child_job(TT, ChildDoc) | Masters]};
-            {{ok, ChildDoc}, _} ->
-                {[{ChildDoc, TraverseInfo} | Slaves], Masters};
-            {{error, not_found}, _} ->
-                Acc
-        end
-    end, {[], []}, Children),
-    
-    #{task_id := TaskId} = MasterJobArgs,
+next_batch_callback(TaskId, SlaveJobs, MasterJobs, SpaceId, Uuid, BatchLastFilename) ->
     ChildrenFiles = lists:map(fun({#document{key = ChildFileUuid}, _}) ->
         ChildFileUuid
     end, SlaveJobs),
@@ -195,25 +163,13 @@ do_master_job(#tree_traverse{
         ChildDirUuid
     end, MasterJobs),
     ok = qos_status:report_next_traverse_batch(
-        SpaceId, TaskId, DirUuid, ChildrenDirs, ChildrenFiles, LN2
-    ),
+        SpaceId, TaskId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastFilename
+    ).
 
-    FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of
-        true ->
-            ok = qos_status:report_traverse_finished_for_dir(TaskId, DirUuid, SpaceId),
-            lists:reverse(MasterJobs);
-        false -> [TT#tree_traverse{
-            token = Token2,
-            last_name = LN2,
-            last_tree = LT2
-        } | lists:reverse(MasterJobs)]
-    end,
-    {ok, #{slave_jobs => lists:reverse(SlaveJobs), master_jobs => FinalMasterJobs}};
-do_master_job(#tree_traverse{
-    doc = Doc,
-    traverse_info = TraverseInfo
-}, _MasterJobArgs) ->
-    {ok, #{slave_jobs => [{Doc, TraverseInfo}], master_jobs => []}}.
+
+master_job_finished_callback(TaskId, Uuid, SpaceId) ->
+    ok = qos_status:report_traverse_finished_for_dir(TaskId, Uuid, SpaceId).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -268,16 +224,3 @@ synchronize_file(UserCtx, FileCtx) ->
             Error
     end,
     ok.
-
-% fixme
-get_child_job(#tree_traverse{
-    execute_slave_on_dir = OnDir,
-    batch_size = BatchSize,
-    traverse_info = TraverseInfo
-}, ChildDoc) ->
-    #tree_traverse{
-        doc = ChildDoc,
-        execute_slave_on_dir = OnDir,
-        batch_size = BatchSize,
-        traverse_info = TraverseInfo
-    }.

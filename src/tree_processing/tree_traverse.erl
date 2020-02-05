@@ -33,7 +33,7 @@
 % Getters API
 -export([get_traverse_info/1, set_traverse_info/2, get_doc/1, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
--export([do_master_job/2, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
+-export([do_master_job/4, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
 
 -type master_job() :: #tree_traverse{}.
 -type slave_job() :: file_meta:doc().
@@ -190,16 +190,17 @@ get_sync_info() ->
 %% returns jobs for listed children and next batch if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec do_master_job(master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
+% fixme spec, equiv
+-spec do_master_job(master_job(), traverse:master_job_extended_args(), any(), any()) -> {ok, traverse:master_job_map()}.
 do_master_job(#tree_traverse{
-    doc = #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
+    doc = #document{key = Uuid, scope = SpaceId, value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
     token = Token,
     last_name = LN,
     last_tree = LT,
     execute_slave_on_dir = OnDir,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
-} = TT, _MasterJobArgs) ->
+} = TT, #{task_id := TaskId} = _MasterJobArgs, NextBatchCallback, JobFinishCallback) ->
     {ok, Children, ExtendedInfo} = case {Token, LN} of
         {undefined, <<>>} ->
             file_meta:list_children(Doc, BatchSize);
@@ -221,9 +222,13 @@ do_master_job(#tree_traverse{
                 Acc
         end
     end, {[], []}, Children),
+    
+    ok = NextBatchCallback(TaskId, SlaveJobs, MasterJobs, SpaceId, Uuid, LN2),
 
     FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of
-        true -> lists:reverse(MasterJobs);
+        true -> 
+            ok = JobFinishCallback(TaskId, Uuid, SpaceId),
+            lists:reverse(MasterJobs);
         false -> [TT#tree_traverse{
             token = Token2,
             last_name = LN2,
@@ -234,7 +239,7 @@ do_master_job(#tree_traverse{
 do_master_job(#tree_traverse{
     doc = Doc,
     traverse_info = TraverseInfo
-}, _MasterJobArgs) ->
+}, _MasterJobArgs, _, _) ->
     {ok, #{slave_jobs => [{Doc, TraverseInfo}], master_jobs => []}}.
 
 %%--------------------------------------------------------------------

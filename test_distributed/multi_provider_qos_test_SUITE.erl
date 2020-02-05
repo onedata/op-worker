@@ -140,6 +140,7 @@ all() -> [
     ]}
 ).
 
+-define(ATTEMPTS, 60).
 
 %%%====================================================================
 %%% Test function
@@ -609,7 +610,7 @@ qos_restoration_file_test(Config) ->
 qos_restoration_dir_test(Config) ->
     basic_qos_restoration_test_base(Config, nested).
 
-
+% fixme test with file deletion during reconcile on remote provider
 qos_status_test(Config) ->
     Workers = [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
@@ -637,8 +638,8 @@ qos_status_test(Config) ->
 
     lists:foreach(fun({Guid, Path}) ->
         lists:foreach(fun(Worker) ->
-            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS),
-            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, Path}), ?ATTEMPTS)
+            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid})),
+            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, Path}))
         end, Workers)
     end, maps:get(files, GuidsAndPaths)),
 
@@ -660,7 +661,7 @@ qos_status_test(Config) ->
     end,
 
     lists:foreach(fun({FileGuid, FilePath}) ->
-        ct:print("writing to file ~p", [FilePath]),
+        ct:print("writing to file ~p on worker ~p", [FilePath, Worker1]),
         {ok, FileHandle} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, FileGuid}, write),
         {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
         ok = lfm_proxy:close(Worker1, FileHandle),
@@ -680,6 +681,7 @@ qos_status_test(Config) ->
             end, FilesAndDirs)
         end, Workers),
         qos_tests_utils:finish_all_transfers([FileGuid]),
+        ct:print("Checking after finish"),
         lists:foreach(fun(Worker) ->
             lists:foreach(fun({G, P}) ->
                 ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, G}), ?ATTEMPTS),
