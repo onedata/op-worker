@@ -45,6 +45,7 @@
     create_share_file/1,
     remove_share/1,
     share_getattr/1,
+    share_get_parent/1,
     share_list/1,
     share_read/1,
     share_child_getattr/1,
@@ -1197,11 +1198,23 @@ create_share_dir(Config) ->
     initializer:testmaster_mock_space_user_privileges(
         Workers, SpaceId, UserId, privileges:space_admin()
     ),
+
+    % User root dir can not be shared
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:create_share(W, SessId, {guid, fslogic_uuid:user_root_dir_guid(UserId)}, <<"share_name">>)
+    ),
+    % But space dir can
+    ?assertMatch(
+        {ok, <<_/binary>>},
+        lfm_proxy:create_share(W, SessId, {guid, fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)}, <<"share_name">>)
+    ),
+    % As well as normal directory
     {ok, ShareId1} = ?assertMatch(
         {ok, <<_/binary>>},
         lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)
     ),
-    % Dir can be shared multiple times
+    % Multiple times at that
     {ok, ShareId2} = ?assertMatch(
         {ok, <<_/binary>>},
         lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>)
@@ -1262,16 +1275,68 @@ remove_share(Config) ->
 
 share_getattr(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
-    DirPath = <<"/space_name1/share_dir2">>,
-    {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#704),
-    {ok, ShareId} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
-    ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
+    UserId = <<"user1">>,
+    OwnerSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    DirPath = <<SpaceName/binary, "/share_dir2">>,
+    {ok, DirGuid} = lfm_proxy:mkdir(W, OwnerSessId, DirPath, 8#704),
+    {ok, ShareId1} = lfm_proxy:create_share(W, OwnerSessId, {guid, DirGuid}, <<"share_name">>),
+    {ok, ShareId2} = lfm_proxy:create_share(W, OwnerSessId, {guid, DirGuid}, <<"share_name">>),
+    ?assertNotEqual(ShareId1, ShareId2),
+
+    ShareGuid = file_id:guid_to_share_guid(DirGuid, ShareId1),
 
     ?assertMatch(
-        {ok, #file_attr{mode = 8#704, name = <<"share_dir2">>, type = ?DIRECTORY_TYPE, guid = ShareGuid, shares = [ShareId]}},
-        lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareGuid})
-    ).
+        {ok, #file_attr{
+            mode = 8#704,
+            name = <<"share_dir2">>,
+            type = ?DIRECTORY_TYPE,
+            guid = DirGuid,
+            parent_uuid = SpaceGuid,
+            shares = [ShareId2, ShareId1]}
+        },
+        lfm_proxy:stat(W, OwnerSessId, {guid, DirGuid})
+    ),
+    lists:foreach(fun(SessId) ->
+        ?assertMatch(
+            {ok, #file_attr{
+                mode = 8#704,
+                name = <<"share_dir2">>,
+                type = ?DIRECTORY_TYPE,
+                guid = ShareGuid,
+                parent_uuid = undefined,   % share root should not point to any parent
+                shares = [ShareId1]}       % other shares shouldn't be shown
+            },
+            lfm_proxy:stat(W, SessId, {guid, ShareGuid})
+        )
+    end, [OwnerSessId, ?GUEST_SESS_ID]).
+
+share_get_parent(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    UserId = <<"user1">>,
+    SessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
+
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    DirPath = <<SpaceName/binary, "/share_get_parent">>,
+    {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId, <<DirPath/binary, "/file">>, 8#700),
+
+    {ok, ShareId} = lfm_proxy:create_share(W, SessId, {guid, DirGuid}, <<"share_name">>),
+    ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+
+    % Getting parent of dir should return space guid
+    ?assertMatch({ok, SpaceGuid}, lfm_proxy:get_parent(W, SessId, {guid, DirGuid})),
+    % Getting parent of dir when accessing it in share mode should return undefined
+    % as dir is share root
+    ?assertMatch({ok, undefined}, lfm_proxy:get_parent(W, SessId, {guid, ShareDirGuid})),
+
+    % Getting file parent in normal mode should return dir guid
+    ?assertMatch({ok, DirGuid}, lfm_proxy:get_parent(W, SessId, {guid, FileGuid})),
+    % Getting file parent in share mode should return share dir guid
+    ?assertMatch({ok, ShareDirGuid}, lfm_proxy:get_parent(W, SessId, {guid, ShareFileGuid})).
 
 share_list(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1317,12 +1382,19 @@ share_child_getattr(Config) ->
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
     {ok, _} = lfm_proxy:create(W, SessId, <<"/space_name1/share_dir5/file">>, 8#700),
     {ok, ShareId} = lfm_proxy:create_share(W, SessId, {guid, Guid}, <<"share_name">>),
-    ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
+    ShareDirGuid = file_id:guid_to_share_guid(Guid, ShareId),
 
-    {ok, [{ShareChildGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
+    {ok, [{ShareChildGuid, _}]} = lfm_proxy:ls(W, ?GUEST_SESS_ID, {guid, ShareDirGuid}, 0, 1),
 
     ?assertMatch(
-        {ok, #file_attr{mode = 8#700, name = <<"file">>, type = ?REGULAR_FILE_TYPE, guid = ShareChildGuid, shares = []}},
+        {ok, #file_attr{
+            mode = 8#700,
+            name = <<"file">>,
+            type = ?REGULAR_FILE_TYPE,
+            guid = ShareChildGuid,
+            parent_uuid = ShareDirGuid,
+            shares = []
+        }},
         lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, ShareChildGuid})
     ).
 

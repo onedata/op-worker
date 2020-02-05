@@ -64,6 +64,7 @@
 
     create_share_test/1,
     remove_share_test/1,
+    share_perms_test/1,
 
     get_acl_test/1,
     set_acl_test/1,
@@ -130,6 +131,7 @@ all() ->
 
         create_share_test,
         remove_share_test,
+        share_perms_test,
 
         get_acl_test,
         set_acl_test,
@@ -1340,6 +1342,49 @@ remove_share_test(Config) ->
             lfm_proxy:remove_share(W, SessId, ShareId)
         end
     }, Config).
+
+
+share_perms_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    Owner = <<"user1">>,
+
+    OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(W)}}, Config),
+    GroupUserSessId = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
+
+    ScenarioDirName = ?SCENARIO_NAME,
+    ScenarioDirPath = <<"/space1/", ScenarioDirName/binary>>,
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, OwnerUserSessId, ScenarioDirPath, 8#700)),
+
+    MiddleDirPath = <<ScenarioDirPath/binary, "/dir2">>,
+    {ok, MiddleDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, OwnerUserSessId, MiddleDirPath, 8#777)),
+
+    BottomDirPath = <<MiddleDirPath/binary, "/dir3">>,
+    {ok, BottomDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W, OwnerUserSessId, BottomDirPath), 8#777),
+
+    FilePath = <<BottomDirPath/binary, "/file1">>,
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, OwnerUserSessId, FilePath, 8#777)),
+
+    {ok, ShareId} = ?assertMatch({ok, _}, lfm_proxy:create_share(W, OwnerUserSessId, {guid, MiddleDirGuid}, <<"share">>)),
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+
+    % Accessing file in normal mode by space user should result in eacces (dir1 perms -> 8#700)
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:stat(W, GroupUserSessId, {guid, FileGuid})
+    ),
+    % But accessing it in share mode should succeed as perms should be checked only up to
+    % share root (dir1/dir2 -> 8#777) and not space root
+    ?assertMatch(
+        {ok, #file_attr{guid = ShareFileGuid}},
+        lfm_proxy:stat(W, GroupUserSessId, {guid, ShareFileGuid})
+    ),
+
+    % Changing BottomDir mode to 8#770 should forbid access to file in share mode
+    ?assertEqual(ok, lfm_proxy:set_perms(W, ?ROOT_SESS_ID, {guid, BottomDirGuid}, 8#770)),
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:stat(W, GroupUserSessId, {guid, ShareFileGuid})
+    ).
 
 
 get_acl_test(Config) ->

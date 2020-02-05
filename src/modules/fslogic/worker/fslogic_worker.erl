@@ -87,7 +87,6 @@
 
 -define(AVAILABLE_SHARE_OPERATIONS, [
     check_perms,
-    resolve_guid,
     get_parent,
     % TODO VFS-6057 resolve share path up to share not user root dir
 %%    get_file_path,
