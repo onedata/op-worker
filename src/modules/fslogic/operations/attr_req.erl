@@ -117,10 +117,16 @@ get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, Ve
             file_ctx:get_file_doc(FileCtx)
     end,
     ShareId = file_ctx:get_share_id_const(FileCtx),
+    % If file is accessed via share guid then attributes like `shares`
+    % should be filtered as to not show any private information,
+    % which includes Ids of other shares created for this file.
     ShownShares = case ShareId of
         undefined ->
             Shares;
         _ ->
+            % ShareId is added to file_meta.shares only for directly shared
+            % files/directories and not their children, so not every file
+            % accessed via share guid will have ShareId in `file_attrs.shares`
             case lists:member(ShareId, Shares) of
                 true -> [ShareId];
                 false -> []

@@ -393,8 +393,11 @@ get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns parent's file context. If file is root dir or root share file
-%% returns its own file context.
+%% Returns parent's file context. In case of user root dir and share root
+%% dir/file returns the same file_ctx. Therefore, to check if given
+%% file_ctx points to root dir (either user root dir or share root) it is
+%% enough to call this function and compare returned parent ctx's guid
+%% with its own.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(ctx(), user_ctx:ctx() | undefined) ->
@@ -405,8 +408,12 @@ get_parent(FileCtx = #file_ctx{guid = Guid, parent = undefined}, UserCtx) ->
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
 
     IsShareRootFile = case ShareId of
-        undefined -> false;
-        _ -> lists:member(ShareId, Doc#document.value#file_meta.shares)
+        undefined ->
+            false;
+        _ ->
+            % ShareId is added to file_meta.shares only for directly shared
+            % files/directories and not their children
+            lists:member(ShareId, Doc#document.value#file_meta.shares)
     end,
 
     Parent = case {fslogic_uuid:is_root_dir_uuid(ParentUuid), IsShareRootFile} of
@@ -416,8 +423,13 @@ get_parent(FileCtx = #file_ctx{guid = Guid, parent = undefined}, UserCtx) ->
                 andalso user_ctx:is_normal_user(UserCtx)
             of
                 true ->
-                    UserId = user_ctx:get_user_id(UserCtx),
-                    new_by_guid(fslogic_uuid:user_root_dir_guid(UserId));
+                    case is_user_root_dir_const(FileCtx2, UserCtx) of
+                        true ->
+                            FileCtx2;
+                        false ->
+                            UserId = user_ctx:get_user_id(UserCtx),
+                            new_by_guid(fslogic_uuid:user_root_dir_guid(UserId))
+                    end;
                 _ ->
                     new_by_guid(fslogic_uuid:root_dir_guid())
             end;
