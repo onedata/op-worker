@@ -198,15 +198,17 @@ is_replica_protected(FileUuid, StorageId) ->
 %%--------------------------------------------------------------------
 -spec clean_up(file_ctx:ctx()) -> ok.
 clean_up(FileCtx) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
-    case get_effective(Uuid) of
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
+    case get_effective_internal(FileDoc, SpaceId) of
         undefined -> ok;
-        #effective_file_qos{qos_entries = EffectiveQosEntries} ->
+        {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
             lists:foreach(fun(EffectiveQosEntryId) ->
-                qos_status:report_file_deleted(FileCtx, EffectiveQosEntryId)
+                qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId)
             end, EffectiveQosEntries);
         {error, {file_meta_missing, _}} -> ok
     end,
+    Uuid = file_ctx:get_uuid_const(FileCtx1),
     case datastore_model:get(?CTX, Uuid) of
         {ok, #document{value = #file_qos{qos_entries = QosEntries}}} ->
             lists:foreach(fun(QosEntryId) ->
