@@ -118,7 +118,14 @@ all() -> [
     % Effective QoS tests
     effective_qos_for_file_in_directory,
     effective_qos_for_file_in_nested_directories,
-    effective_qos_for_files_in_different_directories_of_tree_structure
+    effective_qos_for_files_in_different_directories_of_tree_structure,
+    
+    % QoS clean up tests
+    qos_cleanup_test,
+    
+    % QoS status tests
+    qos_status_during_traverse_test,
+    qos_status_with_file_deletion
 ].
 
 % Although this test SUITE is single provider, QoS parameters

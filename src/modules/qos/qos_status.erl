@@ -210,7 +210,6 @@ report_file_deleted(FileCtx, QosEntryId) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     {ok, TraverseReqs} = qos_entry:get_traverse_reqs(QosDoc),
     Uuid = file_ctx:get_uuid_const(FileCtx),
-    ?notice("report_file_deleted: ~p", [Uuid]),
     TraverseIds = qos_traverse_req:get_traverse_ids(TraverseReqs),
     
     lists:foreach(fun(TraverseId) ->

@@ -96,6 +96,8 @@ all() -> [
     qos_restoration_file_test,
     qos_restoration_dir_test,
     qos_status_test,
+    qos_status1,
+    qos_status2,
 
     reconcile_qos_using_file_meta_posthooks_test,
 
