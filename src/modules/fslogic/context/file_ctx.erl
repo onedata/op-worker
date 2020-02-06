@@ -66,7 +66,8 @@
     set_storage_path_type/2, get_storage_path_type_const/1, get_mounted_in_root/1,
     get_canonical_path_tokens/1]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
-    is_root_dir_const/1, has_acl_const/1, file_exists_const/1, is_in_user_space_const/2]).
+    is_root_dir_const/1, has_acl_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
+    is_in_user_space_const/2]).
 -export([equals/2]).
 
 %% Functions modifying context
@@ -382,10 +383,10 @@ get_mounted_in_root(FileCtx = #file_ctx{mounted_in_root = MiR}) ->
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
     {ok, Doc} = file_meta:get_including_deleted(FileUuid),
-    case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
-        {false, false} ->
+    case file_meta:is_deleted(Doc) of
+        false ->
             {Doc, FileCtx#file_ctx{file_doc = Doc}};
-        _ ->
+        true ->
             {Doc, FileCtx}
     end;
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
@@ -1162,6 +1163,28 @@ file_exists_const(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Checks if file exists. Returns 'deleted' if files was created and then deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_exists_or_is_deleted(ctx()) -> {?FILE_EXISTS | ?FILE_DELETED | ?FILE_NEVER_EXISTED, ctx()}.
+file_exists_or_is_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
+    FileUuid = get_uuid_const(FileCtx),
+    case file_meta:get_including_deleted(FileUuid) of
+        {ok, Doc} ->
+            case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
+                {false, false} ->
+                    {?FILE_EXISTS, FileCtx#file_ctx{file_doc = Doc}};
+                _ ->
+                    {?FILE_DELETED, FileCtx}
+            end;
+        {error, not_found} ->
+            {?FILE_NEVER_EXISTED, FileCtx}
+    end;
+file_exists_or_is_deleted(_) ->
+    ?FILE_EXISTS.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Checks if file is located in space accessible by user.
 %% @end
 %%--------------------------------------------------------------------
@@ -1242,7 +1265,7 @@ generate_canonical_path(FileCtx) ->
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),
             {Path, FileCtx2};
         _ ->
-            {ok, ParentDoc} = file_meta:get_parent(Doc),
+            {ok, ParentDoc} = file_meta:get_parent_including_deleted(Doc),
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
             {Path ++ [FileName], FileCtx2}
     end.

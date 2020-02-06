@@ -142,9 +142,8 @@ delete_imported_file(ChildName, ParentCtx) ->
 %%-------------------------------------------------------------------
 -spec delete_imported_file(file_ctx:ctx()) -> ok.
 delete_imported_file(FileCtx) ->
-    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        ok = fslogic_delete:remove_file(FileCtx, RootUserCtx, false, true),
+        ok = fslogic_delete:handle_file_deleted_on_synced_storage(FileCtx),
         fslogic_event_emitter:emit_file_removed(FileCtx, []),
         ok = fslogic_delete:remove_file_handles(FileCtx),
         fslogic_delete:remove_auxiliary_documents(FileCtx)
@@ -357,7 +356,7 @@ filter_children_in_db(LinkName, FileCtx, UserCtx, TableName) ->
         end
     catch
         throw:?ENOENT ->
-            ?warning_stacktrace("full_update:filter_children_in_db failed with enoent for file ~p", [LinkName]),
+            ?debug_stacktrace("full_update:filter_children_in_db failed with enoent for file ~p", [LinkName]),
             ets:delete(TableName, LinkName);
         Error:Reason  ->
             ?error_stacktrace("full_update:filter_children_in_db failed with unexpected ~p:~p for file ~p", [Error, Reason, LinkName]),

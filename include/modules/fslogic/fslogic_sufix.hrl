@@ -22,8 +22,6 @@
 -define(FILE_DELETION_LINK_SUFFIX, <<"####TO_DELETE">>).
 -define(FILE_DELETION_LINK_NAME(Name),
     <<(Name)/binary, (?FILE_DELETION_LINK_SUFFIX)/binary>>).
--define(FILE_DELETION_LINK(Name, Uuid),
-    {?FILE_DELETION_LINK_NAME(Name), Uuid}).
 
 
 -define(CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR, <<"%%%%">>).

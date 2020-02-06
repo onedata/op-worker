@@ -14,6 +14,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/posix/errors.hrl").
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -172,6 +173,7 @@ rename_removed_opened_file_test(Config) ->
     FileNameString = binary_to_list(FileName),
     FilePath = <<"/space_name1/",  FileName/binary>>,
     User = <<"user1">>,
+    User2 = <<"user2">>,
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])]) of
@@ -191,7 +193,7 @@ rename_removed_opened_file_test(Config) ->
     ?assertEqual([FileNameString], ListAns -- InitialSpaceFiles),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId(User), {path, FilePath})),
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
     {ok, StorageDirList} = ?assertMatch({ok, _}, rpc:call(Worker, file, list_dir, [StorageDir])),
     ?assert(lists:member(?DELETED_OPENED_FILES_DIR_STRING, StorageDirList)),
     {ok, ListAns2} = ?assertMatch({ok, _},
@@ -200,6 +202,10 @@ rename_removed_opened_file_test(Config) ->
     {ok, ListAns3} = ?assertMatch({ok, _},
         rpc:call(Worker, file, list_dir, [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])])),
     ?assertEqual([Guid1String], ListAns3 -- InitialDeletedDir),
+    RenamedStorageID = filename:join([?DELETED_OPENED_FILES_DIR, Guid1]),
+    ?assertMatch({ok, #file_location{file_id = RenamedStorageID}},
+        lfm_proxy:get_file_location(Worker, SessId(User), {guid, Guid1})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_file_location(Worker, SessId(User2), {guid, Guid1})),
 
     lfm_proxy:close_all(Worker),
     {ok, ListAns4} = ?assertMatch({ok, _},
@@ -237,7 +243,7 @@ mkdir_removed_opened_file_test(Config) ->
     ?assertEqual([FileNameString], ListAns -- InitialSpaceFiles),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId(User), {path, FilePath})),
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
     {ok, StorageDirList} = ?assertMatch({ok, _}, rpc:call(Worker, file, list_dir, [StorageDir])),
     ?assert(lists:member(?DELETED_OPENED_FILES_DIR_STRING, StorageDirList)),
     {ok, ListAns2} = ?assertMatch({ok, _},
@@ -350,7 +356,7 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
         5000 -> timeout
     end),
 
-    ?assertEqual({error, enoent}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId(User), {guid, Guid1})),
     {ok, StorageDirList} = ?assertMatch({ok, _}, rpc:call(Worker, file, list_dir, [StorageDir])),
     ?assert(lists:member(?DELETED_OPENED_FILES_DIR_STRING, StorageDirList)),
     {ok, ListAns2} = ?assertMatch({ok, _},

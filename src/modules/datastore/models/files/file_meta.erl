@@ -31,8 +31,8 @@
     delete_without_link/1]).
 -export([delete_child_link/4, foreach_child/3, add_child_link/4, delete_deletion_link/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
--export([add_share/2, remove_share/2]).
--export([get_parent/1, get_parent_uuid/1]).
+-export([add_share/2, remove_share/2, get_shares/1]).
+-export([get_parent/1, get_parent_uuid/1, get_parent_including_deleted/1]).
 -export([
     get_child/2, get_child_uuid/2,
     list_children/2, list_children/3, list_children/4,
@@ -41,7 +41,7 @@
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4]).
--export([check_name/3, has_suffix/1]).
+-export([check_name/3, has_suffix/1, is_deleted/1]).
 % For tests
 -export([get_all_links/2]).
 
@@ -284,8 +284,6 @@ delete(#document{
 }) ->
     ?run(begin
         ok = delete_child_link(ParentUuid, Scope, FileUuid, FileName),
-        LocalLocationId = file_location:local_id(FileUuid),
-        fslogic_location_cache:delete_location(FileUuid, LocalLocationId),
         datastore_model:delete(?CTX, FileUuid)
     end);
 delete({path, Path}) ->
@@ -312,11 +310,7 @@ delete_without_link(#document{
 }) ->
     delete_without_link(FileUuid);
 delete_without_link(FileUuid) ->
-    ?run(begin
-        LocalLocationId = file_location:local_id(FileUuid),
-        fslogic_location_cache:delete_location(FileUuid, LocalLocationId),
-        datastore_model:delete(?CTX, FileUuid)
-    end).
+    ?run(begin datastore_model:delete(?CTX, FileUuid) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -591,6 +585,13 @@ get_parent(Entry) ->
         Error -> Error
     end.
 
+-spec get_parent_including_deleted(entry()) -> {ok, doc()} | {error, term()}.
+get_parent_including_deleted(Entry) ->
+    case get_parent_uuid(Entry) of
+        {ok, ParentUuid} -> file_meta:get_including_deleted(ParentUuid);
+        Error -> Error
+    end.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's parent uuid.
@@ -710,6 +711,12 @@ remove_share(FileCtx, ShareId) ->
             _ -> {error, not_found}
         end
     end).
+
+-spec get_shares(doc() | file_meta()) -> {ok, [od_share:id()]}.
+get_shares(#document{value = FileMeta}) ->
+    get_shares(FileMeta);
+get_shares(#file_meta{shares = Shares}) ->
+    {ok, Shares}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -859,7 +866,7 @@ check_name(ParentUuid, Name, #document{
             end,
             WithTag = tag_children(Links2),
             {NameAns, OtherFiles} = lists:foldl(fun
-                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) when Uuid =:= ChildUuid->
+                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {_NameAcc, OtherAcc}) when Uuid =:= ChildUuid->
                     {ExtendedName, OtherAcc};
                 (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) ->
                     {NameAcc, [{Uuid, ExtendedName} | OtherAcc]}
@@ -889,6 +896,10 @@ has_suffix(Name) ->
         [BaseName | _] -> {true, BaseName};
         _ -> false
     end.
+
+-spec is_deleted(doc()) -> boolean().
+is_deleted(#document{value = #file_meta{deleted = Deleted1}, deleted = Deleted2}) ->
+    Deleted1 orelse Deleted2.
 
 %%%===================================================================
 %%% Internal functions

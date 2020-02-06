@@ -32,7 +32,6 @@
 -export([
     create_directory_import_test/1,
     create_file_import_test/1,
-    import_file_with_link_but_no_doc_test/1,
     create_file_in_dir_update_test/1,
     delete_file_update_test/1,
     append_file_update_test/1,
@@ -64,7 +63,7 @@
     delete_and_update_files_simultaneously_update_test/1,
     update_syncs_files_after_import_failed_test/1,
     update_syncs_files_after_previous_update_failed_test/1,
-    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes/1,
+    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed/1,
     sync_works_properly_after_delete_test/1,
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/1,
     sync_should_not_delete_dir_created_in_remote_provider/1,
@@ -85,9 +84,8 @@
     create_directory_import_without_read_permission_test,
     create_directory_import_many_test,
     create_file_import_test,
-    import_file_with_link_but_no_doc_test,
     create_empty_file_import_test,
-    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes,
+    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
     create_file_in_dir_import_test,
@@ -327,8 +325,8 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
-sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes(Config) ->
-    storage_sync_test_base:sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes(Config, true).
+sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed(Config) ->
+    storage_sync_test_base:sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed(Config, true).
 
 create_directory_import_check_user_id_test(Config) ->
     storage_sync_test_base:create_directory_import_check_user_id_test(Config, true).
@@ -344,9 +342,6 @@ create_directory_import_many_test(Config) ->
 
 create_file_import_test(Config) ->
     storage_sync_test_base:create_file_import_test(Config, true).
-
-import_file_with_link_but_no_doc_test(Config) ->
-    storage_sync_test_base:import_file_with_link_but_no_doc_test(Config, true).
 
 create_empty_file_import_test(Config) ->
     storage_sync_test_base:create_empty_file_import_test(Config, true).
@@ -1717,7 +1712,7 @@ end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
     ok = test_utils:mock_unload(Workers, [storage_file_manager]),
     end_per_testcase(default, Config);
 
-end_per_testcase(sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changes, Config) ->
+end_per_testcase(sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [fslogic_path]),
     end_per_testcase(default, Config);
