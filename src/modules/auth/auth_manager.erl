@@ -90,6 +90,7 @@
     verification_result :: verification_result(),
     cache_expiration :: timestamp()
 }).
+-type cache_item() :: #cache_item{}.
 
 -type state() :: undefined.
 -type timestamp() :: time_utils:seconds().
@@ -169,8 +170,8 @@ get_interface(#token_auth{interface = Interface}) ->
 
 -spec get_data_access_caveats_policy(token_auth()) ->
     data_access_caveats:policy().
-get_data_access_caveats_policy(#token_auth{data_access_caveats_policy = DACP}) ->
-    DACP.
+get_data_access_caveats_policy(#token_auth{data_access_caveats_policy = Policy}) ->
+    Policy.
 
 
 -spec get_credentials(token_auth()) -> credentials().
@@ -237,41 +238,7 @@ get_caveats(TokenAuth) ->
 %%--------------------------------------------------------------------
 -spec verify(token_auth()) -> verification_result().
 verify(TokenAuth) ->
-    Now = ?NOW(),
-    case ets:lookup(?CACHE_NAME, TokenAuth) of
-        [#cache_item{cache_expiration = Expiration} = Item] when Now < Expiration ->
-            Item#cache_item.verification_result;
-        _ ->
-            try
-                {Result, CacheExpiration} = verify_internal(Now, TokenAuth),
-                ets:insert(?CACHE_NAME, #cache_item{
-                    token_auth = TokenAuth,
-                    verification_result = Result,
-                    cache_expiration = CacheExpiration
-                }),
-                %% Fetches user doc to trigger user setup if token verification
-                %% succeeded. Otherwise does nothing.
-                %% It must be called after caching verification result as to
-                %% avoid infinite loop (gs_client_worker would try to verify
-                %% given TokenAuth).
-                case Result of
-                    {ok, ?USER(UserId), _} ->
-                        case user_logic:get(TokenAuth, UserId) of
-                            {ok, _} ->
-                                Result;
-                            {error, _} = Error ->
-                                Error
-                        end;
-                    _ ->
-                        Result
-                end
-            catch Type:Reason ->
-                ?error_stacktrace("Cannot verify user auth due to ~p:~p", [
-                    Type, Reason
-                ]),
-                ?ERROR_UNAUTHORIZED
-            end
-    end.
+    get_from_cache_or_verify_in_zone(TokenAuth).
 
 
 -spec invalidate(token_auth()) -> ok.
@@ -321,7 +288,8 @@ spec() -> #{
     {ok, state()} | {ok, state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init(_) ->
-    ets:new(?CACHE_NAME, [
+    process_flag(trap_exit, true),
+    ?CACHE_NAME = ets:new(?CACHE_NAME, [
         set, public, named_table, {keypos, #cache_item.token_auth}
     ]),
     schedule_cache_size_checkup(),
@@ -394,7 +362,8 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     state()) -> term().
-terminate(_Reason, _State) ->
+terminate(Reason, State) ->
+    ?log_terminate(Reason, State),
     ets:delete(?CACHE_NAME),
     ok.
 
@@ -417,9 +386,80 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec verify_internal(Now :: timestamp(), token_auth()) ->
+-spec get_from_cache_or_verify_in_zone(token_auth()) -> verification_result().
+get_from_cache_or_verify_in_zone(TokenAuth) ->
+    Now = ?NOW(),
+    case get_from_cache(TokenAuth, Now) of
+        {ok, Item} ->
+            Item#cache_item.verification_result;
+        ?ERROR_NOT_FOUND ->
+            try
+                {Result, CacheExpiration} = verify_in_zone(Now, TokenAuth),
+                save_in_cache(#cache_item{
+                    token_auth = TokenAuth,
+                    verification_result = Result,
+                    cache_expiration = CacheExpiration
+                }),
+                %% Fetches user doc to trigger user setup if token verification
+                %% succeeded. Otherwise does nothing.
+                %% It must be called after caching verification result as to
+                %% avoid infinite loop (gs_client_worker would try to verify
+                %% given TokenAuth).
+                case Result of
+                    {ok, ?USER(UserId), _} ->
+                        case user_logic:get(TokenAuth, UserId) of
+                            {ok, _} ->
+                                Result;
+                            {error, _} = Error ->
+                                Error
+                        end;
+                    _ ->
+                        Result
+                end
+            catch Type:Reason ->
+                ?error_stacktrace("Cannot verify user auth due to ~p:~p", [
+                    Type, Reason
+                ]),
+                ?ERROR_UNAUTHORIZED
+            end
+    end.
+
+
+%% @private
+-spec get_from_cache(token_auth(), Now :: timestamp()) ->
+    {ok, cache_item()} | ?ERROR_NOT_FOUND.
+get_from_cache(TokenAuth, Now) ->
+    try ets:lookup(?CACHE_NAME, TokenAuth) of
+        [#cache_item{cache_expiration = Expiration} = Item] when Now < Expiration ->
+            {ok, Item};
+        _ ->
+            ?ERROR_NOT_FOUND
+    catch Type:Reason ->
+        ?warning("Failed to lookup ~p cache (ets table) due to ~p:~p", [
+            ?MODULE, Type, Reason
+        ]),
+        ?ERROR_NOT_FOUND
+    end.
+
+
+%% @private
+-spec save_in_cache(cache_item()) -> ok.
+save_in_cache(Item) ->
+    try
+        ets:insert(?CACHE_NAME, Item),
+        ok
+    catch Type:Reason ->
+        ?warning("Failed to save entry in ~p cache (ets table) due to ~p:~p", [
+            ?MODULE, Type, Reason
+        ]),
+        ok
+    end.
+
+
+%% @private
+-spec verify_in_zone(Now :: timestamp(), token_auth()) ->
     {verification_result(), VerificationResultExpiration :: timestamp()}.
-verify_internal(Now, #token_auth{
+verify_in_zone(Now, #token_auth{
     access_token = AccessToken,
     peer_ip = PeerIp,
     interface = Interface,
