@@ -26,10 +26,7 @@
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
     create_delayed_storage_file/1, create_delayed_storage_file/4,
-    delete_storage_file/2, create_parent_dirs/1, recursive_delete/2]).
-
-% For spawning
--export([retry_dir_deletion/3]).
+    delete_storage_file/2, create_parent_dirs/1, delete/2]).
 
 % Test API
 -export([create_storage_file/3]).
@@ -202,15 +199,16 @@ create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_storage_file(file_ctx:ctx(), user_ctx:ctx()) ->
-    ok | {error, term()}.
+    {ok, file_ctx:ctx()} | {error, term()}.
 delete_storage_file(FileCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
     case storage_file_manager:new_handle(SessId, FileCtx, false) of
-        {undefined, _} ->
+        {undefined, _FileCtx2} ->
             {error, ?ENOENT};
-        {SFMHandle, _} ->
-            {Size, _} = file_ctx:get_file_size(FileCtx),
-            storage_file_manager:unlink(SFMHandle, Size)
+        {SFMHandle, FileCtx2} ->
+            {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
+            storage_file_manager:unlink(SFMHandle, Size),
+            {ok, FileCtx3}
     end.
 
 %%--------------------------------------------------------------------
@@ -219,16 +217,12 @@ delete_storage_file(FileCtx, UserCtx) ->
 %% deleted to.
 %% @end
 %%--------------------------------------------------------------------
--spec recursive_delete(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
-recursive_delete(FileCtx, UserCtx) ->
+-spec delete(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
+delete(FileCtx, UserCtx) ->
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
     case IsDir of
-        true ->
-            {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
-            {ok, FileCtx3} = delete_children(FileCtx2, UserCtx, 0, ChunkSize),
-            delete_storage_dir(FileCtx3, UserCtx);
-        false ->
-            delete_storage_file(FileCtx2, UserCtx)
+        true -> delete_storage_dir(FileCtx2, UserCtx);
+        false -> delete_storage_file(FileCtx2, UserCtx)
     end.
 
 %%--------------------------------------------------------------------
@@ -237,63 +231,32 @@ recursive_delete(FileCtx, UserCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_storage_dir(file_ctx:ctx(), user_ctx:ctx()) ->
-    ok | {error, term()}.
-delete_storage_dir(FileCtx, UserCtx) ->
+    {ok, file_ctx:ctx()} | {error, term()}.
+delete_storage_dir(DirCtx, UserCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case storage_file_manager:new_handle(SessId, FileCtx, false) of
-        {undefined, _} ->
-            ok;
-        {SFMHandle, _} ->
+    FileUuid = file_ctx:get_uuid_const(DirCtx),
+    case storage_file_manager:new_handle(SessId, DirCtx, false) of
+        {undefined, FileCtx2} ->
+            {ok, FileCtx2};
+        {SFMHandle, FileCtx2} ->
             case storage_file_manager:rmdir(SFMHandle) of
                 ok ->
-                    dir_location:delete(FileUuid);
+                    dir_location:delete(FileUuid),
+                    {ok, FileCtx2};
                 {error, ?ENOENT} ->
-                    dir_location:delete(FileUuid);
-                {error, ?ENOTEMPTY} ->
-                    % todo VFS-4997
-                    spawn(?MODULE, retry_dir_deletion, [SFMHandle, FileUuid, 0]),
-                    ok;
+                    dir_location:delete(FileUuid),
+                    {ok, FileCtx2};
+                {error, ?ENOTEMPTY} = Error ->
+                    ?debug("sfm_utils:delete_storage_dir failed with ~p", [Error]),
+                    Error;
                 {error,'Function not implemented'} = Error ->
                     % Some helpers do not support rmdir
                     ?debug("sfm_utils:delete_storage_dir failed with ~p", [Error]),
-                    ok;
+                    {ok, FileCtx2};
                 Error ->
                     ?error("sfm_utils:delete_storage_dir failed with ~p", [Error]),
                     Error
             end
-    end.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% This function is used to delay cleanup of directory on storage
-%% if it fails with ENOTEMPTY.
-%% @end
-%%-------------------------------------------------------------------
--spec retry_dir_deletion(storage_file_manager:handle(), file_meta:uuid(),
-    non_neg_integer()) -> ok  | {error, term()}.
-retry_dir_deletion(#sfm_handle{file = FileId, space_id = SpaceId}, _FileUuid, ?CLEANUP_MAX_RETRIES_NUM) ->
-    ?error("Could not delete directory ~p on storage in space ~p", [FileId, SpaceId]);
-retry_dir_deletion(SFMHandle = #sfm_handle{
-    file = FileId,
-    space_id = SpaceId
-}, FileUuid, RetryNum) ->
-    ?debug(
-        "Delayed deletion of directory ~p on storage in space ~p. Retry number: ~p",
-        [FileId, SpaceId, RetryNum + 1]),
-    timer:sleep(timer:seconds(?CLEANUP_DELAY)),
-    case storage_file_manager:rmdir(SFMHandle) of
-        ok ->
-            dir_location:delete(FileUuid);
-        {error, ?ENOENT} ->
-            dir_location:delete(FileUuid);
-        {error, ?ENOTEMPTY} ->
-            retry_dir_deletion(SFMHandle, FileUuid, RetryNum + 1);
-        Error ->
-            ?error(
-                "Unexpected error when trying to delete directory ~p on storage in space ~p",
-                [FileId, SpaceId]),
-            Error
     end.
 
 %%--------------------------------------------------------------------
@@ -392,32 +355,6 @@ mkdir_and_maybe_chown(SFMHandle, Mode, FileCtx, ShouldChown) ->
             ok
     end,
     FileCtx.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function recursively deletes all children of given directory.
-%% @end
-%%-------------------------------------------------------------------
--spec delete_children(file_ctx:ctx(), user_ctx:ctx(), non_neg_integer(),
-    non_neg_integer()) -> {ok, file_ctx:ctx()}.
-delete_children(FileCtx, UserCtx, Offset, ChunkSize) ->
-    % todo VFS-4997
-    {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx,
-        UserCtx, Offset, ChunkSize),
-    lists:foreach(fun(ChildCtx) ->
-        ok = case recursive_delete(ChildCtx, UserCtx) of
-            ok -> ok;
-            {error, ?ENOENT} -> ok;
-            Error -> Error
-        end
-    end, ChildrenCtxs),
-    case length(ChildrenCtxs) < ChunkSize of
-        true ->
-            {ok, FileCtx2};
-        false ->
-            delete_children(FileCtx2, UserCtx, Offset + ChunkSize, ChunkSize)
-    end.
 
 %%-------------------------------------------------------------------
 %% @private

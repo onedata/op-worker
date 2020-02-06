@@ -206,6 +206,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
                 [Error, Reason]),
             sfm_utils:delete_storage_file(FileCtx, UserCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
+            fslogic_location_cache:delete_local_location(FileUuid),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             case Reason of
@@ -277,6 +278,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     catch
         Error:Reason ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
+            fslogic_location_cache:delete_local_location(FileUuid),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)

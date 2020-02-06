@@ -79,7 +79,7 @@ new_handle(SessionId, FileCtx, Generate) ->
 %% Handle created by this function may not be used for remote files.
 %% @end
 %%--------------------------------------------------------------------
--spec new_handle(session:id(), od_space:id(), file_meta:uuid(),
+-spec new_handle(session:id(), od_space:id(), file_meta:uuid() | undefined,
     Storage :: datastore:doc(), FileId :: helpers:file_id(),
     ShareId :: od_share:id() | undefined) -> handle().
 new_handle(SessionId, SpaceId, FileUuid, #document{key = StorageId} = Storage,
@@ -545,10 +545,6 @@ unlink(SFMHandle = #sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 }, CurrentSize) ->
-    case storage_sync_info:delete(FileId, SpaceId) of
-        ok -> ok;
-        {error, not_found} -> ok
-    end,
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     ?RUN(SFMHandle, fun() ->
         case helpers:unlink(HelperHandle, FileId, CurrentSize) of

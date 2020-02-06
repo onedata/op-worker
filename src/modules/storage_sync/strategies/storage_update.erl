@@ -38,7 +38,7 @@
 ]).
 
 %%simple_scan callbacks
--export([handle_already_imported_file/3, import_children/5]).
+-export([maybe_update_file/3, import_children/5]).
 
 %% API
 -export([start/8]).
@@ -250,18 +250,18 @@ start(SpaceId, StorageId, ImportStartTime, ImportFinishTime, LastUpdateStartTime
 %% Callback called by simple_scan module
 %% @end
 %%--------------------------------------------------------------------
--spec handle_already_imported_file(space_strategy:job(), #file_attr{},
+-spec maybe_update_file(space_strategy:job(), #file_attr{},
     file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
-handle_already_imported_file(Job = #space_strategy_job{
+maybe_update_file(Job = #space_strategy_job{
     data = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx
 ) ->
     {#statbuf{st_mode = Mode}, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
     case file_meta:type(Mode) of
         ?DIRECTORY_TYPE ->
-            handle_already_imported_directory(Job, FileAttr, FileCtx);
+            maybe_update_directory(Job, FileAttr, FileCtx);
         ?REGULAR_FILE_TYPE ->
-            simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx)
+            simple_scan:maybe_update_file(Job, FileAttr, FileCtx)
     end.
 
 %%--------------------------------------------------------------------
@@ -388,18 +388,18 @@ import_children(#space_strategy_job{}, _Type, _Offset, _FileCtx, _) ->
 %% Handles update of directory that has already been imported.
 %% @end
 %%-------------------------------------------------------------------
--spec handle_already_imported_directory(space_strategy:job(), #file_attr{},
+-spec maybe_update_directory(space_strategy:job(), #file_attr{},
     file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
-handle_already_imported_directory(Job = #space_strategy_job{
+maybe_update_directory(Job = #space_strategy_job{
     data = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx
 ) ->
     {StorageSyncInfo, FileCtx2} = file_ctx:get_storage_sync_info(FileCtx),
     case storage_sync_changes:mtime_has_changed(StorageSyncInfo, StorageFileCtx) of
         true ->
-            handle_already_imported_directory_changed_mtime(Job, FileAttr, FileCtx2);
+            maybe_update_directory_with_changed_mtime(Job, FileAttr, FileCtx2);
         false ->
-            handle_already_imported_directory_unchanged_mtime(Job, FileAttr, FileCtx2)
+            maybe_update_directory_with_unchanged_mtime(Job, FileAttr, FileCtx2)
     end.
 
 %%-------------------------------------------------------------------
@@ -410,9 +410,9 @@ handle_already_imported_directory(Job = #space_strategy_job{
 %% created or deleted).
 %% @end
 %%-------------------------------------------------------------------
--spec handle_already_imported_directory_changed_mtime(space_strategy:job(),
+-spec maybe_update_directory_with_changed_mtime(space_strategy:job(),
     #file_attr{}, file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
-handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
+maybe_update_directory_with_changed_mtime(Job = #space_strategy_job{
     strategy_args = #{delete_enable := true},
     data = Data
 }, FileAttr, FileCtx) ->
@@ -422,14 +422,14 @@ handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
     end,
     case Result of
         ok ->
-            simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx);
+            simple_scan:maybe_update_file(Job, FileAttr, FileCtx);
         Error = {error, _} ->
             {Error, Job}
     end;
-handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
+maybe_update_directory_with_changed_mtime(Job = #space_strategy_job{
     strategy_args = #{delete_enable := false}
 }, FileAttr, FileCtx) ->
-    simple_scan:handle_already_imported_file(Job, FileAttr, FileCtx).
+    simple_scan:maybe_update_file(Job, FileAttr, FileCtx).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -438,9 +438,9 @@ handle_already_imported_directory_changed_mtime(Job = #space_strategy_job{
 %% mtime has not changed.
 %% @end
 %%-------------------------------------------------------------------
--spec handle_already_imported_directory_unchanged_mtime(space_strategy:job(),
+-spec maybe_update_directory_with_unchanged_mtime(space_strategy:job(),
     #file_attr{}, file_ctx:ctx()) -> {simple_scan:job_result(), space_strategy:job()}.
-handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
+maybe_update_directory_with_unchanged_mtime(Job = #space_strategy_job{
     strategy_args = Args = #{write_once := false},
     data = Data0 = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx) ->
@@ -471,12 +471,12 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
         BatchHash, BatchKey)
     of
         true ->
-            handle_already_imported_directory_changed_hash(Job2, FileAttr,
+            maybe_update_directory_with_changed_hash(Job2, FileAttr,
                 FileCtx2, BatchHash);
         false ->
             import_dirs_only(Job2, FileAttr, FileCtx2)
     end;
-handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
+maybe_update_directory_with_unchanged_mtime(Job = #space_strategy_job{
     strategy_args = #{write_once := true}
 }, FileAttr, FileCtx
 ) ->
@@ -490,16 +490,16 @@ handle_already_imported_directory_unchanged_mtime(Job = #space_strategy_job{
 %% should be updated).
 %% @end
 %%-------------------------------------------------------------------
--spec handle_already_imported_directory_changed_hash(space_strategy:job(),
+-spec maybe_update_directory_with_changed_hash(space_strategy:job(),
     #file_attr{}, file_ctx:ctx(), storage_sync_changes:hash()) ->
     {simple_scan:job_result(), space_strategy:job()}.
-handle_already_imported_directory_changed_hash(Job = #space_strategy_job{
+maybe_update_directory_with_changed_hash(Job = #space_strategy_job{
     data = #{dir_offset := Offset}
 }, FileAttr, FileCtx, CurrentHash
 ) ->
     HashesMap = #{Offset div ?DIR_BATCH => CurrentHash},
     Job2 = space_strategy:update_job_data(hashes_map, HashesMap, Job),
-    simple_scan:handle_already_imported_file(Job2, FileAttr, FileCtx).
+    simple_scan:maybe_update_file(Job2, FileAttr, FileCtx).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -510,7 +510,7 @@ handle_already_imported_directory_changed_hash(Job = #space_strategy_job{
 %%-------------------------------------------------------------------
 import_dirs_only(Job = #space_strategy_job{}, FileAttr, FileCtx) ->
     Job2 = space_strategy:update_job_data(import_dirs_only, true, Job),
-    simple_scan:handle_already_imported_file(Job2, FileAttr, FileCtx).
+    simple_scan:maybe_update_file(Job2, FileAttr, FileCtx).
 
 %%-------------------------------------------------------------------
 %% @private

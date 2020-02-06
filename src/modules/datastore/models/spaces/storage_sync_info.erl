@@ -43,19 +43,19 @@
 %% @equiv datastore_model:get(?CTX, Uuid).
 %% @end
 %%-------------------------------------------------------------------
--spec get(file_meta:path(), od_space:id()) -> {ok, doc()} | error().
-get(FilePath, SpaceId) ->
-    datastore_model:get(?CTX, id(FilePath, SpaceId)).
+-spec get(helpers:file_id(), od_space:id()) -> {ok, doc()} | error().
+get(StorageFileId, SpaceId) ->
+    datastore_model:get(?CTX, id(StorageFileId, SpaceId)).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates or updates storage_sync_info document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(file_meta:path(), diff(), od_space:id()) ->
+-spec create_or_update(helpers:file_id(), diff(), od_space:id()) ->
     {ok, doc()} | error().
-create_or_update(FilePath, Diff, SpaceId) ->
-    Id = id(FilePath, SpaceId),
+create_or_update(StorageFileId, Diff, SpaceId) ->
+    Id = id(StorageFileId, SpaceId),
     DefaultDoc = default_doc(Id, Diff, SpaceId),
     datastore_model:update(?CTX, Id, Diff, DefaultDoc).
 
@@ -64,18 +64,18 @@ create_or_update(FilePath, Diff, SpaceId) ->
 %% @equiv datastore_model:delete(?CTX, Uuid).
 %% @end
 %%-------------------------------------------------------------------
--spec delete(file_meta:path(), od_space:id()) -> ok | error().
-delete(FilePath, SpaceId) ->
-    datastore_model:delete(?CTX, id(FilePath, SpaceId)).
+-spec delete(helpers:file_id(), od_space:id()) -> ok | error().
+delete(StorageFileId, SpaceId) ->
+    datastore_model:delete(?CTX, id(StorageFileId, SpaceId)).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Generates key basing of given FilePath
 %% @end
 %%-------------------------------------------------------------------
--spec id(file_meta:path(), od_space:id()) -> key().
-id(FilePath, SpaceId) ->
-    datastore_key:adjacent_from_digest([FilePath], SpaceId).
+-spec id(helpers:file_id(), od_space:id()) -> key().
+id(StorageFileId, SpaceId) ->
+    datastore_key:adjacent_from_digest([StorageFileId], SpaceId).
 
 %%===================================================================
 %% Internal functions
