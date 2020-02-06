@@ -16,7 +16,7 @@
 
 -record(credentials, {
     access_token :: tokens:serialized(),
-    audience_token = undefined :: undefined | tokens:serialized()
+    consumer_token = undefined :: undefined | tokens:serialized()
 }).
 
 -endif.

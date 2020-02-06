@@ -77,7 +77,7 @@
 % Record containing access token for user authorization in OZ.
 -record(token_auth, {
     access_token :: tokens:serialized(),
-    audience_token = undefined :: undefined | tokens:serialized(),
+    consumer_token = undefined :: undefined | tokens:serialized(),
     peer_ip = undefined :: undefined | ip_utils:ip(),
     interface = undefined :: undefined | cv_interface:interface(),
     data_access_caveats_policy = disallow_data_access_caveats :: data_access_caveats:policy()
@@ -93,7 +93,7 @@
 -type timestamp() :: time_utils:seconds().
 
 -type access_token() :: tokens:serialized().
--type audience_token() :: undefined | tokens:serialized().
+-type consumer_token() :: undefined | tokens:serialized().
 
 -type credentials() :: #credentials{}.
 -opaque token_auth() :: #token_auth{}.
@@ -103,7 +103,7 @@
     | errors:error().
 
 -export_type([
-    access_token/0, audience_token/0,
+    access_token/0, consumer_token/0,
     credentials/0, token_auth/0, verification_result/0
 ]).
 
@@ -114,16 +114,16 @@
 
 
 -spec build_token_auth(
-    access_token(), audience_token(),
+    access_token(), consumer_token(),
     PeerIp :: undefined | ip_utils:ip(),
     Interface :: undefined | cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
     token_auth().
-build_token_auth(AccessToken, AudienceToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+build_token_auth(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     #token_auth{
         access_token = AccessToken,
-        audience_token = AudienceToken,
+        consumer_token = ConsumerToken,
         peer_ip = PeerIp,
         interface = Interface,
         data_access_caveats_policy = DataAccessCaveatsPolicy
@@ -159,20 +159,20 @@ get_data_access_caveats_policy(#token_auth{data_access_caveats_policy = DACP}) -
 -spec get_credentials(token_auth()) -> credentials().
 get_credentials(#token_auth{
     access_token = AccessToken,
-    audience_token = AudienceToken
+    consumer_token = ConsumerToken
 }) ->
     #credentials{
         access_token = AccessToken,
-        audience_token = AudienceToken
+        consumer_token = ConsumerToken
     }.
 
 
--spec update_credentials(token_auth(), access_token(), audience_token()) ->
+-spec update_credentials(token_auth(), access_token(), consumer_token()) ->
     token_auth().
-update_credentials(TokenAuth, AccessToken, AudienceToken) ->
+update_credentials(TokenAuth, AccessToken, ConsumerToken) ->
     TokenAuth#token_auth{
         access_token = AccessToken,
-        audience_token = AudienceToken
+        consumer_token = ConsumerToken
     }.
 
 
@@ -181,14 +181,14 @@ to_auth_override(#token_auth{
     access_token = Token,
     peer_ip = PeerIp,
     interface = Interface,
-    audience_token = AudienceToken,
+    consumer_token = ConsumerToken,
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
     #auth_override{
         client_auth = {token, Token},
         peer_ip = PeerIp,
         interface = Interface,
-        audience_token = AudienceToken,
+        consumer_token = ConsumerToken,
         data_access_caveats_policy = DataAccessCaveatsPolicy
     }.
 

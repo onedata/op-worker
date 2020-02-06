@@ -14,6 +14,7 @@
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 
 -export([
     verify_access_token/4,
@@ -81,7 +82,10 @@ verify_provider_identity_token(IdentityToken) ->
             aspect = verify_identity_token,
             scope = public
         },
-        data = #{<<"token">> => IdentityToken}
+        data = #{
+            <<"token">> => IdentityToken,
+            <<"consumer">> => ?SUB(?ONEPROVIDER, oneprovider:get_id())
+        }
     }),
     case Result of
         {ok, #{<<"subject">> := Subject}} ->

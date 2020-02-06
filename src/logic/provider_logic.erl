@@ -719,18 +719,18 @@ zone_get_offline_access_idps() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_provider_identity(od_provider:id()) -> ok | {error, term()}.
-verify_provider_identity(ProviderId) ->
+verify_provider_identity(TheirProviderId) ->
     try
-        {ok, Domain} = get_domain(ProviderId),
-        {ok, OurIdentityToken} = provider_auth:get_identity_token(
-            ?AUD(?OP_WORKER, ProviderId)
+        {ok, Domain} = get_domain(TheirProviderId),
+        {ok, OurIdentityToken} = provider_auth:get_identity_token_for_consumer(
+            ?SUB(?ONEPROVIDER, TheirProviderId)
         ),
-        Headers = tokens:build_access_token_header(OurIdentityToken),
+        Headers = tokens:access_token_header(OurIdentityToken),
         URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_TOKEN_PATH]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
         case http_client:get(URL, Headers, <<>>, SslOpts) of
             {ok, 200, _, TheirIdentityToken} ->
-                verify_provider_identity(ProviderId, TheirIdentityToken);
+                verify_provider_identity(TheirProviderId, TheirIdentityToken);
             {ok, Code, _, _} ->
                 {error, {bad_http_code, Code}};
             {error, _} = Error ->
@@ -738,7 +738,7 @@ verify_provider_identity(ProviderId) ->
         end
     catch Type:Reason ->
         ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
-            provider_logic:to_printable(ProviderId),
+            provider_logic:to_printable(TheirProviderId),
             Type, Reason
         ]),
         ?ERROR_UNAUTHORIZED
