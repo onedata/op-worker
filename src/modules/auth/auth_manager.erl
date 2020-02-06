@@ -52,6 +52,7 @@
     invalidate/1
 ]).
 -export([start_link/0, spec/0]).
+-export([report_oz_connection_started/0, report_oz_connection_terminated/0]).
 
 %% gen_server callbacks
 -export([
@@ -60,8 +61,58 @@
     terminate/2, code_change/3
 ]).
 
+
+-type credentials() :: #credentials{}.
+-type access_token() :: tokens:serialized().
+-type audience_token() :: undefined | tokens:serialized().
+
+% Record containing access token for user authorization in OZ.
+-record(token_auth, {
+    access_token :: access_token(),
+    audience_token = undefined :: audience_token(),
+    peer_ip = undefined :: undefined | ip_utils:ip(),
+    interface = undefined :: undefined | cv_interface:interface(),
+    data_access_caveats_policy = disallow_data_access_caveats :: data_access_caveats:policy()
+}).
+
+-opaque token_auth() :: #token_auth{}.
+-type guest_auth() :: ?GUEST_AUTH.
+-type root_auth() :: ?ROOT_AUTH.
+-type auth() :: token_auth() | guest_auth() | root_auth().
+
+-type verification_result() ::
+    {ok, aai:auth(), TokenValidUntil :: undefined | timestamp()} |
+    errors:error().
+
+-type timestamp() :: time_utils:seconds().
+-type token_ref() ::
+    {named, tokens:id()} |
+    {temporary, od_user:id(), temporary_token_secret:generation()}.
+
+-record(cache_item, {
+    token_auth :: token_auth(),
+    verification_result :: verification_result(),
+
+    token_ref :: undefined | token_ref(),
+    token_revoked = false :: boolean(),
+    cache_expiration :: timestamp()
+}).
+-type cache_item() :: #cache_item{}.
+
+-record(state, {
+    cache_invalidation_timer = undefined :: undefined | reference()
+}).
+-type state() :: #state{}.
+
+-export_type([
+    credentials/0, access_token/0, audience_token/0,
+    token_auth/0, guest_auth/0, root_auth/0, auth/0,
+    verification_result/0
+]).
+
+
 -define(CACHE_NAME, ?MODULE).
--define(CHECK_SIZE_MSG, check_size).
+-define(CHECK_CACHE_SIZE_REQ, check_cache_size).
 
 -define(CACHE_SIZE_LIMIT,
     application:get_env(?APP_NAME, auth_cache_size_limit, 5000)
@@ -73,47 +124,15 @@
     application:get_env(?APP_NAME, auth_cache_item_default_ttl, 10)
 ).
 
+-define(OZ_CONNECTION_STARTED_MSG, oz_connection_stared).
+-define(OZ_CONNECTION_TERMINATED_MSG, oz_connection_terminated).
+
+-define(INVALIDATE_CACHE_REQ, invalidate_cache).
+-define(CACHE_INVALIDATION_DELAY,
+    application:get_env(?APP_NAME, auth_invalidation_delay, timer:seconds(300))
+).
+
 -define(NOW(), time_utils:system_time_seconds()).
-
-
-% Record containing access token for user authorization in OZ.
--record(token_auth, {
-    access_token :: tokens:serialized(),
-    audience_token = undefined :: undefined | tokens:serialized(),
-    peer_ip = undefined :: undefined | ip_utils:ip(),
-    interface = undefined :: undefined | cv_interface:interface(),
-    data_access_caveats_policy = disallow_data_access_caveats :: data_access_caveats:policy()
-}).
-
--record(cache_item, {
-    token_auth :: token_auth(),
-    verification_result :: verification_result(),
-    cache_expiration :: timestamp()
-}).
--type cache_item() :: #cache_item{}.
-
--type state() :: undefined.
--type timestamp() :: time_utils:seconds().
-
--type access_token() :: tokens:serialized().
--type audience_token() :: undefined | tokens:serialized().
-
--type credentials() :: #credentials{}.
-
--opaque token_auth() :: #token_auth{}.
--type guest_auth() :: ?GUEST_AUTH.
--type root_auth() :: ?ROOT_AUTH.
--type auth() :: token_auth() | guest_auth() | root_auth().
-
--type verification_result() ::
-    {ok, aai:auth(), TokenValidUntil :: undefined | timestamp()}
-    | errors:error().
-
--export_type([
-    access_token/0, audience_token/0, credentials/0,
-    token_auth/0, guest_auth/0, root_auth/0, auth/0,
-    verification_result/0
-]).
 
 
 %%%===================================================================
@@ -238,7 +257,7 @@ get_caveats(TokenAuth) ->
 %%--------------------------------------------------------------------
 -spec verify(token_auth()) -> verification_result().
 verify(TokenAuth) ->
-    get_from_cache_or_verify_in_zone(TokenAuth).
+    get_from_cache_or_verify_token_auth(TokenAuth).
 
 
 -spec invalidate(token_auth()) -> ok.
@@ -255,6 +274,20 @@ invalidate(TokenAuth) ->
 -spec start_link() -> {ok, pid()} | ignore | {error, Reason :: term()}.
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+
+-spec report_oz_connection_started() -> ok.
+report_oz_connection_started() ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    gen_server:abcast(Nodes, ?MODULE, ?OZ_CONNECTION_STARTED_MSG),
+    ok.
+
+
+-spec report_oz_connection_terminated() -> ok.
+report_oz_connection_terminated() ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    gen_server:abcast(Nodes, ?MODULE, ?OZ_CONNECTION_TERMINATED_MSG),
+    ok.
 
 
 %%-------------------------------------------------------------------
@@ -289,11 +322,13 @@ spec() -> #{
     {stop, Reason :: term()} | ignore.
 init(_) ->
     process_flag(trap_exit, true),
+
     ?CACHE_NAME = ets:new(?CACHE_NAME, [
         set, public, named_table, {keypos, #cache_item.token_auth}
     ]),
     schedule_cache_size_checkup(),
-    {ok, undefined, hibernate}.
+
+    {ok, #state{}, hibernate}.
 
 
 %%--------------------------------------------------------------------
@@ -324,6 +359,13 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_cast(?OZ_CONNECTION_STARTED_MSG, State0) ->
+    ets:delete_all_objects(?CACHE_NAME),
+    {noreply, cancel_cache_invalidation_timer(State0)};
+
+handle_cast(?OZ_CONNECTION_TERMINATED_MSG, State) ->
+    {noreply, schedule_cache_invalidation(State)};
+
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -339,13 +381,18 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_info(?CHECK_SIZE_MSG, State) ->
+handle_info(?CHECK_CACHE_SIZE_REQ, State) ->
     case ets:info(?CACHE_NAME, size) > ?CACHE_SIZE_LIMIT of
         true -> ets:delete_all_objects(?CACHE_NAME);
         false -> ok
     end,
     schedule_cache_size_checkup(),
-    {noreply, State, hibernate};
+    {noreply, State};
+
+handle_info(?INVALIDATE_CACHE_REQ, State) ->
+    ets:delete_all_objects(?CACHE_NAME),
+    {noreply, cancel_cache_invalidation_timer(State)};
+
 handle_info(Info, State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -386,15 +433,15 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec get_from_cache_or_verify_in_zone(token_auth()) -> verification_result().
-get_from_cache_or_verify_in_zone(TokenAuth) ->
+-spec get_from_cache_or_verify_token_auth(token_auth()) -> verification_result().
+get_from_cache_or_verify_token_auth(TokenAuth) ->
     Now = ?NOW(),
     case get_from_cache(TokenAuth, Now) of
         {ok, Item} ->
             Item#cache_item.verification_result;
         ?ERROR_NOT_FOUND ->
             try
-                {Result, CacheExpiration} = verify_in_zone(Now, TokenAuth),
+                {Result, CacheExpiration} = verify_token_auth(Now, TokenAuth),
                 save_in_cache(#cache_item{
                     token_auth = TokenAuth,
                     verification_result = Result,
@@ -457,42 +504,37 @@ save_in_cache(Item) ->
 
 
 %% @private
--spec verify_in_zone(Now :: timestamp(), token_auth()) ->
+-spec verify_token_auth(Now :: timestamp(), token_auth()) ->
     {verification_result(), VerificationResultExpiration :: timestamp()}.
-verify_in_zone(Now, #token_auth{
-    access_token = AccessToken,
+verify_token_auth(Now, #token_auth{
+    access_token = SerializedAccessToken,
     peer_ip = PeerIp,
     interface = Interface,
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
     CacheDefaultTTL = ?CACHE_ITEM_DEFAULT_TTL,
 
-    case tokens:deserialize(AccessToken) of
-        {ok, #token{subject = ?SUB(user, UserId) = Subject} = Token} ->
-            case provider_logic:has_eff_user(UserId) of
-                true ->
-                    case token_logic:verify_access_token(
-                        AccessToken, PeerIp, Interface,
-                        DataAccessCaveatsPolicy
-                    ) of
-                        {ok, Subject, undefined} ->
-                            Auth = #auth{
-                                subject = Subject,
-                                caveats = tokens:get_caveats(Token)
-                            },
-                            {{ok, Auth, undefined}, Now + CacheDefaultTTL};
-                        {ok, Subject, TokenTTL} ->
-                            Auth = #auth{
-                                subject = Subject,
-                                caveats = tokens:get_caveats(Token)
-                            },
-                            Expiration = Now + min(TokenTTL, CacheDefaultTTL),
-                            {{ok, Auth, Now + TokenTTL}, Expiration};
-                        {error, _} = VerificationError ->
-                            {VerificationError, Now + CacheDefaultTTL}
-                    end;
-                false ->
-                    {?ERROR_USER_NOT_SUPPORTED, Now + CacheDefaultTTL}
+    case deserialize_token(SerializedAccessToken) of
+        {ok, #token{subject = Subject} = Token} ->
+            case token_logic:verify_access_token(
+                SerializedAccessToken, PeerIp, Interface,
+                DataAccessCaveatsPolicy
+            ) of
+                {ok, Subject, undefined} ->
+                    Auth = #auth{
+                        subject = Subject,
+                        caveats = tokens:get_caveats(Token)
+                    },
+                    {{ok, Auth, undefined}, Now + CacheDefaultTTL};
+                {ok, Subject, TokenTTL} ->
+                    Auth = #auth{
+                        subject = Subject,
+                        caveats = tokens:get_caveats(Token)
+                    },
+                    Expiration = Now + min(TokenTTL, CacheDefaultTTL),
+                    {{ok, Auth, Now + TokenTTL}, Expiration};
+                {error, _} = VerificationError ->
+                    {VerificationError, Now + CacheDefaultTTL}
             end;
         {error, _} = DeserializationError ->
             {DeserializationError, Now + CacheDefaultTTL}
@@ -500,6 +542,45 @@ verify_in_zone(Now, #token_auth{
 
 
 %% @private
+-spec deserialize_token(tokens:serialized()) ->
+    {ok, tokens:token()} | errors:error().
+deserialize_token(SerializedToken) ->
+    case tokens:deserialize(SerializedToken) of
+        {ok, #token{subject = ?SUB(user, UserId)} = Token} ->
+            case provider_logic:has_eff_user(UserId) of
+                true ->
+                    {ok, Token};
+                false ->
+                    ?ERROR_USER_NOT_SUPPORTED
+            end;
+        {ok, _} ->
+            ?ERROR_TOKEN_SUBJECT_INVALID;
+        {error, _} = DeserializationError ->
+            DeserializationError
+    end.
+
+
+%% @private
 -spec schedule_cache_size_checkup() -> reference().
 schedule_cache_size_checkup() ->
-    erlang:send_after(?CACHE_SIZE_CHECK_INTERVAL, self(), ?CHECK_SIZE_MSG).
+    erlang:send_after(?CACHE_SIZE_CHECK_INTERVAL, self(), ?CHECK_CACHE_SIZE_REQ).
+
+
+%% @private
+-spec schedule_cache_invalidation(state()) -> state().
+schedule_cache_invalidation(#state{cache_invalidation_timer = undefined} = State) ->
+    TimerRef = erlang:send_after(
+        ?CACHE_INVALIDATION_DELAY, self(), ?INVALIDATE_CACHE_REQ
+    ),
+    State#state{cache_invalidation_timer = TimerRef};
+schedule_cache_invalidation(State) ->
+    State.
+
+
+%% @private
+-spec cancel_cache_invalidation_timer(state()) -> state().
+cancel_cache_invalidation_timer(#state{cache_invalidation_timer = undefined} = State) ->
+    State;
+cancel_cache_invalidation_timer(#state{cache_invalidation_timer = TimerRef} = State) ->
+    erlang:cancel_timer(TimerRef, [{async, true}, {info, false}]),
+    State#state{cache_invalidation_timer = undefined}.

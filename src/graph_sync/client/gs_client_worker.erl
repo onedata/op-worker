@@ -279,6 +279,7 @@ handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
     end;
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
     ?warning("Connection to Onezone lost, reason: ~p", [Reason]),
+    oneprovider:on_disconnect_to_oz(),
     {stop, normal, State};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
