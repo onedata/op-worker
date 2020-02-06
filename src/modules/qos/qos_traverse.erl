@@ -135,8 +135,8 @@ task_finished(TaskId, _PoolName) ->
     case TaskType of
         <<"traverse">> ->
             {ok, #{<<"qos_entry_id">> := QosEntryId}} = AdditionalData,
-            ok = qos_status:report_traverse_finished(SpaceId, TaskId, FileUuid),
-            ok = qos_entry:remove_traverse_req(QosEntryId, TaskId);
+            ok = qos_entry:remove_traverse_req(QosEntryId, TaskId),
+            ok = qos_status:report_traverse_finished(SpaceId, TaskId, FileUuid);
         <<"reconcile">> ->
             ok = qos_status:report_file_reconciled(SpaceId, FileUuid, TaskId)
     end.
@@ -150,25 +150,22 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
-    tree_traverse:do_master_job(
-        Job, MasterJobArgs, fun next_batch_callback/6, fun master_job_finished_callback/3
-    ).
-
-
-next_batch_callback(TaskId, SlaveJobs, MasterJobs, SpaceId, Uuid, BatchLastFilename) ->
-    ChildrenFiles = lists:map(fun({#document{key = ChildFileUuid}, _}) ->
-        ChildFileUuid
-    end, SlaveJobs),
-    ChildrenDirs = lists:map(fun(#tree_traverse{doc = #document{key = ChildDirUuid}}) ->
-        ChildDirUuid
-    end, MasterJobs),
-    ok = qos_status:report_next_traverse_batch(
-        SpaceId, TaskId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastFilename
-    ).
-
-
-master_job_finished_callback(TaskId, Uuid, SpaceId) ->
-    ok = qos_status:report_traverse_finished_for_dir(TaskId, Uuid, SpaceId).
+    NextBatchCallback = fun(TaskId, SlaveJobs, MasterJobs, SpaceId, Uuid, BatchLastFilename) ->
+        ChildrenFiles = lists:map(fun({#document{key = ChildFileUuid}, _}) ->
+            ChildFileUuid
+        end, SlaveJobs),
+        ChildrenDirs = lists:map(fun(#tree_traverse{doc = #document{key = ChildDirUuid}}) ->
+            ChildDirUuid
+        end, MasterJobs),
+        ok = qos_status:report_next_traverse_batch(
+            SpaceId, TaskId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastFilename)
+    end,
+    
+    MasterJobFinishedCallback = fun(TaskId, Uuid, SpaceId) ->
+        ok = qos_status:report_traverse_finished_for_dir(TaskId, Uuid, SpaceId)
+    end, 
+    
+    tree_traverse:do_master_job(Job, MasterJobArgs, NextBatchCallback, MasterJobFinishedCallback).
 
 
 %%--------------------------------------------------------------------
@@ -202,6 +199,7 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId} = FileDoc, _TraverseInf
 %%%===================================================================
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Synchronizes file to given storage.
 %% @end

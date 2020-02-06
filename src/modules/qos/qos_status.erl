@@ -7,28 +7,56 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for calculating QoS entry fulfillment status.
-%%% QoS entry is fulfilled when:
-%%%     - there is no information that qos_entry cannot be satisfied (see qos_entry.erl)
-%%%     - there are no traverse requests in qos_entry document (see qos_entry.erl)
-%%%     - there are no links indicating that file has been changed and it should
-%%%       be reconciled. When provider notices file_location change that impacts
-%%%       local replica it calculates effective_file_qos for given file. For
-%%%       each QoS entry in effective_file_qos provider creates appropriate link
-%%%       and schedules file reconciliation. Links are created as follow:
-%%%         * value is set to traverse task ID
-%%%         * key is expressed as combined: relative path to QoS entry origin
-%%%           file (file that QoS entry was added to) and traverse task id
 %%%
-%%% QoS fulfillment status of directory is checked by getting next status link to
-%%% given directory relative path. Because status links keys start with relative
-%%% path, if there is unfinished transfer in subtree of this directory next
-%%% status link will start with given parent directory relative path.
-
-% QoS status for given file is 
-
-% fixme no relative path
-
-% fixme explain status during traverse
+%%% QoS entry for given file/directory is fulfilled when:
+%%%     - there is no information that qos_entry cannot be satisfied (see qos_entry.erl)
+%%%     - each traverse job created as result of this QoS entry has already 
+%%%       synchronized this file/all its files in subtree
+%%%     - file is not being reconciled/no file is currently being reconciled in 
+%%%       subtree of this directory
+%%%
+%%% In order to be able to check that given file/directory has been traversed additional 
+%%% document(qos_status) is created for a directory when it was encountered during traverse. 
+%%% This document contains information of traverse state in a directory subtree.
+%%% 
+%%% QoS traverse lists files in batches and after each batch have been evaluated it is 
+%%% reported to this module so qos_status document could be appropriately updated. 
+%%% Next batch is started when previous one is finished.
+%%% 
+%%% qos_status document contains previous and current batch last filenames and list of not 
+%%% finished files in current batch. It also has number of children directories for which 
+%%% traverse have started. 
+%%%
+%%% When traverse of subtree of a directory is finished (i.e. all children files have been 
+%%% synchronized and all children directories have traverse_links), traverse_link is created 
+%%% for this directory and qos_status document is deleted. A traverse_link for a directory indicates 
+%%% that traverse of subtree of this directory is finished. When traverse_link is created, links 
+%%% for all children are deleted, so when traverse job is finished only one traverse_link is left 
+%%% for QoS entry origin directory. This traverse_link is then deleted.
+%%% 
+%%% To check whether given file have been traversed(synchronized in a traverse): 
+%%%     - qos_status document for parent exists: 
+%%%         * given file's name is lower than last filename of previous batch -> traversed 
+%%%         * given file's name is higher than last filename of current batch -> not traversed 
+%%%         * file is on list of files not finished in current batch -> not traversed
+%%%     - there is no qos_status document for parent directory: 
+%%%         * any ancestor has traverse_link -> traversed
+%%%         * otherwise -> not traversed
+%%%
+%%% To check whether given directory have been traversed: 
+%%%     - qos_status document for directory exists -> not traversed
+%%%     - there is no qos_status document for directory: 
+%%%         * any ancestor has traverse_link -> traversed
+%%%         * otherwise -> not traversed 
+%%% 
+%%% 
+%%% In order to be able to check whether file is being reconciled, when file_change was 
+%%% reported reconcile_link is created. This link is file uuid_path (similar to canonical bath, 
+%%% but instead of filenames, uuids are used). This link is deleted after reconcile job is done. 
+%%% 
+%%% To check if there is any reconcile job in subtree of a directory simply check if there is any 
+%%% reconcile_link with its prefix being this directory uuid path.
+%%% 
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_status).
@@ -56,7 +84,6 @@
 -type record() :: #qos_status{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type one_or_many(Type) :: Type | [Type].
 
 -define(CTX, #{
     model => ?MODULE,
@@ -86,7 +113,7 @@ check_fulfillment(FileCtx, QosEntryId) ->
         are_traverses_finished_for_file(FileCtx, QosDoc).
 
 
--spec report_traverse_started(traverse:id(), file_ctx:ctx()) -> ok.
+-spec report_traverse_started(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 report_traverse_started(TraverseId, FileCtx) ->
     {ok, case file_ctx:is_dir(FileCtx) of
         {true, FileCtx1} ->
@@ -101,7 +128,7 @@ report_traverse_started(TraverseId, FileCtx) ->
     ok | {error, term()}.
 report_traverse_finished(SpaceId, TraverseId, Uuid) ->
     {Path, _} = file_ctx:get_uuid_path(file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId))),
-    delete_synced_links(SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), oneprovider:get_id(), Path).
+    delete_synced_link(SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), oneprovider:get_id(), Path).
 
 
 -spec report_next_traverse_batch(od_space:id(), traverse:id(), file_meta:uuid(),
@@ -110,11 +137,11 @@ report_traverse_finished(SpaceId, TraverseId, Uuid) ->
 report_next_traverse_batch(SpaceId, TraverseId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastName) ->
     {ok, _} = update(TraverseId, Uuid,
         fun(#qos_status{
-            files_list = FilesList, child_dirs = ChildDirs, this_batch_last_file = LN} = Value) ->
+            files_list = FilesList, child_dirs = ChildDirs, current_batch_last_file = LN} = Value) ->
             {ok, Value#qos_status{
                 files_list = FilesList ++ ChildrenFiles,
                 previous_batch_last_file = LN,
-                this_batch_last_file = BatchLastName,
+                current_batch_last_file = BatchLastName,
                 child_dirs = ChildDirs + length(ChildrenDirs)}
             }
         end),
@@ -173,7 +200,7 @@ report_file_reconciled(SpaceId, FileUuid, TraverseId) ->
             file_qos:get_qos_entries(EffectiveFileQos)
     end,
     lists:foreach(fun(QosEntryId) ->
-        ok = delete_synced_links(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), oneprovider:get_id(),
+        ok = delete_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), oneprovider:get_id(),
             ?RECONCILE_LINK_NAME(UuidPath, TraverseId))
     end, QosEntries).
 
@@ -194,7 +221,7 @@ report_file_deleted(FileCtx, QosEntryId) ->
     {ok, SpaceId} = qos_entry:get_space_id(QosDoc),
     {UuidPath, _} = file_ctx:get_uuid_path(FileCtx),
     % delete links from all traverses
-    delete_links_with_prefix(
+    delete_all_links_with_prefix(
         SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ?RECONCILE_LINK_NAME(UuidPath, <<"">>)).
     
 
@@ -202,12 +229,7 @@ report_file_deleted(FileCtx, QosEntryId) ->
 %%% Internal functions concerning QoS status check during traverse
 %%%===================================================================
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% For each traverse in given QoS entry %fixme
-%% @end
-%%--------------------------------------------------------------------
 -spec are_traverses_finished_for_file(file_ctx:ctx(), qos_entry:doc()) -> boolean().
 are_traverses_finished_for_file(FileCtx, #document{key = QosEntryId} = QosDoc) ->
     {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosDoc),
@@ -220,7 +242,7 @@ are_traverses_finished_for_file(FileCtx, #document{key = QosEntryId} = QosDoc) -
     end, AllTraverseIds),
     
     % fetch traverse list again to secure against possible race
-    % between status check and traverse finish
+    % between start of status check and traverse finish
     {ok, QosDoc1} = qos_entry:get(QosEntryId),
     {ok, TraverseReqsAfter} = qos_entry:get_traverse_reqs(QosDoc1),
     TraverseIdsAfter = qos_traverse_req:get_traverse_ids(TraverseReqsAfter),
@@ -234,7 +256,7 @@ is_traverse_finished_for_file(TraverseId, FileCtx, QosOriginUuid, _IsDir = true)
     Uuid = file_ctx:get_uuid_const(FileCtx),
     case get(TraverseId, Uuid) of
         {ok, _} -> false;
-        ?ERROR_NOT_FOUND -> is_directory_traversed(TraverseId, FileCtx)
+        ?ERROR_NOT_FOUND -> has_traverse_link(TraverseId, FileCtx)
             orelse is_parent_fulfilled(TraverseId, FileCtx, Uuid, QosOriginUuid);
         {error, _} = Error -> Error
     end;
@@ -247,14 +269,11 @@ is_traverse_finished_for_file(TraverseId, FileCtx, QosOriginUuid, _IsDir = false
         {ok, #document{
             value = #qos_status{
                 previous_batch_last_file = PreviousBatchLastFile, 
-                this_batch_last_file = LastFile,
-                files_list = FilesList
+                current_batch_last_file = LastFile, files_list = FilesList
             }
-        }} when is_binary(PreviousBatchLastFile) ->
+        }} ->
             FileName =< PreviousBatchLastFile orelse 
                 (not (FileName > LastFile) and not lists:member(Uuid, FilesList));
-        {ok, _} -> 
-            false; 
         ?ERROR_NOT_FOUND -> 
             is_parent_fulfilled(TraverseId, FileCtx1, Uuid, QosOriginUuid);
         {error, _} = Error -> 
@@ -270,13 +289,13 @@ is_parent_fulfilled(_TraverseId, _FileCtx, Uuid, QosOriginUuid) when Uuid == Qos
 is_parent_fulfilled(TraverseId, FileCtx, _Uuid, QosOriginUuid) ->
     {ParentFileCtx, _FileCtx1} = file_ctx:get_parent(FileCtx, undefined),
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
-    is_directory_traversed(TraverseId, ParentFileCtx)
-        orelse (not has_status_doc(TraverseId, ParentUuid)
+    has_traverse_link(TraverseId, ParentFileCtx)
+        orelse (not has_qos_status_doc(TraverseId, ParentUuid)
             andalso  is_parent_fulfilled(TraverseId, ParentFileCtx, ParentUuid, QosOriginUuid)).
 
 
 %%%===================================================================
-%%% Internal functions regarding QoS status check %fixme
+%%% Internal functions regarding check of reconcile jobs
 %%%===================================================================
 
 %% @private
@@ -331,11 +350,9 @@ handle_traverse_finished_for_dir(TraverseId, FileCtx) ->
     {Path, FileCtx1} = file_ctx:get_uuid_path(FileCtx),
     Uuid = file_ctx:get_uuid_const(FileCtx1),
     SpaceId = file_ctx:get_space_id_const(FileCtx1),
-    % fixme
-    ?notice("Adding link: {~p ~p}", [Path, Uuid]),
     {ok, _} = add_synced_links(
         SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), oneprovider:get_id(), {Path, Uuid}),
-    ok = delete_links_with_prefix(
+    ok = delete_all_links_with_prefix(
         SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), <<Path/binary, "/">>),
     ok = delete(TraverseId, Uuid).
 
@@ -345,18 +362,16 @@ handle_traverse_finished_for_dir(TraverseId, FileCtx) ->
 %%%===================================================================
 
 %% @private
--spec create(traverse:id(), file_meta:uuid(), od_space:id(), boolean()) -> {ok, id()}.
+-spec create(traverse:id(), file_meta:uuid(), od_space:id(), boolean()) -> {ok, doc()}.
 create(TraverseId, DirUuid, SpaceId, IsStartDir) ->
     Id = generate_status_doc_id(TraverseId, DirUuid),
-    % fixme
-    ?notice("New doc created ~p", [Id]),
     datastore_model:create(?CTX, #document{key = Id, scope = SpaceId,
         value = #qos_status{is_start_dir = IsStartDir}
     }).
 
 
 %% @private
--spec update(traverse:id(), file_meta:uuid(), diff()) -> ok | {error, term()}.
+-spec update(traverse:id(), file_meta:uuid(), diff()) -> {ok, doc()} | {error, term()}.
 update(TraverseId, Uuid, Diff) ->
     Id = generate_status_doc_id(TraverseId, Uuid),
     datastore_model:update(?CTX, Id, Diff).
@@ -373,24 +388,21 @@ get(TraverseId, Uuid) ->
 -spec delete(traverse:id(), file_meta:uuid()) -> ok | {error, term()}.
 delete(TraverseId, Uuid)->
     Id = generate_status_doc_id(TraverseId, Uuid),
-    % fixme
-    ?notice("Doc deleted ~p", [Id]),
     ?not_found_ok(datastore_model:delete(?CTX, Id)).
 
 
 %% @private
 -spec add_synced_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    one_or_many({datastore:link_name(), datastore:link_target()})) ->
-    one_or_many({ok, datastore:link()} | {error, term()}).
-add_synced_links(Scope, Key, TreeId, Links) ->
-    datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
+    {datastore:link_name(), datastore:link_target()}) -> {ok, datastore:link()} | {error, term()}.
+add_synced_links(Scope, Key, TreeId, Link) ->
+    datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Link).
 
 
 %% @private
--spec delete_synced_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
+-spec delete_synced_link(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
     datastore:link_name() | {datastore:link_name(), datastore:link_rev()}) ->
     ok | {error, term()}.
-delete_synced_links(Scope, Key, TreeId, Link) ->
+delete_synced_link(Scope, Key, TreeId, Link) ->
     ok = datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Link).
 
 
@@ -420,7 +432,7 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {previous_batch_last_file, binary},
-        {this_batch_last_file, binary},
+        {current_batch_last_file, binary},
         {files_list, [string]},
         {child_dirs, integer},
         {is_last_batch, boolean},
@@ -437,15 +449,9 @@ generate_status_doc_id(TraverseId, DirUuid) ->
     datastore_key:adjacent_from_digest([DirUuid, TraverseId], DirUuid).
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Checks whether given directory has link denoting that its whole subtree 
-%% has already been traversed.
-%% @end
-%%--------------------------------------------------------------------
--spec is_directory_traversed(traverse:id(), file_ctx:ctx()) -> boolean().
-is_directory_traversed(TraverseId, FileCtx) ->
+-spec has_traverse_link(traverse:id(), file_ctx:ctx()) -> boolean().
+has_traverse_link(TraverseId, FileCtx) ->
     {Path, _} = file_ctx:get_uuid_path(FileCtx),
     case get_next_status_links(?TRAVERSE_LINKS_KEY(TraverseId), Path, 1) of
         {ok, [{Path, _}]} -> true;
@@ -454,8 +460,8 @@ is_directory_traversed(TraverseId, FileCtx) ->
 
 
 %% @private
--spec has_status_doc(traverse:id(), file_meta:uuid()) -> boolean().
-has_status_doc(TraverseId, Uuid) ->
+-spec has_qos_status_doc(traverse:id(), file_meta:uuid()) -> boolean().
+has_qos_status_doc(TraverseId, Uuid) ->
     case get(TraverseId, Uuid) of
         {ok, _} -> true;
         ?ERROR_NOT_FOUND -> false
@@ -463,14 +469,14 @@ has_status_doc(TraverseId, Uuid) ->
 
 
 %% @private
--spec delete_links_with_prefix(od_space:id(), datastore:key(), path()) -> ok.
-delete_links_with_prefix(SpaceId, Key, Prefix) ->
+-spec delete_all_links_with_prefix(od_space:id(), datastore:key(), path()) -> ok.
+delete_all_links_with_prefix(SpaceId, Key, Prefix) ->
     case get_next_status_links(Key, Prefix, ?LIST_LINKS_BATCH_SIZE) of
         {ok, []} -> ok;
         {ok, Links} ->
             case delete_links_with_prefix_in_batch(SpaceId, Key, Prefix, Links) of
                 finished -> ok;
-                false -> delete_links_with_prefix(SpaceId, Key, Prefix)
+                false -> delete_all_links_with_prefix(SpaceId, Key, Prefix)
             end
     end.
 
@@ -484,9 +490,7 @@ delete_links_with_prefix_in_batch(SpaceId, Key, Prefix, Links) ->
         ({LinkName, TreeId}, _) ->
             case str_utils:binary_starts_with(LinkName, Prefix) of
                 true ->
-                    % fixme
-                    ?notice("deleting link ~p", [LinkName]),
-                    ok = delete_synced_links(SpaceId, Key, TreeId, LinkName),
+                    ok = delete_synced_link(SpaceId, Key, TreeId, LinkName),
                     false;
                 false -> 
                     finished

@@ -72,7 +72,7 @@
 
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
-    ?not_found_ok(datastore_model:delete(?CTX, Key).
+    ?not_found_ok(datastore_model:delete(?CTX, Key)).
 
 %%%===================================================================
 %%% Higher-level functions operating on file_qos document.

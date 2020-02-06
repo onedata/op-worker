@@ -68,7 +68,7 @@ extract_key(Result) -> Result.
 %% Marks datastore call to non existing document as ok.
 %% @end
 %%--------------------------------------------------------------------
--spec extract_key(T) -> ok | T.
+-spec not_found_ok(T) -> ok | T.
 not_found_ok(?ERROR_NOT_FOUND) -> ok;
 not_found_ok(Result) -> Result.
 

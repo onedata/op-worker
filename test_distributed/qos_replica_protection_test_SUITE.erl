@@ -645,8 +645,6 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         false -> WorkerP2
     end,
 
-    % fixme race between filesync and checking ditribution
-    %    https://bamboo.onedata.org/download/VFS-PROV-QRP/build_logs/VFS-PROV-QRP-1797.log
     transfers_test_mechanism:run_test(
         Config1, #transfer_test_spec{
             setup = #setup{

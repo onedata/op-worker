@@ -23,7 +23,8 @@
     select_traverse_reqs/2, get_storage/1,
     get_traverse_ids/1,
     are_all_finished/1,
-    start_applicable_traverses/3
+    start_applicable_traverses/3,
+    split_local_and_remote/1
 ]).
 
 -type id() :: traverse:id().
@@ -130,6 +131,21 @@ start_traverse(FileCtx, QosEntryId, StorageId, TaskId) ->
             ok = qos_entry:remove_traverse_req(QosEntryId, TaskId)
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Splits given traverse reqs to those of current provider and those of remote providers.
+%% @end
+%%--------------------------------------------------------------------
+-spec split_local_and_remote(traverse_reqs()) -> {Local :: [id()], Remote :: [id()]}.
+split_local_and_remote(TraverseReqs) ->
+    maps:fold(fun(TaskId, TraverseReq, {LocalTraverseReqs, RemoteTraverseReqs}) ->
+        StorageId = qos_traverse_req:get_storage(TraverseReq),
+        case storage:is_local(StorageId) of
+            true -> {[TaskId | LocalTraverseReqs], RemoteTraverseReqs};
+            false -> {LocalTraverseReqs, [TaskId | RemoteTraverseReqs]}
+        end
+    end, {[], []}, TraverseReqs).
 
 %%%===================================================================
 %%% Utility functions

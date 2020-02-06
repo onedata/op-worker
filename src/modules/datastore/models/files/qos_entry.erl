@@ -30,7 +30,6 @@
 %%%       It is set to `{possible, ProviderId}` if during evaluation of QoS expression
 %%%       provider ProviderId was able to calculate list of storages that would fulfill
 %%%       QoS requirements, otherwise it is set to `{impossible, ProviderId}`)
-% fixme
 %%%     - there are no traverse requests in qos_entry document. Traverse requests
 %%%       are added to qos_entry document on its creation and removed from document
 %%%       when traverse task for this request is completed
@@ -99,7 +98,8 @@
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
     replicas_num()) -> {ok, doc()} | {error, term()}.
 create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum) ->
-    create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, false, #{}).
+    create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, false, 
+        qos_traverse_req:build_traverse_reqs(FileUuid, [])).
 
 
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
@@ -397,27 +397,9 @@ resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReq
     #qos_entry{traverse_reqs = LocalReqs} = Value) ->
     % traverse requests are different
 
-    {LocalTraverseIds, _} = split_traverse_reqs(LocalReqs),
-    {_, RemoteTraverseIds} = split_traverse_reqs(RemoteReqs),
+    {LocalTraverseIds, _} = qos_traverse_req:split_local_and_remote(LocalReqs),
+    {_, RemoteTraverseIds} = qos_traverse_req:split_local_and_remote(RemoteReqs),
     Value#qos_entry{
         traverse_reqs = qos_traverse_req:select_traverse_reqs(
             LocalTraverseIds ++ RemoteTraverseIds, LocalReqs)
     }.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Splits given traverse reqs to those of current provider and those of remote providers.
-%% @end
-%%--------------------------------------------------------------------
--spec split_traverse_reqs(qos_traverse_req:traverse_reqs()) ->
-    {[qos_traverse_req:id()], [qos_traverse_req:id()]}.
-split_traverse_reqs(AllTraverseReqs) ->
-    maps:fold(fun(TaskId, TraverseReq, {LocalTraverseReqs, RemoteTraverseReqs}) ->
-        StorageId = qos_traverse_req:get_storage(TraverseReq),
-        case storage:is_local(StorageId) of
-            true -> {[TaskId | LocalTraverseReqs], RemoteTraverseReqs};
-            false -> {LocalTraverseReqs, [TaskId | RemoteTraverseReqs]}
-        end
-    end, {[], []}, AllTraverseReqs).
