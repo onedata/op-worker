@@ -257,7 +257,7 @@ get_caveats(TokenAuth) ->
 %%--------------------------------------------------------------------
 -spec verify(token_auth()) -> verification_result().
 verify(TokenAuth) ->
-    get_from_cache_or_verify_token_auth(TokenAuth).
+    verify_token_auth(TokenAuth).
 
 
 -spec invalidate(token_auth()) -> ok.
@@ -433,16 +433,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec get_from_cache_or_verify_token_auth(token_auth()) -> verification_result().
-get_from_cache_or_verify_token_auth(TokenAuth) ->
-    case get_from_cache(TokenAuth) of
+-spec verify_token_auth(token_auth()) -> verification_result().
+verify_token_auth(TokenAuth) ->
+    case get_token_auth_verification_result_from_cache(TokenAuth) of
         {ok, CachedVerificationResult} ->
             CachedVerificationResult;
         ?ERROR_NOT_FOUND ->
             try
-                {TokenRef, VerificationResult} = verify_token_auth(TokenAuth),
-                save_in_cache(TokenAuth, TokenRef, VerificationResult),
-
+                VerificationResult = verify_token_auth_and_cache_result(TokenAuth),
                 %% Fetches user doc to trigger user setup if token verification
                 %% succeeded. Otherwise does nothing.
                 %% It must be called after caching verification result as to
@@ -450,15 +448,11 @@ get_from_cache_or_verify_token_auth(TokenAuth) ->
                 %% given TokenAuth).
                 case VerificationResult of
                     {ok, ?USER(UserId), _} ->
-                        case user_logic:get(TokenAuth, UserId) of
-                            {ok, _} ->
-                                VerificationResult;
-                            {error, _} = Error ->
-                                Error
-                        end;
+                        user_logic:get(TokenAuth, UserId);
                     _ ->
-                        VerificationResult
-                end
+                        ok
+                end,
+                VerificationResult
             catch Type:Reason ->
                 ?error_stacktrace("Cannot verify user auth due to ~p:~p", [
                     Type, Reason
@@ -469,42 +463,39 @@ get_from_cache_or_verify_token_auth(TokenAuth) ->
 
 
 %% @private
--spec verify_token_auth(token_auth()) ->
-    {token_ref(), verification_result()}.
-verify_token_auth(#token_auth{
+-spec verify_token_auth_and_cache_result(token_auth()) ->
+    verification_result().
+verify_token_auth_and_cache_result(#token_auth{
     access_token = AccessToken,
     peer_ip = PeerIp,
     interface = Interface,
     data_access_caveats_policy = DataAccessCaveatsPolicy
-}) ->
-    case deserialize_token(AccessToken) of
+} = TokenAuth) ->
+    {TokenRef, Result} = case deserialize_and_validate_token(AccessToken) of
         {ok, #token{subject = Subject} = Token} ->
-            case token_logic:verify_access_token(
-                AccessToken, PeerIp, Interface,
-                DataAccessCaveatsPolicy
-            ) of
+            AccessTokenVerificationResult = token_logic:verify_access_token(
+                AccessToken, PeerIp, Interface, DataAccessCaveatsPolicy
+            ),
+            case AccessTokenVerificationResult of
                 {ok, Subject, TokenTTL} ->
-                    TokenExpiration = case TokenTTL of
-                        undefined -> undefined;
-                        _ -> ?NOW() + TokenTTL
-                    end,
-                    Auth = #auth{
-                        subject = Subject,
-                        caveats = tokens:get_caveats(Token)
-                    },
-                    {get_token_ref(Token), {ok, Auth, TokenExpiration}};
+                    AaiAuth = build_aai_auth(Token),
+                    TokenExpiration = infer_token_expiration(TokenTTL),
+                    {get_token_ref(Token), {ok, AaiAuth, TokenExpiration}};
                 {error, _} = VerificationError ->
                     {undefined, VerificationError}
             end;
         {error, _} = DeserializationError ->
             {undefined, DeserializationError}
-    end.
+    end,
+
+    save_token_auth_verification_result_in_cache(TokenAuth, TokenRef, Result),
+    Result.
 
 
 %% @private
--spec deserialize_token(tokens:serialized()) ->
+-spec deserialize_and_validate_token(tokens:serialized()) ->
     {ok, tokens:token()} | errors:error().
-deserialize_token(SerializedToken) ->
+deserialize_and_validate_token(SerializedToken) ->
     case tokens:deserialize(SerializedToken) of
         {ok, #token{subject = ?SUB(user, UserId)} = Token} ->
             case provider_logic:has_eff_user(UserId) of
@@ -521,6 +512,23 @@ deserialize_token(SerializedToken) ->
 
 
 %% @private
+-spec build_aai_auth(tokens:token()) -> aai:auth().
+build_aai_auth(#token{subject = Subject} = Token) ->
+    #auth{
+        subject = Subject,
+        caveats = tokens:get_caveats(Token)
+    }.
+
+
+%% @private
+-spec infer_token_expiration
+    (TokenTTL :: undefined) -> undefined;
+    (TokenTTL :: time_utils:seconds()) -> timestamp().
+infer_token_expiration(undefined) -> undefined;
+infer_token_expiration(TokenTTL) -> ?NOW() + TokenTTL.
+
+
+%% @private
 -spec get_token_ref(tokens:token()) -> token_ref().
 get_token_ref(#token{persistence = named, id = TokenId}) ->
     {named, TokenId};
@@ -532,14 +540,14 @@ get_token_ref(#token{
 
 
 %% @private
--spec get_from_cache(token_auth()) ->
+-spec get_token_auth_verification_result_from_cache(token_auth()) ->
     {ok, verification_result()} | ?ERROR_NOT_FOUND.
-get_from_cache(TokenAuth) ->
+get_token_auth_verification_result_from_cache(TokenAuth) ->
     Now = ?NOW(),
     try ets:lookup(?CACHE_NAME, TokenAuth) of
         [#cache_entry{cache_expiration = Expiration} = Item] when
             Expiration == undefined;
-            is_integer(Expiration), Now < Expiration
+            (is_integer(Expiration) andalso Now < Expiration)
         ->
             case Item#cache_entry.token_revoked of
                 true ->
@@ -558,8 +566,13 @@ get_from_cache(TokenAuth) ->
 
 
 %% @private
--spec save_in_cache(token_auth(), token_ref(), verification_result()) -> ok.
-save_in_cache(TokenAuth, TokenRef, VerificationResult) ->
+-spec save_token_auth_verification_result_in_cache(
+    token_auth(),
+    undefined | token_ref(),
+    verification_result()
+) ->
+    boolean().
+save_token_auth_verification_result_in_cache(TokenAuth, TokenRef, VerificationResult) ->
     CacheEntry = #cache_entry{
         token_auth = TokenAuth,
         verification_result = VerificationResult,
@@ -570,12 +583,12 @@ save_in_cache(TokenAuth, TokenRef, VerificationResult) ->
     },
     try
         ets:insert(?CACHE_NAME, CacheEntry),
-        ok
+        true
     catch Type:Reason ->
         ?warning("Failed to save entry in ~p cache (ets table) due to ~p:~p", [
             ?MODULE, Type, Reason
         ]),
-        ok
+        false
     end.
 
 
@@ -583,8 +596,8 @@ save_in_cache(TokenAuth, TokenRef, VerificationResult) ->
 -spec infer_cache_expiration(token_auth(), verification_result()) -> timestamp().
 infer_cache_expiration(_TokenAuth, {error, _}) ->
     ?NOW() + ?CACHE_ITEM_DEFAULT_TTL;
-infer_cache_expiration(#token_auth{audience_token = undefined}, {ok, _, TokenExpiration}) ->
-    TokenExpiration;
+infer_cache_expiration(#token_auth{audience_token = undefined}, {ok, _, Expiration}) ->
+    Expiration;
 infer_cache_expiration(_TokenAuth, {ok, _, _}) ->
     ?NOW() + ?CACHE_ITEM_DEFAULT_TTL.
 
