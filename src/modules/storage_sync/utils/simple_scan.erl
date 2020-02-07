@@ -640,7 +640,7 @@ maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SyncAcl) ->
         true ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-            {CanonicalPath, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+            {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
             FileUuid = file_ctx:get_uuid_const(FileCtx3),
             storage_sync_utils:log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId),
             fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
@@ -1057,6 +1057,7 @@ is_suffixed(FileName) ->
             {true, FileUuid, FileName2}
     end.
 
+-spec is_still_on_storage(storage_file_manager:handle()) -> boolean().
 is_still_on_storage(SFMHandle) ->
     case storage_file_manager:stat(SFMHandle) of
         {ok, _} -> true;
