@@ -12,6 +12,7 @@
 
 -include("modules/storage_sync/strategy_config.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -33,12 +34,14 @@
     assertNoUpdateInProgress/3, append/2, recursive_rm/1, truncate/2,
     change_time/3, assert_num_results_gte/3, assert_num_results/3,
     to_storage_files/4, parallel_assert/5, uuid/2, space_uuid/2, change_time/2,
-    to_storage_file_id/2, assert_monitoring_state/4, verify_file_deleted/5]).
+    to_storage_file_id/2, assert_monitoring_state/4, verify_file_deleted/5, delete_link/3]).
 
 %% tests
 -export([
     create_directory_import_test/2, create_directory_export_test/2,
-    create_file_import_test/2, create_file_export_test/2,
+    create_file_import_test/2, create_remote_file_import_conflict_test/2,
+    create_remote_dir_import_race_test/2, create_remote_file_import_race_test/2,
+    create_file_export_test/2,
     delete_empty_directory_update_test/2, delete_directory_export_test/2,
     delete_file_update_test/2, delete_file_export_test/2,
     append_file_update_test/2, move_file_update_test/2, truncate_file_update_test/2,
@@ -144,7 +147,7 @@ create_delete_import_test(Config, MountSpaceInRoot, ReadBoth) ->
         ?assertMatch({ok, ?TEST_DATA},
             begin
                 SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W)}}, Config),
-                case lfm_proxy:open(W, SessId, {path, ?SPACE_TEST_FILE_PATH}, read) of
+                case lfm_proxy:open(W, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read) of
                     {ok, Handle} ->
                         try
                             lfm_proxy:read(W, Handle, 0, Size)
@@ -162,7 +165,7 @@ create_delete_import_test(Config, MountSpaceInRoot, ReadBoth) ->
 
     SessIdW2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
     {ok, #file_attr{guid = GUID}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH})),
+        lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH1})),
     ?assertMatch(ok, lfm_proxy:unlink(W2, <<"0">>, {guid, GUID})),
     ?assertEqual({error, ?ENOENT}, file:read_file(StorageTestFilePath), Attempts),
     ?assertEqual({error, ?ENOENT}, file:read_file(StorageTestFilePath2), Attempts),
@@ -190,7 +193,7 @@ create_delete_import2_test(Config, MountSpaceInRoot, ReadBoth) ->
         ?assertMatch({ok, ?TEST_DATA},
             begin
                 SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W)}}, Config),
-                case lfm_proxy:open(W, SessId, {path, ?SPACE_TEST_FILE_PATH}, read) of
+                case lfm_proxy:open(W, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read) of
                     {ok, Handle} ->
                         try
                             lfm_proxy:read(W, Handle, 0, Size)
@@ -210,7 +213,7 @@ create_delete_import2_test(Config, MountSpaceInRoot, ReadBoth) ->
     SessIdW2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
 
     {ok, #file_attr{guid = GUID}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH})),
+        lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH1})),
     ?assertMatch(ok, lfm_proxy:unlink(W2, ?ROOT_SESS_ID, {guid, GUID})),
 
     ?assertEqual({error, ?ENOENT}, file:read_file(StorageTestFilePath), Attempts),
@@ -218,7 +221,7 @@ create_delete_import2_test(Config, MountSpaceInRoot, ReadBoth) ->
 
     storage_sync_test_base:enable_storage_update(Config),
 
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W2, SessIdW2, ?SPACE_TEST_FILE_PATH, 8#777)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W2, SessIdW2, ?SPACE_TEST_FILE_PATH1, 8#777)),
     {ok, FileHandle} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessIdW2, {guid, FileGuid}, write)),
     ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W2, FileHandle, 0, ?TEST_DATA)),
 
@@ -291,7 +294,7 @@ create_directory_import_error_test(Config, MountSpaceInRoot) ->
     test_utils:mock_expect(W1, simple_scan, import_file,
         fun(Job = #space_strategy_job{
             data = #{file_name := FileName}
-        }, _) ->
+        }) ->
             case FileName of
                 ?TEST_DIR ->
                     throw(test_error);
@@ -350,7 +353,7 @@ update_syncs_files_after_import_failed_test(Config, MountSpaceInRoot) ->
     test_utils:mock_expect(W1, simple_scan, import_file,
         fun(Job = #space_strategy_job{
             data = #{file_name := FileName}
-        }, _) ->
+        }) ->
             case FileName of
                 ?TEST_DIR ->
                     throw(test_error);
@@ -458,7 +461,7 @@ update_syncs_files_after_previous_update_failed_test(Config, MountSpaceInRoot) -
     timer:sleep(timer:seconds(1)),
     test_utils:mock_new(W1, simple_scan),
     test_utils:mock_expect(W1, simple_scan, import_file, fun(Job = #space_strategy_job{
-        data = #{file_name := FileName}}, _
+        data = #{file_name := FileName}}
     ) ->
         case FileName of
             ?TEST_DIR ->
@@ -699,9 +702,9 @@ create_file_import_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported on W1
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
@@ -730,11 +733,193 @@ create_file_import_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), 5 * ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), 5 * ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
+
+create_remote_file_import_conflict_test(Config, MountSpaceInRoot) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+
+    {ok, FileGuid} = lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH1, 8#664),
+    {ok, Handle} = lfm_proxy:open(W2, SessId2, {guid, FileGuid}, write),
+    {ok, _} = lfm_proxy:write(W2, Handle, 0, ?TEST_DATA),
+    lfm_proxy:close(W2, Handle),
+
+    StorageTestFilePath =
+        storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    ProviderId1 = provider_id(W1),
+    ImportedConflictingFileName = ?IMPORTED_CONFLICTING_FILE_NAME(?TEST_FILE1, ProviderId1),
+    ImportedConflictingFilePath = ?SPACE_TEST_FILE_PATH(ImportedConflictingFileName),
+
+    %% Create conflicting file on synced storage
+    timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA2),
+
+    ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {guid, FileGuid}), ?ATTEMPTS),
+    ?assertEqual({ok, [{FileGuid, ?TEST_FILE1}]}, lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 1), ?ATTEMPTS),
+
+    storage_sync_test_base:enable_storage_import(Config),
+    assertImportTimes(W1, ?SPACE_ID),
+
+    %% Check if file was imported on W1
+    ?assertMatch({ok, #file_attr{name = ImportedConflictingFileName}},
+        lfm_proxy:stat(W1, SessId, {path, ImportedConflictingFilePath}), ?ATTEMPTS),
+    {ok, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {path, ImportedConflictingFilePath}, read)),
+    ?assertMatch({ok, ?TEST_DATA2}, lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA2))),
+    lfm_proxy:close(W1, Handle1),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 0,
+        <<"importedSum">> => 1,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 1,
+        <<"importedDayHist">> => 1,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+    %% Check if file was imported on W2
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W2, SessId2, {path, ImportedConflictingFilePath}), ?ATTEMPTS),
+    {ok, Handle2} = ?assertMatch({ok, _},
+        lfm_proxy:open(W2, SessId2, {path, ImportedConflictingFilePath}, read)),
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
+
+create_remote_dir_import_race_test(Config, MountSpaceInRoot) ->
+    % directory is created in remote provider and at the same time, file with the same name is created on storage
+    % this tests checks whether we properly handle situation when links are synchronized during scan,
+    % but file_meta is not yet synchronized
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    StorageTestDirPath =
+        storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),
+    ok = file:make_dir(StorageTestDirPath),
+
+    % pretend that only link has been synchronized
+    Ctx = rpc:call(W1, file_meta, get_ctx, []),
+    TreeId = rpc:call(W1, oneprovider, get_id, []),
+    FileUuid = datastore_key:new(),
+    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    {ok, _} = rpc:call(W1, datastore_model, add_links,
+        [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_DIR, FileUuid}]),
+
+    % sync should import directory with conflicting name
+    ProviderId1 = provider_id(W1),
+    ImportedConflictingDirName = ?IMPORTED_CONFLICTING_FILE_NAME(?TEST_DIR, ProviderId1),
+    ImportedConflictingDirPath = ?SPACE_TEST_FILE_PATH(ImportedConflictingDirName),
+
+    storage_sync_test_base:enable_storage_import(Config),
+    % wait till scan is finished
+    assertImportTimes(W1, ?SPACE_ID),
+
+    %% Check if dir was imported
+    {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{name = ImportedConflictingDirName}},
+        lfm_proxy:stat(W1, SessId, {path, ImportedConflictingDirPath}), ?ATTEMPTS),
+    ?assertNotEqual(FileUuid, file_id:guid_to_uuid(FileGuid)),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W2, SessId2, {path, ImportedConflictingDirPath}), ?ATTEMPTS),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 0,
+        <<"importedSum">> => 1,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 1,
+        <<"importedDayHist">> => 1,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID).
+
+create_remote_file_import_race_test(Config, MountSpaceInRoot) ->
+    % file is created in remote provider and at the same time, file with the same name is created on storage
+    % this tests checks whether we properly handle situation when links are synchronized during scan,
+    % but file_location is not yet synchronized
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    W1MountPoint = get_host_mount_point(W1, Config),
+    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    StorageTestFilePath =
+        storage_test_dir_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    ok = file:write_file(StorageTestFilePath, ?TEST_DATA),
+
+    % pretend that only link has been synchronized
+    Ctx = rpc:call(W1, file_meta, get_ctx, []),
+    TreeId = rpc:call(W1, oneprovider, get_id, []),
+    FileUuid = datastore_key:new(),
+    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    {ok, _} = rpc:call(W1, datastore_model, add_links,
+        [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_FILE1, FileUuid}]),
+
+    % sync should import file with conflicting name
+    ProviderId1 = provider_id(W1),
+    ImportedConflictingFileName = ?IMPORTED_CONFLICTING_FILE_NAME(?TEST_FILE1, ProviderId1),
+    ImportedConflictingFilePath = ?SPACE_TEST_FILE_PATH(ImportedConflictingFileName),
+
+    storage_sync_test_base:enable_storage_import(Config),
+    % wait till scan is finished
+    assertImportTimes(W1, ?SPACE_ID),
+
+    %% Check if file was imported
+    {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{name = ImportedConflictingFileName}},
+        lfm_proxy:stat(W1, SessId, {path, ImportedConflictingFilePath}), ?ATTEMPTS),
+    ?assertNotEqual(FileUuid, file_id:guid_to_uuid(FileGuid)),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W2, SessId2, {path, ImportedConflictingFilePath}), ?ATTEMPTS),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, FileGuid}, read), ?ATTEMPTS),
+    ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W1, Handle, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
+    lfm_proxy:close(W1, Handle),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 2,
+        <<"imported">> => 1,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 0,
+        <<"importedSum">> => 1,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 1,
+        <<"importedDayHist">> => 1,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID).
 
 create_empty_file_import_test(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -753,9 +938,9 @@ create_empty_file_import_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported on W1
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, <<"">>},
         lfm_proxy:read(W1, Handle1, 0, 100)),
     lfm_proxy:close(W1, Handle1),
@@ -784,9 +969,9 @@ create_empty_file_import_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), 5 * ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), 5 * ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, <<"">>},
         lfm_proxy:read(W2, Handle2, 0, 100), ?ATTEMPTS).
 
@@ -809,9 +994,9 @@ sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_c
 
     %% Check if file was imported on W1
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
@@ -840,9 +1025,9 @@ sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_c
 
     %% Check if file was imported on W2
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), 5 * ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), 5 * ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
 
@@ -851,8 +1036,8 @@ sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_c
         case FileName of
             ?TEST_FILE1 ->
                 {error, not_found};
-                _ ->
-                    meck:passthrough([ParentUuid, FileName])
+            _ ->
+                meck:passthrough([ParentUuid, FileName])
         end
     end),
     timer:sleep(timer:seconds(1)),
@@ -900,9 +1085,9 @@ create_file_import_check_user_id_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported on W1
     ?assertMatch({ok, #file_attr{owner_id = ?USER}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
@@ -945,7 +1130,7 @@ create_file_import_check_user_id_error_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported on W1
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -1085,7 +1270,9 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     create_nested_directory_tree(DirStructure, StorageTestDirPath),
     storage_sync_test_base:enable_storage_update(Config),
 
-    ?assertEqual(true, 10 =< rpc:call(W1, storage_sync_monitoring, get_unhandled_jobs_value, [?SPACE_ID, get_storage_id(W1)]), ?ATTEMPTS),
+    ?assertEqual(true,
+        10 =< rpc:call(W1, storage_sync_monitoring, get_unhandled_jobs_value, [?SPACE_ID, get_storage_id(W1)]),
+        ?ATTEMPTS),
 
     recursive_rm(StorageTestDirPath),
     ?assertMatch({error, ?ENOENT},
@@ -1119,7 +1306,7 @@ create_file_export_test(Config, MountInRoot) ->
     StorageTestFilePath = storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountInRoot),
     % Create file in space
     {ok, FileGuid} =
-        ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#777)),
+        ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1, 8#777)),
     {ok, FileHandle} =
         ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, FileGuid}, write)),
 
@@ -1340,7 +1527,7 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH2}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH2})),
     ?assertMatch({ok, #file_attr{}},
@@ -1740,9 +1927,9 @@ delete_file_update_test(Config, MountSpaceInRoot) ->
     storage_sync_test_base:enable_storage_import(Config),
     %% Check if file was imported
     {ok, #file_attr{guid = FileGuid}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} =
-        ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
@@ -1781,9 +1968,9 @@ delete_file_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was deleted in space
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"xattr_name">>)),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, <<"xattr_name">>)),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:get_xattr(W1, SessId, {guid, FileGuid}, <<"xattr_name">>)),
     ?assertMatch({error, not_found}, rpc:call(W1, custom_metadata, get, [FileUuid])).
 
@@ -1857,7 +2044,7 @@ delete_file_export_test(Config, MountSpaceInRoot) ->
         storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     % Create file in space
     {ok, FileGuid} = ?assertMatch({ok, _},
-        lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#777)),
+        lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1, 8#777)),
     {ok, FileHandle} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {guid, FileGuid}, write)),
     ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W1, FileHandle, 0, ?TEST_DATA)),
@@ -1867,7 +2054,7 @@ delete_file_export_test(Config, MountSpaceInRoot) ->
     ?assert(filelib:is_regular(StorageTestFilePath)),
     ?assertEqual({ok, ?TEST_DATA}, file:read_file(StorageTestFilePath)),
     % Delete file in space
-    ok = lfm_proxy:unlink(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}),
+    ok = lfm_proxy:unlink(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}),
     %% Check if file was deleted on storage
     ?assertMatch({error, ?ENOENT}, file:read_file(StorageTestFilePath), ?ATTEMPTS).
 
@@ -1885,18 +2072,18 @@ append_file_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
     %% Check if file is visible on 2nd provider
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle2),
@@ -1930,14 +2117,14 @@ append_file_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if appended bytes were imported on worker1
     {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     AppendedData = <<(?TEST_DATA)/binary, (?TEST_DATA2)/binary>>,
     ?assertMatch({ok, AppendedData},
         lfm_proxy:read(W1, Handle3, 0, byte_size(AppendedData))),
     lfm_proxy:close(W1, Handle3),
 
     {ok, Handle4} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, AppendedData},
         lfm_proxy:read(W2, Handle4, 0, byte_size(AppendedData)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle4),
@@ -1972,18 +2159,18 @@ append_file_not_changing_mtime_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
     %% Check if file is visible on 2nd provider
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle2),
@@ -2020,14 +2207,14 @@ append_file_not_changing_mtime_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if appended bytes were imported on worker1
     {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     AppendedData = <<(?TEST_DATA)/binary, (?TEST_DATA2)/binary>>,
     ?assertMatch({ok, AppendedData},
         lfm_proxy:read(W1, Handle3, 0, byte_size(AppendedData))),
     lfm_proxy:close(W1, Handle3),
 
     {ok, Handle4} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, AppendedData},
         lfm_proxy:read(W2, Handle4, 0, byte_size(AppendedData)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle4),
@@ -2063,18 +2250,18 @@ append_empty_file_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, <<"">>},
         lfm_proxy:read(W1, Handle1, 0, 100)),
     lfm_proxy:close(W1, Handle1),
 
     %% Check if file is visible on 2nd provider
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, <<"">>},
         lfm_proxy:read(W2, Handle2, 0, 100), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle2),
@@ -2108,13 +2295,13 @@ append_empty_file_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if appended bytes were imported on worker1
     {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA2},
         lfm_proxy:read(W1, Handle3, 0, byte_size(?TEST_DATA2))),
     lfm_proxy:close(W1, Handle3),
 
     {ok, Handle4} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA2},
         lfm_proxy:read(W2, Handle4, 0, byte_size(?TEST_DATA2)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle4),
@@ -2143,7 +2330,7 @@ append_file_export_test(Config, MountSpaceInRoot) ->
         storage_test_file_path(W1MountPoint, ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     % Create file in space
     {ok, FileGuid} =
-        ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#777)),
+        ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1, 8#777)),
     {ok, FileHandle} =
         ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, FileGuid}, write)),
     ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W1, FileHandle, 0, ?TEST_DATA)),
@@ -2193,9 +2380,9 @@ copy_file_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
@@ -2233,7 +2420,7 @@ copy_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle2),
     {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle3, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle3).
@@ -2275,9 +2462,9 @@ move_file_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
@@ -2315,7 +2502,7 @@ move_file_update_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA))),
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})),
     lfm_proxy:close(W1, Handle2).
 
 truncate_file_update_test(Config, MountSpaceInRoot) ->
@@ -2354,18 +2541,18 @@ truncate_file_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported
     {ok, #file_attr{guid = G}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
     %% Check if file is visible on 2nd provider and replicate it
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle2),
@@ -2380,17 +2567,17 @@ truncate_file_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was truncated
     {ok, #file_attr{guid = G}} = ?assertMatch({ok, #file_attr{size = 1}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, <<"t">>},
         lfm_proxy:read(W1, Handle3, 0, 100), ?ATTEMPTS),
     lfm_proxy:close(W1, Handle3),
 
     ?assertMatch({ok, #file_attr{size = 1}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle4} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, <<"t">>},
         lfm_proxy:read(W2, Handle4, 0, 100), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle4),
@@ -2447,18 +2634,18 @@ change_file_content_constant_size_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
     %% Check if file is visible on 2nd provider
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle2),
@@ -2473,17 +2660,17 @@ change_file_content_constant_size_test(Config, MountSpaceInRoot) ->
     %% Check if file was updated
     DataSize = byte_size(?TEST_DATA),
     ?assertMatch({ok, #file_attr{size = DataSize}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA_ONE_BYTE_CHANGED},
         lfm_proxy:read(W1, Handle3, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle3),
 
     ?assertMatch({ok, #file_attr{size = DataSize}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle4} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA_ONE_BYTE_CHANGED},
         lfm_proxy:read(W2, Handle4, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle4),
@@ -2540,18 +2727,18 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config,
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
     %% Check if file is visible on 2nd provider
     {ok, #file_attr{guid = Guid}} = ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle2),
@@ -2577,17 +2764,17 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config,
     %% Check if file was updated
     DataSize = byte_size(?TEST_DATA),
     ?assertMatch({ok, #file_attr{size = DataSize}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA_ONE_BYTE_CHANGED},
         lfm_proxy:read(W1, Handle3, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle3),
 
     ?assertMatch({ok, #file_attr{size = DataSize}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle4} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA_ONE_BYTE_CHANGED},
         lfm_proxy:read(W2, Handle4, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle4),
@@ -2644,18 +2831,18 @@ change_file_content_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
     %% Check if file is visible on 2nd provider
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle2),
@@ -2670,17 +2857,17 @@ change_file_content_update_test(Config, MountSpaceInRoot) ->
     %% Check if file was updated
     DataSize = byte_size(?TEST_DATA_CHANGED),
     ?assertMatch({ok, #file_attr{size = DataSize}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle3} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA_CHANGED},
         lfm_proxy:read(W1, Handle3, 0, 100)),
     lfm_proxy:close(W1, Handle3),
 
     ?assertMatch({ok, #file_attr{size = DataSize}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle4} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA_CHANGED},
         lfm_proxy:read(W2, Handle4, 0, 100), ?ATTEMPTS),
     lfm_proxy:close(W2, Handle4),
@@ -2768,7 +2955,7 @@ chmod_file_update_test(Config, MountSpaceInRoot) ->
 
     test_utils:mock_new(W1, storage_sync_changes, [passthrough]),
 
-    timer:sleep(timer:seconds(2)),  %ensure that modify time is different from read time
+    timer:sleep(timer:seconds(2)), %ensure that modify time is different from read time
     %% Change file permissions
     file:change_mode(StorageTestFileinDirPath1, NewMode),
 
@@ -2906,14 +3093,14 @@ update_timestamps_file_import_test(Config, MountSpaceInRoot) ->
     storage_sync_test_base:enable_storage_import(Config),
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -2962,7 +3149,7 @@ update_timestamps_file_import_test(Config, MountSpaceInRoot) ->
 
     %% Check if timestamps were changed
     ?assertMatch({ok, #file_attr{atime = NewTimestamp, mtime = NewTimestamp}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS).
 
 should_not_detect_timestamp_update_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -2977,7 +3164,7 @@ should_not_detect_timestamp_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -3008,7 +3195,7 @@ should_not_detect_timestamp_update_test(Config, MountSpaceInRoot) ->
 
     %% Check if timestamps hasn't changed
     ?assertNotMatch({ok, #file_attr{atime = 1, mtime = 1}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -3041,24 +3228,24 @@ import_nfs_acl_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
     %% User1 should be allowed to read acl
     {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
-        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>)),
     ?assertMatch(Value, ?ACL_JSON),
 
     %% User1 should not be allowed to set acl
     ?assertMatch({error, ?EACCES},
-        lfm_proxy:set_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, #xattr{})),
+        lfm_proxy:set_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, #xattr{})),
 
     %% User1 should not be allowed to modify file attrs
     ?assertMatch({error, ?EACCES},
-        lfm_proxy:truncate(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, 100)),
+        lfm_proxy:truncate(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, 100)),
 
     %% User2 should be allowed to read acl
     {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
-        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>)),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -3098,24 +3285,24 @@ update_nfs_acl_test(Config, MountSpaceInRoot) ->
 
     %% Check if file was imported
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
     %% User1 should be allowed to read acl
     {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
-        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>)),
     ?assertMatch(Value, ?ACL_JSON),
 
     %% User1 should not be allowed to set acl
     ?assertMatch({error, ?EACCES},
-        lfm_proxy:set_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, #xattr{})),
+        lfm_proxy:set_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, #xattr{})),
 
     %% User2 should be allowed to read acl
     {ok, #xattr{value = Value}} = ?assertMatch({ok, #xattr{}},
-        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>)),
 
     %% User2 should not be allowed to set acl
     ?assertMatch({error, ?EACCES},
-        lfm_proxy:set_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, #xattr{})),
+        lfm_proxy:set_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, #xattr{})),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -3153,11 +3340,11 @@ update_nfs_acl_test(Config, MountSpaceInRoot) ->
 
     %% User1 should not be allowed to read acl
     ?assertMatch({error, ?EACCES},
-        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>), ?ATTEMPTS),
+        lfm_proxy:get_xattr(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>), ?ATTEMPTS),
 
     %% User2 should be allowed to read acl
     {ok, #xattr{value = Value2}} = ?assertMatch({ok, #xattr{}},
-        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH}, <<"cdmi_acl">>)),
+        lfm_proxy:get_xattr(W1, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, <<"cdmi_acl">>)),
     ?assertMatch(Value2, ?ACL2_JSON),
 
     ?assertMonitoring(W1, #{
@@ -3189,7 +3376,7 @@ import_nfs_acl_with_disabled_luma_should_fail_test(Config, MountSpaceInRoot) ->
     assertImportTimes(W1, ?SPACE_ID, ?ATTEMPTS),
 
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -3223,7 +3410,7 @@ recreate_file_deleted_by_sync_test(Config, MountSpaceInRoot) ->
     enable_storage_import(Config),
 
     {ok, FileGuid} =
-        ?assertMatch({ok, _}, lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH, 8#777)),
+        ?assertMatch({ok, _}, lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH1, 8#777)),
     {ok, FileHandle} =
         ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, FileGuid}, write)),
     ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W2, FileHandle, 0, ?TEST_DATA)),
@@ -3232,9 +3419,9 @@ recreate_file_deleted_by_sync_test(Config, MountSpaceInRoot) ->
 
     %% Replicate file to W1
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle1} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W1, Handle1),
@@ -3252,13 +3439,13 @@ recreate_file_deleted_by_sync_test(Config, MountSpaceInRoot) ->
 
     %% Check if file disappeared
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
     % recreate file
     {ok, FileGuid2} =
-        ?assertMatch({ok, _}, lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH, 8#777)),
+        ?assertMatch({ok, _}, lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH1, 8#777)),
     {ok, FileHandle2} =
         ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, FileGuid2}, write)),
     ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W2, FileHandle2, 0, ?TEST_DATA)),
@@ -3266,9 +3453,9 @@ recreate_file_deleted_by_sync_test(Config, MountSpaceInRoot) ->
     ok = lfm_proxy:close(W2, FileHandle2),
 
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W1, Handle2).
@@ -3282,7 +3469,7 @@ sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config, Mo
     enable_storage_import(Config),
 
     {ok, FileGuid} =
-        ?assertMatch({ok, _}, lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH, 8#777)),
+        ?assertMatch({ok, _}, lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH1, 8#777)),
     {ok, FileHandle} =
         ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, FileGuid}, write)),
     ?assertEqual({ok, byte_size(?TEST_DATA)}, lfm_proxy:write(W2, FileHandle, 0, ?TEST_DATA)),
@@ -3293,7 +3480,7 @@ sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config, Mo
 
     %check if file_meta was synced
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
     %% Create file on storage to trigger update
     StorageRandomFilePath =
@@ -3312,15 +3499,15 @@ sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config, Mo
 
     % file shouldn't disappear from space
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}, read), ?ATTEMPTS),
+        lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
     lfm_proxy:close(W1, Handle2),
 
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS).
 
 sync_should_not_delete_dir_created_in_remote_provider(Config, MountSpaceInRoot) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -3412,20 +3599,20 @@ sync_should_not_invalidate_file_after_replication(Config) ->
     SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
 
-    {ok, FileGuid} = lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH, 8#664),
+    {ok, FileGuid} = lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH1, 8#664),
     {ok, Handle} = lfm_proxy:open(W2, SessId2, {guid, FileGuid}, write),
     {ok, _} = lfm_proxy:write(W2, Handle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(W2, Handle),
 
     %% Check if file was synchronized to W1
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
     % replicate file to W1
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}, read)),
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
 
@@ -3577,7 +3764,8 @@ clean_storage(Config, Readonly) ->
                 rpc:multicall(Workers, os, cmd, ["rm -r " ++ binary_to_list(DockerMountPoint) ++ "/*"]),
                 os:cmd("rm -r " ++ binary_to_list(HostMountPoint) ++ "/*");
             false ->
-                rpc:multicall(Workers, os, cmd, ["rm -r " ++ binary_to_list(DockerMountPoint) ++ "/" ++ binary_to_list(?SPACE_ID) ++ "/*"]),
+                rpc:multicall(Workers, os, cmd,
+                    ["rm -r " ++ binary_to_list(DockerMountPoint) ++ "/" ++ binary_to_list(?SPACE_ID) ++ "/*"]),
                 os:cmd("rm -r " ++ binary_to_list(HostMountPoint) ++ "/" ++ binary_to_list(?SPACE_ID))
         end
     end, Workers),
@@ -3916,7 +4104,7 @@ assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts) ->
                     timer:sleep(timer:seconds(1)),
                     assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts - 1);
                 true ->
-                    {Format, Args } = storage_sync_monitoring_description(SSM),
+                    {Format, Args} = storage_sync_monitoring_description(SSM),
                     ct:pal(
                         "Assertion of field \"~p\" in storage_sync_monitoring for space ~p and storage ~p failed.~n"
                         "    Expected: ~p~n"
@@ -3936,7 +4124,7 @@ assert_for_key(Key, ExpectedValue, SSM) ->
     case Value of
         ExpectedValue -> ok;
         _ ->
-        throw({assertion_error, Key, ExpectedValue, Value})
+            throw({assertion_error, Key, ExpectedValue, Value})
     end.
 
 flatten_histograms(SSM) ->
@@ -3959,3 +4147,11 @@ storage_sync_monitoring_description(SSM) ->
     maps:fold(fun(Key, Value, {AccFormat, AccArgs}) ->
         {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [Key, Value]}
     end, {"~n#storage_sync_monitoring fields values:~n", []}, SSM).
+
+provider_id(Worker) ->
+    rpc:call(Worker, oneprovider, get_id, []).
+
+delete_link(Worker, ParentUuid, FileName) ->
+    Ctx = rpc:call(Worker, file_meta, get_ctx, []),
+    TreeId = provider_id(Worker),
+    ok = rpc:call(Worker, datastore_model, delete_links, [Ctx#{scope => ?SPACE_ID}, ParentUuid, TreeId, FileName]).

@@ -414,9 +414,11 @@ save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
 -spec maybe_delete_imported_dir_and_update_counters(file_ctx:ctx(),
     od_space:id(), storage:id()) -> ok.
 maybe_delete_imported_dir_and_update_counters(FileCtx, SpaceId, StorageId) ->
-    delete_imported_dir(FileCtx, SpaceId, StorageId),
-    {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx),
-    storage_sync_utils:log_deletion(StorageFileId, SpaceId),
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    delete_imported_dir(FileCtx3, SpaceId, StorageId),
+    storage_sync_utils:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
     storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId),
     ok.
 
@@ -428,9 +430,11 @@ maybe_delete_imported_dir_and_update_counters(FileCtx, SpaceId, StorageId) ->
 -spec maybe_delete_imported_regular_file_and_update_counters(file_ctx:ctx(),
     od_space:id(), storage:id()) -> ok.
 maybe_delete_imported_regular_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
-    delete_imported_file(FileCtx),
-    {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx),
-    storage_sync_utils:log_deletion(StorageFileId, SpaceId),
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    delete_imported_file(FileCtx3),
+    storage_sync_utils:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
     storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId),
     ok.
 
