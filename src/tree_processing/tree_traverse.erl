@@ -33,7 +33,7 @@
 % Getters API
 -export([get_traverse_info/1, set_traverse_info/2, get_doc/1, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
--export([do_master_job/4, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
+-export([do_master_job/2, do_master_job/4, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
 
 -type master_job() :: #tree_traverse{}.
 -type slave_job() :: file_meta:doc().
@@ -187,6 +187,16 @@ get_sync_info() ->
 %%%===================================================================
 %%% Behaviour callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv do_master_job(Job, MasterJobArgs, fun(_,_,_,_,_,_) -> ok end, fun(_,_,_) -> ok end).
+%% @end
+%%--------------------------------------------------------------------
+-spec do_master_job(master_job(), traverse:master_job_extended_args()) -> 
+    {ok, traverse:master_job_map()}.
+do_master_job(Job, MasterJobArgs) ->
+    do_master_job(Job, MasterJobArgs, fun(_,_,_,_,_,_) -> ok end, fun(_,_,_) -> ok end).
 
 %%--------------------------------------------------------------------
 %% @doc
