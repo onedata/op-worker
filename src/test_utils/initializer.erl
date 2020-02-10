@@ -475,7 +475,7 @@ unmock_test_file_context(Config) ->
 mock_auth_manager(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, auth_manager, [passthrough]),
-    test_utils:mock_expect(Workers, auth_manager, verify,
+    test_utils:mock_expect(Workers, auth_manager, verify_auth,
         fun(TokenAuth) ->
             case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
                 {ok, Token} ->
