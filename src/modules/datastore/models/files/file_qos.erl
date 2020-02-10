@@ -72,7 +72,7 @@
 
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
-    ?not_found_ok(datastore_model:delete(?CTX, Key)).
+    ?ok_if_not_found(datastore_model:delete(?CTX, Key)).
 
 %%%===================================================================
 %%% Higher-level functions operating on file_qos document.
@@ -190,7 +190,7 @@ is_replica_protected(FileUuid, StorageId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Cleans up all QoS documents related to given file.
+%% Deletes all QoS documents related to given file.
 %% @end
 %%--------------------------------------------------------------------
 -spec clean_up(file_ctx:ctx()) -> ok.

@@ -33,7 +33,7 @@
 
 -record(file_ctx, {
     canonical_path :: undefined | file_meta:path(),
-    uuid_path :: undefined | file_meta:path(),
+    uuid_based_path :: undefined | file_meta:uuid_based_path(),
     guid :: fslogic_worker:file_guid(),
     file_doc :: undefined | file_meta:doc(),
     parent :: undefined | ctx(),
@@ -69,7 +69,7 @@
 -export([equals/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_path/1, get_file_doc/1,
+-export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
@@ -285,7 +285,7 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {<<"/">>, FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            {Path, FileCtx2} = generate_canonical_path(FileCtx),
+            {Path, FileCtx2} = resolve_canonical_path_tokens(FileCtx),
             CanonicalPath = filename:join(Path),
             {CanonicalPath, FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
@@ -303,7 +303,7 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {[<<"/">>], FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            {CanonicalPathTokens, FileCtx2} = generate_canonical_path(FileCtx),
+            {CanonicalPathTokens, FileCtx2} = resolve_canonical_path_tokens(FileCtx),
             CanonicalPath = filename:join(CanonicalPathTokens),
             {CanonicalPathTokens,
                 FileCtx2#file_ctx{canonical_path = CanonicalPath}}
@@ -313,15 +313,16 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file's uuid path (similar to canonical but instead of filename, uuid is used).
+%% Returns file's uuid based path 
+%% (similar to canonical but instead of filename, uuid is used).
 %% @end
 %%--------------------------------------------------------------------
--spec get_uuid_path(ctx()) -> {file_meta:path(), ctx()}.
-get_uuid_path(FileCtx = #file_ctx{uuid_path = undefined}) ->
-    {UuidPathTokens, FileCtx2} = generate_uuid_path(FileCtx),
+-spec get_uuid_based_path(ctx()) -> {file_meta:uuid_based_path(), ctx()}.
+get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = undefined}) ->
+    {UuidPathTokens, FileCtx2} = resolve_uuid_based_path_tokens(FileCtx),
     UuidPath = filename:join(UuidPathTokens),
-    {UuidPath, FileCtx2#file_ctx{uuid_path = UuidPath}};
-get_uuid_path(FileCtx = #file_ctx{uuid_path = UuidPath}) ->
+    {UuidPath, FileCtx2#file_ctx{uuid_based_path = UuidPath}};
+get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = UuidPath}) ->
     {UuidPath, FileCtx}.
 
 %%--------------------------------------------------------------------
@@ -1215,14 +1216,8 @@ is_dir(FileCtx = #file_ctx{is_dir = IsDir}) ->
 new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
     #file_ctx{guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId), file_name = Name}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Generates canonical path
-%% @end
-%%--------------------------------------------------------------------
--spec generate_canonical_path(ctx()) -> {[file_meta:name()], ctx()}.
-generate_canonical_path(FileCtx) ->
+-spec resolve_canonical_path_tokens(ctx()) -> {[file_meta:name()], ctx()}.
+resolve_canonical_path_tokens(FileCtx) ->
     Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}, scope = SpaceId}, ParentValue, CalculationInfo]) ->
         case fslogic_uuid:is_root_dir_uuid(Uuid) of
             true ->
@@ -1237,16 +1232,10 @@ generate_canonical_path(FileCtx) ->
         end
     end,
     CacheName = location_and_link_utils:get_canonical_paths_cache_name(file_ctx:get_space_id_const(FileCtx)),
-    generate_and_cache_path(FileCtx, Callback, CacheName, name).
+    resolve_and_cache_path(FileCtx, Callback, CacheName, name).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Generates uuid path
-%% @end
-%%--------------------------------------------------------------------
--spec generate_uuid_path(ctx()) -> {[file_meta:uuid()], ctx()}.
-generate_uuid_path(FileCtx) ->
+-spec resolve_uuid_based_path_tokens(ctx()) -> {[file_meta:uuid()], ctx()}.
+resolve_uuid_based_path_tokens(FileCtx) ->
     Callback = fun([#document{key = Uuid, scope = SpaceId}, ParentValue, CalculationInfo]) ->
         case fslogic_uuid:is_root_dir_uuid(Uuid) of
             true ->
@@ -1261,11 +1250,11 @@ generate_uuid_path(FileCtx) ->
         end
     end,
     CacheName = location_and_link_utils:get_uuid_paths_cache_name(file_ctx:get_space_id_const(FileCtx)),
-    generate_and_cache_path(FileCtx, Callback, CacheName, uuid).
+    resolve_and_cache_path(FileCtx, Callback, CacheName, uuid).
 
--spec generate_and_cache_path(ctx(), bounded_cache:callback(), bounded_cache:cache(), name | uuid) -> 
+-spec resolve_and_cache_path(ctx(), bounded_cache:callback(), bounded_cache:cache(), name | uuid) -> 
     {[file_meta:uuid() | file_meta:name()], ctx()}.
-generate_and_cache_path(FileCtx, Callback, CacheName, Type) ->
+resolve_and_cache_path(FileCtx, Callback, CacheName, Type) ->
     {#document{key = Uuid, value = #file_meta{type = FileType, name = Filename}} = Doc, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
     NameOrUuid = case Type of
@@ -1277,7 +1266,8 @@ generate_and_cache_path(FileCtx, Callback, CacheName, Type) ->
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),
             {Path, FileCtx2};
         _ ->
-            {ok, ParentDoc} = file_meta:get_parent(Doc),
+            {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
+            {ok, ParentDoc} = file_meta:get_including_deleted(ParentUuid),
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
             {Path ++ [NameOrUuid], FileCtx2}
     end.

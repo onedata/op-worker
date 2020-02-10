@@ -44,7 +44,7 @@ handle_qos_entry_change(SpaceId, #document{
 }) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
     qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-    ok = ?not_found_ok(file_qos:remove_qos_entry_id(FileUuid, QosEntryId));
+    ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(FileUuid, QosEntryId));
 handle_qos_entry_change(SpaceId, #document{
     key = QosEntryId,
     value = QosEntry
@@ -57,11 +57,7 @@ handle_qos_entry_change(SpaceId, #document{
             ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs);
         false ->
-            ok = case qos_entry:add_to_impossible_list(QosEntryId, SpaceId) of
-                ok -> ok;
-                ?ERROR_ALREADY_EXISTS -> ok;
-                Error -> Error
-            end,
+            ok = qos_entry:add_to_impossible_list(QosEntryId, SpaceId),
             ok = reevaluate_impossible_qos(QosEntryDoc)
     end.
 
@@ -87,8 +83,8 @@ reconcile_qos(FileCtx) ->
             ),
             ok;
         {ok, EffFileQos} ->
-            QosToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
-            ok = qos_traverse:reconcile_qos_for_entries(FileCtx1, QosToUpdate);
+            QosEntriesToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
+            ok = qos_traverse:reconcile_file_for_qos_entries(FileCtx1, QosEntriesToUpdate);
         undefined ->
             ok
     end.

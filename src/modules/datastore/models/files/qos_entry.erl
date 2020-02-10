@@ -44,6 +44,7 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on document using datastore model API
@@ -196,9 +197,11 @@ get_space_id(QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec add_to_impossible_list(id(), od_space:id()) ->  ok | {error, term()}.
 add_to_impossible_list(QosEntryId, SpaceId) ->
-    ?extract_ok(
-        add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId})
-    ).
+    case add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId}) of
+        {ok, _} -> ok;
+        ?ERROR_ALREADY_EXISTS -> ok;
+        {error, _} = Error -> Error
+    end.
 
 
 -spec delete_from_impossible_list(id(), od_space:id()) ->  ok | {error, term()}.
