@@ -386,7 +386,7 @@ check_api_authorization(?ROOT_AUTH, _) ->
 check_api_authorization(?GUEST_AUTH, _) ->
     ok;
 check_api_authorization(TokenAuth, #gs_req_graph{operation = Operation, gri = GRI}) ->
-    case auth_manager:verify(TokenAuth) of
+    case auth_manager:verify_auth(TokenAuth) of
         {ok, Auth, _} ->
             api_auth:check_authorization(Auth, ?OZ_WORKER, Operation, GRI);
         {error, _} = Error ->
@@ -768,7 +768,7 @@ is_authorized_to_get(SessionId, AuthHint, GRI, CachedDoc) when is_binary(Session
 is_authorized_to_get(TokenAuth, AuthHint, GRI, CachedDoc) ->
     case auth_manager:is_token_auth(TokenAuth) of
         true ->
-            case auth_manager:verify(TokenAuth) of
+            case auth_manager:verify_auth(TokenAuth) of
                 {ok, ?USER(UserId), _} ->
                     is_user_authorized_to_get(UserId, TokenAuth, AuthHint, GRI, CachedDoc);
                 {error, _} = Error ->

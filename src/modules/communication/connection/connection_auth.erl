@@ -97,7 +97,7 @@ handle_client_handshake(#client_handshake_request{
         AccessToken, AudienceToken,
         IpAddress, oneclient, allow_data_access_caveats
     ),
-    case auth_manager:verify(TokenAuth) of
+    case auth_manager:verify_auth(TokenAuth) of
         {ok, #auth{subject = ?SUB(user, UserId) = Subject}, _} ->
             {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
                 Nonce, Subject, TokenAuth

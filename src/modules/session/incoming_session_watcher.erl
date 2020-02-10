@@ -355,7 +355,7 @@ mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
 check_auth_validity(undefined, _Identity) ->
     {true, undefined};
 check_auth_validity(TokenAuth, Identity) ->
-    case auth_manager:verify(TokenAuth) of
+    case auth_manager:verify_auth(TokenAuth) of
         {ok, #auth{subject = Identity}, undefined} ->
             {true, schedule_session_validity_checkup(?SESSION_VALIDITY_CHECK_INTERVAL)};
         {ok, #auth{subject = Identity}, TokenValidUntil} ->

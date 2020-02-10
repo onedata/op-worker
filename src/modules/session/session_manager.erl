@@ -85,7 +85,7 @@ reuse_or_create_outgoing_provider_session(SessId, Identity) ->
     auth_manager:auth(), SessionType :: atom()) ->
     {ok, session:id()} | error().
 reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
-    case auth_manager:verify(Auth) of
+    case auth_manager:verify_auth(Auth) of
         {ok, #auth{subject = ?SUB(user, _) = Identity}, _TokenValidUntil} ->
             reuse_or_create_session(
                 SessId, SessionType, Identity, Auth, ProxyVia

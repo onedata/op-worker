@@ -132,7 +132,7 @@ create_user_session(Config, UserId) ->
         AccessToken, undefined,
         initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
     ),
-    {ok, ?USER(UserId), _} = rpc:call(Node, auth_manager, verify, [TokenAuth]),
+    {ok, ?USER(UserId), _} = rpc:call(Node, auth_manager, verify_auth, [TokenAuth]),
     {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [
         ?SUB(user, UserId), TokenAuth
     ]),

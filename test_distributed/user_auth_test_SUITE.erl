@@ -131,7 +131,7 @@ token_authentication(Config) ->
     ),
     ?assertMatch(
         {ok, ?USER(?USER_ID), undefined},
-        rpc:call(Worker1, auth_manager, verify, [TokenAuth])
+        rpc:call(Worker1, auth_manager, verify_auth, [TokenAuth])
     ),
     ok = ssl:close(Sock).
 
@@ -157,7 +157,7 @@ token_expiration(Config) ->
     ),
     ?assertMatch(
         {ok, ?USER(?USER_ID), _},
-        rpc:call(Worker1, auth_manager, verify, [TokenAuth1])
+        rpc:call(Worker1, auth_manager, verify_auth, [TokenAuth1])
     ),
 
     timer:sleep(timer:seconds(4)),
@@ -168,7 +168,7 @@ token_expiration(Config) ->
     ),
     ?assertMatch(
         ?ERROR_UNAUTHORIZED,
-        rpc:call(Worker1, auth_manager, verify, [TokenAuth1])
+        rpc:call(Worker1, auth_manager, verify_auth, [TokenAuth1])
     ),
 
     % But it is possible to update credentials and increase expiration
@@ -326,7 +326,7 @@ unmock_token_logic(Config) ->
 
 
 verify_auth(Worker, TokenAuth) ->
-    rpc:call(Worker, auth_manager, verify, [TokenAuth]).
+    rpc:call(Worker, auth_manager, verify_auth, [TokenAuth]).
 
 
 clear_auth_cache(Worker) ->

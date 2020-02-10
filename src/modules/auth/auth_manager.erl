@@ -47,7 +47,7 @@
 -export([
     to_auth_override/1,
     get_caveats/1,
-    verify/1,
+    verify_auth/1,
 
     invalidate/1
 ]).
@@ -130,6 +130,10 @@
 -define(INVALIDATE_CACHE_REQ, invalidate_cache).
 -define(CACHE_INVALIDATION_DELAY,
     application:get_env(?APP_NAME, auth_invalidation_delay, timer:seconds(300))
+).
+
+-define(MONITOR_TOKEN_REQ(__TokenAuth, __TokenRef),
+    {monitor_token, __TokenAuth, __TokenRef}
 ).
 
 -define(NOW(), time_utils:system_time_seconds()).
@@ -240,7 +244,7 @@ get_caveats(?ROOT_AUTH) ->
 get_caveats(?GUEST_AUTH) ->
     {ok, []};
 get_caveats(TokenAuth) ->
-    case verify(TokenAuth) of
+    case verify_auth(TokenAuth) of
         {ok, #auth{caveats = Caveats}, _} ->
             {ok, Caveats};
         {error, _} = Error ->
@@ -250,13 +254,25 @@ get_caveats(TokenAuth) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies identity of subject identified by specified token_auth()
-%% and returns time this auth will be valid until. Nevertheless this
-%% auth should be confirmed periodically as tokens can be revoked.
+%% Verifies identity of subject identified by specified auth() and returns
+%% time this auth will be valid until. Nevertheless this check should be
+%% performed periodically for token_auth() as tokens can be revoked.
 %% @end
 %%--------------------------------------------------------------------
--spec verify(token_auth()) -> verification_result().
-verify(TokenAuth) ->
+-spec verify_auth(auth()) -> verification_result().
+verify_auth(?ROOT_AUTH) ->
+    AaiAuth = #auth{
+        subject = ?SUB(root, ?ROOT_USER_ID),
+        session_id = ?ROOT_SESS_ID
+    },
+    {ok, AaiAuth, undefined};
+verify_auth(?GUEST_AUTH) ->
+    AaiAuth = #auth{
+        subject = ?SUB(nobody, ?GUEST_USER_ID),
+        session_id = ?GUEST_SESS_ID
+    },
+    {ok, AaiAuth, undefined};
+verify_auth(TokenAuth) ->
     verify_token_auth(TokenAuth).
 
 
@@ -366,6 +382,25 @@ handle_cast(?OZ_CONNECTION_STARTED_MSG, State0) ->
 handle_cast(?OZ_CONNECTION_TERMINATED_MSG, State) ->
     {noreply, schedule_cache_invalidation(State)};
 
+handle_cast(?MONITOR_TOKEN_REQ(TokenAuth, TokenRef), State) ->
+    case is_token_revoked(TokenRef) of
+        {ok, false} ->
+            ok;
+        {ok, true} ->
+            ets:update_element(?CACHE_NAME, TokenAuth, [
+                {#cache_entry.token_revoked, true}
+            ]);
+        {error, _} = Error ->
+            ets:insert(?CACHE_NAME, #cache_entry{
+                token_auth = TokenAuth,
+                verification_result = Error,
+
+                token_ref = TokenRef,
+                cache_expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL
+            })
+    end,
+    {noreply, State};
+
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -440,19 +475,7 @@ verify_token_auth(TokenAuth) ->
             CachedVerificationResult;
         ?ERROR_NOT_FOUND ->
             try
-                VerificationResult = verify_token_auth_and_cache_result(TokenAuth),
-                %% Fetches user doc to trigger user setup if token verification
-                %% succeeded. Otherwise does nothing.
-                %% It must be called after caching verification result as to
-                %% avoid infinite loop (gs_client_worker would try to verify
-                %% given TokenAuth).
-                case VerificationResult of
-                    {ok, ?USER(UserId), _} ->
-                        user_logic:get(TokenAuth, UserId);
-                    _ ->
-                        ok
-                end,
-                VerificationResult
+                verify_token_auth_and_cache_result(TokenAuth)
             catch Type:Reason ->
                 ?error_stacktrace("Cannot verify user auth due to ~p:~p", [
                     Type, Reason
@@ -478,7 +501,7 @@ verify_token_auth_and_cache_result(#token_auth{
             ),
             case AccessTokenVerificationResult of
                 {ok, Subject, TokenTTL} ->
-                    AaiAuth = build_aai_auth(Token),
+                    AaiAuth = build_aai_auth_from_token(Token),
                     TokenExpiration = infer_token_expiration(TokenTTL),
                     {get_token_ref(Token), {ok, AaiAuth, TokenExpiration}};
                 {error, _} = VerificationError ->
@@ -488,7 +511,13 @@ verify_token_auth_and_cache_result(#token_auth{
             {undefined, DeserializationError}
     end,
 
-    save_token_auth_verification_result_in_cache(TokenAuth, TokenRef, Result),
+    case save_token_auth_verification_result_in_cache(TokenAuth, TokenRef, Result) of
+        true ->
+            maybe_request_auth_manager_to_monitor_token(TokenAuth, TokenRef, Result),
+            maybe_fetch_user_data(TokenAuth, Result);
+        false ->
+            ok
+    end,
     Result.
 
 
@@ -512,8 +541,8 @@ deserialize_and_validate_token(SerializedToken) ->
 
 
 %% @private
--spec build_aai_auth(tokens:token()) -> aai:auth().
-build_aai_auth(#token{subject = Subject} = Token) ->
+-spec build_aai_auth_from_token(tokens:token()) -> aai:auth().
+build_aai_auth_from_token(#token{subject = Subject} = Token) ->
     #auth{
         subject = Subject,
         caveats = tokens:get_caveats(Token)
@@ -537,6 +566,56 @@ get_token_ref(#token{
     subject = ?SUB(user, UserId)
 }) ->
     {temporary, UserId, Generation}.
+
+
+%% @private
+-spec is_token_revoked(token_ref()) -> {ok, boolean()} | errors:error().
+is_token_revoked({named, TokenId}) ->
+    token_logic:is_revoked(TokenId);
+is_token_revoked({temporary, UserId, Generation}) ->
+    case token_logic:get_temporary_tokens_generation(UserId) of
+        {ok, ActualGeneration} ->
+            {ok, Generation /= ActualGeneration};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Asks auth_manager to monitor token status/revocation in case of successful
+%% token verification.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_request_auth_manager_to_monitor_token(
+    token_auth(),
+    token_ref(),
+    verification_result()
+) ->
+    ok.
+maybe_request_auth_manager_to_monitor_token(_TokenAuth, _TokenRef, {error, _}) ->
+    ok;
+maybe_request_auth_manager_to_monitor_token(TokenAuth, TokenRef, {ok, _, _}) ->
+    gen_server:cast(?MODULE, ?MONITOR_TOKEN_REQ(TokenAuth, TokenRef)),
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Fetches user doc to trigger user setup if token verification succeeded.
+%% Otherwise does nothing.
+%% It must be called after caching verification result as to avoid infinite
+%% loop (gs_client_worker would try to verify given TokenAuth).
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_fetch_user_data(token_auth(), verification_result()) -> ok.
+maybe_fetch_user_data(_TokenAuth, {error, _}) ->
+    ok;
+maybe_fetch_user_data(TokenAuth, {ok, ?USER(UserId), _TokenExpiration}) ->
+    user_logic:get(TokenAuth, UserId),
+    ok.
 
 
 %% @private

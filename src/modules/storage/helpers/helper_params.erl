@@ -107,7 +107,7 @@ resolve_user_by_token(#{<<"onedataAccessToken">> := AccessToken} = Params) when
         AccessToken, undefined, undefined,
         undefined, disallow_data_access_caveats
     ),
-    {ok, ?USER(UserId), _} = auth_manager:verify(TokenAuth),
+    {ok, ?USER(UserId), _} = auth_manager:verify_auth(TokenAuth),
     Params#{<<"adminId">> => UserId};
 resolve_user_by_token(Params) -> Params.
 
