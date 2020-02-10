@@ -30,10 +30,10 @@
 }).
 
 %% API
--export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0]).
+-export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
 
 %% datastore_model callbacks
--export([get_ctx/0]).
+-export([get_ctx/0, get_posthooks/0]).
 
 
 %%%===================================================================
@@ -61,6 +61,22 @@ list() ->
     datastore_model:fold_keys(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Token create/update posthook.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_after(atom(), list(), term()) -> term().
+run_after(update, _, {ok, Doc} = Result) ->
+    auth_manager:report_token_status_update(Doc),
+    Result;
+run_after(delete, _Args, {ok, Doc} = Result) ->
+    auth_manager:report_token_deletion(Doc),
+    Result;
+run_after(_Function, _Args, Result) ->
+    Result.
+
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -74,3 +90,14 @@ list() ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of callbacks which will be called after each operation
+%% on datastore model.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_posthooks() -> [datastore_hooks:posthook()].
+get_posthooks() ->
+    [fun run_after/3].

@@ -31,6 +31,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("stdlib/include/ms_transform.hrl").
 
 %% API
 -export([root_auth/0, guest_auth/0]).
@@ -52,7 +53,16 @@
     invalidate/1
 ]).
 -export([start_link/0, spec/0]).
--export([report_oz_connection_started/0, report_oz_connection_terminated/0]).
+-export([
+    report_oz_connection_start/0,
+    report_oz_connection_termination/0,
+
+    report_token_status_update/1,
+    report_token_deletion/1,
+
+    report_temporary_tokens_generation_change/1,
+    report_temporary_tokens_deletion/1
+]).
 
 %% gen_server callbacks
 -export([
@@ -135,6 +145,16 @@
 -define(MONITOR_TOKEN_REQ(__TokenAuth, __TokenRef),
     {monitor_token, __TokenAuth, __TokenRef}
 ).
+
+-define(TOKEN_STATUS_CHANGED_MSG(__TokenId, __IsRevoked),
+    {token_status_changed, __TokenId, __IsRevoked}
+).
+-define(TOKEN_DELETED_MSG(__TokenId), {token_deleted, __TokenId}).
+
+-define(TEMP_TOKENS_GENERATION_CHANGED_MSG(__UserId, __Generation),
+    {temporary_token_generation_changed, __UserId, __Generation}
+).
+-define(TEMP_TOKENS_DELETED_MSG(__UserId), {temporary_tokens_deleted, __UserId}).
 
 -define(NOW(), time_utils:system_time_seconds()).
 
@@ -292,17 +312,60 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 
--spec report_oz_connection_started() -> ok.
-report_oz_connection_started() ->
+-spec report_oz_connection_start() -> ok.
+report_oz_connection_start() ->
     Nodes = consistent_hashing:get_all_nodes(),
     gen_server:abcast(Nodes, ?MODULE, ?OZ_CONNECTION_STARTED_MSG),
     ok.
 
 
--spec report_oz_connection_terminated() -> ok.
-report_oz_connection_terminated() ->
+-spec report_oz_connection_termination() -> ok.
+report_oz_connection_termination() ->
     Nodes = consistent_hashing:get_all_nodes(),
     gen_server:abcast(Nodes, ?MODULE, ?OZ_CONNECTION_TERMINATED_MSG),
+    ok.
+
+
+-spec report_token_status_update(od_token:doc()) -> ok.
+report_token_status_update(#document{
+    key = TokenId,
+    value = #od_token{revoked = Revoked}
+}) ->
+    gen_server:abcast(
+        consistent_hashing:get_all_nodes(), ?MODULE,
+        ?TOKEN_STATUS_CHANGED_MSG(TokenId, Revoked)
+    ),
+    ok.
+
+
+-spec report_token_deletion(od_token:doc()) -> ok.
+report_token_deletion(#document{key = TokenId}) ->
+    gen_server:abcast(
+        consistent_hashing:get_all_nodes(), ?MODULE,
+        ?TOKEN_DELETED_MSG(TokenId)
+    ),
+    ok.
+
+
+-spec report_temporary_tokens_generation_change(temporary_token_secret:doc()) ->
+    ok.
+report_temporary_tokens_generation_change(#document{
+    key = UserId,
+    value = #temporary_token_secret{generation = Generation}
+}) ->
+    gen_server:abcast(
+        consistent_hashing:get_all_nodes(), ?MODULE,
+        ?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation)
+    ),
+    ok.
+
+
+-spec report_temporary_tokens_deletion(temporary_token_secret:doc()) -> ok.
+report_temporary_tokens_deletion(#document{key = UserId}) ->
+    gen_server:abcast(
+        consistent_hashing:get_all_nodes(), ?MODULE,
+        ?TEMP_TOKENS_DELETED_MSG(UserId)
+    ),
     ok.
 
 
@@ -399,6 +462,53 @@ handle_cast(?MONITOR_TOKEN_REQ(TokenAuth, TokenRef), State) ->
                 cache_expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL
             })
     end,
+    {noreply, State};
+
+handle_cast(?TOKEN_STATUS_CHANGED_MSG(TokenId, IsRevoked), State) ->
+    ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
+        token_ref = {named, Id},
+        token_revoked = OldIsRevoked
+    } = CacheEntry) when Id == TokenId andalso OldIsRevoked /= IsRevoked ->
+        CacheEntry#cache_entry{
+            token_revoked = IsRevoked
+        }
+    end)),
+    {noreply, State};
+
+handle_cast(?TOKEN_DELETED_MSG(TokenId), State) ->
+    Expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL,
+    ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
+        token_ref = {named, Id}
+    } = CacheEntry) when Id == TokenId ->
+        CacheEntry#cache_entry{
+            verification_result = ?ERROR_TOKEN_INVALID,
+            cache_expiration = Expiration
+        }
+    end)),
+    {noreply, State};
+
+handle_cast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation), State) ->
+    Expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL,
+    ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
+        token_ref = {temporary, Id, OldGeneration}
+    } = CacheEntry) when Id == UserId andalso OldGeneration < Generation ->
+        CacheEntry#cache_entry{
+            verification_result = ?ERROR_TOKEN_REVOKED,
+            cache_expiration = Expiration
+        }
+    end)),
+    {noreply, State};
+
+handle_cast(?TEMP_TOKENS_DELETED_MSG(UserId), State) ->
+    Expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL,
+    ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
+        token_ref = {temporary, Id, _Generation}
+    } = CacheEntry) when Id == UserId ->
+        CacheEntry#cache_entry{
+            verification_result = ?ERROR_TOKEN_INVALID,
+            cache_expiration = Expiration
+        }
+    end)),
     {noreply, State};
 
 handle_cast(Request, State) ->
