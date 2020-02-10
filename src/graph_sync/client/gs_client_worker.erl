@@ -481,7 +481,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
         end,
         GsReq = #gs_req{
             subtype = SubType,
-            auth_override = auth_manager:to_auth_override(client_to_auth(Client)),
+            auth_override = auth_manager:auth_to_gs_auth_override(client_to_auth(Client)),
             request = Request
         },
         case gen_server2:call(ConnRef, {async_request, GsReq, Timeout}) of

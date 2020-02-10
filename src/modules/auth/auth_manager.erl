@@ -1,22 +1,29 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Verifies subject identity in Onezone service and caches resolved auth
-%%% objects (or errors in case of invalid tokens) in its ets cache.
-%%% Also, to avoid exhausting memory, performs periodic checks and
-%%% clears cache if size limit is breached.
+%%% Provides utility functions to operate on auth() objects. The main one being
+%%% subject identity verification in Onezone service and caching resolved
+%%% aai:auth objects (or errors in case of invalid tokens) in its ets cache.
+%%%
+%%% Cache entries are cached for as long as token expiration allows (can be
+%%% cached forever if no time caveat is present). At the same time ?MODULE
+%%% subscribes in oz for token events and monitors their status so that
+%%% eventual changes will be reflected in cache.
+%%% To avoid exhausting memory, ?MODULE performs periodic checks and clears
+%%% cache if size limit is breached. Cache is also cleared, with some delay,
+%%% when connection to oz is lost (subscription may became invalid) and
+%%% immediately when mentioned connection is restored.
 %%%
 %%% NOTE !!!
-%%% Tokens can be revoked, which means that they will be invalid before their
-%%% actual expiration. That is why verification results are cached only for
-%%% limited amount of time.
-%%% To assert that tokens are valid (and not revoked) verification checks
-%%% should be performed periodically.
+%%% Tokens can be revoked and deleted, which means that they may become invalid
+%%% before their actual expiration.
+%%% To assert that tokens are valid (and not revoked/deleted) verification
+%%% checks should be performed periodically.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(auth_manager).
@@ -46,7 +53,7 @@
     get_credentials/1, update_credentials/3
 ]).
 -export([
-    to_auth_override/1,
+    auth_to_gs_auth_override/1,
     get_caveats/1,
     verify_auth/1,
 
@@ -237,12 +244,12 @@ update_credentials(TokenAuth, AccessToken, AudienceToken) ->
     }.
 
 
--spec to_auth_override(auth()) -> gs_protocol:auth_override().
-to_auth_override(?ROOT_AUTH) ->
+-spec auth_to_gs_auth_override(auth()) -> gs_protocol:auth_override().
+auth_to_gs_auth_override(?ROOT_AUTH) ->
     undefined;
-to_auth_override(?GUEST_AUTH) ->
+auth_to_gs_auth_override(?GUEST_AUTH) ->
     #auth_override{client_auth = nobody};
-to_auth_override(#token_auth{
+auth_to_gs_auth_override(#token_auth{
     access_token = AccessToken,
     peer_ip = PeerIp,
     interface = Interface,
@@ -329,11 +336,11 @@ report_oz_connection_termination() ->
 -spec report_token_status_update(od_token:doc()) -> ok.
 report_token_status_update(#document{
     key = TokenId,
-    value = #od_token{revoked = Revoked}
+    value = #od_token{revoked = IsRevoked}
 }) ->
     gen_server:abcast(
         consistent_hashing:get_all_nodes(), ?MODULE,
-        ?TOKEN_STATUS_CHANGED_MSG(TokenId, Revoked)
+        ?TOKEN_STATUS_CHANGED_MSG(TokenId, IsRevoked)
     ),
     ok.
 
@@ -447,11 +454,9 @@ handle_cast(?OZ_CONNECTION_TERMINATED_MSG, State) ->
 
 handle_cast(?MONITOR_TOKEN_REQ(TokenAuth, TokenRef), State) ->
     case is_token_revoked(TokenRef) of
-        {ok, false} ->
-            ok;
-        {ok, true} ->
+        {ok, IsRevoked} ->
             ets:update_element(?CACHE_NAME, TokenAuth, [
-                {#cache_entry.token_revoked, true}
+                {#cache_entry.token_revoked, IsRevoked}
             ]);
         {error, _} = Error ->
             ets:insert(?CACHE_NAME, #cache_entry{
@@ -476,37 +481,32 @@ handle_cast(?TOKEN_STATUS_CHANGED_MSG(TokenId, IsRevoked), State) ->
     {noreply, State};
 
 handle_cast(?TOKEN_DELETED_MSG(TokenId), State) ->
-    Expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL,
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         token_ref = {named, Id}
     } = CacheEntry) when Id == TokenId ->
         CacheEntry#cache_entry{
             verification_result = ?ERROR_TOKEN_INVALID,
-            cache_expiration = Expiration
+            token_revoked = false
         }
     end)),
     {noreply, State};
 
 handle_cast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation), State) ->
-    Expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL,
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         token_ref = {temporary, Id, OldGeneration}
     } = CacheEntry) when Id == UserId andalso OldGeneration < Generation ->
         CacheEntry#cache_entry{
-            verification_result = ?ERROR_TOKEN_REVOKED,
-            cache_expiration = Expiration
+            verification_result = ?ERROR_TOKEN_REVOKED
         }
     end)),
     {noreply, State};
 
 handle_cast(?TEMP_TOKENS_DELETED_MSG(UserId), State) ->
-    Expiration = ?NOW() + ?CACHE_ITEM_DEFAULT_TTL,
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         token_ref = {temporary, Id, _Generation}
     } = CacheEntry) when Id == UserId ->
         CacheEntry#cache_entry{
-            verification_result = ?ERROR_TOKEN_INVALID,
-            cache_expiration = Expiration
+            verification_result = ?ERROR_TOKEN_INVALID
         }
     end)),
     {noreply, State};
@@ -788,6 +788,10 @@ infer_cache_expiration(_TokenAuth, {error, _}) ->
 infer_cache_expiration(#token_auth{audience_token = undefined}, {ok, _, Expiration}) ->
     Expiration;
 infer_cache_expiration(_TokenAuth, {ok, _, _}) ->
+    % Audience token may come from subject not supported by this provider and
+    % as such cannot be monitored (subscription in oz for token issued by such
+    % subjects). That is why when audience tokens are present cache expiration
+    % should be limited.
     ?NOW() + ?CACHE_ITEM_DEFAULT_TTL.
 
 
