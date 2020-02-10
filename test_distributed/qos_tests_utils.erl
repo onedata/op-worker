@@ -27,7 +27,8 @@
     assert_distribution_in_dir_structure/3,
     assert_effective_qos/4, assert_effective_qos/5,
     assert_file_qos_documents/4, assert_file_qos_documents/5,
-    assert_qos_entry_documents/3, assert_qos_entry_documents/4
+    assert_qos_entry_documents/3, assert_qos_entry_documents/4,
+    assert_status_on_all_workers/4, assert_status_on_all_workers/5
 ]).
 
 % util functions
@@ -325,6 +326,9 @@ finish_all_transfers(Files) ->
                 erlang:send_after(timer:seconds(2), self(), Msg),
                 finish_all_transfers(Files)
         end
+    after timer:seconds(10) ->
+        ct:print("Transfers not started: ~p", [Files]),
+        {error, transfers_not_started}
     end.
 
 %%%====================================================================
@@ -371,12 +375,14 @@ assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, Repl
         ?assertMatch({ok, _Doc}, rpc:call(Worker, qos_entry, get, [QosEntryId]), Attempts),
         {ok, #document{value = QosEntry, scope = SpaceId}} = rpc:call(Worker, qos_entry, get, [QosEntryId]),
         {ok, {Expression, ReplicasNum}} = get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId),
+        % do not assert traverse reqs
+        QosEntryWithoutTraverseReqs = QosEntry#qos_entry{traverse_reqs = #{}},
         ErrMsg = str_utils:format(
             "Worker: ~p ~n"
             "Expected qos_entry: ~p ~n"
-            "Got: ~p", [Worker, ExpectedQosEntry, QosEntry]
+            "Got: ~p", [Worker, ExpectedQosEntry, QosEntryWithoutTraverseReqs]
         ),
-        {QosEntry, ErrMsg}
+        {QosEntryWithoutTraverseReqs, ErrMsg}
     end,
     assert_match_with_err_msg(GetQosEntryFun, ExpectedQosEntry, Attempts, 200).
 
@@ -603,6 +609,18 @@ assert_file_distribution(Config, Workers, {FileName, FileContent, ExpectedFileDi
         end
     end, true, Workers).
 
+
+assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus) ->
+    assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus, 1).
+
+assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus, Attempts) ->
+    Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    lists:foreach(fun(Worker) ->
+        lists:foreach(fun(Guid) ->
+            ?assertEqual({ok, ExpectedStatus}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), Attempts)
+        end, Guids)
+    end, Workers).
 
 %%%====================================================================
 %%% Internal functions

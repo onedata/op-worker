@@ -69,13 +69,14 @@
     effective_qos_for_file_in_nested_directories/1,
     effective_qos_for_files_in_different_directories_of_tree_structure/1,
     
-    % fixme add to all
     % QoS clean up tests
     qos_cleanup_test/1,
     
     % QoS status tests
     qos_status_during_traverse_test/1,
-    qos_status_with_file_deletion/1
+    qos_status_during_traverse_multi_batch_test/1,
+    qos_status_during_traverse_with_file_deletion/1,
+    qos_status_during_traverse_with_dir_deletion/1
 ]).
 
 all() -> [
@@ -125,7 +126,9 @@ all() -> [
     
     % QoS status tests
     qos_status_during_traverse_test,
-    qos_status_with_file_deletion
+    qos_status_during_traverse_multi_batch_test,
+    qos_status_during_traverse_with_file_deletion,
+    qos_status_during_traverse_with_dir_deletion
 ].
 
 % Although this test SUITE is single provider, QoS parameters
@@ -602,20 +605,16 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
 %%%===================================================================
 %%% Tests that check QoS documents clean up procedure
 %%%===================================================================
-% fixme duplicate
-
--define(simple_dir_structure(Name, Distribution),
-    {?SPACE_PATH1, [
-        {Name, ?TEST_DATA, Distribution}
-    ]}
-).
 
 qos_cleanup_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Name = generator:gen_name(),
     QosSpec = #fulfill_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
-            dir_structure = ?simple_dir_structure(Name, [?GET_DOMAIN_BIN(Worker)])
+            dir_structure = {?SPACE_PATH1, [
+                {Name, ?TEST_DATA, [?GET_DOMAIN_BIN(Worker)]}
+            ]}
+
         },
         qos_to_add = [
             #qos_to_add{
@@ -640,18 +639,23 @@ qos_cleanup_test(Config) ->
     ?assertEqual({error, {file_meta_missing, FileUuid}}, rpc:call(Worker, file_qos, get_effective, [FileUuid])),
     ?assertEqual({error, not_found}, rpc:call(Worker, qos_entry, get, [QosEntryId])).
 
-%fixme effective qos test and for dir
 
 %%%===================================================================
 %%% QoS status tests
 %%%===================================================================
 
-% fixme more tests
 qos_status_during_traverse_test(Config) ->
-    qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_PATH1, 10).
+    qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_PATH1, 8).
 
-qos_status_with_file_deletion(Config) ->
-    qos_test_base:qos_status_with_file_deletion(Config, ?SPACE_PATH1, 10).
+qos_status_during_traverse_multi_batch_test(Config) ->
+    % same test as previous one, batch size is set in init_per_testcase
+    qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_PATH1, 8).
+
+qos_status_during_traverse_with_file_deletion(Config) ->
+    qos_test_base:qos_status_during_traverse_with_file_deletion_test_base(Config, ?SPACE_PATH1, 2).
+
+qos_status_during_traverse_with_dir_deletion(Config) ->
+    qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_PATH1, 2).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -672,13 +676,18 @@ end_per_suite(Config) ->
     application:stop(ssl),
     initializer:teardown_storage(Config).
 
+
+init_per_testcase(qos_status_during_traverse_multi_batch_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    rpc:multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 2]),
+    init_per_testcase(qos_status_during_traverse_test, Config);
 init_per_testcase(Case, Config) when
     Case =:= qos_status_during_traverse_test;
-    Case =:= qos_status_with_file_deletion ->
+    Case =:= qos_status_during_traverse_with_file_deletion;
+    Case =:= qos_status_during_traverse_with_dir_deletion ->
     
     Workers = ?config(op_worker_nodes, Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    % do not start file synchronization
     qos_tests_utils:mock_transfers(Workers),
     mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
     mock_storage_qos_parameters(Workers, ?TEST_PROVIDERS_QOS),
@@ -695,6 +704,10 @@ init_per_testcase(_, Config) ->
     lfm_proxy:init(ConfigWithSessionInfo).
 
 
+end_per_testcase(qos_status_during_traverse_multi_batch_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    rpc:multicall(Workers, application, set_env, [op_worker, qos_traverse_batch_size, 40]),
+    end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),

@@ -49,7 +49,11 @@
     
     % QoS status test bases
     qos_status_during_traverse_test_base/3,
-    qos_status_with_file_deletion/3
+    qos_status_during_traverse_with_file_deletion_test_base/3,
+    qos_status_during_traverse_with_dir_deletion_test_base/3,
+    qos_status_during_reconciliation_test_base/4,
+    qos_status_during_reconciliation_with_file_deletion_test_base/2,
+    qos_status_during_reconciliation_with_dir_deletion_test_base/2
 ]).
 
 -define(ATTEMPTS, 60).
@@ -1025,208 +1029,259 @@ effective_qos_for_files_in_different_directories_of_tree_structure_spec(
 
 
 %%%===================================================================
-%%% QoS status tests bases and utils
+%%% QoS status tests bases
 %%%===================================================================
 
 qos_status_during_traverse_test_base(Config, SpaceId, NumberOfFilesInDir) ->
-    Workers = [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
-    % fixme
-    rpc:call(Worker1, application, set_env, [op_worker, qos_traverse_batch_size, 4]),
-    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     Name = generator:gen_name(),
     DirStructure =
         {SpaceId, [
-            {Name, [
-                {?filename(Name, 1), 
-                    lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]} end, lists:seq(1, NumberOfFilesInDir))
+            {Name, [ % Dir1
+                {?filename(Name, 1), % Dir2
+                    lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]} end, lists:seq(1, NumberOfFilesInDir)) % Guids2
                 },
-                {?filename(Name, 2), [
-                    {?filename(Name, 1),
-                        lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]} end, lists:seq(1, NumberOfFilesInDir))
+                {?filename(Name, 2), [ % Dir3
+                    {?filename(Name, 1), % Dir4
+                        lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]} end, lists:seq(1, NumberOfFilesInDir)) % Guids3
                     }
                 ]} ] ++ 
-                lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]} end, lists:seq(3, 2 + NumberOfFilesInDir))
+                lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]} end, lists:seq(3, 2 + NumberOfFilesInDir)) % Guids1
             }
         ]},
-
-    QosSpec = #fulfill_qos_test_spec{
-        initial_dir_structure = #test_dir_structure{
-            dir_structure = DirStructure
-        },
-        qos_to_add = [
-            #qos_to_add{
-                worker = Worker1,
-                qos_name = ?QOS1,
-                path = filename:join([<<"/">>, SpaceId, Name]),
-                expression = <<"country=PL">>
-            }
-        ],
-        % do not wait for QoS fulfillment
-        wait_for_qos_fulfillment = []
-    },
-
-    {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
-    QosList = maps:values(QosNameIdMapping),
-
-    lists:foreach(fun({Guid, Path}) ->
-        lists:foreach(fun(Worker) ->
-            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid})),
-            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, Path}))
-        end, Workers)
-    end, maps:get(files, GuidsAndPaths)),
-
-    % fixme
-    ct:print("ok ok"),
-
-    MakePath = fun(Files) ->
-        Files1 = lists:map(fun(A) -> ?filename(Name, A) end, Files),
-        fslogic_path:join([<<"/">>, SpaceId, Name | Files1])
-    end,
+    
+    {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
 
     Guids1 = lists:map(fun(Num) ->
-        qos_tests_utils:get_guid(MakePath([Num]), GuidsAndPaths)
+        qos_tests_utils:get_guid(resolve_path(SpaceId, Name, [Num]), GuidsAndPaths)
     end, lists:seq(3, 2 + NumberOfFilesInDir)),
     
     Guids2 = lists:map(fun(Num) ->
-        qos_tests_utils:get_guid(MakePath([1, Num]), GuidsAndPaths)
+        qos_tests_utils:get_guid(resolve_path(SpaceId, Name, [1, Num]), GuidsAndPaths)
     end, lists:seq(1, NumberOfFilesInDir)),
     
     Guids3 = lists:map(fun(Num) ->
-        qos_tests_utils:get_guid(MakePath([2, 1, Num]), GuidsAndPaths)
+        qos_tests_utils:get_guid(resolve_path(SpaceId, Name, [2, 1, Num]), GuidsAndPaths)
     end, lists:seq(1, NumberOfFilesInDir)),
     
+    Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
+    Dir2 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, [1]), GuidsAndPaths),
+    Dir3 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, [2]), GuidsAndPaths),
+    Dir4 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, [2,1]), GuidsAndPaths),
     
-    qos_tests_utils:finish_all_transfers(Guids1),
     
-    % fixme
-    ct:print("finished1"),
-    lists:foreach(fun(Worker) ->
-        ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([])}), ?ATTEMPTS),
-        ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([1])}), ?ATTEMPTS),
-        ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([2])}), ?ATTEMPTS),
-        ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([2, 1])}), ?ATTEMPTS),
-        lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS)
-        end, Guids1),
-        lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS)
-        end, Guids2),
-        lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS)
-        end, Guids3)
-    end, Workers),
-    ct:print("ok ok"),
+    ok = qos_tests_utils:finish_all_transfers(Guids1),
+    qos_tests_utils:assert_status_on_all_workers(Config, Guids1, QosList, true, ?ATTEMPTS),
+    qos_tests_utils:assert_status_on_all_workers(Config, Guids2 ++ Guids3 ++ [Dir1, Dir2, Dir3, Dir4], QosList, false, ?ATTEMPTS),
     
-    qos_tests_utils:finish_all_transfers(Guids2),
+    ok = qos_tests_utils:finish_all_transfers(Guids2),
+    qos_tests_utils:assert_status_on_all_workers(Config, Guids1 ++ Guids2 ++ [Dir2], QosList, true, ?ATTEMPTS),
+    qos_tests_utils:assert_status_on_all_workers(Config, Guids3 ++ [Dir1, Dir3, Dir4], QosList, false, ?ATTEMPTS),
     
-    % fixme
-    ct:print("finished2"),
-    lists:foreach(fun(Worker) ->
-        ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([])}), ?ATTEMPTS),
-        ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([1])}), ?ATTEMPTS),
-        ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([2])}), ?ATTEMPTS),
-        ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([2, 1])}), ?ATTEMPTS),
-        lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS)
-        end, Guids1),
-        lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS)
-        end, Guids2),
-        lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS)
-        end, Guids3)
-    end, Workers),
-    ct:print("ok ok"),
-    
-    qos_tests_utils:finish_all_transfers(Guids3),
-    
-    % fixme
-    ct:print("finished3"),
-    lists:foreach(fun(Worker) ->
-        ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([])}), ?ATTEMPTS),
-        ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([1])}), ?ATTEMPTS),
-        ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([2])}), ?ATTEMPTS),
-        ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([2, 1])}), ?ATTEMPTS),
-        lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS)
-        end, Guids1),
-        lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS)
-        end, Guids2),
-        lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS)
-        end, Guids3)
-    end, Workers).
+    ok = qos_tests_utils:finish_all_transfers(Guids3),
+    qos_tests_utils:assert_status_on_all_workers(Config, Guids1 ++ Guids2 ++ Guids3 ++ [Dir1, Dir2, Dir3, Dir4], QosList, true, ?ATTEMPTS).
 
 
-qos_status_with_file_deletion(Config, SpaceId, NumberOfFilesInDir) ->
-    Workers = [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+qos_status_during_traverse_with_file_deletion_test_base(Config, SpaceId, NumberOfFilesInDir) ->
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     Name = generator:gen_name(),
     DirStructure =
         {SpaceId, [
-            {Name, 
+            {Name, % Dir1
                 lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]} end, lists:seq(1, NumberOfFilesInDir))
             }
         ]},
     
-    QosSpec = #fulfill_qos_test_spec{
-        initial_dir_structure = #test_dir_structure{
-            dir_structure = DirStructure
-        },
-        qos_to_add = [
-            #qos_to_add{
-                worker = Worker1,
-                qos_name = ?QOS1,
-                path = filename:join([<<"/">>, SpaceId, Name]),
-                expression = <<"country=PL">>
-            }
-        ],
-        % do not wait for QoS fulfillment
-        wait_for_qos_fulfillment = []
-    },
-    
-    {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
-    QosList = maps:values(QosNameIdMapping),
-    
-    lists:foreach(fun({Guid, Path}) ->
-        lists:foreach(fun(Worker) ->
-            case lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}) of
-                {ok, true} ->
-                    ct:print("checking file: ~p", [Guid]),
-                    timer:sleep(timer:hours(8));
-                _ -> ok
-            end,
-            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, Path}))
-        end, Workers)
-    end, maps:get(files, GuidsAndPaths)),
-    
-    % fixme
-    ct:print("ok ok"),
-    
-    MakePath = fun(Files) ->
-        Files1 = lists:map(fun(A) -> ?filename(Name, A) end, Files),
-        fslogic_path:join([<<"/">>, SpaceId, Name | Files1])
-    end,
+    {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
     
     {ToFinish, ToDelete} = lists:foldl(fun(Num, {F, D}) ->
-        Guid = qos_tests_utils:get_guid(MakePath([Num]), GuidsAndPaths),
+        Guid = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, [Num]), GuidsAndPaths),
         case Num rem 2 of
             0 -> {[Guid | F], D};
             1 -> {F, [Guid | D]}
         end
     end, {[], []}, lists:seq(1, NumberOfFilesInDir)),
     
-    qos_tests_utils:finish_all_transfers(ToFinish),
     lists:foreach(fun(Guid) ->
-        lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, Guid})
+        ok = lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, Guid})
     end, ToDelete),
     
-    % fixme
-    ct:print("finished1"),
+    ok = qos_tests_utils:finish_all_transfers(ToFinish),
+    
+    Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
+    ok = qos_tests_utils:assert_status_on_all_workers(Config, ToDelete ++ ToFinish ++ [Dir1], QosList, true, ?ATTEMPTS),
+    
+    % finish transfers to unlock waiting slave job processes
+    ok = qos_tests_utils:finish_all_transfers(ToDelete).
+    
+
+qos_status_during_traverse_with_dir_deletion_test_base(Config, SpaceId, NumberOfFilesInDir) ->
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    Name = generator:gen_name(),
+    DirStructure =
+        {SpaceId, [
+            {Name, [ % Dir1
+                {?filename(Name, 1), % Dir2
+                    lists:map(fun(Num) -> {?filename(Name, Num), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]} end, lists:seq(1, NumberOfFilesInDir)) 
+                }
+            ]}
+        ]},
+    
+    {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
+    
+    Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
+    Dir2 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, [1]), GuidsAndPaths),
+    
+    ok = lfm_proxy:rm_recursive(Worker1, SessId(Worker1), {guid, Dir2}),
+    
+    qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, true, ?ATTEMPTS),
+    
+    % finish transfers to unlock waiting slave job processes
+    ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]).
+
+
+qos_status_during_reconciliation_test_base(Config, SpaceId, DirStructure, Filename) ->
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    
+    {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Filename),
+    
+    ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]),
+    
+    FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
+    FilesAndDirsGuids = lists:map(fun({G, _}) -> G end, FilesAndDirs),
+    
+    qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, true, ?ATTEMPTS),
+    
+    IsAncestor = fun
+        (F, F) -> true;
+        (A, F) -> str_utils:binary_starts_with(F, <<A/binary, "/">>)
+    end,
+    
+    lists:foreach(fun({FileGuid, FilePath}) ->
+        ct:print("writing to file ~p on worker ~p", [FilePath, Worker1]),
+        {ok, FileHandle} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, FileGuid}, write),
+        {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
+        ok = lfm_proxy:close(Worker1, FileHandle),
+        lists:foreach(fun({G, P}) ->
+            ct:print("Checking file: ~p~n\tis_ancestor: ~p", [P, IsAncestor(P, FilePath)]),
+            qos_tests_utils:assert_status_on_all_workers(Config, [G], QosList, not IsAncestor(P, FilePath), ?ATTEMPTS)
+        end, FilesAndDirs),
+        ok = qos_tests_utils:finish_all_transfers([FileGuid]),
+        ct:print("Checking after finish"),
+        qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, true, ?ATTEMPTS)
+    end, maps:get(files, GuidsAndPaths)).
+
+
+qos_status_during_reconciliation_with_file_deletion_test_base(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    
+    Name = generator:gen_name(),
+    DirStructure =
+        {SpaceId, [
+            {Name, % Dir1
+                [{?filename(Name, 0), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]}]
+            }
+        ]},
+    
+    {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
+    
+    ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]),
+    
+    FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
+    FilesAndDirsGuids = lists:map(fun({G, _}) -> G end, FilesAndDirs),
+    [{Dir1, _}] = maps:get(dirs, GuidsAndPaths),
+    
+    qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, true, ?ATTEMPTS),
+    
     lists:foreach(fun(Worker) ->
-        ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, MakePath([])}), ?ATTEMPTS),
-        lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS)
-        end, ToFinish ++ ToDelete)
+        {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), Dir1, generator:gen_name(), 8#664),
+        {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
+        ok = lfm_proxy:close(Worker1, FileHandle),
+        qos_tests_utils:assert_status_on_all_workers(Config, [FileGuid], QosList, false, ?ATTEMPTS),
+        ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, FileGuid}),
+        qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, true, ?ATTEMPTS),
+        % finish transfer to unlock waiting slave job process
+        ok = qos_tests_utils:finish_all_transfers([FileGuid])
     end, Workers).
+
+
+qos_status_during_reconciliation_with_dir_deletion_test_base(Config, SpaceId) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    Name = generator:gen_name(),
+    Name = generator:gen_name(),
+    DirStructure =
+        {SpaceId, [
+            {Name, % Dir1
+                [{?filename(Name, 0), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]}]
+            }
+        ]},
+    
+    {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
+    
+    Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
+    
+    ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]),
+    qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, true, ?ATTEMPTS),
+    
+    lists:foreach(fun(Worker) ->
+        {ok, DirGuid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir1, generator:gen_name(), 8#775),
+        {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), 8#664),
+        {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
+        ok = lfm_proxy:close(Worker1, FileHandle),
+        qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, false, ?ATTEMPTS),
+        ok = lfm_proxy:rm_recursive(Worker, SessId(Worker), {guid, DirGuid}),
+        qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, true, ?ATTEMPTS),
+        % finish transfer to unlock waiting slave job process
+        ok = qos_tests_utils:finish_all_transfers([FileGuid])
+    end, Workers).
+
+
+%% @private
+prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
+    [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    QosRootFilePath = filename:join([<<"/">>, SpaceId, Name]),
+    
+    QosSpec = #fulfill_qos_test_spec{
+        initial_dir_structure = #test_dir_structure{
+            dir_structure = DirStructure
+        },
+        qos_to_add = [
+            #qos_to_add{
+                worker = Worker1,
+                qos_name = ?QOS1,
+                path = QosRootFilePath,
+                expression = <<"country=PT">>
+            }
+        ],
+        % do not wait for QoS fulfillment
+        wait_for_qos_fulfillment = [],
+        expected_qos_entries = [
+            #expected_qos_entry{
+                workers = Workers,
+                qos_name = ?QOS1,
+                file_key = {path, QosRootFilePath},
+                qos_expression_in_rpn = [<<"country=PT">>],
+                replicas_num = 1,
+                possibility_check = {possible, ?GET_DOMAIN_BIN(Worker1)}
+            }
+        ]
+    },
+    
+    {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
+    QosList = maps:values(QosNameIdMapping),
+    
+    FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
+    FilesAndDirsGuids = lists:map(fun({G, _}) -> G end, FilesAndDirs),
+    qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, false),
+    {GuidsAndPaths, QosList}.
+
+
+%% @private
+resolve_path(SpaceId, Name, Files) ->
+    Files1 = lists:map(fun(A) -> ?filename(Name, A) end, Files),
+    fslogic_path:join([<<"/">>, SpaceId, Name | Files1]).
