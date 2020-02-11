@@ -1161,16 +1161,16 @@ qos_status_during_reconciliation_test_base(Config, SpaceId, DirStructure, Filena
     end,
     
     lists:foreach(fun({FileGuid, FilePath}) ->
-        ct:print("writing to file ~p on worker ~p", [FilePath, Worker1]),
+        ct:pal("writing to file ~p on worker ~p", [FilePath, Worker1]),
         {ok, FileHandle} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, FileGuid}, write),
         {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
         ok = lfm_proxy:close(Worker1, FileHandle),
         lists:foreach(fun({G, P}) ->
-            ct:print("Checking file: ~p~n\tis_ancestor: ~p", [P, IsAncestor(P, FilePath)]),
+            ct:pal("Checking file: ~p~n\tis_ancestor: ~p", [P, IsAncestor(P, FilePath)]),
             qos_tests_utils:assert_status_on_all_workers(Config, [G], QosList, not IsAncestor(P, FilePath), ?ATTEMPTS)
         end, FilesAndDirs),
         ok = qos_tests_utils:finish_all_transfers([FileGuid]),
-        ct:print("Checking after finish"),
+        ct:pal("Checking after finish"),
         qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, true, ?ATTEMPTS)
     end, maps:get(files, GuidsAndPaths)).
 
@@ -1213,7 +1213,6 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(Config, SpaceId) ->
     [Worker1 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     Name = generator:gen_name(),
-    Name = generator:gen_name(),
     DirStructure =
         {SpaceId, [
             {Name, % Dir1
@@ -1222,9 +1221,7 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(Config, SpaceId) ->
         ]},
     
     {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
-    
     Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
-    
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]),
     qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, true, ?ATTEMPTS),
     

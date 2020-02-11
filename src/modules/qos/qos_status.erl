@@ -51,8 +51,9 @@
 %%% 
 %%% 
 %%% In order to be able to check whether file is being reconciled, when file_change was reported 
-%%% reconcile_link is created. This link is file uuid_based_path (similar to canonical path, 
-%%% but instead of filenames, uuids are used). This link is deleted after reconcile job is done. 
+%%% reconcile_link is created. This link is file uuid_based_path (similar to canonical, but path 
+%%% elements are uuids instead of filenames/dirnames). This link is deleted after reconcile job 
+%%% is done. 
 %%% 
 %%% To check if there is any reconcile job in subtree of a directory simply check if there is any 
 %%% reconcile_link with its prefix being this directory uuid path.
@@ -186,7 +187,7 @@ report_reconciliation_started(TraverseId, FileCtx, QosEntries) ->
     {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
     Link = {?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId), TraverseId},
     lists:foreach(fun(QosEntryId) ->
-        {ok, _} = add_synced_links(
+        {ok, _} = add_synced_link(
             SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), oneprovider:get_id(), Link)
     end, QosEntries).
 
@@ -216,15 +217,21 @@ report_file_deleted(FileCtx, QosEntryId) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     {ok, TraverseReqs} = qos_entry:get_traverse_reqs(QosDoc),
     {LocalTraverseIds, _} = qos_traverse_req:split_local_and_remote(TraverseReqs),
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx),
     
     lists:foreach(fun(TraverseId) ->
-        ok = delete(TraverseId, Uuid),
-        ok = report_traverse_finished_for_file(TraverseId, FileCtx)
+        case IsDir of
+            true ->
+                {ParentFileCtx, _} = file_ctx:get_parent(FileCtx1, undefined),
+                ok = report_child_dir_traversed(TraverseId, ParentFileCtx),
+                ok = handle_traverse_finished_for_dir(TraverseId, FileCtx1, no_link);
+            false ->
+                ok = report_traverse_finished_for_file(TraverseId, FileCtx)
+        end
     end, LocalTraverseIds),
     
     {ok, SpaceId} = qos_entry:get_space_id(QosDoc),
-    {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
+    {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx1),
     % delete all reconcile links
     delete_all_links_with_prefix(
         SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ?RECONCILE_LINK_NAME(UuidBasedPath, <<"">>)).
@@ -326,11 +333,11 @@ update_status_doc_and_handle_finished(TraverseId, FileCtx, UpdateFun) ->
         {ok, #document{value = #qos_status{
             child_dirs_count = 0, files_list = [], is_last_batch = true, is_start_dir = true}}
         } -> 
-            handle_traverse_finished_for_dir(TraverseId, FileCtx);
+            handle_traverse_finished_for_dir(TraverseId, FileCtx, add_link);
         {ok, #document{value = #qos_status{
             child_dirs_count = 0, files_list = [], is_last_batch = true}}
         } ->
-            handle_traverse_finished_for_dir(TraverseId, FileCtx),
+            handle_traverse_finished_for_dir(TraverseId, FileCtx, add_link),
             {ParentFileCtx, _} = file_ctx:get_parent(FileCtx, undefined),
             ok = report_child_dir_traversed(TraverseId, ParentFileCtx);
         {ok, _} -> ok;
@@ -342,21 +349,27 @@ update_status_doc_and_handle_finished(TraverseId, FileCtx, UpdateFun) ->
 -spec report_child_dir_traversed(traverse:id(), file_ctx:ctx()) ->
     ok | {error, term()}.
 report_child_dir_traversed(TraverseId, FileCtx) ->
-    update_status_doc_and_handle_finished(TraverseId, FileCtx,
+    ?ok_if_not_found(update_status_doc_and_handle_finished(TraverseId, FileCtx,
         fun(#qos_status{child_dirs_count = ChildDirs} = Value) ->
             {ok, Value#qos_status{child_dirs_count = ChildDirs - 1}}
         end
-    ).
+    )).
 
 
 %% @private
--spec handle_traverse_finished_for_dir(traverse:id(), file_ctx:ctx()) -> ok.
-handle_traverse_finished_for_dir(TraverseId, FileCtx) ->
+-spec handle_traverse_finished_for_dir(traverse:id(), file_ctx:ctx(), 
+    LinkStrategy :: add_link | no_link) -> ok.
+handle_traverse_finished_for_dir(TraverseId, FileCtx, LinkStrategy) ->
     {Path, FileCtx1} = file_ctx:get_uuid_based_path(FileCtx),
     Uuid = file_ctx:get_uuid_const(FileCtx1),
     SpaceId = file_ctx:get_space_id_const(FileCtx1),
-    {ok, _} = add_synced_links(
-        SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), oneprovider:get_id(), {Path, Uuid}),
+    case LinkStrategy of
+        add_link ->
+            {ok, _} = add_synced_link(
+                SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), 
+                oneprovider:get_id(), {Path, Uuid});
+        no_link -> ok
+    end,
     ok = delete_all_links_with_prefix(
         SpaceId, ?TRAVERSE_LINKS_KEY(TraverseId), <<Path/binary, "/">>),
     ok = delete(TraverseId, Uuid).
@@ -398,9 +411,9 @@ delete(TraverseId, Uuid)->
 
 
 %% @private
--spec add_synced_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
+-spec add_synced_link(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
     {datastore:link_name(), datastore:link_target()}) -> {ok, datastore:link()} | {error, term()}.
-add_synced_links(SpaceId, Key, TreeId, Link) ->
+add_synced_link(SpaceId, Key, TreeId, Link) ->
     datastore_model:add_links(?CTX#{scope => SpaceId}, Key, TreeId, Link).
 
 

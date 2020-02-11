@@ -311,12 +311,7 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
 get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
     {fslogic_path:split(Path), FileCtx}.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file's uuid based path 
-%% (similar to canonical but instead of filename, uuid is used).
-%% @end
-%%--------------------------------------------------------------------
+
 -spec get_uuid_based_path(ctx()) -> {file_meta:uuid_based_path(), ctx()}.
 get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = undefined}) ->
     {UuidPathTokens, FileCtx2} = resolve_uuid_based_path_tokens(FileCtx),

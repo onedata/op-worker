@@ -704,7 +704,7 @@ qos_status_during_reconciliation_with_file_deletion_test(Config) ->
     qos_test_base:qos_status_during_reconciliation_with_file_deletion_test_base(Config, ?SPACE_ID).
 
 qos_status_during_reconciliation_with_dir_deletion_test(Config) ->
-    qos_test_base:qos_status_during_reconciliation_with_file_deletion_test_base(Config, ?SPACE_ID).
+    qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID).
 
 
 %%%===================================================================
