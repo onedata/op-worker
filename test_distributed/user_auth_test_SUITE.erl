@@ -29,6 +29,7 @@
 -export([
     auth_cache_size_test/1,
     auth_cache_named_token_events_test/1,
+    auth_cache_temporary_token_events_test/1,
     token_authentication/1,
     token_expiration/1
 ]).
@@ -36,6 +37,7 @@
 all() -> ?ALL([
     auth_cache_size_test,
     auth_cache_named_token_events_test,
+    auth_cache_temporary_token_events_test,
     token_authentication,
     token_expiration
 ]).
@@ -108,13 +110,12 @@ auth_cache_named_token_events_test(Config) ->
     TokenAuth2 = create_token_auth(AccessToken1),
     TokenAuth3 = create_token_auth(AccessToken2),
 
-    lists:foreach(fun({TokenAuth, ExpUserId, ExpCacheSize}) ->
-        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker1, TokenAuth)),
-        ?assertEqual(ExpCacheSize, get_auth_cache_size(Worker1))
+    lists:foreach(fun({TokenAuth, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker1, TokenAuth))
     end, [
-        {TokenAuth1, ?USER_ID_1, 1},
-        {TokenAuth2, ?USER_ID_1, 2},
-        {TokenAuth3, ?USER_ID_2, 3}
+        {TokenAuth1, ?USER_ID_1},
+        {TokenAuth2, ?USER_ID_1},
+        {TokenAuth3, ?USER_ID_2}
     ]),
 
     % When AccessToken1 is revoked
@@ -150,6 +151,55 @@ auth_cache_named_token_events_test(Config) ->
         ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker1, TokenAuth))
     end, [TokenAuth1, TokenAuth2]),
     ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker1, TokenAuth3)),
+
+    clear_auth_cache(Worker1).
+
+
+auth_cache_temporary_token_events_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+
+    clear_auth_cache(Worker1),
+    ?assertEqual(0, get_auth_cache_size(Worker1)),
+
+    AccessToken1 = initializer:create_access_token(?USER_ID_1, [], temporary),
+    AccessToken2 = initializer:create_access_token(?USER_ID_2, [], temporary),
+
+    TokenAuth1 = create_token_auth(AccessToken1),
+    TokenAuth2 = create_token_auth(AccessToken1),
+    TokenAuth3 = create_token_auth(AccessToken2),
+
+    lists:foreach(fun({TokenAuth, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker1, TokenAuth))
+    end, [
+        {TokenAuth1, ?USER_ID_1},
+        {TokenAuth2, ?USER_ID_1},
+        {TokenAuth3, ?USER_ID_2}
+    ]),
+
+    % When temporary tokens of ?USER_ID_1 are revoked
+    simulate_gs_temporary_tokens_revocation(Worker1, ?USER_ID_1),
+
+    % Then all TokenAuths based on temporary tokens should be revoked
+    lists:foreach(fun(TokenAuth) ->
+        ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker1, TokenAuth))
+    end, [TokenAuth1, TokenAuth2]),
+    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
+
+    % Deleting temporary tokens of ?USER_ID_1 should result in ?ERROR_TOKEN_INVALID
+    simulate_gs_temporary_tokens_deletion(Worker1, ?USER_ID_1),
+
+    lists:foreach(fun(TokenAuth) ->
+        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker1, TokenAuth))
+    end, [TokenAuth1, TokenAuth2]),
+    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
+
+    % Revoking already deleted token should not change error
+    simulate_gs_temporary_tokens_revocation(Worker1, ?USER_ID_1),
+
+    lists:foreach(fun(TokenAuth) ->
+        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker1, TokenAuth))
+    end, [TokenAuth1, TokenAuth2]),
+    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
 
     clear_auth_cache(Worker1).
 
@@ -439,6 +489,28 @@ simulate_gs_token_status_update(Node, TokenId, Revoked) ->
 simulate_gs_token_deletion(Node, TokenId) ->
     rpc:call(Node, gs_client_worker, process_push_message, [#gs_push_graph{
         gri = #gri{type = od_token, id = TokenId, aspect = instance, scope = shared},
+        change_type = deleted
+    }]),
+    ok.
+
+
+-spec simulate_gs_temporary_tokens_revocation(node(), binary()) -> ok.
+simulate_gs_temporary_tokens_revocation(Node, UserId) ->
+    rpc:call(Node, gs_client_worker, process_push_message, [#gs_push_graph{
+        gri = #gri{type = temporary_token_secret, id = UserId, aspect = user, scope = shared},
+        data = #{
+            <<"revision">> => erlang:unique_integer([monotonic, positive]),
+            <<"generation">> => erlang:unique_integer([monotonic, positive])
+        },
+        change_type = updated
+    }]),
+    ok.
+
+
+-spec simulate_gs_temporary_tokens_deletion(node(), binary()) -> ok.
+simulate_gs_temporary_tokens_deletion(Node, UserId) ->
+    rpc:call(Node, gs_client_worker, process_push_message, [#gs_push_graph{
+        gri = #gri{type = temporary_token_secret, id = UserId, aspect = user, scope = shared},
         change_type = deleted
     }]),
     ok.

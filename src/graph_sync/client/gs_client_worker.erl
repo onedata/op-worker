@@ -328,6 +328,8 @@ process_push_message(#gs_push_graph{gri = GRI, change_type = deleted}) ->
             main_harvesting_stream:space_removed(SpaceId);
         #gri{type = od_token, id = TokenId, aspect = instance} ->
             auth_manager:report_token_deletion(TokenId);
+        #gri{type = temporary_token_secret, id = UserId, aspect = user} ->
+            auth_manager:report_temporary_tokens_deletion(UserId);
         _ ->
             ok
     end,

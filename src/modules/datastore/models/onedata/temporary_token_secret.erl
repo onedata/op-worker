@@ -72,9 +72,6 @@ list() ->
 run_after(update, _, {ok, Doc} = Result) ->
     auth_manager:report_temporary_tokens_generation_change(Doc),
     Result;
-run_after(delete, _Args, {ok, Doc} = Result) ->
-    auth_manager:report_temporary_tokens_deletion(Doc),
-    Result;
 run_after(_Function, _Args, Result) ->
     Result.
 

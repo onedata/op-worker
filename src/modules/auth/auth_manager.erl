@@ -353,8 +353,8 @@ report_temporary_tokens_generation_change(#document{
     ok.
 
 
--spec report_temporary_tokens_deletion(temporary_token_secret:doc()) -> ok.
-report_temporary_tokens_deletion(#document{key = UserId}) ->
+-spec report_temporary_tokens_deletion(od_user:id()) -> ok.
+report_temporary_tokens_deletion(UserId) ->
     gen_server:abcast(
         consistent_hashing:get_all_nodes(), ?MODULE,
         ?TEMP_TOKENS_DELETED_MSG(UserId)
@@ -487,6 +487,7 @@ handle_cast(?TOKEN_DELETED_MSG(TokenId), State) ->
 
 handle_cast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation), State) ->
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
+        verification_result = {ok, _, _},
         token_ref = {temporary, Id, OldGeneration}
     } = CacheEntry) when Id == UserId andalso OldGeneration < Generation ->
         CacheEntry#cache_entry{
