@@ -256,6 +256,12 @@ mock_user_logic(Config) ->
         (_, _) ->
             {error, not_found}
     end,
+    test_utils:mock_expect(Workers, token_logic, is_token_revoked, fun(_TokenId) ->
+        {ok, false}
+    end),
+    test_utils:mock_expect(Workers, token_logic, get_temporary_tokens_generation, fun(_UserId) ->
+        {ok, 1}
+    end),
 
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(AccessToken, _, _, _) ->

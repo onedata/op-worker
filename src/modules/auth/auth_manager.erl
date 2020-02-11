@@ -13,10 +13,10 @@
 %%% Cache entries are cached for as long as token expiration allows (can be
 %%% cached forever if no time caveat is present). At the same time ?MODULE
 %%% subscribes in oz for token events and monitors their status so that
-%%% eventual changes will be reflected in cache.
+%%% eventual changes (eg. revocation) will be reflected in cache.
 %%% To avoid exhausting memory, ?MODULE performs periodic checks and clears
 %%% cache if size limit is breached. Cache is also cleared, with some delay,
-%%% when connection to oz is lost (subscription may became invalid) and
+%%% when connection to oz is lost (subscriptions may became invalid) and
 %%% immediately when mentioned connection is restored.
 %%%
 %%% NOTE !!!
@@ -57,7 +57,7 @@
     get_caveats/1,
     verify_auth/1,
 
-    invalidate/1
+    invalidate_cache_entry/1
 ]).
 -export([start_link/0, spec/0]).
 -export([
@@ -288,25 +288,11 @@ get_caveats(TokenAuth) ->
 %%--------------------------------------------------------------------
 -spec verify_auth(auth()) -> verification_result().
 verify_auth(?ROOT_AUTH) ->
-    AaiAuth = #auth{
-        subject = ?SUB(root, ?ROOT_USER_ID),
-        session_id = ?ROOT_SESS_ID
-    },
-    {ok, AaiAuth, undefined};
+    {ok, #auth{subject = ?SUB(root, ?ROOT_USER_ID)}, undefined};
 verify_auth(?GUEST_AUTH) ->
-    AaiAuth = #auth{
-        subject = ?SUB(nobody, ?GUEST_USER_ID),
-        session_id = ?GUEST_SESS_ID
-    },
-    {ok, AaiAuth, undefined};
+    {ok, #auth{subject = ?SUB(nobody, ?GUEST_USER_ID)}, undefined};
 verify_auth(TokenAuth) ->
     verify_token_auth(TokenAuth).
-
-
--spec invalidate(token_auth()) -> ok.
-invalidate(TokenAuth) ->
-    ets:delete(?CACHE_NAME, TokenAuth),
-    ok.
 
 
 %%--------------------------------------------------------------------
@@ -373,6 +359,12 @@ report_temporary_tokens_deletion(#document{key = UserId}) ->
         consistent_hashing:get_all_nodes(), ?MODULE,
         ?TEMP_TOKENS_DELETED_MSG(UserId)
     ),
+    ok.
+
+
+-spec invalidate_cache_entry(token_auth()) -> ok.
+invalidate_cache_entry(TokenAuth) ->
+    ets:delete(?CACHE_NAME, TokenAuth),
     ok.
 
 
@@ -486,7 +478,8 @@ handle_cast(?TOKEN_DELETED_MSG(TokenId), State) ->
     } = CacheEntry) when Id == TokenId ->
         CacheEntry#cache_entry{
             verification_result = ?ERROR_TOKEN_INVALID,
-            token_revoked = false
+            token_revoked = false,
+            cache_expiration = undefined
         }
     end)),
     {noreply, State};
@@ -496,7 +489,9 @@ handle_cast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation), State) ->
         token_ref = {temporary, Id, OldGeneration}
     } = CacheEntry) when Id == UserId andalso OldGeneration < Generation ->
         CacheEntry#cache_entry{
-            verification_result = ?ERROR_TOKEN_REVOKED
+            verification_result = ?ERROR_TOKEN_REVOKED,
+            token_revoked = false,
+            cache_expiration = undefined
         }
     end)),
     {noreply, State};
@@ -506,7 +501,9 @@ handle_cast(?TEMP_TOKENS_DELETED_MSG(UserId), State) ->
         token_ref = {temporary, Id, _Generation}
     } = CacheEntry) when Id == UserId ->
         CacheEntry#cache_entry{
-            verification_result = ?ERROR_TOKEN_INVALID
+            verification_result = ?ERROR_TOKEN_INVALID,
+            token_revoked = false,
+            cache_expiration = undefined
         }
     end)),
     {noreply, State};
@@ -681,7 +678,7 @@ get_token_ref(#token{
 %% @private
 -spec is_token_revoked(token_ref()) -> {ok, boolean()} | errors:error().
 is_token_revoked({named, TokenId}) ->
-    token_logic:is_revoked(TokenId);
+    token_logic:is_token_revoked(TokenId);
 is_token_revoked({temporary, UserId, Generation}) ->
     case token_logic:get_temporary_tokens_generation(UserId) of
         {ok, ActualGeneration} ->
@@ -768,7 +765,7 @@ save_token_auth_verification_result_in_cache(TokenAuth, TokenRef, VerificationRe
 
         token_ref = TokenRef,
         token_revoked = false,
-        cache_expiration = infer_cache_expiration(TokenAuth, VerificationResult)
+        cache_expiration = infer_cache_entry_expiration(TokenAuth, VerificationResult)
     },
     try
         ets:insert(?CACHE_NAME, CacheEntry),
@@ -782,16 +779,17 @@ save_token_auth_verification_result_in_cache(TokenAuth, TokenRef, VerificationRe
 
 
 %% @private
--spec infer_cache_expiration(token_auth(), verification_result()) -> timestamp().
-infer_cache_expiration(_TokenAuth, {error, _}) ->
+-spec infer_cache_entry_expiration(token_auth(), verification_result()) ->
+    undefined | timestamp().
+infer_cache_entry_expiration(_TokenAuth, {error, _}) ->
     ?NOW() + ?CACHE_ITEM_DEFAULT_TTL;
-infer_cache_expiration(#token_auth{audience_token = undefined}, {ok, _, Expiration}) ->
+infer_cache_entry_expiration(#token_auth{audience_token = undefined}, {ok, _, Expiration}) ->
     Expiration;
-infer_cache_expiration(_TokenAuth, {ok, _, _}) ->
+infer_cache_entry_expiration(_TokenAuth, {ok, _, _}) ->
     % Audience token may come from subject not supported by this provider and
     % as such cannot be monitored (subscription in oz for token issued by such
-    % subjects). That is why when audience tokens are present cache expiration
-    % should be limited.
+    % subjects). That is why verification_result() for token_auth() with
+    % audience_token() should be cached only for short period of time.
     ?NOW() + ?CACHE_ITEM_DEFAULT_TTL.
 
 
@@ -804,10 +802,9 @@ schedule_cache_size_checkup() ->
 %% @private
 -spec schedule_cache_invalidation(state()) -> state().
 schedule_cache_invalidation(#state{cache_invalidation_timer = undefined} = State) ->
-    TimerRef = erlang:send_after(
+    State#state{cache_invalidation_timer = erlang:send_after(
         ?CACHE_INVALIDATION_DELAY, self(), ?INVALIDATE_CACHE_REQ
-    ),
-    State#state{cache_invalidation_timer = TimerRef};
+    )};
 schedule_cache_invalidation(State) ->
     State.
 

@@ -121,6 +121,7 @@
 ]).
 
 -define(TOKENS_SECRET, <<"secret">>).
+-define(TEMPORARY_TOKENS_GENERATION, 1).
 
 -define(SUPPORTED_ACCESS_TOKEN_CAVEATS, [
     cv_time, cv_audience,
@@ -244,7 +245,7 @@ create_access_token(UserId, Caveats) ->
             subject = ?SUB(user, UserId),
             id = UserId,
             type = ?ACCESS_TOKEN,
-            persistence = {temporary, 1}
+            persistence = {temporary, ?TEMPORARY_TOKENS_GENERATION}
         }, ?TOKENS_SECRET, Caveats))
     ),
     SerializedToken.
@@ -317,7 +318,7 @@ teardown_session(Worker, Config) ->
         ({{session_id, _}, SessId}, Acc) ->
             case rpc:call(Worker, session, get_auth, [SessId]) of
                 {ok, Auth} ->
-                    rpc:call(Worker, auth_manager, invalidate, [Auth]),
+                    rpc:call(Worker, auth_manager, invalidate_cache_entry, [Auth]),
                     ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId]));
                 {error, not_found} ->
                     ok
@@ -951,6 +952,12 @@ user_logic_mock_setup(Workers, Users) ->
             undefined -> {error, not_found};
             UserId -> {ok, ?SUB(user, UserId), undefined}
         end
+    end),
+    test_utils:mock_expect(Workers, token_logic, is_token_revoked, fun(_TokenId) ->
+        {ok, false}
+    end),
+    test_utils:mock_expect(Workers, token_logic, get_temporary_tokens_generation, fun(_UserId) ->
+        {ok, ?TEMPORARY_TOKENS_GENERATION}
     end),
 
     test_utils:mock_expect(Workers, auth_manager, get_caveats, fun(TokenAuth) ->

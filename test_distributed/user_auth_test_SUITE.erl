@@ -97,7 +97,7 @@ auth_cache_test(Config) ->
     timer:sleep(timer:seconds(5)),
     ?assertEqual(0, get_auth_cache_size(Worker1)),
 
-    % Filling entries up to limit will should not cause cache purge
+    % Filling entries up to limit should not cause cache purge
     verify_auth(Worker1, TokenAuth1),
     verify_auth(Worker1, TokenAuth2),
     ?assertEqual(2, get_auth_cache_size(Worker1)),
@@ -317,6 +317,12 @@ mock_token_logic(Config) ->
                 {error, _} = Error ->
                     Error
             end
+    end),
+    test_utils:mock_expect(Workers, token_logic, is_token_revoked, fun(_TokenId) ->
+        {ok, false}
+    end),
+    test_utils:mock_expect(Workers, token_logic, get_temporary_tokens_generation, fun(_UserId) ->
+        {ok, 1}
     end).
 
 

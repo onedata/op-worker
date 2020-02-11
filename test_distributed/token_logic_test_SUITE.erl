@@ -130,7 +130,7 @@ convenience_functions_test(Config) ->
 
     ?assertMatch(
         {ok, false},
-        rpc:call(Node, token_logic, is_revoked, [?TOKEN_1])
+        rpc:call(Node, token_logic, is_token_revoked, [?TOKEN_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 

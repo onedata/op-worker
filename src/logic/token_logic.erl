@@ -17,7 +17,7 @@
 
 -export([
     get_shared_data/1,
-    is_revoked/1,
+    is_token_revoked/1,
 
     get_temporary_tokens_generation/1,
 
@@ -45,8 +45,8 @@ get_shared_data(TokenId) ->
     }).
 
 
--spec is_revoked(od_token:id()) -> {ok, boolean()} | errors:error().
-is_revoked(TokenId) ->
+-spec is_token_revoked(od_token:id()) -> {ok, boolean()} | errors:error().
+is_token_revoked(TokenId) ->
     case get_shared_data(TokenId) of
         {ok, #document{value = #od_token{revoked = Revoked}}} ->
             {ok, Revoked};

@@ -556,9 +556,10 @@ confined_access_token_test(Config) ->
         ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
         rpc:call(Node, user_logic, fetch_idp_access_token, [TokenAuth, ?USER_1, ?MOCK_IDP])
     ),
-    % Nevertheless, GraphCalls should be increased as TokenAuth was verified to
-    % retrieve caveats
-    ?assertEqual(GraphCalls+1, logic_tests_common:count_reqs(Config, graph)).
+    % Nevertheless, GraphCalls should be increased by 2 as:
+    % 1) TokenAuth was verified to retrieve caveats
+    % 2) auth_manager fetched token data to subscribe itself for updates from oz
+    ?assertEqual(GraphCalls+2, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================
