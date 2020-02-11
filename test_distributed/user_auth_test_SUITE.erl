@@ -30,6 +30,7 @@
     auth_cache_size_test/1,
     auth_cache_named_token_events_test/1,
     auth_cache_temporary_token_events_test/1,
+    auth_cache_oz_conn_status_test/1,
     token_authentication/1,
     token_expiration/1
 ]).
@@ -38,6 +39,7 @@ all() -> ?ALL([
     auth_cache_size_test,
     auth_cache_named_token_events_test,
     auth_cache_temporary_token_events_test,
+    auth_cache_oz_conn_status_test,
     token_authentication,
     token_expiration
 ]).
@@ -47,6 +49,7 @@ all() -> ?ALL([
 -define(USER_ID_2, <<"test_id_2">>).
 -define(USER_FULL_NAME, <<"test_name">>).
 
+-define(ATTEMPTS, 20).
 
 %%%===================================================================
 %%% Test functions
@@ -200,6 +203,44 @@ auth_cache_temporary_token_events_test(Config) ->
         ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker1, TokenAuth))
     end, [TokenAuth1, TokenAuth2]),
     ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
+
+    clear_auth_cache(Worker1).
+
+
+auth_cache_oz_conn_status_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+
+    clear_auth_cache(Worker1),
+    ?assertEqual(0, get_auth_cache_size(Worker1)),
+
+    AccessToken1 = initializer:create_access_token(?USER_ID_1, [], temporary),
+    AccessToken2 = initializer:create_access_token(?USER_ID_2, [], named),
+
+    TokenAuth1 = create_token_auth(AccessToken1),
+    TokenAuth2 = create_token_auth(AccessToken2),
+
+    lists:foreach(fun({TokenAuth, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker1, TokenAuth))
+    end, [{TokenAuth1, ?USER_ID_1}, {TokenAuth2, ?USER_ID_2}]),
+
+    ?assertEqual(2, get_auth_cache_size(Worker1)),
+
+    % Connection start should cause immediate cache purge
+    simulate_oz_connection_start(Worker1),
+    ?assertEqual(0, get_auth_cache_size(Worker1)),
+
+    lists:foreach(fun({TokenAuth, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker1, TokenAuth))
+    end, [{TokenAuth1, ?USER_ID_1}, {TokenAuth2, ?USER_ID_2}]),
+
+    % Connection termination should schedule cache purge after 'auth_invalidation_delay'
+    rpc:call(Worker1, application, set_env, [?APP_NAME, auth_invalidation_delay, timer:seconds(4)]),
+    simulate_oz_connection_termination(Worker1),
+
+    timer:sleep(timer:seconds(2)),
+    ?assertEqual(2, get_auth_cache_size(Worker1)),
+    timer:sleep(timer:seconds(3)),
+    ?assertEqual(0, get_auth_cache_size(Worker1)),
 
     clear_auth_cache(Worker1).
 
@@ -513,4 +554,16 @@ simulate_gs_temporary_tokens_deletion(Node, UserId) ->
         gri = #gri{type = temporary_token_secret, id = UserId, aspect = user, scope = shared},
         change_type = deleted
     }]),
+    ok.
+
+
+-spec simulate_oz_connection_start(node()) -> ok.
+simulate_oz_connection_start(Node) ->
+    rpc:call(Node, auth_manager, report_oz_connection_start, []),
+    ok.
+
+
+-spec simulate_oz_connection_termination(node()) -> ok.
+simulate_oz_connection_termination(Node) ->
+    rpc:call(Node, auth_manager, report_oz_connection_termination, []),
     ok.
