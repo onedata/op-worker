@@ -331,8 +331,8 @@ report_token_status_update(#document{
     ok.
 
 
--spec report_token_deletion(od_token:doc()) -> ok.
-report_token_deletion(#document{key = TokenId}) ->
+-spec report_token_deletion(od_token:id()) -> ok.
+report_token_deletion(TokenId) ->
     gen_server:abcast(
         consistent_hashing:get_all_nodes(), ?MODULE,
         ?TOKEN_DELETED_MSG(TokenId)
@@ -463,6 +463,7 @@ handle_cast(?MONITOR_TOKEN_REQ(TokenAuth, TokenRef), State) ->
 
 handle_cast(?TOKEN_STATUS_CHANGED_MSG(TokenId, IsRevoked), State) ->
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
+        verification_result = {ok, _, _},
         token_ref = {named, Id},
         token_revoked = OldIsRevoked
     } = CacheEntry) when Id == TokenId andalso OldIsRevoked /= IsRevoked ->

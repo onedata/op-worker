@@ -326,6 +326,8 @@ process_push_message(#gs_push_graph{gri = GRI, change_type = deleted}) ->
             oneprovider:on_deregister();
         #gri{type = od_space, id = SpaceId, aspect = instance} ->
             main_harvesting_stream:space_removed(SpaceId);
+        #gri{type = od_token, id = TokenId, aspect = instance} ->
+            auth_manager:report_token_deletion(TokenId);
         _ ->
             ok
     end,

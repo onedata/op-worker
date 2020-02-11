@@ -28,7 +28,7 @@
 
 %% API
 -export([
-    create_access_token/1, create_access_token/2,
+    create_access_token/1, create_access_token/2, create_access_token/3,
     setup_session/3, teardown_session/2,
     setup_storage/1, setup_storage/2, teardown_storage/1,
     clean_test_users_and_spaces/1,
@@ -238,6 +238,12 @@ create_access_token(UserId) ->
 
 -spec create_access_token(od_user:id(), [caveats:caveat()]) -> tokens:serialized().
 create_access_token(UserId, Caveats) ->
+    create_access_token(UserId, Caveats, temporary).
+
+
+-spec create_access_token(od_user:id(), [caveats:caveat()], Persistence :: named | temporary) ->
+    tokens:serialized().
+create_access_token(UserId, Caveats, Persistence) ->
     {ok, SerializedToken} = ?assertMatch(
         {ok, _},
         tokens:serialize(tokens:construct(#token{
@@ -245,7 +251,10 @@ create_access_token(UserId, Caveats) ->
             subject = ?SUB(user, UserId),
             id = UserId,
             type = ?ACCESS_TOKEN,
-            persistence = {temporary, ?TEMPORARY_TOKENS_GENERATION}
+            persistence = case Persistence of
+                named -> named;
+                temporary -> {temporary, ?TEMPORARY_TOKENS_GENERATION}
+            end
         }, ?TOKENS_SECRET, Caveats))
     ),
     SerializedToken.
