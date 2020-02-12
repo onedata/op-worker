@@ -68,7 +68,7 @@ list() ->
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
 run_after(update, _Args, {ok, Doc} = Result) ->
-    auth_manager:report_token_status_update(Doc),
+    auth_cache:report_token_status_update(Doc),
     Result;
 run_after(_Function, _Args, Result) ->
     Result.

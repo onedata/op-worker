@@ -559,11 +559,11 @@ simulate_gs_temporary_tokens_deletion(Node, UserId) ->
 
 -spec simulate_oz_connection_start(node()) -> ok.
 simulate_oz_connection_start(Node) ->
-    rpc:call(Node, auth_manager, report_oz_connection_start, []),
+    rpc:call(Node, auth_cache, report_oz_connection_start, []),
     ok.
 
 
 -spec simulate_oz_connection_termination(node()) -> ok.
 simulate_oz_connection_termination(Node) ->
-    rpc:call(Node, auth_manager, report_oz_connection_termination, []),
+    rpc:call(Node, auth_cache, report_oz_connection_termination, []),
     ok.

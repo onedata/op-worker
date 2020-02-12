@@ -70,7 +70,7 @@ list() ->
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
 run_after(update, _, {ok, Doc} = Result) ->
-    auth_manager:report_temporary_tokens_generation_change(Doc),
+    auth_cache:report_temporary_tokens_generation_change(Doc),
     Result;
 run_after(_Function, _Args, Result) ->
     Result.

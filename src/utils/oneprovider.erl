@@ -300,7 +300,7 @@ on_connect_to_oz() ->
     ok = main_harvesting_stream:revise_all_spaces(),
     ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
     ok = fslogic_worker:init_cannonical_paths_cache(all),
-    ok = auth_manager:report_oz_connection_start(),
+    ok = auth_cache:report_oz_connection_start(),
     storage_sync_worker:notify_connection_to_oz().
 
 
@@ -311,7 +311,7 @@ on_connect_to_oz() ->
 %%--------------------------------------------------------------------
 -spec on_disconnect_to_oz() -> ok.
 on_disconnect_to_oz() ->
-    ok = auth_manager:report_oz_connection_termination().
+    ok = auth_cache:report_oz_connection_termination().
 
 
 %%--------------------------------------------------------------------
