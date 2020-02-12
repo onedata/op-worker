@@ -649,7 +649,7 @@ maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SyncAcl) ->
             updated
     end.
 
--spec filter_updated_attrs([{updated | not_updated, atom()}]) -> [{updated | not_updated, atom()}].
+-spec filter_updated_attrs([{updated | not_updated, atom()}]) -> [atom()].
 filter_updated_attrs(ResultsWithAttrNames) ->
     lists:filtermap(fun
         ({updated, AttrName}) ->

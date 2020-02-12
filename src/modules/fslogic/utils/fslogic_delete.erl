@@ -331,10 +331,15 @@ maybe_remove_file_on_storage(FileCtx, UserCtx) ->
 
 -spec delete_shares_and_update_parent_timestamps(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
 delete_shares_and_update_parent_timestamps(UserCtx, FileCtx) ->
-    FileCtx2 = delete_shares(UserCtx, FileCtx),
-    {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
-    fslogic_times:update_mtime_ctime(ParentCtx),
-    FileCtx3.
+    try
+        FileCtx2 = delete_shares(UserCtx, FileCtx),
+        {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, UserCtx),
+        fslogic_times:update_mtime_ctime(ParentCtx),
+        FileCtx3
+    catch
+        error:{badmatch, {error, not_found}} ->
+            FileCtx
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -421,7 +426,7 @@ rename_storage_file(FileCtx, SourceFileId, TargetFileId) ->
             case storage_file_manager:mv(SFMHandle, TargetFileId) of
                 ok ->
                     FinalFL = case finalize_file_location_rename(FileUuid) of
-                        {ok, NewFL2} -> NewFL2;
+                        {ok, #document{value = NewFL2}} -> NewFL2;
                         {error, not_found} -> NewFL
                     end,
                     fslogic_event_emitter:emit_file_location_changed(FinalFL#file_location{blocks = []}, [], 0, 0),
