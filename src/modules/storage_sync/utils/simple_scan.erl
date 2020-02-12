@@ -227,12 +227,13 @@ sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
         {ok, #document{
             value = #file_location{
                 file_id = FileId,
+                rename_src_file_id = RenameSrcFileId,
                 storage_id = StorageId,
                 size = Size
         }} = FL} ->
             {ParentStorageFileId, _ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),
-            ExpectedFileId = filename:join([ParentStorageFileId, FileName]),
-            case {FileId =:= ExpectedFileId, file_location:is_rename_in_progress(FL)} of
+            StorageFileId = filename:join([ParentStorageFileId, FileName]),
+            case {FileId =:= StorageFileId, RenameSrcFileId =:= StorageFileId} of
                 {_, true} ->
                     % file is being renamed at the moment, ignore it
                     {processed, FileCtx, Job};
