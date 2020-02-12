@@ -204,6 +204,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 FileCtx7 = maybe_remove_deletion_link(FileCtx6, UserCtx, RemoveStorageFileResult),
                 maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult);
             ?OPENED_FILE_DELETE ->
+                % TODO VFS-6114 maybe delete file_meta here?
                 FileCtx5 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
                 delete_storage_sync_info(FileCtx5),
                 ok;
@@ -239,7 +240,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
 custom_handle_opened_file(FileCtx, UserCtx, DeleteMode, ?RENAME_HANDLING_METHOD) ->
     FileCtx3 = case maybe_rename_storage_file(FileCtx) of
         {ok, FileCtx2} -> FileCtx2;
-        {error, ?ENOENT} -> FileCtx
+        {error, _} -> FileCtx
     end,
     maybe_delete_parent_link(FileCtx3, UserCtx, DeleteMode == ?REMOTE_DELETE);
 custom_handle_opened_file(FileCtx, UserCtx, ?REMOTE_DELETE, ?LINK_HANDLING_METHOD) ->
@@ -409,24 +410,44 @@ ensure_dir_for_deleted_files_created(SpaceId) ->
     end.
 
 -spec rename_storage_file(file_ctx:ctx(), helpers:file_id(), helpers:file_id()) ->
-    {ok, file_ctx:ctx()} | {error, ?ENOENT}.
+    {ok, file_ctx:ctx()} | {error, term()}.
 rename_storage_file(FileCtx, SourceFileId, TargetFileId) ->
     % ensure SourceFileId is set in FileCtx
     FileCtx2 = file_ctx:set_file_id(FileCtx, SourceFileId),
     {SFMHandle, FileCtx3} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx2 ),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
-    LocId = file_location:local_id(FileUuid),
-    case fslogic_location_cache:update_location(FileUuid, LocId, fun(FileLocation) ->
-        {ok, FileLocation#file_location{file_id = TargetFileId}}
-    end, false) of
+    case init_file_location_rename(FileUuid, TargetFileId) of
         {ok, #document{value = NewFL}} ->
             case storage_file_manager:mv(SFMHandle, TargetFileId) of
                 ok ->
-                    fslogic_event_emitter:emit_file_location_changed(NewFL#file_location{blocks = []}, [], 0, 0),
+                    FinalFL = case finalize_file_location_rename(FileUuid) of
+                        {ok, NewFL2} -> NewFL2;
+                        {error, not_found} -> NewFL
+                    end,
+                    fslogic_event_emitter:emit_file_location_changed(FinalFL#file_location{blocks = []}, [], 0, 0),
                     {ok, file_ctx:set_file_id(FileCtx3, TargetFileId)};
                 {error, ?ENOENT} = Error ->
                     Error
             end;
-        {error, ?ENOENT} = Error2->
+        {error, not_found} = Error2->
             Error2
     end.
+
+-spec init_file_location_rename(file_meta:uuid(), helpers:file_id()) ->
+    {ok, file_location:doc()} | {error, term()}.
+init_file_location_rename(FileUuid, TargetFileId) ->
+    LocId = file_location:local_id(FileUuid),
+    fslogic_location_cache:update_location(FileUuid, LocId, fun
+        (FL = #file_location{file_id = FileId, rename_src_file_id = undefined}) ->
+            {ok, FL#file_location{
+                file_id = TargetFileId,
+                rename_src_file_id = FileId
+            }}
+    end, false).
+
+-spec finalize_file_location_rename(file_meta:uuid()) -> {ok, file_location:doc()} | {error, term()}.
+finalize_file_location_rename(FileUuid) ->
+    LocId = file_location:local_id(FileUuid),
+    fslogic_location_cache:update_location(FileUuid, LocId, fun(FileLocation) ->
+        {ok, FileLocation#file_location{rename_src_file_id = undefined}}
+    end, false).

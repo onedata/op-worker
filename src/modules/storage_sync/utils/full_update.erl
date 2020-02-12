@@ -27,6 +27,9 @@
 %% API
 -export([run/2, delete_imported_file/2]).
 
+%% exported for mocking in tests
+-export([save_storage_children_names/2, storage_readdir/3]).
+
 %%-------------------------------------------------------------------
 %% @doc
 %% Runs full update in directory referenced by FileName.
@@ -49,7 +52,7 @@ run(#space_strategy_job{
     DBTable = create_ets(DBTable),
     try
         save_db_children_names(DBTable, FileCtx),
-        save_storage_children_names(StorageTable, StorageFileCtx),
+        full_update:save_storage_children_names(StorageTable, StorageFileCtx),
         ok = remove_files_not_existing_on_storage(StorageTable, DBTable, FileCtx, SpaceId, StorageId)
     catch
         Error:Reason ->
@@ -66,13 +69,22 @@ run(#space_strategy_job{
 %% Remove files that had been earlier imported and updates suitable counters.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_delete_imported_file_and_update_counters(file_meta:name(),
+-spec maybe_delete_imported_file_and_update_counters(file_meta:name(), file_meta:uuid(),
     file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
-maybe_delete_imported_file_and_update_counters(ChildName, ParentCtx, SpaceId, StorageId) ->
+maybe_delete_imported_file_and_update_counters(ChildName, ChildUuid, ParentCtx, SpaceId, StorageId) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
         {FileCtx, _ParentCtx2} = file_ctx:get_child(ParentCtx, ChildName, UserCtx),
-        maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId)
+        {SFMHandle, FileCtx2} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx),
+        case {file_ctx:get_uuid_const(FileCtx), storage_file_manager:stat(SFMHandle)} of
+            {ChildUuid, {error, ?ENOENT}} ->
+                % uuid matches ChildUuid from ets, and file is still missing on storage
+                % we can delete it from db
+                maybe_delete_imported_file_and_update_counters(FileCtx2, SpaceId, StorageId);
+            _ ->
+                storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+                ok
+        end
     catch
         throw:?ENOENT ->
             storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
@@ -100,11 +112,9 @@ maybe_delete_imported_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
         {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
         case IsDir of
             true ->
-                maybe_delete_imported_dir_and_update_counters(
-                    FileCtx2, SpaceId, StorageId);
+                maybe_delete_imported_dir_and_update_counters(FileCtx2, SpaceId, StorageId);
             false ->
-                maybe_delete_imported_regular_file_and_update_counters(
-                    FileCtx2, SpaceId, StorageId)
+                maybe_delete_imported_regular_file_and_update_counters(FileCtx2, SpaceId, StorageId)
         end
     catch
         Error:Reason ->
@@ -269,18 +279,19 @@ iterate_and_remove(StKey = '$end_of_table', StTable, DBKey, DBTable, FileCtx,
 ) ->
     Next = ets:next(DBTable, DBKey),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
-    maybe_delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId, StorageId),
+    [{DBKey, ChildUuid}] = ets:lookup(DBTable, DBKey),
+    maybe_delete_imported_file_and_update_counters(DBKey, ChildUuid, FileCtx, SpaceId, StorageId),
     iterate_and_remove(StKey, StTable, Next, DBTable, FileCtx, SpaceId, StorageId);
 iterate_and_remove(Key, StorageTable, Key, DBTable, FileCtx, SpaceId, StorageId) ->
     StNext = ets:next(StorageTable, Key),
     DBNext = ets:next(DBTable, Key),
-    iterate_and_remove(StNext, StorageTable, DBNext, DBTable, FileCtx, SpaceId,
-        StorageId);
+    iterate_and_remove(StNext, StorageTable, DBNext, DBTable, FileCtx, SpaceId, StorageId);
 iterate_and_remove(StKey, StorageTable, DBKey, DBTable, FileCtx, SpaceId, StorageId
 ) when StKey > DBKey ->
     Next = ets:next(DBTable, DBKey),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
-    maybe_delete_imported_file_and_update_counters(DBKey, FileCtx, SpaceId, StorageId),
+    [{DBKey, ChildUuid}] = ets:lookup(DBTable, DBKey),
+    maybe_delete_imported_file_and_update_counters(DBKey, ChildUuid, FileCtx, SpaceId, StorageId),
     iterate_and_remove(StKey, StorageTable, Next, DBTable, FileCtx, SpaceId, StorageId);
 iterate_and_remove(StKey, StorageTable, DBKey, DBTable, FileCtx, SpaceId, StorageId) ->
     Next = ets:next(StorageTable, StKey),
@@ -312,7 +323,10 @@ save_db_children_names(TableName, FileCtx, UserCtx, Offset, Batch) ->
     {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Batch),
     lists:foreach(fun(ChildCtx) ->
         {FileName, _} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
-        ets:insert(TableName, {FileName, undefined})
+        FileUuid = file_ctx:get_uuid_const(ChildCtx),
+        % save FileUuid to ensure whether proper file will be deleted
+        % in case of race with recreating file with the same name
+        ets:insert(TableName, {FileName, FileUuid})
     end, ChildrenCtxs),
 
     case length(ChildrenCtxs) < Batch of
@@ -386,7 +400,7 @@ save_storage_children_names(TableName, StorageFileCtx) ->
     non_neg_integer(), non_neg_integer()) -> term().
 save_storage_children_names(TableName, StorageFileCtx, Offset, BatchSize) ->
     {SFMHandle, StorageFileCtx2} = storage_file_ctx:get_handle(StorageFileCtx),
-    {ok, ChildrenIds} = storage_file_manager:readdir(SFMHandle, Offset, BatchSize),
+    {ok, ChildrenIds} = full_update:storage_readdir(SFMHandle, Offset, BatchSize),
 
     lists:foreach(fun(ChildId) ->
         case file_meta:is_hidden(ChildId) of
@@ -438,4 +452,7 @@ maybe_delete_imported_regular_file_and_update_counters(FileCtx, SpaceId, Storage
     storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId),
     ok.
 
-
+-spec storage_readdir(storage_file_manager:handle(), non_neg_integer(), non_neg_integer()) ->
+    {ok, [helpers:file_id()]} | {error, term()}.
+storage_readdir(SFMHandle, Offset, BatchSize) ->
+    storage_file_manager:readdir(SFMHandle, Offset, BatchSize).

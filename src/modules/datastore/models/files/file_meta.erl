@@ -332,16 +332,18 @@ add_child_link(ParentUuid, Scope, Name, Uuid) ->
     FileUuid :: uuid(), FileName :: name()) -> ok.
 delete_child_link(ParentUuid, Scope, FileUuid, FileName) ->
     {ok, Links} = datastore_model:get_links(?CTX, ParentUuid, all, FileName),
-    [#link{tree_id = ProviderId, name = FileName, rev = Rev}] = lists:filter(fun
-        (#link{target = Uuid}) -> Uuid == FileUuid
-    end, Links),
-    Ctx = ?CTX#{scope => Scope},
-    Link = {FileName, Rev},
-    case oneprovider:is_self(ProviderId) of
-        true ->
-            ok = datastore_model:delete_links(Ctx, ParentUuid, ProviderId, Link);
-        false ->
-            ok = datastore_model:mark_links_deleted(Ctx, ParentUuid, ProviderId, Link)
+    case lists:filter(fun(#link{target = Uuid}) -> Uuid == FileUuid end, Links) of
+        [#link{tree_id = ProviderId, name = FileName, rev = Rev}] ->
+            Ctx = ?CTX#{scope => Scope},
+            Link = {FileName, Rev},
+            case oneprovider:is_self(ProviderId) of
+                true ->
+                    ok = datastore_model:delete_links(Ctx, ParentUuid, ProviderId, Link);
+                false ->
+                    ok = datastore_model:mark_links_deleted(Ctx, ParentUuid, ProviderId, Link)
+            end;
+        [] ->
+            ok
     end.
 
 %%--------------------------------------------------------------------

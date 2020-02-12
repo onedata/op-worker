@@ -157,6 +157,8 @@ maybe_sync_storage_file(Job = #space_strategy_job{
                     {processed, undefined, Job2}
             end;
         {ok, ResolvedUuid} ->
+            %TODO moze powinnismy tu sprawdzic czy ResolvedUuid == FileUuid if FileUuid != undefined?
+            % % TODO SPRAWDZIC JAK W TAKIM WYPADKU ROZWIAZUJE TE UUIDY !!!
             FileUuid2 = utils:ensure_defined(FileUuid, undefined, ResolvedUuid),
             case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                 {error, not_found} ->
@@ -196,7 +198,7 @@ maybe_import_file(Job = #space_strategy_job{
         {{error, _}, true} ->
             {LocalResult, FileCtx} = import_file_safe(Job2),
             {LocalResult, FileCtx, Job};
-        _->
+        _ ->
             {processed, undefined, Job}
     end.
 
@@ -215,10 +217,9 @@ sync_if_file_is_not_being_replicated(Job, FileCtx, ?DIRECTORY_TYPE) ->
     maybe_update_file(Job, FileCtx);
 sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
     storage_id := StorageId,
-    storage_file_ctx := StorageFileCtx,
     parent_ctx := ParentCtx,
     file_name := FileName
-    }}, FileCtx, ?REGULAR_FILE_TYPE) ->
+}}, FileCtx, ?REGULAR_FILE_TYPE) ->
     % Get only two blocks - it is enough to verify if file can be imported
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case fslogic_location_cache:get_location(
@@ -230,9 +231,12 @@ sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
                 size = Size
         }} = FL} ->
             {ParentStorageFileId, _ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),
-            FileIdCheck = filename:join([ParentStorageFileId, FileName]),
-            case FileId =:= FileIdCheck of
-                true ->
+            ExpectedFileId = filename:join([ParentStorageFileId, FileName]),
+            case {FileId =:= ExpectedFileId, file_location:is_rename_in_progress(FL)} of
+                {_, true} ->
+                    % file is being renamed at the moment, ignore it
+                    {processed, FileCtx, Job};
+                {true, false} ->
                     case fslogic_location_cache:get_blocks(FL, #{count => 2}) of
                         [#file_block{offset = 0, size = Size}] ->
                             maybe_update_file(Job, FileCtx);
@@ -241,22 +245,16 @@ sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
                         _ ->
                             {processed, FileCtx, Job}
                     end;
-                false ->
-                    {SFMHandle, StorageFileCtx2} = storage_file_ctx:get_handle(StorageFileCtx),
-                    Job2 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx2, Job),
-                    % this may happen in 2 cases:
-                    case storage_file_manager:stat(SFMHandle) of
-                        {ok, _} ->
-                            % when there was a conflict between creation of file on storage and by remote provider
-                            % in such case, if file was replicated from the remote provider
-                            % it must have been created on storage with a suffix
-                            maybe_import_file(Job2);
-                        _ ->
-                            % when file has been moved because it was deleted and still opened
-                            % in such case, its storage_file_id in file_location has been changed
-                            % such file should be ignored
-                            {processed, undefined, Job2}
-                    end
+                {false, false} ->
+                    % This may happen in 2 cases:
+                    %   * when there was a conflict between creation of file on storage and by remote provider
+                    %     in such case, if file was replicated from the remote provider
+                    %     it must have been created on storage with a suffix and therefore file ids do not match.
+                    %   * when file has been moved because it was deleted and still opened
+                    %     in such case, its file_id in file_location has been changed
+                    %     such file should be ignored
+                    % To determine which case it is, maybe_import_file will check whether file is still on storage.
+                    maybe_import_file(Job)
             end;
         {error, not_found} ->
             maybe_import_file(Job);
@@ -368,7 +366,8 @@ run_internal(Job = #space_strategy_job{
         storage_file_ctx:get_stat_buf(StorageFileCtx)
     catch
         throw:?ENOENT ->
-            ?error_stacktrace("simple_scan failed due to ~p for file ~p in space ~p", [?ENOENT, CanonicalPath, SpaceId]),
+            ?error_stacktrace("simple_scan failed due to ~p for file ~p in space ~p",
+                [?ENOENT, CanonicalPath, SpaceId]),
             {error, ?ENOENT}
     end,
 
@@ -392,7 +391,7 @@ run_internal(Job = #space_strategy_job{
 %%--------------------------------------------------------------------
 -spec maybe_update_file(space_strategy:job(), file_ctx:ctx()) ->
     {space_strategy:job_result(), file_ctx:ctx(), space_strategy:job()}.
-maybe_update_file(Job, FileCtx) ->
+maybe_update_file(Job = #space_strategy_job{data = #{file_name := FileName}}, FileCtx) ->
     CallbackModule = storage_sync_utils:module(Job),
     case get_attr_including_deleted(FileCtx) of
         {ok, _FileAttr, true} ->
@@ -629,34 +628,43 @@ maybe_update_file(Job = #space_strategy_job{
     file_meta:mode(), boolean()) -> job_result().
 maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SyncAcl) ->
     {FileStat, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
-    Results = [
-        maybe_update_file_location(FileStat, FileCtx, file_meta:type(Mode), StorageFileCtx2),
-        maybe_update_mode(FileAttr, FileStat, FileCtx),
-        maybe_update_times(FileAttr, FileStat, FileCtx),
-        maybe_update_owner(FileAttr, StorageFileCtx2, FileCtx),
-        maybe_update_nfs4_acl(StorageFileCtx2, FileCtx, SyncAcl)
+    ResultsWithAttrNames = [
+        {maybe_update_file_location(FileStat, FileCtx, file_meta:type(Mode), StorageFileCtx2), file_location},
+        {maybe_update_mode(FileAttr, FileStat, FileCtx), mode},
+        {maybe_update_times(FileAttr, FileStat, FileCtx), timestamps},
+        {maybe_update_owner(FileAttr, StorageFileCtx2, FileCtx), owner},
+        {maybe_update_nfs4_acl(StorageFileCtx2, FileCtx, SyncAcl), nfs4_acl}
     ],
-    case lists:member(updated, Results) of
-        true ->
+    case filter_updated_attrs(ResultsWithAttrNames) of
+        [] ->
+            processed;
+        UpdatedAttrs ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
             {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
             FileUuid = file_ctx:get_uuid_const(FileCtx3),
-            storage_sync_utils:log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+            storage_sync_utils:log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
             fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
-            updated;
-        false ->
-            processed
+            updated
     end.
+
+-spec filter_updated_attrs([{updated | not_updated, atom()}]) -> [{updated | not_updated, atom()}].
+filter_updated_attrs(ResultsWithAttrNames) ->
+    lists:filtermap(fun
+        ({updated, AttrName}) ->
+            {true, AttrName};
+        ({not_updated, _}) ->
+            false
+    end, ResultsWithAttrNames).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Get file attr, catching all exceptions and returning always fuse_response
+%% Get file attr, including deleted doc.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_attr_including_deleted(file_ctx:ctx()) ->
-    {ok, fslogic_worker:fuse_response_type(), boolean()} | {error, term()}.
+    {ok, fslogic_worker:fuse_response_type(), IsDeleted :: boolean()} | {error, term()}.
 get_attr_including_deleted(FileCtx) ->
     try
         {#fuse_response{
@@ -832,11 +840,10 @@ update_mode(FileCtx, NewMode) ->
 maybe_update_times(#file_attr{atime = ATime, mtime = MTime, ctime = CTime},
     #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime},
     _FileCtx
-) when
-    ATime >= StorageATime,
-    MTime >= StorageMTime,
-    CTime >= StorageCTime
-->
+)
+    when ATime >= StorageATime
+    andalso MTime >= StorageMTime
+    andalso CTime >= StorageCTime ->
     not_updated;
 maybe_update_times(_FileAttr,
     #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime},

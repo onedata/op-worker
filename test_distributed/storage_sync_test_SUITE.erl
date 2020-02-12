@@ -92,7 +92,9 @@
     create_file_import_race_test/1,
     close_file_import_race_test/1,
     delete_file_reimport_race_test/1,
-    delete_opened_file_reimport_race_test/1
+    delete_opened_file_reimport_race_test/1,
+    recreate_delete_race_test/1,
+    create_list_race_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -163,7 +165,10 @@
     sync_should_not_invalidate_file_after_replication,
     create_file_import_race_test,
     close_file_import_race_test,
-    delete_file_reimport_race_test
+    delete_file_reimport_race_test,
+    delete_opened_file_reimport_race_test,
+    recreate_delete_race_test,
+    create_list_race_test
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -491,6 +496,12 @@ delete_opened_file_reimport_race_test(Config) ->
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:ls(W2, SessId2, {path, ?SPACE_PATH}, 0, 1)).
+
+recreate_delete_race_test(Config) ->
+    storage_sync_test_base:recreate_delete_race_test(Config, false).
+
+create_list_race_test(Config) ->
+    storage_sync_test_base:create_list_race_test(Config, false).
 
 create_directory_import_test(Config) ->
     storage_sync_test_base:create_directory_import_test(Config, false).
@@ -1348,6 +1359,7 @@ init_per_testcase(Case, Config) when
     Case =:= delete_and_update_files_simultaneously_update_test;
     Case =:= create_delete_import2_test;
     Case =:= recreate_file_deleted_by_sync_test;
+    Case =:= recreate_delete_race_test;
     Case =:= sync_should_not_delete_not_replicated_file_created_in_remote_provider;
     Case =:= sync_should_not_delete_dir_created_in_remote_provider;
     Case =:= sync_should_not_delete_not_replicated_files_created_in_remote_provider2;
@@ -1374,6 +1386,22 @@ init_per_testcase(Case, Config) when
         | Config
     ],
     init_per_testcase(default, Config2);
+
+init_per_testcase(Case, Config) when
+    Case =:= create_list_race_test
+    ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, dir_batch_size),
+    test_utils:set_env(W1, op_worker, dir_batch_size, 2),
+    Config2 = [
+        {update_config, #{
+            delete_enable => true,
+            write_once => false}},
+        {old_dir_batch_size, OldDirBatchSize}
+        | Config
+    ],
+    init_per_testcase(default, Config2);
+
 
 init_per_testcase(Case, Config) when
     Case =:= chmod_file_update2_test
@@ -1453,8 +1481,9 @@ init_per_testcase(_Case, Config) ->
     Config2.
 
 end_per_testcase(Case, Config) when
-    Case =:= chmod_file_update2_test;
-    Case =:= create_file_in_dir_exceed_batch_update_test
+    Case =:= chmod_file_update2_test orelse
+    Case =:= create_file_in_dir_exceed_batch_update_test orelse
+    Case =:= create_list_race_test
     ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     OldDirBatchSize = ?config(old_dir_batch_size, Config),

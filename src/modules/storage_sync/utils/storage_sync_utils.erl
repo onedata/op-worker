@@ -19,7 +19,7 @@
 
 %% API
 -export([take_children_storage_ctxs_for_batch/2, take_hash_for_batch/2, module/1,
-    all_children_imported/2, log_import/4, log_update/4, log_deletion/4]).
+    all_children_imported/2, log_import/4, log_update/5, log_deletion/4]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -78,11 +78,11 @@ log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
 %% Function used to add log of update to sync audit log.
 %% @end
 %%-------------------------------------------------------------------
--spec log_update(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id()) -> ok.
-log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
-    log("Update of storage file ~s has been detected.~n"
+-spec log_update(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id(), [atom()]) -> ok.
+log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs) ->
+    log("Update of storage file ~s has been detected. Updated attrs: ~w.~n"
     "Corresponding file ~s with uuid ~s has been updated.",
-        [StorageFileId, CanonicalPath, FileUuid], SpaceId).
+        [StorageFileId, UpdatedAttrs, CanonicalPath, FileUuid], SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
