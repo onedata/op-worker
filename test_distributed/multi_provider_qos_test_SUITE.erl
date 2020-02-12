@@ -68,7 +68,9 @@
 
     reevaluate_impossible_qos_test/1,
     reevaluate_impossible_qos_race_test/1,
-    reevaluate_impossible_qos_conflict_test/1
+    reevaluate_impossible_qos_conflict_test/1,
+    
+    qos_traverse_cancellation_test/1
 ]).
 
 all() -> [
@@ -895,6 +897,85 @@ reevaluate_impossible_qos_conflict_test(Config) ->
     ],
     qos_tests_utils:assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, true, 10).
 
+
+%%%===================================================================
+%%% QoS traverse tests
+%%%===================================================================
+
+qos_traverse_cancellation_test(Config) ->
+    [Worker1, Worker2 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    Name = generator:gen_name(),
+    QosRootFilePath = filename:join([<<"/">>, ?SPACE_ID, Name]),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    
+    DirStructure =
+        {?SPACE_ID, [
+            {Name, % Dir1
+                [
+                    {?filename(Name, 0), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]},
+                    {?filename(Name, 1), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]},
+                    {?filename(Name, 2), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]},
+                    {?filename(Name, 3), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]}
+                ]
+            }
+        ]},
+    
+    QosSpec = #fulfill_qos_test_spec{
+        initial_dir_structure = #test_dir_structure{
+            dir_structure = DirStructure
+        },
+        qos_to_add = [
+            #qos_to_add{
+                worker = Worker1,
+                qos_name = ?QOS1,
+                path = QosRootFilePath,
+                expression = <<"country=PL">>
+            }
+        ],
+        % do not wait for QoS fulfillment
+        wait_for_qos_fulfillment = [],
+        expected_qos_entries = [
+            #expected_qos_entry{
+                workers = Workers,
+                qos_name = ?QOS1,
+                file_key = {path, QosRootFilePath},
+                qos_expression_in_rpn = [<<"country=PL">>],
+                replicas_num = 1,
+                possibility_check = {possible, ?GET_DOMAIN_BIN(Worker1)}
+            }
+        ]
+    },
+    
+    {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
+    [QosEntryId] = maps:values(QosNameIdMapping),
+    
+    DirGuid = qos_tests_utils:get_guid(QosRootFilePath, GuidsAndPaths),
+    
+    % create file and write to it on remote provider to trigger reconcile transfer
+    {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker2, SessId(Worker2), DirGuid, generator:gen_name(), 8#664),
+    {ok, _} = lfm_proxy:write(Worker2, FileHandle, 0, <<"new_data">>),
+    ok = lfm_proxy:close(Worker2, FileHandle),
+    
+    % wait for reconciliation transfer to start
+    receive {qos_slave_job, _Pid, FileGuid} = Msg ->
+        self() ! Msg
+    end,
+    
+    % remove entry to trigger transfer cancellation
+    lfm_proxy:remove_qos_entry(Worker1, SessId(Worker1), QosEntryId),
+    
+    % check that 5 transfers were cancelled (4 from traverse and 1 reconciliation)
+    test_utils:mock_assert_num_calls(Worker1, replica_synchronizer, cancel, 1, 5, ?ATTEMPTS),
+    
+    % check that qos_entry document is deleted
+    lists:foreach(fun(Worker) ->
+        ?assertEqual(?ERROR_NOT_FOUND, rpc:call(Worker, qos_entry, get, [QosEntryId]), ?ATTEMPTS)
+    end, Workers),
+    
+    % finish transfers to unlock waiting slave job processes
+    ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)] ++ [FileGuid]).
+    
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -932,7 +1013,8 @@ init_per_testcase(Case, Config) when
     Case =:= qos_status_during_reconciliation_test;
     Case =:= qos_status_during_reconciliation_prefix_file_test;
     Case =:= qos_status_during_reconciliation_with_file_deletion_test;
-    Case =:= qos_status_during_reconciliation_with_dir_deletion_test ->
+    Case =:= qos_status_during_reconciliation_with_dir_deletion_test; 
+    Case =:= qos_traverse_cancellation_test ->
     
     Workers = ?config(op_worker_nodes, Config),
     qos_tests_utils:mock_transfers(Workers),

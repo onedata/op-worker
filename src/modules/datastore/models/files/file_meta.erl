@@ -499,10 +499,10 @@ list_children(Entry, Offset, Limit, Token, PrevLinkKey) ->
     Limit :: limit(),
     Token :: undefined | datastore_links_iter:token(),
     PrevLinkKey :: undefined | name(),
-    PrevTeeID :: undefined | oneprovider:id()
+    PrevTreeID :: undefined | oneprovider:id()
 ) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTeeID) ->
+list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTreeID) ->
     Opts = case Offset of
         0 -> #{size => Limit};
         _ -> #{offset => Offset, size => Limit}
@@ -518,9 +518,9 @@ list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTeeID) ->
         _ -> Opts2#{prev_link_name => PrevLinkKey}
     end,
 
-    Opts4 = case PrevTeeID of
+    Opts4 = case PrevTreeID of
         undefined -> Opts3;
-        _ -> Opts3#{prev_tree_id => PrevTeeID}
+        _ -> Opts3#{prev_tree_id => PrevTreeID}
     end,
 
     list_children_internal(Entry, Opts4).

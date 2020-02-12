@@ -1400,11 +1400,11 @@ flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 -
 flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
         case transfer:mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) of
-            {ok, _} ->
-                ok;
+            {ok, _} -> ok;
+            ?ERROR_NOT_FOUND -> ok;
             {error, Error} ->
                 ?error(
-                    "Failed to update trasnfer statistics for ~p transfer "
+                    "Failed to update transfer statistics for ~p transfer "
                     "due to ~p", [TransferId, Error]
                 )
         end

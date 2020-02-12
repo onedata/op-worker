@@ -44,7 +44,7 @@
 -export([
     get_effective/1, 
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/2,
-    is_replica_protected/2, is_effective_qos_of_file/2,
+    is_replica_required_on_storage/2, is_effective_qos_of_file/2,
     clean_up/1
 ]).
 
@@ -91,12 +91,9 @@ delete(Key) ->
     {ok, effective_file_qos()} | {error, term()} | undefined.
 get_effective(FileUuid) when is_binary(FileUuid) ->
     case file_meta:get(FileUuid) of
-        {ok, FileDoc} ->
-            get_effective(FileDoc);
-        ?ERROR_NOT_FOUND ->
-            {error, {file_meta_missing, FileUuid}};
-        _ ->
-            undefined
+        {ok, FileDoc} -> get_effective(FileDoc);
+        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}};
+        _ -> undefined
     end;
 get_effective(#document{scope = SpaceId} = FileDoc) ->
     Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
@@ -203,11 +200,11 @@ remove_qos_entry_id(FileUuid, QosEntryId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks whether given file is protected on given storage by QoS.
+%% Checks whether given file is required on given storage by QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec is_replica_protected(file_meta:uuid(), storage:id()) -> boolean().
-is_replica_protected(FileUuid, StorageId) ->
+-spec is_replica_required_on_storage(file_meta:uuid(), storage:id()) -> boolean().
+is_replica_required_on_storage(FileUuid, StorageId) ->
     QosStorages = case get_effective(FileUuid) of
         {ok, #effective_file_qos{assigned_entries = AssignedEntries}} -> AssignedEntries;
         _ -> #{}
@@ -231,6 +228,7 @@ is_effective_qos_of_file(FileUuidOrDoc, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec clean_up(file_ctx:ctx()) -> ok.
 clean_up(FileCtx) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case get_effective(FileDoc) of
         undefined -> ok;
@@ -246,6 +244,8 @@ clean_up(FileCtx) ->
     case datastore_model:get(?CTX, Uuid) of
         {ok, #document{value = #file_qos{qos_entries = QosEntries}}} ->
             lists:foreach(fun(QosEntryId) ->
+                qos_entry:remove_from_impossible_list(QosEntryId, SpaceId),
+                qos_traverse:report_entry_deleted(QosEntryId),
                 qos_entry:delete(QosEntryId)
             end, QosEntries);
         ?ERROR_NOT_FOUND -> ok

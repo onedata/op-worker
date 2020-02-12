@@ -26,7 +26,6 @@
     reevaluate_all_impossible_qos_in_space/1
 ]).
 
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -37,28 +36,24 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_qos_entry_change(od_space:id(), qos_entry:doc()) -> ok.
-handle_qos_entry_change(SpaceId, #document{
-    deleted = true,
-    key = QosEntryId,
-    value = QosEntry
-}) ->
-    {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
-    qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-    ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(FileUuid, QosEntryId));
-handle_qos_entry_change(SpaceId, #document{
-    key = QosEntryId,
-    value = QosEntry
-} = QosEntryDoc) ->
-    {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
-    file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
+handle_qos_entry_change(SpaceId, #document{deleted = true, key = QosEntryId} = QosEntryDoc) ->
+    {ok, FileUuid} = qos_entry:get_file_uuid(QosEntryDoc),
+    ok = qos_entry:remove_from_impossible_list(QosEntryId, SpaceId),
+    ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(FileUuid, QosEntryId)),
     ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+    ok = qos_traverse:report_entry_deleted(QosEntryDoc);
+handle_qos_entry_change(SpaceId, #document{key = QosEntryId, value = QosEntry} = QosEntryDoc) ->
+    {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
+    ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
     case qos_entry:is_possible(QosEntry) of
         true ->
             {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosEntry),
-            qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs);
+            ok = qos_entry:remove_from_impossible_list(QosEntryId, SpaceId),
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            ok = qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs);
         false ->
             ok = qos_entry:add_to_impossible_list(QosEntryId, SpaceId),
-            ok = reevaluate_impossible_qos(QosEntryDoc)
+            ok = reevaluate_qos(QosEntryDoc)
     end.
 
 
@@ -111,19 +106,19 @@ reconcile_qos(FileUuid, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec reevaluate_all_impossible_qos_in_space(od_space:id()) -> ok.
 reevaluate_all_impossible_qos_in_space(SpaceId) ->
-    % TODO VFS-6005 Use traverse to list impossible qos
-    {ok, QosList} = qos_entry:get_impossible_list(SpaceId),
-    lists:foreach(fun reevaluate_impossible_qos/1, QosList).
+%%    % TODO VFS-6005 Use traverse to list and reevaluate impossible qos
+    qos_entry:apply_to_all_impossible_in_space(SpaceId, fun reevaluate_qos/1).
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Recalculates target storages for given QoS entry and if it is now possible
 %% to fulfill adds appropriate traverse requests.
 %% @end
 %%--------------------------------------------------------------------
--spec reevaluate_impossible_qos(qos_entry:id() | qos_entry:doc()) -> ok.
-reevaluate_impossible_qos(#document{key = QosEntryId} = QosEntryDoc) ->
+-spec reevaluate_qos(qos_entry:id() | qos_entry:doc()) -> ok.
+reevaluate_qos(#document{key = QosEntryId} = QosEntryDoc) ->
     {ok, FileGuid} = qos_entry:get_file_guid(QosEntryDoc),
     {ok, ReplicasNum} = qos_entry:get_replicas_num(QosEntryDoc),
     {ok, QosExpression} = qos_entry:get_expression(QosEntryDoc),
@@ -136,7 +131,7 @@ reevaluate_impossible_qos(#document{key = QosEntryId} = QosEntryDoc) ->
             AllTraverseReqs = qos_traverse_req:build_traverse_reqs(
                 file_ctx:get_uuid_const(FileCtx), StoragesList
             ),
-            qos_entry:mark_entry_possible(QosEntryId, SpaceId, AllTraverseReqs),
+            qos_entry:mark_possible(QosEntryId, SpaceId, AllTraverseReqs),
             % No need to invalidate QoS cache here; it is invalidated by each provider
             % that should start traverse task (see qos_traverse_req:start_traverse)
             qos_traverse_req:start_applicable_traverses(
@@ -145,6 +140,6 @@ reevaluate_impossible_qos(#document{key = QosEntryId} = QosEntryDoc) ->
         false -> ok
     end;
 
-reevaluate_impossible_qos(QosEntryId) ->
+reevaluate_qos(QosEntryId) when is_binary(QosEntryId) ->
     {ok, QosEntryDoc} = qos_entry:get(QosEntryId),
-    reevaluate_impossible_qos(QosEntryDoc).
+    reevaluate_qos(QosEntryDoc).
