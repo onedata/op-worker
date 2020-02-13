@@ -317,6 +317,8 @@ handle_cast(?OZ_CONNECTION_TERMINATED_MSG, State) ->
     {noreply, schedule_cache_purge(State)};
 
 handle_cast(?MONITOR_TOKEN_REQ(TokenAuth, TokenRef), State) ->
+    ?debug("Received request to monitor token (~s)", [TokenRef]),
+
     case is_token_revoked(TokenRef) of
         {ok, IsRevoked} ->
             ets:update_element(?CACHE_NAME, TokenAuth, [
@@ -334,6 +336,9 @@ handle_cast(?MONITOR_TOKEN_REQ(TokenAuth, TokenRef), State) ->
     {noreply, State};
 
 handle_cast(?TOKEN_STATUS_CHANGED_MSG(TokenId, IsRevoked), State) ->
+    ?debug("Received token status changed (revoked: ~p) event for token ~s", [
+        TokenId, IsRevoked
+    ]),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         verification_result = {ok, _, _},
         token_ref = {named, Id},
@@ -346,6 +351,8 @@ handle_cast(?TOKEN_STATUS_CHANGED_MSG(TokenId, IsRevoked), State) ->
     {noreply, State};
 
 handle_cast(?TOKEN_DELETED_MSG(TokenId), State) ->
+    ?debug("Received token deleted event for token ~s", [TokenId]),
+
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         token_ref = {named, Id}
     } = CacheEntry) when Id == TokenId ->
@@ -358,6 +365,9 @@ handle_cast(?TOKEN_DELETED_MSG(TokenId), State) ->
     {noreply, State};
 
 handle_cast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation), State) ->
+    ?debug("Received temporary tokens generation changed (gen: ~p) event for user ~s", [
+        UserId, Generation
+    ]),
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         verification_result = {ok, _, _},
         token_ref = {temporary, Id, OldGeneration}
@@ -371,6 +381,8 @@ handle_cast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation), State) ->
     {noreply, State};
 
 handle_cast(?TEMP_TOKENS_DELETED_MSG(UserId), State) ->
+    ?debug("Received temporary tokens deleted event for user ~s", [UserId]),
+
     ets:select_replace(?CACHE_NAME, ets:fun2ms(fun(#cache_entry{
         token_ref = {temporary, Id, _Generation}
     } = CacheEntry) when Id == UserId ->
@@ -458,6 +470,8 @@ broadcast(Msg) ->
 -spec purge_cache(state()) -> state().
 purge_cache(State) ->
     ets:delete_all_objects(?CACHE_NAME),
+    ?debug("Purged ~p cache", [?MODULE]),
+
     cancel_cache_purge_timer(State).
 
 
