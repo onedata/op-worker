@@ -154,7 +154,7 @@
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test,
     chmod_file_update_test,
     chmod_file_update2_test,
-    change_file_type_test,
+%%    change_file_type_test,    TODO VFS-6118
 %%    change_file_type2_test,   TODO VFS-6118
     update_timestamps_file_import_test,
     should_not_detect_timestamp_update_test,

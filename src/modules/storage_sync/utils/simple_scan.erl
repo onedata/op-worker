@@ -612,26 +612,13 @@ maybe_update_file(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
         space_id := SpaceId,
-        storage_id := StorageId,
         storage_file_ctx := StorageFileCtx
     }
-}, FileAttr = #file_attr{type = FileMetaType}, FileCtx) ->
+}, FileAttr, FileCtx) ->
     try
-        {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
-        StorageFileType = file_meta:type(StMode),
-        case StorageFileType =:= FileMetaType of
-            true ->
-                SyncAcl = maps:get(sync_acl, Args, false),
-                Result = maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx2, SyncAcl),
-                {Result, FileCtx, Job};
-            false ->
-                % file types does not match,that means that file with the same name
-                % has been deleted and recreated with different type
-                storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
-                full_update:delete_imported_file(FileCtx),
-                storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId),
-                maybe_import_file(Job)
-        end
+        SyncAcl = maps:get(sync_acl, Args, false),
+        Result = maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, SyncAcl),
+        {Result, FileCtx, Job}
     catch
         Error:Reason ->
             ?error_stacktrace("simple_scan:maybe_update_file file for file ~p in space ~p failed due to ~p:~p",
