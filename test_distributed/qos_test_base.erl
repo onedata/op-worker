@@ -51,6 +51,7 @@
     qos_status_during_traverse_test_base/3,
     qos_status_during_traverse_with_file_deletion_test_base/3,
     qos_status_during_traverse_with_dir_deletion_test_base/3,
+    qos_status_during_traverse_file_without_qos_test_base/2,
     qos_status_during_reconciliation_test_base/4,
     qos_status_during_reconciliation_with_file_deletion_test_base/2,
     qos_status_during_reconciliation_with_dir_deletion_test_base/2
@@ -1110,10 +1111,11 @@ qos_status_during_traverse_with_file_deletion_test_base(Config, SpaceId, NumberO
     ok = qos_tests_utils:finish_all_transfers(ToFinish),
     
     Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
-    ok = qos_tests_utils:assert_status_on_all_workers(Config, ToDelete ++ ToFinish ++ [Dir1], QosList, true, ?ATTEMPTS),
-    
+    ok = qos_tests_utils:assert_status_on_all_workers(Config, ToFinish ++ [Dir1], QosList, true, ?ATTEMPTS),
     % finish transfers to unlock waiting slave job processes
-    ok = qos_tests_utils:finish_all_transfers(ToDelete).
+    ok = qos_tests_utils:finish_all_transfers(ToDelete),
+    % These files where deleted so QoS is not fulfilled
+    ok = qos_tests_utils:assert_status_on_all_workers(Config, ToDelete, QosList, false, ?ATTEMPTS).
     
 
 qos_status_during_traverse_with_dir_deletion_test_base(Config, SpaceId, NumberOfFilesInDir) ->
@@ -1141,6 +1143,34 @@ qos_status_during_traverse_with_dir_deletion_test_base(Config, SpaceId, NumberOf
     % finish transfers to unlock waiting slave job processes
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]).
 
+
+qos_status_during_traverse_file_without_qos_test_base(Config, SpaceId) ->
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    
+    Name = generator:gen_name(),
+    DirStructure =
+        {SpaceId, [
+            {Name, [ % Dir1
+                {?filename(Name, 1), 
+                    [{?filename(Name, 0), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]}]
+                }]
+            }
+        ]},
+    
+    {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, filename:join(Name, ?filename(Name,1))),
+    Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
+    
+    % create file outside QoS range
+    {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), Dir1, generator:gen_name(), 8#664),
+    {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
+    ok = lfm_proxy:close(Worker1, FileHandle),
+    
+    qos_tests_utils:assert_status_on_all_workers(Config, [FileGuid], QosList, true, ?ATTEMPTS),
+    
+    % finish transfer to unlock waiting slave job process
+    ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]).
+    
 
 qos_status_during_reconciliation_test_base(Config, SpaceId, DirStructure, Filename) ->
     [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
@@ -1273,7 +1303,7 @@ prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
     QosList = maps:values(QosNameIdMapping),
     
     FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
-    FilesAndDirsGuids = lists:map(fun({G, _}) -> G end, FilesAndDirs),
+    FilesAndDirsGuids = lists:filtermap(fun({G, P}) when P >= Name -> {true, G}; (_) -> false end, FilesAndDirs),
     qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, false),
     {GuidsAndPaths, QosList}.
 

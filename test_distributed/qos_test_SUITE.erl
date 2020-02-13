@@ -76,7 +76,8 @@
     qos_status_during_traverse_test/1,
     qos_status_during_traverse_multi_batch_test/1,
     qos_status_during_traverse_with_file_deletion/1,
-    qos_status_during_traverse_with_dir_deletion/1
+    qos_status_during_traverse_with_dir_deletion/1,
+    qos_status_during_traverse_file_without_qos_test/1
 ]).
 
 all() -> [
@@ -128,7 +129,8 @@ all() -> [
     qos_status_during_traverse_test,
     qos_status_during_traverse_multi_batch_test,
     qos_status_during_traverse_with_file_deletion,
-    qos_status_during_traverse_with_dir_deletion
+    qos_status_during_traverse_with_dir_deletion,
+    qos_status_during_traverse_file_without_qos_test
 ].
 
 % Although this test SUITE is single provider, QoS parameters
@@ -657,6 +659,9 @@ qos_status_during_traverse_with_file_deletion(Config) ->
 qos_status_during_traverse_with_dir_deletion(Config) ->
     qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_PATH1, 2).
 
+qos_status_during_traverse_file_without_qos_test(Config) ->
+    qos_test_base:qos_status_during_traverse_file_without_qos_test_base(Config, ?SPACE_PATH1).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -684,7 +689,8 @@ init_per_testcase(qos_status_during_traverse_multi_batch_test, Config) ->
 init_per_testcase(Case, Config) when
     Case =:= qos_status_during_traverse_test;
     Case =:= qos_status_during_traverse_with_file_deletion;
-    Case =:= qos_status_during_traverse_with_dir_deletion ->
+    Case =:= qos_status_during_traverse_with_dir_deletion;
+    Case =:= qos_status_during_traverse_file_without_qos_test ->
     
     Workers = ?config(op_worker_nodes, Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),

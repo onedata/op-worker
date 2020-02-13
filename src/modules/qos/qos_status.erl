@@ -109,9 +109,12 @@
 -spec check_fulfillment(file_ctx:ctx(), qos_entry:id()) -> boolean().
 check_fulfillment(FileCtx, QosEntryId) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
-    qos_entry:is_possible(QosDoc) andalso
-        is_file_reconciled(FileCtx, QosDoc) andalso
-        are_traverses_finished_for_file(FileCtx, QosDoc).
+    {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
+    
+    not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId) orelse 
+        (qos_entry:is_possible(QosDoc) andalso 
+        is_file_reconciled(FileCtx1, QosDoc) andalso
+        are_traverses_finished_for_file(FileCtx1, QosDoc)).
 
 
 -spec report_traverse_started(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
