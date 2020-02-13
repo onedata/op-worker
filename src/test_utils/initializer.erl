@@ -327,7 +327,7 @@ teardown_session(Worker, Config) ->
         ({{session_id, _}, SessId}, Acc) ->
             case rpc:call(Worker, session, get_auth, [SessId]) of
                 {ok, Auth} ->
-                    rpc:call(Worker, auth_cache, invalidate_cache_entry, [Auth]),
+                    rpc:call(Worker, auth_cache, delete_cache_entry, [Auth]),
                     ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId]));
                 {error, not_found} ->
                     ok

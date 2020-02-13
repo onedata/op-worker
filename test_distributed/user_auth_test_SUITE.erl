@@ -73,7 +73,7 @@ auth_cache_size_test(Config) ->
             {ok, ?USER(?USER_ID_1), undefined},
             verify_auth(Worker1, TokenAuth)
         ),
-        ?assertEqual(ExpCacheSize, get_auth_cache_size(Worker1))
+        ?assertEqual(ExpCacheSize, get_auth_cache_size(Worker1), ?ATTEMPTS)
     end, [
         {TokenAuth1, 1},
         {TokenAuth2, 2},
@@ -234,7 +234,7 @@ auth_cache_oz_conn_status_test(Config) ->
     end, [{TokenAuth1, ?USER_ID_1}, {TokenAuth2, ?USER_ID_2}]),
 
     % Connection termination should schedule cache purge after 'auth_invalidation_delay'
-    rpc:call(Worker1, application, set_env, [?APP_NAME, auth_invalidation_delay, timer:seconds(4)]),
+    set_auth_cache_purge_delay(Worker1, timer:seconds(4)),
     simulate_oz_connection_termination(Worker1),
 
     timer:sleep(timer:seconds(2)),
@@ -476,11 +476,11 @@ verify_auth(Worker, TokenAuth) ->
 
 
 clear_auth_cache(Worker) ->
-    rpc:call(Worker, ets, delete_all_objects, [auth_manager]).
+    rpc:call(Worker, ets, delete_all_objects, [auth_cache]).
 
 
 get_auth_cache_size(Worker) ->
-    rpc:call(Worker, ets, info, [auth_manager, size]).
+    rpc:call(Worker, ets, info, [auth_cache, size]).
 
 
 -spec infer_ttl([caveats:caveat()]) -> undefined | time_utils:seconds().
@@ -555,6 +555,13 @@ simulate_gs_temporary_tokens_deletion(Node, UserId) ->
         change_type = deleted
     }]),
     ok.
+
+
+-spec set_auth_cache_purge_delay(node(), Delay :: time_utils:millis()) -> ok.
+set_auth_cache_purge_delay(Node, Delay) ->
+    ?assertMatch(ok, rpc:call(Node, application, set_env, [
+        ?APP_NAME, auth_cache_purge_delay, Delay
+    ])).
 
 
 -spec simulate_oz_connection_start(node()) -> ok.

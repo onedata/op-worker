@@ -279,7 +279,7 @@ handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
     end;
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
     ?warning("Connection to Onezone lost, reason: ~p", [Reason]),
-    oneprovider:on_disconnect_to_oz(),
+    oneprovider:on_disconnect_from_oz(),
     {stop, normal, State};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
@@ -718,8 +718,8 @@ is_authorized_to_get(_, _, #gri{type = od_share, scope = public}, _) ->
 is_authorized_to_get(_, _, #gri{type = od_handle, scope = public}, _) ->
     true;
 
-is_authorized_to_get(?ROOT_SESS_ID, AuthHin, GRI, Doc) ->
-    is_root_authorized_to_get(AuthHin, GRI, Doc);
+is_authorized_to_get(?ROOT_SESS_ID, AuthHint, GRI, Doc) ->
+    is_root_authorized_to_get(AuthHint, GRI, Doc);
 
 is_authorized_to_get(?GUEST_SESS_ID, AuthHint, GRI, Doc) ->
     is_guest_authorized_to_get(AuthHint, GRI, Doc);

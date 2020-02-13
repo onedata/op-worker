@@ -107,7 +107,7 @@ get_test(Config) ->
     % Make sure that after auth cache purge next request will reach zone
     % (when using TokenAuth 2 requests will be made - one to verify token
     % auth and second to fetch user data)
-    true = rpc:call(Node, ets, delete_all_objects, [auth_manager]),
+    true = rpc:call(Node, ets, delete_all_objects, [auth_cache]),
 
     ?assertMatch(
         {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},

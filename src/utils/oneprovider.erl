@@ -31,7 +31,7 @@
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([is_connected_to_oz/0]).
 -export([terminate_oz_connection/0, force_oz_connection_start/0, restart_oz_connection/0]).
--export([on_connect_to_oz/0, on_disconnect_to_oz/0, on_deregister/0]).
+-export([on_connect_to_oz/0, on_disconnect_from_oz/0, on_deregister/0]).
 -export([set_up_service_in_onezone/0]).
 
 % Developer functions
@@ -309,8 +309,8 @@ on_connect_to_oz() ->
 %% Callback called when connection to Onezone is terminated.
 %% @end
 %%--------------------------------------------------------------------
--spec on_disconnect_to_oz() -> ok.
-on_disconnect_to_oz() ->
+-spec on_disconnect_from_oz() -> ok.
+on_disconnect_from_oz() ->
     ok = auth_cache:report_oz_connection_termination().
 
 

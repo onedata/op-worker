@@ -19,8 +19,6 @@
 -module(auth_manager).
 -author("Bartosz Walkowicz").
 
--behaviour(gen_server).
-
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").

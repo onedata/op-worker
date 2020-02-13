@@ -6,14 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Creates and maintains auth cache. Also provides utility functions
-%%% for getting and saving entries to the cache.
-%%% Cache entries are cached for as long as token expiration allows (can be
+%%% Creates, maintains and provides functions for manipulation of auth cache,
+%%% that is mapping between token credentials and user auth.
+%%% Cache entries are kept for as long as token expiration allows (can be
 %%% cached forever if no time caveat is present). At the same time ?MODULE
-%%% subscribes in oz for token events and monitors their status so that
-%%% eventual changes (eg. revocation) will be reflected in cache.
-%%% To avoid exhausting memory, ?MODULE performs periodic checks and clears
-%%% cache if size limit is breached. Cache is also cleared, with some delay,
+%%% subscribes in Onezone for token status changes and monitors them so that
+%%% it can reflect those changes (eg. revocation) in cached entries.
+%%% To avoid exhausting memory, ?MODULE performs periodic checks and purges
+%%% cache if size limit is breached. Cache is also purged, with some delay,
 %%% when connection to oz is lost (subscriptions may became invalid) and
 %%% immediately when mentioned connection is restored.
 %%% @end
@@ -30,13 +30,13 @@
 -include_lib("stdlib/include/ms_transform.hrl").
 
 %% API
--export([start_link/0, spec/0]).
+-export([spec/0, start_link/0]).
 -export([
     get_token_ref/1,
     get_token_auth_verification_result/1,
     save_token_auth_verification_result/3,
 
-    invalidate_cache_entry/1
+    delete_cache_entry/1
 ]).
 -export([
     report_oz_connection_start/0,
@@ -72,7 +72,7 @@
 }).
 
 -record(state, {
-    cache_invalidation_timer = undefined :: undefined | reference()
+    cache_purge_timer = undefined :: undefined | reference()
 }).
 -type state() :: #state{}.
 
@@ -89,9 +89,9 @@
     ?APP_NAME, auth_cache_size_limit, 5000
 )).
 
--define(INVALIDATE_CACHE_REQ, invalidate_cache).
--define(CACHE_INVALIDATION_DELAY, application:get_env(
-    ?APP_NAME, auth_invalidation_delay, timer:seconds(300)
+-define(PURGE_CACHE_REQ, purge_cache).
+-define(CACHE_PURGE_DELAY, application:get_env(
+    ?APP_NAME, auth_cache_purge_delay, timer:seconds(300)
 )).
 
 -define(CACHE_ITEM_DEFAULT_TTL, application:get_env(
@@ -214,24 +214,20 @@ save_token_auth_verification_result(TokenAuth, TokenRef, VerificationResult) ->
     end.
 
 
--spec invalidate_cache_entry(auth_manager:token_auth()) -> ok.
-invalidate_cache_entry(TokenAuth) ->
+-spec delete_cache_entry(auth_manager:token_auth()) -> ok.
+delete_cache_entry(TokenAuth) ->
     ets:delete(?CACHE_NAME, TokenAuth),
     ok.
 
 
 -spec report_oz_connection_start() -> ok.
 report_oz_connection_start() ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    gen_server:abcast(Nodes, ?MODULE, ?OZ_CONNECTION_STARTED_MSG),
-    ok.
+    broadcast(?OZ_CONNECTION_STARTED_MSG).
 
 
 -spec report_oz_connection_termination() -> ok.
 report_oz_connection_termination() ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    gen_server:abcast(Nodes, ?MODULE, ?OZ_CONNECTION_TERMINATED_MSG),
-    ok.
+    broadcast(?OZ_CONNECTION_TERMINATED_MSG).
 
 
 -spec report_token_status_update(od_token:doc()) -> ok.
@@ -239,20 +235,12 @@ report_token_status_update(#document{
     key = TokenId,
     value = #od_token{revoked = IsRevoked}
 }) ->
-    gen_server:abcast(
-        consistent_hashing:get_all_nodes(), ?MODULE,
-        ?TOKEN_STATUS_CHANGED_MSG(TokenId, IsRevoked)
-    ),
-    ok.
+    broadcast(?TOKEN_STATUS_CHANGED_MSG(TokenId, IsRevoked)).
 
 
 -spec report_token_deletion(od_token:id()) -> ok.
 report_token_deletion(TokenId) ->
-    gen_server:abcast(
-        consistent_hashing:get_all_nodes(), ?MODULE,
-        ?TOKEN_DELETED_MSG(TokenId)
-    ),
-    ok.
+    broadcast(?TOKEN_DELETED_MSG(TokenId)).
 
 
 -spec report_temporary_tokens_generation_change(temporary_token_secret:doc()) ->
@@ -261,20 +249,12 @@ report_temporary_tokens_generation_change(#document{
     key = UserId,
     value = #temporary_token_secret{generation = Generation}
 }) ->
-    gen_server:abcast(
-        consistent_hashing:get_all_nodes(), ?MODULE,
-        ?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation)
-    ),
-    ok.
+    broadcast(?TEMP_TOKENS_GENERATION_CHANGED_MSG(UserId, Generation)).
 
 
 -spec report_temporary_tokens_deletion(od_user:id()) -> ok.
 report_temporary_tokens_deletion(UserId) ->
-    gen_server:abcast(
-        consistent_hashing:get_all_nodes(), ?MODULE,
-        ?TEMP_TOKENS_DELETED_MSG(UserId)
-    ),
-    ok.
+    broadcast(?TEMP_TOKENS_DELETED_MSG(UserId)).
 
 
 %%%===================================================================
@@ -330,12 +310,11 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(?OZ_CONNECTION_STARTED_MSG, State0) ->
-    ets:delete_all_objects(?CACHE_NAME),
-    {noreply, cancel_cache_invalidation_timer(State0)};
+handle_cast(?OZ_CONNECTION_STARTED_MSG, State) ->
+    {noreply, purge_cache(State)};
 
 handle_cast(?OZ_CONNECTION_TERMINATED_MSG, State) ->
-    {noreply, schedule_cache_invalidation(State)};
+    {noreply, schedule_cache_purge(State)};
 
 handle_cast(?MONITOR_TOKEN_REQ(TokenAuth, TokenRef), State) ->
     case is_token_revoked(TokenRef) of
@@ -426,9 +405,8 @@ handle_info(?CHECK_CACHE_SIZE_REQ, State) ->
     schedule_cache_size_checkup(),
     {noreply, State};
 
-handle_info(?INVALIDATE_CACHE_REQ, State) ->
-    ets:delete_all_objects(?CACHE_NAME),
-    {noreply, cancel_cache_invalidation_timer(State)};
+handle_info(?PURGE_CACHE_REQ, State) ->
+    {noreply, purge_cache(State)};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -467,6 +445,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec broadcast(Msg :: term()) -> ok.
+broadcast(Msg) ->
+    gen_server:abcast(consistent_hashing:get_all_nodes(), ?MODULE, Msg),
+    ok.
+
+
+%% @private
+-spec purge_cache(state()) -> state().
+purge_cache(State) ->
+    ets:delete_all_objects(?CACHE_NAME),
+    cancel_cache_purge_timer(State).
 
 
 %% @private
@@ -545,19 +537,19 @@ schedule_cache_size_checkup() ->
 
 
 %% @private
--spec schedule_cache_invalidation(state()) -> state().
-schedule_cache_invalidation(#state{cache_invalidation_timer = undefined} = State) ->
-    State#state{cache_invalidation_timer = erlang:send_after(
-        ?CACHE_INVALIDATION_DELAY, self(), ?INVALIDATE_CACHE_REQ
+-spec schedule_cache_purge(state()) -> state().
+schedule_cache_purge(#state{cache_purge_timer = undefined} = State) ->
+    State#state{cache_purge_timer = erlang:send_after(
+        ?CACHE_PURGE_DELAY, self(), ?PURGE_CACHE_REQ
     )};
-schedule_cache_invalidation(State) ->
+schedule_cache_purge(State) ->
     State.
 
 
 %% @private
--spec cancel_cache_invalidation_timer(state()) -> state().
-cancel_cache_invalidation_timer(#state{cache_invalidation_timer = undefined} = State) ->
+-spec cancel_cache_purge_timer(state()) -> state().
+cancel_cache_purge_timer(#state{cache_purge_timer = undefined} = State) ->
     State;
-cancel_cache_invalidation_timer(#state{cache_invalidation_timer = TimerRef} = State) ->
+cancel_cache_purge_timer(#state{cache_purge_timer = TimerRef} = State) ->
     erlang:cancel_timer(TimerRef, [{async, true}, {info, false}]),
-    State#state{cache_invalidation_timer = undefined}.
+    State#state{cache_purge_timer = undefined}.
