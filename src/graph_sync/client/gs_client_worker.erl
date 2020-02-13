@@ -97,7 +97,7 @@ force_terminate() ->
 %% @equiv request(?ROOT_SESS_ID, Req).
 %% @end
 %%--------------------------------------------------------------------
--spec request(gs_protocol:rpc_req() | gs_protocol:graph_req()) -> result().
+-spec request(gs_protocol:graph_req()) -> result().
 request(Req) ->
     request(?ROOT_SESS_ID, Req).
 
@@ -107,7 +107,7 @@ request(Req) ->
 %% @equiv request(Client, Req, ?GS_REQUEST_TIMEOUT).
 %% @end
 %%--------------------------------------------------------------------
--spec request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req()) -> result().
+-spec request(client(), gs_protocol:graph_req()) -> result().
 request(Client, Req) ->
     request(Client, Req, ?GS_REQUEST_TIMEOUT).
 
@@ -118,7 +118,7 @@ request(Client, Req) ->
 %% from cache if possible.
 %% @end
 %%--------------------------------------------------------------------
--spec request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req(), timeout()) ->
+-spec request(client(), gs_protocol:graph_req(), timeout()) ->
     result().
 request(Client, Req, Timeout) ->
     try
@@ -400,15 +400,8 @@ check_api_authorization(TokenAuth, #gs_req_graph{operation = Operation, gri = GR
 
 
 %% @private
--spec do_request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req(), timeout()) ->
+-spec do_request(client(), gs_protocol:graph_req(), timeout()) ->
     result().
-do_request(Client, #gs_req_rpc{} = RpcReq, Timeout) ->
-    case call_onezone(Client, RpcReq, Timeout) of
-        {ok, #gs_resp_rpc{result = Res}} ->
-            {ok, Res};
-        {error, _} = Error ->
-            Error
-    end;
 do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout) ->
     case maybe_serve_from_cache(Client, GraphReq) of
         {error, _} = Err1 ->
@@ -463,9 +456,8 @@ do_request(Client, #gs_req_graph{} = GraphReq, Timeout) ->
 
 
 %% @private
--spec call_onezone(client(), gs_protocol:rpc_req() | gs_protocol:graph_req() | gs_protocol:unsub_req(),
-    timeout()) -> {ok, gs_protocol:rpc_resp() | gs_protocol:graph_resp() | gs_protocol:unsub_resp()} |
-errors:error().
+-spec call_onezone(client(), gs_protocol:graph_req() | gs_protocol:unsub_req(), timeout()) ->
+    {ok, gs_protocol:graph_resp() | gs_protocol:unsub_resp()} | errors:error().
 call_onezone(Client, Request, Timeout) ->
     case get_connection_pid() of
         undefined ->
@@ -476,15 +468,12 @@ call_onezone(Client, Request, Timeout) ->
 
 
 %% @private
--spec call_onezone(connection_ref(), client(),
-    gs_protocol:rpc_req() | gs_protocol:graph_req() | gs_protocol:unsub_req(), timeout()) ->
-    {ok, gs_protocol:rpc_resp() | gs_protocol:graph_resp() | gs_protocol:unsub_resp()} |
-    errors:error().
+-spec call_onezone(connection_ref(), client(), gs_protocol:graph_req() | gs_protocol:unsub_req(),
+    timeout()) -> {ok, gs_protocol:graph_resp() | gs_protocol:unsub_resp()} | errors:error().
 call_onezone(ConnRef, Client, Request, Timeout) ->
     try
         SubType = case Request of
             #gs_req_graph{} -> graph;
-            #gs_req_rpc{} -> rpc;
             #gs_req_unsub{} -> unsub
         end,
         GsReq = #gs_req{
