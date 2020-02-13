@@ -49,7 +49,7 @@ all() -> ?ALL([
 -define(USER_ID_2, <<"test_id_2">>).
 -define(USER_FULL_NAME, <<"test_name">>).
 
--define(ATTEMPTS, 20).
+-define(ATTEMPTS, 60).
 
 %%%===================================================================
 %%% Test functions
@@ -57,161 +57,163 @@ all() -> ?ALL([
 
 
 auth_cache_size_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
-    clear_auth_cache(Worker1),
-    ?assertEqual(0, get_auth_cache_size(Worker1)),
+    clear_auth_caches(Config),
 
     AccessToken = initializer:create_access_token(?USER_ID_1),
 
-    TokenAuth1 = create_token_auth(AccessToken),
-    TokenAuth2 = create_token_auth(AccessToken),
-    TokenAuth3 = create_token_auth(AccessToken),
+    TokenAuth1 = create_token_auth(AccessToken, undefined),
+    TokenAuth2 = create_token_auth(AccessToken, graphsync),
+    TokenAuth3 = create_token_auth(AccessToken, rest),
+    TokenAuth4 = create_token_auth(AccessToken, oneclient, allow_data_access_caveats),
+    TokenAuth5 = create_token_auth(AccessToken, oneclient, disallow_data_access_caveats),
 
-    lists:foreach(fun({TokenAuth, ExpCacheSize}) ->
+    lists:foreach(fun({TokenAuth, Worker, ExpCacheSize}) ->
         ?assertMatch(
             {ok, ?USER(?USER_ID_1), undefined},
-            verify_auth(Worker1, TokenAuth)
+            verify_auth(Worker, TokenAuth)
         ),
-        ?assertEqual(ExpCacheSize, get_auth_cache_size(Worker1), ?ATTEMPTS)
+        ?assertEqual(ExpCacheSize, get_auth_cache_size(Worker), ?ATTEMPTS)
     end, [
-        {TokenAuth1, 1},
-        {TokenAuth2, 2},
-        {TokenAuth3, 3}
+        {TokenAuth1, Worker1, 1},
+        {TokenAuth2, Worker2, 1},
+        {TokenAuth3, Worker1, 2},
+        {TokenAuth4, Worker2, 2},
+        {TokenAuth5, Worker1, 3}
     ]),
 
-    % Default cache size limit is big enough so that 3 entries will not be purged
+    % Default cache size limit is big enough so that 2 or 3 entries will not be purged
     timer:sleep(timer:seconds(5)),
     ?assertEqual(3, get_auth_cache_size(Worker1)),
+    ?assertEqual(2, get_auth_cache_size(Worker2)),
 
-    % After setting auth cache size limit to 2 entries should be purged during
-    % next checkup (since they exceed limit)
+    % Setting auth cache size limit to 2 should cause cache purge on Worker1
+    % (cache entries exceed limit) but not on Worker2
+    set_auth_cache_size_limit(Worker1, 2),
+    set_auth_cache_size_limit(Worker2, 2),
     rpc:call(Worker1, application, set_env, [?APP_NAME, auth_cache_size_limit, 2]),
     timer:sleep(timer:seconds(5)),
     ?assertEqual(0, get_auth_cache_size(Worker1)),
+    ?assertEqual(2, get_auth_cache_size(Worker2)),
 
-    % Filling entries up to limit should not cause cache purge
-    verify_auth(Worker1, TokenAuth1),
-    verify_auth(Worker1, TokenAuth2),
-    ?assertEqual(2, get_auth_cache_size(Worker1)),
-    timer:sleep(timer:seconds(5)),
-    ?assertEqual(2, get_auth_cache_size(Worker1)),
-
-    clear_auth_cache(Worker1).
+    clear_auth_caches(Config).
 
 
 auth_cache_named_token_events_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
-    clear_auth_cache(Worker1),
-    ?assertEqual(0, get_auth_cache_size(Worker1)),
+    clear_auth_caches(Config),
 
     AccessToken1 = initializer:create_access_token(?USER_ID_1, [], named),
     AccessToken2 = initializer:create_access_token(?USER_ID_2, [], named),
 
-    TokenAuth1 = create_token_auth(AccessToken1),
-    TokenAuth2 = create_token_auth(AccessToken1),
-    TokenAuth3 = create_token_auth(AccessToken2),
+    TokenAuth1 = create_token_auth(AccessToken1, rest),
+    TokenAuth2 = create_token_auth(AccessToken1, oneclient),
+    TokenAuth3 = create_token_auth(AccessToken2, graphsync),
 
-    lists:foreach(fun({TokenAuth, ExpUserId}) ->
-        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker1, TokenAuth))
+    lists:foreach(fun({TokenAuth, Worker, ExpUserId, ExpCacheSize}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker, TokenAuth)),
+        ?assertEqual(ExpCacheSize, get_auth_cache_size(Worker), ?ATTEMPTS)
     end, [
-        {TokenAuth1, ?USER_ID_1},
-        {TokenAuth2, ?USER_ID_1},
-        {TokenAuth3, ?USER_ID_2}
+        {TokenAuth1, Worker1, ?USER_ID_1, 1},
+        {TokenAuth2, Worker2, ?USER_ID_1, 1},
+        {TokenAuth3, Worker1, ?USER_ID_2, 2}
     ]),
 
+    %% TOKEN EVENTS SEND ON ANY NODE SHOULD AFFECT ALL NODES AUTH CACHE
+
     % When AccessToken1 is revoked
-    simulate_gs_token_status_update(Worker1, ?USER_ID_1, true),
+    simulate_gs_token_status_update(Worker2, ?USER_ID_1, true),
 
     % Then only TokenAuths based on that token should be revoked
-    lists:foreach(fun(TokenAuth) ->
-        ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker1, TokenAuth))
-    end, [TokenAuth1, TokenAuth2]),
+    lists:foreach(fun({TokenAuth, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker, TokenAuth))
+    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
     ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
 
     % Revoked tokens can be re-revoked and used again
     simulate_gs_token_status_update(Worker1, ?USER_ID_1, false),
-    simulate_gs_token_status_update(Worker1, ?USER_ID_2, true),
+    simulate_gs_token_status_update(Worker2, ?USER_ID_2, true),
 
-    lists:foreach(fun(TokenAuth) ->
-        ?assertMatch({ok, ?USER(?USER_ID_1), _}, verify_auth(Worker1, TokenAuth))
-    end, [TokenAuth1, TokenAuth2]),
+    lists:foreach(fun({TokenAuth, Worker}) ->
+        ?assertMatch({ok, ?USER(?USER_ID_1), _}, verify_auth(Worker, TokenAuth))
+    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
     ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker1, TokenAuth3)),
 
     % Deleting token should result in ?ERROR_TOKEN_INVALID
     simulate_gs_token_deletion(Worker1, ?USER_ID_1),
 
-    lists:foreach(fun(TokenAuth) ->
-        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker1, TokenAuth))
-    end, [TokenAuth1, TokenAuth2]),
+    lists:foreach(fun({TokenAuth, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker, TokenAuth))
+    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
     ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker1, TokenAuth3)),
 
     % Revoking already deleted token should not change error
     simulate_gs_token_status_update(Worker1, ?USER_ID_1, true),
 
-    lists:foreach(fun(TokenAuth) ->
-        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker1, TokenAuth))
-    end, [TokenAuth1, TokenAuth2]),
+    lists:foreach(fun({TokenAuth, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker, TokenAuth))
+    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
     ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker1, TokenAuth3)),
 
-    clear_auth_cache(Worker1).
+    clear_auth_caches(Config).
 
 
 auth_cache_temporary_token_events_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
-    clear_auth_cache(Worker1),
-    ?assertEqual(0, get_auth_cache_size(Worker1)),
+    clear_auth_caches(Config),
 
     AccessToken1 = initializer:create_access_token(?USER_ID_1, [], temporary),
     AccessToken2 = initializer:create_access_token(?USER_ID_2, [], temporary),
 
-    TokenAuth1 = create_token_auth(AccessToken1),
-    TokenAuth2 = create_token_auth(AccessToken1),
-    TokenAuth3 = create_token_auth(AccessToken2),
+    TokenAuth1 = create_token_auth(AccessToken1, rest),
+    TokenAuth2 = create_token_auth(AccessToken1, oneclient),
+    TokenAuth3 = create_token_auth(AccessToken2, graphsync),
 
-    lists:foreach(fun({TokenAuth, ExpUserId}) ->
-        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker1, TokenAuth))
+    lists:foreach(fun({TokenAuth, Worker, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker, TokenAuth))
     end, [
-        {TokenAuth1, ?USER_ID_1},
-        {TokenAuth2, ?USER_ID_1},
-        {TokenAuth3, ?USER_ID_2}
+        {TokenAuth1, Worker1, ?USER_ID_1},
+        {TokenAuth2, Worker2, ?USER_ID_1},
+        {TokenAuth3, Worker1, ?USER_ID_2}
     ]),
+
+    %% TOKEN EVENTS SEND ON ANY NODE SHOULD AFFECT ALL NODES AUTH CACHE
 
     % When temporary tokens of ?USER_ID_1 are revoked
     simulate_gs_temporary_tokens_revocation(Worker1, ?USER_ID_1),
 
     % Then all TokenAuths based on temporary tokens should be revoked
-    lists:foreach(fun(TokenAuth) ->
-        ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker1, TokenAuth))
-    end, [TokenAuth1, TokenAuth2]),
+    lists:foreach(fun({TokenAuth, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker, TokenAuth))
+    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
     ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
 
     % Deleting temporary tokens of ?USER_ID_1 should result in ?ERROR_TOKEN_INVALID
     simulate_gs_temporary_tokens_deletion(Worker1, ?USER_ID_1),
 
-    lists:foreach(fun(TokenAuth) ->
-        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker1, TokenAuth))
-    end, [TokenAuth1, TokenAuth2]),
+    lists:foreach(fun({TokenAuth, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker, TokenAuth))
+    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
     ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
 
     % Revoking already deleted token should not change error
     simulate_gs_temporary_tokens_revocation(Worker1, ?USER_ID_1),
 
-    lists:foreach(fun(TokenAuth) ->
-        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker1, TokenAuth))
-    end, [TokenAuth1, TokenAuth2]),
+    lists:foreach(fun({TokenAuth, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker, TokenAuth))
+    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
     ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
 
-    clear_auth_cache(Worker1).
+    clear_auth_caches(Config).
 
 
 auth_cache_oz_conn_status_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
 
-    clear_auth_cache(Worker1),
-    ?assertEqual(0, get_auth_cache_size(Worker1)),
+    clear_auth_caches(Config),
 
     AccessToken1 = initializer:create_access_token(?USER_ID_1, [], temporary),
     AccessToken2 = initializer:create_access_token(?USER_ID_2, [], named),
@@ -219,30 +221,43 @@ auth_cache_oz_conn_status_test(Config) ->
     TokenAuth1 = create_token_auth(AccessToken1),
     TokenAuth2 = create_token_auth(AccessToken2),
 
-    lists:foreach(fun({TokenAuth, ExpUserId}) ->
-        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker1, TokenAuth))
-    end, [{TokenAuth1, ?USER_ID_1}, {TokenAuth2, ?USER_ID_2}]),
+    lists:foreach(fun({TokenAuth, Worker, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker, TokenAuth))
+    end, [
+        {TokenAuth1, Worker1, ?USER_ID_1},
+        {TokenAuth2, Worker2, ?USER_ID_2}]
+    ),
 
-    ?assertEqual(2, get_auth_cache_size(Worker1)),
+    ?assertEqual(1, get_auth_cache_size(Worker1)),
+    ?assertEqual(1, get_auth_cache_size(Worker2)),
 
     % Connection start should cause immediate cache purge
     simulate_oz_connection_start(Worker1),
     ?assertEqual(0, get_auth_cache_size(Worker1)),
+    ?assertEqual(0, get_auth_cache_size(Worker2)),
 
-    lists:foreach(fun({TokenAuth, ExpUserId}) ->
-        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker1, TokenAuth))
-    end, [{TokenAuth1, ?USER_ID_1}, {TokenAuth2, ?USER_ID_2}]),
+    lists:foreach(fun({TokenAuth, Worker, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker, TokenAuth))
+    end, [
+        {TokenAuth1, Worker2, ?USER_ID_1},
+        {TokenAuth2, Worker1, ?USER_ID_2}]
+    ),
 
     % Connection termination should schedule cache purge after 'auth_invalidation_delay'
     set_auth_cache_purge_delay(Worker1, timer:seconds(4)),
+    set_auth_cache_purge_delay(Worker2, timer:seconds(6)),
     simulate_oz_connection_termination(Worker1),
 
     timer:sleep(timer:seconds(2)),
-    ?assertEqual(2, get_auth_cache_size(Worker1)),
+    ?assertEqual(1, get_auth_cache_size(Worker1)),
+    ?assertEqual(1, get_auth_cache_size(Worker2)),
     timer:sleep(timer:seconds(3)),
     ?assertEqual(0, get_auth_cache_size(Worker1)),
+    ?assertEqual(1, get_auth_cache_size(Worker2)),
+    timer:sleep(timer:seconds(2)),
+    ?assertEqual(0, get_auth_cache_size(Worker2)),
 
-    clear_auth_cache(Worker1).
+    clear_auth_caches(Config).
 
 
 token_authentication(Config) ->
@@ -263,10 +278,7 @@ token_authentication(Config) ->
         {ok, #document{value = #session{identity = ?SUB(user, ?USER_ID_1)}}},
         rpc:call(Worker1, session, get, [SessId])
     ),
-    ?assertMatch(
-        TokenAuth,
-        session:get_auth(Doc)
-    ),
+    ?assertMatch(TokenAuth, session:get_auth(Doc)),
     ?assertMatch(
         {ok, ?USER(?USER_ID_1), undefined},
         rpc:call(Worker1, auth_manager, verify_auth, [TokenAuth])
@@ -479,10 +491,6 @@ clear_auth_cache(Worker) ->
     rpc:call(Worker, ets, delete_all_objects, [auth_cache]).
 
 
-get_auth_cache_size(Worker) ->
-    rpc:call(Worker, ets, info, [auth_cache, size]).
-
-
 -spec infer_ttl([caveats:caveat()]) -> undefined | time_utils:seconds().
 infer_ttl(Caveats) ->
     ValidUntil = lists:foldl(fun
@@ -495,6 +503,17 @@ infer_ttl(Caveats) ->
     end.
 
 
+get_auth_cache_size(Worker) ->
+    rpc:call(Worker, ets, info, [auth_cache, size]).
+
+
+clear_auth_caches(Config) ->
+    lists:foreach(fun(Node) ->
+        clear_auth_cache(Node),
+        ?assertEqual(0, get_auth_cache_size(Node))
+    end, ?config(op_worker_nodes, Config)).
+
+
 -spec create_token_auth(auth_manager:access_token()) -> auth_manager:token_auth().
 create_token_auth(AccessToken) ->
     Interface = case rand:uniform(4) of
@@ -503,10 +522,22 @@ create_token_auth(AccessToken) ->
         3 -> graphsync;
         4 -> oneclient
     end,
+    create_token_auth(AccessToken, Interface).
+
+
+-spec create_token_auth(auth_manager:access_token(), undefined | cv_interface:interface()) ->
+    auth_manager:token_auth().
+create_token_auth(AccessToken, Interface) ->
     DataAccessCaveatsPolicy = case rand:uniform(2) of
         1 -> allow_data_access_caveats;
         2 -> disallow_data_access_caveats
     end,
+    create_token_auth(AccessToken, Interface, DataAccessCaveatsPolicy).
+
+
+-spec create_token_auth(auth_manager:access_token(), undefined | cv_interface:interface(),
+    data_access_caveats:policy()) -> auth_manager:token_auth().
+create_token_auth(AccessToken, Interface, DataAccessCaveatsPolicy) ->
     auth_manager:build_token_auth(
         AccessToken, undefined, initializer:local_ip_v4(),
         Interface, DataAccessCaveatsPolicy
@@ -555,6 +586,13 @@ simulate_gs_temporary_tokens_deletion(Node, UserId) ->
         change_type = deleted
     }]),
     ok.
+
+
+-spec set_auth_cache_size_limit(node(), SizeLimit :: non_neg_integer()) -> ok.
+set_auth_cache_size_limit(Node, SizeLimit) ->
+    ?assertMatch(ok, rpc:call(Node, application, set_env, [
+        ?APP_NAME, auth_cache_size_limit, SizeLimit
+    ])).
 
 
 -spec set_auth_cache_purge_delay(node(), Delay :: time_utils:millis()) -> ok.
