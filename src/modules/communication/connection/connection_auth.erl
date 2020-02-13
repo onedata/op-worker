@@ -87,14 +87,14 @@ handle_client_handshake(#client_handshake_request{
     nonce = Nonce,
     credentials = #credentials{
         access_token = AccessToken,
-        audience_token = AudienceToken
+        consumer_token = ConsumerToken
     }
 } = Req, IpAddress) when is_binary(Nonce) ->
 
     assert_client_compatibility(Req, IpAddress),
 
     TokenAuth = auth_manager:build_token_auth(
-        AccessToken, AudienceToken,
+        AccessToken, ConsumerToken,
         IpAddress, oneclient, allow_data_access_caveats
     ),
     case auth_manager:verify(TokenAuth) of
