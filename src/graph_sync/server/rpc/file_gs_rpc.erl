@@ -18,62 +18,15 @@
 
 %% API
 -export([
-    ls/2,
     move/2, copy/2,
 
-    register_file_upload/2, deregister_file_upload/2,
-    get_file_download_url/2
+    register_file_upload/2, deregister_file_upload/2
 ]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec ls(aai:auth(), gs_protocol:rpc_args()) -> gs_protocol:rpc_result().
-ls(?USER(_UserId, SessionId) = Auth, Data) ->
-    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
-        required => #{
-            <<"guid">> => {binary, non_empty},
-            <<"limit">> => {integer, {not_lower_than, 1}}
-        },
-        optional => #{
-            <<"index">> => {any, fun
-                (null) ->
-                    {true, undefined};
-                (undefined) ->
-                    true;
-                (<<>>) ->
-                    throw(?ERROR_BAD_VALUE_EMPTY(<<"index">>));
-                (IndexBin) when is_binary(IndexBin) ->
-                    true;
-                (_) ->
-                    false
-            end},
-            <<"offset">> => {integer, any}
-        }
-    }),
-    FileGuid = maps:get(<<"guid">>, SanitizedData),
-    Limit = maps:get(<<"limit">>, SanitizedData),
-    StartId = maps:get(<<"index">>, SanitizedData, undefined),
-    Offset = maps:get(<<"offset">>, SanitizedData, 0),
-
-    assert_space_membership_and_local_support(Auth, FileGuid),
-
-    case lfm:ls(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
-        {ok, Children, _, _} ->
-            {ok, lists:map(fun({ChildGuid, _ChildName}) ->
-                gri:serialize(#gri{
-                    type = op_file,
-                    id = ChildGuid,
-                    aspect = instance,
-                    scope = private
-                })
-            end, Children)};
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end.
 
 
 -spec move(aai:auth(), gs_protocol:rpc_args()) -> gs_protocol:rpc_result().
@@ -162,28 +115,6 @@ deregister_file_upload(?USER(UserId), Data) ->
     FileGuid = maps:get(<<"guid">>, SanitizedData),
     file_upload_manager:deregister_upload(UserId, FileGuid),
     {ok, #{}}.
-
-
--spec get_file_download_url(aai:auth(), gs_protocol:rpc_args()) ->
-    gs_protocol:rpc_result().
-get_file_download_url(?USER(_UserId, SessId) = Auth, Data) ->
-    SanitizedData = middleware_sanitizer:sanitize_data(Data, #{
-        required => #{<<"guid">> => {binary, non_empty}}
-    }),
-    FileGuid = maps:get(<<"guid">>, SanitizedData),
-    assert_space_membership_and_local_support(Auth, FileGuid),
-
-    case page_file_download:get_file_download_url(SessId, FileGuid) of
-        {ok, URL} ->
-            {ok, #{<<"fileUrl">> => URL}};
-        ?ERROR_FORBIDDEN ->
-            ?ERROR_FORBIDDEN;
-        {error, Errno} ->
-            ?debug("Cannot resolve file download url for file ~p - ~p", [
-                FileGuid, Errno
-            ]),
-            ?ERROR_POSIX(Errno)
-    end.
 
 
 %%%===================================================================

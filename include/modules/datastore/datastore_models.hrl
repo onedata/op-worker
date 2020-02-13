@@ -118,13 +118,15 @@
 
 %% Model for caching share details fetched from OZ
 -record(od_share, {
-    name = undefined :: undefined | binary(),
-    public_url = undefined :: undefined | binary(),
+    name :: binary(),
+    public_url :: binary(),
 
     % Direct relations to other entities
     space = undefined :: undefined | od_space:id(),
     handle = undefined :: undefined | od_handle:id(),
-    root_file = undefined :: undefined | binary(),
+
+    root_file :: binary(),
+    file_type :: od_share:file_type(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -164,11 +166,11 @@
 
 %% Model for caching handle details fetched from OZ
 -record(od_handle, {
-    public_handle :: od_handle:public_handle() | undefined,
+    public_handle :: od_handle:public_handle(),
     resource_type :: od_handle:resource_type() | undefined,
     resource_id :: od_handle:resource_id() | undefined,
     metadata :: od_handle:metadata() | undefined,
-    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp() | undefined,
+    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp(),
 
     % Direct relations to other entities
     handle_service :: od_handle_service:id() | undefined,

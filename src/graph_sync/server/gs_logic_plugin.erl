@@ -44,9 +44,9 @@
 -spec verify_handshake_auth(gs_protocol:client_auth(), ip_utils:ip()) ->
     {ok, aai:auth()} | errors:error().
 verify_handshake_auth(undefined, _) ->
-    {ok, ?NOBODY};
+    {ok, ?GUEST};
 verify_handshake_auth(nobody, _) ->
-    {ok, ?NOBODY};
+    {ok, ?GUEST};
 verify_handshake_auth({token, AccessToken}, PeerIp) ->
     TokenAuth = auth_manager:build_token_auth(
         AccessToken, undefined,
@@ -55,7 +55,7 @@ verify_handshake_auth({token, AccessToken}, PeerIp) ->
     case http_auth:authenticate(TokenAuth) of
         {ok, ?USER = Auth} ->
             {ok, Auth};
-        {ok, ?NOBODY} ->
+        {ok, ?GUEST} ->
             ?ERROR_UNAUTHORIZED;
         {error, _} = Error ->
             Error
@@ -172,5 +172,8 @@ is_type_supported(#gri{type = op_user}) -> true;
 is_type_supported(#gri{type = op_group}) -> true;
 is_type_supported(#gri{type = op_file}) -> true;
 is_type_supported(#gri{type = op_replica}) -> true;
+is_type_supported(#gri{type = op_share}) -> true;
 is_type_supported(#gri{type = op_transfer}) -> true;
+is_type_supported(#gri{type = op_handle}) -> true;
+is_type_supported(#gri{type = op_handle_service}) -> true;
 is_type_supported(#gri{type = _}) -> false.

@@ -32,8 +32,8 @@
 -spec create_response(gri:gri(), middleware:auth_hint(),
     middleware:data_format(), Result :: term() | {gri:gri(), term()} |
     {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
-create_response(#gri{aspect = shared_dir}, _, value, ShareId) ->
-    PathTokens = [<<"shares-id">>, ShareId],
+create_response(#gri{aspect = instance}, _, resource, {#gri{id = ShareId}, _}) ->
+    PathTokens = [<<"shares">>, ShareId],
     ?CREATED_REPLY(PathTokens, #{<<"shareId">> => ShareId}).
 
 
@@ -43,5 +43,6 @@ create_response(#gri{aspect = shared_dir}, _, value, ShareId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(_, ShareData) ->
-    ?OK_REPLY(ShareData).
+get_response(_, #{<<"rootFileId">> := RootFileShareGuid} = ShareData) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(RootFileShareGuid),
+    ?OK_REPLY(ShareData#{<<"rootFileId">> => ObjectId}).

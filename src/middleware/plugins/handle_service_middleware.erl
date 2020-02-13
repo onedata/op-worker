@@ -1,16 +1,16 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles middleware operations (create, get, update, delete)
-%%% corresponding to group.
+%%% corresponding to handle services.
 %%% @end
 %%%-------------------------------------------------------------------
--module(group_middleware).
+-module(handle_service_middleware).
 -author("Bartosz Walkowicz").
 
 -behaviour(middleware_plugin).
@@ -42,7 +42,7 @@
 %%--------------------------------------------------------------------
 -spec operation_supported(middleware:operation(), gri:aspect(),
     middleware:scope()) -> boolean().
-operation_supported(get, instance, shared) -> true;
+operation_supported(get, instance, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
@@ -66,10 +66,10 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
-fetch_entity(#op_req{auth = Auth, auth_hint = AuthHint, gri = #gri{id = GroupId}}) ->
-    case group_logic:get_shared_data(Auth#auth.session_id, GroupId, AuthHint) of
-        {ok, #document{value = Group}} ->
-            {ok, {Group, 1}};
+fetch_entity(#op_req{auth = Auth, gri = #gri{id = HandleServiceId}}) ->
+    case handle_service_logic:get(Auth#auth.session_id, HandleServiceId) of
+        {ok, #document{value = HandleService}} ->
+            {ok, {HandleService, 1}};
         {error, _} = Error ->
             Error
     end;
@@ -86,7 +86,7 @@ fetch_entity(_) ->
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = shared}}, _) ->
+authorize(#op_req{operation = get, gri = #gri{aspect = instance}}, _) ->
     % authorization was checked by oz in `fetch_entity`
     true.
 
@@ -118,14 +118,8 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{gri = #gri{aspect = instance, scope = shared}}, #od_group{
-    name = Name,
-    type = Type
-}) ->
-    {ok, #{
-        <<"name">> => Name,
-        <<"type">> => Type
-    }}.
+get(#op_req{gri = #gri{aspect = instance, scope = private}}, HandleService) ->
+    {ok, HandleService}.
 
 
 %%--------------------------------------------------------------------

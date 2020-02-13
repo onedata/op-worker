@@ -578,12 +578,13 @@ node_get_mocked_space_user_privileges(SpaceId, UserId) ->
 mock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, share_logic),
-    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid) ->
+    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid, FileType) ->
         {ok, _} = put_into_cache(#document{key = ShareId, value = #od_share{
             name = Name,
             space = SpaceId,
             root_file = ShareFileGuid,
             public_url = <<ShareId/binary, "_public_url">>,
+            file_type = FileType,
             handle = <<ShareId/binary, "_handle_id">>
         }}),
         {ok, ShareId}

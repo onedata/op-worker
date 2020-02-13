@@ -27,7 +27,7 @@ catch
 end).
 
 %% API
--export([create_share/3, remove_share/2]).
+-export([create_share/3, remove_share/3]).
 
 
 %%%===================================================================
@@ -55,16 +55,15 @@ create_share(UserCtx, FileCtx0, Name) ->
 %% @equiv remove_share_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec remove_share(user_ctx:ctx(), file_ctx:ctx(), od_share:id()) ->
     fslogic_worker:provider_response().
-remove_share(UserCtx, FileCtx0) ->
+remove_share(UserCtx, FileCtx0, ShareId) ->
     data_constraints:is_in_readonly_mode(UserCtx) andalso throw(?EACCES),
-
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors]
     ),
-    remove_share_internal(UserCtx, FileCtx1).
+    remove_share_internal(UserCtx, FileCtx1, ShareId).
 
 
 %%%===================================================================
@@ -90,39 +89,41 @@ create_share_internal(UserCtx, FileCtx, Name) ->
 %% Stops sharing a given file, catches known errors.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share_internal(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec remove_share_internal(user_ctx:ctx(), file_ctx:ctx(), od_share:id()) ->
     fslogic_worker:provider_response().
-remove_share_internal(UserCtx, FileCtx) ->
-    ?CATCH_ERRORS(remove_share_insecure(UserCtx, FileCtx)).
+remove_share_internal(UserCtx, FileCtx, ShareId) ->
+    ?CATCH_ERRORS(remove_share_insecure(UserCtx, FileCtx, ShareId)).
 
 
 %% @private
 -spec create_share_insecure(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
     fslogic_worker:provider_response().
-create_share_insecure(UserCtx, FileCtx, Name) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
+create_share_insecure(UserCtx, FileCtx0, Name) ->
+    Guid = file_ctx:get_guid_const(FileCtx0),
     ShareId = datastore_key:new(),
     ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
     SessionId = user_ctx:get_session_id(UserCtx),
     UserId = user_ctx:get_user_id(UserCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx0),
 
-    check_is_dir(FileCtx),
+    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
+    FileType = case IsDir of
+        true -> dir;
+        false -> file
+    end,
+
     assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
-    case share_logic:create(SessionId, ShareId, Name, SpaceId, ShareGuid) of
+    case share_logic:create(SessionId, ShareId, Name, SpaceId, ShareGuid, FileType) of
         {ok, _} ->
-            case file_meta:add_share(FileCtx, ShareId) of
-                {error, already_exists} ->
+            case file_meta:add_share(FileCtx1, ShareId) of
+                {error, _} ->
                     ok = share_logic:delete(SessionId, ShareId),
-                    ?ERROR(?EEXIST);
+                    ?ERROR(?EAGAIN);
                 {ok, _} ->
                     #provider_response{
                         status = #status{code = ?OK},
-                        provider_response = #share{
-                            share_id = ShareId,
-                            root_file_guid = ShareGuid
-                        }
+                        provider_response = #share{share_id = ShareId}
                     }
             end;
         _ ->
@@ -131,15 +132,13 @@ create_share_insecure(UserCtx, FileCtx, Name) ->
 
 
 %% @private
--spec remove_share_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec remove_share_insecure(user_ctx:ctx(), file_ctx:ctx(), od_share:id()) ->
     fslogic_worker:provider_response().
-remove_share_insecure(UserCtx, FileCtx) ->
-    ShareId = file_ctx:get_share_id_const(FileCtx),
+remove_share_insecure(UserCtx, FileCtx, ShareId) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     UserId = user_ctx:get_user_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    check_is_dir(FileCtx),
     assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
     case file_meta:remove_share(FileCtx, ShareId) of
@@ -149,15 +148,6 @@ remove_share_insecure(UserCtx, FileCtx) ->
             ok = share_logic:delete(SessionId, ShareId),
             ok = permissions_cache:invalidate(),
             #provider_response{status = #status{code = ?OK}}
-    end.
-
-
-%% @private
--spec check_is_dir(file_ctx:ctx()) -> ok | no_return().
-check_is_dir(FileCtx) ->
-    case file_ctx:is_dir(FileCtx) of
-        {false, _} -> ?ERROR(?ENOTDIR);
-        _ -> ok
     end.
 
 

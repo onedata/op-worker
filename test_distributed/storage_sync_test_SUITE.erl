@@ -229,8 +229,8 @@ import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
 
 create_file_import_race_test(Config) ->
     [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     Master = self(),
     CreateProc = spawn(fun() ->
@@ -319,7 +319,7 @@ create_file_import_race_test(Config) ->
 
 close_file_import_race_test(Config) ->
     [W1 | _] = Workers = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
     {ok, {_, CreateHandle}} = lfm_proxy:create_and_open(W1, SessId, ?SPACE_TEST_FILE_PATH, 8#777),
     {ok, _} = lfm_proxy:write(W1, CreateHandle, 0, ?WRITE_TEXT),
@@ -398,7 +398,7 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
 
 sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
     StorageSpacePath = storage_sync_test_base:storage_path(?SPACE_ID, <<"">>, false),
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
@@ -452,7 +452,7 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
 
 sync_should_not_import_recreated_file_with_suffix_on_storage(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
 
     StorageSpacePath = storage_sync_test_base:storage_path(?SPACE_ID, <<"">>, false),
@@ -512,8 +512,8 @@ sync_should_not_import_recreated_file_with_suffix_on_storage(Config) ->
 
 sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
 
     StorageSpacePath = storage_sync_test_base:storage_path(?SPACE_ID, <<"">>, false),
@@ -617,8 +617,8 @@ sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config) ->
 
 sync_should_not_import_replicated_file_with_suffix_on_storage(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     timer:sleep(timer:seconds(1)),
 
@@ -671,8 +671,8 @@ sync_should_not_import_replicated_file_with_suffix_on_storage(Config) ->
 
 sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageSpacePath = storage_sync_test_base:storage_path(?SPACE_ID, <<"">>, false),
     StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, false),
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
@@ -821,7 +821,7 @@ copy_file_update_test(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     W1MountPoint = storage_sync_test_base:get_host_mount_point(Config, RDWRStorage),
-    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
     SrcStorageFilePath =
@@ -951,8 +951,8 @@ sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config) 
 
 should_not_sync_file_during_replication(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER, ?GET_DOMAIN(W2)}}, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
 
     {ok, FileGuid} =
         ?assertMatch({ok, _}, lfm_proxy:create(W2, SessId2, ?SPACE_TEST_FILE_PATH, 8#777)),

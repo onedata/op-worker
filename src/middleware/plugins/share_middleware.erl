@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles middleware operations (create, get, update, delete)
-%%% corresponding to directory sharing.
+%%% corresponding to shares.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(share_middleware).
@@ -41,16 +41,14 @@
 %%--------------------------------------------------------------------
 -spec operation_supported(middleware:operation(), gri:aspect(),
     middleware:scope()) -> boolean().
-operation_supported(create, shared_dir, private) -> true;
+operation_supported(create, instance, private) -> true;
 
 operation_supported(get, instance, private) -> true;
-operation_supported(get, shared_dir, private) -> true;
+operation_supported(get, instance, public) -> true;
 
 operation_supported(update, instance, private) -> true;
-operation_supported(update, shared_dir, private) -> true;
 
 operation_supported(delete, instance, private) -> true;
-operation_supported(delete, shared_dir, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
@@ -61,26 +59,27 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = create, gri = #gri{aspect = shared_dir}}) -> #{
-    required => #{<<"name">> => {binary, non_empty}}
+data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
+    required => #{
+        <<"name">> => {binary, non_empty},
+        <<"fileId">> => {binary, fun(ObjectId) ->
+            case catch file_id:objectid_to_guid(ObjectId) of
+                {ok, Guid} ->
+                    {true, Guid};
+                _Error ->
+                    throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>))
+            end
+        end}
+    }
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = shared_dir}}) ->
-    undefined;
-
 data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) ->
     #{required => #{<<"name">> => {binary, non_empty}}};
 
-data_spec(#op_req{operation = update, gri = #gri{aspect = shared_dir}}) ->
-    #{required => #{<<"name">> => {binary, non_empty}}};
-
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
-    undefined;
-
-data_spec(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
     undefined.
 
 
@@ -91,35 +90,33 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
 %%--------------------------------------------------------------------
 -spec fetch_entity(middleware:req()) ->
     {ok, middleware:versioned_entity()} | errors:error().
-fetch_entity(#op_req{operation = create, gri = #gri{aspect = shared_dir}}) ->
-    {ok, {undefined, 1}};
-
 fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     id = ShareId,
-    aspect = instance
+    aspect = instance,
+    scope = public
 }}) ->
-    fetch_share(Auth, ShareId);
+    case share_logic:get_public_data(Auth#auth.session_id, ShareId) of
+        {ok, #document{value = Share}} ->
+            {ok, {Share, 1}};
+        {error, _} = Error ->
+            Error
+    end;
 
-fetch_entity(#op_req{operation = get, gri = #gri{aspect = shared_dir}}) ->
-    {ok, {undefined, 1}};
-
-fetch_entity(#op_req{operation = update, auth = Auth, gri = #gri{
+fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId, SessionId), gri = #gri{
     id = ShareId,
-    aspect = instance
-}}) ->
-    fetch_share(Auth, ShareId);
-
-fetch_entity(#op_req{operation = update, gri = #gri{aspect = shared_dir}}) ->
-    {ok, {undefined, 1}};
-
-fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
-    id = ShareId,
-    aspect = instance
-}}) ->
-    fetch_share(Auth, ShareId);
-
-fetch_entity(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
-    {ok, {undefined, 1}}.
+    aspect = instance,
+    scope = private
+}}) when
+    Op =:= get;
+    Op =:= update;
+    Op =:= delete
+->
+    case share_logic:get(SessionId, ShareId) of
+        {ok, #document{value = Share}} ->
+            {ok, {Share, 1}};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -131,50 +128,22 @@ fetch_entity(#op_req{operation = delete, gri = #gri{aspect = shared_dir}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
-authorize(#op_req{auth = ?NOBODY}, _) ->
-    false;
-
-authorize(#op_req{operation = create, auth = Auth, gri = #gri{
-    id = DirGuid,
-    aspect = shared_dir
+authorize(#op_req{operation = create, auth = Auth, gri = #gri{aspect = instance}, data = #{
+    <<"fileId">> := FileGuid
 }}, _) ->
-    SpaceId = file_id:guid_to_space_id(DirGuid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     middleware_utils:is_eff_space_member(Auth, SpaceId);
 
-authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}},
+authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = public}}, _) ->
+    true;
+
+authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = instance}},
     #od_share{space = SpaceId}
-) ->
-    middleware_utils:is_eff_space_member(Auth, SpaceId);
-
-authorize(#op_req{operation = get, auth = Auth, gri = #gri{
-    id = DirGuid,
-    aspect = shared_dir
-}}, _) ->
-    SpaceId = file_id:guid_to_space_id(DirGuid),
-    middleware_utils:is_eff_space_member(Auth, SpaceId);
-
-authorize(#op_req{operation = update, auth = Auth, gri = #gri{aspect = instance}},
-    #od_share{space = SpaceId}
-) ->
-    middleware_utils:is_eff_space_member(Auth, SpaceId);
-
-authorize(#op_req{operation = update, auth = Auth, gri = #gri{
-    id = DirGuid,
-    aspect = shared_dir
-}}, _) ->
-    SpaceId = file_id:guid_to_space_id(DirGuid),
-    middleware_utils:is_eff_space_member(Auth, SpaceId);
-
-authorize(#op_req{operation = delete, auth = Auth, gri = #gri{aspect = instance}},
-    #od_share{space = SpaceId}
-) ->
-    middleware_utils:is_eff_space_member(Auth, SpaceId);
-
-authorize(#op_req{operation = delete, auth = Auth, gri = #gri{
-    id = DirGuid,
-    aspect = shared_dir
-}}, _) ->
-    SpaceId = file_id:guid_to_space_id(DirGuid),
+) when
+    Op =:= get;
+    Op =:= update;
+    Op =:= delete
+->
     middleware_utils:is_eff_space_member(Auth, SpaceId).
 
 
@@ -184,35 +153,22 @@ authorize(#op_req{operation = delete, auth = Auth, gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = create, gri = #gri{id = Guid, aspect = shared_dir}}, _) ->
-    SpaceId = file_id:guid_to_space_id(Guid),
+validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = #{
+    <<"fileId">> := FileGuid
+}}, _) ->
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate(#op_req{operation = get, gri = #gri{aspect = instance}}, #od_share{
-    space = SpaceId
-}) ->
-    middleware_utils:assert_space_supported_locally(SpaceId);
+validate(#op_req{operation = get, gri = #gri{aspect = instance, scope = public}}, _) ->
+    ok;
 
-validate(#op_req{operation = get, gri = #gri{id = DirGuid, aspect = shared_dir}}, _) ->
-    SpaceId = file_id:guid_to_space_id(DirGuid),
-    middleware_utils:assert_space_supported_locally(SpaceId);
-
-validate(#op_req{operation = update, gri = #gri{aspect = instance}}, #od_share{
-    space = SpaceId
-}) ->
-    middleware_utils:assert_space_supported_locally(SpaceId);
-
-validate(#op_req{operation = update, gri = #gri{id = DirGuid, aspect = shared_dir}}, _) ->
-    SpaceId = file_id:guid_to_space_id(DirGuid),
-    middleware_utils:assert_space_supported_locally(SpaceId);
-
-validate(#op_req{operation = delete, gri = #gri{aspect = instance}}, #od_share{
-    space = SpaceId
-}) ->
-    middleware_utils:assert_space_supported_locally(SpaceId);
-
-validate(#op_req{operation = delete, gri = #gri{id = DirGuid, aspect = shared_dir}}, _) ->
-    SpaceId = file_id:guid_to_space_id(DirGuid),
+validate(#op_req{operation = Op, gri = #gri{aspect = instance}},
+    #od_share{space = SpaceId}
+) when
+    Op =:= get;
+    Op =:= update;
+    Op =:= delete
+->
     middleware_utils:assert_space_supported_locally(SpaceId).
 
 
@@ -222,11 +178,20 @@ validate(#op_req{operation = delete, gri = #gri{id = DirGuid, aspect = shared_di
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
-create(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
+create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
+    SessionId = Auth#auth.session_id,
     Name = maps:get(<<"name">>, Req#op_req.data),
-    case lfm:create_share(Auth#auth.session_id, {guid, DirGuid}, Name) of
-        {ok, {ShareId, _ShareGuid}} ->
-            {ok, value, ShareId};
+    FileGuid = maps:get(<<"fileId">>, Req#op_req.data),
+
+    case lfm:create_share(SessionId, {guid, FileGuid}, Name) of
+        {ok, ShareId} ->
+            case share_logic:get(SessionId, ShareId) of
+                {ok, #document{value = ShareRec}} ->
+                    Share = share_to_json(ShareId, ShareRec),
+                    {ok, resource, {GRI#gri{id = ShareId}, Share}};
+                {error, _} = Error ->
+                    Error
+            end;
         {error, Errno} ->
             ?ERROR_POSIX(Errno)
     end.
@@ -238,32 +203,8 @@ create(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir} = GRI} = Req, _) ->
-    ShareId = resolve_share_id(Auth, DirGuid),
-    case fetch_share(Auth, ShareId) of
-        {ok, {Share, _}} ->
-            get(Req#op_req{gri = GRI#gri{id = ShareId, aspect = instance}}, Share);
-        {error, _} = Error ->
-            Error
-    end;
-
-get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
-    space = SpaceId,
-    root_file = RootFile,
-    name = ShareName,
-    public_url = SharePublicUrl,
-    handle = Handle
-}) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(RootFile),
-
-    {ok, #{
-        <<"shareId">> => ShareId,
-        <<"name">> => ShareName,
-        <<"publicUrl">> => SharePublicUrl,
-        <<"rootFileId">> => ObjectId,
-        <<"spaceId">> => SpaceId,
-        <<"handleId">> => utils:ensure_defined(Handle, undefined, null)
-    }}.
+get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, Share) ->
+    {ok, share_to_json(ShareId, Share)}.
 
 
 %%--------------------------------------------------------------------
@@ -272,11 +213,6 @@ get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, #od_share{
 %% @end
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
-update(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir}} = Req) ->
-    ShareId = resolve_share_id(Auth, DirGuid),
-    NewName = maps:get(<<"name">>, Req#op_req.data),
-    share_logic:update_name(Auth#auth.session_id, ShareId, NewName);
-
 update(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}} = Req) ->
     NewName = maps:get(<<"name">>, Req#op_req.data),
     share_logic:update_name(Auth#auth.session_id, ShareId, NewName).
@@ -288,10 +224,6 @@ update(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}} = Req) 
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
-delete(#op_req{auth = Auth, gri = #gri{id = DirGuid, aspect = shared_dir}}) ->
-    ShareId = resolve_share_id(Auth, DirGuid),
-    ?check(lfm:remove_share(Auth#auth.session_id, ShareId));
-
 delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
     ?check(lfm:remove_share(Auth#auth.session_id, ShareId)).
 
@@ -302,24 +234,21 @@ delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
 
 
 %% @private
--spec fetch_share(aai:auth(), od_share:id()) ->
-    {ok, {#od_share{}, middleware:revision()}} | ?ERROR_NOT_FOUND.
-fetch_share(?USER(_UserId, SessionId), ShareId) ->
-    case share_logic:get(SessionId, ShareId) of
-        {ok, #document{value = Share}} ->
-            {ok, {Share, 1}};
-        {error, _} = Error ->
-            Error
-    end.
-
-
-%% @private
--spec resolve_share_id(aai:auth(), file_id:file_guid()) ->
-    od_share:id() | ?ERROR_NOT_FOUND.
-resolve_share_id(?USER(_UserId, SessionId), DirGuid) ->
-    case lfm:stat(SessionId, {guid, DirGuid}) of
-        {ok, #file_attr{shares = [ShareId]}} ->
-            ShareId;
-        _ ->
-            throw(?ERROR_NOT_FOUND)
-    end.
+-spec share_to_json(od_share:id(), od_share:record()) -> map().
+share_to_json(ShareId, #od_share{
+    space = SpaceId,
+    root_file = RootFileGuid,
+    name = ShareName,
+    public_url = SharePublicUrl,
+    file_type = FileType,
+    handle = Handle
+}) ->
+    #{
+        <<"shareId">> => ShareId,
+        <<"name">> => ShareName,
+        <<"fileType">> => FileType,
+        <<"publicUrl">> => SharePublicUrl,
+        <<"rootFileId">> => RootFileGuid,
+        <<"spaceId">> => utils:undefined_to_null(SpaceId),
+        <<"handleId">> => utils:undefined_to_null(Handle)
+    }.
