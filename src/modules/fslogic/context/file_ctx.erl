@@ -393,54 +393,75 @@ get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns parent's file context.
+%% Returns parent's file context. In case of user root dir and share root
+%% dir/file returns the same file_ctx. Therefore, to check if given
+%% file_ctx points to root dir (either user root dir or share root) it is
+%% enough to call this function and compare returned parent ctx's guid
+%% with its own.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(ctx(), user_ctx:ctx() | undefined) ->
     {ParentFileCtx :: ctx(), NewFileCtx :: ctx()}.
-get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
+get_parent(FileCtx = #file_ctx{guid = Guid, parent = undefined}, UserCtx) ->
+    {FileUuid, SpaceId, ShareId} = file_id:unpack_share_guid(Guid),
     {Doc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
-    ParentGuid =
-        case fslogic_uuid:is_root_dir_uuid(ParentUuid) of
-            true ->
-                case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
-                    andalso UserCtx =/= undefined
-                    andalso user_ctx:is_normal_user(UserCtx)
-                of
-                    true ->
-                        UserId = user_ctx:get_user_id(UserCtx),
-                        fslogic_uuid:user_root_dir_guid(UserId);
-                    _ ->
-                        fslogic_uuid:root_dir_guid()
-                end;
-            false ->
-                SpaceId = get_space_id_const(FileCtx2),
-                case get_share_id_const(FileCtx2) of
-                    undefined ->
-                        file_id:pack_guid(ParentUuid, SpaceId);
-                    ShareId ->
-                        file_id:pack_share_guid(ParentUuid, SpaceId, ShareId)
-                end
-        end,
-    Parent = new_by_guid(ParentGuid),
+
+    IsShareRootFile = case ShareId of
+        undefined ->
+            false;
+        _ ->
+            % ShareId is added to file_meta.shares only for directly shared
+            % files/directories and not their children
+            lists:member(ShareId, Doc#document.value#file_meta.shares)
+    end,
+
+    Parent = case {fslogic_uuid:is_root_dir_uuid(ParentUuid), IsShareRootFile} of
+        {true, false} ->
+            case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
+                andalso UserCtx =/= undefined
+                andalso user_ctx:is_normal_user(UserCtx)
+            of
+                true ->
+                    case is_user_root_dir_const(FileCtx2, UserCtx) of
+                        true ->
+                            FileCtx2;
+                        false ->
+                            UserId = user_ctx:get_user_id(UserCtx),
+                            new_by_guid(fslogic_uuid:user_root_dir_guid(UserId))
+                    end;
+                _ ->
+                    new_by_guid(fslogic_uuid:root_dir_guid())
+            end;
+        {true, true} ->
+            case fslogic_uuid:is_space_dir_uuid(FileUuid) of
+                true ->
+                    FileCtx2;
+                false ->
+                    % userRootDir and globalRootDir can not be shared
+                    throw(?EINVAL)
+            end;
+        {false, false} ->
+            new_by_guid(file_id:pack_share_guid(ParentUuid, SpaceId, ShareId));
+        {false, true} ->
+            FileCtx2
+    end,
     {Parent, FileCtx2#file_ctx{parent = Parent}};
 get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
     {Parent, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns GUID of parent or undefined when the file is a root dir.
+%% Returns GUID of parent or undefined when the file is a root/share root dir.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent_guid(ctx(), user_ctx:ctx() | undefined) -> {fslogic_worker:file_guid() | undefined, ctx()}.
-get_parent_guid(FileCtx, UserCtx) ->
-    case is_root_dir_const(FileCtx) of
-        true ->
-            {undefined, FileCtx};
-        false ->
-            {ParentFile, FileCtx2} = get_parent(FileCtx, UserCtx),
-            ParentGuid = get_guid_const(ParentFile),
+get_parent_guid(#file_ctx{guid = FileGuid} = FileCtx, UserCtx) ->
+    {ParentCtx, FileCtx2} = get_parent(FileCtx, UserCtx),
+    case get_guid_const(ParentCtx) of
+        FileGuid ->
+            {undefined, FileCtx2};
+        ParentGuid ->
             {ParentGuid, FileCtx2}
     end.
 

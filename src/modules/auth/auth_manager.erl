@@ -33,7 +33,7 @@
     build_token_auth/5,
 
     get_access_token/1,
-    get_audience_token/1,
+    get_consumer_token/1,
     get_peer_ip/1,
     get_interface/1,
     get_data_access_caveats_policy/1,
@@ -47,12 +47,12 @@
 
 -type credentials() :: #credentials{}.
 -type access_token() :: tokens:serialized().
--type audience_token() :: undefined | tokens:serialized().
+-type consumer_token() :: undefined | tokens:serialized().
 
 % Record containing access token for user authorization in OZ.
 -record(token_auth, {
     access_token :: access_token(),
-    audience_token = undefined :: audience_token(),
+    consumer_token = undefined :: consumer_token(),
     peer_ip = undefined :: undefined | ip_utils:ip(),
     interface = undefined :: undefined | cv_interface:interface(),
     data_access_caveats_policy = disallow_data_access_caveats :: data_access_caveats:policy()
@@ -68,7 +68,7 @@
     errors:error().
 
 -export_type([
-    credentials/0, access_token/0, audience_token/0,
+    credentials/0, access_token/0, consumer_token/0,
     token_auth/0, guest_auth/0, root_auth/0, auth/0,
     verification_result/0
 ]).
@@ -92,16 +92,16 @@ guest_auth() ->
 
 
 -spec build_token_auth(
-    access_token(), audience_token(),
+    access_token(), consumer_token(),
     PeerIp :: undefined | ip_utils:ip(),
     Interface :: undefined | cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
     token_auth().
-build_token_auth(AccessToken, AudienceToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+build_token_auth(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     #token_auth{
         access_token = AccessToken,
-        audience_token = AudienceToken,
+        consumer_token = ConsumerToken,
         peer_ip = PeerIp,
         interface = Interface,
         data_access_caveats_policy = DataAccessCaveatsPolicy
@@ -113,9 +113,9 @@ get_access_token(#token_auth{access_token = AccessToken}) ->
     AccessToken.
 
 
--spec get_audience_token(token_auth()) -> audience_token().
-get_audience_token(#token_auth{audience_token = AudienceToken}) ->
-    AudienceToken.
+-spec get_consumer_token(token_auth()) -> consumer_token().
+get_consumer_token(#token_auth{consumer_token = ConsumerToken}) ->
+    ConsumerToken.
 
 
 -spec get_peer_ip(token_auth()) -> undefined | ip_utils:ip().
@@ -137,20 +137,20 @@ get_data_access_caveats_policy(#token_auth{data_access_caveats_policy = Policy})
 -spec get_credentials(token_auth()) -> credentials().
 get_credentials(#token_auth{
     access_token = AccessToken,
-    audience_token = AudienceToken
+    consumer_token = ConsumerToken
 }) ->
     #credentials{
         access_token = AccessToken,
-        audience_token = AudienceToken
+        consumer_token = ConsumerToken
     }.
 
 
--spec update_credentials(token_auth(), access_token(), audience_token()) ->
+-spec update_credentials(token_auth(), access_token(), consumer_token()) ->
     token_auth().
-update_credentials(TokenAuth, AccessToken, AudienceToken) ->
+update_credentials(TokenAuth, AccessToken, ConsumerToken) ->
     TokenAuth#token_auth{
         access_token = AccessToken,
-        audience_token = AudienceToken
+        consumer_token = ConsumerToken
     }.
 
 
@@ -163,14 +163,14 @@ auth_to_gs_auth_override(#token_auth{
     access_token = AccessToken,
     peer_ip = PeerIp,
     interface = Interface,
-    audience_token = AudienceToken,
+    consumer_token = ConsumerToken,
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
     #auth_override{
         client_auth = {token, AccessToken},
         peer_ip = PeerIp,
         interface = Interface,
-        audience_token = AudienceToken,
+        consumer_token = ConsumerToken,
         data_access_caveats_policy = DataAccessCaveatsPolicy
     }.
 

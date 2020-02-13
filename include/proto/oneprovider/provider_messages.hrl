@@ -109,6 +109,7 @@
 }).
 
 -record(remove_share, {
+    share_id :: od_share:id()
 }).
 
 % messages for adding, getting and removing QoS entry
@@ -173,8 +174,7 @@
 }).
 
 -record(share, {
-    share_id :: od_share:id(),
-    root_file_guid :: od_share:root_file_guid()
+    share_id :: od_share:id()
 }).
 
 -record(scheduled_transfer, {

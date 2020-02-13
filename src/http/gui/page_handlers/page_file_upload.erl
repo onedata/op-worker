@@ -19,8 +19,8 @@
 
 -include("http/rest.hrl").
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -71,7 +71,7 @@ handle(<<"POST">>, InitialReq) ->
                     ]),
                     reply_with_error(?ERROR_INTERNAL_SERVER_ERROR, Req)
             end;
-        {ok, ?NOBODY} ->
+        {ok, ?GUEST} ->
             reply_with_error(?ERROR_UNAUTHORIZED, Req);
         {error, _} = Error ->
             reply_with_error(Error, Req)

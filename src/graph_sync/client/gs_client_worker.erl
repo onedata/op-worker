@@ -358,7 +358,7 @@ start_gs_connection() ->
         CaCerts = oneprovider:trusted_ca_certs(),
         Opts = [{cacerts, CaCerts}],
         {ok, AccessToken} = provider_auth:get_access_token(),
-        OpWorkerAccessToken = tokens:build_service_access_token(?OP_WORKER, AccessToken),
+        OpWorkerAccessToken = tokens:build_oneprovider_access_token(?OP_WORKER, AccessToken),
 
         gs_client:start_link(
             Address, {token, OpWorkerAccessToken}, [?GS_PROTOCOL_VERSION],

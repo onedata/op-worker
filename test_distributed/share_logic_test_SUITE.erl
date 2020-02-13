@@ -299,7 +299,8 @@ create_update_delete_test(Config) ->
             ?MOCK_CREATED_SHARE_ID,
             ?SHARE_NAME(<<"newShare">>),
             ?SHARE_SPACE(<<"newShare">>),
-            ?SHARE_ROOT_FILE(<<"newShare">>)
+            ?SHARE_ROOT_FILE(<<"newShare">>),
+            dir
         ])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
@@ -310,7 +311,8 @@ create_update_delete_test(Config) ->
             ?MOCK_CREATED_SHARE_ID,
             ?SHARE_NAME(<<"newShare">>),
             <<"badSpaceId">>,
-            ?SHARE_ROOT_FILE(<<"newShare">>)
+            ?SHARE_ROOT_FILE(<<"newShare">>),
+            dir
         ])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),

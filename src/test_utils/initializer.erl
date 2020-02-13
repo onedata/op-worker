@@ -123,13 +123,6 @@
 -define(TOKENS_SECRET, <<"secret">>).
 -define(TEMPORARY_TOKENS_GENERATION, 1).
 
--define(SUPPORTED_ACCESS_TOKEN_CAVEATS, [
-    cv_time, cv_audience,
-    cv_ip, cv_asn, cv_country, cv_region,
-    cv_interface, cv_api,
-    cv_data_readonly, cv_data_path, cv_data_objectid
-]).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -287,7 +280,7 @@ setup_session(Worker, [{_, #user_config{
         AccessToken, undefined,
         local_ip_v4(), oneclient, allow_data_access_caveats
     ),
-    {ok, SessId} = ?assertMatch({ok, SessId}, rpc:call(
+    {ok, SessId} = ?assertMatch({ok, _}, rpc:call(
         Worker,
         session_manager,
         reuse_or_create_fuse_session,
@@ -493,11 +486,11 @@ mock_auth_manager(Config) ->
                         current_timestamp = time_utils:cluster_time_seconds(),
                         ip = auth_manager:get_peer_ip(TokenAuth),
                         interface = auth_manager:get_interface(TokenAuth),
-                        audience = ?AUD(?OP_WORKER, oneprovider:get_id()),
+                        service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
                         data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenAuth),
                         group_membership_checker = fun(_, _) -> false end
                     },
-                    case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx, ?SUPPORTED_ACCESS_TOKEN_CAVEATS) of
+                    case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx) of
                         {ok, Auth} ->
                             {ok, Auth, undefined};
                         {error, _} = Err1 ->
@@ -551,8 +544,8 @@ mock_provider_ids(Config) ->
 -spec mock_provider_id([node()], od_provider:id(), binary(), binary()) -> ok.
 mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
     ok = test_utils:mock_new(Workers, provider_auth),
-    ok = test_utils:mock_expect(Workers, provider_auth, get_identity_token,
-        fun(_Audience) ->
+    ok = test_utils:mock_expect(Workers, provider_auth, get_identity_token_for_consumer,
+        fun(_Consumer) ->
             {ok, ?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)}
         end
     ),
@@ -595,12 +588,13 @@ node_get_mocked_space_user_privileges(SpaceId, UserId) ->
 mock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, share_logic),
-    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid) ->
+    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid, FileType) ->
         {ok, _} = put_into_cache(#document{key = ShareId, value = #od_share{
             name = Name,
             space = SpaceId,
             root_file = ShareFileGuid,
             public_url = <<ShareId/binary, "_public_url">>,
+            file_type = FileType,
             handle = <<ShareId/binary, "_handle_id">>
         }}),
         {ok, ShareId}

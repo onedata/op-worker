@@ -136,7 +136,7 @@ create_root_session() ->
         value = #session{
             type = root,
             status = active,
-            identity = ?SUB(root, ?ROOT_USER_ID),
+            identity = ?ROOT_IDENTITY,
             auth = auth_manager:root_auth(),
             data_constraints = data_constraints:get_allow_all_constraints()
         }
@@ -155,7 +155,7 @@ create_guest_session() ->
         value = #session{
             type = guest,
             status = active,
-            identity = ?SUB(nobody, ?GUEST_USER_ID),
+            identity = ?GUEST_IDENTITY,
             auth = auth_manager:guest_auth(),
             data_constraints = data_constraints:get_allow_all_constraints()
         }

@@ -494,14 +494,14 @@ is_token_revoked({temporary, UserId, Generation}) ->
 infer_cache_entry_expiration(_TokenAuth, {error, _}) ->
     ?NOW() + ?CACHE_ITEM_DEFAULT_TTL;
 infer_cache_entry_expiration(TokenAuth, {ok, _, Expiration}) ->
-    case auth_manager:get_audience_token(TokenAuth) of
+    case auth_manager:get_consumer_token(TokenAuth) of
         undefined ->
             Expiration;
         _ ->
-            % Audience token may come from subject not supported by this
+            % Consumer token may come from subject not supported by this
             % provider and as such cannot be monitored (subscription in
             % oz for token issued by such subjects). That is why verification
-            % result for token_auth with audience token should be cached
+            % result for token_auth with consumer token should be cached
             % only for short period of time.
             ?NOW() + ?CACHE_ITEM_DEFAULT_TTL
     end.

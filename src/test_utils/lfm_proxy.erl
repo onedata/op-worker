@@ -26,7 +26,7 @@
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
     set_mimetype/4, fsync/2, fsync/4, rm_recursive/3, get_metadata/6, set_metadata/6,
     has_custom_metadata/3, remove_metadata/4, check_perms/4, create_share/4,
-    remove_share/3, remove_share_by_guid/3, resolve_guid/3, schedule_file_replica_eviction/5,
+    remove_share/3, resolve_guid/3, schedule_file_replica_eviction/5,
     schedule_file_replication/4, get_file_distribution/3,
     schedule_replication_by_view/6, schedule_replica_eviction_by_view/7,
     get_effective_file_qos/3, add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3, check_qos_fulfilled/3,
@@ -441,7 +441,7 @@ check_perms(Worker, SessId, FileKey, OpenFlag) ->
     ?EXEC(Worker, lfm:check_perms(SessId, FileKey, OpenFlag)).
 
 -spec create_share(node(), session:id(), lfm:file_key(), od_share:name()) ->
-    {ok, {od_share:id(), od_share:root_file_guid()}} | {error, term()}.
+    {ok, od_share:id()} | {error, term()}.
 create_share(Worker, SessId, FileKey, Name) ->
     ?EXEC(Worker, lfm:create_share(SessId, FileKey, Name)).
 
@@ -449,11 +449,6 @@ create_share(Worker, SessId, FileKey, Name) ->
     ok | {error, term()}.
 remove_share(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:remove_share(SessId, FileKey)).
-
--spec remove_share_by_guid(node(), session:id(), od_share:root_file_guid()) ->
-    ok | {error, term()}.
-remove_share_by_guid(Worker, SessId, ShareGuid) ->
-    ?EXEC(Worker, lfm:remove_share_by_guid(SessId, ShareGuid)).
 
 -spec resolve_guid(node(), session:id(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.

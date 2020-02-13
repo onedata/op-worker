@@ -16,7 +16,7 @@
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
 
--export([get_response/2]).
+-export([create_response/4, get_response/2]).
 
 
 %%%===================================================================
@@ -26,12 +26,29 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% {@link rest_translator_behaviour} callback create_response/4.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_response(gri:gri(), middleware:auth_hint(),
+    middleware:data_format(), Result :: term() | {gri:gri(), term()} |
+    {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
+create_response(#gri{aspect = object_id}, _, value, ObjectId) ->
+    ?OK_REPLY(#{<<"fileId">> => ObjectId}).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link rest_translator_behaviour} callback get_response/2.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(#gri{aspect = list}, Result) ->
+get_response(#gri{aspect = As}, Result) when
+    As =:= object_id;
+    As =:= list
+->
     ?OK_REPLY(Result);
+get_response(#gri{aspect = shares}, ShareIds) ->
+    ?OK_REPLY(#{<<"shares">> => ShareIds});
 get_response(#gri{aspect = As}, Metadata) when
     As =:= attrs;
     As =:= xattrs;

@@ -20,8 +20,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 -type type_constraint() ::
-    any | boolean | integer | binary | json |
-    gri | page_token.
+    any | boolean | integer | binary | list_of_binaries |
+    json | gri | page_token.
 -type value_constraint() ::
     any |
     non_empty |
@@ -97,7 +97,7 @@ sanitize_data(RawData, DataSpec) ->
             end
         end, {SanitizedData2, false}, maps:keys(AtLeastOneParamsSpec)
     ),
-    case {length(maps:keys(AtLeastOneParamsSpec)), HasAtLeastOne} of
+    case {maps:size(AtLeastOneParamsSpec), HasAtLeastOne} of
         {_, true} ->
             ok;
         {0, false} ->
@@ -191,6 +191,17 @@ check_type(binary, _Param, Atom) when is_atom(Atom) ->
     atom_to_binary(Atom, utf8);
 check_type(binary, Param, _) ->
     throw(?ERROR_BAD_VALUE_BINARY(Param));
+
+check_type(list_of_binaries, Key, Values) ->
+    try
+        lists:map(fun
+            (Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8);
+            (Bin) when is_binary(Bin) -> Bin
+        end, Values)
+    catch
+        _:_ ->
+            throw(?ERROR_BAD_VALUE_LIST_OF_BINARIES(Key))
+    end;
 
 check_type(boolean, _Param, true) ->
     true;

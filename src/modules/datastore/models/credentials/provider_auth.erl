@@ -26,7 +26,7 @@
 -export([save/2, delete/0]).
 -export([get_provider_id/0, is_registered/0]).
 -export([clear_provider_id_cache/0]).
--export([get_access_token/0, get_identity_token/1]).
+-export([get_access_token/0, get_identity_token_for_consumer/1]).
 -export([get_root_token_file_path/0]).
 
 %% datastore_model callbacks
@@ -142,16 +142,16 @@ get_access_token() ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns identity token for this provider usable only by specified
-%% audience. The token can be used solely to verify this provider's
+%% consumer. The token can be used solely to verify this provider's
 %% identity and carries no authorization. The token is confined with
 %% TTL for security.
 %% @end
 %%--------------------------------------------------------------------
--spec get_identity_token(aai:audience()) ->
+-spec get_identity_token_for_consumer(aai:consumer_spec()) ->
     {ok, tokens:serialized()} | {error, term()}.
-get_identity_token(Audience) ->
+get_identity_token_for_consumer(Consumer) ->
     {ok, Token} = get_token(identity),
-    {ok, tokens:confine(Token, #cv_audience{whitelist = [Audience]})}.
+    {ok, tokens:confine(Token, #cv_consumer{whitelist = [Consumer]})}.
 
 
 %%--------------------------------------------------------------------
@@ -331,5 +331,5 @@ caveats_for_token(access) -> [
 ];
 caveats_for_token(identity) -> [
     #cv_time{valid_until = ?NOW() + ?TOKEN_TTL},
-    #cv_authorization_none{}
+    #cv_scope{scope = identity_token}
 ].

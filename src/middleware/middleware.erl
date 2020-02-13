@@ -31,7 +31,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 % Some of the types are just aliases for types from gs_protocol, this is
-% for better readability of logic modules.
+% for better readability of middleware modules.
 % TODO VFS-5621
 -type req() :: #op_req{}.
 -type operation() :: gs_protocol:operation().
@@ -105,7 +105,7 @@ handle(OpReq) ->
 handle(#op_req{gri = #gri{type = EntityType}} = OpReq, VersionedEntity) ->
     try
         ReqCtx0 = #req_ctx{
-            req = OpReq,
+            req = switch_context_if_shared_file_request(OpReq),
             plugin = get_plugin(EntityType),
             versioned_entity = VersionedEntity
         },
@@ -159,7 +159,7 @@ is_authorized(#op_req{gri = #gri{type = EntityType} = GRI} = OpReq, VersionedEnt
 %% @end
 %%--------------------------------------------------------------------
 -spec client_to_string(aai:auth()) -> string().
-client_to_string(?NOBODY) -> "nobody (unauthenticated client)";
+client_to_string(?GUEST) -> "nobody (unauthenticated client)";
 client_to_string(?ROOT) -> "root";
 client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 
@@ -170,9 +170,28 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 
 
 %% @private
+-spec switch_context_if_shared_file_request(req()) -> req().
+switch_context_if_shared_file_request(#op_req{gri = #gri{type = op_file, id = undefined}} = OpReq) ->
+    OpReq;
+switch_context_if_shared_file_request(#op_req{gri = #gri{type = op_file} = GRI} = OpReq) ->
+    % Every request concerning shared files must be carried with guest auth
+    case file_id:is_share_guid(GRI#gri.id) of
+        true ->
+            % TODO VFS-6115 rm cast to public scope when gui fix preview share mode
+            OpReq#op_req{auth = ?GUEST, gri = GRI#gri{scope = public}};
+        false ->
+            OpReq
+    end;
+switch_context_if_shared_file_request(OpReq) ->
+    OpReq.
+
+
+%% @private
 -spec get_plugin(gri:entity_type()) -> module() | no_return().
 get_plugin(op_file) -> file_middleware;
 get_plugin(op_group) -> group_middleware;
+get_plugin(op_handle) -> handle_middleware;
+get_plugin(op_handle_service) -> handle_service_middleware;
 get_plugin(op_metrics) -> metrics_middleware;
 get_plugin(op_provider) -> provider_middleware;
 get_plugin(op_qos) -> qos_middleware;
@@ -288,7 +307,7 @@ ensure_authorized(#req_ctx{
             ok;
         false ->
             case Auth of
-                ?NOBODY ->
+                ?GUEST ->
                     % The client was not authenticated -> unauthorized
                     throw(?ERROR_UNAUTHORIZED);
                 _ ->
