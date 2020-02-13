@@ -25,7 +25,7 @@
 -type key() :: file_meta:name() | atom().
 
 %% API
--export([run/2, delete_imported_file/2]).
+-export([run/2, delete_imported_file/2, delete_imported_file/1]).
 
 %% exported for mocking in tests
 -export([save_storage_children_names/2, storage_readdir/3]).
@@ -140,12 +140,7 @@ delete_imported_file(ChildName, ParentCtx) ->
             ok
     end.
 
-%%===================================================================
-%% Internal functions
-%%===================================================================
-
 %%-------------------------------------------------------------------
-%% @private
 %% @doc
 %% Remove files that had been earlier imported.
 %% @end
@@ -161,6 +156,10 @@ delete_imported_file(FileCtx) ->
         throw:?ENOENT ->
             ok
     end.
+
+%%===================================================================
+%% Internal functions
+%%===================================================================
 
 %%-------------------------------------------------------------------
 %% @private

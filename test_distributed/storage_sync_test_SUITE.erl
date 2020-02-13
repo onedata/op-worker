@@ -51,6 +51,8 @@
     move_file_update_test/1,
     truncate_file_update_test/1,
     chmod_file_update_test/1,
+    change_file_type_test/1,
+    change_file_type2_test/1,
     update_timestamps_file_import_test/1,
     create_file_in_dir_import_test/1,
     create_file_in_dir_update_test/1,
@@ -152,6 +154,8 @@
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test,
     chmod_file_update_test,
     chmod_file_update2_test,
+    change_file_type_test,
+%%    change_file_type2_test,   TODO VFS-6118
     update_timestamps_file_import_test,
     should_not_detect_timestamp_update_test,
     recreate_file_deleted_by_sync_test,
@@ -1206,6 +1210,12 @@ chmod_file_update_test(Config) ->
 chmod_file_update2_test(Config) ->
     storage_sync_test_base:chmod_file_update2_test(Config, false).
 
+change_file_type_test(Config) ->
+    storage_sync_test_base:change_file_type_test(Config, false).
+
+change_file_type2_test(Config) ->
+    storage_sync_test_base:change_file_type2_test(Config, false).
+
 update_timestamps_file_import_test(Config) ->
     storage_sync_test_base:update_timestamps_file_import_test(Config, false).
 
@@ -1346,6 +1356,8 @@ init_per_testcase(Case, Config) when
     Case =:= delete_file_update_test;
     Case =:= delete_many_subfiles_test;
     Case =:= move_file_update_test;
+    Case =:= change_file_type_test;
+    Case =:= change_file_type2_test;
     Case =:= create_subfiles_and_delete_before_import_is_finished_test
     ->
     Config2 = [
@@ -1552,7 +1564,7 @@ end_per_testcase(_Case, Config) ->
     storage_sync_test_base:clean_space(Config),
     storage_sync_test_base:cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
     lfm_proxy:teardown(Config),
-    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils, fslogic_delete, helpers]),
+    test_utils:mock_unload(Workers, [simple_scan, storage_sync_changes, link_utils, fslogic_delete, helpers, full_update]),
     timer:sleep(timer:seconds(1)).
 
 %%%===================================================================

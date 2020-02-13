@@ -242,6 +242,7 @@ custom_handle_opened_file(FileCtx, UserCtx, DeleteMode, ?RENAME_HANDLING_METHOD)
         {ok, FileCtx2} -> FileCtx2;
         {error, _} -> FileCtx
     end,
+    % TODO VFS-6114 maybe we should call maybe_try_to_delete_parent/3 here?
     maybe_delete_parent_link(FileCtx3, UserCtx, DeleteMode == ?REMOTE_DELETE);
 custom_handle_opened_file(FileCtx, UserCtx, ?REMOTE_DELETE, ?LINK_HANDLING_METHOD) ->
     maybe_add_deletion_link(FileCtx, UserCtx);
@@ -442,13 +443,13 @@ rename_storage_file(FileCtx, SourceFileId, TargetFileId) ->
     {ok, file_location:doc()} | {error, term()}.
 init_file_location_rename(FileUuid, TargetFileId) ->
     LocId = file_location:local_id(FileUuid),
-    fslogic_location_cache:update_location(FileUuid, LocId, fun
-        (FL = #file_location{file_id = FileId, rename_src_file_id = undefined}) ->
+    fslogic_location_cache:update_location(FileUuid, LocId,
+        fun(FL = #file_location{file_id = FileId}) ->
             {ok, FL#file_location{
                 file_id = TargetFileId,
                 rename_src_file_id = FileId
             }}
-    end, false).
+        end, false).
 
 -spec finalize_file_location_rename(file_meta:uuid()) -> {ok, file_location:doc()} | {error, term()}.
 finalize_file_location_rename(FileUuid) ->
