@@ -144,7 +144,7 @@ init([MgrSup, SessId]) ->
     process_flag(trap_exit, true),
     init_memory(SessId),
     Self = self(),
-    {ok, SessId} = session:update(SessId, fun(Session = #session{}) ->
+    {ok, #document{key = SessId}} = session:update(SessId, fun(Session = #session{}) ->
         {ok, Session#session{event_manager = Self}}
     end),
     {ok, #state{manager_sup = MgrSup, session_id = SessId}, 0}.

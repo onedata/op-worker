@@ -178,20 +178,7 @@ init([]) ->
             {stop, normal};
         {ok, ClientRef, #gs_resp_handshake{identity = ?SUB(?ONEPROVIDER)}} ->
             yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
-            ?info("Started connection to Onezone: ~p, running post-init procedures", [
-                ClientRef
-            ]),
-            % Post-init procedures are run in different process to avoid deadlocks.
-            spawn(fun() -> try
-                oneprovider:on_connect_to_oz()
-            catch Type:Message ->
-                ?error_stacktrace(
-                    "Connection to Onezone lost due to unexpected error in post-init - ~p:~p",
-                    [Type, Message]
-                ),
-                % Kill the connection to Onezone, which will cause a reconnection and retry
-                gen_server2:call({global, ?GS_CLIENT_WORKER_GLOBAL_NAME}, {terminate, normal})
-            end end),
+            ?info("Started connection to Onezone: ~p", [ClientRef]),
             {ok, #state{client_ref = ClientRef}};
         {error, unauthorized} ->
             ?info("Unauthorized to start connection to Onezone"),
@@ -228,8 +215,12 @@ handle_call({async_request, GsReq, Timeout}, {From, _}, #state{client_ref = Clie
         }
     }};
 
-handle_call({terminate, Reason}, _From, State) ->
+handle_call({terminate, Reason}, _From, State = #state{client_ref = ClientRef}) ->
     ?warning("Connection to Onezone terminated"),
+    case ClientRef of
+        undefined -> ok;
+        _ -> gs_client:kill(ClientRef)
+    end,
     {stop, Reason, ok, State};
 
 handle_call(Request, _From, #state{} = State) ->
@@ -359,13 +350,15 @@ start_gs_connection() ->
         CaCerts = oneprovider:trusted_ca_certs(),
         Opts = [{cacerts, CaCerts}],
         {ok, AccessToken} = provider_auth:get_access_token(),
-        OpWorkerAccessToken = tokens:build_service_access_token(?OP_WORKER, AccessToken),
+        OpWorkerAccessToken = tokens:build_oneprovider_access_token(?OP_WORKER, AccessToken),
 
         gs_client:start_link(
             Address, {token, OpWorkerAccessToken}, [?GS_PROTOCOL_VERSION],
             fun process_push_message/1, Opts
         )
     catch
+        throw:{error, _} = Error ->
+            Error;
         Type:Reason ->
             ?error_stacktrace("Cannot start gs connection due to ~p:~p", [
                 Type, Reason
@@ -766,8 +759,18 @@ is_authorized_to_get(SessionId, AuthHint, GRI, CachedDoc) when is_binary(Session
     {ok, UserId} = session:get_user_id(SessionId),
     is_user_authorized_to_get(UserId, SessionId, AuthHint, GRI, CachedDoc);
 
-is_authorized_to_get(_, _, _, _) ->
-    unknown.
+is_authorized_to_get(TokenAuth, AuthHint, GRI, CachedDoc) ->
+    case auth_manager:is_token_auth(TokenAuth) of
+        true ->
+            case auth_manager:verify(TokenAuth) of
+                {ok, ?USER(UserId), _} ->
+                    is_user_authorized_to_get(UserId, TokenAuth, AuthHint, GRI, CachedDoc);
+                {error, _} = Error ->
+                    throw(Error)
+            end;
+        false ->
+            unknown
+    end.
 
 
 -spec is_user_authorized_to_get(od_user:id(), client(), gs_protocol:auth_hint(), gri:gri(), doc()) ->

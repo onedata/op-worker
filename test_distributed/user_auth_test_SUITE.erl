@@ -34,12 +34,14 @@
 
 -export([
     auth_cache_test/1,
-    token_authentication/1
+    token_authentication/1,
+    token_expiration/1
 ]).
 
 all() -> ?ALL([
     auth_cache_test,
-    token_authentication
+    token_authentication,
+    token_expiration
 ]).
 
 
@@ -108,7 +110,7 @@ auth_cache_test(Config) ->
 token_authentication(Config) ->
     % given
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    Nonce = <<"nonce">>,
+    Nonce = <<"token_authentication">>,
     AccessToken = initializer:create_access_token(?USER_ID),
     TokenAuth = auth_manager:build_token_auth(
         AccessToken, undefined,
@@ -132,6 +134,79 @@ token_authentication(Config) ->
         rpc:call(Worker1, auth_manager, verify, [TokenAuth])
     ),
     ok = ssl:close(Sock).
+
+
+token_expiration(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    Nonce = <<"token_expiration">>,
+
+    % Session should be terminated after time caveat expiration
+    AccessToken1 = initializer:create_access_token(?USER_ID, [#cv_time{
+        valid_until = time_utils:system_time_seconds() + 2
+    }]),
+    TokenAuth1 = auth_manager:build_token_auth(
+        AccessToken1, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
+
+    {ok, {_, SessId1}} = fuse_test_utils:connect_via_token(Worker1, [], Nonce, AccessToken1),
+
+    ?assertMatch(
+        {ok, #document{value = #session{identity = ?SUB(user, ?USER_ID)}}},
+        rpc:call(Worker1, session, get, [SessId1])
+    ),
+    ?assertMatch(
+        {ok, ?USER(?USER_ID), _},
+        rpc:call(Worker1, auth_manager, verify, [TokenAuth1])
+    ),
+
+    timer:sleep(timer:seconds(4)),
+
+    ?assertMatch(
+        {error, not_found},
+        rpc:call(Worker1, session, get, [SessId1])
+    ),
+    ?assertMatch(
+        ?ERROR_UNAUTHORIZED,
+        rpc:call(Worker1, auth_manager, verify, [TokenAuth1])
+    ),
+
+    % But it is possible to update credentials and increase expiration
+    AccessToken2 = initializer:create_access_token(?USER_ID, [#cv_time{
+        valid_until = time_utils:system_time_seconds() + 4
+    }]),
+    {ok, {_, SessId2}} = fuse_test_utils:connect_via_token(
+        Worker1, [], Nonce, AccessToken2
+    ),
+    ?assertMatch(
+        {ok, #document{value = #session{identity = ?SUB(user, ?USER_ID)}}},
+        rpc:call(Worker1, session, get, [SessId2])
+    ),
+
+    timer:sleep(timer:seconds(2)),
+    ?assertMatch(
+        {ok, #document{value = #session{identity = ?SUB(user, ?USER_ID)}}},
+        rpc:call(Worker1, session, get, [SessId2])
+    ),
+
+    AccessToken3 = initializer:create_access_token(?USER_ID, [#cv_time{
+        valid_until = time_utils:system_time_seconds() + 6
+    }]),
+    rpc:call(Worker1, incoming_session_watcher, request_credentials_update, [
+        SessId2, AccessToken3, undefined
+    ]),
+
+    timer:sleep(timer:seconds(4)),
+    ?assertMatch(
+        {ok, #document{value = #session{identity = ?SUB(user, ?USER_ID)}}},
+        rpc:call(Worker1, session, get, [SessId2])
+    ),
+
+    timer:sleep(timer:seconds(4)),
+    ?assertMatch(
+        {error, not_found},
+        rpc:call(Worker1, session, get, [SessId2])
+    ).
 
 
 %%%===================================================================
@@ -229,8 +304,16 @@ mock_token_logic(Config) ->
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun
         (AccessToken, _, _, _) ->
             case tokens:deserialize(AccessToken) of
-                {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
-                    {ok, ?SUB(user, ?USER_ID), undefined};
+                {ok, #token{subject = ?SUB(user, ?USER_ID)} = Token} ->
+                    Caveats = tokens:get_caveats(Token),
+                    case infer_ttl(Caveats) of
+                        undefined ->
+                            {ok, ?SUB(user, ?USER_ID), undefined};
+                        TokenTTL when TokenTTL > 0 ->
+                            {ok, ?SUB(user, ?USER_ID), TokenTTL};
+                        _ ->
+                            ?ERROR_UNAUTHORIZED
+                    end;
                 {error, _} = Error ->
                     Error
             end
@@ -252,3 +335,15 @@ clear_auth_cache(Worker) ->
 
 get_auth_cache_size(Worker) ->
     rpc:call(Worker, ets, info, [auth_manager, size]).
+
+
+-spec infer_ttl([caveats:caveat()]) -> undefined | time_utils:seconds().
+infer_ttl(Caveats) ->
+    ValidUntil = lists:foldl(fun
+        (#cv_time{valid_until = ValidUntil}, undefined) -> ValidUntil;
+        (#cv_time{valid_until = ValidUntil}, Acc) -> min(ValidUntil, Acc)
+    end, undefined, caveats:filter([cv_time], Caveats)),
+    case ValidUntil of
+        undefined -> undefined;
+        _ -> ValidUntil - time_utils:system_time_seconds()
+    end.

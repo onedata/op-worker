@@ -281,7 +281,7 @@ reuse_or_create_session(SessId, SessType, Identity, Auth, DataConstraints, Proxy
             end
     end,
     case session:update(SessId, Diff) of
-        {ok, SessId} ->
+        {ok, #document{key = SessId}} ->
             {ok, SessId};
         {error, not_found} ->
             case start_session(#document{key = SessId, value = Sess}) of

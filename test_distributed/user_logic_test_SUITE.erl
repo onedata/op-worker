@@ -48,6 +48,11 @@ get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
+    User1AccessToken = initializer:create_access_token(?USER_1),
+    User1TokenAuth = auth_manager:build_token_auth(
+        User1AccessToken, undefined,
+        initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
+    ),
     User2Sess = logic_tests_common:get_user_session(Config, ?USER_2),
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
@@ -65,6 +70,12 @@ get_test(Config) ->
     ?assertMatch(
         {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+
+    ?assertMatch(
+        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
+        rpc:call(Node, user_logic, get, [User1TokenAuth, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
@@ -92,6 +103,25 @@ get_test(Config) ->
         rpc:call(Node, user_logic, get, [?ROOT_SESS_ID, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+
+    % Make sure that after auth cache purge next request will reach zone
+    % (when using TokenAuth 2 requests will be made - one to verify token
+    % auth and second to fetch user data)
+    true = rpc:call(Node, ets, delete_all_objects, [auth_manager]),
+
+    ?assertMatch(
+        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
+        rpc:call(Node, user_logic, get, [User1TokenAuth, ?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph)),
+
+    % And will be cached for later requests
+    ?assertMatch(
+        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
+        rpc:call(Node, user_logic, get, [User1TokenAuth, ?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph)),
+
     ok.
 
 
@@ -410,7 +440,12 @@ convenience_functions_test(Config) ->
     % Full name is within shared scope
     ?assertMatch(
         {ok, ?USER_FULL_NAME(?USER_1)},
-        rpc:call(Node, user_logic, get_full_name, [User1Sess, ?USER_1])
+        rpc:call(Node, user_logic, get_full_name, [?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertMatch(
+        {ok, ?USER_FULL_NAME(?USER_1)},
+        rpc:call(Node, user_logic, get_full_name, [User1Sess, ?USER_1, ?THROUGH_SPACE(?SPACE_1)])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 

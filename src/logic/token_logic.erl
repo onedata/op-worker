@@ -14,6 +14,7 @@
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 
 -export([
     verify_access_token/4,
@@ -81,7 +82,10 @@ verify_provider_identity_token(IdentityToken) ->
             aspect = verify_identity_token,
             scope = public
         },
-        data = #{<<"token">> => IdentityToken}
+        data = #{
+            <<"token">> => IdentityToken,
+            <<"consumer">> => aai:serialize_subject(?SUB(?ONEPROVIDER, oneprovider:get_id()))
+        }
     }),
     case Result of
         {ok, #{<<"subject">> := Subject}} ->
@@ -113,6 +117,7 @@ build_verification_payload(AccessToken, PeerIp, Interface, DataAccessCaveatsPoli
             _ ->
                 element(2, {ok, _} = ip_utils:to_binary(PeerIp))
         end,
+        <<"service">> => aai:serialize_service(?SERVICE(?OP_WORKER, oneprovider:get_id())),
         <<"allowDataAccessCaveats">> => case DataAccessCaveatsPolicy of
             allow_data_access_caveats -> true;
             disallow_data_access_caveats -> false

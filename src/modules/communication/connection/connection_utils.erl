@@ -45,11 +45,11 @@ maybe_create_proxied_session(ProviderId, ProviderIp, #client_message{
     effective_session_id = EffSessionId,
     effective_session_credentials = #credentials{
         access_token = AccessToken,
-        audience_token = AudienceToken
+        consumer_token = ConsumerToken
     }
 }) when EffSessionId =/= undefined ->
     TokenAuth = auth_manager:build_token_auth(
-        AccessToken, AudienceToken,
+        AccessToken, ConsumerToken,
         ProviderIp, oneclient, allow_data_access_caveats
     ),
     Res = session_manager:reuse_or_create_proxied_session(

@@ -113,6 +113,35 @@ all() -> [
     effective_qos_for_files_in_different_directories_of_tree_structure
 ].
 
+% Although this test SUITE is single provider, QoS parameters
+% for multiple providers are mocked for QoS target storages
+% calculation so more complex examples can be tested.
+-define(P1_TEST_QOS, #{
+    <<"country">> => <<"PL">>,
+    <<"type">> => <<"disk">>,
+    <<"tier">> => <<"t3">>,
+    <<"param1">> => <<"val1">>
+}).
+
+-define(P2_TEST_QOS, #{
+    <<"country">> => <<"FR">>,
+    <<"type">> => <<"tape">>,
+    <<"tier">> => <<"t2">>
+}).
+
+-define(P3_TEST_QOS, #{
+    <<"country">> => <<"PT">>,
+    <<"type">> => <<"disk">>,
+    <<"tier">> => <<"t2">>,
+    <<"param1">> => <<"val1">>
+}).
+
+-define(TEST_PROVIDERS_QOS, #{
+    <<"p1">> => ?P1_TEST_QOS,
+    <<"p2">> => ?P2_TEST_QOS,
+    <<"p3">> => ?P3_TEST_QOS
+}).
+
 
 -define(SPACE1_ID, <<"space_id1">>).
 -define(SPACE_PATH1, <<"/space_name1">>).
@@ -581,9 +610,9 @@ init_per_testcase(_, Config) ->
     initializer:communicator_mock(Workers),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     % do not start file synchronization
-    qos_tests_utils:mock_synchronize_transfers(ConfigWithSessionInfo),
-    qos_tests_utils:mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
-    qos_tests_utils:mock_storage_qos_parameters(Workers, ?TEST_PROVIDERS_QOS),
+    mock_synchronize_transfers(ConfigWithSessionInfo),
+    mock_space_storages(ConfigWithSessionInfo, maps:keys(?TEST_PROVIDERS_QOS)),
+    mock_storage_qos_parameters(Workers, ?TEST_PROVIDERS_QOS),
     mock_storage_get_provider(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
 
@@ -661,6 +690,33 @@ create_test_dir_with_file(Config) ->
     FilePath = filename:join(?TEST_DIR_PATH, <<"file1">>),
     _FileGuid = qos_tests_utils:create_file(Worker, SessId, FilePath, ?TEST_DATA),
     ?TEST_DIR_PATH.
+
+
+%%%====================================================================
+%%% Mocks
+%%%====================================================================
+
+mock_space_storages(Config, StorageList) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_expect(Workers, space_logic, get_all_storage_ids,
+        fun(_) ->
+            {ok, StorageList}
+        end).
+
+
+mock_storage_qos_parameters(Workers, StorageQos) ->
+    test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(StorageId, _SpaceId) ->
+        {ok, maps:get(StorageId, StorageQos, #{})}
+    end).
+
+
+mock_synchronize_transfers(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
+    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
+        fun(_, _, _, _, _, _) ->
+            {ok, ok}
+        end).
 
 
 mock_storage_get_provider(Config) ->

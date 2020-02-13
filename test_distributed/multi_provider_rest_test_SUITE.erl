@@ -1369,6 +1369,7 @@ init_per_testcase(Case, Config) when
 
 init_per_testcase(_Case, Config) ->
     Config2 = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
+    initializer:mock_auth_manager(Config2),
     ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config2).
 

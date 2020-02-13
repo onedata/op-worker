@@ -45,7 +45,7 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Res
             username = utils:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result),
-            default_space = utils:null_to_undefined(maps:get(<<"defaultSpaceId">>, Result)),
+
             space_aliases = maps:get(<<"spaceAliases">>, Result),
 
             eff_groups = maps:get(<<"effectiveGroups">>, Result),
@@ -271,7 +271,6 @@ translate(GRI, Result) ->
 apply_scope_mask(Doc = #document{value = User = #od_user{}}, protected) ->
     Doc#document{
         value = User#od_user{
-            default_space = undefined,
             space_aliases = #{},
 
             eff_groups = [],
@@ -285,7 +284,6 @@ apply_scope_mask(Doc = #document{value = User = #od_user{}}, shared) ->
         value = User#od_user{
             emails = [],
             linked_accounts = [],
-            default_space = undefined,
             space_aliases = #{},
 
             eff_groups = [],

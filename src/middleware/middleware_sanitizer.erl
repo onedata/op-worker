@@ -97,7 +97,7 @@ sanitize_data(RawData, DataSpec) ->
             end
         end, {SanitizedData2, false}, maps:keys(AtLeastOneParamsSpec)
     ),
-    case {length(maps:keys(AtLeastOneParamsSpec)), HasAtLeastOne} of
+    case {maps:size(AtLeastOneParamsSpec), HasAtLeastOne} of
         {_, true} ->
             ok;
         {0, false} ->

@@ -50,7 +50,6 @@
 -record(user_config, {
     id :: od_user:id(),
     name :: binary(),
-    default_space :: binary(),
     spaces :: [],
     groups :: [],
     token :: binary()
@@ -58,20 +57,6 @@
 
 -define(TIMEOUT, timer:seconds(5)).
 -define(DEFAULT_GLOBAL_SETUP, [
-    {<<"users">>, [
-        {<<"user1">>, [
-            {<<"default_space">>, <<"space_id1">>}
-        ]},
-        {<<"user2">>, [
-            {<<"default_space">>, <<"space_id2">>}
-        ]},
-        {<<"user3">>, [
-            {<<"default_space">>, <<"space_id3">>}
-        ]},
-        {<<"user4">>, [
-            {<<"default_space">>, <<"space_id4">>}
-        ]}
-    ]},
     {<<"groups">>, [
         {<<"group1">>, [
             {<<"users">>, [<<"user1">>]}
@@ -136,13 +121,6 @@
 ]).
 
 -define(TOKENS_SECRET, <<"secret">>).
-
--define(SUPPORTED_ACCESS_TOKEN_CAVEATS, [
-    cv_time, cv_audience,
-    cv_ip, cv_asn, cv_country, cv_region,
-    cv_interface, cv_api,
-    cv_data_readonly, cv_data_path, cv_data_objectid
-]).
 
 %%%===================================================================
 %%% API
@@ -259,7 +237,7 @@ create_access_token(UserId, Caveats) ->
             subject = ?SUB(user, UserId),
             id = UserId,
             type = ?ACCESS_TOKEN,
-            persistent = false
+            persistence = {temporary, 1}
         }, ?TOKENS_SECRET, Caveats))
     ),
     SerializedToken.
@@ -292,7 +270,7 @@ setup_session(Worker, [{_, #user_config{
         AccessToken, undefined,
         local_ip_v4(), oneclient, allow_data_access_caveats
     ),
-    {ok, SessId} = ?assertMatch({ok, SessId}, rpc:call(
+    {ok, SessId} = ?assertMatch({ok, _}, rpc:call(
         Worker,
         session_manager,
         reuse_or_create_fuse_session,
@@ -387,7 +365,7 @@ setup_storage([Worker | Rest], Config) ->
     StorageName = <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
     {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, false, undefined, false]),
     rpc:call(Worker, storage, on_storage_created, [StorageId]),
-    storage_mock_setup(Worker, #{?GET_DOMAIN_BIN(Worker) => #{StorageId => #{}}}),
+    storage_logic_mock_setup(Worker, #{?GET_DOMAIN_BIN(Worker) => #{StorageId => #{}}}, []),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).
 
@@ -498,11 +476,11 @@ mock_auth_manager(Config) ->
                         current_timestamp = time_utils:cluster_time_seconds(),
                         ip = auth_manager:get_peer_ip(TokenAuth),
                         interface = auth_manager:get_interface(TokenAuth),
-                        audience = ?AUD(?OP_WORKER, oneprovider:get_id()),
+                        service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
                         data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenAuth),
                         group_membership_checker = fun(_, _) -> false end
                     },
-                    case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx, ?SUPPORTED_ACCESS_TOKEN_CAVEATS) of
+                    case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx) of
                         {ok, Auth} ->
                             {ok, Auth, undefined};
                         {error, _} = Err1 ->
@@ -556,15 +534,15 @@ mock_provider_ids(Config) ->
 -spec mock_provider_id([node()], od_provider:id(), binary(), binary()) -> ok.
 mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
     ok = test_utils:mock_new(Workers, provider_auth),
-    ok = test_utils:mock_expect(Workers, provider_auth, get_identity_token,
-        fun(_Audience) ->
+    ok = test_utils:mock_expect(Workers, provider_auth, get_identity_token_for_consumer,
+        fun(_Consumer) ->
             {ok, ?DUMMY_PROVIDER_IDENTITY_TOKEN(ProviderId)}
         end
     ),
 
     % Mock cached auth and identity tokens with large TTL
     ExpirationTime = time_utils:system_time_seconds() + 999999999,
-    rpc:call(hd(Workers), datastore_model, save, [#{model => provider_auth}, #document{
+    rpc:multicall(Workers, datastore_model, save, [#{model => provider_auth}, #document{
         key = <<"provider_auth">>,
         value = #provider_auth{
             provider_id = ProviderId,
@@ -680,7 +658,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     GlobalSetup = proplists:get_value(<<"test_global_setup">>, ConfigJSON, ?DEFAULT_GLOBAL_SETUP),
     DomainMappings = [{atom_to_binary(K, utf8), V} || {K, V} <- ?config(domain_mappings, Config)],
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
-    UsersSetup = proplists:get_value(<<"users">>, GlobalSetup),
     HarvestersSetup = proplists:get_value(<<"harvesters">>, GlobalSetup, []),
     StoragesSetup = proplists:get_value(<<"storages">>, GlobalSetup, []),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
@@ -730,18 +707,11 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         {GroupId, proplists:get_value(<<"users">>, GroupConfig)}
     end, proplists:get_value(<<"groups">>, GlobalSetup)),
 
-    UserToSpaces0 = lists:foldl(fun({SpaceId, Users}, AccIn) ->
+    UserToSpaces = lists:foldl(fun({SpaceId, Users}, AccIn) ->
         lists:foldl(fun(UserId, CAcc) ->
             maps:put(UserId, maps:get(UserId, CAcc, []) ++ [{SpaceId, proplists:get_value(SpaceId, Spaces)}], CAcc)
         end, AccIn, Users)
     end, #{}, SpaceUsers),
-
-    UserToSpaces = maps:map(fun(UserId, SpacesList) ->
-        UserConfig = proplists:get_value(UserId, UsersSetup),
-        DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
-        DefaultSpace = {DefaultSpaceId, proplists:get_value(DefaultSpaceId, SpacesList)},
-        [DefaultSpace | SpacesList -- [DefaultSpace]]
-    end, UserToSpaces0),
 
     UserToGroups = lists:foldl(fun({GroupId, Users}, AccIn) ->
         lists:foldl(fun(UserId, CAcc) ->
@@ -780,8 +750,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     end, SpacesSetup),
 
     Users = maps:fold(fun(UserId, SpacesList, AccIn) ->
-        UserConfig = proplists:get_value(UserId, UsersSetup),
-        DefaultSpaceId = proplists:get_value(<<"default_space">>, UserConfig),
         Name = fun(Text, User) ->
             list_to_binary(Text ++ "_" ++ binary_to_list(User)) end,
         AccIn ++ [{UserId, #user_config{
@@ -789,7 +757,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
             name = Name("name", UserId),
             spaces = SpacesList,
             token = create_access_token(UserId),
-            default_space = DefaultSpaceId,
             groups = maps:get(UserId, UserToGroups, [])
         }}
         ]
@@ -817,7 +784,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
 
     cluster_logic_mock_setup(AllWorkers),
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
-    storage_mock_setup(AllWorkers, StoragesSetupMap),
+    storage_logic_mock_setup(AllWorkers, StoragesSetupMap, SpacesSupports),
     ok = init_qos_bounded_cache(Config),
 
     %% Setup storage
@@ -840,6 +807,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         Val ->
             Val
     end,
+    {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, session_validity_check_interval_seconds, 24 * 60 * 60]),
     {_, []} = rpc:multicall(AllWorkers, application, set_env, [?APP_NAME, fuse_session_grace_period_seconds, FuseSessionTTL]),
 
     lists:foreach(fun(Worker) ->
@@ -898,9 +866,7 @@ teardown_storage(Worker, Config) ->
 %% Mocks user_logic module, so that it returns user details, spaces and groups.
 %% @end
 %%--------------------------------------------------------------------
--spec user_logic_mock_setup(Workers :: node() | [node()],
-    [{UserNum :: integer(), Spaces :: [{binary(), binary()}],
-        DefaultSpace :: binary(), Groups :: [{binary(), binary()}]}]) ->
+-spec user_logic_mock_setup(Workers :: node() | [node()], [{od_user:id(), #user_config{}}]) ->
     ok.
 user_logic_mock_setup(Workers, Users) ->
     test_utils:mock_new(Workers, user_logic, [passthrough]),
@@ -910,7 +876,7 @@ user_logic_mock_setup(Workers, Users) ->
         #user_config{
             name = UName, id = UID,
             groups = Groups,
-            spaces = Spaces, default_space = DefaultSpaceId
+            spaces = Spaces
         } = UserConfig,
         {SpaceIds, _} = lists:unzip(Spaces),
         {GroupIds, _} = lists:unzip(Groups),
@@ -919,7 +885,6 @@ user_logic_mock_setup(Workers, Users) ->
             linked_accounts = [],
             emails = [],
             username = <<>>,
-            default_space = DefaultSpaceId,
             eff_spaces = SpaceIds,
             eff_groups = GroupIds
         }}}
@@ -1003,8 +968,8 @@ user_logic_mock_setup(Workers, Users) ->
         end
     end),
 
-    test_utils:mock_expect(Workers, user_logic, get_full_name, fun(Client, UserId) ->
-        {ok, #document{value = #od_user{full_name = FullName}}} = GetUserFun(protected, Client, UserId),
+    test_utils:mock_expect(Workers, user_logic, get_full_name, fun(UserId) ->
+        {ok, #document{value = #od_user{full_name = FullName}}} = GetUserFun(protected, ?ROOT_SESS_ID, UserId),
         {ok, FullName}
     end),
 
@@ -1048,30 +1013,16 @@ user_logic_mock_setup(Workers, Users) ->
                     end, false, EffSpaces)
         end).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks group_logic module, so that it returns default group details for
-%% default group Id.
-%% @end
-%%--------------------------------------------------------------------
 -spec group_logic_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}], [{binary(), [binary()]}]) -> ok.
 group_logic_mock_setup(Workers, Groups, _Users) ->
     test_utils:mock_new(Workers, group_logic),
 
-    test_utils:mock_expect(Workers, group_logic, get_name, fun(_Client, GroupId) ->
+    test_utils:mock_expect(Workers, group_logic, get_name, fun(GroupId) ->
         GroupName = proplists:get_value(GroupId, Groups),
         {ok, GroupName}
     end).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks space_logic module, so that it returns default space details for default
-%% space ID.
-%% @end
-%%--------------------------------------------------------------------
 -spec space_logic_mock_setup(Workers :: node() | [node()],
     [{binary(), binary()}], [{binary(), [binary()]}], [{binary(), [{binary(), non_neg_integer()}]}],
     [{binary(), [binary()]}], [{binary(), binary()}]) -> ok.
@@ -1149,13 +1100,6 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         {ok, proplists:get_value(SpaceId, SpacesHarvesters, [])}
     end).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Mocks provider_logic module, so that it returns default provider details for
-%% default provider Id.
-%% @end
-%%--------------------------------------------------------------------
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
     proplists:proplist(), proplists:proplist(), [{binary(), [{binary(), non_neg_integer()}]}],
     [{binary(), binary()}], #{binary() => [binary()]}) -> ok.
@@ -1449,8 +1393,9 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
     end).
 
 
--spec storage_mock_setup(Workers :: node() | [node()], map()) -> ok.
-storage_mock_setup(Workers, StoragesSetupMap) ->
+-spec storage_logic_mock_setup(node() | [node()], map(),
+    [{binary(), [#{{binary(), binary()} => non_neg_integer()}]}]) -> ok.
+storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     StorageMap = maps:fold(fun(ProviderId, InitialStorageDesc, Acc) ->
         NewStorageDesc = maps:map(fun(_StorageId, Desc) ->
             Desc1 = case Desc of
@@ -1462,22 +1407,36 @@ storage_mock_setup(Workers, StoragesSetupMap) ->
         maps:merge(Acc, NewStorageDesc)
     end, #{}, StoragesSetupMap),
 
-    GetStorageFun = fun(StorageId) ->
-        StorageDesc = maps:get(StorageId, StorageMap, #{}),
-        {ok, #document{value = #od_storage{
-            % storage name is equal to its id
-            name = StorageId,
-            qos_parameters = maps:get(<<"qos_parameters">>, StorageDesc, #{})
-    }}} end,
+
+    StoragesToSpaces = lists:foldl(fun({SpaceId, Map}, AccOut) ->
+        Storages = lists:map(fun({S, _}) -> S end, maps:keys(Map)),
+        lists:foldl(fun(Storage, AccIn) ->
+            maps:update_with(Storage, fun(Spaces) -> [SpaceId | Spaces] end, [SpaceId], AccIn)
+        end, AccOut, Storages)
+    end, #{}, SpacesToStorages),
+
+    GetStorageFun = fun(SM) ->
+        fun (<<"all">>) ->
+                % This is useful when changing storage parameters. Used only in mock.
+                {ok, SM};
+            (StorageId) ->
+                StorageDesc = maps:get(StorageId, SM, #{}),
+                {ok, #document{value = #od_storage{
+                    % storage name is equal to its id
+                    name = StorageId,
+                    qos_parameters = maps:get(<<"qos_parameters">>, StorageDesc, #{})
+                }}}
+        end
+    end,
 
     GetQosParametersFun = fun(StorageId) ->
-        {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} = GetStorageFun(StorageId),
+        {ok, #document{value = #od_storage{qos_parameters = QosParameters}}} = storage_logic:get(StorageId),
         {ok, QosParameters}
     end,
 
     ok = test_utils:mock_new(Workers, storage_logic),
 
-    ok = test_utils:mock_expect(Workers, storage_logic, get, GetStorageFun),
+    ok = test_utils:mock_expect(Workers, storage_logic, get, GetStorageFun(StorageMap)),
 
     ok = test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_local_storage, GetQosParametersFun),
 
@@ -1494,7 +1453,21 @@ storage_mock_setup(Workers, StoragesSetupMap) ->
     ok = test_utils:mock_expect(Workers, storage_logic, get_name,
         % storage name is equal to its id
         fun(#document{key = Id}) -> {ok, Id};
-           (Id) -> {ok, Id}
+            (Id) -> {ok, Id}
+        end),
+
+    ok = test_utils:mock_expect(Workers, storage_logic, get_spaces,
+        fun(StorageId) -> {ok, maps:get(StorageId, StoragesToSpaces, [])} end),
+
+    % NOTE this function changes qos parameters only on the node where it was executed
+    ok = test_utils:mock_expect(Workers, storage_logic, set_qos_parameters,
+        fun(StorageId, QosParameters) ->
+            % erlang:apply needed to evade dialyzer warnings
+            {ok, PreviousStorageMap} = erlang:apply(storage_logic, get, [<<"all">>]),
+            PreviousStorageDesc = maps:get(StorageId, PreviousStorageMap, #{}),
+            NewStorageDesc = PreviousStorageDesc#{<<"qos_parameters">> => QosParameters},
+            NewStorageMap = PreviousStorageMap#{StorageId => NewStorageDesc},
+            ok = meck:expect(storage_logic, get, GetStorageFun(NewStorageMap))
         end).
 
 

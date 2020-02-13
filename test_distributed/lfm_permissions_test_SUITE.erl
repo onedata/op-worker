@@ -1988,10 +1988,12 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         NewConfig1 = [{space_storage_mock, false} | NewConfig],
         NewConfig2 = initializer:setup_storage(NewConfig1),
-        initializer:create_test_users_and_spaces(
+        NewConfig3 = initializer:create_test_users_and_spaces(
             ?TEST_FILE(NewConfig2, "env_desc.json"),
             NewConfig2
-        )
+        ),
+        initializer:mock_auth_manager(NewConfig3),
+        NewConfig3
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 

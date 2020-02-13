@@ -71,7 +71,7 @@
     username :: undefined | binary(),
     emails = [] :: [binary()],
     linked_accounts = [] :: [od_user:linked_account()],
-    default_space :: binary() | undefined,
+
     % List of user's aliases for spaces
     space_aliases = #{} :: #{od_space:id() => od_space:alias()},
 

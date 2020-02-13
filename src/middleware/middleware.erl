@@ -31,7 +31,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 % Some of the types are just aliases for types from gs_protocol, this is
-% for better readability of logic modules.
+% for better readability of middleware modules.
 % TODO VFS-5621
 -type req() :: #op_req{}.
 -type operation() :: gs_protocol:operation().
