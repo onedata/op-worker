@@ -120,7 +120,7 @@ create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible, Travers
         true ->
             {possible, oneprovider:get_id()};
         false ->
-            ok = add_to_impossible_list(QosEntryId, SpaceId),
+            ok = add_to_impossible_list(SpaceId, QosEntryId),
             {impossible, oneprovider:get_id()}
     end,
     datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
@@ -145,10 +145,8 @@ update(Key, Diff) ->
     datastore_model:update(?CTX, Key, Diff).
 
 
-%% @private
 -spec delete(id()) -> ok | {error, term()}.
 delete(QosEntryId) ->
-    %TODO VFS-6100 delete all additional documents (qos_status)
     datastore_model:delete(?CTX, QosEntryId).
 
 
@@ -216,7 +214,7 @@ mark_possible(QosEntryId, SpaceId, AllTraverseReqs) ->
             traverse_reqs = AllTraverseReqs
         }}
     end),
-    ok = remove_from_impossible_list(QosEntryId, SpaceId).
+    ok = remove_from_impossible_list(SpaceId, QosEntryId).
 
 
 %%--------------------------------------------------------------------
@@ -231,7 +229,7 @@ remove_traverse_req(QosEntryId, TraverseId) ->
             traverse_reqs = qos_traverse_req:remove_req(TraverseId, TR)
         }}
     end,
-    ?ok_if_not_found(update(QosEntryId, Diff)).
+    ?ok_if_not_found(?extract_ok(update(QosEntryId, Diff))).
 
 %%%===================================================================
 %%% Functions operating on qos_entry record.
@@ -284,8 +282,8 @@ is_possible(#qos_entry{possibility_check = {impossible, _}}) ->
 %% qos_entry documents that cannot be fulfilled at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec add_to_impossible_list(id(), od_space:id()) ->  ok | {error, term()}.
-add_to_impossible_list(QosEntryId, SpaceId) ->
+-spec add_to_impossible_list(od_space:id(), id()) ->  ok | {error, term()}.
+add_to_impossible_list(SpaceId, QosEntryId) ->
     case add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId}) of
         {ok, _} -> ok;
         ?ERROR_ALREADY_EXISTS -> ok;
@@ -293,8 +291,8 @@ add_to_impossible_list(QosEntryId, SpaceId) ->
     end.
 
 
--spec remove_from_impossible_list(id(), od_space:id()) ->  ok | {error, term()}.
-remove_from_impossible_list(QosEntryId, SpaceId) ->
+-spec remove_from_impossible_list(od_space:id(), id()) ->  ok | {error, term()}.
+remove_from_impossible_list(SpaceId, QosEntryId) ->
     ?extract_ok(
         delete_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)
     ).
@@ -433,11 +431,10 @@ resolve_conflict_internal(SpaceId, QosId,
             % remote changes were made by provider with lower id ->
             %   trigger async removal of entry from file_qos and save remote changes
             spawn(fun() ->
-                case file_qos:remove_qos_entry_id(FileUuid, QosId) of
-                    ok ->
-                        ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+                case file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosId) of
+                    ok -> ok;
                     {error, _} = Error ->
-                        ?error("Could not remvove qos_entry ~p from file_qos of file ~p: ~p",
+                        ?error("Could not remove qos_entry ~p from file_qos of file ~p: ~p",
                             [QosId, FileUuid, Error])
                 end
             end),

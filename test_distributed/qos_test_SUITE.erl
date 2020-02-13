@@ -238,7 +238,7 @@ qos_bounded_cache_should_be_periodically_cleaned_if_overfilled(Config) ->
 
     % check that QoS cache is overfilled
     SizeBeforeCleaning = ?GET_CACHE_TABLE_SIZE(?SPACE1_ID),
-    ?assertEqual(6, SizeBeforeCleaning),
+    ?assertEqual(7, SizeBeforeCleaning),
 
     % send message that checks cache size and cleans it if necessary
     ?assertMatch(ok, rpc:call(Worker, bounded_cache, check_cache_size, [?QOS_CACHE_TEST_OPTIONS(1)])),
@@ -278,13 +278,13 @@ qos_bounded_cache_should_not_be_cleaned_if_not_overfilled(Config) ->
 
     % check that QoS cache is not empty
     SizeBeforeCleaning = ?GET_CACHE_TABLE_SIZE(?SPACE1_ID),
-    ?assertEqual(6, SizeBeforeCleaning),
+    ?assertEqual(7, SizeBeforeCleaning),
 
     % send message that checks cache size and cleans it if necessary
-    ?assertMatch(ok, rpc:call(Worker, bounded_cache, check_cache_size, [?QOS_CACHE_TEST_OPTIONS(6)])),
+    ?assertMatch(ok, rpc:call(Worker, bounded_cache, check_cache_size, [?QOS_CACHE_TEST_OPTIONS(7)])),
 
     SizeAfterCleaning = ?GET_CACHE_TABLE_SIZE(?SPACE1_ID),
-    ?assertEqual(6, SizeAfterCleaning).
+    ?assertEqual(7, SizeAfterCleaning).
 
 
 %%%===================================================================

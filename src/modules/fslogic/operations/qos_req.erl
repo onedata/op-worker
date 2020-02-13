@@ -197,11 +197,11 @@ remove_qos_entry_insecure(_UserCtx, FileCtx, QosEntryId) ->
 
     % TODO: VFS-5567 For now QoS entry is added only for file or dir
     % for which it has been added, so starting traverse is not needed.
-    ok = file_qos:remove_qos_entry_id(FileUuid, QosEntryId),
-    ok = qos_entry:remove_from_impossible_list(QosEntryId, SpaceId),
+    ok = file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId),
+    ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
     ok = qos_traverse:report_entry_deleted(QosEntryId),
+    ok = qos_status:report_entry_deleted(SpaceId, QosEntryId),
     ok = qos_entry:delete(QosEntryId),
-    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     #provider_response{status = #status{code = ?OK}}.
 
 
@@ -244,8 +244,7 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN,
                           ReplicasNum, true, AllTraverseReqs) of
         {ok, _} ->
-            file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
-            qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
             qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs),
             #provider_response{
                 status = #status{code = ?OK},
@@ -271,8 +270,7 @@ add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
 
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN, ReplicasNum) of
         {ok, _} ->
-            ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #qos_entry_id{id = QosEntryId}

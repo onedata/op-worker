@@ -97,7 +97,7 @@ report_entry_deleted(QosEntryId) when is_binary(QosEntryId) ->
         {ok, QosDoc} -> report_entry_deleted(QosDoc);
         ?ERROR_NOT_FOUND -> ok;
         {error, _} = Error -> 
-            ?warning("Error after qos entry deleted: ~p", [Error])
+            ?error("Error in qos_traverse:report_entry_deleted: ~p", [Error])
     end;
 report_entry_deleted(#document{key = QosEntryId} = QosEntryDoc) ->
     ok = cancel_local_traverses(QosEntryDoc),
@@ -182,7 +182,7 @@ do_master_job(Job, MasterJobArgs) ->
 %%--------------------------------------------------------------------
 -spec do_slave_job(traverse:job(), traverse:id()) -> ok.
 do_slave_job({#document{key = FileUuid, scope = SpaceId} = FileDoc, _TraverseInfo}, TaskId) ->
-    % TODO: add space check and optionally choose other storage
+    % TODO VFS-5574: add space check and optionally choose other storage
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
@@ -191,16 +191,16 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId} = FileDoc, _TraverseInf
         <<"task_type">> := TaskType
     } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     
-    {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
     {ok, EffectiveFileQos} = file_qos:get_effective(FileDoc),
-    AssignedEntries = file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId),
     
     % start transfer only for existing entries
     QosEntries = case TaskType of
         <<"traverse">> -> 
             #{<<"qos_entry_id">> := QosEntryId} = AdditionalData,
-            lists_utils:intersect(AssignedEntries, [QosEntryId]);
-        <<"reconcile">> -> AssignedEntries
+            lists_utils:intersect(file_qos:get_qos_entries(EffectiveFileQos), [QosEntryId]);
+        <<"reconcile">> ->
+            {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
+            file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
     end,
     ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries),
 
@@ -241,7 +241,7 @@ synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
     case SyncResult of
         {ok, _} -> ok;
         {error, cancelled} -> 
-            ?error("QoS file synchronization failed due to cancellation");
+            ?debug("QoS file synchronization failed due to cancellation");
         {error, _} = Error ->
             % TODO: VFS-5737 handle failures properly
             ?error("Error during file synchronization: ~p", [Error])

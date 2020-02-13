@@ -38,21 +38,20 @@
 -spec handle_qos_entry_change(od_space:id(), qos_entry:doc()) -> ok.
 handle_qos_entry_change(SpaceId, #document{deleted = true, key = QosEntryId} = QosEntryDoc) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntryDoc),
-    ok = qos_entry:remove_from_impossible_list(QosEntryId, SpaceId),
-    ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(FileUuid, QosEntryId)),
-    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-    ok = qos_traverse:report_entry_deleted(QosEntryDoc);
+    ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId)),
+    ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
+    ok = qos_traverse:report_entry_deleted(QosEntryDoc),
+    ok = qos_status:report_entry_deleted(SpaceId, QosEntryId);
 handle_qos_entry_change(SpaceId, #document{key = QosEntryId, value = QosEntry} = QosEntryDoc) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
-    ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
+    ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
     case qos_entry:is_possible(QosEntry) of
         true ->
             {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosEntry),
-            ok = qos_entry:remove_from_impossible_list(QosEntryId, SpaceId),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
             ok = qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs);
         false ->
-            ok = qos_entry:add_to_impossible_list(QosEntryId, SpaceId),
+            ok = qos_entry:add_to_impossible_list(SpaceId, QosEntryId),
             ok = reevaluate_qos(QosEntryDoc)
     end.
 

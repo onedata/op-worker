@@ -119,8 +119,7 @@ start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs) ->
 start_traverse(FileCtx, QosEntryId, StorageId, TaskId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId, StorageId),
-    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+    ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId, StorageId),
     case lookup_file_meta_doc(FileCtx) of
         {ok, FileCtx1} ->
             ok = qos_traverse:start_initial_traverse(FileCtx1, QosEntryId, TaskId);

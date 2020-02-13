@@ -112,7 +112,9 @@ all() -> [
 
     reevaluate_impossible_qos_test,
     reevaluate_impossible_qos_race_test,
-    reevaluate_impossible_qos_conflict_test
+    reevaluate_impossible_qos_conflict_test,
+    
+    qos_traverse_cancellation_test
 ].
 
 
