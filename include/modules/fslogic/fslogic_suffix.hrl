@@ -16,8 +16,8 @@
 %%%-------------------------------------------------------------------
 -author("Michal Wrzeszcz").
 
--ifndef(FSLOGIC_SUFIX_HRL).
--define(FSLOGIC_SUFIX_HRL, 1).
+-ifndef(FSLOGIC_SUFFIX_HRL).
+-define(FSLOGIC_SUFFIX_HRL, 1).
 
 -define(FILE_DELETION_LINK_SUFFIX, <<"####TO_DELETE">>).
 -define(FILE_DELETION_LINK_NAME(Name),
@@ -29,9 +29,9 @@
     (?CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR)/binary, Uuid/binary>>).
 
 -define(IMPORTED_CONFLICTING_FILE_SUFFIX_SEPARATOR, <<"####IMPORTED###">>).
--define(IMPORTED_CONFLICTING_FILE_NAME(Name),
-    <<(Name)/binary, (?IMPORTED_CONFLICTING_FILE_SUFFIX_SEPARATOR)/binary,
-        (oneprovider:get_id())/binary>>).
+-define(IMPORTED_CONFLICTING_FILE_NAME(Name), ?IMPORTED_CONFLICTING_FILE_NAME(Name, oneprovider:get_id())).
+-define(IMPORTED_CONFLICTING_FILE_NAME(Name, ProviderId),
+    <<(Name)/binary, (?IMPORTED_CONFLICTING_FILE_SUFFIX_SEPARATOR)/binary, (ProviderId)/binary>>).
 
 -define(CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR_CHAR, "@").
 -define(CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, <<?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR_CHAR>>).

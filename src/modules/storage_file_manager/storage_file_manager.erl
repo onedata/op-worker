@@ -187,7 +187,6 @@ mkdir(#sfm_handle{
     space_id = SpaceId,
     session_id = SessionId
 } = SFMHandle, Mode, Recursive) ->
-
     {ok, HelperHandle} = session_helpers:get_helper(SessionId, SpaceId, Storage),
     ?RUN(SFMHandle, fun() ->
         Noop = fun(_) -> ok end,

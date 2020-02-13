@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/fslogic_sufix.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
@@ -332,16 +332,18 @@ add_child_link(ParentUuid, Scope, Name, Uuid) ->
     FileUuid :: uuid(), FileName :: name()) -> ok.
 delete_child_link(ParentUuid, Scope, FileUuid, FileName) ->
     {ok, Links} = datastore_model:get_links(?CTX, ParentUuid, all, FileName),
-    [#link{tree_id = ProviderId, name = FileName, rev = Rev}] = lists:filter(fun
-        (#link{target = Uuid}) -> Uuid == FileUuid
-    end, Links),
-    Ctx = ?CTX#{scope => Scope},
-    Link = {FileName, Rev},
-    case oneprovider:is_self(ProviderId) of
-        true ->
-            ok = datastore_model:delete_links(Ctx, ParentUuid, ProviderId, Link);
-        false ->
-            ok = datastore_model:mark_links_deleted(Ctx, ParentUuid, ProviderId, Link)
+    case lists:filter(fun(#link{target = Uuid}) -> Uuid == FileUuid end, Links) of
+        [#link{tree_id = ProviderId, name = FileName, rev = Rev}] ->
+            Ctx = ?CTX#{scope => Scope},
+            Link = {FileName, Rev},
+            case oneprovider:is_self(ProviderId) of
+                true ->
+                    ok = datastore_model:delete_links(Ctx, ParentUuid, ProviderId, Link);
+                false ->
+                    ok = datastore_model:mark_links_deleted(Ctx, ParentUuid, ProviderId, Link)
+            end;
+        [] ->
+            ok
     end.
 
 %%--------------------------------------------------------------------

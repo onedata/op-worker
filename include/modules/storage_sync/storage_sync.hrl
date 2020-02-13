@@ -18,9 +18,4 @@
 
 -define(FILES_IMPORT_TIMEOUT, timer:hours(24)).
 
--define(DIR_BATCH,
-    begin
-        {ok, __Batch} = application:get_env(?APP_NAME, dir_batch_size),
-        __Batch
-    end
-).
+-define(DIR_BATCH, application:get_env(?APP_NAME, dir_batch_size, 100)).

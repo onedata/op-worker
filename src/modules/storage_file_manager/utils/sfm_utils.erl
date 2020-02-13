@@ -16,7 +16,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/fslogic_sufix.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
 -include_lib("ctool/include/posix/errors.hrl").

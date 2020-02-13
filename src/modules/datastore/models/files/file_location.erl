@@ -337,7 +337,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -402,6 +402,24 @@ get_record_struct(4) ->
         {last_rename, {{string, string}, integer}},
         {storage_file_created, boolean},
         {last_replication_timestamp, integer}
+    ]};
+get_record_struct(5) ->
+    {record, [
+        {uuid, string},
+        {provider_id, string},
+        {storage_id, string},
+        {file_id, string},
+        % added field rename_src_file_id which allows to determine
+        % that file on storage is being renamed at the moment
+        {rename_src_file_id, string},
+        {blocks, [term]},
+        {version_vector, #{term => integer}},
+        {size, integer},
+        {space_id, string},
+        {recent_changes, {[term], [term]}},
+        {last_rename, {{string, string}, integer}},
+        {storage_file_created, boolean},
+        {last_replication_timestamp, integer}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -428,4 +446,10 @@ upgrade_record(3, {?MODULE, Uuid, ProviderId, StorageId, FileId, Blocks,
     {4, {?MODULE,
         Uuid, ProviderId, StorageId, FileId, Blocks, VersionVector, Size,
         SpaceId, RecentChanges, LastRename, StorageFileCreated, undefined
+    }};
+upgrade_record(4, {?MODULE, Uuid, ProviderId, StorageId, FileId, Blocks,
+    VersionVector, Size, SpaceId, RecentChanges, LastRename, StorageFileCreated, LastReplicationTimestamp}) ->
+    {5, {?MODULE,
+        Uuid, ProviderId, StorageId, FileId, undefined, Blocks, VersionVector, Size,
+        SpaceId, RecentChanges, LastRename, StorageFileCreated, LastReplicationTimestamp
     }}.

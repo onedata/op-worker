@@ -251,7 +251,7 @@ start(SpaceId, StorageId, ImportStartTime, ImportFinishTime, LastUpdateStartTime
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_update_file(space_strategy:job(), #file_attr{},
-    file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
+    file_ctx:ctx()) -> {space_strategy:job_result(), file_ctx:ctx(), space_strategy:job()}.
 maybe_update_file(Job = #space_strategy_job{
     data = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx
@@ -389,7 +389,7 @@ import_children(#space_strategy_job{}, _Type, _Offset, _FileCtx, _) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_update_directory(space_strategy:job(), #file_attr{},
-    file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
+    file_ctx:ctx()) -> {space_strategy:job_result(), file_ctx:ctx(), space_strategy:job()}.
 maybe_update_directory(Job = #space_strategy_job{
     data = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx
@@ -411,7 +411,7 @@ maybe_update_directory(Job = #space_strategy_job{
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_update_directory_with_changed_mtime(space_strategy:job(),
-    #file_attr{}, file_ctx:ctx()) -> {space_strategy:job_result(), space_strategy:job()}.
+    #file_attr{}, file_ctx:ctx()) -> {space_strategy:job_result(), file_ctx:ctx(), space_strategy:job()}.
 maybe_update_directory_with_changed_mtime(Job = #space_strategy_job{
     strategy_args = #{delete_enable := true},
     data = Data
@@ -424,7 +424,7 @@ maybe_update_directory_with_changed_mtime(Job = #space_strategy_job{
         ok ->
             simple_scan:maybe_update_file(Job, FileAttr, FileCtx);
         Error = {error, _} ->
-            {Error, Job}
+            {Error, FileCtx, Job}
     end;
 maybe_update_directory_with_changed_mtime(Job = #space_strategy_job{
     strategy_args = #{delete_enable := false}
@@ -439,7 +439,7 @@ maybe_update_directory_with_changed_mtime(Job = #space_strategy_job{
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_update_directory_with_unchanged_mtime(space_strategy:job(),
-    #file_attr{}, file_ctx:ctx()) -> {simple_scan:job_result(), space_strategy:job()}.
+    #file_attr{}, file_ctx:ctx()) -> {simple_scan:job_result(), file_ctx:ctx(), space_strategy:job()}.
 maybe_update_directory_with_unchanged_mtime(Job = #space_strategy_job{
     strategy_args = Args = #{write_once := false},
     data = Data0 = #{storage_file_ctx := StorageFileCtx}
@@ -492,7 +492,7 @@ maybe_update_directory_with_unchanged_mtime(Job = #space_strategy_job{
 %%-------------------------------------------------------------------
 -spec maybe_update_directory_with_changed_hash(space_strategy:job(),
     #file_attr{}, file_ctx:ctx(), storage_sync_changes:hash()) ->
-    {simple_scan:job_result(), space_strategy:job()}.
+    {simple_scan:job_result(), file_ctx:ctx(), space_strategy:job()}.
 maybe_update_directory_with_changed_hash(Job = #space_strategy_job{
     data = #{dir_offset := Offset}
 }, FileAttr, FileCtx, CurrentHash
@@ -566,7 +566,7 @@ should_init_update_job(LastUpdateStartTime, LastUpdateFinishTime,
         true -> %update is in progress
             false;
         _ ->
-            LastUpdateFinishTime + ScanIntervalSeconds < CurrentTimestamp
+            LastUpdateFinishTime + ScanIntervalSeconds =< CurrentTimestamp
     end.
 
 %%-------------------------------------------------------------------
