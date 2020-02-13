@@ -52,9 +52,9 @@
 ).
 
 -define(SESSION_REMOVAL_RETRY_DELAY, 15).   % in seconds
--define(SESSION_VALIDITY_CHECK_INTERVAL,
-    application:get_env(?APP_NAME, session_validity_check_interval_seconds, 10)
-).
+-define(SESSION_VALIDITY_CHECK_INTERVAL, application:get_env(
+    ?APP_NAME, session_validity_check_interval_seconds, 15
+)).
 
 -type state() :: #state{}.
 
