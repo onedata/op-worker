@@ -401,11 +401,15 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
              user_ctx:is_direct_io(UserCtx, SpaceID) andalso HandleId0 =:= undefined, HandleId),
         {HandleId, FileLocation, FileCtx2}
     catch
-        E1:E2 ->
-            ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
-                [E1, E2, file_ctx:get_uuid_const(FileCtx)]),
+        throw:?ENOENT ->
+            ?debug_stacktrace("Open file error: ENOENT for uuid ~p", [file_ctx:get_uuid_const(FileCtx)]),
             check_and_register_release(FileCtx, SessId, HandleId0),
-            throw(E2)
+            throw(?ENOENT);
+        Error:Reason ->
+            ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
+                [Error, Reason, file_ctx:get_uuid_const(FileCtx)]),
+            check_and_register_release(FileCtx, SessId, HandleId0),
+            throw(Reason)
     end.
 
 %%--------------------------------------------------------------------
@@ -435,8 +439,12 @@ maybe_open_on_storage(FileCtx, SessId, Flag, _DirectIO, HandleId) ->
 open_on_storage(FileCtx, SessId, Flag, HandleId) ->
     {SFMHandle, _FileCtx2} = storage_file_manager:new_handle(SessId, FileCtx),
     SFMHandle2 = storage_file_manager:set_size(SFMHandle),
-    {ok, Handle} = storage_file_manager:open(SFMHandle2, Flag),
-    ok = session_handles:add(SessId, HandleId, Handle).
+    case storage_file_manager:open(SFMHandle2, Flag) of
+        {ok, Handle} ->
+            ok = session_handles:add(SessId, HandleId, Handle);
+        {error, ?ENOENT} ->
+            throw(?ENOENT)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

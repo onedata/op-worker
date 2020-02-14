@@ -70,6 +70,13 @@
     is_in_user_space_const/2]).
 -export([equals/2]).
 
+%% Functions that do not modify context but does not have _const suffix and return context.
+% TODO VFS-6119 missing _const suffix in function name
+-export([
+    get_local_file_location_doc/1, get_local_file_location_doc/2,
+    get_dir_location_doc/1, is_storage_file_created/1
+]).
+
 %% Functions modifying context
 -export([get_canonical_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2, get_storage_file_id/1, get_storage_file_id/2,
@@ -79,12 +86,12 @@
     get_logical_path/2,
     get_storage_id/1, get_storage_doc/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2, fill_location_gaps/4,
-    get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
-    get_local_file_location_doc/2, get_or_create_local_file_location_doc/2, get_or_create_local_regular_file_location_doc/3,
+    get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
+    get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_acl/1, get_raw_storage_path/1, get_child_canonical_path/2, get_file_size/1,
     get_file_size_from_remote_locations/1, get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
-    is_import_on/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1,
+    is_import_on/1, get_and_cache_file_doc_including_deleted/1,
     get_storage_sync_info/1]).
 -export([is_dir/1]).
 
@@ -892,6 +899,7 @@ get_or_create_local_file_location_doc(FileCtx, IncludeBlocks) ->
 -spec get_local_file_location_doc(ctx()) ->
     {file_location:doc() | undefined, ctx()}.
 get_local_file_location_doc(FileCtx) ->
+    % TODO VFS-6119 missing _const suffix in function name
     get_local_file_location_doc(FileCtx, true).
 
 %%--------------------------------------------------------------------
@@ -899,13 +907,12 @@ get_local_file_location_doc(FileCtx) ->
 %% Returns local file location doc.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_file_location_doc(ctx(), boolean()) ->
+-spec get_local_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts()) ->
     {file_location:doc() | undefined, ctx()}.
-get_local_file_location_doc(FileCtx, IncludeBlocks) ->
+get_local_file_location_doc(FileCtx, GetDocOpts) ->
+    % TODO VFS-6119 missing _const suffix in function name
     FileUuid = get_uuid_const(FileCtx),
-    LocalLocationId = file_location:local_id(FileUuid),
-    case fslogic_location_cache:get_location(LocalLocationId, FileUuid,
-        IncludeBlocks) of
+    case fslogic_location_cache:get_local_location(FileUuid, GetDocOpts) of
         {ok, Location} ->
             {Location, FileCtx};
         {error, not_found} ->
@@ -920,6 +927,7 @@ get_local_file_location_doc(FileCtx, IncludeBlocks) ->
 -spec get_dir_location_doc(ctx()) ->
     {dir_location:doc() | undefined, ctx()}.
 get_dir_location_doc(FileCtx) ->
+    % TODO VFS-6119 missing _const suffix in function name
     FileUuid = get_uuid_const(FileCtx),
     case dir_location:get(FileUuid) of
         {ok, Location} ->
@@ -988,6 +996,18 @@ get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts, IncludeLocal) ->
         end
     end, LocationIds),
     {LocationDocs, FileCtx2}.
+
+-spec is_storage_file_created(file_ctx:ctx()) -> {boolean(), file_ctx:ctx()}.
+is_storage_file_created(FileCtx) ->
+    % TODO VFS-6119 missing _const suffix in function name
+    case file_ctx:is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            {DirLocation, FileCtx3} = file_ctx:get_dir_location_doc(FileCtx2),
+            {dir_location:is_storage_file_created(DirLocation), FileCtx3};
+        {false, FileCtx2} ->
+            {FileLocation, FileCtx3} = file_ctx:get_local_file_location_doc(FileCtx2, false),
+            {file_location:is_storage_file_created(FileLocation), FileCtx3}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

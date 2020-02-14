@@ -256,12 +256,13 @@ maybe_update_file(Job = #space_strategy_job{
     data = #{storage_file_ctx := StorageFileCtx}
 }, FileAttr, FileCtx
 ) ->
-    {#statbuf{st_mode = Mode}, _} = storage_file_ctx:get_stat_buf(StorageFileCtx),
-    case file_meta:type(Mode) of
+    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
+    Job2 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx2, Job),
+    case file_meta:type(StMode) of
         ?DIRECTORY_TYPE ->
-            maybe_update_directory(Job, FileAttr, FileCtx);
+            maybe_update_directory(Job2, FileAttr, FileCtx);
         ?REGULAR_FILE_TYPE ->
-            simple_scan:maybe_update_file(Job, FileAttr, FileCtx)
+            simple_scan:maybe_update_file(Job2, FileAttr, FileCtx)
     end.
 
 %%--------------------------------------------------------------------

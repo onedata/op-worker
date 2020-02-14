@@ -42,7 +42,7 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
         {error, not_found} ->
             ok;
         {#document{}, FileCtx2} ->
-            {#fuse_response{fuse_response = #file_attr{} = FileAttr}, OtherFiles, _} =
+            {#fuse_response{fuse_response = #file_attr{} = FileAttr}, OtherFiles} =
                 attr_req:get_file_attr_and_conflicts(user_ctx:new(?ROOT_SESS_ID), FileCtx2, true, true, true),
             emit_suffixes(OtherFiles, {ctx, FileCtx2}),
             emit_file_attr_changed(FileCtx2, FileAttr, ExcludedSessions);
