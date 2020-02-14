@@ -175,7 +175,7 @@ confined_access_token_test(Config) ->
 
     Caveat = #cv_data_path{whitelist = [<<"/spaceid/file/dir.txt">>]},
     AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), rest, allow_data_access_caveats
     ),
@@ -185,10 +185,10 @@ confined_access_token_test(Config) ->
     % data access caveat presence
     ?assertMatch(
         ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
-        rpc:call(Node, group_logic, get_shared_data, [TokenAuth, ?GROUP_1, undefined])
+        rpc:call(Node, group_logic, get_shared_data, [TokenCredentials, ?GROUP_1, undefined])
     ),
     % Nevertheless, GraphCalls should be increased by 2 as:
-    % 1) TokenAuth was verified to retrieve caveats
+    % 1) TokenCredentials was verified to retrieve caveats
     % 2) auth_manager fetched token data to subscribe itself for updates from oz
     ?assertEqual(GraphCalls+2, logic_tests_common:count_reqs(Config, graph)).
 

@@ -28,29 +28,28 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([root_auth/0, guest_auth/0]).
 -export([
-    build_token_auth/5,
+    build_token_credentials/5,
 
     get_access_token/1,
     get_consumer_token/1,
     get_peer_ip/1,
     get_interface/1,
     get_data_access_caveats_policy/1,
-    get_credentials/1, update_credentials/3
+    get_proto_credentials/1, update_proto_credentials/3
 ]).
 -export([
-    auth_to_gs_auth_override/1,
+    credentials_to_gs_auth_override/1,
     get_caveats/1,
-    verify_auth/1
+    verify_credentials/1
 ]).
 
--type credentials() :: #credentials{}.
+-type proto_credentials() :: #credentials{}.
 -type access_token() :: tokens:serialized().
 -type consumer_token() :: undefined | tokens:serialized().
 
 % Record containing access token for user authorization in OZ.
--record(token_auth, {
+-record(token_credentials, {
     access_token :: access_token(),
     consumer_token = undefined :: consumer_token(),
     peer_ip = undefined :: undefined | ip_utils:ip(),
@@ -58,18 +57,16 @@
     data_access_caveats_policy = disallow_data_access_caveats :: data_access_caveats:policy()
 }).
 
--opaque token_auth() :: #token_auth{}.
--type guest_auth() :: ?GUEST_AUTH.
--type root_auth() :: ?ROOT_AUTH.
--type auth() :: token_auth() | guest_auth() | root_auth().
+-opaque token_credentials() :: #token_credentials{}.
+-type credentials() :: ?ROOT_CREDENTIALS | ?GUEST_CREDENTIALS | token_credentials().
 
 -type verification_result() ::
     {ok, aai:auth(), TokenValidUntil :: undefined | time_utils:seconds()} |
     errors:error().
 
 -export_type([
-    credentials/0, access_token/0, consumer_token/0,
-    token_auth/0, guest_auth/0, root_auth/0, auth/0,
+    proto_credentials/0, access_token/0, consumer_token/0,
+    token_credentials/0, credentials/0,
     verification_result/0
 ]).
 
@@ -81,25 +78,15 @@
 %%%===================================================================
 
 
--spec root_auth() -> root_auth().
-root_auth() ->
-    ?ROOT_AUTH.
-
-
--spec guest_auth() -> guest_auth().
-guest_auth() ->
-    ?GUEST_AUTH.
-
-
--spec build_token_auth(
+-spec build_token_credentials(
     access_token(), consumer_token(),
     PeerIp :: undefined | ip_utils:ip(),
     Interface :: undefined | cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
-    token_auth().
-build_token_auth(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
-    #token_auth{
+    token_credentials().
+build_token_credentials(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+    #token_credentials{
         access_token = AccessToken,
         consumer_token = ConsumerToken,
         peer_ip = PeerIp,
@@ -108,34 +95,34 @@ build_token_auth(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveat
     }.
 
 
--spec get_access_token(token_auth()) -> access_token().
-get_access_token(#token_auth{access_token = AccessToken}) ->
+-spec get_access_token(token_credentials()) -> access_token().
+get_access_token(#token_credentials{access_token = AccessToken}) ->
     AccessToken.
 
 
--spec get_consumer_token(token_auth()) -> consumer_token().
-get_consumer_token(#token_auth{consumer_token = ConsumerToken}) ->
+-spec get_consumer_token(token_credentials()) -> consumer_token().
+get_consumer_token(#token_credentials{consumer_token = ConsumerToken}) ->
     ConsumerToken.
 
 
--spec get_peer_ip(token_auth()) -> undefined | ip_utils:ip().
-get_peer_ip(#token_auth{peer_ip = PeerIp}) ->
+-spec get_peer_ip(token_credentials()) -> undefined | ip_utils:ip().
+get_peer_ip(#token_credentials{peer_ip = PeerIp}) ->
     PeerIp.
 
 
--spec get_interface(token_auth()) -> undefined | cv_interface:interface().
-get_interface(#token_auth{interface = Interface}) ->
+-spec get_interface(token_credentials()) -> undefined | cv_interface:interface().
+get_interface(#token_credentials{interface = Interface}) ->
     Interface.
 
 
--spec get_data_access_caveats_policy(token_auth()) ->
+-spec get_data_access_caveats_policy(token_credentials()) ->
     data_access_caveats:policy().
-get_data_access_caveats_policy(#token_auth{data_access_caveats_policy = Policy}) ->
+get_data_access_caveats_policy(#token_credentials{data_access_caveats_policy = Policy}) ->
     Policy.
 
 
--spec get_credentials(token_auth()) -> credentials().
-get_credentials(#token_auth{
+-spec get_proto_credentials(token_credentials()) -> proto_credentials().
+get_proto_credentials(#token_credentials{
     access_token = AccessToken,
     consumer_token = ConsumerToken
 }) ->
@@ -145,21 +132,21 @@ get_credentials(#token_auth{
     }.
 
 
--spec update_credentials(token_auth(), access_token(), consumer_token()) ->
-    token_auth().
-update_credentials(TokenAuth, AccessToken, ConsumerToken) ->
-    TokenAuth#token_auth{
+-spec update_proto_credentials(token_credentials(), access_token(), consumer_token()) ->
+    token_credentials().
+update_proto_credentials(TokenCredentials, AccessToken, ConsumerToken) ->
+    TokenCredentials#token_credentials{
         access_token = AccessToken,
         consumer_token = ConsumerToken
     }.
 
 
--spec auth_to_gs_auth_override(auth()) -> gs_protocol:auth_override().
-auth_to_gs_auth_override(?ROOT_AUTH) ->
+-spec credentials_to_gs_auth_override(credentials()) -> gs_protocol:auth_override().
+credentials_to_gs_auth_override(?ROOT_CREDENTIALS) ->
     undefined;
-auth_to_gs_auth_override(?GUEST_AUTH) ->
+credentials_to_gs_auth_override(?GUEST_CREDENTIALS) ->
     #auth_override{client_auth = nobody};
-auth_to_gs_auth_override(#token_auth{
+credentials_to_gs_auth_override(#token_credentials{
     access_token = AccessToken,
     peer_ip = PeerIp,
     interface = Interface,
@@ -175,13 +162,13 @@ auth_to_gs_auth_override(#token_auth{
     }.
 
 
--spec get_caveats(auth()) -> {ok, [caveats:caveat()]} | errors:error().
-get_caveats(?ROOT_AUTH) ->
+-spec get_caveats(credentials()) -> {ok, [caveats:caveat()]} | errors:error().
+get_caveats(?ROOT_CREDENTIALS) ->
     {ok, []};
-get_caveats(?GUEST_AUTH) ->
+get_caveats(?GUEST_CREDENTIALS) ->
     {ok, []};
-get_caveats(TokenAuth) ->
-    case verify_auth(TokenAuth) of
+get_caveats(TokenCredentials) ->
+    case verify_credentials(TokenCredentials) of
         {ok, #auth{caveats = Caveats}, _} ->
             {ok, Caveats};
         {error, _} = Error ->
@@ -191,18 +178,19 @@ get_caveats(TokenAuth) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Verifies identity of subject identified by specified auth() and returns
-%% time this auth will be valid until. Nevertheless this check should be
-%% performed periodically for token_auth() as tokens can be revoked.
+%% Verifies identity of subject identified by specified credentials() and
+%% returns time this auth will be valid until. Nevertheless this check
+%% should be performed periodically for token_credentials() as tokens
+%% can be revoked.
 %% @end
 %%--------------------------------------------------------------------
--spec verify_auth(auth()) -> verification_result().
-verify_auth(?ROOT_AUTH) ->
-    {ok, #auth{subject = ?SUB(root, ?ROOT_USER_ID)}, undefined};
-verify_auth(?GUEST_AUTH) ->
-    {ok, #auth{subject = ?SUB(nobody, ?GUEST_USER_ID)}, undefined};
-verify_auth(TokenAuth) ->
-    verify_token_auth(TokenAuth).
+-spec verify_credentials(credentials()) -> verification_result().
+verify_credentials(?ROOT_CREDENTIALS) ->
+    {ok, #auth{subject = ?ROOT_IDENTITY}, undefined};
+verify_credentials(?GUEST_CREDENTIALS) ->
+    {ok, #auth{subject = ?GUEST_IDENTITY}, undefined};
+verify_credentials(TokenCredentials) ->
+    verify_token_credentials(TokenCredentials).
 
 
 %%%===================================================================
@@ -211,16 +199,16 @@ verify_auth(TokenAuth) ->
 
 
 %% @private
--spec verify_token_auth(token_auth()) -> verification_result().
-verify_token_auth(TokenAuth) ->
-    case auth_cache:get_token_auth_verification_result(TokenAuth) of
+-spec verify_token_credentials(token_credentials()) -> verification_result().
+verify_token_credentials(TokenCredentials) ->
+    case auth_cache:get_token_credentials_verification_result(TokenCredentials) of
         {ok, CachedVerificationResult} ->
             CachedVerificationResult;
         ?ERROR_NOT_FOUND ->
             try
-                {TokenRef, VerificationResult} = verify_token_auth_insecure(TokenAuth),
-                auth_cache:save_token_auth_verification_result(
-                    TokenAuth, TokenRef, VerificationResult
+                {TokenRef, VerificationResult} = verify_token_credentials_insecure(TokenCredentials),
+                auth_cache:save_token_credentials_verification_result(
+                    TokenCredentials, TokenRef, VerificationResult
                 ),
                 VerificationResult
             catch Type:Reason ->
@@ -233,9 +221,9 @@ verify_token_auth(TokenAuth) ->
 
 
 %% @private
--spec verify_token_auth_insecure(token_auth()) ->
+-spec verify_token_credentials_insecure(token_credentials()) ->
     {undefined | auth_cache:token_ref(), verification_result()}.
-verify_token_auth_insecure(#token_auth{
+verify_token_credentials_insecure(#token_credentials{
     access_token = AccessToken,
     peer_ip = PeerIp,
     interface = Interface,

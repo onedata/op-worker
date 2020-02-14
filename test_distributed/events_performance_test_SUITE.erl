@@ -447,12 +447,12 @@ end_per_testcase(_Case, Config) ->
     Iden :: aai:subject(), Conn :: pid()) -> {ok, session:id()}.
 session_setup(Worker, Nonce, ?SUB(user, UserId) = Iden, Conn) ->
     AccessToken = initializer:create_access_token(UserId),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), oneclient, allow_data_access_caveats
     ),
     ?assertMatch({ok, _}, fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, Iden, TokenAuth, Conn
+        Worker, Nonce, Iden, TokenCredentials, Conn
     )).
 
 %%--------------------------------------------------------------------

@@ -9,10 +9,10 @@
 %%% Creates, maintains and provides functions for manipulation of auth cache,
 %%% that is mapping between token credentials and user auth.
 %%% Cache entries are kept for as long as token expiration allows (can be
-%%% cached forever if no time caveat is present). At the same time ?MODULE
+%%% cached forever if no time caveat is present). At the same time ?SERVER
 %%% subscribes in Onezone for token status changes and monitors them so that
 %%% it can reflect those changes (eg. revocation) in cached entries.
-%%% To avoid exhausting memory, ?MODULE performs periodic checks and purges
+%%% To avoid exhausting memory, ?SERVER performs periodic checks and purges
 %%% cache if size limit is breached. Cache is also purged, with some delay,
 %%% when connection to oz is lost (subscriptions may became invalid) and
 %%% immediately when mentioned connection is restored.
@@ -33,8 +33,8 @@
 -export([spec/0, start_link/0]).
 -export([
     get_token_ref/1,
-    get_token_auth_verification_result/1,
-    save_token_auth_verification_result/3,
+    get_token_credentials_verification_result/1,
+    save_token_credentials_verification_result/3,
 
     delete_cache_entry/1
 ]).
@@ -63,7 +63,7 @@
     {temporary, od_user:id(), temporary_token_secret:generation()}.
 
 -record(cache_entry, {
-    token_auth :: auth_manager:token_auth(),
+    token_credentials :: auth_manager:token_credentials(),
     verification_result :: auth_manager:verification_result(),
 
     token_ref :: undefined | token_ref(),
@@ -79,6 +79,7 @@
 -export_type([token_ref/0]).
 
 
+-define(SERVER, ?MODULE).
 -define(CACHE_NAME, ?MODULE).
 
 -define(CHECK_CACHE_SIZE_REQ, check_cache_size).
@@ -101,8 +102,8 @@
 -define(OZ_CONNECTION_STARTED_MSG, oz_connection_stared).
 -define(OZ_CONNECTION_TERMINATED_MSG, oz_connection_terminated).
 
--define(MONITOR_TOKEN_REQ(__TokenAuth, __TokenRef),
-    {monitor_token, __TokenAuth, __TokenRef}
+-define(MONITOR_TOKEN_REQ(__TokenCredentials, __TokenRef),
+    {monitor_token, __TokenCredentials, __TokenRef}
 ).
 
 -define(TOKEN_STATUS_CHANGED_MSG(__TokenId, __IsRevoked),
@@ -127,12 +128,12 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns child spec for ?MODULE to attach it to supervision.
+%% Returns child spec for ?SERVER to attach it to supervision.
 %% @end
 %%-------------------------------------------------------------------
 -spec spec() -> supervisor:child_spec().
 spec() -> #{
-    id => ?MODULE,
+    id => ?SERVER,
     start => {?MODULE, start_link, []},
     restart => permanent,
     shutdown => timer:seconds(10),
@@ -143,12 +144,12 @@ spec() -> #{
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the ?MODULE server.
+%% Starts the ?SERVER server.
 %% @end
 %%--------------------------------------------------------------------
 -spec start_link() -> {ok, pid()} | ignore | {error, Reason :: term()}.
 start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 
 -spec get_token_ref(tokens:token()) -> token_ref().
@@ -161,11 +162,11 @@ get_token_ref(#token{
     {temporary, UserId, Generation}.
 
 
--spec get_token_auth_verification_result(auth_manager:token_auth()) ->
+-spec get_token_credentials_verification_result(auth_manager:token_credentials()) ->
     {ok, auth_manager:verification_result()} | ?ERROR_NOT_FOUND.
-get_token_auth_verification_result(TokenAuth) ->
+get_token_credentials_verification_result(TokenCredentials) ->
     Now = ?NOW(),
-    try ets:lookup(?CACHE_NAME, TokenAuth) of
+    try ets:lookup(?CACHE_NAME, TokenCredentials) of
         [#cache_entry{cache_expiration = Expiration} = Item] when
             Expiration == undefined;
             (is_integer(Expiration) andalso Now < Expiration)
@@ -180,43 +181,43 @@ get_token_auth_verification_result(TokenAuth) ->
             ?ERROR_NOT_FOUND
     catch Type:Reason ->
         ?warning("Failed to lookup ~p cache (ets table) due to ~p:~p", [
-            ?MODULE, Type, Reason
+            ?CACHE_NAME, Type, Reason
         ]),
         ?ERROR_NOT_FOUND
     end.
 
 
--spec save_token_auth_verification_result(
-    auth_manager:token_auth(),
+-spec save_token_credentials_verification_result(
+    auth_manager:token_credentials(),
     undefined | token_ref(),
     auth_manager:verification_result()
 ) ->
     boolean().
-save_token_auth_verification_result(TokenAuth, TokenRef, VerificationResult) ->
+save_token_credentials_verification_result(TokenCredentials, TokenRef, VerificationResult) ->
     CacheEntry = #cache_entry{
-        token_auth = TokenAuth,
+        token_credentials = TokenCredentials,
         verification_result = VerificationResult,
 
         token_ref = TokenRef,
         token_revoked = false,
-        cache_expiration = infer_cache_entry_expiration(TokenAuth, VerificationResult)
+        cache_expiration = infer_cache_entry_expiration(TokenCredentials, VerificationResult)
     },
     try
         ets:insert(?CACHE_NAME, CacheEntry),
-        maybe_request_token_monitoring(TokenAuth, TokenRef, VerificationResult),
-        maybe_fetch_user_data(TokenAuth, VerificationResult),
+        maybe_request_token_monitoring(TokenCredentials, TokenRef, VerificationResult),
+        maybe_fetch_user_data(TokenCredentials, VerificationResult),
         true
     catch Type:Reason ->
         ?warning("Failed to save entry in ~p cache (ets table) due to ~p:~p", [
-            ?MODULE, Type, Reason
+            ?CACHE_NAME, Type, Reason
         ]),
         false
     end.
 
 
--spec delete_cache_entry(auth_manager:token_auth()) -> ok.
-delete_cache_entry(TokenAuth) ->
-    ets:delete(?CACHE_NAME, TokenAuth),
+-spec delete_cache_entry(auth_manager:token_credentials()) -> ok.
+delete_cache_entry(TokenCredentials) ->
+    ets:delete(?CACHE_NAME, TokenCredentials),
     ok.
 
 
@@ -275,7 +276,7 @@ init(_) ->
     process_flag(trap_exit, true),
 
     ?CACHE_NAME = ets:new(?CACHE_NAME, [
-        set, public, named_table, {keypos, #cache_entry.token_auth}
+        set, public, named_table, {keypos, #cache_entry.token_credentials}
     ]),
     schedule_cache_size_checkup(),
 
@@ -316,17 +317,17 @@ handle_cast(?OZ_CONNECTION_STARTED_MSG, State) ->
 handle_cast(?OZ_CONNECTION_TERMINATED_MSG, State) ->
     {noreply, schedule_cache_purge(State)};
 
-handle_cast(?MONITOR_TOKEN_REQ(TokenAuth, TokenRef), State) ->
+handle_cast(?MONITOR_TOKEN_REQ(TokenCredentials, TokenRef), State) ->
     ?debug("Received request to monitor token (~s)", [TokenRef]),
 
     case is_token_revoked(TokenRef) of
         {ok, IsRevoked} ->
-            ets:update_element(?CACHE_NAME, TokenAuth, [
+            ets:update_element(?CACHE_NAME, TokenCredentials, [
                 {#cache_entry.token_revoked, IsRevoked}
             ]);
         {error, _} = Error ->
             ets:insert(?CACHE_NAME, #cache_entry{
-                token_auth = TokenAuth,
+                token_credentials = TokenCredentials,
                 verification_result = Error,
 
                 token_ref = TokenRef,
@@ -462,7 +463,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @private
 -spec broadcast(Msg :: term()) -> ok.
 broadcast(Msg) ->
-    gen_server:abcast(consistent_hashing:get_all_nodes(), ?MODULE, Msg),
+    gen_server:abcast(consistent_hashing:get_all_nodes(), ?SERVER, Msg),
     ok.
 
 
@@ -470,7 +471,7 @@ broadcast(Msg) ->
 -spec purge_cache(state()) -> state().
 purge_cache(State) ->
     ets:delete_all_objects(?CACHE_NAME),
-    ?debug("Purged ~p cache", [?MODULE]),
+    ?debug("Purged ~p cache", [?CACHE_NAME]),
 
     cancel_cache_purge_timer(State).
 
@@ -489,20 +490,20 @@ is_token_revoked({temporary, UserId, Generation}) ->
 
 
 %% @private
--spec infer_cache_entry_expiration(auth_manager:token_auth(),
+-spec infer_cache_entry_expiration(auth_manager:token_credentials(),
     auth_manager:verification_result()) -> undefined | timestamp().
-infer_cache_entry_expiration(_TokenAuth, {error, _}) ->
+infer_cache_entry_expiration(_TokenCredentials, {error, _}) ->
     ?NOW() + ?CACHE_ITEM_DEFAULT_TTL;
-infer_cache_entry_expiration(TokenAuth, {ok, _, Expiration}) ->
-    case auth_manager:get_consumer_token(TokenAuth) of
+infer_cache_entry_expiration(TokenCredentials, {ok, _, Expiration}) ->
+    case auth_manager:get_consumer_token(TokenCredentials) of
         undefined ->
             Expiration;
         _ ->
             % Consumer token may come from subject not supported by this
             % provider and as such cannot be monitored (subscription in
             % oz for token issued by such subjects). That is why verification
-            % result for token_auth with consumer token should be cached
-            % only for short period of time.
+            % result for token_credentials with consumer token should be
+            % cached only for short period of time.
             ?NOW() + ?CACHE_ITEM_DEFAULT_TTL
     end.
 
@@ -510,17 +511,17 @@ infer_cache_entry_expiration(TokenAuth, {ok, _, Expiration}) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Asks ?MODULE to monitor token status/revocation in case of successful
+%% Asks ?SERVER to monitor token status/revocation in case of successful
 %% token verification. In case of changes in token status/revocation or
-%% token deletion ?MODULE reflects those changes in cached entry.
+%% token deletion ?SERVER reflects those changes in cached entry.
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_request_token_monitoring(auth_manager:token_auth(),
+-spec maybe_request_token_monitoring(auth_manager:token_credentials(),
     undefined | token_ref(), auth_manager:verification_result()) -> ok.
-maybe_request_token_monitoring(_TokenAuth, _TokenRef, {error, _}) ->
+maybe_request_token_monitoring(_TokenCredentials, _TokenRef, {error, _}) ->
     ok;
-maybe_request_token_monitoring(TokenAuth, TokenRef, {ok, _, _}) ->
-    gen_server:cast(?MODULE, ?MONITOR_TOKEN_REQ(TokenAuth, TokenRef)),
+maybe_request_token_monitoring(TokenCredentials, TokenRef, {ok, _, _}) ->
+    gen_server:cast(?SERVER, ?MONITOR_TOKEN_REQ(TokenCredentials, TokenRef)),
     ok.
 
 
@@ -532,15 +533,15 @@ maybe_request_token_monitoring(TokenAuth, TokenRef, {ok, _, _}) ->
 %%
 %% NOTE !!!
 %% It must be called after caching verification result as to avoid infinite
-%% loop (gs_client_worker would try to verify given TokenAuth).
+%% loop (gs_client_worker would try to verify given TokenCredentials).
 %% @end
 %%--------------------------------------------------------------------
--spec maybe_fetch_user_data(auth_manager:token_auth(),
+-spec maybe_fetch_user_data(auth_manager:token_credentials(),
     auth_manager:verification_result()) -> ok.
-maybe_fetch_user_data(_TokenAuth, {error, _}) ->
+maybe_fetch_user_data(_TokenCredentials, {error, _}) ->
     ok;
-maybe_fetch_user_data(TokenAuth, {ok, ?USER(UserId), _TokenExpiration}) ->
-    user_logic:get(TokenAuth, UserId),
+maybe_fetch_user_data(TokenCredentials, {ok, ?USER(UserId), _TokenExpiration}) ->
+    user_logic:get(TokenCredentials, UserId),
     ok.
 
 

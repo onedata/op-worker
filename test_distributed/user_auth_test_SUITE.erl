@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -63,24 +63,24 @@ auth_cache_size_test(Config) ->
 
     AccessToken = initializer:create_access_token(?USER_ID_1),
 
-    TokenAuth1 = create_token_auth(AccessToken, undefined),
-    TokenAuth2 = create_token_auth(AccessToken, graphsync),
-    TokenAuth3 = create_token_auth(AccessToken, rest),
-    TokenAuth4 = create_token_auth(AccessToken, oneclient, allow_data_access_caveats),
-    TokenAuth5 = create_token_auth(AccessToken, oneclient, disallow_data_access_caveats),
+    TokenCredentials1 = create_token_credentials(AccessToken, undefined),
+    TokenCredentials2 = create_token_credentials(AccessToken, graphsync),
+    TokenCredentials3 = create_token_credentials(AccessToken, rest),
+    TokenCredentials4 = create_token_credentials(AccessToken, oneclient, allow_data_access_caveats),
+    TokenCredentials5 = create_token_credentials(AccessToken, oneclient, disallow_data_access_caveats),
 
-    lists:foreach(fun({TokenAuth, Worker, ExpCacheSize}) ->
+    lists:foreach(fun({TokenCredentials, Worker, ExpCacheSize}) ->
         ?assertMatch(
             {ok, ?USER(?USER_ID_1), undefined},
-            verify_auth(Worker, TokenAuth)
+            verify_credentials(Worker, TokenCredentials)
         ),
         ?assertEqual(ExpCacheSize, get_auth_cache_size(Worker), ?ATTEMPTS)
     end, [
-        {TokenAuth1, Worker1, 1},
-        {TokenAuth2, Worker2, 1},
-        {TokenAuth3, Worker1, 2},
-        {TokenAuth4, Worker2, 2},
-        {TokenAuth5, Worker1, 3}
+        {TokenCredentials1, Worker1, 1},
+        {TokenCredentials2, Worker2, 1},
+        {TokenCredentials3, Worker1, 2},
+        {TokenCredentials4, Worker2, 2},
+        {TokenCredentials5, Worker1, 3}
     ]),
 
     % Default cache size limit is big enough so that 2 or 3 entries will not be purged
@@ -108,17 +108,17 @@ auth_cache_named_token_events_test(Config) ->
     AccessToken1 = initializer:create_access_token(?USER_ID_1, [], named),
     AccessToken2 = initializer:create_access_token(?USER_ID_2, [], named),
 
-    TokenAuth1 = create_token_auth(AccessToken1, rest),
-    TokenAuth2 = create_token_auth(AccessToken1, oneclient),
-    TokenAuth3 = create_token_auth(AccessToken2, graphsync),
+    TokenCredentials1 = create_token_credentials(AccessToken1, rest),
+    TokenCredentials2 = create_token_credentials(AccessToken1, oneclient),
+    TokenCredentials3 = create_token_credentials(AccessToken2, graphsync),
 
-    lists:foreach(fun({TokenAuth, Worker, ExpUserId, ExpCacheSize}) ->
-        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker, TokenAuth)),
+    lists:foreach(fun({TokenCredentials, Worker, ExpUserId, ExpCacheSize}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_credentials(Worker, TokenCredentials)),
         ?assertEqual(ExpCacheSize, get_auth_cache_size(Worker), ?ATTEMPTS)
     end, [
-        {TokenAuth1, Worker1, ?USER_ID_1, 1},
-        {TokenAuth2, Worker2, ?USER_ID_1, 1},
-        {TokenAuth3, Worker1, ?USER_ID_2, 2}
+        {TokenCredentials1, Worker1, ?USER_ID_1, 1},
+        {TokenCredentials2, Worker2, ?USER_ID_1, 1},
+        {TokenCredentials3, Worker1, ?USER_ID_2, 2}
     ]),
 
     %% TOKEN EVENTS SEND ON ANY NODE SHOULD AFFECT ALL NODES AUTH CACHE
@@ -126,36 +126,36 @@ auth_cache_named_token_events_test(Config) ->
     % When AccessToken1 is revoked
     simulate_gs_token_status_update(Worker2, ?USER_ID_1, true),
 
-    % Then only TokenAuths based on that token should be revoked
-    lists:foreach(fun({TokenAuth, Worker}) ->
-        ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker, TokenAuth))
-    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
-    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
+    % Then only TokenCredentialss based on that token should be revoked
+    lists:foreach(fun({TokenCredentials, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker, TokenCredentials))
+    end, [{TokenCredentials1, Worker1}, {TokenCredentials2, Worker2}]),
+    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker1, TokenCredentials3)),
 
     % Revoked tokens can be re-revoked and used again
     simulate_gs_token_status_update(Worker1, ?USER_ID_1, false),
     simulate_gs_token_status_update(Worker2, ?USER_ID_2, true),
 
-    lists:foreach(fun({TokenAuth, Worker}) ->
-        ?assertMatch({ok, ?USER(?USER_ID_1), _}, verify_auth(Worker, TokenAuth))
-    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
-    ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker1, TokenAuth3)),
+    lists:foreach(fun({TokenCredentials, Worker}) ->
+        ?assertMatch({ok, ?USER(?USER_ID_1), _}, verify_credentials(Worker, TokenCredentials))
+    end, [{TokenCredentials1, Worker1}, {TokenCredentials2, Worker2}]),
+    ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker1, TokenCredentials3)),
 
     % Deleting token should result in ?ERROR_TOKEN_INVALID
     simulate_gs_token_deletion(Worker1, ?USER_ID_1),
 
-    lists:foreach(fun({TokenAuth, Worker}) ->
-        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker, TokenAuth))
-    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
-    ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker1, TokenAuth3)),
+    lists:foreach(fun({TokenCredentials, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_INVALID, verify_credentials(Worker, TokenCredentials))
+    end, [{TokenCredentials1, Worker1}, {TokenCredentials2, Worker2}]),
+    ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker1, TokenCredentials3)),
 
     % Revoking already deleted token should not change error
     simulate_gs_token_status_update(Worker1, ?USER_ID_1, true),
 
-    lists:foreach(fun({TokenAuth, Worker}) ->
-        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker, TokenAuth))
-    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
-    ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker1, TokenAuth3)),
+    lists:foreach(fun({TokenCredentials, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_INVALID, verify_credentials(Worker, TokenCredentials))
+    end, [{TokenCredentials1, Worker1}, {TokenCredentials2, Worker2}]),
+    ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker1, TokenCredentials3)),
 
     clear_auth_caches(Config).
 
@@ -168,16 +168,16 @@ auth_cache_temporary_token_events_test(Config) ->
     AccessToken1 = initializer:create_access_token(?USER_ID_1, [], temporary),
     AccessToken2 = initializer:create_access_token(?USER_ID_2, [], temporary),
 
-    TokenAuth1 = create_token_auth(AccessToken1, rest),
-    TokenAuth2 = create_token_auth(AccessToken1, oneclient),
-    TokenAuth3 = create_token_auth(AccessToken2, graphsync),
+    TokenCredentials1 = create_token_credentials(AccessToken1, rest),
+    TokenCredentials2 = create_token_credentials(AccessToken1, oneclient),
+    TokenCredentials3 = create_token_credentials(AccessToken2, graphsync),
 
-    lists:foreach(fun({TokenAuth, Worker, ExpUserId}) ->
-        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker, TokenAuth))
+    lists:foreach(fun({TokenCredentials, Worker, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_credentials(Worker, TokenCredentials))
     end, [
-        {TokenAuth1, Worker1, ?USER_ID_1},
-        {TokenAuth2, Worker2, ?USER_ID_1},
-        {TokenAuth3, Worker1, ?USER_ID_2}
+        {TokenCredentials1, Worker1, ?USER_ID_1},
+        {TokenCredentials2, Worker2, ?USER_ID_1},
+        {TokenCredentials3, Worker1, ?USER_ID_2}
     ]),
 
     %% TOKEN EVENTS SEND ON ANY NODE SHOULD AFFECT ALL NODES AUTH CACHE
@@ -185,27 +185,27 @@ auth_cache_temporary_token_events_test(Config) ->
     % When temporary tokens of ?USER_ID_1 are revoked
     simulate_gs_temporary_tokens_revocation(Worker1, ?USER_ID_1),
 
-    % Then all TokenAuths based on temporary tokens should be revoked
-    lists:foreach(fun({TokenAuth, Worker}) ->
-        ?assertMatch(?ERROR_TOKEN_REVOKED, verify_auth(Worker, TokenAuth))
-    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
-    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
+    % Then all TokenCredentialss based on temporary tokens should be revoked
+    lists:foreach(fun({TokenCredentials, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker, TokenCredentials))
+    end, [{TokenCredentials1, Worker1}, {TokenCredentials2, Worker2}]),
+    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker1, TokenCredentials3)),
 
     % Deleting temporary tokens of ?USER_ID_1 should result in ?ERROR_TOKEN_INVALID
     simulate_gs_temporary_tokens_deletion(Worker1, ?USER_ID_1),
 
-    lists:foreach(fun({TokenAuth, Worker}) ->
-        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker, TokenAuth))
-    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
-    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
+    lists:foreach(fun({TokenCredentials, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_INVALID, verify_credentials(Worker, TokenCredentials))
+    end, [{TokenCredentials1, Worker1}, {TokenCredentials2, Worker2}]),
+    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker1, TokenCredentials3)),
 
     % Revoking already deleted token should not change error
     simulate_gs_temporary_tokens_revocation(Worker1, ?USER_ID_1),
 
-    lists:foreach(fun({TokenAuth, Worker}) ->
-        ?assertMatch(?ERROR_TOKEN_INVALID, verify_auth(Worker, TokenAuth))
-    end, [{TokenAuth1, Worker1}, {TokenAuth2, Worker2}]),
-    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_auth(Worker1, TokenAuth3)),
+    lists:foreach(fun({TokenCredentials, Worker}) ->
+        ?assertMatch(?ERROR_TOKEN_INVALID, verify_credentials(Worker, TokenCredentials))
+    end, [{TokenCredentials1, Worker1}, {TokenCredentials2, Worker2}]),
+    ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker1, TokenCredentials3)),
 
     clear_auth_caches(Config).
 
@@ -218,14 +218,14 @@ auth_cache_oz_conn_status_test(Config) ->
     AccessToken1 = initializer:create_access_token(?USER_ID_1, [], temporary),
     AccessToken2 = initializer:create_access_token(?USER_ID_2, [], named),
 
-    TokenAuth1 = create_token_auth(AccessToken1),
-    TokenAuth2 = create_token_auth(AccessToken2),
+    TokenCredentials1 = create_token_credentials(AccessToken1),
+    TokenCredentials2 = create_token_credentials(AccessToken2),
 
-    lists:foreach(fun({TokenAuth, Worker, ExpUserId}) ->
-        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker, TokenAuth))
+    lists:foreach(fun({TokenCredentials, Worker, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_credentials(Worker, TokenCredentials))
     end, [
-        {TokenAuth1, Worker1, ?USER_ID_1},
-        {TokenAuth2, Worker2, ?USER_ID_2}]
+        {TokenCredentials1, Worker1, ?USER_ID_1},
+        {TokenCredentials2, Worker2, ?USER_ID_2}]
     ),
 
     ?assertEqual(1, get_auth_cache_size(Worker1)),
@@ -236,11 +236,11 @@ auth_cache_oz_conn_status_test(Config) ->
     ?assertEqual(0, get_auth_cache_size(Worker1)),
     ?assertEqual(0, get_auth_cache_size(Worker2)),
 
-    lists:foreach(fun({TokenAuth, Worker, ExpUserId}) ->
-        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_auth(Worker, TokenAuth))
+    lists:foreach(fun({TokenCredentials, Worker, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_credentials(Worker, TokenCredentials))
     end, [
-        {TokenAuth1, Worker2, ?USER_ID_1},
-        {TokenAuth2, Worker1, ?USER_ID_2}]
+        {TokenCredentials1, Worker2, ?USER_ID_1},
+        {TokenCredentials2, Worker1, ?USER_ID_2}]
     ),
 
     % Connection termination should schedule cache purge after 'auth_invalidation_delay'
@@ -265,7 +265,7 @@ token_authentication(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     Nonce = <<"token_authentication">>,
     AccessToken = initializer:create_access_token(?USER_ID_1),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), oneclient, allow_data_access_caveats
     ),
@@ -278,10 +278,10 @@ token_authentication(Config) ->
         {ok, #document{value = #session{identity = ?SUB(user, ?USER_ID_1)}}},
         rpc:call(Worker1, session, get, [SessId])
     ),
-    ?assertMatch(TokenAuth, session:get_auth(Doc)),
+    ?assertMatch(TokenCredentials, session:get_credentials(Doc)),
     ?assertMatch(
         {ok, ?USER(?USER_ID_1), undefined},
-        rpc:call(Worker1, auth_manager, verify_auth, [TokenAuth])
+        rpc:call(Worker1, auth_manager, verify_credentials, [TokenCredentials])
     ),
     ok = ssl:close(Sock).
 
@@ -294,7 +294,7 @@ token_expiration(Config) ->
     AccessToken1 = initializer:create_access_token(?USER_ID_1, [#cv_time{
         valid_until = time_utils:system_time_seconds() + 2
     }]),
-    TokenAuth1 = create_token_auth(AccessToken1),
+    TokenCredentials1 = create_token_credentials(AccessToken1),
 
     {ok, {_, SessId1}} = fuse_test_utils:connect_via_token(Worker1, [], Nonce, AccessToken1),
 
@@ -304,7 +304,7 @@ token_expiration(Config) ->
     ),
     ?assertMatch(
         {ok, ?USER(?USER_ID_1), _},
-        rpc:call(Worker1, auth_manager, verify_auth, [TokenAuth1])
+        rpc:call(Worker1, auth_manager, verify_credentials, [TokenCredentials1])
     ),
 
     timer:sleep(timer:seconds(4)),
@@ -315,7 +315,7 @@ token_expiration(Config) ->
     ),
     ?assertMatch(
         ?ERROR_UNAUTHORIZED,
-        rpc:call(Worker1, auth_manager, verify_auth, [TokenAuth1])
+        rpc:call(Worker1, auth_manager, verify_credentials, [TokenCredentials1])
     ),
 
     % But it is possible to update credentials and increase expiration
@@ -431,8 +431,8 @@ mock_user_logic(Config) ->
             catch
                 _:_ -> ?ERROR_UNAUTHORIZED
             end;
-        (TokenAuth, UserId) ->
-            case auth_manager:verify_auth(TokenAuth) of
+        (TokenCredentials, UserId) ->
+            case auth_manager:verify_credentials(TokenCredentials) of
                 {ok, ?ROOT, _} ->
                     maps:get(UserId, Users, {error, not_found});
                 {ok, ?USER(UserId), _} ->
@@ -483,8 +483,8 @@ unmock_token_logic(Config) ->
     test_utils:mock_validate_and_unload(Workers, token_logic).
 
 
-verify_auth(Worker, TokenAuth) ->
-    rpc:call(Worker, auth_manager, verify_auth, [TokenAuth]).
+verify_credentials(Worker, TokenCredentials) ->
+    rpc:call(Worker, auth_manager, verify_credentials, [TokenCredentials]).
 
 
 clear_auth_cache(Worker) ->
@@ -514,31 +514,31 @@ clear_auth_caches(Config) ->
     end, ?config(op_worker_nodes, Config)).
 
 
--spec create_token_auth(auth_manager:access_token()) -> auth_manager:token_auth().
-create_token_auth(AccessToken) ->
+-spec create_token_credentials(auth_manager:access_token()) -> auth_manager:token_credentials().
+create_token_credentials(AccessToken) ->
     Interface = case rand:uniform(4) of
         1 -> undefined;
         2 -> rest;
         3 -> graphsync;
         4 -> oneclient
     end,
-    create_token_auth(AccessToken, Interface).
+    create_token_credentials(AccessToken, Interface).
 
 
--spec create_token_auth(auth_manager:access_token(), undefined | cv_interface:interface()) ->
-    auth_manager:token_auth().
-create_token_auth(AccessToken, Interface) ->
+-spec create_token_credentials(auth_manager:access_token(), undefined | cv_interface:interface()) ->
+    auth_manager:token_credentials().
+create_token_credentials(AccessToken, Interface) ->
     DataAccessCaveatsPolicy = case rand:uniform(2) of
         1 -> allow_data_access_caveats;
         2 -> disallow_data_access_caveats
     end,
-    create_token_auth(AccessToken, Interface, DataAccessCaveatsPolicy).
+    create_token_credentials(AccessToken, Interface, DataAccessCaveatsPolicy).
 
 
--spec create_token_auth(auth_manager:access_token(), undefined | cv_interface:interface(),
-    data_access_caveats:policy()) -> auth_manager:token_auth().
-create_token_auth(AccessToken, Interface, DataAccessCaveatsPolicy) ->
-    auth_manager:build_token_auth(
+-spec create_token_credentials(auth_manager:access_token(), undefined | cv_interface:interface(),
+    data_access_caveats:policy()) -> auth_manager:token_credentials().
+create_token_credentials(AccessToken, Interface, DataAccessCaveatsPolicy) ->
+    auth_manager:build_token_credentials(
         AccessToken, undefined, initializer:local_ip_v4(),
         Interface, DataAccessCaveatsPolicy
     ).

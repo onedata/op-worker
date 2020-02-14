@@ -27,7 +27,7 @@
 
 
 %% @formatter:off
--type client() :: session:id() | auth_manager:auth().
+-type client() :: session:id() | auth_manager:credentials().
 -type create_result() :: {ok, Data :: term()} |
                          {ok, {gri:gri(), doc()}} |
                          errors:error().
@@ -122,7 +122,7 @@ request(Client, Req) ->
     result().
 request(Client, Req, Timeout) ->
     try
-        case check_api_authorization(client_to_auth(Client), Req) of
+        case check_api_authorization(client_to_credentials(Client), Req) of
             ok ->
                 do_request(Client, Req, Timeout);
             {error, _} = Err1 ->
@@ -384,14 +384,14 @@ start_gs_connection() ->
 %% exfiltrated from the local provider cache in case of a limited token.
 %% @end
 %%--------------------------------------------------------------------
--spec check_api_authorization(auth_manager:auth(), gs_protocol:rpc_req() | gs_protocol:graph_req()) ->
+-spec check_api_authorization(auth_manager:credentials(), gs_protocol:graph_req()) ->
     ok | errors:error().
-check_api_authorization(?ROOT_AUTH, _) ->
+check_api_authorization(?ROOT_CREDENTIALS, _) ->
     ok;
-check_api_authorization(?GUEST_AUTH, _) ->
+check_api_authorization(?GUEST_CREDENTIALS, _) ->
     ok;
-check_api_authorization(TokenAuth, #gs_req_graph{operation = Operation, gri = GRI}) ->
-    case auth_manager:verify_auth(TokenAuth) of
+check_api_authorization(TokenCredentials, #gs_req_graph{operation = Operation, gri = GRI}) ->
+    case auth_manager:verify_credentials(TokenCredentials) of
         {ok, Auth, _} ->
             api_auth:check_authorization(Auth, ?OZ_WORKER, Operation, GRI);
         {error, _} = Error ->
@@ -478,7 +478,7 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
         end,
         GsReq = #gs_req{
             subtype = SubType,
-            auth_override = auth_manager:auth_to_gs_auth_override(client_to_auth(Client)),
+            auth_override = auth_manager:credentials_to_gs_auth_override(client_to_credentials(Client)),
             request = Request
         },
         case gen_server2:call(ConnRef, {async_request, GsReq, Timeout}) of
@@ -619,12 +619,12 @@ get_connection_pid() ->
 
 
 %% @private
--spec client_to_auth(client()) -> auth_manager:auth().
-client_to_auth(SessionId) when is_binary(SessionId) ->
-    {ok, Auth} = session:get_auth(SessionId),
-    client_to_auth(Auth);
-client_to_auth(SessionAuth) ->
-    SessionAuth.
+-spec client_to_credentials(client()) -> auth_manager:credentials().
+client_to_credentials(SessionId) when is_binary(SessionId) ->
+    {ok, Credentials} = session:get_credentials(SessionId),
+    Credentials;
+client_to_credentials(Credentials) ->
+    Credentials.
 
 
 %% @private
@@ -717,14 +717,14 @@ is_authorized_to_get(SessionId, AuthHint, GRI, CachedDoc) when is_binary(Session
     {ok, UserId} = session:get_user_id(SessionId),
     is_user_authorized_to_get(UserId, SessionId, AuthHint, GRI, CachedDoc);
 
-is_authorized_to_get(TokenAuth, AuthHint, GRI, CachedDoc) ->
-    case auth_manager:verify_auth(TokenAuth) of
+is_authorized_to_get(Credentials, AuthHint, GRI, CachedDoc) ->
+    case auth_manager:verify_credentials(Credentials) of
         {ok, ?ROOT, _} ->
             is_root_authorized_to_get(AuthHint, GRI, CachedDoc);
         {ok, ?NOBODY, _} ->
             is_guest_authorized_to_get(AuthHint, GRI, CachedDoc);
         {ok, ?USER(UserId), _} ->
-            is_user_authorized_to_get(UserId, TokenAuth, AuthHint, GRI, CachedDoc)
+            is_user_authorized_to_get(UserId, Credentials, AuthHint, GRI, CachedDoc)
     end.
 
 
@@ -860,4 +860,3 @@ is_user_authorized_to_get(UserId, _, _, #gri{type = od_handle, scope = private},
 
 is_user_authorized_to_get(_, _, _, _, _) ->
     false.
-

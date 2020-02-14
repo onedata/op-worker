@@ -237,7 +237,7 @@ mock_user_logic(Config) ->
     GetUserFun = fun
         (?ROOT_SESS_ID, ?USER_ID) ->
             UserDoc;
-        (?ROOT_AUTH, ?USER_ID) ->
+        (?ROOT_CREDENTIALS, ?USER_ID) ->
             UserDoc;
         (UserSessId, ?USER_ID) when is_binary(UserSessId) ->
             try session:get_user_id(UserSessId) of
@@ -246,8 +246,8 @@ mock_user_logic(Config) ->
             catch
                 _:_ -> ?ERROR_UNAUTHORIZED
             end;
-        (TokenAuth, ?USER_ID) ->
-            case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
+        (TokenCredentials, ?USER_ID) ->
+            case tokens:deserialize(auth_manager:get_access_token(TokenCredentials)) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     UserDoc;
                 {error, _} = Error ->
@@ -265,11 +265,11 @@ mock_user_logic(Config) ->
 
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(AccessToken, _, _, _) ->
-        TokenAuth = auth_manager:build_token_auth(
+        TokenCredentials = auth_manager:build_token_credentials(
             AccessToken, undefined,
             undefined, undefined, disallow_data_access_caveats
         ),
-        case GetUserFun(TokenAuth, ?USER_ID) of
+        case GetUserFun(TokenCredentials, ?USER_ID) of
             {ok, #document{key = UserId}} -> {ok, ?SUB(user, UserId), undefined};
             {error, _} = Error -> Error
         end

@@ -181,7 +181,7 @@ route_and_ignore_answer(ClientMsg = #client_message{
 }) ->
     Req = {dbsync_message, effective_session_id(ClientMsg), Msg},
     ok = worker_proxy:cast(dbsync_worker, Req);
-% Message that updates the #token_auth{} record in given session
+% Message that updates the #token_credentials{} record in given session
 % (originates from #'Macaroon' client message).
 route_and_ignore_answer(#client_message{
     message_body = #credentials{

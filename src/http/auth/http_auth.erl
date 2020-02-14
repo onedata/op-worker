@@ -1,7 +1,7 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2015-2019 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -28,27 +28,31 @@
 %%%===================================================================
 
 
--spec authenticate(cowboy_req:req(), cv_interface:interface(),
-    data_access_caveats:policy()) -> {ok, aai:auth()} | errors:error().
-authenticate(Req, Interface, DataCaveatsPolicy) ->
+-spec authenticate(
+    cowboy_req:req(),
+    cv_interface:interface(),
+    data_access_caveats:policy()
+) ->
+    {ok, aai:auth()} | errors:error().
+authenticate(Req, Interface, DataAccessCaveatsPolicy) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
             {ok, ?GUEST};
         SubjectAccessToken ->
             {PeerIp, _} = cowboy_req:peer(Req),
-            TokenAuth = auth_manager:build_token_auth(
+            TokenCredentials = auth_manager:build_token_credentials(
                 SubjectAccessToken, tokens:parse_consumer_token_header(Req),
-                PeerIp, Interface, DataCaveatsPolicy
+                PeerIp, Interface, DataAccessCaveatsPolicy
             ),
-            authenticate(TokenAuth)
+            authenticate(TokenCredentials)
     end.
 
 
--spec authenticate(auth_manager:token_auth()) ->
+-spec authenticate(auth_manager:token_credentials()) ->
     {ok, aai:auth()} | errors:error().
-authenticate(TokenAuth) ->
+authenticate(TokenCredentials) ->
     try
-        authenticate_insecure(TokenAuth)
+        authenticate_insecure(TokenCredentials)
     catch
         throw:Error ->
             Error;
@@ -66,13 +70,13 @@ authenticate(TokenAuth) ->
 
 
 %% @private
--spec authenticate_insecure(auth_manager:token_auth()) ->
+-spec authenticate_insecure(auth_manager:token_credentials()) ->
     {ok, aai:auth()} | no_return().
-authenticate_insecure(TokenAuth) ->
-    case auth_manager:verify_auth(TokenAuth) of
-        {ok, Auth, _TokenValidUntil} ->
-            Interface = auth_manager:get_interface(TokenAuth),
-            case create_or_reuse_session(Auth#auth.subject, TokenAuth, Interface) of
+authenticate_insecure(TokenCredentials) ->
+    case auth_manager:verify_credentials(TokenCredentials) of
+        {ok, #auth{subject = Identity} = Auth, _TokenValidUntil} ->
+            Interface = auth_manager:get_interface(TokenCredentials),
+            case create_or_reuse_session(Identity, TokenCredentials, Interface) of
                 {ok, SessionId} ->
                     {ok, Auth#auth{session_id = SessionId}};
                 {error, {invalid_identity, _}} ->
@@ -85,9 +89,13 @@ authenticate_insecure(TokenAuth) ->
 
 
 %% @private
--spec create_or_reuse_session(aai:subject(), auth_manager:token_auth(),
-    Interface :: graphsync | rest) -> {ok, session:id()} | {error, term()}.
-create_or_reuse_session(Identity, TokenAuth, graphsync) ->
-    session_manager:reuse_or_create_gui_session(Identity, TokenAuth);
-create_or_reuse_session(Identity, TokenAuth, rest) ->
-    session_manager:reuse_or_create_rest_session(Identity, TokenAuth).
+-spec create_or_reuse_session(
+    Identity :: aai:subject(),
+    auth_manager:token_credentials(),
+    Interface :: graphsync | rest
+) ->
+    {ok, session:id()} | {error, term()}.
+create_or_reuse_session(Identity, TokenCredentials, graphsync) ->
+    session_manager:reuse_or_create_gui_session(Identity, TokenCredentials);
+create_or_reuse_session(Identity, TokenCredentials, rest) ->
+    session_manager:reuse_or_create_rest_session(Identity, TokenCredentials).

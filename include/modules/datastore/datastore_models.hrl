@@ -236,7 +236,7 @@
     accessed :: undefined | integer(),
     type :: undefined | session:type(),
     identity :: aai:subject(),
-    auth :: undefined | auth_manager:auth(),
+    credentials :: undefined | auth_manager:credentials(),
     data_constraints :: data_constraints:constraints(),
     node :: node(),
     supervisor :: undefined | pid(),

@@ -48,12 +48,12 @@ maybe_create_proxied_session(ProviderId, ProviderIp, #client_message{
         consumer_token = ConsumerToken
     }
 }) when EffSessionId =/= undefined ->
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, ConsumerToken,
         ProviderIp, oneclient, allow_data_access_caveats
     ),
     Res = session_manager:reuse_or_create_proxied_session(
-        EffSessionId, ProviderId, TokenAuth, fuse
+        EffSessionId, ProviderId, TokenCredentials, fuse
     ),
     case Res of
         {ok, _} -> ok;

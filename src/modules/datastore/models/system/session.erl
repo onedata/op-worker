@@ -29,7 +29,7 @@
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
--export([get_auth/1, get_data_constraints/1, get_user_id/1]).
+-export([get_credentials/1, get_data_constraints/1, get_user_id/1]).
 -export([set_direct_io/3]).
 
 % exometer callbacks
@@ -281,25 +281,27 @@ get_sequencer_manager(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns auth record associated with session.
+%% Returns credentials associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth
-    (id()) -> {ok, Auth :: auth_manager:auth()} | {ok, undefined} | {error, term()};
-    (record() | doc()) -> auth_manager:auth().
-get_auth(?ROOT_SESS_ID) ->
-    {ok, auth_manager:root_auth()};
-get_auth(?GUEST_SESS_ID) ->
-    {ok, auth_manager:guest_auth()};
-get_auth(<<_/binary>> = SessId) ->
+-spec get_credentials
+    (id()) -> {ok, undefined | auth_manager:credentials()} | {error, term()};
+    (record() | doc()) -> auth_manager:credentials().
+get_credentials(?ROOT_SESS_ID) ->
+    {ok, ?ROOT_CREDENTIALS};
+get_credentials(?GUEST_SESS_ID) ->
+    {ok, ?GUEST_CREDENTIALS};
+get_credentials(<<_/binary>> = SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{auth = Auth}}} -> {ok, Auth};
-        {error, Reason} -> {error, Reason}
+        {ok, #document{value = #session{credentials = Credentials}}} ->
+            {ok, Credentials};
+        {error, _} = Error ->
+            Error
     end;
-get_auth(#session{auth = Auth}) ->
-    Auth;
-get_auth(#document{value = Session}) ->
-    get_auth(Session).
+get_credentials(#session{credentials = Credentials}) ->
+    Credentials;
+get_credentials(#document{value = Session}) ->
+    get_credentials(Session).
 
 
 -spec get_data_constraints(record() | doc()) -> data_constraints:constraints().

@@ -32,7 +32,7 @@
 -export([
     get_user/1, get_user_id/1,
     get_eff_spaces/1, get_session_id/1,
-    get_auth/1, get_data_constraints/1
+    get_credentials/1, get_data_constraints/1
 ]).
 -export([is_root/1, is_guest/1, is_normal_user/1, is_direct_io/2]).
 
@@ -105,12 +105,12 @@ get_session_id(#user_ctx{session = #document{key = SessId}}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets session's auth from user context.
+%% Gets session's credentials from user context.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth(ctx()) -> auth_manager:auth().
-get_auth(#user_ctx{session = Session}) ->
-    session:get_auth(Session).
+-spec get_credentials(ctx()) -> auth_manager:credentials().
+get_credentials(#user_ctx{session = Session}) ->
+    session:get_credentials(Session).
 
 %%--------------------------------------------------------------------
 %% @doc

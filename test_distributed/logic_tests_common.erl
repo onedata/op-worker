@@ -128,13 +128,13 @@ create_user_session(Config, UserId) ->
     [Node | _] = ?NODES(Config),
 
     AccessToken = initializer:create_access_token(UserId),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
     ),
-    {ok, ?USER(UserId), _} = rpc:call(Node, auth_manager, verify_auth, [TokenAuth]),
+    {ok, ?USER(UserId), _} = rpc:call(Node, auth_manager, verify_credentials, [TokenCredentials]),
     {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [
-        ?SUB(user, UserId), TokenAuth
+        ?SUB(user, UserId), TokenCredentials
     ]),
     % Make sure private user data is fetched (if user identity was cached, it might
     % not happen).
