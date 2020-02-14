@@ -85,7 +85,7 @@ get_handshake_error_msg(_) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     nonce = Nonce,
-    credentials = #credentials{
+    client_tokens = #client_tokens{
         access_token = AccessToken,
         consumer_token = ConsumerToken
     }

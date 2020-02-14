@@ -36,7 +36,7 @@
     get_peer_ip/1,
     get_interface/1,
     get_data_access_caveats_policy/1,
-    get_proto_credentials/1, update_proto_credentials/3
+    get_client_tokens/1, update_client_tokens/3
 ]).
 -export([
     credentials_to_gs_auth_override/1,
@@ -44,9 +44,9 @@
     verify_credentials/1
 ]).
 
--type proto_credentials() :: #credentials{}.
 -type access_token() :: tokens:serialized().
 -type consumer_token() :: undefined | tokens:serialized().
+-type client_tokens() :: #client_tokens{}.
 
 % Record containing access token for user authorization in OZ.
 -record(token_credentials, {
@@ -65,7 +65,7 @@
     errors:error().
 
 -export_type([
-    proto_credentials/0, access_token/0, consumer_token/0,
+    access_token/0, consumer_token/0, client_tokens/0,
     token_credentials/0, credentials/0,
     verification_result/0
 ]).
@@ -121,20 +121,20 @@ get_data_access_caveats_policy(#token_credentials{data_access_caveats_policy = P
     Policy.
 
 
--spec get_proto_credentials(token_credentials()) -> proto_credentials().
-get_proto_credentials(#token_credentials{
+-spec get_client_tokens(token_credentials()) -> client_tokens().
+get_client_tokens(#token_credentials{
     access_token = AccessToken,
     consumer_token = ConsumerToken
 }) ->
-    #credentials{
+    #client_tokens{
         access_token = AccessToken,
         consumer_token = ConsumerToken
     }.
 
 
--spec update_proto_credentials(token_credentials(), access_token(), consumer_token()) ->
+-spec update_client_tokens(token_credentials(), access_token(), consumer_token()) ->
     token_credentials().
-update_proto_credentials(TokenCredentials, AccessToken, ConsumerToken) ->
+update_client_tokens(TokenCredentials, AccessToken, ConsumerToken) ->
     TokenCredentials#token_credentials{
         access_token = AccessToken,
         consumer_token = ConsumerToken
@@ -181,16 +181,34 @@ get_caveats(TokenCredentials) ->
 %% Verifies identity of subject identified by specified credentials() and
 %% returns time this auth will be valid until. Nevertheless this check
 %% should be performed periodically for token_credentials() as tokens
-%% can be revoked.
+%% can be revoked/deleted.
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_credentials(credentials()) -> verification_result().
 verify_credentials(?ROOT_CREDENTIALS) ->
     {ok, #auth{subject = ?ROOT_IDENTITY}, undefined};
+
 verify_credentials(?GUEST_CREDENTIALS) ->
     {ok, #auth{subject = ?GUEST_IDENTITY}, undefined};
+
 verify_credentials(TokenCredentials) ->
-    verify_token_credentials(TokenCredentials).
+    case auth_cache:get_token_credentials_verification_result(TokenCredentials) of
+        {ok, CachedVerificationResult} ->
+            CachedVerificationResult;
+        ?ERROR_NOT_FOUND ->
+            try
+                {TokenRef, VerificationResult} = verify_token_credentials(TokenCredentials),
+                auth_cache:save_token_credentials_verification_result(
+                    TokenCredentials, TokenRef, VerificationResult
+                ),
+                VerificationResult
+            catch Type:Reason ->
+                ?error_stacktrace("Cannot verify user credentials due to ~p:~p", [
+                    Type, Reason
+                ]),
+                ?ERROR_UNAUTHORIZED
+            end
+    end.
 
 
 %%%===================================================================
@@ -199,31 +217,9 @@ verify_credentials(TokenCredentials) ->
 
 
 %% @private
--spec verify_token_credentials(token_credentials()) -> verification_result().
-verify_token_credentials(TokenCredentials) ->
-    case auth_cache:get_token_credentials_verification_result(TokenCredentials) of
-        {ok, CachedVerificationResult} ->
-            CachedVerificationResult;
-        ?ERROR_NOT_FOUND ->
-            try
-                {TokenRef, VerificationResult} = verify_token_credentials_insecure(TokenCredentials),
-                auth_cache:save_token_credentials_verification_result(
-                    TokenCredentials, TokenRef, VerificationResult
-                ),
-                VerificationResult
-            catch Type:Reason ->
-                ?error_stacktrace("Cannot verify user auth due to ~p:~p", [
-                    Type, Reason
-                ]),
-                ?ERROR_UNAUTHORIZED
-            end
-    end.
-
-
-%% @private
--spec verify_token_credentials_insecure(token_credentials()) ->
+-spec verify_token_credentials(token_credentials()) ->
     {undefined | auth_cache:token_ref(), verification_result()}.
-verify_token_credentials_insecure(#token_credentials{
+verify_token_credentials(#token_credentials{
     access_token = AccessToken,
     peer_ip = PeerIp,
     interface = Interface,

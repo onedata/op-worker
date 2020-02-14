@@ -16,7 +16,7 @@
 -include("proto/common/credentials.hrl").
 
 -record(client_handshake_request, {
-    credentials :: auth_manager:proto_credentials(),
+    client_tokens :: auth_manager:client_tokens(),
     nonce :: binary(),
     version :: binary(),
     compatible_oneprovider_versions :: [binary()]

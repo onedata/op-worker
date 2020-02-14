@@ -43,7 +43,7 @@
     #client_message{}) -> ok | {error, term()}.
 maybe_create_proxied_session(ProviderId, ProviderIp, #client_message{
     effective_session_id = EffSessionId,
-    effective_session_credentials = #credentials{
+    effective_client_tokens = #client_tokens{
         access_token = AccessToken,
         consumer_token = ConsumerToken
     }
