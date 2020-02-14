@@ -51,10 +51,10 @@ handle_qos_entry_change(SpaceId, #document{
 } = QosEntryDoc) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
     file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
+    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     case qos_entry:is_possible(QosEntry) of
         true ->
             {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosEntry),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs);
         false ->
             ok = qos_entry:add_to_impossible_list(QosEntryId, SpaceId),
