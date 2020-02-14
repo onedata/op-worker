@@ -81,5 +81,7 @@ cancel(SpaceId, StorageId) ->
 
 -spec space_unsupported(od_space:id(), storage:id()) -> ok | {error, term()}.
 space_unsupported(SpaceId, StorageId) ->
+    cancel(SpaceId, StorageId),
+    storage_sync_traverse:delete_ended(),
     storage_sync_monitoring:delete(SpaceId, StorageId),
     space_strategies:delete(SpaceId).

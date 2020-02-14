@@ -62,7 +62,7 @@
 -export_type([scan_status/0, info/0, master_job/0, slave_job/0]).
 
 %% API
--export([init_pool/0, stop_pool/0, run_import/3, run_update/3, cancel/2]).
+-export([init_pool/0, stop_pool/0, run_import/3, run_update/3, cancel/2, delete_ended/0]).
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, get_job/1, update_job_progress/5, to_string/1,
@@ -120,10 +120,19 @@ cancel(SpaceId, StorageId) ->
     case storage_sync_monitoring:get_finished_scans_num(SpaceId, StorageId) of
         {ok, ScansNum} ->
             traverse:cancel(?POOL_BIN, encode_task_id(SpaceId, StorageId, ScansNum + 1));
-        {error, ?ENOENT} ->
-            ?warning("Cannot cancel storage sync for space ~p and storage ~p as it is not configured"),
+        {error, not_found} ->
+            ?debug("Cannot cancel storage sync for space ~p and storage ~p as it is not configured", 
+                [SpaceId, StorageId]),
             ok
     end.
+
+-spec delete_ended() -> ok.
+delete_ended() ->
+    {ok, TaskIds, _} = traverse_task_list:list(?POOL_BIN, ended),
+    lists:foreach(fun(T) ->
+        ok = traverse_task:delete_ended(?POOL_BIN, T)
+    end, TaskIds).
+    
 
 %===================================================================
 % Pool callbacks

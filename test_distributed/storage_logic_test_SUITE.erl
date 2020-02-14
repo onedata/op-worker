@@ -19,12 +19,14 @@
 
 -export([
     get_test/1,
-    subscribe_test/1
+    subscribe_test/1,
+    cease_support_cleanup_test/1
 ]).
 
 all() -> ?ALL([
     get_test,
-    subscribe_test
+    subscribe_test,
+    cease_support_cleanup_test
 ]).
 
 
@@ -121,6 +123,48 @@ subscribe_test(Config) ->
 
     ok.
 
+cease_support_cleanup_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space1">>,
+    
+    {ok, StorageId} = rpc:call(Node, space_logic, get_local_storage_id, [SpaceId]),
+    
+    ok = rpc:call(Node, storage_sync, configure_import, [SpaceId, true, #{max_depth => 5, sync_acl => true}]),
+    ok = rpc:call(Node, file_popularity_api, enable, [SpaceId]),
+    ACConfig =  #{
+        enabled => true,
+        target => 0,
+        threshold => 100
+    },
+    ok = rpc:call(Node, autocleaning_api, configure, [SpaceId, ACConfig]),
+    ok = rpc:call(Node, storage_sync_worker, schedule_spaces_check, [0]),
+    
+    ?assertMatch({ok, _}, rpc:call(Node, space_strategies, get, [SpaceId])),
+    ?assertMatch({ok, _}, rpc:call(Node, storage_sync_monitoring, get, [SpaceId, StorageId]), 10),
+    ?assertMatch({ok, _}, rpc:call(Node, autocleaning, get, [SpaceId])),
+    ?assertMatch({ok, _}, rpc:call(Node, file_popularity_config, get, [SpaceId])),
+    ?assertMatch(true, rpc:call(Node, file_popularity_api, is_enabled, [SpaceId])),
+    ?assertMatch({ok, [_], _}, rpc:call(Node, traverse_task_list, list, [<<"storage_sync_traverse">>, ended]), 10),
+    
+    {ok, Token} = tokens:serialize(tokens:construct(#token{
+        onezone_domain = <<"zone">>,
+        subject = ?SUB(user, <<"user1">>),
+        id = <<"user1">>,
+        type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId),
+        persistence = named
+    }, <<"secret">>, [])),
+    
+    % force cleanup by adding new support when remnants of previous one still exist
+    {ok, _} = rpc:call(Node, storage, support_space, [StorageId, Token, 10]),
+    
+    ?assertEqual({error, not_found}, rpc:call(Node, space_strategies, get, [SpaceId])),
+    ?assertEqual({error, not_found}, rpc:call(Node, storage_sync_monitoring, get, [SpaceId, StorageId])),
+    ?assertEqual(undefined, rpc:call(Node, autocleaning, get_config, [SpaceId])),
+    ?assertEqual({error, not_found}, rpc:call(Node, autocleaning, get, [SpaceId])),
+    ?assertEqual(false, rpc:call(Node, file_popularity_api, is_enabled, [SpaceId])),
+    ?assertEqual({error, not_found}, rpc:call(Node, file_popularity_config, get, [SpaceId])),
+    ?assertMatch({ok, [], _}, rpc:call(Node, traverse_task_list, list, [<<"storage_sync_traverse">>, ended])).
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -132,9 +176,26 @@ init_per_suite(Config) ->
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
+init_per_testcase(cease_support_cleanup_test, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Nodes, provider_logic),
+    test_utils:mock_new(Nodes, space_logic),
+    test_utils:mock_expect(Nodes, provider_logic, supports_space, fun(_) -> false end),
+    test_utils:mock_expect(Nodes, provider_logic, get_support_size, fun(_) -> {ok, 1000} end),
+    test_utils:mock_expect(Nodes, provider_logic, get_spaces, fun() -> {ok, [<<"space1">>]} end),
+    Config1 = initializer:setup_storage(Config),
+    lists:foreach(fun(Node) ->
+        StorageId = ?config({storage_id, ?GET_DOMAIN(Node)}, Config1),
+        test_utils:mock_expect(Node, space_logic, get_local_storage_id, fun(_) -> {ok, StorageId} end)
+    end, Nodes),
+    test_utils:mock_expect(Nodes, storage_logic, support_space, fun(_, _, _) ->  {ok, <<"space1">>} end),
+    Config1;
 init_per_testcase(_, Config) ->
     logic_tests_common:init_per_testcase(Config).
 
+end_per_testcase(cease_support_cleanup_test, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Nodes);
 end_per_testcase(_, _Config) ->
     ok.
 
