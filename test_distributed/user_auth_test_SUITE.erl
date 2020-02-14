@@ -27,6 +27,7 @@
 ]).
 
 -export([
+    auth_cache_expiration_test/1,
     auth_cache_size_test/1,
     auth_cache_named_token_events_test/1,
     auth_cache_temporary_token_events_test/1,
@@ -36,6 +37,7 @@
 ]).
 
 all() -> ?ALL([
+    auth_cache_expiration_test,
     auth_cache_size_test,
     auth_cache_named_token_events_test,
     auth_cache_temporary_token_events_test,
@@ -54,6 +56,75 @@ all() -> ?ALL([
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
+
+
+auth_cache_expiration_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    Mod = token_logic,
+    Fun = verify_access_token,
+
+    clear_auth_caches(Config),
+
+    AccessToken1 = initializer:create_access_token(?USER_ID_1, [], temporary),
+    AccessToken2 = initializer:create_access_token(?USER_ID_1, [#cv_time{
+        valid_until = time_utils:system_time_seconds() + 15
+    }], named),
+    AccessToken3 = initializer:create_access_token(?USER_ID_2, [], named),
+
+    TokenCredentials1 = create_token_credentials(AccessToken1, rest),
+    TokenCredentials2 = create_token_credentials(AccessToken2, graphsync),
+    TokenCredentials3 = create_token_credentials(
+        AccessToken3, oneclient, allow_data_access_caveats, AccessToken1
+    ),
+
+    set_auth_cache_default_ttl(Worker1, 2),
+    ?assertMatch(0, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+
+    lists:foreach(fun({TokenCredentials, ExpUserId}) ->
+        ?assertMatch({ok, ?USER(ExpUserId), _}, verify_credentials(Worker1, TokenCredentials))
+    end, [
+        {TokenCredentials1, ?USER_ID_1},
+        {TokenCredentials2, ?USER_ID_1},
+        {TokenCredentials3, ?USER_ID_2}
+    ]),
+    ?assertEqual(3, get_auth_cache_size(Worker1)),
+
+    ?assertMatch(3, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+    ?assertMatch(AccessToken1, rpc:call(Worker1, meck, capture, [1, Mod, Fun, '_', 1])),
+    ?assertMatch(AccessToken2, rpc:call(Worker1, meck, capture, [2, Mod, Fun, '_', 1])),
+    ?assertMatch(AccessToken3, rpc:call(Worker1, meck, capture, [3, Mod, Fun, '_', 1])),
+
+    % TokenCredentials without consumer token should be cached for as long as token allows
+    % (time caveats). On the other hand TokenCredentials with consumer token should be cached
+    % for only limited amount of time as provider can't subscribe to and monitor consumer tokens
+    lists:foreach(fun(ZoneCallsNum) ->
+        timer:sleep(timer:seconds(3)),
+
+        ?assertMatch({ok, ?USER(?USER_ID_1), _}, verify_credentials(Worker1, TokenCredentials1)),
+        ?assertMatch(ZoneCallsNum, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+
+        ?assertMatch({ok, ?USER(?USER_ID_1), _}, verify_credentials(Worker1, TokenCredentials2)),
+        ?assertMatch(ZoneCallsNum, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+
+        IncZoneCallsNum = ZoneCallsNum + 1,
+        ?assertMatch({ok, ?USER(?USER_ID_2), _}, verify_credentials(Worker1, TokenCredentials3)),
+        ?assertMatch(IncZoneCallsNum, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+        ?assertMatch(AccessToken3, rpc:call(Worker1, meck, capture, [IncZoneCallsNum, Mod, Fun, '_', 1]))
+
+    end, lists:seq(3, 6)),
+
+    timer:sleep(timer:seconds(4)),
+
+    % AccessToken1 without time caveats is still cached (for eternity or until token event is received)
+    ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker1, TokenCredentials1)),
+    ?assertMatch(7, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+
+    % AccessToken2 with passed time limit is no longer cached
+    ?assertMatch(?ERROR_UNAUTHORIZED, verify_credentials(Worker1, TokenCredentials2)),
+    ?assertMatch(8, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+    ?assertMatch(AccessToken2, rpc:call(Worker1, meck, capture, [last, Mod, Fun, '_', 1])),
+
+    clear_auth_caches(Config).
 
 
 auth_cache_size_test(Config) ->
@@ -294,7 +365,10 @@ token_expiration(Config) ->
     AccessToken1 = initializer:create_access_token(?USER_ID_1, [#cv_time{
         valid_until = time_utils:system_time_seconds() + 2
     }]),
-    TokenCredentials1 = create_token_credentials(AccessToken1),
+    TokenCredentials1 = auth_manager:build_token_credentials(
+        AccessToken1, undefined,
+        initializer:local_ip_v4(), oneclient, allow_data_access_caveats
+    ),
 
     {ok, {_, SessId1}} = fuse_test_utils:connect_via_token(Worker1, [], Nonce, AccessToken1),
 
@@ -538,8 +612,14 @@ create_token_credentials(AccessToken, Interface) ->
 -spec create_token_credentials(auth_manager:access_token(), undefined | cv_interface:interface(),
     data_access_caveats:policy()) -> auth_manager:token_credentials().
 create_token_credentials(AccessToken, Interface, DataAccessCaveatsPolicy) ->
+    create_token_credentials(AccessToken, Interface, DataAccessCaveatsPolicy, undefined).
+
+
+-spec create_token_credentials(auth_manager:access_token(), undefined | cv_interface:interface(),
+    data_access_caveats:policy(), auth_manager:consumer_token()) -> auth_manager:token_credentials().
+create_token_credentials(AccessToken, Interface, DataAccessCaveatsPolicy, ConsumerToken) ->
     auth_manager:build_token_credentials(
-        AccessToken, undefined, initializer:local_ip_v4(),
+        AccessToken, ConsumerToken, initializer:local_ip_v4(),
         Interface, DataAccessCaveatsPolicy
     ).
 
@@ -599,6 +679,13 @@ set_auth_cache_size_limit(Node, SizeLimit) ->
 set_auth_cache_purge_delay(Node, Delay) ->
     ?assertMatch(ok, rpc:call(Node, application, set_env, [
         ?APP_NAME, auth_cache_purge_delay, Delay
+    ])).
+
+
+-spec set_auth_cache_default_ttl(node(), TTL :: time_utils:seconds()) -> ok.
+set_auth_cache_default_ttl(Node, TTL) ->
+    ?assertMatch(ok, rpc:call(Node, application, set_env, [
+        ?APP_NAME, auth_cache_item_default_ttl, TTL
     ])).
 
 

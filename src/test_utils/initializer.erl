@@ -487,7 +487,6 @@ mock_auth_manager(Config) ->
                         ip = auth_manager:get_peer_ip(TokenCredentials),
                         interface = auth_manager:get_interface(TokenCredentials),
                         service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
-                        consumer = auth_manager:get_consumer_token(TokenCredentials),
                         data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenCredentials),
                         group_membership_checker = fun(_, _) -> false end
                     },
