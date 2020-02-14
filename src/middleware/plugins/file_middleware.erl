@@ -102,8 +102,6 @@ fetch_entity(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
-authorize(#op_req{auth = ?NOBODY}, _) ->
-    false;
 authorize(#op_req{operation = create} = Req, Entity) ->
     authorize_create(Req, Entity);
 authorize(#op_req{operation = get} = Req, Entity) ->
@@ -139,6 +137,7 @@ validate(#op_req{operation = delete} = Req, Entity) ->
 -spec create_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
 create_operation_supported(instance, private) -> true;
+create_operation_supported(object_id, private) -> true;
 create_operation_supported(attrs, private) -> true;
 create_operation_supported(xattrs, private) -> true;
 create_operation_supported(json_metadata, private) -> true;
@@ -166,6 +165,9 @@ data_spec_create(#gri{aspect = instance}) -> #{
     optional => #{<<"createAttempts">> => {integer, {between, 1, 200}}}
 };
 
+data_spec_create(#gri{aspect = object_id}) ->
+    undefined;
+
 data_spec_create(#gri{aspect = attrs}) -> #{
     required => #{<<"mode">> => {binary,
         fun(Mode) ->
@@ -180,23 +182,11 @@ data_spec_create(#gri{aspect = attrs}) -> #{
 };
 
 data_spec_create(#gri{aspect = xattrs}) -> #{
-    required => #{<<"application/json">> => {json,
-        % Accept only one xattr to set
-        fun(JSON) ->
-            case maps:to_list(JSON) of
-                [{Key, _Val}] when not is_binary(Key) ->
-                    throw(?ERROR_BAD_VALUE_BINARY(<<"extended attribute name">>));
-                [{_, _}] ->
-                    true;
-                _ ->
-                    false
-            end
-        end
-    }}
+    required => #{<<"metadata">> => {json, any}}
 };
 
 data_spec_create(#gri{aspect = json_metadata}) -> #{
-    required => #{<<"application/json">> => {any, any}},
+    required => #{<<"metadata">> => {any, any}},
     optional => #{
         <<"filter_type">> => {binary, [<<"keypath">>]},
         <<"filter">> => {binary, any}
@@ -204,7 +194,7 @@ data_spec_create(#gri{aspect = json_metadata}) -> #{
 };
 
 data_spec_create(#gri{aspect = rdf_metadata}) -> #{
-    required => #{<<"application/rdf+xml">> => {binary, any}}
+    required => #{<<"metadata">> => {binary, any}}
 }.
 
 
@@ -220,7 +210,12 @@ authorize_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    has_access_to_file(Auth, Guid).
+    has_access_to_file(Auth, Guid);
+
+authorize_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
+    % File path must have been resolved to guid by rest_handler already (to
+    % get to this point), so authorization is surely granted.
+    true.
 
 
 %% @private
@@ -229,13 +224,18 @@ validate_create(#op_req{data = Data, gri = #gri{aspect = instance}}, _) ->
     SpaceId = file_id:guid_to_space_id(maps:get(<<"parent">>, Data)),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
-validate_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
+validate_create(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    assert_file_managed_locally(Auth, Guid).
+    assert_file_managed_locally(Guid);
+
+validate_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
+    % File path must have been resolved to guid by rest_handler already (to
+    % get to this point), so file must be managed locally.
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -259,20 +259,25 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     {ok, Attrs} = ?check(lfm:stat(SessionId, {guid, Guid})),
     {ok, resource, {GRI#gri{id = Guid}, Attrs}};
 
+create(#op_req{gri = #gri{id = FileGuid, aspect = object_id}}) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+    {ok, value, ObjectId};
+
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = attrs}}) ->
     Mode = maps:get(<<"mode">>, Data),
     ?check(lfm:set_perms(Auth#auth.session_id, {guid, Guid}, Mode));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = xattrs}}) ->
-    [{Name, Value}] = maps:to_list(maps:get(<<"application/json">>, Data)),
-    ?check(lfm:set_xattr(
-        Auth#auth.session_id, {guid, Guid},
-        #xattr{name = Name, value = Value},
-        false, false
-    ));
+    lists:foreach(fun({XattrName, XattrValue}) ->
+        ?check(lfm:set_xattr(
+            Auth#auth.session_id, {guid, Guid},
+            #xattr{name = XattrName, value = XattrValue},
+            false, false
+        ))
+    end, maps:to_list(maps:get(<<"metadata">>, Data)));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_metadata}}) ->
-    JSON = maps:get(<<"application/json">>, Data),
+    JSON = maps:get(<<"metadata">>, Data),
     Filter = maps:get(<<"filter">>, Data, undefined),
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
     FilterList = case {FilterType, Filter} of
@@ -289,11 +294,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_met
     ));
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
-    Rdf = maps:get(<<"application/rdf+xml">>, Data),
-    ?check(lfm:set_metadata(
-        Auth#auth.session_id, {guid, Guid},
-        rdf, Rdf, []
-    )).
+    Rdf = maps:get(<<"metadata">>, Data),
+    ?check(lfm:set_metadata(Auth#auth.session_id, {guid, Guid}, rdf, Rdf, [])).
 
 
 %%%===================================================================
@@ -304,13 +306,22 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_meta
 -spec get_operation_supported(gri:gri(), middleware:scope()) ->
     boolean().
 get_operation_supported(instance, private) -> true;
+get_operation_supported(instance, public) -> true;
 get_operation_supported(list, private) -> true;
+get_operation_supported(children, private) -> true;
+get_operation_supported(children, public) -> true;
 get_operation_supported(attrs, private) -> true;
 get_operation_supported(xattrs, private) -> true;
+get_operation_supported(xattrs, public) -> true;
 get_operation_supported(json_metadata, private) -> true;
+get_operation_supported(json_metadata, public) -> true;
 get_operation_supported(rdf_metadata, private) -> true;
+get_operation_supported(rdf_metadata, public) -> true;
 get_operation_supported(acl, private) -> true;
+get_operation_supported(shares, private) -> true;
 get_operation_supported(transfers, private) -> true;
+get_operation_supported(download_url, private) -> true;
+get_operation_supported(download_url, public) -> true;
 get_operation_supported(_, _) -> false.
 
 
@@ -326,6 +337,27 @@ data_spec_get(#gri{aspect = list}) -> #{
     }
 };
 
+data_spec_get(#gri{aspect = children}) -> #{
+    required => #{
+        <<"limit">> => {integer, {not_lower_than, 1}}
+    },
+    optional => #{
+        <<"index">> => {any, fun
+            (null) ->
+                {true, undefined};
+            (undefined) ->
+                true;
+            (<<>>) ->
+                throw(?ERROR_BAD_VALUE_EMPTY(<<"index">>));
+            (IndexBin) when is_binary(IndexBin) ->
+                true;
+            (_) ->
+                false
+        end},
+        <<"offset">> => {integer, any}
+    }
+};
+
 data_spec_get(#gri{aspect = attrs}) -> #{
     optional => #{<<"attribute">> => {binary, ?ALL_BASIC_ATTRIBUTES}}
 };
@@ -333,7 +365,8 @@ data_spec_get(#gri{aspect = attrs}) -> #{
 data_spec_get(#gri{aspect = xattrs}) -> #{
     optional => #{
         <<"attribute">> => {binary, any},
-        <<"inherited">> => {boolean, any}
+        <<"inherited">> => {boolean, any},
+        <<"show_internal">> => {boolean, any}
     }
 };
 
@@ -351,21 +384,40 @@ data_spec_get(#gri{aspect = rdf_metadata}) ->
 data_spec_get(#gri{aspect = acl}) ->
     undefined;
 
+data_spec_get(#gri{aspect = shares}) ->
+    undefined;
+
 data_spec_get(#gri{aspect = transfers}) -> #{
     optional => #{<<"include_ended_ids">> => {boolean, any}}
-}.
+};
+
+data_spec_get(#gri{aspect = download_url}) ->
+    undefined.
 
 
 %% @private
 -spec authorize_get(middleware:req(), middleware:entity()) -> boolean().
+authorize_get(#op_req{gri = #gri{aspect = As, scope = public}}, _) when
+    As =:= instance;
+    As =:= children;
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadata;
+    As =:= download_url
+->
+    true;
+
 authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= list;
+    As =:= children;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
-    As =:= acl
+    As =:= acl;
+    As =:= shares;
+    As =:= download_url
 ->
     has_access_to_file(Auth, Guid);
 
@@ -376,17 +428,20 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = trans
 
 %% @private
 -spec validate_get(middleware:req(), middleware:entity()) -> ok | no_return().
-validate_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
+validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= list;
+    As =:= children;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
     As =:= acl;
-    As =:= transfers
+    As =:= shares;
+    As =:= transfers;
+    As =:= download_url
 ->
-    assert_file_managed_locally(Auth, Guid).
+    assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -418,6 +473,19 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}},
             ?ERROR_POSIX(Errno)
     end;
 
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
+    SessionId = Auth#auth.session_id,
+    Limit = maps:get(<<"limit">>, Data),
+    StartId = maps:get(<<"index">>, Data, undefined),
+    Offset = maps:get(<<"offset">>, Data, 0),
+
+    case lfm:ls(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
+        {ok, Children, _, _} ->
+            {ok, value, Children};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end;
+
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}, _) ->
     RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of
         undefined -> ?ALL_BASIC_ATTRIBUTES;
@@ -432,13 +500,14 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
     SessionId = Auth#auth.session_id,
     Inherited = maps:get(<<"inherited">>, Data, false),
+    ShowInternal = maps:get(<<"show_internal">>, Data, false),
 
     case maps:get(<<"attribute">>, Data, undefined) of
         undefined ->
             {ok, Xattrs} = ?check(lfm:list_xattr(
-                SessionId, {guid, FileGuid}, Inherited, true
+                SessionId, {guid, FileGuid}, Inherited, ShowInternal
             )),
-            {ok, lists:foldl(fun(XattrName, Acc) ->
+            {ok, value, lists:foldl(fun(XattrName, Acc) ->
                 {ok, #xattr{value = Value}} = ?check(lfm:get_xattr(
                     SessionId,
                     {guid, FileGuid},
@@ -451,7 +520,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}
             {ok, #xattr{value = Val}} = ?check(lfm:get_xattr(
                 SessionId, {guid, FileGuid}, XattrName, Inherited
             )),
-            {ok, #{XattrName => Val}}
+            {ok, value, #{XattrName => Val}}
     end;
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}, _) ->
@@ -470,19 +539,29 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
             binary:split(Filter, <<".">>, [global])
     end,
 
-    ?check(lfm:get_metadata(
+    {ok, Result} = ?check(lfm:get_metadata(
         SessionId, {guid, FileGuid},
         json, FilterList, Inherited
-    ));
+    )),
+    {ok, value, Result};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
-    ?check(lfm:get_metadata(
+    {ok, Result} = ?check(lfm:get_metadata(
         Auth#auth.session_id, {guid, FileGuid},
         rdf, [], false
-    ));
+    )),
+    {ok, value, Result};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     ?check(lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}));
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
+    case lfm:stat(Auth#auth.session_id, {guid, FileGuid}) of
+        {ok, #file_attr{shares = Shares}} ->
+            {ok, Shares};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end;
 
 get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
     {ok, #{
@@ -499,6 +578,17 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
             {ok, value, Transfers#{<<"endedIds">> => Ended}};
         false ->
             {ok, value, Transfers}
+    end;
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) ->
+    SessionId = Auth#auth.session_id,
+    case page_file_download:get_file_download_url(SessionId, FileGuid) of
+        {ok, URL} ->
+            {ok, value, URL};
+        ?ERROR_FORBIDDEN ->
+            ?ERROR_FORBIDDEN;
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
     end.
 
 
@@ -552,8 +642,7 @@ authorize_update(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= instance;
     As =:= acl
 ->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    middleware_utils:is_eff_space_member(Auth, SpaceId).
+    has_access_to_file(Auth, Guid).
 
 
 %% @private
@@ -562,8 +651,7 @@ validate_update(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= acl
 ->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    middleware_utils:assert_space_supported_locally(SpaceId).
+    assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -596,27 +684,46 @@ update(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = acl}}) -
 -spec delete_operation_supported(gri:aspect(), middleware:scope()) ->
     boolean().
 delete_operation_supported(instance, private) -> true;
+delete_operation_supported(xattrs, private) -> true;
+delete_operation_supported(json_metadata, private) -> true;
+delete_operation_supported(rdf_metadata, private) -> true;
 delete_operation_supported(_, _) -> false.
 
 
 %% @private
 -spec data_spec_delete(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
-data_spec_delete(#gri{aspect = instance}) ->
-    undefined.
+data_spec_delete(#gri{aspect = As}) when
+    As =:= instance;
+    As =:= json_metadata;
+    As =:= rdf_metadata
+->
+    undefined;
+
+data_spec_delete(#gri{aspect = xattrs}) -> #{
+    required => #{<<"keys">> => {list_of_binaries, any}}
+}.
 
 
 %% @private
 -spec authorize_delete(middleware:req(), middleware:entity()) -> boolean().
-authorize_delete(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = instance}}, _) ->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    middleware_utils:is_eff_space_member(Auth, SpaceId).
+authorize_delete(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
+    As =:= instance;
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadata
+->
+    has_access_to_file(Auth, Guid).
 
 
 %% @private
 -spec validate_delete(middleware:req(), middleware:entity()) -> ok | no_return().
-validate_delete(#op_req{gri = #gri{id = Guid, aspect = instance}}, _) ->
-    SpaceId = file_id:guid_to_space_id(Guid),
-    middleware_utils:assert_space_supported_locally(SpaceId).
+validate_delete(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
+    As =:= instance;
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadata
+->
+    assert_file_managed_locally(Guid).
 
 
 %%--------------------------------------------------------------------
@@ -626,7 +733,18 @@ validate_delete(#op_req{gri = #gri{id = Guid, aspect = instance}}, _) ->
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
-    ?check(lfm:rm_recursive(Auth#auth.session_id, {guid, FileGuid})).
+    ?check(lfm:rm_recursive(Auth#auth.session_id, {guid, FileGuid}));
+
+delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}) ->
+    lists:foreach(fun(XattrName) ->
+        ?check(lfm:remove_xattr(Auth#auth.session_id, {guid, FileGuid}, XattrName))
+    end, maps:get(<<"keys">>, Data));
+
+delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
+    ?check(lfm:remove_metadata(Auth#auth.session_id, {guid, FileGuid}, json));
+
+delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
+    ?check(lfm:remove_metadata(Auth#auth.session_id, {guid, FileGuid}, rdf)).
 
 
 %%%===================================================================
@@ -642,6 +760,8 @@ delete(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec has_access_to_file(aai:auth(), file_id:file_guid()) -> boolean().
+has_access_to_file(?GUEST, _Guid) ->
+    false;
 has_access_to_file(?USER(UserId) = Auth, Guid) ->
     case fslogic_uuid:user_root_dir_guid(UserId) of
         Guid ->
@@ -660,14 +780,14 @@ has_access_to_file(?USER(UserId) = Auth, Guid) ->
 %% and can be reached from any provider.
 %% @end
 %%--------------------------------------------------------------------
--spec assert_file_managed_locally(aai:auth(), file_id:file_guid()) ->
+-spec assert_file_managed_locally(file_id:file_guid()) ->
     ok | no_return().
-assert_file_managed_locally(?USER(UserId), Guid) ->
-    case fslogic_uuid:user_root_dir_guid(UserId) of
-        Guid ->
+assert_file_managed_locally(FileGuid) ->
+    {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
+    case fslogic_uuid:is_root_dir_uuid(FileUuid) of
+        true ->
             ok;
-        _ ->
-            SpaceId = file_id:guid_to_space_id(Guid),
+        false ->
             middleware_utils:assert_space_supported_locally(SpaceId)
     end.
 

@@ -186,12 +186,12 @@ route_and_ignore_answer(ClientMsg = #client_message{
 route_and_ignore_answer(#client_message{
     message_body = #credentials{
         access_token = AccessToken,
-        audience_token = AudienceToken
+        consumer_token = ConsumerToken
     }
 } = Msg) ->
     incoming_session_watcher:request_credentials_update(
         effective_session_id(Msg),
-        AccessToken, AudienceToken
+        AccessToken, ConsumerToken
     ),
     ok;
 route_and_ignore_answer(ClientMsg) ->

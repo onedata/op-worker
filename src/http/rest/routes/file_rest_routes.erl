@@ -30,7 +30,18 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% List files and folders
+    %% Lookup file id
+    {<<"/lookup-file-id/[...]">>, rest_handler, #rest_req{
+        method = 'POST',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?PATH_BINDING, 
+            aspect = object_id, 
+            scope = private
+        }
+    }},
+    %% List files and directories
     {<<"/files/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -41,7 +52,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% List files and folders by Id
+    %% List files and directories by Id
     {<<"/files-id/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -49,6 +60,28 @@ routes() -> [
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
             aspect = list, 
+            scope = private
+        }
+    }},
+    %% List file shares by path
+    {<<"/file-shares/[...]">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?PATH_BINDING, 
+            aspect = shares, 
+            scope = private
+        }
+    }},
+    %% List file shares by Id
+    {<<"/file-id-shares/:id">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = shares, 
             scope = private
         }
     }},
@@ -89,7 +122,7 @@ routes() -> [
     %% Set file extended attribute
     {<<"/metadata/xattrs/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -112,7 +145,7 @@ routes() -> [
     %% Set file json metadata
     {<<"/metadata/json/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -135,7 +168,7 @@ routes() -> [
     %% Set file rdf metadata
     {<<"/metadata/rdf/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/rdf+xml">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -181,7 +214,7 @@ routes() -> [
     %% Set file extended attribute by Id
     {<<"/metadata-id/xattrs/:id">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -204,7 +237,7 @@ routes() -> [
     %% Set file json metadata by Id
     {<<"/metadata-id/json/:id">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
@@ -227,7 +260,7 @@ routes() -> [
     %% Set file rdf metadata by Id
     {<<"/metadata-id/rdf/:id">>, rest_handler, #rest_req{
         method = 'PUT',
-        parse_body = as_is,
+        parse_body = {as_is, <<"metadata">>},
         consumes = [<<"application/rdf+xml">>],
         b_gri = #b_gri{
             type = op_file, 

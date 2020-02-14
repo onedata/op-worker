@@ -59,6 +59,7 @@ operation_supported(get, {view, _}, private) -> true;
 operation_supported(get, {query_view, _}, private) -> true;
 operation_supported(get, eff_users, private) -> true;
 operation_supported(get, eff_groups, private) -> true;
+operation_supported(get, shares, private) -> true;
 operation_supported(get, providers, private) -> true;
 operation_supported(get, transfers, private) -> true;
 operation_supported(get, transfers_active_channels, private) -> true;
@@ -80,7 +81,7 @@ operation_supported(_, _, _) -> false.
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = {view, _}}}) -> #{
     required => #{
-        <<"application/javascript">> => {binary, non_empty}
+        <<"mapFunction">> => {binary, non_empty}
     },
     optional => #{
         <<"spatial">> => {boolean, any},
@@ -100,7 +101,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = {view, _}}}) -> #{
 };
 
 data_spec(#op_req{operation = create, gri = #gri{aspect = {view_reduce_function, _}}}) -> #{
-    required => #{<<"application/javascript">> => {binary, non_empty}}
+    required => #{<<"reduceFunction">> => {binary, non_empty}}
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = list}}) ->
@@ -143,6 +144,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = eff_users}}) ->
 data_spec(#op_req{operation = get, gri = #gri{aspect = eff_groups}}) ->
     undefined;
 
+data_spec(#op_req{operation = get, gri = #gri{aspect = shares}}) ->
+    undefined;
+
 data_spec(#op_req{operation = get, gri = #gri{aspect = providers}}) ->
     undefined;
 
@@ -180,7 +184,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {transfers_throughput_cha
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = {view, _}}}) -> #{
     optional => #{
-        <<"application/javascript">> => {binary, any},
+        <<"mapFunction">> => {binary, any},
         <<"spatial">> => {boolean, any},
         <<"update_min_changes">> => {integer, {not_lower_than, 1}},
         <<"replica_update_min_changes">> => {integer, {not_lower_than, 1}},
@@ -221,7 +225,7 @@ fetch_entity(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
-authorize(#op_req{auth = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
 authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
@@ -270,6 +274,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 }}, _) when
     As =:= eff_users;
     As =:= eff_groups;
+    As =:= shares;
     As =:= providers
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW);
@@ -356,6 +361,7 @@ validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = {query_view,
 validate(#op_req{operation = get, gri = #gri{id = SpaceId, aspect = As}}, _) when
     As =:= eff_users;
     As =:= eff_groups;
+    As =:= shares;
     As =:= providers
 ->
     middleware_utils:assert_space_supported_locally(SpaceId);
@@ -407,14 +413,14 @@ validate(#op_req{operation = delete, gri = #gri{
 create(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
     index:save(
         SpaceId, ViewName,
-        maps:get(<<"application/javascript">>, Data), undefined,
+        maps:get(<<"mapFunction">>, Data), undefined,
         prepare_view_options(Data),
         maps:get(<<"spatial">>, Data, false),
         maps:get(<<"providers[]">>, Data, [oneprovider:get_id()])
     );
 
 create(#op_req{gri = #gri{id = SpaceId, aspect = {view_reduce_function, ViewName}}} = Req) ->
-    ReduceFunction = maps:get(<<"application/javascript">>, Req#op_req.data),
+    ReduceFunction = maps:get(<<"reduceFunction">>, Req#op_req.data),
     case index:update_reduce_function(SpaceId, ViewName, ReduceFunction) of
         {error, ?EINVAL} ->
             ?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>);
@@ -499,6 +505,9 @@ get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_users}}, _) ->
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = eff_groups}}, _) ->
     space_logic:get_eff_groups(Auth#auth.session_id, SpaceId);
 
+get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = shares}}, _) ->
+    space_logic:get_shares(Auth#auth.session_id, SpaceId);
+
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = providers}}, _) ->
     space_logic:get_provider_ids(Auth#auth.session_id, SpaceId);
 
@@ -555,7 +564,7 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = transfers}}, _) ->
         _ ->
             #{<<"transfers">> => Transfers}
     end,
-    {ok, Result};
+    {ok, value, Result};
 
 get(#op_req{gri = #gri{id = SpaceId, aspect = transfers_active_channels}}, _) ->
     {ok, ActiveChannels} = space_transfer_stats_cache:get_active_channels(SpaceId),
@@ -607,7 +616,7 @@ get(#op_req{data = Data, gri = #gri{
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = {view, ViewName}}}) ->
-    MapFunctionRaw = maps:get(<<"application/javascript">>, Data),
+    MapFunctionRaw = maps:get(<<"mapFunction">>, Data),
     MapFun = utils:ensure_defined(MapFunctionRaw, <<>>, undefined),
 
     case index:update(

@@ -33,11 +33,11 @@
 authenticate(Req, Interface, DataCaveatsPolicy) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
-            {ok, ?NOBODY};
+            {ok, ?GUEST};
         SubjectAccessToken ->
             {PeerIp, _} = cowboy_req:peer(Req),
             TokenAuth = auth_manager:build_token_auth(
-                SubjectAccessToken, tokens:parse_audience_token_header(Req),
+                SubjectAccessToken, tokens:parse_consumer_token_header(Req),
                 PeerIp, Interface, DataCaveatsPolicy
             ),
             authenticate(TokenAuth)

@@ -52,7 +52,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Replicate file or folder by path
+    %% Replicate file or directory by path
     {<<"/replicas/[...]">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
@@ -87,7 +87,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Replicate file or folder by Id
+    %% Replicate file or directory by Id
     {<<"/replicas-id/:fid">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,

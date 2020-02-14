@@ -708,6 +708,8 @@ make_rest_request(Config, Worker, URL, Method, Headers, ReqBody, SpaceId, Requir
         case rest_test_utils:request(Worker, URL, Method, Headers, EncodedReqBody) of
             {ok, 200, _, RespBody} ->
                 {ok, RespBody};
+            {ok, 201, _, RespBody} ->
+                {ok, RespBody};
             {ok, Code1, _, RespBody} ->
                 {error, {Code1, RespBody}}
         end

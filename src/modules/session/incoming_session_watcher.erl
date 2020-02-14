@@ -47,8 +47,8 @@
 -define(REMOVE_SESSION, remove_session).
 -define(CHECK_SESSION_ACTIVITY, check_session_activity).
 -define(CHECK_SESSION_VALIDITY, check_session_validity).
--define(UPDATE_CREDENTIALS_REQ(__AccessToken, __AudienceToken),
-    {update_credentials, __AccessToken, __AudienceToken}
+-define(UPDATE_CREDENTIALS_REQ(__AccessToken, __ConsumerToken),
+    {update_credentials, __AccessToken, __ConsumerToken}
 ).
 
 -define(SESSION_REMOVAL_RETRY_DELAY, 15).   % in seconds
@@ -76,13 +76,13 @@ start_link(SessId, SessType) ->
 
 
 -spec request_credentials_update(session:id(), auth_manager:access_token(),
-    auth_manager:audience_token()) -> ok.
-request_credentials_update(SessionId, AccessToken, AudienceToken) ->
+    auth_manager:consumer_token()) -> ok.
+request_credentials_update(SessionId, AccessToken, ConsumerToken) ->
     case session:get(SessionId) of
         {ok, #document{value = #session{watcher = SessionWatcher}}} ->
             gen_server2:cast(
                 SessionWatcher,
-                ?UPDATE_CREDENTIALS_REQ(AccessToken, AudienceToken)
+                ?UPDATE_CREDENTIALS_REQ(AccessToken, ConsumerToken)
             );
         _ ->
             ok
@@ -160,7 +160,7 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(?UPDATE_CREDENTIALS_REQ(AccessToken, AudienceToken), #state{
+handle_cast(?UPDATE_CREDENTIALS_REQ(AccessToken, ConsumerToken), #state{
     session_id = SessionId,
     identity = Identity,
     auth = OldTokenAuth,
@@ -168,7 +168,7 @@ handle_cast(?UPDATE_CREDENTIALS_REQ(AccessToken, AudienceToken), #state{
 } = State) ->
     cancel_validity_checkup_timer(OldTimer),
     NewTokenAuth = auth_manager:update_credentials(
-        OldTokenAuth, AccessToken, AudienceToken
+        OldTokenAuth, AccessToken, ConsumerToken
     ),
     case check_auth_validity(NewTokenAuth, Identity) of
         {true, NewTimer} ->
