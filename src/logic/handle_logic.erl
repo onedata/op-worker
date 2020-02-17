@@ -77,23 +77,29 @@ has_eff_user(SessionId, HandleId, UserId) ->
 
 
 -spec create(gs_client_worker:client(), od_handle_service:id(),
-    od_handle:resource_type(), od_handle:resource_id(), od_handle:metadata()) ->
-    {ok, od_handle:id()} | errors:error().
+od_handle:resource_type(), od_handle:resource_id(), od_handle:metadata()) ->
+{ok, od_handle:id()} | errors:error().
 create(SessionId, HandleServiceId, ResourceType, ResourceId, Metadata) ->
+{ok, UserId} = session:get_user_id(SessionId),
+Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
+    operation = create,
+    gri = #gri{type = od_handle, id = undefined, aspect = instance},
+    auth_hint = ?AS_USER(UserId),
+    data = #{
+        <<"handleServiceId">> => HandleServiceId,
+        <<"resourceType">> => ResourceType,
+        <<"resourceId">> => ResourceId,
+        <<"metadata">> => Metadata
+    },
+    subscribe = true
+})),
+?ON_SUCCESS(Res, fun(_) ->
     {ok, UserId} = session:get_user_id(SessionId),
-    Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
-        operation = create,
-        gri = #gri{type = od_handle, id = undefined, aspect = instance},
-        auth_hint = ?AS_USER(UserId),
-        data = #{
-            <<"handleServiceId">> => HandleServiceId,
-            <<"resourceType">> => ResourceType,
-            <<"resourceId">> => ResourceId,
-            <<"metadata">> => Metadata
-        },
-        subscribe = true
-    })),
-    ?ON_SUCCESS(Res, fun(_) ->
-        {ok, UserId} = session:get_user_id(SessionId),
-        gs_client_worker:invalidate_cache(od_user, UserId)
-    end).
+    gs_client_worker:invalidate_cache(od_user, UserId),
+    case ResourceType of
+        <<"Share">> ->
+            gs_client_worker:invalidate_cache(od_share, ResourceId);
+        _ ->
+            ok
+    end
+end).
