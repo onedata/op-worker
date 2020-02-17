@@ -306,10 +306,10 @@ filter_children_in_db('$end_of_table', FileCtx, _UserCtx, _TableName) ->
 filter_children_in_db(LinkName, FileCtx, UserCtx, TableName) ->
     FileCtx3 = try
         {ChildCtx, FileCtx2} = file_ctx:get_child(FileCtx, LinkName, UserCtx),
-        case file_ctx:is_storage_file_created(ChildCtx) of
-            {true, _ChildCtx2} ->
+        case file_ctx:is_storage_file_created_const(ChildCtx) of
+            true ->
                 FileCtx2;
-            {false, _ChildCtx2} ->
+            false ->
                 ets:delete(TableName, LinkName),
                 FileCtx2
         end

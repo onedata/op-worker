@@ -67,15 +67,12 @@
     get_canonical_path_tokens/1]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
     is_root_dir_const/1, has_acl_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
-    is_in_user_space_const/2]).
+    is_in_user_space_const/2, is_storage_file_created_const/1]).
 -export([equals/2]).
 
 %% Functions that do not modify context but does not have _const suffix and return context.
 % TODO VFS-6119 missing _const suffix in function name
--export([
-    get_local_file_location_doc/1, get_local_file_location_doc/2,
-    get_dir_location_doc/1, is_storage_file_created/1
-]).
+-export([get_local_file_location_doc/1, get_local_file_location_doc/2, get_dir_location_doc/1]).
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_file_doc/1,
@@ -997,16 +994,15 @@ get_file_location_docs(FileCtx = #file_ctx{}, GetLocationOpts, IncludeLocal) ->
     end, LocationIds),
     {LocationDocs, FileCtx2}.
 
--spec is_storage_file_created(file_ctx:ctx()) -> {boolean(), file_ctx:ctx()}.
-is_storage_file_created(FileCtx) ->
-    % TODO VFS-6119 missing _const suffix in function name
+-spec is_storage_file_created_const(file_ctx:ctx()) -> boolean().
+is_storage_file_created_const(FileCtx) ->
     case file_ctx:is_dir(FileCtx) of
         {true, FileCtx2} ->
-            {DirLocation, FileCtx3} = file_ctx:get_dir_location_doc(FileCtx2),
-            {dir_location:is_storage_file_created(DirLocation), FileCtx3};
+            {DirLocation, _} = file_ctx:get_dir_location_doc(FileCtx2),
+            dir_location:is_storage_file_created(DirLocation);
         {false, FileCtx2} ->
-            {FileLocation, FileCtx3} = file_ctx:get_local_file_location_doc(FileCtx2, false),
-            {file_location:is_storage_file_created(FileLocation), FileCtx3}
+            {FileLocation, _} = file_ctx:get_local_file_location_doc(FileCtx2, false),
+            file_location:is_storage_file_created(FileLocation)
     end.
 
 %%--------------------------------------------------------------------
