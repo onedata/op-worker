@@ -461,8 +461,10 @@ run_internal(Job = #space_strategy_job{
 -spec check_file_meta_and_maybe_sync(space_strategy:job(), file_ctx:ctx(), boolean()) ->
     {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()}.
 check_file_meta_and_maybe_sync(Job = #space_strategy_job{}, FileCtx, StorageFileCreated) ->
-    case get_attr(FileCtx) of
-        {ok, FileAttr} ->
+    case get_attr_including_deleted(FileCtx) of
+        {ok, _FileAttr, true} ->
+            {processed, undefined, Job};
+        {ok, FileAttr, false} ->
             check_file_type_and_maybe_sync(Job, FileAttr, FileCtx, StorageFileCreated);
         {error, ?ENOENT} ->
             maybe_import_file(Job)
@@ -756,14 +758,15 @@ filter_updated_attrs(ResultsWithAttrNames) ->
             false
     end, ResultsWithAttrNames).
 
--spec get_attr(file_ctx:ctx()) -> {ok, #file_attr{}} | {error, term()}.
-get_attr(FileCtx) ->
+-spec get_attr_including_deleted(file_ctx:ctx()) -> {ok, #file_attr{}} | {error, term()}.
+get_attr_including_deleted(FileCtx) ->
     try
         {#fuse_response{
             status = #status{code = ?OK},
             fuse_response = FileAttr
-        }, _} = attr_req:get_file_attr_and_conflicts(user_ctx:new(?ROOT_SESS_ID), FileCtx, false, true, false),
-        {ok, FileAttr}
+        }, _, IsDeleted} =
+            attr_req:get_file_attr_and_conflicts(user_ctx:new(?ROOT_SESS_ID), FileCtx, true, true, false),
+        {ok, FileAttr, IsDeleted}
     catch
         _:Reason ->
             #status{code = Error} = fslogic_errors:gen_status_message(Reason),

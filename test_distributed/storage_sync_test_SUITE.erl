@@ -449,10 +449,7 @@ delete_opened_file_reimport_race_test(Config) ->
         case Guid =:= FileGuid of
             true ->
                 TestProcess ! {syncing_process, self()},
-                receive
-                    continue ->
-                        meck:passthrough([Job, FileCtx])
-                end;
+                receive continue -> meck:passthrough([Job, FileCtx]) end;
             false ->
                 meck:passthrough([Job, FileCtx])
         end

@@ -107,13 +107,14 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
 -spec create_storage_test_file(user_ctx:ctx(), fslogic_worker:file_guid(),
     storage:id()) -> #fuse_response{}.
 create_storage_test_file(UserCtx, Guid, StorageId) ->
-    FileCtx = file_ctx:new_by_guid(Guid),
-    UserId = user_ctx:get_user_id(UserCtx),
-    SessionId = user_ctx:get_session_id(UserCtx),
-    SpaceId = case file_ctx:get_space_id_const(FileCtx) of
+    SpaceId = case file_id:guid_to_space_id(Guid) of
         undefined -> throw(?ENOENT);
         <<_/binary>> = Id -> Id
     end,
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
+    UserId = user_ctx:get_user_id(UserCtx),
+    SessionId = user_ctx:get_session_id(UserCtx),
 
     {ok, StorageDoc} = storage:get(StorageId),
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
@@ -121,11 +122,10 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
 
     case luma:get_client_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) of
         {ok, ClientStorageUserCtx} ->
-            {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId,
-                StorageDoc, HelperName),
+            {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName),
             HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
 
-            {RawStoragePath, FileCtx2} = file_ctx:get_raw_storage_path(FileCtx),
+            {RawStoragePath, FileCtx2} = file_ctx:get_raw_storage_path(SpaceCtx),
             Dirname = filename:dirname(RawStoragePath),
             FileCtx3 = sfm_utils:create_parent_dirs(FileCtx2),
             {Size, _} = file_ctx:get_file_size(FileCtx3),

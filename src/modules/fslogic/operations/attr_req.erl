@@ -70,7 +70,7 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles) ->
     AllowDeletedFiles :: boolean(), IncludeSize :: boolean()) ->
     fslogic_worker:fuse_response().
 get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
-    {Ans, _} = get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, true),
+    {Ans, _, _} = get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, true),
     Ans.
 
 %%--------------------------------------------------------------------
@@ -82,7 +82,7 @@ get_file_attr_insecure(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize) ->
 -spec get_file_attr_light(user_ctx:ctx(), file_ctx:ctx(),
     IncludeSize :: boolean()) -> fslogic_worker:fuse_response().
 get_file_attr_light(UserCtx, FileCtx, IncludeSize) ->
-    {Ans, _} = get_file_attr_and_conflicts(UserCtx, FileCtx, false, IncludeSize, false),
+    {Ans, _, _} = get_file_attr_and_conflicts(UserCtx, FileCtx, false, IncludeSize, false),
     Ans.
 
 %%--------------------------------------------------------------------
@@ -94,7 +94,7 @@ get_file_attr_light(UserCtx, FileCtx, IncludeSize) ->
 %%--------------------------------------------------------------------
 -spec get_file_attr_and_conflicts(user_ctx:ctx(), file_ctx:ctx(),
     AllowDeletedFiles :: boolean(), IncludeSize :: boolean(), VerifyName :: boolean()) ->
-    {fslogic_worker:fuse_response(), Conflicts :: [{file_meta:uuid(), file_meta:name()}]}.
+    {fslogic_worker:fuse_response(), Conflicts :: [{file_meta:uuid(), file_meta:name()}], IsDeleted :: boolean()}.
 get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, VerifyName) ->
     {#document{
         key = Uuid,
@@ -152,7 +152,7 @@ get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, Ve
             shares = Shares,
             owner_id = OwnerId
         }
-    }, ConflictingFiles}.
+    }, ConflictingFiles, file_meta:is_deleted(Doc)}.
 
 %%--------------------------------------------------------------------
 %% @equiv get_child_attr_insecure/3 with permission checks
