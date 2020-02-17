@@ -177,8 +177,7 @@ switch_context_if_shared_file_request(#op_req{gri = #gri{type = op_file} = GRI} 
     % Every request concerning shared files must be carried with guest auth
     case file_id:is_share_guid(GRI#gri.id) of
         true ->
-            % TODO VFS-6115 rm cast to public scope when gui fix preview share mode
-            OpReq#op_req{auth = ?GUEST, gri = GRI#gri{scope = public}};
+            OpReq#op_req{auth = ?GUEST};
         false ->
             OpReq
     end;
