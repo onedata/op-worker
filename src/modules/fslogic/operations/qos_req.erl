@@ -198,9 +198,7 @@ remove_qos_entry_insecure(_UserCtx, FileCtx, QosEntryId) ->
     % TODO: VFS-5567 For now QoS entry is added only for file or dir
     % for which it has been added, so starting traverse is not needed.
     ok = file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId),
-    ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
-    ok = qos_traverse:report_entry_deleted(QosEntryId),
-    ok = qos_status:report_entry_deleted(SpaceId, QosEntryId),
+    ok = qos_hooks:handle_entry_delete(QosEntryId),
     ok = qos_entry:delete(QosEntryId),
     #provider_response{status = #status{code = ?OK}}.
 

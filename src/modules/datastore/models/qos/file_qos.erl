@@ -232,7 +232,6 @@ is_effective_qos_of_file(FileUuidOrDoc, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec clean_up(file_ctx:ctx()) -> ok.
 clean_up(FileCtx) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case get_effective(FileDoc) of
         undefined -> ok;
@@ -248,9 +247,7 @@ clean_up(FileCtx) ->
     case datastore_model:get(?CTX, Uuid) of
         {ok, #document{value = #file_qos{qos_entries = QosEntries}}} ->
             lists:foreach(fun(QosEntryId) ->
-                ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
-                ok = qos_status:report_entry_deleted(SpaceId, QosEntryId),
-                ok = qos_traverse:report_entry_deleted(QosEntryId),
+                ok = qos_hooks:handle_entry_delete(QosEntryId),
                 ok = qos_entry:delete(QosEntryId)
             end, QosEntries);
         ?ERROR_NOT_FOUND -> ok

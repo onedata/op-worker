@@ -74,7 +74,7 @@
 -type diff() :: datastore_doc:diff(record()).
 -type replicas_num() :: pos_integer().
 
--type qos_transfer_id() :: binary().
+-type qos_transfer_id() :: transfer:id().
 -type one_or_many(Type) :: Type | [Type].
 -type list_opts() :: #{
     token => datastore_links_iter:token(), 
@@ -284,11 +284,8 @@ is_possible(#qos_entry{possibility_check = {impossible, _}}) ->
 %%--------------------------------------------------------------------
 -spec add_to_impossible_list(od_space:id(), id()) ->  ok | {error, term()}.
 add_to_impossible_list(SpaceId, QosEntryId) ->
-    case add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId}) of
-        {ok, _} -> ok;
-        ?ERROR_ALREADY_EXISTS -> ok;
-        {error, _} = Error -> Error
-    end.
+    ?ok_if_exists(?extract_ok(
+        add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId}))).
 
 
 -spec remove_from_impossible_list(od_space:id(), id()) ->  ok | {error, term()}.

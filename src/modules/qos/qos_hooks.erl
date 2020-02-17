@@ -22,6 +22,7 @@
 %% API
 -export([
     handle_qos_entry_change/2,
+    handle_entry_delete/1,
     reconcile_qos/1, reconcile_qos/2,
     reevaluate_all_impossible_qos_in_space/1
 ]).
@@ -39,9 +40,7 @@
 handle_qos_entry_change(SpaceId, #document{deleted = true, key = QosEntryId} = QosEntryDoc) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntryDoc),
     ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId)),
-    ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
-    ok = qos_traverse:report_entry_deleted(QosEntryDoc),
-    ok = qos_status:report_entry_deleted(SpaceId, QosEntryId);
+    handle_entry_delete(QosEntryDoc);
 handle_qos_entry_change(SpaceId, #document{key = QosEntryId, value = QosEntry} = QosEntryDoc) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
     ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
@@ -55,6 +54,16 @@ handle_qos_entry_change(SpaceId, #document{key = QosEntryId, value = QosEntry} =
             ok = reevaluate_qos(QosEntryDoc)
     end.
 
+
+-spec handle_entry_delete(qos_entry:id() | qos_entry:doc()) -> ok.
+handle_entry_delete(QosEntryId) when is_binary(QosEntryId) ->
+    {ok, QosEntryDoc} = qos_entry:get(QosEntryId),
+    handle_entry_delete(QosEntryDoc);
+handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) ->
+    ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
+    ok = qos_traverse:report_entry_deleted(QosEntryDoc),
+    ok = qos_status:report_entry_deleted(SpaceId, QosEntryId).
+    
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -105,7 +114,7 @@ reconcile_qos(FileUuid, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec reevaluate_all_impossible_qos_in_space(od_space:id()) -> ok.
 reevaluate_all_impossible_qos_in_space(SpaceId) ->
-%%    % TODO VFS-6005 Use traverse to list and reevaluate impossible qos
+    % TODO VFS-6005 Use traverse to list and reevaluate impossible qos
     qos_entry:apply_to_all_impossible_in_space(SpaceId, fun reevaluate_qos/1).
 
 

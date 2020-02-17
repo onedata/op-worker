@@ -19,5 +19,6 @@
 -define(extract_ok(Result), datastore_runner:extract_ok(Result)).
 -define(extract_key(Result), datastore_runner:extract_key(Result)).
 -define(ok_if_not_found(Result), datastore_runner:ok_if_not_found(Result)).
+-define(ok_if_exists(Result), datastore_runner:ok_if_exists(Result)).
 
 -endif.

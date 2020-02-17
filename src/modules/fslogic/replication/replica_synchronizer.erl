@@ -1401,6 +1401,8 @@ flush_stats(#state{space_id = SpaceId} = State, CancelTimer) ->
     lists:foreach(fun({TransferId, BytesPerProvider}) ->
         case transfer:mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) of
             {ok, _} -> ok;
+            % Tried to update document when transfer was not created by job (e.g. QoS), 
+            % so there is no document
             ?ERROR_NOT_FOUND -> ok;
             {error, Error} ->
                 ?error(
