@@ -202,7 +202,7 @@ init_paths_caches(Space) ->
     ok = init_paths_caches(Space, get_canonical_paths_cache_name(Space)),
     ok = init_paths_caches(Space, get_uuid_paths_cache_name(Space)).
 
--spec init_paths_caches(od_space:id(), bounded_cache:name()) -> ok.
+-spec init_paths_caches(od_space:id(), bounded_cache:cache()) -> ok.
 init_paths_caches(Space, Name) ->
     try
         case bounded_cache:cache_exists(Name) of
