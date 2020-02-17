@@ -24,7 +24,7 @@
     mark_location_created/3]).
 -export([create_imported_file_location/6, update_imported_file_location/2]).
 -export([get_canonical_paths_cache_name/1, get_uuid_paths_cache_name/1, 
-    invalidate_paths_cache/1, init_paths_cache_group/0, init_paths_cache/1]).
+    invalidate_paths_caches/1, init_paths_cache_group/0, init_paths_caches/1]).
 
 %%%===================================================================
 %%% API
@@ -158,8 +158,8 @@ get_uuid_paths_cache_name(Space) ->
 %% Invalidates cache for particular space.
 %% @end
 %%-------------------------------------------------------------------
--spec invalidate_paths_cache(od_space:id()) -> ok.
-invalidate_paths_cache(Space) ->
+-spec invalidate_paths_caches(od_space:id()) -> ok.
+invalidate_paths_caches(Space) ->
     ok = bounded_cache:invalidate(get_canonical_paths_cache_name(Space)),
     ok = bounded_cache:invalidate(get_uuid_paths_cache_name(Space)).
 
@@ -172,7 +172,7 @@ invalidate_paths_cache(Space) ->
 init_paths_cache_group() ->
     CheckFrequency = application:get_env(?APP_NAME, canonical_paths_cache_frequency, 30000),
     Size = application:get_env(?APP_NAME, canonical_paths_cache_size, 20000),
-    ok = bounded_cache:init_group(<<"canonical_paths_cache">>, #{
+    ok = bounded_cache:init_group(<<"paths_cache_group">>, #{
         check_frequency => CheckFrequency,
         size => Size,
         worker => true
@@ -183,26 +183,27 @@ init_paths_cache_group() ->
 %% Initializes cache for particular space or all spaces.
 %% @end
 %%-------------------------------------------------------------------
--spec init_paths_cache(od_space:id() | all) -> ok.
-init_paths_cache(all) ->
+-spec init_paths_caches(od_space:id() | all) -> ok.
+init_paths_caches(all) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            lists:foreach(fun init_paths_cache/1, SpaceIds);
+            lists:foreach(fun init_paths_caches/1, SpaceIds);
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            ?debug("Unable to initialize canonical_paths bounded caches due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
+            ?debug("Unable to initialize paths bounded caches due to: ~p", [?ERROR_NO_CONNECTION_TO_ONEZONE]);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            ?debug("Unable to initialize canonical_paths bounded caches due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
+            ?debug("Unable to initialize paths bounded caches due to: ~p", [?ERROR_UNREGISTERED_ONEPROVIDER]);
         Error = {error, _} ->
-            ?critical("Unable to initialize canonical_paths bounded caches due to: ~p", [Error])
+            ?critical("Unable to initialize paths bounded caches due to: ~p", [Error])
     catch
         Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize canonical_paths bounded caches due to: ~p", [{Error2, Reason}])
+            ?critical_stacktrace("Unable to initialize paths bounded caches due to: ~p", [{Error2, Reason}])
     end;
-init_paths_cache(Space) ->
-    ok = init_paths_cache(Space, get_canonical_paths_cache_name(Space)),
-    ok = init_paths_cache(Space, get_uuid_paths_cache_name(Space)).
+init_paths_caches(Space) ->
+    ok = init_paths_caches(Space, get_canonical_paths_cache_name(Space)),
+    ok = init_paths_caches(Space, get_uuid_paths_cache_name(Space)).
 
-init_paths_cache(Space, Name) ->
+-spec init_paths_caches(od_space:id(), bounded_cache:name()) -> ok.
+init_paths_caches(Space, Name) ->
     try
         case bounded_cache:cache_exists(Name) of
             true ->

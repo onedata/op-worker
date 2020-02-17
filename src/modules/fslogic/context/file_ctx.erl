@@ -1234,6 +1234,14 @@ new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
 
 -spec resolve_canonical_path_tokens(ctx()) -> {[file_meta:name()], ctx()}.
 resolve_canonical_path_tokens(FileCtx) ->
+    resolve_and_cache_path(FileCtx, name).
+
+-spec resolve_uuid_based_path_tokens(ctx()) -> {[file_meta:uuid()], ctx()}.
+resolve_uuid_based_path_tokens(FileCtx) ->
+    resolve_and_cache_path(FileCtx, uuid).
+
+-spec resolve_and_cache_path(ctx(), name | uuid) -> {[file_meta:uuid() | file_meta:name()], ctx()}.
+resolve_and_cache_path(FileCtx, Type) ->
     Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}, scope = SpaceId}, ParentValue, CalculationInfo]) ->
         case fslogic_uuid:is_root_dir_uuid(Uuid) of
             true ->
@@ -1243,39 +1251,22 @@ resolve_canonical_path_tokens(FileCtx) ->
                     true ->
                         {ok, [<<"/">>, SpaceId], CalculationInfo};
                     false ->
-                        {ok, ParentValue ++ [Name], CalculationInfo}
+                        NameOrUuid = case Type of
+                            uuid -> Uuid;
+                            name -> Name
+                        end,
+                        {ok, ParentValue ++ [NameOrUuid], CalculationInfo}
                 end
         end
     end,
-    CacheName = location_and_link_utils:get_canonical_paths_cache_name(file_ctx:get_space_id_const(FileCtx)),
-    resolve_and_cache_path(FileCtx, Callback, CacheName, name).
-
--spec resolve_uuid_based_path_tokens(ctx()) -> {[file_meta:uuid()], ctx()}.
-resolve_uuid_based_path_tokens(FileCtx) ->
-    Callback = fun([#document{key = Uuid, scope = SpaceId}, ParentValue, CalculationInfo]) ->
-        case fslogic_uuid:is_root_dir_uuid(Uuid) of
-            true ->
-                {ok, [<<"/">>], CalculationInfo};
-            false ->
-                case fslogic_uuid:is_space_dir_uuid(Uuid) of
-                    true ->
-                        {ok, [<<"/">>, SpaceId], CalculationInfo};
-                    false ->
-                        {ok, ParentValue ++ [Uuid], CalculationInfo}
-                end
-        end
-    end,
-    CacheName = location_and_link_utils:get_uuid_paths_cache_name(file_ctx:get_space_id_const(FileCtx)),
-    resolve_and_cache_path(FileCtx, Callback, CacheName, uuid).
-
--spec resolve_and_cache_path(ctx(), bounded_cache:callback(), bounded_cache:cache(), name | uuid) -> 
-    {[file_meta:uuid() | file_meta:name()], ctx()}.
-resolve_and_cache_path(FileCtx, Callback, CacheName, Type) ->
+    
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    
     {#document{key = Uuid, value = #file_meta{type = FileType, name = Filename}} = Doc, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
-    NameOrUuid = case Type of
-        name -> Filename;
-        uuid -> Uuid
+    {FilenameOrUuid, CacheName} = case Type of
+        name -> {Filename, location_and_link_utils:get_canonical_paths_cache_name(SpaceId)};
+        uuid -> {Uuid, location_and_link_utils:get_uuid_paths_cache_name(SpaceId)}
     end,
     case FileType of
         ?DIRECTORY_TYPE ->
@@ -1285,7 +1276,7 @@ resolve_and_cache_path(FileCtx, Callback, CacheName, Type) ->
             {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
             {ok, ParentDoc} = file_meta:get_including_deleted(ParentUuid),
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
-            {Path ++ [NameOrUuid], FileCtx2}
+            {Path ++ [FilenameOrUuid], FileCtx2}
     end.
 
 %%--------------------------------------------------------------------

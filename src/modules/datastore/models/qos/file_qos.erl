@@ -103,8 +103,6 @@ get_effective(#document{scope = SpaceId} = FileDoc) ->
         case {datastore_model:get(?CTX, Uuid), ParentEffQos} of
             {?ERROR_NOT_FOUND, _} ->
                 {ok, ParentEffQos, CalculationInfo};
-            {{ok, #document{value = FileQos}}, undefined} ->
-                {ok, FileQos, CalculationInfo};
             {{ok, #document{value = FileQos}}, _} ->
                 EffQos = merge_file_qos(ParentEffQos, FileQos),
                 {ok, EffQos, CalculationInfo}
@@ -286,6 +284,8 @@ get_assigned_entries_for_storage(EffectiveFileQos, StorageId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec merge_file_qos(record(), record()) -> record().
+merge_file_qos(undefined, ChildQos) ->
+    ChildQos;
 merge_file_qos(ParentQos, ChildQos) ->
     #file_qos{
         qos_entries = lists:usort(

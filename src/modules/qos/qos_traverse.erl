@@ -58,7 +58,7 @@ start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
             <<"task_type">> => <<"traverse">>
         }
     },
-    {ok, FileCtx2} = qos_status:report_traverse_started(TaskId, FileCtx),
+    {ok, FileCtx2} = qos_status:report_traverse_start(TaskId, FileCtx),
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx2, Options),
     ok.
 
@@ -119,10 +119,10 @@ task_finished(TaskId, _PoolName) ->
         <<"space_id">> := SpaceId,
         <<"uuid">> := FileUuid,
         <<"task_type">> := TaskType
-    }} = AdditionalData = traverse_task:get_additional_data(?POOL_NAME, TaskId),
+    } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     case TaskType of
         <<"traverse">> ->
-            {ok, #{<<"qos_entry_id">> := QosEntryId}} = AdditionalData,
+            #{<<"qos_entry_id">> := QosEntryId} = AdditionalData,
             ok = qos_entry:remove_traverse_req(QosEntryId, TaskId),
             ok = qos_status:report_traverse_finished(SpaceId, TaskId, FileUuid);
         <<"reconcile">> ->
@@ -138,7 +138,7 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
-    NextBatchCallback = fun(TaskId, SlaveJobs, MasterJobs, SpaceId, Uuid, BatchLastFilename) ->
+    MasterJobFinishedCallback = fun(TaskId, SlaveJobs, MasterJobs, SpaceId, Uuid, BatchLastFilename) ->
         ChildrenFiles = lists:map(fun({#document{key = ChildFileUuid}, _}) ->
             ChildFileUuid
         end, SlaveJobs),
@@ -149,11 +149,11 @@ do_master_job(Job, MasterJobArgs) ->
             SpaceId, TaskId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastFilename)
     end,
     
-    MasterJobFinishedCallback = fun(TaskId, Uuid, SpaceId) ->
+    LastBatchFinishedCallback = fun(TaskId, Uuid, SpaceId) ->
         ok = qos_status:report_traverse_finished_for_dir(SpaceId, TaskId, Uuid)
     end, 
     
-    tree_traverse:do_master_job(Job, MasterJobArgs, NextBatchCallback, MasterJobFinishedCallback).
+    tree_traverse:do_master_job(Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchFinishedCallback).
 
 
 %%--------------------------------------------------------------------

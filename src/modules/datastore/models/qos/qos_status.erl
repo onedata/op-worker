@@ -19,8 +19,8 @@
 %%% document(qos_status) is created for a directory when it was encountered during traverse. 
 %%% This document contains information of traverse state in a directory subtree.
 %%% 
-%%% QoS traverse lists files in alphabetical order and splits them into batches. 
-%%% After each batch have been evaluated it is reported to this module so qos_status 
+%%% QoS traverse lists files in an ordered fashion (based on binary comparison) and splits them 
+%%% into batches. After each batch have been evaluated it is reported to this module so qos_status 
 %%% document could be appropriately updated. Next batch is started when previous one is finished.
 %%% 
 %%% qos_status document contains previous and current batch last filenames and list of not 
@@ -56,7 +56,7 @@
 %%% is done. 
 %%% 
 %%% To check if there is any reconcile job in subtree of a directory simply check if there is any 
-%%% reconcile_link with its prefix being this directory uuid path.
+%%% reconcile_link with its prefix being this directory uuid based path.
 %%% 
 %%% @end
 %%%-------------------------------------------------------------------
@@ -71,7 +71,7 @@
 
 %% API
 -export([check_fulfillment/2]).
--export([report_traverse_started/2, report_traverse_finished/3,
+-export([report_traverse_start/2, report_traverse_finished/3,
     report_next_traverse_batch/6, report_traverse_finished_for_dir/3,
     report_traverse_finished_for_file/2]).
 -export([report_reconciliation_started/3, report_file_reconciled/3]).
@@ -85,6 +85,8 @@
 -type record() :: #qos_status{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
+% Describes whether link should be added upon successful function execution
+-type link_strategy() :: add_link | no_link.
 
 -define(CTX, #{
     model => ?MODULE,
@@ -117,8 +119,8 @@ check_fulfillment(FileCtx, QosEntryId) ->
         are_traverses_finished_for_file(FileCtx1, QosDoc)).
 
 
--spec report_traverse_started(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-report_traverse_started(TraverseId, FileCtx) ->
+-spec report_traverse_start(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+report_traverse_start(TraverseId, FileCtx) ->
     {ok, case file_ctx:is_dir(FileCtx) of
         {true, FileCtx1} ->
             {ok, _} = create(file_ctx:get_space_id_const(FileCtx), TraverseId, 
@@ -141,12 +143,12 @@ report_traverse_finished(SpaceId, TraverseId, Uuid) ->
 report_next_traverse_batch(SpaceId, TraverseId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastFilename) ->
     {ok, _} = update(TraverseId, Uuid,
         fun(#qos_status{
-            files_list = FilesList, 
+            files_list = [], 
             child_dirs_count = ChildDirs, 
             current_batch_last_filename = LN
         } = Value) ->
             {ok, Value#qos_status{
-                files_list = FilesList ++ ChildrenFiles,
+                files_list = ChildrenFiles,
                 previous_batch_last_filename = LN,
                 current_batch_last_filename = BatchLastFilename,
                 child_dirs_count = ChildDirs + length(ChildrenDirs)}
@@ -189,9 +191,10 @@ report_reconciliation_started(TraverseId, FileCtx, QosEntries) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
     Link = {?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId), TraverseId},
+    ProviderId = oneprovider:get_id(),
     lists:foreach(fun(QosEntryId) ->
         {ok, _} = add_synced_link(
-            SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), oneprovider:get_id(), Link)
+            SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ProviderId, Link)
     end, QosEntries).
 
 
@@ -209,8 +212,9 @@ report_file_reconciled(SpaceId, TraverseId, FileUuid) ->
             file_qos:get_qos_entries(EffectiveFileQos)
     end,
     {UuidBasedPath, _} = file_ctx:get_uuid_based_path(file_ctx:new_by_guid(FileGuid)),
+    ProviderId = oneprovider:get_id(),
     lists:foreach(fun(QosEntryId) ->
-        ok = delete_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), oneprovider:get_id(),
+        ok = delete_synced_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ProviderId,
             ?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId))
     end, QosEntries).
 
@@ -360,8 +364,7 @@ report_child_dir_traversed(TraverseId, FileCtx) ->
 
 
 %% @private
--spec handle_traverse_finished_for_dir(traverse:id(), file_ctx:ctx(), 
-    LinkStrategy :: add_link | no_link) -> ok.
+-spec handle_traverse_finished_for_dir(traverse:id(), file_ctx:ctx(), link_strategy()) -> ok.
 handle_traverse_finished_for_dir(TraverseId, FileCtx, LinkStrategy) ->
     {Path, FileCtx1} = file_ctx:get_uuid_based_path(FileCtx),
     Uuid = file_ctx:get_uuid_const(FileCtx1),
@@ -462,7 +465,7 @@ get_record_struct(1) ->
     ]}.
 
 %%%===================================================================
-%%% Internal functions
+%%% Internal functions operating on links and datastore document
 %%%===================================================================
 
 %% @private

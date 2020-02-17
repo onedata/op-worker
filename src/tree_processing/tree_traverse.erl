@@ -55,9 +55,12 @@
     additional_data => traverse:additional_data()
 }.
 
--type next_batch_callback() :: fun((traverse:id(), [{slave_job(), traverse_info()}], 
+% This callback is executed when each master job is finished 
+% and next master jobs and slave jobs are evaluated.
+-type master_job_finished_callback() :: fun((traverse:id(), [{slave_job(), traverse_info()}], 
     [master_job()], od_space:id(), file_meta:uuid(), file_meta:name()) -> ok).
--type master_job_finished_callback() :: fun((traverse:id(), file_meta:uuid(), od_space:id()) -> ok).
+% This callback is executed when last batch for a directory have been evaluated.
+-type last_batch_finished_callback() :: fun((traverse:id(), file_meta:uuid(), od_space:id()) -> ok).
 
 -export_type([master_job/0, slave_job/0, execute_slave_on_dir/0, batch_size/0, traverse_info/0]).
 
@@ -204,8 +207,8 @@ do_master_job(Job, MasterJobArgs) ->
 %% returns jobs for listed children and next batch if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec do_master_job(master_job(), traverse:master_job_extended_args(), next_batch_callback(), 
-    master_job_finished_callback()) -> {ok, traverse:master_job_map()}.
+-spec do_master_job(master_job(), traverse:master_job_extended_args(), master_job_finished_callback(), 
+    last_batch_finished_callback()) -> {ok, traverse:master_job_map()}.
 do_master_job(#tree_traverse{
     doc = #document{key = Uuid, scope = SpaceId, value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
     token = Token,
@@ -214,7 +217,7 @@ do_master_job(#tree_traverse{
     execute_slave_on_dir = OnDir,
     batch_size = BatchSize,
     traverse_info = TraverseInfo
-} = TT, #{task_id := TaskId} = _MasterJobArgs, NextBatchCallback, JobFinishedCallback) ->
+} = TT, #{task_id := TaskId} = _MasterJobArgs, MasterJobFinishedCallback, LastBatchCallback) ->
     {ok, Children, ExtendedInfo} = case {Token, LN} of
         {undefined, <<>>} ->
             file_meta:list_children(Doc, BatchSize);
@@ -237,11 +240,11 @@ do_master_job(#tree_traverse{
         end
     end, {[], []}, Children),
     
-    ok = NextBatchCallback(TaskId, SlaveJobs, MasterJobs, SpaceId, Uuid, LN2),
+    ok = MasterJobFinishedCallback(TaskId, SlaveJobs, MasterJobs, SpaceId, Uuid, LN2),
 
     FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of
         true -> 
-            ok = JobFinishedCallback(TaskId, Uuid, SpaceId),
+            ok = LastBatchCallback(TaskId, Uuid, SpaceId),
             lists:reverse(MasterJobs);
         false -> [TT#tree_traverse{
             token = Token2,
