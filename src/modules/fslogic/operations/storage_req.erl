@@ -19,6 +19,7 @@
 -include("modules/storage_file_manager/helpers/helpers.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(REMOVE_STORAGE_TEST_FILE_DELAY, timer:seconds(application:get_env(?APP_NAME,
     remove_storage_test_file_delay_seconds, 300))).
@@ -107,8 +108,12 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
 -spec create_storage_test_file(user_ctx:ctx(), fslogic_worker:file_guid(),
     storage:id()) -> #fuse_response{}.
 create_storage_test_file(UserCtx, Guid, StorageId) ->
+    % TODO VFS-6121 pass SpaceId instead of Guid here
     SpaceId = case file_id:guid_to_space_id(Guid) of
-        undefined -> throw(?ENOENT);
+        undefined ->
+            % TODO VFS-6121 log not existing SpaceId here
+            ?error("Detecting storage ~p failed due to not existing space.", [StorageId]),
+            throw(?ENOENT);
         <<_/binary>> = Id -> Id
     end,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
@@ -116,7 +121,12 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
 
-    {ok, StorageDoc} = storage:get(StorageId),
+    {ok, StorageDoc} = case storage:get(StorageId) of
+        {ok, Doc} -> {ok, Doc};
+        {error, not_found} ->
+            ?error("Detecting storage ~p failed due to not found storage document.", [StorageId]),
+            throw(?ENOENT)
+    end,
     {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
     HelperName = helper:get_name(Helper),
 
@@ -125,26 +135,30 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName),
             HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
 
-            {RawStoragePath, FileCtx2} = file_ctx:get_raw_storage_path(SpaceCtx),
-            Dirname = filename:dirname(RawStoragePath),
-            FileCtx3 = sfm_utils:create_parent_dirs(FileCtx2),
-            {Size, _} = file_ctx:get_file_size(FileCtx3),
+            {RawStoragePath, _SpaceCtx2} = file_ctx:get_raw_storage_path(SpaceCtx),
+            DirName = filename:dirname(RawStoragePath),
+
             TestFileName = storage_detector:generate_file_id(),
-            TestFileId = fslogic_path:join([Dirname, TestFileName]),
-            FileContent = storage_detector:create_test_file(Helper, ServerStorageUserCtx, TestFileId),
-
-            spawn(storage_req, remove_storage_test_file, [
-                Helper, ServerStorageUserCtx, TestFileId, Size, ?REMOVE_STORAGE_TEST_FILE_DELAY]),
-
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = #storage_test_file{
-                    helper_params = HelperParams, space_id = SpaceId,
-                    file_id = TestFileId, file_content = FileContent
+            TestFileId = fslogic_path:join([DirName, TestFileName]),
+            try
+                FileContent = storage_detector:create_test_file(Helper, ServerStorageUserCtx, TestFileId),
+                spawn(storage_req, remove_storage_test_file, [
+                    Helper, ServerStorageUserCtx, TestFileId, byte_size(FileContent), ?REMOVE_STORAGE_TEST_FILE_DELAY]),
+                #fuse_response{
+                    status = #status{code = ?OK},
+                    fuse_response = #storage_test_file{
+                        helper_params = HelperParams, space_id = SpaceId,
+                        file_id = TestFileId, file_content = FileContent
+                    }
                 }
-            };
-        {error, _} ->
-            #fuse_response{status = #status{code = ?ENOENT}}
+            catch
+                error:{badmatch, {error, Reason}} ->
+                    ?error_stacktrace("Detecting storage ~p failed due to ~p", [StorageId, Reason]),
+                    #fuse_response{status = #status{code = Reason}}
+            end;
+        {error, Reason} ->
+            ?error("Detecting storage ~p failed with error ~p when getting client user context.", [StorageId, Reason])
+            #fuse_response{status = #status{code = ?EACCES}}
     end.
 
 %%--------------------------------------------------------------------
