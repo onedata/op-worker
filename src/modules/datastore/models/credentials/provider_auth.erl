@@ -338,5 +338,4 @@ caveats_for_token(access) -> [
     #cv_time{valid_until = ?NOW() + ?TOKEN_TTL}
 ];
 caveats_for_token(identity) -> [
-    #cv_scope{scope = identity_token}
 ].
