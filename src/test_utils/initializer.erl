@@ -29,6 +29,7 @@
 %% API
 -export([
     create_access_token/1, create_access_token/2, create_access_token/3,
+    create_identity_token/1,
     setup_session/3, teardown_session/2,
     setup_storage/1, setup_storage/2, teardown_storage/1,
     clean_test_users_and_spaces/1,
@@ -251,6 +252,11 @@ create_access_token(UserId, Caveats, Persistence) ->
         }, ?TOKENS_SECRET, Caveats))
     ),
     SerializedToken.
+
+
+-spec create_identity_token(od_user:id()) -> tokens:serialized().
+create_identity_token(UserId) ->
+    create_access_token(UserId, []).
 
 
 %%--------------------------------------------------------------------
@@ -482,11 +488,19 @@ mock_auth_manager(Config) ->
         fun(TokenCredentials) ->
             case tokens:deserialize(auth_manager:get_access_token(TokenCredentials)) of
                 {ok, Token} ->
+                    Consumer = case auth_manager:get_consumer_token(TokenCredentials) of
+                        undefined ->
+                            undefined;
+                        ConsumerToken ->
+                            {ok, #token{subject = Csm}} = tokens:deserialize(ConsumerToken),
+                            Csm
+                    end,
                     AuthCtx = #auth_ctx{
                         current_timestamp = time_utils:cluster_time_seconds(),
                         ip = auth_manager:get_peer_ip(TokenCredentials),
                         interface = auth_manager:get_interface(TokenCredentials),
                         service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
+                        consumer = Consumer,
                         data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenCredentials),
                         group_membership_checker = fun(_, _) -> false end
                     },
