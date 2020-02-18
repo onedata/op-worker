@@ -67,8 +67,8 @@ list() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec run_after(atom(), list(), term()) -> term().
-run_after(update, _Args, {ok, Doc} = Result) ->
-    auth_cache:report_token_status_update(Doc),
+run_after(update, _Args, {ok, #document{key = TokenId}} = Result) ->
+    auth_cache:report_token_status_update(TokenId),
     Result;
 run_after(_Function, _Args, Result) ->
     Result.

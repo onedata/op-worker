@@ -8,6 +8,7 @@
 %%% @doc
 %%% This model serves as cache for temporary_token_secret records
 %%% synchronized via Graph Sync.
+%%% For more information about this model check identical module in oz.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(temporary_token_secret).

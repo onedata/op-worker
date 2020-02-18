@@ -172,7 +172,7 @@ auth_cache_size_test(Config) ->
 
 
 auth_cache_named_token_events_test(Config) ->
-    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+    [Worker1, Worker2 | _] = Workers = ?config(op_worker_nodes, Config),
 
     clear_auth_caches(Config),
 
@@ -195,6 +195,7 @@ auth_cache_named_token_events_test(Config) ->
     %% TOKEN EVENTS SEND ON ANY NODE SHOULD AFFECT ALL NODES AUTH CACHE
 
     % When AccessToken1 is revoked
+    mock_token_logic_is_revoked(Workers, [?USER_ID_1]),
     simulate_gs_token_status_update(Worker2, ?USER_ID_1, true),
 
     % Then only TokenCredentialss based on that token should be revoked
@@ -204,6 +205,7 @@ auth_cache_named_token_events_test(Config) ->
     ?assertMatch({ok, ?USER(?USER_ID_2), undefined}, verify_credentials(Worker1, TokenCredentials3)),
 
     % Revoked tokens can be re-revoked and used again
+    mock_token_logic_is_revoked(Workers, [?USER_ID_2]),
     simulate_gs_token_status_update(Worker1, ?USER_ID_1, false),
     simulate_gs_token_status_update(Worker2, ?USER_ID_2, true),
 
@@ -221,6 +223,7 @@ auth_cache_named_token_events_test(Config) ->
     ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker1, TokenCredentials3)),
 
     % Revoking already deleted token should not change error
+    mock_token_logic_is_revoked(Workers, [?USER_ID_2]),
     simulate_gs_token_status_update(Worker1, ?USER_ID_1, true),
 
     lists:foreach(fun({TokenCredentials, Worker}) ->
@@ -228,6 +231,7 @@ auth_cache_named_token_events_test(Config) ->
     end, [{TokenCredentials1, Worker1}, {TokenCredentials2, Worker2}]),
     ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker1, TokenCredentials3)),
 
+    mock_token_logic_is_revoked(Workers, []),
     clear_auth_caches(Config).
 
 
@@ -622,6 +626,12 @@ create_token_credentials(AccessToken, Interface, DataAccessCaveatsPolicy, Consum
         AccessToken, ConsumerToken, initializer:local_ip_v4(),
         Interface, DataAccessCaveatsPolicy
     ).
+
+
+mock_token_logic_is_revoked(Nodes, RevokedTokens) ->
+    test_utils:mock_expect(Nodes, token_logic, is_token_revoked, fun(TokenId) ->
+        {ok, lists:member(TokenId, RevokedTokens)}
+    end).
 
 
 -spec simulate_gs_token_status_update(node(), binary(), boolean()) -> ok.
