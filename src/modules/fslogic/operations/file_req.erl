@@ -402,6 +402,7 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
         {HandleId, FileLocation, FileCtx2}
     catch
         throw:?ENOENT ->
+            % this error can is thrown on race between opening the file and deleting it on storage
             ?debug_stacktrace("Open file error: ENOENT for uuid ~p", [file_ctx:get_uuid_const(FileCtx)]),
             check_and_register_release(FileCtx, SessId, HandleId0),
             throw(?ENOENT);

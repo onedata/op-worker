@@ -157,7 +157,7 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
                     #fuse_response{status = #status{code = Reason}}
             end;
         {error, Reason} ->
-            ?error("Detecting storage ~p failed with error ~p when getting client user context.", [StorageId, Reason])
+            ?error("Detecting storage ~p failed with error ~p when getting client user context.", [StorageId, Reason]),
             #fuse_response{status = #status{code = ?EACCES}}
     end.
 
