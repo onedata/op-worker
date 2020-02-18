@@ -53,6 +53,8 @@
     chmod_file_update_test/1,
     change_file_type_test/1,
     change_file_type2_test/1,
+    change_file_type3_test/1,
+    change_file_type4_test/1,
     update_timestamps_file_import_test/1,
     create_file_in_dir_import_test/1,
     create_file_in_dir_update_test/1,
@@ -154,8 +156,10 @@
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test,
     chmod_file_update_test,
     chmod_file_update2_test,
-%%    change_file_type_test,    TODO VFS-6118
-%%    change_file_type2_test,   TODO VFS-6118
+    change_file_type_test,
+    change_file_type2_test,
+    change_file_type3_test,
+    change_file_type4_test,
     update_timestamps_file_import_test,
     should_not_detect_timestamp_update_test,
     recreate_file_deleted_by_sync_test,
@@ -346,6 +350,7 @@ close_file_import_race_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})).
 
 delete_file_reimport_race_test(Config) ->
+    % todo ogarnac czy mockować tą funckje czy moze jednak check_location_and_maybe_sync
     % in this test, we check whether sync does not reimport file that is deleted between checking links and file_location
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     MountInRoot = false,
@@ -364,17 +369,17 @@ delete_file_reimport_race_test(Config) ->
 
     TestProcess = self(),
     ok = test_utils:mock_new(W1, simple_scan),
-    ok = test_utils:mock_expect(W1, simple_scan, sync_if_file_is_not_being_replicated, fun(Job, FileCtx, FileType) ->
+    ok = test_utils:mock_expect(W1, simple_scan, check_location_and_maybe_sync, fun(Job, FileCtx) ->
         Guid = file_ctx:get_guid_const(FileCtx),
         case Guid =:= FileGuid of
             true ->
                 TestProcess ! {syncing_process, self()},
                 receive
                     continue ->
-                        meck:passthrough([Job, FileCtx, FileType])
+                        meck:passthrough([Job, FileCtx])
                 end;
             false ->
-                meck:passthrough([Job, FileCtx, FileType])
+                meck:passthrough([Job, FileCtx])
         end
     end),
 
@@ -442,17 +447,14 @@ delete_opened_file_reimport_race_test(Config) ->
 
     TestProcess = self(),
     ok = test_utils:mock_new(W1, simple_scan),
-    ok = test_utils:mock_expect(W1, simple_scan, sync_if_file_is_not_being_replicated, fun(Job, FileCtx, FileType) ->
+    ok = test_utils:mock_expect(W1, simple_scan, check_location_and_maybe_sync, fun(Job, FileCtx) ->
         Guid = file_ctx:get_guid_const(FileCtx),
         case Guid =:= FileGuid of
             true ->
                 TestProcess ! {syncing_process, self()},
-                receive
-                    continue ->
-                        meck:passthrough([Job, FileCtx, FileType])
-                end;
+                receive continue -> meck:passthrough([Job, FileCtx]) end;
             false ->
-                meck:passthrough([Job, FileCtx, FileType])
+                meck:passthrough([Job, FileCtx])
         end
     end),
 
@@ -1216,6 +1218,12 @@ change_file_type_test(Config) ->
 change_file_type2_test(Config) ->
     storage_sync_test_base:change_file_type2_test(Config, false).
 
+change_file_type3_test(Config) ->
+    storage_sync_test_base:change_file_type3_test(Config, false).
+
+change_file_type4_test(Config) ->
+    storage_sync_test_base:change_file_type4_test(Config, false).
+
 update_timestamps_file_import_test(Config) ->
     storage_sync_test_base:update_timestamps_file_import_test(Config, false).
 
@@ -1358,6 +1366,8 @@ init_per_testcase(Case, Config) when
     Case =:= move_file_update_test;
     Case =:= change_file_type_test;
     Case =:= change_file_type2_test;
+    Case =:= change_file_type3_test;
+    Case =:= change_file_type4_test;
     Case =:= create_subfiles_and_delete_before_import_is_finished_test
     ->
     Config2 = [

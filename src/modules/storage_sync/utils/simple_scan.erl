@@ -28,13 +28,16 @@
 -export_type([job_result/0]).
 
 %% API
--export([run/1, maybe_sync_storage_file_and_children/1,
-    maybe_sync_storage_file/1, import_children/5,
-    maybe_update_file/3, generate_jobs_for_importing_children/4,
-    import_regular_subfiles/1]).
+-export([run/1]).
+
+%% Internal functions exported for storage_update
+-export([
+    maybe_update_file/3, import_children/5,
+    generate_jobs_for_importing_children/4, import_regular_subfiles/1
+]).
 
 %% exported for mocking in tests
--export([sync_if_file_is_not_being_replicated/3, import_file/1]).
+-export([check_location_and_maybe_sync/2, import_file/1]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,7 +62,56 @@ run(Job = #space_strategy_job{data = #{
             {{error, Reason}, []}
     end.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Implementation for 'simple_scan' strategy.
+%% @end
+%%--------------------------------------------------------------------
+-spec run_internal(space_strategy:job()) ->
+    {space_strategy:job_result(), [space_strategy:job()]}.
+run_internal(Job = #space_strategy_job{
+    data = #{
+        storage_file_ctx := StorageFileCtx
+    }}) when StorageFileCtx =/= undefined ->
+    maybe_sync_storage_file_and_children(Job);
+run_internal(Job = #space_strategy_job{
+    data = Data = #{
+        parent_ctx := ParentCtx,
+        file_name := FileName,
+        space_id := SpaceId,
+        storage_id := StorageId
+    }}) ->
+
+    {CanonicalPath, ParentCtx2} = file_ctx:get_child_canonical_path(ParentCtx, FileName),
+    StorageFileCtx = storage_file_ctx:new(CanonicalPath, SpaceId, StorageId),
+    StatResult = try
+        storage_file_ctx:get_stat_buf(StorageFileCtx)
+    catch
+        throw:?ENOENT ->
+            ?error_stacktrace("simple_scan failed due to ~p for file ~p in space ~p",
+                [?ENOENT, CanonicalPath, SpaceId]),
+            {error, ?ENOENT}
+    end,
+
+    case StatResult of
+        Error = {error, _} ->
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
+            {Error, []};
+        {_StatBuf, StorageFileCtx2} ->
+            Data2 = Data#{
+                parent_ctx => ParentCtx2,
+                storage_file_ctx => StorageFileCtx2
+            },
+            run_internal(Job#space_strategy_job{data = Data2})
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Synchronizes file associated with SFMHandle and returns jobs for
 %% synchronizing a batch of its children (if it's a directory).
@@ -118,23 +170,19 @@ maybe_sync_storage_file_and_children(Job0 = #space_strategy_job{
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Synchronizes file associated with SFMHandle.
 %% @end
 %%--------------------------------------------------------------------
 -spec maybe_sync_storage_file(space_strategy:job()) ->
-    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()} | no_return().
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()}.
 maybe_sync_storage_file(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
         parent_ctx := ParentCtx,
-        storage_file_ctx := StorageFileCtx,
         space_id := SpaceId
 }}) ->
-    {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
-    FileType = file_meta:type(Mode),
-    Job2 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx2, Job),
-
     {HasSuffix, FileUuid, FileBaseName} = case is_suffixed(FileName) of
         {true, StorageUuid, StorageBaseName} -> {true, StorageUuid, StorageBaseName};
         false -> {false, undefined, FileName}
@@ -149,12 +197,12 @@ maybe_sync_storage_file(Job = #space_strategy_job{
                             {ParentStorageFileId, _} = file_ctx:get_storage_file_id(ParentCtx),
                             Path = filename:join([ParentStorageFileId, FileName]),
                             ?error("Deletion link for ~p is unexpectedly missing", [Path]),
-                            {processed, undefined, Job2};
+                            {processed, undefined, Job};
                         false ->
-                            maybe_import_file(Job2)
+                            maybe_import_file(Job)
                     end;
                 {ok, _FileUuid} ->
-                    {processed, undefined, Job2}
+                    {processed, undefined, Job}
             end;
         {ok, ResolvedUuid} ->
             FileUuid2 = utils:ensure_defined(FileUuid, undefined, ResolvedUuid),
@@ -162,11 +210,202 @@ maybe_sync_storage_file(Job = #space_strategy_job{
                 {error, not_found} ->
                     FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
-                    simple_scan:sync_if_file_is_not_being_replicated(Job2, FileCtx, FileType);
+                    simple_scan:check_location_and_maybe_sync(Job, FileCtx);
                 {ok, _} ->
-                    {processed, undefined, Job2}
+                    {processed, undefined, Job}
             end
     end.
+
+
+-spec check_location_and_maybe_sync(space_strategy:job(), file_ctx:ctx()) ->
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()}.
+check_location_and_maybe_sync(Job = #space_strategy_job{
+    data = #{storage_file_ctx := StorageFileCtx}
+}, FileCtx) ->
+    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
+    Job2 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx2, Job),
+    case file_meta:type(StMode) of
+        ?DIRECTORY_TYPE ->
+            check_dir_location_and_maybe_sync(Job2, FileCtx);
+        ?REGULAR_FILE_TYPE ->
+            check_file_location_and_maybe_sync(Job2, FileCtx)
+    end.
+
+
+-spec check_dir_location_and_maybe_sync(space_strategy:job(), file_ctx:ctx()) ->
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()}.
+check_dir_location_and_maybe_sync(Job, FileCtx) ->
+    check_dir_location_and_maybe_sync(Job, FileCtx, false).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function checks dir_location associated with passed FileCtx
+%% to determine whether the file can by synchronised.
+%% CheckType flag determines whether file_location associated with
+%% given FileCtx has already been checked.
+%% If StorageFileIsRegularFile == true file_location has been checked and
+%% has not been found.
+%% else file_location has not been checked yet.
+%% @end
+%%-------------------------------------------------------------------
+-spec check_dir_location_and_maybe_sync(space_strategy:job(), file_ctx:ctx(), boolean()) ->
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()}.
+check_dir_location_and_maybe_sync(Job, FileCtx, StorageFileIsRegularFile) ->
+    {DirLocation, _} = file_ctx:get_dir_location_doc(FileCtx),
+    StorageFileCreated = dir_location:is_storage_file_created(DirLocation),
+    case  StorageFileCreated or StorageFileIsRegularFile of
+        true ->
+            check_file_meta_and_maybe_sync(Job, FileCtx, StorageFileCreated);
+        false ->
+            % dir_location does not exist, check whether file_location exist
+            % as file with the same name may had been deleted and
+            % directory with the same name created
+            check_file_location_and_maybe_sync(Job, FileCtx, true)
+    end.
+
+
+-spec check_file_location_and_maybe_sync(space_strategy:job(), file_ctx:ctx()) ->
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()}.
+check_file_location_and_maybe_sync(Job, FileCtx) ->
+    check_file_location_and_maybe_sync(Job, FileCtx, false).
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function analyses file_location associated with passed FileCtx
+%% to determine whether the file can by synchronised, and if so whether
+%% it should be imported or updated.
+%% CheckType flag determines whether dir_location associated with
+%% given FileCtx has already been checked.
+%% If StorageFileIsDir == true dir_location has been checked and has not been found.
+%% else dir_location has not been checked yet.
+%% @end
+%%-------------------------------------------------------------------
+-spec check_file_location_and_maybe_sync(space_strategy:job(), file_ctx:ctx(), boolean()) ->
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()}.
+check_file_location_and_maybe_sync(Job = #space_strategy_job{data = #{
+    storage_id := StorageId,
+    parent_ctx := ParentCtx,
+    file_name := FileName
+}}, FileCtx, StorageFileIsDir) ->
+    % Get only two blocks - it is enough to verify if file can be imported
+    case file_ctx:get_local_file_location_doc(FileCtx, {blocks_num, 2}) of
+        {FLDoc = #document{
+            value = #file_location{
+                file_id = FileId,
+                rename_src_file_id = RenameSrcFileId,
+                storage_id = StorageId,
+                size = Size
+            }}, _} ->
+            {ParentStorageFileId, _ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),
+            StorageFileId = filename:join([ParentStorageFileId, FileName]),
+            case {FileId =:= StorageFileId, RenameSrcFileId =:= StorageFileId} of
+                {_, true} ->
+                    % file is being renamed at the moment, ignore it
+                    {processed, FileCtx, Job};
+                {true, false} ->
+                    case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
+                        [#file_block{offset = 0, size = Size}] ->
+                            check_file_meta_and_maybe_sync(Job, FileCtx, true);
+                        [] when Size =:= 0 ->
+                            check_file_meta_and_maybe_sync(Job, FileCtx, true);
+                        _ when StorageFileIsDir ->
+                            % file must have been deleted and directory
+                            % with the same name recreated
+                            check_file_meta_and_maybe_sync(Job, FileCtx, true);
+                        _ ->
+                            % file is not fully replicated (not in one block), ignore it
+                            {processed, FileCtx, Job}
+                    end;
+                {false, false} ->
+                    % This may happen in 2 cases:
+                    %   * when there was a conflict between creation of file on storage and by remote provider
+                    %     in such case, if file was replicated from the remote provider
+                    %     it must have been created on storage with a suffix and therefore file ids do not match.
+                    %   * when file has been moved because it was deleted and still opened
+                    %     in such case, its file_id in file_location has been changed
+                    %     such file should be ignored
+                    % To determine which case it is, maybe_import_file will check whether file is still on storage.
+                    maybe_import_file(Job)
+            end;
+        {undefined, _} ->
+            % This may happen in the following cases:
+            %  * File has just been deleted by lfm, in such case it won't be imported as
+            %    maybe_import_file checks whether file is still on storage.
+            %  * There was a conflict between creation of file on storage and by remote provider.
+            %    Links has been synchronized so we have uuid, but file_location has not been synchronized yet.
+            %    We may import this file with a IMPORTED suffix.
+            %  * Directory with the same name as given file was deleted on storage, and the file was created between
+            %    consecutive scans.
+            case StorageFileIsDir of
+                true ->
+                    % dir_location was not found and file_location either
+                    check_file_meta_and_maybe_sync(Job, FileCtx, false);
+                false ->
+                    % Check whether dir_location exists for this file to determine whether
+                    % it's 3rd of the above cases.
+                    check_dir_location_and_maybe_sync(Job, FileCtx, true)
+            end
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if file (which metadata exists in onedata) is synchronized.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_file_meta_and_maybe_sync(space_strategy:job(), file_ctx:ctx(), boolean()) ->
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()}.
+check_file_meta_and_maybe_sync(Job = #space_strategy_job{}, FileCtx, StorageFileCreated) ->
+    case get_attr_including_deleted(FileCtx) of
+        {ok, _FileAttr, true} ->
+            {processed, undefined, Job};
+        {ok, FileAttr, false} ->
+            check_file_type_and_maybe_sync(Job, FileAttr, FileCtx, StorageFileCreated);
+        {error, ?ENOENT} ->
+            maybe_import_file(Job)
+    end.
+
+-spec check_file_type_and_maybe_sync(space_strategy:job(), #file_attr{}, file_ctx:ctx(), boolean()) ->
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()}.
+check_file_type_and_maybe_sync(Job = #space_strategy_job{data = #{storage_file_ctx := StorageFileCtx}},
+    FileAttr = #file_attr{type = FileMetaType}, FileCtx, StorageFileCreated
+) ->
+    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
+    Job2 = space_strategy:update_job_data(storage_file_ctx, StorageFileCtx2, Job),
+    StorageFileType = file_meta:type(StMode),
+    case {StorageFileType, FileMetaType, StorageFileCreated} of
+        {Type, Type, true} ->
+            CallbackModule = storage_sync_utils:module(Job2),
+            delegate(CallbackModule, maybe_update_file, [Job2, FileAttr, FileCtx], 3);
+        {_Type, _OtherType, true} ->
+            import_file_recreated_with_different_type(Job2, FileCtx);
+        {?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE, false} ->
+            maybe_import_file(Job2);
+        {?DIRECTORY_TYPE, ?DIRECTORY_TYPE, false} ->
+            CallbackModule = storage_sync_utils:module(Job2),
+            delegate(CallbackModule, maybe_update_file, [Job2, FileAttr, FileCtx], 3);
+        {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, false} ->
+            maybe_import_file(Job2);
+        {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE, false} ->
+            {processed, undefined, Job2}
+    end.
+
+-spec import_file_recreated_with_different_type(space_strategy:job(), file_ctx:ctx()) ->
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()}.
+import_file_recreated_with_different_type(Job = #space_strategy_job{
+    data = #{
+        space_id := SpaceId,
+        storage_id := StorageId
+    }
+}, FileCtx) ->
+    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
+    full_update:delete_file_and_update_counters(FileCtx, SpaceId, StorageId),
+    maybe_import_file(Job).
+
 
 %%-------------------------------------------------------------------
 %% @private
@@ -177,7 +416,7 @@ maybe_sync_storage_file(Job = #space_strategy_job{
 %% @end
 %%-------------------------------------------------------------------
 -spec maybe_import_file(space_strategy:job()) ->
-    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()} | no_return().
+    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()}.
 maybe_import_file(Job = #space_strategy_job{
     data = #{
         file_name := FileName,
@@ -200,77 +439,94 @@ maybe_import_file(Job = #space_strategy_job{
             {processed, undefined, Job}
     end.
 
-%%-------------------------------------------------------------------
+
+%%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function synchronizes the file.
-%% For regular files, it checks whether the file is being replicated and
-%% synchronizes it if it isn't.
-%% Directories are always replicated.
+%% Imports given storage file to onedata filesystem.
 %% @end
-%%-------------------------------------------------------------------
--spec sync_if_file_is_not_being_replicated(space_strategy:job(), file_ctx:ctx(), file_meta:type()) ->
-    {space_strategy:job_result(), file_ctx:ctx() | undefined, space_strategy:job()} | no_return().
-sync_if_file_is_not_being_replicated(Job, FileCtx, ?DIRECTORY_TYPE) ->
-    maybe_update_file(Job, FileCtx);
-sync_if_file_is_not_being_replicated(Job = #space_strategy_job{data = #{
-    storage_id := StorageId,
-    parent_ctx := ParentCtx,
-    file_name := FileName
-}}, FileCtx, ?REGULAR_FILE_TYPE) ->
-    % Get only two blocks - it is enough to verify if file can be imported
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case fslogic_location_cache:get_location(
-        file_location:local_id(FileUuid), FileUuid, {blocks_num, 2}) of
-        {ok, #document{
-            value = #file_location{
-                file_id = FileId,
-                rename_src_file_id = RenameSrcFileId,
-                storage_id = StorageId,
-                size = Size
-        }} = FL} ->
-            {ParentStorageFileId, _ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),
-            StorageFileId = filename:join([ParentStorageFileId, FileName]),
-            case {FileId =:= StorageFileId, RenameSrcFileId =:= StorageFileId} of
-                {_, true} ->
-                    % file is being renamed at the moment, ignore it
-                    {processed, FileCtx, Job};
-                {true, false} ->
-                    case fslogic_location_cache:get_blocks(FL, #{count => 2}) of
-                        [#file_block{offset = 0, size = Size}] ->
-                            maybe_update_file(Job, FileCtx);
-                        [] when Size =:= 0 ->
-                            maybe_update_file(Job, FileCtx);
-                        _ ->
-                            {processed, FileCtx, Job}
-                    end;
-                {false, false} ->
-                    % This may happen in 2 cases:
-                    %   * when there was a conflict between creation of file on storage and by remote provider
-                    %     in such case, if file was replicated from the remote provider
-                    %     it must have been created on storage with a suffix and therefore file ids do not match.
-                    %   * when file has been moved because it was deleted and still opened
-                    %     in such case, its file_id in file_location has been changed
-                    %     such file should be ignored
-                    % To determine which case it is, maybe_import_file will check whether file is still on storage.
-                    maybe_import_file(Job)
-            end;
-        {error, not_found} ->
-            % This may happen in the following cases:
-            %  * File has just been deleted by lfm, in such case it won't be imported as
-            %    maybe_import_file checks whether file is still on storage.
-            %  * When there was a conflict between creation of file on storage and by remote provider.
-            %    Links has been synchronized so we have uuid, but file_location has not been synchronized yet.
-            %    We may import this file with a IMPORTED suffix.
-            %  * Directory with the same name as given file was deleted on storage, and the file was created between
-            %    consecutive scans. Currently, this file won't be processed properly.
-            %    If it was earlier synced it will be ignored as storage_sync_info exists.
-            %    It it was created by lfm it will be imported with IMPORTED suffix and previous directory won't be deleted.
-            % TODO VFS-6118  We can't distinguish this case from the previous one. How do we determine whether file associated with FileUuid can be deleted?
-            maybe_import_file(Job);
-        _Other ->
-            {processed, FileCtx, Job}
+%%--------------------------------------------------------------------
+-spec import_file_safe(space_strategy:job()) -> {space_strategy:job_result(), file_ctx:ctx()}.
+import_file_safe(Job = #space_strategy_job{
+    data = #{
+        file_name := FileName,
+        space_id := SpaceId,
+        parent_ctx := ParentCtx
+    }}) ->
+    try
+        simple_scan:import_file(Job)
+    catch
+        Error:Reason ->
+            ?error_stacktrace("importing file ~p in space ~p failed with ~p:~p", [FileName, SpaceId, Error, Reason]),
+            full_update:delete_file(FileName, ParentCtx),
+            {{error, Reason}, undefined}
     end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Imports given storage file to onedata filesystem.
+%% @end
+%%--------------------------------------------------------------------
+-spec import_file(space_strategy:job()) -> {job_result(), file_ctx:ctx()}.
+import_file(#space_strategy_job{
+    strategy_args = Args,
+    data = #{
+        file_name := FileName,
+        space_id := SpaceId,
+        storage_id := StorageId,
+        parent_ctx := ParentCtx,
+        storage_file_ctx := StorageFileCtx
+    }}) ->
+    {StatBuf, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
+    #statbuf{
+        st_mode = Mode,
+        st_atime = ATime,
+        st_ctime = CTime,
+        st_mtime = MTime,
+        st_size = FSize
+    } = StatBuf,
+    {OwnerId, StorageFileCtx3} = get_owner_id(StorageFileCtx2),
+    {GroupId, StorageFileCtx4} = get_group_owner_id(StorageFileCtx3),
+    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    FileUuid = datastore_key:new(),
+    {ParentStorageFileId, ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),
+    {ParentCanonicalPath, _} = file_ctx:get_canonical_path(ParentCtx2),
+    StorageFileId = filename:join([ParentStorageFileId, FileName]),
+    CanonicalPath = filename:join([ParentCanonicalPath, FileName]),
+
+    case file_meta:type(Mode) of
+        ?REGULAR_FILE_TYPE ->
+            StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx4),
+
+            storage_sync_info:create_or_update(StorageFileId, fun(SSI) ->
+                {ok, SSI#storage_sync_info{
+                    mtime = MTime,
+                    last_stat = StatTimestamp
+                }}
+            end, SpaceId),
+            ok = location_and_link_utils:create_imported_file_location(
+                SpaceId, StorageId, FileUuid, StorageFileId, FSize, OwnerId);
+        _ ->
+            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid, SpaceId)
+    end,
+
+    {ok, FileUuid} = create_file_meta(FileUuid, FileName, Mode, OwnerId,
+        GroupId, ParentUuid, SpaceId),
+    {ok, _} = create_times(FileUuid, MTime, ATime, CTime, SpaceId),
+    SyncAcl = maps:get(sync_acl, Args, false),
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    case SyncAcl of
+        true ->
+            ok = import_nfs4_acl(FileCtx, StorageFileCtx4);
+        _ ->
+            ok
+    end,
+    storage_sync_utils:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    {imported, FileCtx}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -344,160 +600,6 @@ import_regular_subfiles(FilesJobs) ->
         worker_pool:call(?STORAGE_SYNC_FILE_POOL_NAME, {?MODULE, run, [Job]},
             worker_pool:default_strategy(), ?FILES_IMPORT_TIMEOUT)
     end, FilesJobs).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Implementation for 'simple_scan' strategy.
-%% @end
-%%--------------------------------------------------------------------
--spec run_internal(space_strategy:job()) ->
-    {space_strategy:job_result(), [space_strategy:job()]}.
-run_internal(Job = #space_strategy_job{
-    data = #{
-        storage_file_ctx := StorageFileCtx
-}}) when StorageFileCtx =/= undefined ->
-    maybe_sync_storage_file_and_children(Job);
-run_internal(Job = #space_strategy_job{
-    data = Data = #{
-        parent_ctx := ParentCtx,
-        file_name := FileName,
-        space_id := SpaceId,
-        storage_id := StorageId
-    }}) ->
-
-    {CanonicalPath, ParentCtx2} = file_ctx:get_child_canonical_path(ParentCtx, FileName),
-    StorageFileCtx = storage_file_ctx:new(CanonicalPath, SpaceId, StorageId),
-    StatResult = try
-        storage_file_ctx:get_stat_buf(StorageFileCtx)
-    catch
-        throw:?ENOENT ->
-            ?error_stacktrace("simple_scan failed due to ~p for file ~p in space ~p",
-                [?ENOENT, CanonicalPath, SpaceId]),
-            {error, ?ENOENT}
-    end,
-
-    case StatResult of
-        Error = {error, _} ->
-            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
-            {Error, []};
-        {_StatBuf, StorageFileCtx2} ->
-            Data2 = Data#{
-                parent_ctx => ParentCtx2,
-                storage_file_ctx => StorageFileCtx2
-            },
-            run_internal(Job#space_strategy_job{data = Data2})
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks if file (which metadata exists in onedata) is synchronized.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_update_file(space_strategy:job(), file_ctx:ctx()) ->
-    {space_strategy:job_result(), file_ctx:ctx(), space_strategy:job()}.
-maybe_update_file(Job = #space_strategy_job{}, FileCtx) ->
-    CallbackModule = storage_sync_utils:module(Job),
-    case get_attr_including_deleted(FileCtx) of
-        {ok, _FileAttr, true} ->
-            {processed, undefined, Job};
-        {ok, FileAttr, false} ->
-            delegate(CallbackModule, maybe_update_file, [Job, FileAttr, FileCtx], 3);
-        {error, ?ENOENT} ->
-            maybe_import_file(Job)
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Imports given storage file to onedata filesystem.
-%% @end
-%%--------------------------------------------------------------------
--spec import_file_safe(space_strategy:job()) -> {space_strategy:job_result(), file_ctx:ctx()}| no_return().
-import_file_safe(Job = #space_strategy_job{
-    data = #{
-        file_name := FileName,
-        space_id := SpaceId,
-        parent_ctx := ParentCtx
-}}) ->
-    try
-        simple_scan:import_file(Job)
-    catch
-        Error:Reason ->
-            ?error_stacktrace("importing file ~p in space ~p failed with ~p:~p", [FileName, SpaceId, Error, Reason]),
-            full_update:delete_imported_file(FileName, ParentCtx),
-            {{error, Reason}, undefined}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Imports given storage file to onedata filesystem.
-%% @end
-%%--------------------------------------------------------------------
--spec import_file(space_strategy:job()) -> {job_result(), file_ctx:ctx()}| no_return().
-import_file(#space_strategy_job{
-    strategy_args = Args,
-    data = #{
-        file_name := FileName,
-        space_id := SpaceId,
-        storage_id := StorageId,
-        parent_ctx := ParentCtx,
-        storage_file_ctx := StorageFileCtx
-}}) ->
-    {StatBuf, StorageFileCtx2} = storage_file_ctx:get_stat_buf(StorageFileCtx),
-    #statbuf{
-        st_mode = Mode,
-        st_atime = ATime,
-        st_ctime = CTime,
-        st_mtime = MTime,
-        st_size = FSize
-    } = StatBuf,
-    {OwnerId, StorageFileCtx3} = get_owner_id(StorageFileCtx2),
-    {GroupId, StorageFileCtx4} = get_group_owner_id(StorageFileCtx3),
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-    FileUuid = datastore_key:new(),
-    {ParentStorageFileId, ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),
-    {ParentCanonicalPath, _} = file_ctx:get_canonical_path(ParentCtx2),
-    StorageFileId = filename:join([ParentStorageFileId, FileName]),
-    CanonicalPath = filename:join([ParentCanonicalPath, FileName]),
-
-    case file_meta:type(Mode) of
-        ?REGULAR_FILE_TYPE ->
-            StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx4),
-
-            storage_sync_info:create_or_update(StorageFileId, fun(SSI) ->
-                {ok, SSI#storage_sync_info{
-                    mtime = MTime,
-                    last_stat = StatTimestamp
-                }}
-            end, SpaceId),
-            ok = location_and_link_utils:create_imported_file_location(
-                SpaceId, StorageId, FileUuid, StorageFileId, FSize, OwnerId);
-        _ ->
-            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid, SpaceId)
-    end,
-
-    {ok, FileUuid} = create_file_meta(FileUuid, FileName, Mode, OwnerId,
-        GroupId, ParentUuid, SpaceId),
-    {ok, _} = create_times(FileUuid, MTime, ATime, CTime, SpaceId),
-    SyncAcl = maps:get(sync_acl, Args, false),
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    FileCtx = file_ctx:new_by_guid(FileGuid),
-    case SyncAcl of
-        true ->
-            ok = import_nfs4_acl(FileCtx, StorageFileCtx4);
-        _ ->
-            ok
-    end,
-    ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath}]),
-    storage_sync_utils:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
-    {imported, FileCtx}.
 
 
 %%--------------------------------------------------------------------
@@ -664,14 +766,7 @@ filter_updated_attrs(ResultsWithAttrNames) ->
             false
     end, ResultsWithAttrNames).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Get file attr, including deleted doc.
-%% @end
-%%--------------------------------------------------------------------
--spec get_attr_including_deleted(file_ctx:ctx()) ->
-    {ok, fslogic_worker:fuse_response_type(), IsDeleted :: boolean()} | {error, term()}.
+-spec get_attr_including_deleted(file_ctx:ctx()) -> {ok, #file_attr{}} | {error, term()}.
 get_attr_including_deleted(FileCtx) ->
     try
         {#fuse_response{

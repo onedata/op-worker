@@ -132,7 +132,16 @@ create_storage_test_file_test(Config) ->
         storage_id = <<"unknown_id">>,
         file_guid = FileGuid
     }),
-    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response3).
+    ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}}, Response3),
+
+    StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
+    ok = rpc:call(Worker, file, change_mode, [StorageDir, 8#444]),
+
+    Response5 = ?req(Worker, SessId, #create_storage_test_file{
+        storage_id = StorageId,
+        file_guid = FileGuid
+    }),
+    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}}, Response5).
 
 verify_storage_test_file_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -190,6 +199,12 @@ init_per_testcase(_Case, Config) ->
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     initializer:disable_quota_limit(ConfigWithSessionInfo),
     lfm_proxy:init(ConfigWithSessionInfo).
+
+end_per_testcase(create_storage_test_file_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
+    ok = rpc:call(Worker, file, change_mode, [StorageDir, 8#777]),
+    end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
