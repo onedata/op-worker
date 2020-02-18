@@ -14,7 +14,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_runner.hrl").
--include("modules/fslogic/fslogic_sufix.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/posix/errors.hrl").

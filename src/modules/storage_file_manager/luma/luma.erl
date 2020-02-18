@@ -61,8 +61,7 @@ get_server_user_ctx(SessionId, UserId, SpaceId, StorageDoc, HelperName) ->
             Result = luma_cache:get_user_ctx(UserId, StorageId, fun() ->
                 get_user_ctx([
                     {fun luma:get_admin_ctx/2, [UserId, Helper]},
-                    {fun fetch_user_ctx/5, [SessionId, UserId, SpaceId,
-                        StorageDoc, Helper]},
+                    {fun fetch_user_ctx/5, [SessionId, UserId, SpaceId, StorageDoc, Helper]},
                     {fun maybe_generate_user_ctx/3, [UserId, SpaceId, HelperName]},
                     {fun luma:get_insecure_user_ctx/1, [Helper]}
                 ])

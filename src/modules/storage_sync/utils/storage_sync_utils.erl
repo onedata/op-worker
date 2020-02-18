@@ -19,7 +19,7 @@
 
 %% API
 -export([take_children_storage_ctxs_for_batch/2, take_hash_for_batch/2, module/1,
-    all_children_imported/2, log_import/2, log_update/2, log_deletion/2]).
+    all_children_imported/2, log_import/4, log_update/5, log_deletion/4]).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -67,27 +67,34 @@ all_children_imported(Jobs, FileUuid) ->
 %% Function used to add log of import to sync audit log.
 %% @end
 %%-------------------------------------------------------------------
--spec log_import(file_meta:path(), od_space:id()) -> ok.
-log_import(FilePath, SpaceId) ->
-    log("File ~s has been imported", [FilePath], SpaceId).
+-spec log_import(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id()) -> ok.
+log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
+    log("Creation of storage file ~s has been detected.~n"
+    "Corresponding file ~s with uuid ~s has been imported.",
+        [StorageFileId, CanonicalPath, FileUuid], SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Function used to add log of update to sync audit log.
 %% @end
 %%-------------------------------------------------------------------
--spec log_update(file_meta:path(), od_space:id()) -> ok.
-log_update(FilePath, SpaceId) ->
-    log("Update of file ~s has been detected", [FilePath], SpaceId).
+-spec log_update(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id(), [atom()]) -> ok.
+log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs) ->
+    log("Update of storage file ~s has been detected. Updated attrs: ~w.~n"
+    "Corresponding file ~s with uuid ~s has been updated.",
+        [StorageFileId, UpdatedAttrs, CanonicalPath, FileUuid], SpaceId).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Function used to add log of deletion to sync audit log.
 %% @end
 %%-------------------------------------------------------------------
--spec log_deletion(file_meta:path(), od_space:id()) -> ok.
-log_deletion(FilePath, SpaceId) ->
-    log("File ~s has been deleted", [FilePath], SpaceId).
+-spec log_deletion(helpers:file_id(), file_meta:path(), file_meta:uuid(), od_space:id()) -> ok.
+log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId) ->
+    log("Deletion of storage file ~p has been detected.~n"
+    "Corresponding file ~s with uuid ~s has been deleted",
+        [StorageFileId, CanonicalPath, FileUuid], SpaceId).
+
 
 %%===================================================================
 %% Internal functions

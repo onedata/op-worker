@@ -36,7 +36,8 @@
 -define(SPACE_PATH, <<"/", (?SPACE_NAME)/binary>>).
 -define(TEST_DIR, <<"test_dir">>).
 -define(TEST_DIR2, <<"test_dir2">>).
--define(TEST_FILE1, <<"test_file">>).
+-define(TEST_FILE(N), <<"test_file", (integer_to_binary(N))/binary>>).
+-define(TEST_FILE1, <<"test_file1">>).
 -define(TEST_FILE2, <<"test_file2">>).
 -define(TEST_FILE3, <<"test_file3">>).
 -define(TEST_FILE4, <<"test_file4">>).
@@ -45,10 +46,11 @@
 -define(SPACE_TEST_FILE_IN_DIR_PATH(DirName, FileName), filename:join(["/", ?SPACE_NAME, DirName, FileName])).
 -define(SPACE_TEST_DIR_PATH, filename:join(["/", ?SPACE_NAME, ?TEST_DIR])).
 -define(SPACE_TEST_DIR_PATH2, filename:join(["/", ?SPACE_NAME, ?TEST_DIR2])).
--define(SPACE_TEST_FILE_PATH, filename:join(["/", ?SPACE_NAME, ?TEST_FILE1])).
--define(SPACE_TEST_FILE_PATH2, filename:join(["/", ?SPACE_NAME, ?TEST_FILE2])).
--define(SPACE_TEST_FILE_PATH3, filename:join(["/", ?SPACE_NAME, ?TEST_FILE3])).
--define(SPACE_TEST_FILE_PATH4, filename:join(["/", ?SPACE_NAME, ?TEST_FILE4])).
+-define(SPACE_TEST_FILE_PATH(TestFile), filename:join(["/", ?SPACE_NAME, TestFile])).
+-define(SPACE_TEST_FILE_PATH1, ?SPACE_TEST_FILE_PATH(?TEST_FILE1)).
+-define(SPACE_TEST_FILE_PATH2, ?SPACE_TEST_FILE_PATH(?TEST_FILE2)).
+-define(SPACE_TEST_FILE_PATH3, ?SPACE_TEST_FILE_PATH(?TEST_FILE3)).
+-define(SPACE_TEST_FILE_PATH4, ?SPACE_TEST_FILE_PATH(?TEST_FILE4)).
 -define(SPACE_TEST_FILE_IN_DIR_PATH, filename:join([?SPACE_TEST_DIR_PATH, ?TEST_FILE1])).
 -define(SPACE_TEST_FILE_IN_DIR_PATH2, filename:join([?SPACE_TEST_DIR_PATH, ?TEST_FILE2])).
 -define(SPACE_TEST_FILE_IN_DIR_PATH3, filename:join([?SPACE_TEST_DIR_PATH, ?TEST_FILE3])).

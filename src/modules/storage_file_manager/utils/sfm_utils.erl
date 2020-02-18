@@ -16,7 +16,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/fslogic_sufix.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
 -include("proto/oneclient/common_messages.hrl").
 
 -include_lib("ctool/include/posix/errors.hrl").
@@ -266,11 +266,16 @@ delete_storage_dir(DirCtx, UserCtx) ->
 %%--------------------------------------------------------------------
 -spec create_parent_dirs(file_ctx:ctx()) -> file_ctx:ctx().
 create_parent_dirs(FileCtx) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx),
-    {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, undefined),
-    create_parent_dirs(ParentCtx, [], SpaceId, Storage),
-    FileCtx4.
+    case file_ctx:is_root_dir_const(FileCtx) of
+        true ->
+            FileCtx;
+        false ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            {Storage, FileCtx3} = file_ctx:get_storage_doc(FileCtx),
+            {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, undefined),
+            create_parent_dirs(ParentCtx, [], SpaceId, Storage),
+            FileCtx4
+    end.
 
 
 %%%===================================================================

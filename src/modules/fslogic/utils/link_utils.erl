@@ -13,7 +13,7 @@
 -module(link_utils).
 -author("Michal Wrzeszcz").
 
--include("modules/fslogic/fslogic_sufix.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
 
 %% API
 -export([try_to_resolve_child_link/2, try_to_resolve_child_deletion_link/2,
