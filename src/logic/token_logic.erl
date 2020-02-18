@@ -17,6 +17,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 
 -export([
+    create_identity_token/1,
     verify_access_token/4,
     verify_provider_identity_token/1
 ]).
@@ -25,6 +26,28 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a new temporary identity token for this provider with given TTL.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_identity_token(ValidUntil :: time_utils:seconds()) ->
+    {ok, tokens:serialized()} | errors:error().
+create_identity_token(ValidUntil) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{
+            type = od_token,
+            id = undefined,
+            aspect = {provider_temporary_token, oneprovider:get_id()},
+            scope = private
+        },
+        data = #{
+            <<"type">> => token_type:to_json(?IDENTITY_TOKEN),
+            <<"caveats">> => [caveats:to_json(#cv_time{valid_until = ValidUntil})]
+        }
+    }).
 
 
 %%--------------------------------------------------------------------
