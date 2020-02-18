@@ -89,10 +89,14 @@ auth_cache_expiration_test(Config) ->
     ]),
     ?assertEqual(3, get_auth_cache_size(Worker1)),
 
+    % Assert proper number of calls and access/consumer token arguments
     ?assertMatch(3, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
     ?assertMatch(AccessToken1, rpc:call(Worker1, meck, capture, [1, Mod, Fun, '_', 1])),
+    ?assertMatch(undefined, rpc:call(Worker1, meck, capture, [1, Mod, Fun, '_', 2])),
     ?assertMatch(AccessToken2, rpc:call(Worker1, meck, capture, [2, Mod, Fun, '_', 1])),
+    ?assertMatch(undefined, rpc:call(Worker1, meck, capture, [2, Mod, Fun, '_', 2])),
     ?assertMatch(AccessToken3, rpc:call(Worker1, meck, capture, [3, Mod, Fun, '_', 1])),
+    ?assertMatch(AccessToken1, rpc:call(Worker1, meck, capture, [3, Mod, Fun, '_', 2])),
 
     % TokenCredentials without consumer token should be cached for as long as token allows
     % (time caveats). On the other hand TokenCredentials with consumer token should be cached
@@ -532,7 +536,7 @@ mock_token_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, token_logic, []),
     test_utils:mock_expect(Workers, token_logic, verify_access_token, fun
-        (AccessToken, _, _, _) ->
+        (AccessToken, _, _, _, _) ->
             case tokens:deserialize(AccessToken) of
                 {ok, #token{subject = ?SUB(user, UserId)} = Token} ->
                     Caveats = tokens:get_caveats(Token),

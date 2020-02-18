@@ -22,7 +22,7 @@
 
     get_temporary_tokens_generation/1,
 
-    verify_access_token/4,
+    verify_access_token/5,
     verify_provider_identity_token/1
 ]).
 
@@ -92,12 +92,13 @@ get_temporary_tokens_generation(UserId) ->
 %%--------------------------------------------------------------------
 -spec verify_access_token(
     auth_manager:access_token(),
+    auth_manager:consumer_token(),
     PeerIp :: undefined | ip_utils:ip(),
     Interface :: undefined | cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
     {ok, aai:subject(), TTL :: undefined | time_utils:seconds()} | errors:error().
-verify_access_token(AccessToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+verify_access_token(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{
@@ -107,8 +108,8 @@ verify_access_token(AccessToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
             scope = public
         },
         data = build_verification_payload(
-            AccessToken, PeerIp, Interface,
-            DataAccessCaveatsPolicy
+            AccessToken, ConsumerToken,
+            PeerIp, Interface, DataAccessCaveatsPolicy
         )
     }),
     case Result of
@@ -158,14 +159,16 @@ verify_provider_identity_token(IdentityToken) ->
 %% @private
 -spec build_verification_payload(
     auth_manager:access_token(),
+    auth_manager:consumer_token(),
     PeerIp :: undefined | ip_utils:ip(),
     Interface :: undefined | cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
     json_utils:json_term().
-build_verification_payload(AccessToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
+build_verification_payload(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
     Json = #{
         <<"token">> => AccessToken,
+        <<"consumerToken">> => utils:undefined_to_null(ConsumerToken),
         <<"peerIp">> => case PeerIp of
             undefined ->
                 null;

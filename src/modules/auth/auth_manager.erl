@@ -221,13 +221,15 @@ verify_credentials(TokenCredentials) ->
     {undefined | auth_cache:token_ref(), verification_result()}.
 verify_token_credentials(#token_credentials{
     access_token = AccessToken,
+    consumer_token = ConsumerToken,
     peer_ip = PeerIp,
     interface = Interface,
     data_access_caveats_policy = DataAccessCaveatsPolicy
 }) ->
     case deserialize_and_validate_token(AccessToken) of
         {ok, #token{subject = Subject} = Token} ->
-            case token_logic:verify_access_token(AccessToken,
+            case token_logic:verify_access_token(
+                AccessToken, ConsumerToken,
                 PeerIp, Interface, DataAccessCaveatsPolicy
             ) of
                 {ok, Subject, TokenTTL} ->

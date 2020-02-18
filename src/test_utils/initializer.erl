@@ -964,7 +964,7 @@ user_logic_mock_setup(Workers, Users) ->
             end
     end,
 
-    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(UserToken, _, _, _) ->
+    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(UserToken, _, _, _, _) ->
         case proplists:get_value(UserToken, UsersByToken, undefined) of
             undefined -> {error, not_found};
             UserId -> {ok, ?SUB(user, UserId), undefined}
