@@ -238,13 +238,24 @@ create_access_token(UserId, Caveats) ->
 -spec create_access_token(od_user:id(), [caveats:caveat()], Persistence :: named | temporary) ->
     tokens:serialized().
 create_access_token(UserId, Caveats, Persistence) ->
+    create_token(?ACCESS_TOKEN, UserId, Caveats, Persistence).
+
+
+-spec create_identity_token(od_user:id()) -> tokens:serialized().
+create_identity_token(UserId) ->
+    create_token(?IDENTITY_TOKEN, UserId, [], temporary).
+
+
+-spec create_token(tokens:type(), od_user:id(), [caveats:caveat()], Persistence :: named | temporary) ->
+    tokens:serialized().
+create_token(TokenType, UserId, Caveats, Persistence) ->
     {ok, SerializedToken} = ?assertMatch(
         {ok, _},
         tokens:serialize(tokens:construct(#token{
             onezone_domain = <<"zone">>,
             subject = ?SUB(user, UserId),
             id = UserId,
-            type = ?ACCESS_TOKEN,
+            type = TokenType,
             persistence = case Persistence of
                 named -> named;
                 temporary -> {temporary, ?TEMPORARY_TOKENS_GENERATION}
@@ -252,11 +263,6 @@ create_access_token(UserId, Caveats, Persistence) ->
         }, ?TOKENS_SECRET, Caveats))
     ),
     SerializedToken.
-
-
--spec create_identity_token(od_user:id()) -> tokens:serialized().
-create_identity_token(UserId) ->
-    create_access_token(UserId, []).
 
 
 %%--------------------------------------------------------------------

@@ -51,6 +51,8 @@ all() -> ?ALL([
 -define(USER_ID_2, <<"test_id_2">>).
 -define(USER_FULL_NAME, <<"test_name">>).
 
+-define(NOW(), time_utils:system_time_seconds()).
+
 -define(ATTEMPTS, 60).
 
 %%%===================================================================
@@ -67,7 +69,7 @@ auth_cache_expiration_test(Config) ->
 
     AccessToken1 = initializer:create_access_token(?USER_ID_1, [], temporary),
     AccessToken2 = initializer:create_access_token(?USER_ID_1, [#cv_time{
-        valid_until = time_utils:system_time_seconds() + 15
+        valid_until = ?NOW() + 15
     }], named),
     AccessToken3 = initializer:create_access_token(?USER_ID_2, [], named),
 
@@ -78,7 +80,7 @@ auth_cache_expiration_test(Config) ->
     ),
 
     set_auth_cache_default_ttl(Worker1, 2),
-    ?assertMatch(0, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+    ?assertEqual(0, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
 
     lists:foreach(fun({TokenCredentials, ExpUserId}) ->
         ?assertMatch({ok, ?USER(ExpUserId), _}, verify_credentials(Worker1, TokenCredentials))
@@ -90,7 +92,7 @@ auth_cache_expiration_test(Config) ->
     ?assertEqual(3, get_auth_cache_size(Worker1)),
 
     % Assert proper number of calls and access/consumer token arguments
-    ?assertMatch(3, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+    ?assertEqual(3, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
     ?assertMatch(AccessToken1, rpc:call(Worker1, meck, capture, [1, Mod, Fun, '_', 1])),
     ?assertMatch(undefined, rpc:call(Worker1, meck, capture, [1, Mod, Fun, '_', 2])),
     ?assertMatch(AccessToken2, rpc:call(Worker1, meck, capture, [2, Mod, Fun, '_', 1])),
@@ -105,15 +107,14 @@ auth_cache_expiration_test(Config) ->
         timer:sleep(timer:seconds(3)),
 
         ?assertMatch({ok, ?USER(?USER_ID_1), _}, verify_credentials(Worker1, TokenCredentials1)),
-        ?assertMatch(ZoneCallsNum, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+        ?assertEqual(ZoneCallsNum, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
 
         ?assertMatch({ok, ?USER(?USER_ID_1), _}, verify_credentials(Worker1, TokenCredentials2)),
-        ?assertMatch(ZoneCallsNum, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+        ?assertEqual(ZoneCallsNum, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
 
-        IncZoneCallsNum = ZoneCallsNum + 1,
         ?assertMatch({ok, ?USER(?USER_ID_2), _}, verify_credentials(Worker1, TokenCredentials3)),
-        ?assertMatch(IncZoneCallsNum, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
-        ?assertMatch(AccessToken3, rpc:call(Worker1, meck, capture, [IncZoneCallsNum, Mod, Fun, '_', 1]))
+        ?assertEqual(ZoneCallsNum + 1, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+        ?assertMatch(AccessToken3, rpc:call(Worker1, meck, capture, [ZoneCallsNum + 1, Mod, Fun, '_', 1]))
 
     end, lists:seq(3, 6)),
 
@@ -121,11 +122,11 @@ auth_cache_expiration_test(Config) ->
 
     % AccessToken1 without time caveats is still cached (for eternity or until token event is received)
     ?assertMatch({ok, ?USER(?USER_ID_1), undefined}, verify_credentials(Worker1, TokenCredentials1)),
-    ?assertMatch(7, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+    ?assertEqual(7, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
 
     % AccessToken2 with passed time limit is no longer cached
     ?assertMatch(?ERROR_UNAUTHORIZED, verify_credentials(Worker1, TokenCredentials2)),
-    ?assertMatch(8, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
+    ?assertEqual(8, rpc:call(Worker1, meck, num_calls, [Mod, Fun, '_'])),
     ?assertMatch(AccessToken2, rpc:call(Worker1, meck, capture, [last, Mod, Fun, '_', 1])),
 
     clear_auth_caches(Config).
@@ -202,7 +203,7 @@ auth_cache_named_token_events_test(Config) ->
     mock_token_logic_is_revoked(Workers, [?USER_ID_1]),
     simulate_gs_token_status_update(Worker2, ?USER_ID_1, true),
 
-    % Then only TokenCredentialss based on that token should be revoked
+    % Then only TokenCredentials based on that token should be revoked
     lists:foreach(fun({TokenCredentials, Worker}) ->
         ?assertMatch(?ERROR_TOKEN_REVOKED, verify_credentials(Worker, TokenCredentials))
     end, [{TokenCredentials1, Worker1}, {TokenCredentials2, Worker2}]),
@@ -371,7 +372,7 @@ token_expiration(Config) ->
 
     % Session should be terminated after time caveat expiration
     AccessToken1 = initializer:create_access_token(?USER_ID_1, [#cv_time{
-        valid_until = time_utils:system_time_seconds() + 2
+        valid_until = ?NOW() + 2
     }]),
     TokenCredentials1 = auth_manager:build_token_credentials(
         AccessToken1, undefined,
@@ -402,7 +403,7 @@ token_expiration(Config) ->
 
     % But it is possible to update credentials and increase expiration
     AccessToken2 = initializer:create_access_token(?USER_ID_1, [#cv_time{
-        valid_until = time_utils:system_time_seconds() + 4
+        valid_until = ?NOW() + 4
     }]),
     {ok, {_, SessId2}} = fuse_test_utils:connect_via_token(
         Worker1, [], Nonce, AccessToken2
@@ -419,7 +420,7 @@ token_expiration(Config) ->
     ),
 
     AccessToken3 = initializer:create_access_token(?USER_ID_1, [#cv_time{
-        valid_until = time_utils:system_time_seconds() + 6
+        valid_until = ?NOW() + 6
     }]),
     rpc:call(Worker1, incoming_session_watcher, request_credentials_update, [
         SessId2, AccessToken3, undefined
@@ -581,7 +582,7 @@ infer_ttl(Caveats) ->
     end, undefined, caveats:filter([cv_time], Caveats)),
     case ValidUntil of
         undefined -> undefined;
-        _ -> ValidUntil - time_utils:system_time_seconds()
+        _ -> ValidUntil - ?NOW()
     end.
 
 

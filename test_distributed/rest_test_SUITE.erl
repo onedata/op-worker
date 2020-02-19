@@ -55,13 +55,15 @@ token_auth(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
     DummyUserId = <<"dummyUserId">>,
+    ShabbyUserId = <<"shabbyUserId">>,
     Endpoint = rest_endpoint(Worker),
 
     SerializedAccessToken = initializer:create_access_token(?USER_ID),
-    SerializedIdentityToken = initializer:create_identity_token(DummyUserId),
     SerializedAccessTokenWithConsumerCaveats = tokens:confine(SerializedAccessToken, [
         #cv_consumer{whitelist = [?SUB(user, DummyUserId)]}
     ]),
+    SerializedDummyUserIdentityToken = initializer:create_identity_token(DummyUserId),
+    SerializedShabbyUserIdentityToken = initializer:create_identity_token(ShabbyUserId),
 
     % when
     ?assertMatch(
@@ -69,18 +71,25 @@ token_auth(Config) ->
         do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => <<"invalid">>})
     ),
     ?assertMatch(
-        {ok, 401, _, _},
-        do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => SerializedAccessTokenWithConsumerCaveats})
-    ),
-    ?assertMatch(
         {ok, 200, _, _},
         do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => SerializedAccessToken})
     ),
     ?assertMatch(
+        {ok, 401, _, _},
+        do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => SerializedAccessTokenWithConsumerCaveats})
+    ),
+    ?assertMatch(
+        {ok, 401, _, _},
+        do_request(Config, get, Endpoint ++ "files", #{
+            ?HDR_X_AUTH_TOKEN => SerializedAccessTokenWithConsumerCaveats,
+            ?HDR_X_ONEDATA_CONSUMER_TOKEN => SerializedShabbyUserIdentityToken
+        })
+    ),
+    ?assertMatch(
         {ok, 200, _, _},
         do_request(Config, get, Endpoint ++ "files", #{
-            ?HDR_X_AUTH_TOKEN => SerializedAccessToken,
-            ?HDR_X_ONEDATA_CONSUMER_TOKEN => SerializedIdentityToken
+            ?HDR_X_AUTH_TOKEN => SerializedAccessTokenWithConsumerCaveats,
+            ?HDR_X_ONEDATA_CONSUMER_TOKEN => SerializedDummyUserIdentityToken
         })
     ),
     ?assertMatch(

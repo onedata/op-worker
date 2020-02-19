@@ -14,7 +14,7 @@
 %%% it can reflect those changes (eg. revocation) in cached entries.
 %%% To avoid exhausting memory, ?SERVER performs periodic checks and purges
 %%% cache if size limit is breached. Cache is also purged, with some delay,
-%%% when connection to oz is lost (subscriptions may became invalid) and
+%%% when connection to Onezone is lost (subscriptions may became invalid) and
 %%% immediately when mentioned connection is restored.
 %%% @end
 %%%-------------------------------------------------------------------
