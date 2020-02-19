@@ -189,9 +189,8 @@ verify_provider_identity_token(IdentityToken) ->
 ) ->
     json_utils:json_term().
 build_verification_payload(AccessToken, ConsumerToken, PeerIp, Interface, DataAccessCaveatsPolicy) ->
-    Json = #{
+    Json0 = #{
         <<"token">> => AccessToken,
-        <<"consumerToken">> => utils:undefined_to_null(ConsumerToken),
         <<"peerIp">> => case PeerIp of
             undefined ->
                 null;
@@ -204,11 +203,17 @@ build_verification_payload(AccessToken, ConsumerToken, PeerIp, Interface, DataAc
             disallow_data_access_caveats -> false
         end
     },
-    case Interface of
+    Json1 = case Interface of
         undefined ->
-            Json;
+            Json0;
         _ ->
-            Json#{<<"interface">> => atom_to_binary(Interface, utf8)}
+            Json0#{<<"interface">> => atom_to_binary(Interface, utf8)}
+    end,
+    case ConsumerToken of
+        undefined ->
+            Json1;
+        _ ->
+            Json1#{<<"consumerToken">> => ConsumerToken}
     end.
 
 
