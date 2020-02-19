@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 % API
--export([do_master_job/2, do_slave_job/2, get_master_job/1, get_master_job/2]).
+-export([do_master_job/2, do_slave_job/2, get_master_job/1, delete_file_and_update_counters/4]).
 
 -type master_job() :: storage_sync_traverse:master_job().
 -type slave_job() :: storage_sync_traverse:slave_job().
@@ -326,72 +326,71 @@ new_child_master_job(Job = #storage_traverse_master{
 maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     try
-        {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
-        case IsDir of
+        {SDHandle, FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx),
+        {IsStorageFileCreated, FileCtx3} = file_ctx:is_storage_file_created(FileCtx2),
+        case IsStorageFileCreated and not storage_driver:exists(SDHandle) of
             true ->
-                maybe_delete_dir_and_update_counters(
-                    FileCtx2, SpaceId, StorageId, UpdateSyncCounters);
+                % file is still missing on storage we can delete it from db
+               delete_file_and_update_counters(FileCtx3, SpaceId, StorageId, UpdateSyncCounters);
             false ->
-                maybe_delete_regular_file_and_update_counters(
-                    FileCtx2, SpaceId, StorageId, UpdateSyncCounters)
+                maybe_mark_processed_file(SpaceId, StorageId, UpdateSyncCounters)
         end
     catch
+        throw:?ENOENT ->
+            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+            ok;
         Error:Reason ->
             ?error_stacktrace("~p:maybe_delete_file_and_update_counters failed due to ~p",
                 [?MODULE, {Error, Reason}]),
             maybe_mark_failed_file(SpaceId, StorageId, UpdateSyncCounters)
     end.
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Checks whether given directory can be deleted by sync.
-%% If true, this function deletes it and updates sync counters.
-%% @end
-%%-------------------------------------------------------------------
--spec maybe_delete_dir_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(), boolean()) -> ok.
-maybe_delete_dir_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
-    {DirLocation, FileCtx2} = file_ctx:get_dir_location_doc(FileCtx),
-    case dir_location:is_storage_file_created(DirLocation) of
-        true ->
-            delete_dir(FileCtx2, SpaceId, StorageId, UpdateSyncCounters),
-            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx2),
-            storage_sync_logger:log_deletion(StorageFileId, SpaceId),
-            maybe_mark_deleted_file(SpaceId, StorageId, UpdateSyncCounters);
-        false ->
-            maybe_mark_processed_file(SpaceId, StorageId, UpdateSyncCounters)
+-spec delete_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(), boolean()) -> ok.
+delete_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
+    case file_ctx:is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            delete_dir_recursive_and_update_counters(FileCtx2, SpaceId, StorageId, UpdateSyncCounters);
+        {false, FileCtx2} ->
+            delete_regular_file_and_update_counters(FileCtx2, SpaceId, StorageId, UpdateSyncCounters)
     end.
-
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Checks whether given regular file can be deleted by sync.
-%% If true, this function deletes it and updates sync counters.
+%% This function deletes directory recursively it and updates sync counters.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_delete_regular_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(),
-    boolean()) -> ok.
-maybe_delete_regular_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
-    {FileLocation, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx, false),
-    case file_location:is_storage_file_created(FileLocation) of
-        true ->
-            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx2),
-            delete_file(FileCtx2),
-            storage_sync_logger:log_deletion(StorageFileId, SpaceId),
-            maybe_mark_deleted_file(SpaceId, StorageId, UpdateSyncCounters),
-            ok;
-        false ->
-            maybe_mark_processed_file(SpaceId, StorageId, UpdateSyncCounters)
-    end.
+-spec delete_dir_recursive_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(), boolean()) -> ok.
+delete_dir_recursive_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    delete_dir_recursive(FileCtx3, SpaceId, StorageId, UpdateSyncCounters),
+    storage_sync_logger:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    maybe_mark_deleted_file(SpaceId, StorageId, UpdateSyncCounters).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% This function deletes regular file and updates sync counters.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_regular_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(), boolean()) -> ok.
+delete_regular_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    delete_file(FileCtx3),
+    storage_sync_logger:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    maybe_mark_deleted_file(SpaceId, StorageId, UpdateSyncCounters).
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
 %% Deletes directory that has been deleted on storage from the system.
-%% It deleted directory recursively.
+%% It deletes directory recursively.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_dir(file_ctx:ctx(), od_space:id(), storage:id(), boolean()) -> ok.
-delete_dir(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
+-spec delete_dir_recursive(file_ctx:ctx(), od_space:id(), storage:id(), boolean()) -> ok.
+delete_dir_recursive(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
     {ok, FileCtx2} = delete_children(FileCtx, RootUserCtx, 0, ChunkSize, SpaceId, StorageId, UpdateSyncCounters),
@@ -435,9 +434,8 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId, UpdateS
 %%-------------------------------------------------------------------
 -spec delete_file(file_ctx:ctx()) -> ok.
 delete_file(FileCtx) ->
-    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        delete_req:delete(RootUserCtx, FileCtx, false, false)
+        fslogic_delete:handle_file_deleted_on_synced_storage(FileCtx)
     catch
         throw:?ENOENT ->
             ok

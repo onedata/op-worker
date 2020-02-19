@@ -191,7 +191,5 @@ get_xattr(StorageFileCtx = #storage_file_ctx{xattr = undefined}, XattrName) ->
         {error, 'Function not implemented'} ->
             throw(?ENOTSUP)
     end;
-get_xattr(StorageFileCtx = #storage_file_ctx{
-    xattr = Xattr
-}, _XattrName) ->
+get_xattr(StorageFileCtx = #storage_file_ctx{xattr = Xattr}, _XattrName) ->
     {Xattr, StorageFileCtx}.

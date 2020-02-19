@@ -266,6 +266,7 @@ has_mtime_changed(SSIDoc, StorageFileCtx) ->
 
 -spec run_deletion_scan(storage_file_ctx:ctx(), non_neg_integer(), space_strategies:config(), file_ctx:ctx(), boolean())
         -> ok.
+% todo może wywalić flagę UpdateSyncCOunters i zamockować storage_sync_monitoring po prostu w testach?
 run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx, UpdateSyncCounters) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
@@ -597,7 +598,7 @@ do_slave_job_on_directory(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = #{file_ctx := FileCtx}
 }) ->
-    {ok, {processed, FileCtx, StorageFileCtx}}.
+    {ok, {?PROCESSED, FileCtx, StorageFileCtx}}.
 
 -spec process_storage_file(storage_file_ctx:ctx(), info()) ->
     {ok, storage_sync_engine:result()} | {error, term()}.
@@ -609,9 +610,9 @@ process_storage_file(StorageFileCtx, Info) ->
     try
         case storage_sync_engine:process_file(StorageFileCtx, Info) of
             Result = {SyncResult, _, _}
-                when SyncResult =:= imported
-                orelse SyncResult =:= updated
-                orelse SyncResult =:= processed
+                when SyncResult =:= ?IMPORTED
+                orelse SyncResult =:= ?UPDATED
+                orelse SyncResult =:= ?PROCESSED
             ->
                 {ok, Result};
             Error = {error, _} ->
@@ -634,11 +635,11 @@ process_storage_file(StorageFileCtx, Info) ->
     end.
 
 -spec increase_counter(storage_sync_engine:result(), od_space:id(), storage:id()) -> ok.
-increase_counter(imported, SpaceId, StorageId) ->
+increase_counter(?IMPORTED, SpaceId, StorageId) ->
     storage_sync_monitoring:mark_imported_file(SpaceId, StorageId);
-increase_counter(updated, SpaceId, StorageId) ->
+increase_counter(?UPDATED, SpaceId, StorageId) ->
     storage_sync_monitoring:mark_updated_file(SpaceId, StorageId);
-increase_counter(processed, SpaceId, StorageId) ->
+increase_counter(?PROCESSED, SpaceId, StorageId) ->
     storage_sync_monitoring:mark_processed_file(SpaceId, StorageId).
 
 -spec get_storage_sync_info_doc(master_job()) -> storage_sync_info:doc().

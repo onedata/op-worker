@@ -129,11 +129,9 @@ create_imported_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size,
 %%-------------------------------------------------------------------
 -spec update_imported_file_location(file_ctx:ctx(), non_neg_integer()) -> ok.
 update_imported_file_location(FileCtx, StorageSize) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
     NewFileBlocks = create_file_blocks(StorageSize),
-    replica_updater:update(FileCtx, NewFileBlocks, StorageSize, true),
-    ok = lfm_event_emitter:emit_file_written(
-        FileGuid, NewFileBlocks, StorageSize, {exclude, ?ROOT_SESS_ID}).
+    {ok, _} = replica_updater:update(FileCtx, NewFileBlocks, StorageSize, true),
+    ok.
 
 %%-------------------------------------------------------------------
 %% @doc

@@ -15,21 +15,30 @@
 
 -include("modules/storage/sync/storage_sync.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/fslogic_sufix.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/logging.hrl").
 -include("global_definitions.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/logging.hrl").
 
--type result() :: imported | updated | processed | failed.
+-type result() :: ?IMPORTED | ?UPDATED | ?PROCESSED | ?FAILED.
+-type file_attr_name() :: ?FILE_LOCATION_ATTR_NAME | ?MODE_ATTR_NAME | ?TIMESTAMPS_ATTR_NAME |
+                          ?OWNER_ATTR_NAME | ?NFS4_ACL_ATTR_NAME.
 
--export_type([result/0]).
+-export_type([result/0, file_attr_name/0]).
 
 %% API
 -export([process_file/2]).
 
 % exported for mocking in CT tests
--export([import_file_unsafe/3]).
+-export([import_file_unsafe/2]).
+
+-define(FILE_LOCATION_ATTR_NAME, file_location).
+-define(MODE_ATTR_NAME, mode).
+-define(TIMESTAMPS_ATTR_NAME, timestamps).
+-define(OWNER_ATTR_NAME, owner).
+-define(NFS4_ACL_ATTR_NAME, nfs4_acl).
 
 %%%===================================================================
 %%% API functions
@@ -40,16 +49,16 @@
 %% Processes storage file associated with StorageFileCtx.
 %% It returns the tuple {Result, FileCtx, StorageFileCtx} where:
 %%    * Result is one of:
-%%      ** imported - which means that file was imported to the Onedata file-system
-%%      ** updated - which means that file had already existed in the Onedata file system
+%%      ** ?IMPORTED - which means that file was imported to the Onedata file-system
+%%      ** ?UPDATED  - which means that file had already existed in the Onedata file system
 %%                   and that update of its attributes on storage was detected and reflected
 %%                   in the Onedata file-system attributes
-%%      ** processed - which means that file has been successfully processed but
+%%      ** ?PROCESSED - which means that file has been successfully processed but
 %%                     no changes were introduced to the Onedata file system.
 %%                     This might have happened if file hadn't been changed since last scan or if
 %%                     it was being deleted or if it was being replicated in the very moment of scan.
 %%                     and that it hasn't changed on storage since last scan
-%%      ** failed - which means that an error occurred during processing the file
+%%      ** ?FAILED - which means that an error occurred during processing the file
 %%    * FileCtx is a:
 %%      ** file_ctx:ctx() - the file in the Onedata file system which is associated
 %%         with the file referenced by StorageFileCtx.
@@ -62,22 +71,20 @@
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
 process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileId}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx2),
-    FileType = file_meta:type(Mode),
+    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     Info2 =  #{parent_ctx := ParentCtx2} = case
-        storage_file_ctx:get_storage_file_id_const(StorageFileCtx2) =:= SpaceStorageFileId
+        storage_file_ctx:get_storage_file_id_const(StorageFileCtx) =:= SpaceStorageFileId
     of
         true ->
             Info;
         false ->
-            find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx2, Info#{parent_ctx => SpaceCtx})
+            find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info#{parent_ctx => SpaceCtx})
     end,
     case file_ctx:is_root_dir_const(ParentCtx2) of
         true ->
-            try_syncing_file(StorageFileCtx2, SpaceCtx, ?DIRECTORY_TYPE, Info2);
+            check_file_location_and_maybe_sync(StorageFileCtx, SpaceCtx, ?DIRECTORY_TYPE, Info2);
         false ->
             % check whether FileName of processed file is in the form
             % FileName = <<FileBaseName, ?CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR, FileUuid>>
@@ -95,20 +102,13 @@ process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileI
                     % Deletion links are removed if and only if file was successfully deleted from storage.
                     case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx2) of
                         {error, not_found} when HasSuffix =:= false ->
-                            % Do not call storage_file_ctx:stat as stat result may be cached
-                            % in #storage_file_ctx.
                             % We must ensure whether file is still on storage at the very moment
                             % to avoid stat/delete race.
                             % Race could happen if previous stat was performed before file was
                             % deleted from the system and if links (and file) were deleted
                             % before we checked the links.
-                            SDHandle = storage_file_ctx:get_handle_const(StorageFileCtx2),
-                            case storage_driver:stat(SDHandle) of
-                                {ok, _} ->
-                                    import_file(StorageFileCtx2,  undefined,  Info2);
-                                _ ->
-                                    {processed, undefined, StorageFileCtx2}
-                            end;
+                            % maybe_import_file/2 will perform the check.
+                            maybe_import_file(StorageFileCtx, Info2);
                         % It's impossible that deletion link is not found and HasSuffix == true,
                         % which is proved below:
                         %
@@ -134,7 +134,7 @@ process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileI
                         {ok, _FileUuid} ->
                             % deletion_link exists, it means that deletion of the file has been scheduled
                             % we may ignore this file
-                            {processed, undefined, StorageFileCtx2}
+                            {?PROCESSED, undefined, StorageFileCtx}
                     end;
                 {ok, ResolvedUuid} ->
                     FileUuid2 = utils:ensure_defined(FileUuid, undefined, ResolvedUuid),
@@ -142,9 +142,9 @@ process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileI
                         {error, not_found} ->
                             FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
                             FileCtx = file_ctx:new_by_guid(FileGuid),
-                            try_syncing_file(StorageFileCtx2, FileCtx, FileType, Info2);
+                            storage_sync_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info2);
                         {ok, _} ->
-                            {processed, undefined, StorageFileCtx2}
+                            {?PROCESSED, undefined, StorageFileCtx}
                     end
             end
     end.
@@ -198,8 +198,8 @@ ensure_parents_exist(ParentStorageFileCtx, Info = #{parent_ctx := ParentCtx}, [M
                         {ok, MissingParentCtx} ->
                             MissingParentCtx;
                         {error, ?ENOENT} ->
-                            {imported, MissingParentCtx, _StorageFileCtx} =
-                                import_file(MissingParentStorageCtx, undefined, Info),
+                            {?IMPORTED, MissingParentCtx, _StorageFileCtx} =
+                                maybe_import_file(MissingParentStorageCtx, Info),
                             MissingParentCtx
                     end
                 end
@@ -217,77 +217,206 @@ get_child_safe(FileCtx, ChildName) ->
             {error, ?ENOENT}
     end.
 
+-spec check_location_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), storage_sync_traverse:info()) ->
+    {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
+check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info) ->
+    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    case file_meta:type(StMode) of
+        ?DIRECTORY_TYPE ->
+            check_dir_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info);
+        ?REGULAR_FILE_TYPE ->
+            check_file_location_and_maybe_sync(StorageFileCtx2, FileCtx, Info)
+    end.
+
+-spec check_dir_location_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), storage_sync_traverse:info()) ->
+    {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
+check_dir_location_and_maybe_sync(StorageFileCtx, FileCtx, Info) ->
+    check_dir_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, false).
+
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function synchronizes the file.
-%% For regular files, it checks whether the file can be synced.
-%% Files can be synced only if they are fully replicated (they
-%% have one block which size equals file's size).
-%% Directories are always processed.
+%% This function checks dir_location associated with passed FileCtx
+%% to determine whether the file can by synchronised.
+%% CheckType flag determines whether file_location associated with
+%% given FileCtx has already been checked.
+%% If StorageFileIsRegularFile == true file_location has been checked and
+%% has not been found.
+%% else file_location has not been checked yet.
 %% @end
 %%-------------------------------------------------------------------
--spec try_syncing_file(storage_file_ctx:ctx(), file_ctx:ctx(),
-    file_meta:type(), storage_sync_traverse:info()) ->
+-spec check_dir_location_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), 
+    storage_sync_traverse:info(), boolean()) -> {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
+check_dir_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsRegularFile) ->
+    {DirLocation, _} = file_ctx:get_dir_location_doc(FileCtx),
+    StorageFileCreated = dir_location:is_storage_file_created(DirLocation),
+    case  StorageFileCreated or StorageFileIsRegularFile of
+        true ->
+            check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated);
+        false ->
+            % dir_location does not exist, check whether file_location exist
+            % as file with the same name may had been deleted and
+            % directory with the same name created
+            check_file_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, true)
+    end.
+
+
+-spec check_file_location_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), storage_sync_traverse:info()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
-try_syncing_file(StorageFileCtx, FileCtx, ?DIRECTORY_TYPE, Info) ->
-    maybe_update_file(StorageFileCtx, FileCtx, Info);
-try_syncing_file(StorageFileCtx, FileCtx, ?REGULAR_FILE_TYPE, Info) ->
+check_file_location_and_maybe_sync(Job, FileCtx, Info) ->
+    check_file_location_and_maybe_sync(Job, FileCtx, Info, false).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function analyses file_location associated with passed FileCtx
+%% to determine whether the file can by synchronised, and if so whether
+%% it should be imported or updated.
+%% CheckType flag determines whether dir_location associated with
+%% given FileCtx has already been checked.
+%% If StorageFileIsDir == true dir_location has been checked and has not been found.
+%% else dir_location has not been checked yet.
+%% @end
+%%-------------------------------------------------------------------
+-spec check_file_location_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), boolean()) ->
+    {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
+check_file_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsDir) ->
     % Get only two blocks - it is enough to verify if file can be imported
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case fslogic_location_cache:get_location(
-        file_location:id(FileUuid, oneprovider:get_id()), FileUuid, {blocks_num, 2}) of
-        {ok, #document{
+    case file_ctx:get_local_file_location_doc(FileCtx, {blocks_num, 2}) of
+        {FLDoc = #document{
             value = #file_location{
                 file_id = FileId,
+                rename_src_file_id = RenameSrcFileId,
                 size = Size
-        }} = FL} ->
-            FileIdCheck = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-            case FileId =:= FileIdCheck of
-                true ->
-                    case fslogic_location_cache:get_blocks(FL, #{count => 2}) of
+            }}, _} ->
+            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+            case {FileId =:= StorageFileId, RenameSrcFileId =:= StorageFileId} of
+                {_, true} ->
+                    % file is being renamed at the moment, ignore it
+                    {?PROCESSED, FileCtx, StorageFileCtx};
+                {true, false} ->
+                    case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
                         [#file_block{offset = 0, size = Size}] ->
-                            % file has one block which size is equal to file's size
-                            maybe_update_file(StorageFileCtx, FileCtx, Info);
+                            check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, true);
                         [] when Size =:= 0 ->
-                            maybe_update_file(StorageFileCtx, FileCtx, Info);
+                            check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, true);
+                        _ when StorageFileIsDir ->
+                            % file must have been deleted and directory
+                            % with the same name recreated
+                            check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, true);
                         _ ->
-                            {processed, FileCtx, StorageFileCtx}
+                            % file is not fully replicated (not in one block), ignore it
+                            {?PROCESSED, FileCtx, StorageFileCtx}
                     end;
-                _ ->
-                    import_file(StorageFileCtx,  FileUuid,  Info)
+                {false, false} ->
+                    % This may happen in 2 cases:
+                    %   * when there was a conflict between creation of file on storage and by remote provider
+                    %     in such case, if file was replicated from the remote provider
+                    %     it must have been created on storage with a suffix and therefore file ids do not match.
+                    %   * when file has been moved because it was deleted and still opened
+                    %     in such case, its file_id in file_location has been changed
+                    %     such file should be ignored
+                    % To determine which case it is, maybe_import_file will check whether file is still on storage.
+                    maybe_import_file(StorageFileCtx, Info)
             end;
-        {error, not_found} ->
-            import_file(StorageFileCtx,  FileUuid,  Info);
-        _Other ->
-            {processed, FileCtx, StorageFileCtx}
+        {undefined, _} ->
+            % This may happen in the following cases:
+            %  * File has just been deleted by lfm, in such case it won't be imported as
+            %    maybe_import_file checks whether file is still on storage.
+            %  * There was a conflict between creation of file on storage and by remote provider.
+            %    Links has been synchronized so we have uuid, but file_location has not been synchronized yet.
+            %    We may import this file with a IMPORTED suffix.
+            %  * Directory with the same name as given file was deleted on storage, and the file was created between
+            %    consecutive scans.
+            case StorageFileIsDir of
+                true ->
+                    % dir_location was not found and file_location either
+                    check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, false);
+                false ->
+                    % Check whether dir_location exists for this file to determine whether
+                    % it's 3rd of the above cases.
+                    check_dir_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, true)
+            end
     end.
 
--spec maybe_update_file(storage_file_ctx:ctx(), file_ctx:ctx(),
-    storage_sync_traverse:info()) -> {result(), file_ctx:ctx(), storage_file_ctx:ctx()}.
-maybe_update_file(StorageFileCtx, FileCtx, Info) ->
-    #fuse_response{
-        status = #status{code = StatusCode},
-        fuse_response = FileAttr
-    } = get_attr(FileCtx),
-    case StatusCode of
-        ?OK ->
-            Result = maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info),
-            {Result, FileCtx ,StorageFileCtx};
-        ErrorCode when
-            ErrorCode =:= ?ENOENT;
-            ErrorCode =:= ?EAGAIN
-        ->
-            % TODO VFS-5273 - verify whether this fallback is needed
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            import_file(StorageFileCtx, FileUuid, Info)
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if file (which metadata exists in onedata) is synchronized.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_file_meta_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), storage_sync_traverse:info(), boolean()) ->
+    {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
+check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated) ->
+    case get_attr_including_deleted(FileCtx) of
+        {ok, _FileAttr, true} ->
+            {?PROCESSED, undefined, StorageFileCtx};
+        {ok, FileAttr, false} ->
+            check_file_type_and_maybe_sync(StorageFileCtx, FileAttr, FileCtx, Info, StorageFileCreated);
+        {error, ?ENOENT} ->
+            maybe_import_file(StorageFileCtx, Info)
     end.
 
--spec import_file(storage_file_ctx:ctx(), file_meta:uuid() | undefined, storage_sync_traverse:info()) ->
+-spec check_file_type_and_maybe_sync(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), storage_sync_traverse:info(),
+    boolean()) -> {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
+check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = FileMetaType}, FileCtx, Info, StorageFileCreated
+) ->
+    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    StorageFileType = file_meta:type(StMode),
+    case {StorageFileType, FileMetaType, StorageFileCreated} of
+        {Type, Type, true} ->
+            maybe_update_file(StorageFileCtx2, FileAttr, FileCtx, Info);
+        {_Type, _OtherType, true} ->
+            import_file_recreated_with_different_type(StorageFileCtx2, FileCtx, Info);
+        {?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE, false} ->
+            maybe_import_file(StorageFileCtx2, Info);
+        {?DIRECTORY_TYPE, ?DIRECTORY_TYPE, false} ->
+            maybe_update_file(StorageFileCtx2, FileAttr, FileCtx, Info);
+        {?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, false} ->
+            maybe_import_file(StorageFileCtx2, Info);
+        {?DIRECTORY_TYPE, ?REGULAR_FILE_TYPE, false} ->
+            {?PROCESSED, undefined, StorageFileCtx2}
+    end.
+
+-spec import_file_recreated_with_different_type(storage_file_ctx:ctx(), file_ctx:ctx(), storage_sync_traverse:info()) ->
+    {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()}.
+import_file_recreated_with_different_type(StorageFileCtx, FileCtx, Info) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
+    storage_sync_deletion:delete_file_and_update_counters(FileCtx, SpaceId, StorageId, true),
+    maybe_import_file(StorageFileCtx, Info).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This functions import the file, if it hasn't been synchronized yet.
+%% It checks whether file that is to be imported is still visible on
+%% the storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec maybe_import_file(storage_file_ctx:ctx(), storage_sync_traverse:info()) ->
+    {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
+maybe_import_file(StorageFileCtx, Info) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+    SDHandle = storage_file_ctx:get_handle_const(StorageFileCtx),
+    % We must ensure that there was no race with deleting file.
+    % We check whether file that we found on storage and that we want to import
+    % is not associated with file that has been deleted from the system.
+    case {storage_sync_info:get(StorageFileId, SpaceId), storage_driver:exists(SDHandle)} of
+        {{error, _}, true} ->
+            import_file(StorageFileCtx, Info);
+        _ ->
+            {?PROCESSED, undefined, StorageFileCtx}
+    end.
+
+-spec import_file(storage_file_ctx:ctx(), storage_sync_traverse:info()) ->
     {result(), file_ctx:ctx(), storage_file_ctx:ctx()} | {error, term()}.
-import_file(StorageFileCtx, FileUuid, Info = #{parent_ctx := ParentCtx}) ->
+import_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     try
-        storage_sync_engine:import_file_unsafe(StorageFileCtx, FileUuid, Info)
+        storage_sync_engine:import_file_unsafe(StorageFileCtx, Info)
     catch
         Error:Reason ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
@@ -298,16 +427,16 @@ import_file(StorageFileCtx, FileUuid, Info = #{parent_ctx := ParentCtx}) ->
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
             try
                 {FileCtx, _} = file_ctx:get_child(ParentCtx, FileName, UserCtx),
-                delete_req:delete(UserCtx, FileCtx, true, false)
+                fslogic_delete:handle_file_deleted_on_synced_storage(FileCtx)
             catch
                 throw:?ENOENT -> ok
             end,
             {error, Reason}
     end.
 
--spec import_file_unsafe(storage_file_ctx:ctx(), file_meta:uuid() | undefined, storage_sync_traverse:info()) ->
+-spec import_file_unsafe(storage_file_ctx:ctx(), storage_sync_traverse:info()) ->
     {result(), file_ctx:ctx(), storage_file_ctx:ctx()}.
-import_file_unsafe(StorageFileCtx, FileUuid, Info = #{parent_ctx := ParentCtx}) ->
+import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
@@ -320,301 +449,76 @@ import_file_unsafe(StorageFileCtx, FileUuid, Info = #{parent_ctx := ParentCtx}) 
         st_mtime = MTime,
         st_size = FSize
     } = StatBuf,
-    {OwnerId, StorageFileCtx3} = get_owner_id(StorageFileCtx2, StorageId),
-    {GroupId, StorageFileCtx4} = get_group_owner_id(StorageFileCtx3, SpaceId, StorageId),
-    {FileUuid2, CreateLinks} = case FileUuid =:= undefined of
-        true -> {datastore_key:new(), true};
-        false -> {FileUuid, false}
-    end,
-    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx4),
+    {OwnerId, StorageFileCtx3} = get_owner_id(StorageFileCtx2),
+    {GroupId, StorageFileCtx4} = get_group_owner_id(StorageFileCtx3),
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    FileUuid = datastore_key:new(),
+    {ParentCanonicalPath, _} = file_ctx:get_canonical_path(ParentCtx),
+    CanonicalPath = filename:join([ParentCanonicalPath, FileName]),
+
     case file_meta:type(Mode) of
         ?REGULAR_FILE_TYPE ->
             StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx4),
             storage_sync_info:update_mtime(StorageFileId, SpaceId, MTime, StatTimestamp),
             ok = location_and_link_utils:create_imported_file_location(
-                SpaceId, StorageId, FileUuid2, StorageFileId, FSize, OwnerId);
+                SpaceId, StorageId, FileUuid, StorageFileId, FSize, OwnerId);
         _ ->
-            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid2, SpaceId)
+            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid, SpaceId)
     end,
 
-    {ok, FileUuid2} = create_file_meta(FileUuid2, FileName, Mode, OwnerId, GroupId, ParentUuid,
-        SpaceId, CreateLinks),
-    {ok, _} = create_times(FileUuid2, MTime, ATime, CTime, SpaceId),
+    {ok, FileUuid} = create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, ParentUuid, SpaceId),
+    {ok, _} = create_times(FileUuid, MTime, ATime, CTime, SpaceId),
     SyncAcl = maps:get(sync_acl, Info, false),
-    FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     case SyncAcl of
         true -> ok = import_nfs4_acl(FileCtx, StorageFileCtx4);
         _ -> ok
     end,
-    {CanonicalPath, _} = file_ctx:get_canonical_path(FileCtx),
-    ?debug("Import storage file ~p", [{StorageFileId, CanonicalPath, FileUuid2}]),
-    storage_sync_logger:log_import(StorageFileId, SpaceId),
-    {imported, FileCtx, StorageFileCtx4}.
+    storage_sync_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    {?IMPORTED, FileCtx, StorageFileCtx4}.
 
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates mode, times, size, file_location and ACLs of already imported file.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_update_file(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(),
-    storage_sync_traverse:info()) -> result().
-maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
-    SyncAcl = maps:get(sync_acl, Info, false),
+-spec get_attr_including_deleted(file_ctx:ctx()) -> {ok, #file_attr{}} | {error, term()}.
+get_attr_including_deleted(FileCtx) ->
     try
-        {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-        maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx2, Mode, SyncAcl)
+        {#fuse_response{
+            status = #status{code = ?OK},
+            fuse_response = FileAttr
+        }, _, IsDeleted} =
+            attr_req:get_file_attr_and_conflicts(user_ctx:new(?ROOT_SESS_ID), FileCtx, true, true, false),
+        {ok, FileAttr, IsDeleted}
     catch
-        Error:Reason ->
-            FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
-            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-            ?error_stacktrace(
-                "storage_sync_engine:maybe_update_file file for file ~p in space ~p"
-                " failed due to ~w:~w",
-                [FileName, SpaceId, Error, Reason]),
-            {error, Reason}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates mode, times and size of already imported file.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_update_attrs(#file_attr{}, file_ctx:ctx(), storage_file_ctx:ctx(),
-    file_meta:mode(), boolean()) -> result().
-maybe_update_attrs(FileAttr, FileCtx, StorageFileCtx, Mode, SyncAcl) ->
-    {FileStat, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    Results = [
-        maybe_update_file_location(FileStat, FileCtx, file_meta:type(Mode), StorageFileCtx2),
-        maybe_update_mode(FileAttr, FileStat, FileCtx),
-        maybe_update_times(FileAttr, FileStat, FileCtx),
-        maybe_update_owner(FileAttr, StorageFileCtx2, FileCtx),
-        maybe_update_nfs4_acl(StorageFileCtx2, FileCtx, SyncAcl)
-    ],
-    case lists:member(updated, Results) of
-        true ->
+        _:Reason ->
+            #status{code = Error} = fslogic_errors:gen_status_message(Reason),
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {StorageFileId, _FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-            storage_sync_logger:log_update(StorageFileId, SpaceId),
-            updated;
-        false ->
-            processed
+            ?debug_stacktrace(
+                "Error {error, ~p} occured when getting attr of file: ~p during storage sync procedure in space: ~p.",
+                [Error, FileUuid, SpaceId]
+            ),
+            {error, Error}
     end.
 
--spec get_attr(file_ctx:ctx()) -> fslogic_worker:fuse_response().
-get_attr(FileCtx) ->
-    try
-        attr_req:get_file_attr_light(user_ctx:new(?ROOT_SESS_ID), FileCtx, true)
-    catch
-        _:Error ->
-            #fuse_response{status = fslogic_errors:gen_status_message(Error)}
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updates file's size if it has changed since last import.
-%% @end
-%%--------------------------------------------------------------------
-maybe_update_file_location(#statbuf{}, _FileCtx, ?DIRECTORY_TYPE, _StorageFileCtx) ->
-    not_updated;
-maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
-    FileCtx, ?REGULAR_FILE_TYPE, StorageFileCtx
-) ->
-    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    StorageSyncInfo = case storage_sync_info:get(StorageFileId, SpaceId) of
-        {error, not_found} -> undefined;
-        {ok, SSI} -> SSI
+-spec create_file_meta(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(),
+    undefined | od_group:id(), file_meta:uuid(), od_space:id()) -> {ok, file_meta:uuid()} | {error, term()}.
+create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, ParentUuid, SpaceId) ->
+    FileMetaDoc = file_meta:new_doc(FileUuid, FileName, file_meta:type(Mode), Mode band 8#1777,
+        OwnerId, GroupId, ParentUuid, SpaceId),
+    {ok, FileUuid} = case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
+        {error, already_exists} ->
+            % there was race with creating file by lfm
+            % file will be imported with suffix
+            FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
+            FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, file_meta:type(Mode),
+                Mode band 8#1777, OwnerId, GroupId, ParentUuid, SpaceId),
+            file_meta:create({uuid, ParentUuid}, FileMetaDoc2);
+        Other ->
+            Other
     end,
-    {Size, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
-    {{_, _, MTime}, FileCtx4} = file_ctx:get_times(FileCtx2),
-    FileUuid = file_ctx:get_uuid_const(FileCtx4),
-    SpaceId = file_ctx:get_space_id_const(FileCtx4),
-    NewLastStat = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx),
-    LocationId = file_location:local_id(FileUuid),
-    {ok, #document{
-        value = #file_location{
-            last_replication_timestamp = LastReplicationTimestamp
-    }}} = fslogic_location_cache:get_location(LocationId, FileUuid),
-
-    Result2 = case {LastReplicationTimestamp, StorageSyncInfo} of
-        %todo VFS-4847 refactor this case, use when wherever possible
-        {undefined, undefined} when MTime < StMtime ->
-            % file created locally and modified on storage
-            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
-            updated;
-
-        {undefined, undefined} ->
-            % file created locally and not modified on storage
-            not_updated;
-
-        {undefined, #document{value = #storage_sync_info{
-            mtime = LastMtime,
-            last_stat = LastStat
-        }}} when LastMtime =:= StMtime
-            andalso Size =:= StSize
-            andalso LastStat > StMtime
-        ->
-            % file not replicated and already handled because LastStat > StMtime
-            not_updated;
-
-        {undefined, #document{value = #storage_sync_info{}}} ->
-            case (MTime < StMtime) or (Size =/= StSize) of
-                true ->
-                    location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
-                    updated;
-                false ->
-                    not_updated
-            end;
-
-        {_, undefined} ->
-            case LastReplicationTimestamp < StMtime of
-                true ->
-                    % file was modified after replication and has never been synced
-                    case (MTime < StMtime) of
-                        true ->
-                            % file was modified on storage
-                            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
-                            updated;
-                        false ->
-                            % file was modified via onedata
-                            not_updated
-                    end;
-                false ->
-                    % file was replicated
-                    not_updated
-            end;
-
-        {_, #document{value = #storage_sync_info{
-            mtime = LastMtime,
-            last_stat = LastStat
-        }}} when LastMtime =:= StMtime
-            andalso Size =:= StSize
-            andalso LastStat > StMtime
-        ->
-            % file replicated and already handled because LastStat > StMtime
-            not_updated;
-
-        {_, #document{value = #storage_sync_info{}}} ->
-            case LastReplicationTimestamp < StMtime of
-                true ->
-                    % file was modified after replication
-                    case (MTime < StMtime) of
-                        true ->
-                            %there was modified on storage
-                            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
-                            updated;
-                        false ->
-                            % file was modified via onedata
-                            not_updated
-                    end;
-                false ->
-                    % file was replicated
-                    not_updated
-            end
-    end,
-    {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx4),
-    storage_sync_info:update_mtime(StorageFileId, SpaceId, StMtime, NewLastStat),
-    Result2.
-
--spec maybe_update_mode(#file_attr{}, helpers:stat(), file_ctx:ctx()) -> updated | not_updated.
-maybe_update_mode(#file_attr{mode = OldMode}, #statbuf{st_mode = Mode}, FileCtx) ->
-    case file_ctx:is_space_dir_const(FileCtx) of
-        false ->
-            case Mode band 8#1777 of
-                OldMode ->
-                    not_updated;
-                NewMode ->
-                    update_mode(FileCtx, NewMode),
-                    updated
-            end;
-        _ ->
-            not_updated
-    end.
-
--spec update_mode(file_ctx:ctx(), file_meta:mode()) ->
-    ok | fslogic_worker:fuse_response().
-update_mode(FileCtx, NewMode) ->
-    case file_ctx:is_space_dir_const(FileCtx) of
-        true ->
-            ok;
-        _ ->
-            ok = attr_req:chmod_attrs_only_insecure(FileCtx, NewMode)
-    end.
-
--spec maybe_update_times(#file_attr{}, helpers:stat(), file_ctx:ctx()) -> updated | not_updated.
-maybe_update_times(#file_attr{atime = ATime, mtime = MTime, ctime = CTime},
-    #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime},
-    _FileCtx
-) when
-    ATime >= StorageATime andalso
-    MTime >= StorageMTime andalso
-    CTime >= StorageCTime
-->
-    not_updated;
-maybe_update_times(_FileAttr,
-    #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime},
-    FileCtx
-) ->
-    ok = fslogic_times:update_times_and_emit(FileCtx,
-        fun(T = #times{
-            atime = ATime,
-            mtime = MTime,
-            ctime = CTime
-        }) ->
-            {ok, T#times{
-                atime = max(StorageATime, ATime),
-                mtime = max(StorageMTime, MTime),
-                ctime = max(StorageCTime, CTime)
-            }}
-        end),
-    updated.
-
--spec maybe_update_owner(#file_attr{}, storage_file_ctx:ctx(), file_ctx:ctx()) ->
-    updated | not_updated.
-maybe_update_owner(#file_attr{owner_id = OldOwnerId}, StorageFileCtx, FileCtx) ->
-    case file_ctx:is_space_dir_const(FileCtx) of
-        true -> not_updated;
-        _ ->
-            StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-            case get_owner_id(StorageFileCtx, StorageId) of
-                {OldOwnerId, _StorageFileCtx2} ->
-                    not_updated;
-                {NewOwnerId, _StorageFileCtx2} ->
-                    FileUuid = file_ctx:get_uuid_const(FileCtx),
-                    {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
-                        {ok, FileMeta#file_meta{owner = NewOwnerId}}
-                    end),
-                    updated
-            end
-    end.
-
--spec create_file_meta(file_meta:uuid() | undefined, file_meta:name(),
-    file_meta:mode(), od_user:id(), undefined | od_group:id(), file_meta:uuid(),
-    od_space:id(), boolean()) -> {ok, file_meta:uuid()} | {error, term()}.
-% TODO VFS-5273 - Maybe delete CreateLinks argument;
-create_file_meta(FileUuid, FileName, Mode, OwnerId, GroupId, ParentUuid, SpaceId, CreateLinks) ->
-    FileMetaDoc = file_meta:new_doc(FileUuid, FileName, file_meta:type(Mode),
-        Mode band 8#1777, OwnerId, GroupId, ParentUuid, SpaceId),
-    case CreateLinks of
-        true ->
-            case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
-                {error, already_exists} ->
-                    % there was race with creating file by lfm
-                    % file will be imported with suffix
-                    FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
-                    FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, file_meta:type(Mode),
-                        Mode band 8#1777, OwnerId, GroupId, ParentUuid, SpaceId),
-                    file_meta:create({uuid, ParentUuid}, FileMetaDoc2);
-                Other ->
-                    Other
-            end;
-        _ ->
-            file_meta:save(FileMetaDoc, false)
-    end.
+    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
+    FileCtx = file_ctx:new_by_guid(FileGuid),
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
+    {ok, FileUuid}.
 
 -spec create_times(file_meta:uuid(), times:time(), times:time(), times:time(), od_space:id()) ->
     {ok, datastore:key()}.
@@ -635,9 +539,10 @@ create_times(FileUuid, MTime, ATime, CTime, SpaceId) ->
 %% Returns owner id of given file, acquired from reverse LUMA.
 %% @end
 %%-------------------------------------------------------------------
--spec get_owner_id(storage_file_ctx:ctx(), storage:id()) -> {od_user:id(), storage_file_ctx:ctx()}.
-get_owner_id(StorageFileCtx, StorageId) ->
+-spec get_owner_id(storage_file_ctx:ctx()) -> {od_user:id(), storage_file_ctx:ctx()}.
+get_owner_id(StorageFileCtx) ->
     {StatBuf, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx2),
     #statbuf{st_uid = Uid} = StatBuf,
     {ok, OwnerId} = reverse_luma:get_user_id(Uid, StorageId),
     {OwnerId, StorageFileCtx2}.
@@ -648,10 +553,11 @@ get_owner_id(StorageFileCtx, StorageId) ->
 %% Returns group owner id of given file, acquired from reverse LUMA.
 %% @end
 %%-------------------------------------------------------------------
--spec get_group_owner_id(storage_file_ctx:ctx(), od_space:id(), storage:id()) ->
-    {od_group:id() | undefined, storage_file_ctx:ctx()}.
-get_group_owner_id(StorageFileCtx, SpaceId, StorageId) ->
+-spec get_group_owner_id(storage_file_ctx:ctx()) -> {od_group:id() | undefined, storage_file_ctx:ctx()}.
+get_group_owner_id(StorageFileCtx) ->
     {StatBuf, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx2),
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx2),
     #statbuf{st_gid = Gid} = StatBuf,
     try
         {ok, GroupId} = reverse_luma:get_group_id(Gid, SpaceId, StorageId),
@@ -685,14 +591,268 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
                     acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl),
                 ok
             catch
-                throw:?ENOTSUP ->
-                    ok;
-                throw:?ENOENT ->
-                    ok;
-                throw:?ENODATA ->
+                throw:Reason
+                    when Reason =:= ?ENOTSUP
+                    orelse Reason =:= ?ENOENT
+                    orelse Reason =:= ?ENODATA
+                    ->
                     ok
             end
     end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates mode, times, size, file_location and ACLs of already imported file.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_update_file(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(),
+    storage_sync_traverse:info()) -> {result(), file_ctx:ctx(), storage_file_ctx:ctx()}.
+maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
+    try
+        maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info)
+    catch
+        % todo log for ENOENT?
+        Error:Reason ->
+            FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+            ?error_stacktrace(
+                "storage_sync_engine:maybe_update_file file for file ~p in space ~p"
+                " failed due to ~w:~w",
+                [FileName, SpaceId, Error, Reason]),
+            {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates mode, times and size of already imported file.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_update_attrs(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), storage_sync_traverse:info()) ->
+    {result(), file_ctx:ctx(), storage_file_ctx:ctx()}.
+maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
+    UpdateAttrsFoldFun = fun(UpdateAttrFun, {StorageFileCtxAcc, FileCtxAcc, UpdatedAttrsAcc}) ->
+        {Updated, StorageFileCtxOut, FileCtxOut, AttrName} = UpdateAttrFun(StorageFileCtxAcc, FileAttr, FileCtxAcc, Info),
+        UpdatedAttrsOut = case Updated of
+            true -> [AttrName | UpdatedAttrsAcc];
+            false -> UpdatedAttrsAcc
+        end,
+        {StorageFileCtxOut, FileCtxOut, UpdatedAttrsOut}
+    end,
+
+    {StorageFileCtx2, FileCtx2, UpdatedAttrs} = lists:foldl(UpdateAttrsFoldFun, {StorageFileCtx, FileCtx, []}, [
+       fun check_type_and_maybe_update_file_location/4,
+       fun maybe_update_mode/4,
+       fun maybe_update_times/4,
+       fun maybe_update_owner/4,
+       fun maybe_update_nfs4_acl/4
+    ]),
+
+    case UpdatedAttrs of
+        [] ->
+            {?PROCESSED, FileCtx2, StorageFileCtx2};
+        UpdatedAttrs ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx2),
+            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx2),
+            {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+            FileUuid = file_ctx:get_uuid_const(FileCtx3),
+            storage_sync_logger:log_update(StorageFileId, CanonicalPath, FileUuid, SpaceId, UpdatedAttrs),
+            fslogic_event_emitter:emit_file_attr_changed(FileCtx3, []),
+            {?UPDATED, FileCtx3, StorageFileCtx2}
+    end.
+
+-spec check_type_and_maybe_update_file_location(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(),
+    storage_sync_traverse:info()) ->
+    {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+check_type_and_maybe_update_file_location(StorageFileCtx, _FileAttr, FileCtx, _Info) ->
+    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    case file_meta:type(StMode) of
+        ?DIRECTORY_TYPE ->
+            {false, FileCtx, StorageFileCtx2, ?FILE_LOCATION_ATTR_NAME};
+        ?REGULAR_FILE_TYPE ->
+            maybe_update_file_location(StorageFileCtx2, FileCtx)
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Updates file's size if it has changed since last import.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_update_file_location(storage_file_ctx:ctx(), file_ctx:ctx()) ->
+    {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_file_location(StorageFileCtx, FileCtx) ->
+    {#statbuf{st_mtime = StMtime, st_size = StSize}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx2),
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx2),
+    StorageSyncInfo = case storage_sync_info:get(StorageFileId, SpaceId) of
+        {error, not_found} -> undefined;
+        {ok, SSI} -> SSI
+    end,
+    {Size, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
+    {{_, _, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
+    NewLastStat = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx),
+    {#document{
+        value = #file_location{
+            last_replication_timestamp = LastReplicationTimestamp
+    }}, _} = file_ctx:get_local_file_location_doc(FileCtx3),
+
+    Result2 = case {LastReplicationTimestamp, StorageSyncInfo} of
+        %todo VFS-4847 refactor this case, use when wherever possible
+        {undefined, undefined} when MTime < StMtime ->
+            % file created locally and modified on storage
+            location_and_link_utils:update_imported_file_location(FileCtx3, StSize),
+            true;
+
+        {undefined, undefined} ->
+            % file created locally and not modified on storage
+            false;
+
+        {undefined, #document{value = #storage_sync_info{
+            mtime = LastMtime,
+            last_stat = LastStat
+        }}} when LastMtime =:= StMtime
+            andalso Size =:= StSize
+            andalso LastStat > StMtime
+        ->
+            % file not replicated and already handled because LastStat > StMtime
+            false;
+
+        {undefined, #document{value = #storage_sync_info{}}} ->
+            case (MTime < StMtime) or (Size =/= StSize) of
+                true ->
+                    location_and_link_utils:update_imported_file_location(FileCtx3, StSize),
+                    true;
+                false ->
+                    false
+            end;
+
+        {_, undefined} ->
+            case LastReplicationTimestamp < StMtime of
+                true ->
+                    % file was modified after replication and has never been synced
+                    case (MTime < StMtime) of
+                        true ->
+                            % file was modified on storage
+                            location_and_link_utils:update_imported_file_location(FileCtx3, StSize),
+                            true;
+                        false ->
+                            % file was modified via onedata
+                            false
+                    end;
+                false ->
+                    % file was replicated
+                    false
+            end;
+
+        {_, #document{value = #storage_sync_info{
+            mtime = LastMtime,
+            last_stat = LastStat
+        }}} when LastMtime =:= StMtime
+            andalso Size =:= StSize
+            andalso LastStat > StMtime
+        ->
+            % file replicated and already handled because LastStat > StMtime
+            false;
+
+        {_, #document{value = #storage_sync_info{}}} ->
+            case LastReplicationTimestamp < StMtime of
+                true ->
+                    % file was modified after replication
+                    case (MTime < StMtime) of
+                        true ->
+                            %there was modified on storage
+                            location_and_link_utils:update_imported_file_location(FileCtx3, StSize),
+                            true;
+                        false ->
+                            % file was modified via onedata
+                            false
+                    end;
+                false ->
+                    % file was replicated
+                    false
+            end
+    end,
+    storage_sync_info:update_mtime(StorageFileId, SpaceId, StMtime, NewLastStat),
+    {Result2, FileCtx3, StorageFileCtx2, ?FILE_LOCATION_ATTR_NAME}.
+
+-spec maybe_update_mode(storage_file_ctx(), #file_attr{}, file_ctx:ctx(), storage_sync_traverse:info()) ->
+    {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_mode(StorageFileCtx, #file_attr{mode = OldMode}, FileCtx, _Info) ->
+    {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    Result = case file_ctx:is_space_dir_const(FileCtx) of
+        false ->
+            case Mode band 8#1777 of
+                OldMode ->
+                    false;
+                NewMode ->
+                    update_mode(FileCtx, NewMode),
+                    true
+            end;
+        _ ->
+            false
+    end,
+    {Result, FileCtx, StorageFileCtx2, ?MODE_ATTR_NAME}.
+
+-spec update_mode(file_ctx:ctx(), file_meta:mode()) -> ok.
+update_mode(FileCtx, NewMode) ->
+    case file_ctx:is_space_dir_const(FileCtx) of
+        true ->
+            ok;
+        _ ->
+            ok = attr_req:chmod_attrs_only_insecure(FileCtx, NewMode)
+    end.
+
+-spec maybe_update_times(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), storage_sync_traverse:info()) ->
+    {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_times(StorageFileCtx, #file_attr{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx, _Info) ->
+    {StorageStat = #statbuf{
+        st_atime = StorageATime,
+        st_mtime = StorageMTime,
+        st_ctime = StorageCTime
+    }, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    Updated = case ATime >= StorageATime andalso  MTime >= StorageMTime andalso CTime >= StorageCTime of
+        true ->
+            false;
+        false ->
+            update_times(FileCtx, StorageStat),
+            true
+    end,
+    {Updated, FileCtx, StorageFileCtx2, ?TIMESTAMPS_ATTR_NAME}.
+
+-spec update_times(file_ctx:ctx(), helpers:stat()) -> ok.
+update_times(FileCtx, #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime}) ->
+    ok = fslogic_times:update_times_and_emit(FileCtx,
+        fun(T = #times{atime = ATime, mtime = MTime, ctime = CTime}) ->
+            {ok, T#times{
+                atime = max(StorageATime, ATime),
+                mtime = max(StorageMTime, MTime),
+                ctime = max(StorageCTime, CTime)
+            }}
+        end
+    ).
+
+-spec maybe_update_owner(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), storage_sync_traverse:info()) ->
+    {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_owner(StorageFileCtx, #file_attr{owner_id = OldOwnerId}, FileCtx, _Info) ->
+    {Updated, StorageFileCtx3} = case file_ctx:is_space_dir_const(FileCtx) of
+        true -> {false, StorageFileCtx};
+        false ->
+            case get_owner_id(StorageFileCtx) of
+                {OldOwnerId, StorageFileCtx2} ->
+                    {false, StorageFileCtx2};
+                {NewOwnerId, StorageFileCtx2} ->
+                    update_owner(FileCtx, NewOwnerId),
+                    {true, StorageFileCtx2}
+            end
+    end,
+    {Updated, FileCtx, StorageFileCtx3, ?OWNER_ATTR_NAME}.
+
+update_owner(FileCtx, NewOwnerId) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    ok = ?extract_ok(file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
+        {ok, FileMeta#file_meta{owner = NewOwnerId}}
+    end)).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -700,40 +860,40 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
 %% Updates file's nfs4 ACL if it has CHANGED.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_update_nfs4_acl(storage_file_ctx:ctx(), file_ctx:ctx(),
-    SyncAcl :: boolean()) -> updated | not_updated.
-maybe_update_nfs4_acl(_StorageFileCtx, _FileCtx, false) ->
-    not_updated;
-maybe_update_nfs4_acl(StorageFileCtx, FileCtx, true) ->
+-spec maybe_update_nfs4_acl(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), storage_sync_traverse:info()) ->
+    {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := true}) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     case file_ctx:is_space_dir_const(FileCtx) of
         true ->
-            not_updated;
+            {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME};
         false ->
-            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-            StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
             #provider_response{provider_response = ACL} = acl_req:get_acl(UserCtx, FileCtx),
             try
-                {ACLBin, _} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
+                {ACLBin, StorageFileCtx2} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
+                SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx2),
+                StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx2),
                 {ok, NormalizedNewACL} = storage_sync_acl:decode_and_normalize(ACLBin, SpaceId, StorageId),
                 {SanitizedAcl, FileCtx2} = sanitize_acl(NormalizedNewACL, FileCtx),
                 case #acl{value = SanitizedAcl} of
                     ACL ->
-                        not_updated;
+                        {false, FileCtx2, StorageFileCtx2, ?NFS4_ACL_ATTR_NAME};
                     _ ->
                         #provider_response{status = #status{code = ?OK}} =
                             acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl),
-                        updated
+                        {true, FileCtx2, StorageFileCtx2, ?NFS4_ACL_ATTR_NAME}
                 end
             catch
-                throw:?ENOTSUP ->
-                    not_updated;
-                throw:?ENOENT ->
-                    not_updated;
-                throw:?ENODATA ->
-                    ok
+                throw:Reason
+                    when Reason =:= ?ENOTSUP
+                    orelse Reason =:= ?ENOENT
+                    orelse Reason =:= ?ENODATA
+                ->
+                    {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME}
             end
-    end.
+    end;
+maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, _Info) ->
+    {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME}.
 
 %%-------------------------------------------------------------------
 %% @private

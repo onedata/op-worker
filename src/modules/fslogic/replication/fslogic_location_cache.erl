@@ -36,7 +36,8 @@
 %% Location getters/setters
 -export([get_location/2, get_location/3, save_location/1, save_location/2,
     cache_location/1, update_location/4, create_location/1, create_location/2,
-    delete_location/2, force_flush/1]).
+    delete_local_location/1, delete_location/2, force_flush/1,
+    get_local_location/1, get_local_location/2]).
 %% Blocks getters/setters
 -export([get_blocks/1, get_blocks/2, set_blocks/2, set_final_blocks/2,
     update_blocks/2, clear_blocks/2]).
@@ -46,6 +47,16 @@
 %%%===================================================================
 %%% Location getters/setters
 %%%===================================================================
+
+-spec get_local_location(file_meta:uuid()) -> {ok, file_location:doc()} | {error, term()}.
+get_local_location(FileUuid) ->
+    LocId = file_location:local_id(FileUuid),
+    get_location(LocId, FileUuid).
+
+-spec get_local_location(file_meta:uuid(), get_doc_opts()) -> {ok, file_location:doc()} | {error, term()}.
+get_local_location(FileUuid, GetDocOpts) ->
+    LocId = file_location:local_id(FileUuid),
+    get_location(LocId, FileUuid, GetDocOpts).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -65,7 +76,7 @@ get_location(LocId, FileUuid) ->
 %%-------------------------------------------------------------------
 -spec get_location(file_location:id(), file_meta:uuid(), get_doc_opts()) ->
     {ok, file_location:doc()} | {error, term()}.
-get_location(LocId, FileUuid, BlocksOptions) ->
+get_location(LocId, FileUuid, GetDocOpts) ->
     replica_synchronizer:apply_or_run_locally(FileUuid, fun() ->
         case fslogic_cache:get_doc(LocId) of
             #document{} = LocationDoc ->
@@ -76,7 +87,7 @@ get_location(LocId, FileUuid, BlocksOptions) ->
     end, fun() ->
         case fslogic_cache:get_doc(LocId) of
             #document{key = Key, value = Location} = LocationDoc ->
-                case BlocksOptions of
+                case GetDocOpts of
                     false ->
                         {ok, LocationDoc};
                     true ->
@@ -92,7 +103,7 @@ get_location(LocId, FileUuid, BlocksOptions) ->
                 Error
         end
     end, fun() ->
-        get_location_not_cached(LocId, BlocksOptions)
+        get_location_not_cached(LocId, GetDocOpts)
     end).
 
 %%-------------------------------------------------------------------
@@ -199,6 +210,16 @@ create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
     end, fun() ->
         ?extract_key(file_location:create_and_update_quota(Doc, GeneratedKey))
     end).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Deletes local location document.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_local_location(file_meta:uuid()) ->
+    ok | {error, term()}.
+delete_local_location(Uuid) ->
+    delete_location(Uuid, file_location:local_id(Uuid)).
 
 %%-------------------------------------------------------------------
 %% @doc

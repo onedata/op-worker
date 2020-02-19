@@ -200,11 +200,11 @@ release(UserCtx, FileCtx, HandleId) ->
     Mode :: file_meta:posix_permissions(), Flags :: fslogic_worker:open_flag()) ->
     fslogic_worker:fuse_response().
 create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
-    FileCtx = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    {FileCtx, ParentFileCtx2} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
         % TODO VFS-5267 - default open mode will fail if read-only file is created
         {HandleId, FileLocation, FileCtx2} = open_file_internal(UserCtx, FileCtx, rdwr, undefined, true, false),
-        fslogic_times:update_mtime_ctime(ParentFileCtx),
+        fslogic_times:update_mtime_ctime(ParentFileCtx2),
 
         #fuse_response{fuse_response = FileAttr} = attr_req:get_file_attr_light(UserCtx, FileCtx2, false),
         FileAttr2 = FileAttr#file_attr{size = 0},
@@ -223,6 +223,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
                 [Error, Reason]),
             sd_utils:delete_storage_file(FileCtx, UserCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
+            fslogic_location_cache:delete_local_location(FileUuid),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             case Reason of
@@ -285,10 +286,10 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 -spec make_file_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(), Name :: file_meta:name(),
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
-    FileCtx = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
+    {FileCtx, ParentFileCtx2} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
         {_, FileCtx2, _} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
-        fslogic_times:update_mtime_ctime(ParentFileCtx),
+        fslogic_times:update_mtime_ctime(ParentFileCtx2),
         #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_light(UserCtx, FileCtx2, false),
         FileAttr2 = FileAttr#file_attr{size = 0},
         ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
@@ -296,6 +297,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     catch
         Error:Reason ->
             FileUuid = file_ctx:get_uuid_const(FileCtx),
+            fslogic_location_cache:delete_local_location(FileUuid),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)
@@ -310,16 +312,16 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %%--------------------------------------------------------------------
 -spec get_file_location_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
-get_file_location_insecure(_UserCtx, FileCtx) ->
-    throw_if_not_exists(FileCtx),
-    {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
+get_file_location_insecure(UserCtx, FileCtx) ->
+    {ok, FileCtx2} = check_if_file_exists_or_is_opened(FileCtx, user_ctx:get_session_id(UserCtx)),
+    {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
     {#document{
         value = #file_location{
             blocks = Blocks,
             file_id = FileId
-    }}, FileCtx3} = file_ctx:get_or_create_local_file_location_doc(FileCtx2),
-    FileUuid = file_ctx:get_uuid_const(FileCtx3),
-    SpaceId = file_ctx:get_space_id_const(FileCtx3),
+    }}, FileCtx4} = file_ctx:get_or_create_local_file_location_doc(FileCtx3),
+    FileUuid = file_ctx:get_uuid_const(FileCtx4),
+    SpaceId = file_ctx:get_space_id_const(FileCtx4),
 
     #fuse_response{
         status = #status{code = ?OK},
@@ -424,11 +426,16 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
              user_ctx:is_direct_io(UserCtx, SpaceID) andalso HandleId0 =:= undefined, HandleId),
         {HandleId, FileLocation, FileCtx2}
     catch
-        E1:E2 ->
-            ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
-                [E1, E2, file_ctx:get_uuid_const(FileCtx)]),
+        throw:?ENOENT ->
+            % this error can is thrown on race between opening the file and deleting it on storage
+            ?debug_stacktrace("Open file error: ENOENT for uuid ~p", [file_ctx:get_uuid_const(FileCtx)]),
             check_and_register_release(FileCtx, SessId, HandleId0),
-            throw(E2)
+            throw(?ENOENT);
+        Error:Reason ->
+            ?error_stacktrace("Open file error: ~p:~p for uuid ~p",
+                [Error, Reason, file_ctx:get_uuid_const(FileCtx)]),
+            check_and_register_release(FileCtx, SessId, HandleId0),
+            throw(Reason)
     end.
 
 
@@ -459,8 +466,12 @@ maybe_open_on_storage(FileCtx, SessId, Flag, _DirectIO, HandleId) ->
 open_on_storage(FileCtx, SessId, Flag, HandleId) ->
     {SDHandle, _FileCtx2} = storage_driver:new_handle(SessId, FileCtx),
     SDHandle2 = storage_driver:set_size(SDHandle),
-    {ok, Handle} = storage_driver:open(SDHandle2, Flag),
-    ok = session_handles:add(SessId, HandleId, Handle).
+    case storage_driver:open(SDHandle2, Flag) of
+        {ok, Handle} ->
+            ok = session_handles:add(SessId, HandleId, Handle);
+        {error, ?ENOENT} ->
+            throw(?ENOENT)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -539,24 +550,29 @@ create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_file_doc(user_ctx:ctx(), file_ctx:ctx(), file_meta:name(), file_meta:mode()) ->
-    ChildFile :: file_ctx:ctx().
+    {ChildFile :: file_ctx:ctx(), ParentFileCtx2 :: file_ctx:ctx()} | no_return().
 create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
-    File = #document{value = #file_meta{
-        name = Name,
-        type = ?REGULAR_FILE_TYPE,
-        mode = Mode,
-        owner = user_ctx:get_user_id(UserCtx)
-    }},
-    ParentFileUuid = file_ctx:get_uuid_const(ParentFileCtx),
-    {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
+    case file_ctx:is_dir(ParentFileCtx) of
+        {true, ParentFileCtx2} ->
+            File = #document{value = #file_meta{
+                name = Name,
+                type = ?REGULAR_FILE_TYPE,
+                mode = Mode,
+                owner = user_ctx:get_user_id(UserCtx)
+            }},
+            ParentFileUuid = file_ctx:get_uuid_const(ParentFileCtx2),
+            {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
 
-    CTime = time_utils:cluster_time_seconds(),
-    SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
-    {ok, _} = times:save(#document{key = FileUuid, value = #times{
-        mtime = CTime, atime = CTime, ctime = CTime
-    }, scope = SpaceId}),
+            CTime = time_utils:cluster_time_seconds(),
+            SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
+            {ok, _} = times:save(#document{key = FileUuid, value = #times{
+                mtime = CTime, atime = CTime, ctime = CTime
+            }, scope = SpaceId}),
 
-    file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)).
+            {file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)), ParentFileCtx2};
+        {false, _} ->
+            throw(?ENOTDIR)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -719,12 +735,20 @@ flush_event_queue(UserCtx, FileCtx) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Throws ?ENOENT if file does not exist.
+%% Throws ?ENOENT if file does not exist or
+%% has been deleted and is not opened within session.
 %% @end
 %%--------------------------------------------------------------------
--spec throw_if_not_exists(file_ctx:ctx()) -> ok | no_return().
-throw_if_not_exists(FileCtx) ->
-    case file_ctx:file_exists_const(FileCtx) of
-        true -> ok;
-        false -> throw(?ENOENT)
+-spec check_if_file_exists_or_is_opened(file_ctx:ctx(), session:id()) -> {ok, file_ctx:ctx()} | no_return().
+check_if_file_exists_or_is_opened(FileCtx, SessionId) ->
+    case file_ctx:file_exists_or_is_deleted(FileCtx) of
+        {?FILE_EXISTS, FileCtx2} ->
+            {ok, FileCtx2};
+        {?FILE_NEVER_EXISTED, _} ->
+            throw(?ENOENT);
+        {?FILE_DELETED, FileCtx2} ->
+            case file_handles:is_used_by_session(FileCtx2, SessionId) of
+                true -> {ok, FileCtx2};
+                false -> throw(?ENOENT)
+            end
     end.

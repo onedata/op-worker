@@ -352,7 +352,7 @@ setup_storage([], Config) ->
 setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
     %% @todo: use shared storage
-    "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir]),
+    "" = rpc:call(Worker, os, cmd, ["mkdir -p " ++ TmpDir ++ " -m 777"]),
     UserCtx = #{<<"uid">> => <<"0">>, <<"gid">> => <<"0">>},
     Args = #{<<"mountPoint">> => list_to_binary(TmpDir)},
     {ok, Helper} = helper:new_helper(

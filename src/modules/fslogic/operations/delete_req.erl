@@ -12,6 +12,7 @@
 -module(delete_req).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
@@ -126,10 +127,11 @@ check_if_empty_and_delete(UserCtx, FileCtx, Silent, RemoveStorageFile) ->
 -spec delete_insecure(user_ctx:ctx(), file_ctx:ctx(), Silent :: boolean(), RemoveStorageFile :: boolean()) ->
     fslogic_worker:fuse_response().
 delete_insecure(UserCtx, FileCtx, Silent, RemoveStorageFile) ->
+    % TODO-JK unused arg
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{deleted = true}}
     end),
-    fslogic_delete:check_if_opened_and_remove(UserCtx, FileCtx, Silent, false, RemoveStorageFile),
+    fslogic_delete:delete_file_locally(UserCtx, FileCtx, Silent),
     fslogic_delete:remove_auxiliary_documents(FileCtx),
     #fuse_response{status = #status{code = ?OK}}.

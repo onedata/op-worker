@@ -28,6 +28,10 @@
 %% Hidden file prefix
 -define(HIDDEN_FILE_PREFIX, ".__onedata__").
 
+%% Directory name for deleted opened files
+-define(DELETED_OPENED_FILES_DIR, <<?HIDDEN_FILE_PREFIX, "deleted">>).
+-define(DELETED_OPENED_FILES_DIR_STRING, binary_to_list(?DELETED_OPENED_FILES_DIR)).
+
 % Global root - parent of all spaces
 % note: spaces are also linked to virtual root directories of each user belonging to space
 -define(GLOBAL_ROOT_DIR_UUID, <<"">>).
@@ -49,8 +53,16 @@
 %% Mode for automatically created parent directory while creating file/directory.
 -define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).
 
+%% Mode of deleted opened files directory
+-define(DELETED_OPENED_FILES_DIR_MODE, 8#700).
+
 %% Allowed parameter keys
 -define(PROXYIO_PARAMETER_HANDLE_ID, <<"handle_id">>).
 -define(PROXYIO_PARAMETER_FILE_GUID, <<"file_uuid">>).
+
+%% Macros for file lifecycle
+-define(FILE_EXISTS, exists).
+-define(FILE_DELETED, deleted).
+-define(FILE_NEVER_EXISTED, never_existed).
 
 -endif.

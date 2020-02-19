@@ -56,6 +56,7 @@
     remote_driver_test/1,
     db_sync_with_delays_test/1,
     db_sync_create_after_del_test/1,
+    db_sync_create_after_deletion_links_test/1,
     rtransfer_fetch_test/1,
     rtransfer_cancel_for_session_test/1,
     remove_file_during_transfers_test/1,
@@ -83,6 +84,7 @@
     distributed_delete_test,
     remote_driver_test,
     db_sync_create_after_del_test,
+    db_sync_create_after_deletion_links_test,
     rtransfer_fetch_test,
     rtransfer_cancel_for_session_test,
     remove_file_during_transfers_test,
@@ -133,6 +135,10 @@ db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
 db_sync_create_after_del_test(Config) ->
+    multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
+
+db_sync_create_after_deletion_links_test(Config) ->
+    % The same test as db_sync_create_after_del_test but with mock (see init_per_testcase)
     multi_provider_file_ops_test_base:create_after_del_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
 distributed_delete_test(Config) ->
@@ -636,7 +642,7 @@ remove_file_on_remote_provider_ceph(Config0) ->
        
     lfm_proxy:unlink(Worker2, SessionId(Worker2), {guid, Guid}),
 
-    ?assertMatch({error, enoent}, lfm_proxy:ls(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:ls(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 
 evict_on_ceph(Config0) ->
@@ -805,6 +811,12 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config).
 
+init_per_testcase(db_sync_create_after_deletion_links_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, fslogic_delete, [passthrough]),
+    test_utils:mock_expect(Workers, fslogic_delete, get_open_file_handling_method,
+        fun(Ctx) -> {deletion_link, Ctx} end),
+    init_per_testcase(?DEFAULT_CASE(db_sync_create_after_deletion_links_test), Config);
 init_per_testcase(file_consistency_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, file_meta, [passthrough]),
@@ -857,6 +869,10 @@ init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
 
+end_per_testcase(db_sync_create_after_deletion_links_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, fslogic_delete),
+    end_per_testcase(?DEFAULT_CASE(db_sync_create_after_deletion_links_test), Config);
 end_per_testcase(file_consistency_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, file_meta),

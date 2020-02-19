@@ -1055,7 +1055,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
         lists:foreach(fun(_) ->
             RmAnsCheck =
                 receive
-                    {rm_ans, W, D, Uuid, {error, enoent}} ->
+                    {rm_ans, W, D, Uuid, {error, ?ENOENT}} ->
                         {rm_ans, W, D, Uuid, ok};
                     {rm_ans, W, D, Uuid, RmAns} ->
                         {rm_ans, W, D, Uuid, RmAns}
