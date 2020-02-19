@@ -144,7 +144,7 @@ client_connection_test(Config) ->
     SerializedToken = initializer:create_access_token(UserId),
 
     ValidMacaroon = #'Macaroon'{macaroon = SerializedToken},
-    InvalidMacaroon = #'Macaroon'{macaroon = <<"invaldi">>},
+    InvalidMacaroon = #'Macaroon'{macaroon = <<"invalid">>},
 
     lists:foreach(fun({M, Version, ExpStatus}) ->
         ?assertMatch(ExpStatus, handshake_as_client(Worker1, M, Version))
