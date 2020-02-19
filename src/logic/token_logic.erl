@@ -17,6 +17,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 
 -export([
+    create_identity_token/1,
     verify_access_token/4,
     verify_provider_identity_token/1
 ]).
@@ -25,6 +26,28 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a new temporary identity token for this provider with given TTL.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_identity_token(ValidUntil :: time_utils:seconds()) ->
+    {ok, tokens:serialized()} | errors:error().
+create_identity_token(ValidUntil) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{
+            type = od_token,
+            id = undefined,
+            aspect = {provider_temporary_token, oneprovider:get_id()},
+            scope = private
+        },
+        data = #{
+            <<"type">> => token_type:to_json(?IDENTITY_TOKEN),
+            <<"caveats">> => [caveats:to_json(#cv_time{valid_until = ValidUntil})]
+        }
+    }).
 
 
 %%--------------------------------------------------------------------
@@ -84,7 +107,7 @@ verify_provider_identity_token(IdentityToken) ->
         },
         data = #{
             <<"token">> => IdentityToken,
-            <<"consumer">> => aai:serialize_subject(?SUB(?ONEPROVIDER, oneprovider:get_id()))
+            <<"consumerToken">> => op_worker_identity_token()
         }
     }),
     case Result of
@@ -117,7 +140,7 @@ build_verification_payload(AccessToken, PeerIp, Interface, DataAccessCaveatsPoli
             _ ->
                 element(2, {ok, _} = ip_utils:to_binary(PeerIp))
         end,
-        <<"service">> => aai:serialize_service(?SERVICE(?OP_WORKER, oneprovider:get_id())),
+        <<"serviceToken">> => op_worker_identity_token(),
         <<"allowDataAccessCaveats">> => case DataAccessCaveatsPolicy of
             allow_data_access_caveats -> true;
             disallow_data_access_caveats -> false
@@ -129,3 +152,10 @@ build_verification_payload(AccessToken, PeerIp, Interface, DataAccessCaveatsPoli
         _ ->
             Json#{<<"interface">> => atom_to_binary(Interface, utf8)}
     end.
+
+
+%% @private
+-spec op_worker_identity_token() -> tokens:serialized().
+op_worker_identity_token() ->
+    {ok, IdentityToken} = provider_auth:get_identity_token(),
+    tokens:add_oneprovider_service_indication(?OP_WORKER, IdentityToken).

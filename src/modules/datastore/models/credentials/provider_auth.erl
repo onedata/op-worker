@@ -6,10 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This model holds the authorization token used by provider to perform
-%%% operations in onezone. The token is never used in bare form (which gives
-%%% full authorization for infinite time - until it is revoked). Rather than
-%%% that, the token is confined to short TTL before use.
+%%% This model manages access and identity tokens used by provider to perform
+%%% operations in Onezone and prove its identity. The tokens are confined and
+%%% then cached for some time for better performance.
+%%%   * access token - provider's root access token is read from database and
+%%%     confined with TTL each time the cache expires
+%%%   * identity token - a new temporary identity token is created each time
+%%%     the cache expires
 %%% @end
 %%%-------------------------------------------------------------------
 -module(provider_auth).
@@ -26,7 +29,7 @@
 -export([save/2, delete/0]).
 -export([get_provider_id/0, is_registered/0]).
 -export([clear_provider_id_cache/0]).
--export([get_access_token/0, get_identity_token_for_consumer/1]).
+-export([get_access_token/0, get_identity_token/0, get_identity_token_for_consumer/1]).
 -export([get_root_token_file_path/0]).
 
 %% datastore_model callbacks
@@ -128,15 +131,14 @@ is_registered() ->
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns access token for this provider. The token is confined
-%% with TTL for security.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_access_token() -> {ok, tokens:serialized()} | {error, term()}.
 get_access_token() ->
     get_token(access).
+
+
+-spec get_identity_token() -> {ok, tokens:serialized()} | {error, term()}.
+get_identity_token() ->
+    get_token(identity).
 
 
 %%--------------------------------------------------------------------
@@ -150,7 +152,7 @@ get_access_token() ->
 -spec get_identity_token_for_consumer(aai:consumer_spec()) ->
     {ok, tokens:serialized()} | {error, term()}.
 get_identity_token_for_consumer(Consumer) ->
-    {ok, Token} = get_token(identity),
+    {ok, Token} = get_identity_token(),
     {ok, tokens:confine(Token, #cv_consumer{whitelist = [Consumer]})}.
 
 
@@ -288,15 +290,21 @@ get_token(Type) ->
             Error;
         {ok, #document{value = ProviderAuth}} ->
             {ValidUntil, CachedToken} = get_cached_token(Type, ProviderAuth),
-            case ValidUntil - ?NOW() > ?MIN_TTL_FROM_CACHE of
+            Now = ?NOW(),
+            case ValidUntil - Now > ?MIN_TTL_FROM_CACHE of
                 true ->
                     {ok, CachedToken};
                 false ->
-                    RootToken = ProviderAuth#provider_auth.root_token,
-                    Caveats = caveats_for_token(Type),
-                    NewToken = tokens:confine(RootToken, Caveats),
-                    cache_token(Type, NewToken),
-                    {ok, NewToken}
+                    Token = case Type of
+                        access ->
+                            ProviderAuth#provider_auth.root_token;
+                        identity ->
+                            {ok, IdentityToken} = token_logic:create_identity_token(Now + ?TOKEN_TTL),
+                            IdentityToken
+                    end,
+                    ConfinedToken = tokens:confine(Token, caveats_for_token(Type)),
+                    cache_token(Type, ConfinedToken),
+                    {ok, ConfinedToken}
             end
     end.
 
@@ -330,6 +338,4 @@ caveats_for_token(access) -> [
     #cv_time{valid_until = ?NOW() + ?TOKEN_TTL}
 ];
 caveats_for_token(identity) -> [
-    #cv_time{valid_until = ?NOW() + ?TOKEN_TTL},
-    #cv_scope{scope = identity_token}
 ].
