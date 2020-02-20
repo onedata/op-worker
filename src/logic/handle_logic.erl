@@ -76,8 +76,13 @@ has_eff_user(SessionId, HandleId, UserId) ->
     end.
 
 
--spec create(gs_client_worker:client(), od_handle_service:id(),
-    od_handle:resource_type(), od_handle:resource_id(), od_handle:metadata()) ->
+-spec create(
+    gs_client_worker:client(), 
+    od_handle_service:id(),
+    od_handle:resource_type(), 
+    od_handle:resource_id(), 
+    od_handle:metadata()
+) ->
     {ok, od_handle:id()} | errors:error().
 create(SessionId, HandleServiceId, ResourceType, ResourceId, Metadata) ->
     {ok, UserId} = session:get_user_id(SessionId),
@@ -95,5 +100,11 @@ create(SessionId, HandleServiceId, ResourceType, ResourceId, Metadata) ->
     })),
     ?ON_SUCCESS(Res, fun(_) ->
         {ok, UserId} = session:get_user_id(SessionId),
-        gs_client_worker:invalidate_cache(od_user, UserId)
+        gs_client_worker:invalidate_cache(od_user, UserId),
+        case ResourceType of
+            <<"Share">> ->
+                gs_client_worker:invalidate_cache(od_share, ResourceId);
+            _ ->
+                ok
+        end
     end).
