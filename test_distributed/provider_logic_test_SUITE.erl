@@ -336,7 +336,7 @@ confined_access_token_test(Config) ->
 
     Caveat = #cv_api{whitelist = [{?OP_PANEL, all, ?GRI_PATTERN('*', '*', '*', '*')}]},
     AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
     ),
@@ -346,11 +346,12 @@ confined_access_token_test(Config) ->
     % API caveat
     ?assertMatch(
         ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
-        rpc:call(Node, provider_logic, get_protected_data, [TokenAuth, ?PROVIDER_1])
+        rpc:call(Node, provider_logic, get_protected_data, [TokenCredentials, ?PROVIDER_1])
     ),
-    % Nevertheless, GraphCalls should be increased as TokenAuth was verified to
-    % retrieve caveats
-    ?assertEqual(GraphCalls+1, logic_tests_common:count_reqs(Config, graph)).
+    % Nevertheless, GraphCalls should be increased by 2 as:
+    % 1) TokenCredentials was verified to retrieve caveats
+    % 2) auth_manager fetched token data to subscribe itself for updates from oz
+    ?assertEqual(GraphCalls+2, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================

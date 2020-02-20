@@ -14,7 +14,7 @@
 -ifndef(CREDENTIALS_HRL).
 -define(CREDENTIALS_HRL, 1).
 
--record(credentials, {
+-record(client_tokens, {
     access_token :: tokens:serialized(),
     consumer_token = undefined :: undefined | tokens:serialized()
 }).

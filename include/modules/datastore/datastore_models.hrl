@@ -196,6 +196,18 @@
     cache_state = #{} :: cache_state()
 }).
 
+-record(od_token, {
+    revoked = false :: boolean(),
+
+    cache_state = #{} :: cache_state()
+}).
+
+-record(temporary_token_secret, {
+    generation :: temporary_token_secret:generation(),
+
+    cache_state = #{} :: cache_state()
+}).
+
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
@@ -224,7 +236,7 @@
     accessed :: undefined | integer(),
     type :: undefined | session:type(),
     identity :: aai:subject(),
-    auth :: undefined | session:auth(),
+    credentials :: undefined | auth_manager:credentials(),
     data_constraints :: data_constraints:constraints(),
     node :: node(),
     supervisor :: undefined | pid(),
