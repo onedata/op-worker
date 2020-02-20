@@ -20,13 +20,13 @@
 -export([
     get_test/1,
     subscribe_test/1,
-    cease_support_cleanup_test/1
+    resupport_cleanup_test/1
 ]).
 
 all() -> ?ALL([
     get_test,
     subscribe_test,
-    cease_support_cleanup_test
+    resupport_cleanup_test
 ]).
 
 
@@ -123,7 +123,7 @@ subscribe_test(Config) ->
 
     ok.
 
-cease_support_cleanup_test(Config) ->
+resupport_cleanup_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space1">>,
     
@@ -176,7 +176,7 @@ init_per_suite(Config) ->
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [logic_tests_common, initializer]} | Config].
 
-init_per_testcase(cease_support_cleanup_test, Config) ->
+init_per_testcase(resupport_cleanup_test, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Nodes, provider_logic),
     test_utils:mock_new(Nodes, space_logic),
@@ -193,7 +193,7 @@ init_per_testcase(cease_support_cleanup_test, Config) ->
 init_per_testcase(_, Config) ->
     logic_tests_common:init_per_testcase(Config).
 
-end_per_testcase(cease_support_cleanup_test, Config) ->
+end_per_testcase(resupport_cleanup_test, Config) ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes);
 end_per_testcase(_, _Config) ->

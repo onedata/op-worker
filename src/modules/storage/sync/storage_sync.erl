@@ -18,7 +18,7 @@
 -export([
     enable_import/3, configure_import/3, configure_import/4, disable_import/2,
     configure_update/3, configure_update/4, disable_update/2,
-    get_import_details/2, get_update_details/2, cancel/2, space_unsupported/2]).
+    get_import_details/2, get_update_details/2, cancel/2, clean_up/2]).
 
 %%%===================================================================
 %%% API functions
@@ -79,8 +79,8 @@ get_update_details(SpaceId, StorageId) ->
 cancel(SpaceId, StorageId) ->
     storage_sync_traverse:cancel(SpaceId, StorageId).
 
--spec space_unsupported(od_space:id(), storage:id()) -> ok | {error, term()}.
-space_unsupported(SpaceId, StorageId) ->
+-spec clean_up(od_space:id(), storage:id()) -> ok | {error, term()}.
+clean_up(SpaceId, StorageId) ->
     cancel(SpaceId, StorageId),
     storage_sync_traverse:delete_ended(),
     storage_sync_monitoring:delete(SpaceId, StorageId),
