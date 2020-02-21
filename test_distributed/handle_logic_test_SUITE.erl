@@ -341,7 +341,7 @@ confined_access_token_test(Config) ->
 
     Caveat = #cv_data_readonly{},
     AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), rest, allow_data_access_caveats
     ),
@@ -351,11 +351,12 @@ confined_access_token_test(Config) ->
     % data access caveat
     ?assertMatch(
         ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
-        rpc:call(Node, handle_logic, get, [TokenAuth, ?HANDLE_1])
+        rpc:call(Node, handle_logic, get, [TokenCredentials, ?HANDLE_1])
     ),
-    % Nevertheless, GraphCalls should be increased as TokenAuth was verified to
-    % retrieve caveats
-    ?assertEqual(GraphCalls+1, logic_tests_common:count_reqs(Config, graph)).
+    % Nevertheless, GraphCalls should be increased by 2 as:
+    % 1) TokenCredentials was verified to retrieve caveats
+    % 2) auth_manager fetched token data to subscribe itself for updates from oz
+    ?assertEqual(GraphCalls+2, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================

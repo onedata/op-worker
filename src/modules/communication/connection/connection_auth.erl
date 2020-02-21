@@ -85,7 +85,7 @@ get_handshake_error_msg(_) ->
     {od_user:id(), session:id()} | no_return().
 handle_client_handshake(#client_handshake_request{
     nonce = Nonce,
-    credentials = #credentials{
+    client_tokens = #client_tokens{
         access_token = AccessToken,
         consumer_token = ConsumerToken
     }
@@ -93,14 +93,14 @@ handle_client_handshake(#client_handshake_request{
 
     assert_client_compatibility(Req, IpAddress),
 
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, ConsumerToken,
         IpAddress, oneclient, allow_data_access_caveats
     ),
-    case auth_manager:verify(TokenAuth) of
+    case auth_manager:verify_credentials(TokenCredentials) of
         {ok, #auth{subject = ?SUB(user, UserId) = Subject}, _} ->
             {ok, SessionId} = session_manager:reuse_or_create_fuse_session(
-                Nonce, Subject, TokenAuth
+                Nonce, Subject, TokenCredentials
             ),
             {UserId, SessionId};
         ?ERROR_FORBIDDEN ->

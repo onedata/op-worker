@@ -33,12 +33,12 @@
 -define(GLOBAL_ROOT_DIR_UUID, <<"">>).
 -define(GLOBAL_ROOT_DIR_NAME, <<"">>).
 %% root user definitions
+-define(ROOT_CREDENTIALS, root_credentials).
 -define(ROOT_USER_ID, <<"0">>).
--define(ROOT_SESS_ID, <<"0">>).
--define(ROOT_AUTH, root_auth).
 -define(ROOT_IDENTITY, ?SUB(root, ?ROOT_USER_ID)).
+-define(ROOT_SESS_ID, <<"0">>).
 %% guest user definitions
--define(GUEST_AUTH, guest_auth).
+-define(GUEST_CREDENTIALS, guest_credentials).
 -define(GUEST_USER_ID, <<"nobody">>).
 -define(GUEST_IDENTITY, ?SUB(nobody, ?GUEST_USER_ID)).
 -define(GUEST_SESS_ID, <<"nobody">>).

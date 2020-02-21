@@ -627,5 +627,5 @@ get_file_guid(FileCtx) ->
 %% @private
 -spec get_access_token(user_ctx:ctx()) -> tokens:serialized().
 get_access_token(UserCtx) ->
-    TokenAuth = user_ctx:get_auth(UserCtx),
-    auth_manager:get_access_token(TokenAuth).
+    TokenCredentials = user_ctx:get_credentials(UserCtx),
+    auth_manager:get_access_token(TokenCredentials).

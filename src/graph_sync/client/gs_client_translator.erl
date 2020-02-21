@@ -252,6 +252,17 @@ translate(#gri{type = od_storage, id = Id, aspect = instance, scope = shared}, R
         }
     };
 
+translate(#gri{type = od_token, id = Id, aspect = instance, scope = shared}, Result) ->
+    #document{
+        key = Id,
+        value = #od_token{revoked = maps:get(<<"revoked">>, Result)}
+    };
+
+translate(#gri{type = temporary_token_secret, id = Id, aspect = user, scope = shared}, Result) ->
+    #document{
+        key = Id,
+        value = #temporary_token_secret{generation = maps:get(<<"generation">>, Result)}
+    };
 
 translate(GRI, Result) ->
     ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p~n", [
