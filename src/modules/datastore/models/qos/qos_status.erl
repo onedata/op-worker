@@ -10,8 +10,8 @@
 %%%
 %%% QoS entry for given file/directory is fulfilled when:
 %%%     - there is no information that qos_entry cannot be satisfied (see qos_entry.erl)
-%%%     - each traverse job created as result of this QoS entry has already 
-%%%       synchronized this file/all its files in subtree
+%%%     - traverse created as result of adding this QoS entry has already synchronized 
+%%%       this file/all its files in subtree
 %%%     - file is not being reconciled/no file is currently being reconciled in 
 %%%       subtree of this directory
 %%%
@@ -31,8 +31,8 @@
 %%% synchronized and all children directories have traverse_links), traverse_link is created 
 %%% for this directory and qos_status document is deleted. A traverse_link for a directory indicates 
 %%% that traverse of subtree of this directory is finished. When traverse_link is created, links 
-%%% for all children are deleted, so when traverse job is finished only one traverse_link is left 
-%%% for QoS entry origin directory. This traverse_link is then deleted.
+%%% for all children are deleted, so when traverse is finished only one traverse_link is left 
+%%% for QoS entry root directory. This traverse_link is then deleted.
 %%% 
 %%% To check whether given file have been traversed(synchronized in a traverse): 
 %%%     - qos_status document for parent exists: 
@@ -50,7 +50,7 @@
 %%%         * otherwise -> not traversed 
 %%% 
 %%% 
-%%% In order to be able to check whether file is being reconciled, when file_change was reported 
+%%% In order to be able to check whether file is being reconciled, when file change was reported 
 %%% reconcile_link is created. This link is file uuid_based_path (similar to canonical, but path 
 %%% elements are uuids instead of filenames/dirnames). This link is deleted after reconcile job 
 %%% is done. 
@@ -126,7 +126,10 @@ report_traverse_start(TraverseId, FileCtx) ->
             {ok, _} = create(file_ctx:get_space_id_const(FileCtx), TraverseId, 
                 file_ctx:get_uuid_const(FileCtx), start_dir),
             FileCtx1;
-        {false, FileCtx1} -> FileCtx1
+        {false, FileCtx1} -> 
+            % No need to create qos_status doc for traverse of single file. Because there is no 
+            % parent doc and traverse_link, status will be false until traverse finish.
+            FileCtx1
     end}.
 
 
