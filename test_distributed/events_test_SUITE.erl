@@ -279,12 +279,12 @@ session_setup(Worker) ->
 session_setup(Worker, Nonce) ->
     UserId = <<"user1">>,
     AccessToken = initializer:create_access_token(UserId),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), oneclient, allow_data_access_caveats
     ),
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, ?SUB(user, UserId), TokenAuth, self()
+        Worker, Nonce, ?SUB(user, UserId), TokenCredentials, self()
     ).
 
 %%--------------------------------------------------------------------

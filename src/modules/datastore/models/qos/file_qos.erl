@@ -97,10 +97,10 @@ get_effective(FileUuid) when is_binary(FileUuid) ->
     end;
 get_effective(#document{scope = SpaceId} = FileDoc) ->
     Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
-        case {datastore_model:get(?CTX, Uuid), ParentEffQos} of
-            {?ERROR_NOT_FOUND, _} ->
+        case datastore_model:get(?CTX, Uuid) of
+            ?ERROR_NOT_FOUND ->
                 {ok, ParentEffQos, CalculationInfo};
-            {{ok, #document{value = FileQos}}, _} ->
+            {ok, #document{value = FileQos}} ->
                 EffQos = merge_file_qos(ParentEffQos, FileQos),
                 {ok, EffQos, CalculationInfo}
         end
@@ -216,6 +216,11 @@ is_replica_required_on_storage(FileUuid, StorageId) ->
     maps:is_key(StorageId, QosStorages).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether given entry was added to given file or to any of file's ancestor.
+%% @end
+%%--------------------------------------------------------------------
 -spec is_effective_qos_of_file(file_meta:doc() | file_meta:uuid(), qos_entry:id()) -> 
     boolean() | {error, term()}.
 is_effective_qos_of_file(FileUuidOrDoc, QosEntryId) ->
@@ -235,6 +240,7 @@ clean_up(FileCtx) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx),
     case get_effective(FileDoc) of
         undefined -> ok;
+        % clean up all potential documents related to status calculation
         {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
             lists:foreach(fun(EffectiveQosEntryId) ->
                 qos_status:report_file_deleted(FileCtx1, EffectiveQosEntryId)
@@ -244,6 +250,7 @@ clean_up(FileCtx) ->
             ok
     end,
     Uuid = file_ctx:get_uuid_const(FileCtx1),
+    % delete all QoS entries added to given file
     case datastore_model:get(?CTX, Uuid) of
         {ok, #document{value = #file_qos{qos_entries = QosEntries}}} ->
             lists:foreach(fun(QosEntryId) ->
@@ -285,7 +292,7 @@ get_assigned_entries_for_storage(EffectiveFileQos, StorageId) ->
 %% effective_file_qos.
 %% @end
 %%--------------------------------------------------------------------
--spec merge_file_qos(record(), record()) -> record().
+-spec merge_file_qos(undefined | record(), record()) -> record().
 merge_file_qos(undefined, ChildQos) ->
     ChildQos;
 merge_file_qos(ParentQos, ChildQos) ->

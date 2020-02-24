@@ -35,26 +35,27 @@
     session_grace_period :: session:grace_period(),
     identity :: aai:subject(),
     % Possible auth values:
-    % #token_auth{} -> for user sessions (gui, rest, fuse). It needs to be
-    %                  periodically verified whether it's still valid (it
-    %                  could be revoked)
+    % auth_manager:token_credentials() -> for user sessions (gui, rest, fuse).
+    %                                     It needs to be periodically verified
+    %                                     whether it's still valid (it could
+    %                                     be revoked)
     % undefined  -> for provider_incoming sessions. No periodic peer
     %               verification is needed.
-    auth :: undefined | session:auth(),
+    credentials :: undefined | auth_manager:credentials(),
     validity_checkup_timer :: undefined | reference()
 }).
 
 -define(REMOVE_SESSION, remove_session).
 -define(CHECK_SESSION_ACTIVITY, check_session_activity).
 -define(CHECK_SESSION_VALIDITY, check_session_validity).
--define(UPDATE_CREDENTIALS_REQ(__AccessToken, __ConsumerToken),
+-define(UPDATE_CLIENT_TOKENS_REQ(__AccessToken, __ConsumerToken),
     {update_credentials, __AccessToken, __ConsumerToken}
 ).
 
 -define(SESSION_REMOVAL_RETRY_DELAY, 15).   % in seconds
--define(SESSION_VALIDITY_CHECK_INTERVAL,
-    application:get_env(?APP_NAME, session_validity_check_interval_seconds, 10)
-).
+-define(SESSION_VALIDITY_CHECK_INTERVAL, application:get_env(
+    ?APP_NAME, session_validity_check_interval_seconds, 15
+)).
 
 -type state() :: #state{}.
 
@@ -82,7 +83,7 @@ request_credentials_update(SessionId, AccessToken, ConsumerToken) ->
         {ok, #document{value = #session{watcher = SessionWatcher}}} ->
             gen_server2:cast(
                 SessionWatcher,
-                ?UPDATE_CREDENTIALS_REQ(AccessToken, ConsumerToken)
+                ?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken)
             );
         _ ->
             ok
@@ -126,7 +127,7 @@ init([SessId, SessType]) ->
         session_id = SessId,
         session_grace_period = GracePeriod,
         identity = Session#session.identity,
-        auth = Session#session.auth,
+        credentials = Session#session.credentials,
         validity_checkup_timer = ValidityCheckupTimer
     }}.
 
@@ -160,28 +161,28 @@ handle_call(Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast(?UPDATE_CREDENTIALS_REQ(AccessToken, ConsumerToken), #state{
+handle_cast(?UPDATE_CLIENT_TOKENS_REQ(AccessToken, ConsumerToken), #state{
     session_id = SessionId,
     identity = Identity,
-    auth = OldTokenAuth,
+    credentials = OldTokenCredentials,
     validity_checkup_timer = OldTimer
 } = State) ->
     cancel_validity_checkup_timer(OldTimer),
-    NewTokenAuth = auth_manager:update_credentials(
-        OldTokenAuth, AccessToken, ConsumerToken
+    NewTokenCredentials = auth_manager:update_client_tokens(
+        OldTokenCredentials, AccessToken, ConsumerToken
     ),
-    case check_auth_validity(NewTokenAuth, Identity) of
+    case check_auth_validity(NewTokenCredentials, Identity) of
         {true, NewTimer} ->
-            {ok, TokenCaveats} = auth_manager:get_caveats(NewTokenAuth),
+            {ok, TokenCaveats} = auth_manager:get_caveats(NewTokenCredentials),
             {ok, DataConstraints} = data_constraints:get(TokenCaveats),
             {ok, _} = session:update(SessionId, fun(Session) ->
                 {ok, Session#session{
-                    auth = NewTokenAuth,
+                    credentials = NewTokenCredentials,
                     data_constraints = DataConstraints
                 }}
             end),
             NewState = State#state{
-                auth = NewTokenAuth,
+                credentials = NewTokenCredentials,
                 validity_checkup_timer = NewTimer
             },
             {noreply, NewState, hibernate};
@@ -241,7 +242,7 @@ handle_info(?CHECK_SESSION_ACTIVITY, #state{
 handle_info(?CHECK_SESSION_VALIDITY, #state{
     session_id = SessionId,
     identity = Identity,
-    auth = Auth,
+    credentials = Auth,
     validity_checkup_timer = OldTimer
 } = State) ->
     cancel_validity_checkup_timer(OldTimer),
@@ -350,12 +351,12 @@ mark_inactive_if_grace_period_has_passed(SessionId, GracePeriod) ->
 
 
 %% @private
--spec check_auth_validity(undefined | session:auth(), aai:subject()) ->
+-spec check_auth_validity(undefined | auth_manager:credentials(), aai:subject()) ->
     {true, NewTimer :: undefined | reference()} | false.
 check_auth_validity(undefined, _Identity) ->
     {true, undefined};
-check_auth_validity(TokenAuth, Identity) ->
-    case auth_manager:verify(TokenAuth) of
+check_auth_validity(TokenCredentials, Identity) ->
+    case auth_manager:verify_credentials(TokenCredentials) of
         {ok, #auth{subject = Identity}, undefined} ->
             {true, schedule_session_validity_checkup(?SESSION_VALIDITY_CHECK_INTERVAL)};
         {ok, #auth{subject = Identity}, TokenValidUntil} ->

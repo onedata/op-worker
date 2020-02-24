@@ -29,7 +29,7 @@
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
--export([get_auth/1, get_data_constraints/1, get_user_id/1]).
+-export([get_credentials/1, get_data_constraints/1, get_user_id/1]).
 -export([set_direct_io/3]).
 
 % exometer callbacks
@@ -44,7 +44,6 @@
 -type diff() :: datastore_doc:diff(record()).
 -type ttl() :: non_neg_integer().
 -type grace_period() :: non_neg_integer().
--type auth() :: auth_manager:token_auth() | ?ROOT_AUTH | ?GUEST_AUTH.
 -type type() :: fuse | rest | gui | provider_outgoing | provider_incoming | root | guest.
 % All sessions, beside root and guest (they start with active status),
 % start with initializing status. When the last component of supervision tree
@@ -56,7 +55,7 @@
 -export_type([
     id/0, record/0, doc/0,
     ttl/0, grace_period/0,
-    auth/0, type/0, status/0
+    type/0, status/0
 ]).
 
 -define(CTX, #{
@@ -282,21 +281,27 @@ get_sequencer_manager(SessId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns auth record associated with session.
+%% Returns credentials associated with session.
 %% @end
 %%--------------------------------------------------------------------
--spec get_auth
-    (id()) -> {ok, Auth :: auth()} | {ok, undefined} | {error, term()};
-    (record() | doc()) -> auth().
-get_auth(<<_/binary>> = SessId) ->
+-spec get_credentials
+    (id()) -> {ok, undefined | auth_manager:credentials()} | {error, term()};
+    (record() | doc()) -> auth_manager:credentials().
+get_credentials(?ROOT_SESS_ID) ->
+    {ok, ?ROOT_CREDENTIALS};
+get_credentials(?GUEST_SESS_ID) ->
+    {ok, ?GUEST_CREDENTIALS};
+get_credentials(<<_/binary>> = SessId) ->
     case session:get(SessId) of
-        {ok, #document{value = #session{auth = Auth}}} -> {ok, Auth};
-        {error, Reason} -> {error, Reason}
+        {ok, #document{value = #session{credentials = Credentials}}} ->
+            {ok, Credentials};
+        {error, _} = Error ->
+            Error
     end;
-get_auth(#session{auth = Auth}) ->
-    Auth;
-get_auth(#document{value = Session}) ->
-    get_auth(Session).
+get_credentials(#session{credentials = Credentials}) ->
+    Credentials;
+get_credentials(#document{value = Session}) ->
+    get_credentials(Session).
 
 
 -spec get_data_constraints(record() | doc()) -> data_constraints:constraints().

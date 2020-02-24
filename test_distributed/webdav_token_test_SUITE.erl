@@ -65,8 +65,8 @@ all() -> [
 -define(IDP, <<"IDP">>).
 -define(ONEDATA_ACCESS_TOKEN, <<"ONEDATA_ACCESS_TOKEN">>).
 -define(ADMIN_ID, <<"ADMIN_ID">>).
--define(ADMIN_AUTH,
-    auth_manager:build_token_auth(
+-define(ADMIN_CREDENTIALS,
+    auth_manager:build_token_credentials(
         ?ONEDATA_ACCESS_TOKEN, undefined,
         undefined, undefined, disallow_data_access_caveats
     )).
@@ -158,7 +158,7 @@ operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     StorageId = initializer:get_storage_id(W),
     TTL = 0,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
-    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
 
     % setxattr should return EKEYEXPIRED due to TTL=0
@@ -168,7 +168,7 @@ operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     % ensure that setxattr was repeated
     ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 2),
     % ensure that token was acquired in admin_ctx
-    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP])).
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP])).
 
 
 operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Config) ->
@@ -177,7 +177,7 @@ operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Confi
     TTL = 5,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
-    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP]),
 
     ?assertEqual(ok, setxattr(W, SDHandle, <<"K">>, <<"V">>)),
 
@@ -191,7 +191,7 @@ operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Confi
     % ensure that setxattr was repeated
     ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 3),
     % ensure that token was acquired in admin_ctx
-    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP])).
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP])).
 
 
 %%%===================================================================

@@ -48,11 +48,11 @@ verify_handshake_auth(undefined, _) ->
 verify_handshake_auth(nobody, _) ->
     {ok, ?GUEST};
 verify_handshake_auth({token, AccessToken}, PeerIp) ->
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         PeerIp, graphsync, disallow_data_access_caveats
     ),
-    case http_auth:authenticate(TokenAuth) of
+    case http_auth:authenticate(TokenCredentials) of
         {ok, ?USER = Auth} ->
             {ok, Auth};
         {ok, ?GUEST} ->

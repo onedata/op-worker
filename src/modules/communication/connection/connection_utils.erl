@@ -43,17 +43,17 @@
     #client_message{}) -> ok | {error, term()}.
 maybe_create_proxied_session(ProviderId, ProviderIp, #client_message{
     effective_session_id = EffSessionId,
-    effective_session_credentials = #credentials{
+    effective_client_tokens = #client_tokens{
         access_token = AccessToken,
         consumer_token = ConsumerToken
     }
 }) when EffSessionId =/= undefined ->
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, ConsumerToken,
         ProviderIp, oneclient, allow_data_access_caveats
     ),
     Res = session_manager:reuse_or_create_proxied_session(
-        EffSessionId, ProviderId, TokenAuth, fuse
+        EffSessionId, ProviderId, TokenCredentials, fuse
     ),
     case Res of
         {ok, _} -> ok;
