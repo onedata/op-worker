@@ -209,17 +209,17 @@ init_paths_caches(Space, Name) ->
             true ->
                 ok;
             _ ->
-                case bounded_cache:init_cache(Name, #{group => <<"canonical_paths_cache">>}) of
+                case bounded_cache:init_cache(Name, #{group => <<"paths_cache_group">>}) of
                     ok ->
                         ok;
                     Error = {error, _} ->
-                        ?critical("Unable to initialize canonical_paths bounded cache for space ~p due to: ~p",
+                        ?critical("Unable to initialize paths bounded cache for space ~p due to: ~p",
                             [Space, Error])
                 end
         end
     catch
         Error2:Reason ->
-            ?critical_stacktrace("Unable to initialize canonical_paths bounded cache for space ~p due to: ~p",
+            ?critical_stacktrace("Unable to initialize paths bounded cache for space ~p due to: ~p",
                 [Space, {Error2, Reason}])
     end.
 
