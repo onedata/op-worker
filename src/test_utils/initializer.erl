@@ -386,7 +386,7 @@ setup_storage([Worker | Rest], Config) ->
     ),
     StorageName = <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
     {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, false, undefined, false]),
-    rpc:call(Worker, storage, on_storage_created, [StorageId]),
+    rpc:call(Worker, storage, on_storage_created, [StorageId, #{}]),
     storage_logic_mock_setup(Worker, #{?GET_DOMAIN_BIN(Worker) => #{StorageId => #{}}}, []),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).

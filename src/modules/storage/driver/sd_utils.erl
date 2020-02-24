@@ -26,7 +26,7 @@
 %% API
 -export([chmod_storage_file/3, rename_storage_file/6,
     create_delayed_storage_file/1, create_delayed_storage_file/4,
-    delete_storage_file/2, create_parent_dirs/1, recursive_delete/2]).
+    delete_storage_file/2, delete_storage_dir/2, create_parent_dirs/1, recursive_delete/2]).
 
 % For spawning
 -export([retry_dir_deletion/3]).

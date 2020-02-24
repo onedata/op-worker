@@ -16,9 +16,7 @@
 -ifndef(QOS_HRL).
 -define(QOS_HRL, 1).
 
-
 -define(QOS_SYNCHRONIZATION_PRIORITY, 224).
-
 
 % macros used for operations on QoS expression
 -define(UNION, <<"|">>).
@@ -32,6 +30,8 @@
 -define(R_PAREN, <<")">>).
 -define(EQUALITY, <<"=">>).
 
+% fixme tests
+-define(ALL_STORAGES, <<"all">>).
 
 % macros used for operations on QoS bounded cache
 -define(CACHE_TABLE_NAME(SpaceId),

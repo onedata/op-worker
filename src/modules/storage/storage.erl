@@ -55,7 +55,10 @@
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 % exported for initializer
--export([on_storage_created/1]).
+-export([on_storage_created/2]).
+
+% fixme
+-export([on_space_unsupported/2]).
 
 
 -type id() :: od_storage:id().
@@ -94,11 +97,12 @@ create(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
 -spec create_insecure(name(), helpers:helper(), boolean(), luma_config:config(),
     boolean(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
+    % fixme create without qos params
     case storage_logic:create_in_zone(Name, QosParameters) of
         {ok, Id} ->
             case storage_config:create(Id, Helper, Readonly, LumaConfig, ImportedStorage) of
                 {ok, Id} ->
-                    on_storage_created(Id),
+                    on_storage_created(Id, QosParameters),
                     {ok, Id};
                 StorageConfigError ->
                     case storage_logic:delete_in_zone(Id) of
@@ -439,10 +443,8 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
-    case storage_logic:revoke_space_support(StorageId, SpaceId) of
-        ok -> on_space_unsupported(SpaceId, StorageId);
-        Error -> Error
-    end.
+    % fixme first remove in zone
+    space_unsupport_worker:start(SpaceId, StorageId).
 
 
 -spec supports_any_space(id()) -> boolean() | errors:error().
@@ -459,8 +461,13 @@ supports_any_space(StorageId) ->
 %%%===================================================================
 
 %% @private
--spec on_storage_created(id()) -> ok.
-on_storage_created(StorageId) ->
+-spec on_storage_created(id(), qos_parameters()) -> ok.
+on_storage_created(StorageId, QosParameters) ->
+    ExtendedQosParameters = QosParameters#{
+        <<"storage_id">> => StorageId,
+        <<"provider_id">> => oneprovider:get_id()
+    },
+    ok = set_qos_parameters(StorageId, ExtendedQosParameters),
     rtransfer_config:add_storage(StorageId).
 
 
