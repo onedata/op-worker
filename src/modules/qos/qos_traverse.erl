@@ -191,14 +191,16 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId} = FileDoc, _TraverseInf
         <<"task_type">> := TaskType
     } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     
-    {ok, EffectiveFileQos} = file_qos:get_effective(FileDoc),
-    
     % start transfer only for existing entries
     QosEntries = case TaskType of
         <<"traverse">> -> 
             #{<<"qos_entry_id">> := QosEntryId} = AdditionalData,
-            lists_utils:intersect(file_qos:get_qos_entries(EffectiveFileQos), [QosEntryId]);
+            case qos_entry:get(QosEntryId) of
+                {ok, _} -> [QosEntryId];
+                ?ERROR_NOT_FOUND -> []
+            end;
         <<"reconcile">> ->
+            {ok, EffectiveFileQos} = file_qos:get_effective(FileDoc),
             {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
             file_qos:get_assigned_entries_for_storage(EffectiveFileQos, StorageId)
     end,
