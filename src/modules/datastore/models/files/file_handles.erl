@@ -180,7 +180,9 @@ register_release(FileCtx, SessId, Count) ->
         {ok, #document{value = #file_handles{descriptors = Fds}}} ->
             case maps:is_key(SessId, Fds) of
                 true -> ok;
-                false -> session_open_files:deregister(SessId, FileGuid)
+                false ->
+                    % TODO VFS-6153 race with open
+                    session_open_files:deregister(SessId, FileGuid)
             end,
             Pred = fun(#file_handles{descriptors = Fds2}) ->
                 maps:size(Fds2) == 0

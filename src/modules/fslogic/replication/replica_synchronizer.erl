@@ -203,6 +203,7 @@ cancel(TransferId) ->
 %%--------------------------------------------------------------------
 -spec cancel_transfers_of_session(file_meta:uuid(), session:id()) -> ok.
 cancel_transfers_of_session(FileUuid, SessionId) ->
+    % TODO VFS-6153 race with open
     apply_if_alive(FileUuid, {async, {cancel_transfers_of_session, SessionId}}).
 
 %%--------------------------------------------------------------------
@@ -1536,8 +1537,8 @@ wait_for_terminate(Pid) ->
 %% given replica is unique.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_whole_file_replica_internal(version_vector:version_vector(), #state{})
-        -> {ok | {error, term()}, #state{}}.
+-spec delete_whole_file_replica_internal(version_vector:version_vector(), #state{}) ->
+    {ok | {error, term()}, #state{}}.
 delete_whole_file_replica_internal(AllowedVV, #state{file_ctx = FileCtx} = State) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     try
@@ -1560,7 +1561,8 @@ delete_whole_file_replica_internal(AllowedVV, #state{file_ctx = FileCtx} = State
             {{error, Reason}, State}
     end.
 
--spec try_to_clear_blocks_and_truncate(file_location:id(), file_location:doc(), #state{}) -> ok | {error, term()}.
+-spec try_to_clear_blocks_and_truncate(file_location:id(), file_location:doc(), #state{}) ->
+    {ok | {error, term()}, #state{}}.
 try_to_clear_blocks_and_truncate(LocalFileLocId, LocationDoc, #state{file_ctx = FileCtx} = State) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     Blocks = fslogic_location_cache:get_blocks(LocationDoc),
