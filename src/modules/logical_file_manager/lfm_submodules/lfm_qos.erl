@@ -112,8 +112,8 @@ check_qos_fulfilled(SessId, QosEntryId, undefined) ->
     case qos_entry:get_file_guid(QosEntryId) of
         {error, _} = Error ->
             Error;
-        {ok, QosOriginFileGuid} ->
-            check_qos_fulfilled(SessId, QosEntryId, {guid, QosOriginFileGuid})
+        {ok, QosRootFileGuid} ->
+            check_qos_fulfilled(SessId, QosEntryId, {guid, QosRootFileGuid})
     end;
 check_qos_fulfilled(SessId, QosEntryId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),

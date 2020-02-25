@@ -13,8 +13,11 @@
 -author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
@@ -41,17 +44,17 @@ handle_qos_entry_change(SpaceId, #document{
 }) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
     qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-    ok = file_qos:remove_qos_entry_id(FileUuid, QosEntryId);
+    ok = ?ok_if_not_found(file_qos:remove_qos_entry_id(FileUuid, QosEntryId));
 handle_qos_entry_change(SpaceId, #document{
     key = QosEntryId,
     value = QosEntry
 } = QosEntryDoc) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
     file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
+    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
     case qos_entry:is_possible(QosEntry) of
         true ->
             {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosEntry),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
             qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs);
         false ->
             ok = qos_entry:add_to_impossible_list(QosEntryId, SpaceId),
@@ -80,10 +83,8 @@ reconcile_qos(FileCtx) ->
             ),
             ok;
         {ok, EffFileQos} ->
-            QosToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
-            lists:foreach(fun(QosEntryId) ->
-                ok = qos_traverse:reconcile_qos_for_entry(FileCtx1, QosEntryId)
-            end, QosToUpdate);
+            QosEntriesToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
+            ok = qos_traverse:reconcile_file_for_qos_entries(FileCtx1, QosEntriesToUpdate);
         undefined ->
             ok
     end.

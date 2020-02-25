@@ -218,7 +218,7 @@ remove_qos_entry_insecure(_UserCtx, FileCtx, QosEntryId) ->
 -spec check_fulfillment_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
 check_fulfillment_insecure(_UserCtx, FileCtx, QosEntryId) ->
-    FulfillmentStatus = qos_status:check_fulfilment(QosEntryId, file_ctx:get_guid_const(FileCtx)),
+    FulfillmentStatus = qos_status:check_fulfillment(FileCtx, QosEntryId),
 
     #provider_response{status = #status{code = ?OK}, provider_response = #qos_fulfillment{
         fulfilled = FulfillmentStatus

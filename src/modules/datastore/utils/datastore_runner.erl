@@ -12,10 +12,11 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([run_and_normalize_error/2]).
--export([extract_ok/1, extract_key/1]).
+-export([extract_ok/1, extract_key/1, ok_if_not_found/1]).
 
 %%%===================================================================
 %%% API
@@ -61,6 +62,15 @@ extract_ok(Result) -> Result.
 -spec extract_key(term()) -> {ok, datastore:key()} | term().
 extract_key({ok, #document{key = Key}}) -> {ok, Key};
 extract_key(Result) -> Result.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Marks datastore call to non existing document as ok.
+%% @end
+%%--------------------------------------------------------------------
+-spec ok_if_not_found(T) -> ok | T.
+ok_if_not_found(?ERROR_NOT_FOUND) -> ok;
+ok_if_not_found(Result) -> Result.
 
 %%%===================================================================
 %%% Internal functions

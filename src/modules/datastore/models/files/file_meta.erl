@@ -55,6 +55,7 @@
 -type diff() :: datastore_doc:diff(file_meta()).
 -type uuid() :: datastore:key().
 -type path() :: binary().
+-type uuid_based_path() :: binary(). % similar to canonical, but path elements are uuids instead of filenames/dirnames
 -type name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
@@ -85,8 +86,8 @@
 %% @formatter:on
 
 -export_type([
-    doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
-    size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    doc/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0, 
+    type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
     offset/0, non_neg_offset/0, limit/0, file_meta/0
 ]).
 

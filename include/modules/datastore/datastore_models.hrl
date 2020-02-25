@@ -328,6 +328,18 @@
     possibility_check :: {possible | impossible, od_provider:id()}
 }).
 
+% This model holds information of QoS traverse state in a directory subtree in order 
+% to calculate entry status.
+-record(qos_status, {
+    % Initialize with empty binary so it always compares as lower than any actual filename
+    previous_batch_last_filename = <<>> :: file_meta:name(),
+    current_batch_last_filename = <<>> :: file_meta:name(),
+    files_list = [] :: [file_meta:uuid()],
+    child_dirs_count = 0 :: non_neg_integer(),
+    is_last_batch = false :: boolean(),
+    is_start_dir :: boolean()
+}).
+
 -record(file_meta, {
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),

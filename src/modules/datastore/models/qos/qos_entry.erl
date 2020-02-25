@@ -44,12 +44,12 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on document using datastore model API
 -export([
-    get/1, delete/1, create/5, create/7,
-    add_synced_links/4, delete_synced_links/4, fold_links/5
+    get/1, delete/1, create/5, create/7
 ]).
 
 %% higher-level functions operating on qos_entry document
@@ -99,7 +99,8 @@
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
     replicas_num()) -> {ok, doc()} | {error, term()}.
 create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum) ->
-    create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, false, #{}).
+    create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, false, 
+        qos_traverse_req:build_traverse_reqs(FileUuid, [])).
 
 
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
@@ -136,6 +137,7 @@ get(QosEntryId) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(QosEntryId) ->
+    %TODO VFS-6100 delete all additional documents (qos_status)
     datastore_model:delete(?CTX, QosEntryId).
 
 
@@ -146,13 +148,6 @@ add_local_links(Key, TreeId, Links) ->
     datastore_model:add_links(?LOCAL_CTX, Key, TreeId, Links).
 
 
--spec add_synced_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    one_or_many({datastore:link_name(), datastore:link_target()})) ->
-    one_or_many({ok, datastore:link()} | {error, term()}).
-add_synced_links(Scope, Key, TreeId, Links) ->
-    datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
-
-
 -spec delete_local_links(datastore:key(), datastore:tree_id(),
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
@@ -160,25 +155,18 @@ delete_local_links(Key, TreeId, Links) ->
     datastore_model:delete_links(?LOCAL_CTX, Key, TreeId, Links).
 
 
--spec delete_synced_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
-    one_or_many(ok | {error, term()}).
-delete_synced_links(Scope, Key, TreeId, Links) ->
-    datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
-
-
--spec fold_links(id(), datastore_model:tree_ids(), datastore:fold_fun(datastore:link()),
+-spec fold_local_links(id(), datastore_model:tree_ids(), datastore:fold_fun(datastore:link()),
     datastore:fold_acc(), datastore:fold_opts()) -> {ok, datastore:fold_acc()} |
     {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
-fold_links(Key, TreeIds, Fun, Acc, Opts) ->
-    datastore_model:fold_links(?CTX, Key, TreeIds, Fun, Acc, Opts).
+fold_local_links(Key, TreeIds, Fun, Acc, Opts) ->
+    datastore_model:fold_links(?LOCAL_CTX, Key, TreeIds, Fun, Acc, Opts).
 
 
 %%%===================================================================
 %%% Higher-level functions operating on qos_entry document.
 %%%===================================================================
 
--spec get_file_guid(id() | doc()) -> {ok, file_id:file_guid()} | {error, term()}.
+-spec get_file_guid(doc() | id()) -> {ok, file_id:file_guid()} | {error, term()}.
 get_file_guid(#document{scope = SpaceId, value = #qos_entry{file_uuid = FileUuid}})  ->
     {ok, file_id:pack_guid(FileUuid, SpaceId)};
 
@@ -191,13 +179,13 @@ get_file_guid(QosEntryId) ->
     end.
 
 
--spec get_space_id(id()) -> {ok, od_space:id()} | {error, term()}.
+-spec get_space_id(doc() | id()) -> {ok, od_space:id()} | {error, term()}.
+get_space_id(#document{scope = SpaceId, value = #qos_entry{}}) ->
+    {ok, SpaceId};
 get_space_id(QosEntryId) ->
     case qos_entry:get(QosEntryId) of
-        {ok, #document{scope = SpaceId}} ->
-            {ok, SpaceId};
-        {error, _} = Error ->
-            Error
+        {ok, Doc} -> get_space_id(Doc);
+        {error, _} = Error -> Error
     end.
 
 
@@ -207,14 +195,16 @@ get_space_id(QosEntryId) ->
 %% qos_entry documents that cannot be fulfilled at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec add_to_impossible_list(id(), od_space:id()) ->  ok.
+-spec add_to_impossible_list(id(), od_space:id()) ->  ok | {error, term()}.
 add_to_impossible_list(QosEntryId, SpaceId) ->
-    ?extract_ok(
-        add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId})
-    ).
+    case add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId}) of
+        {ok, _} -> ok;
+        ?ERROR_ALREADY_EXISTS -> ok;
+        {error, _} = Error -> Error
+    end.
 
 
--spec delete_from_impossible_list(id(), od_space:id()) ->  ok.
+-spec delete_from_impossible_list(id(), od_space:id()) ->  ok | {error, term()}.
 delete_from_impossible_list(QosEntryId, SpaceId) ->
     ?extract_ok(
         delete_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)
@@ -223,7 +213,7 @@ delete_from_impossible_list(QosEntryId, SpaceId) ->
 
 -spec get_impossible_list(od_space:id()) ->  {ok, [id()]} | {error, term()}.
 get_impossible_list(SpaceId) ->
-    fold_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(),
+    fold_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(),
         fun(#link{target = T}, Acc) -> {ok, [T | Acc]} end,
         [], #{}
     ).
@@ -410,27 +400,9 @@ resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReq
     #qos_entry{traverse_reqs = LocalReqs} = Value) ->
     % traverse requests are different
 
-    {LocalTraverseIds, _} = split_traverse_reqs(LocalReqs),
-    {_, RemoteTraverseIds} = split_traverse_reqs(RemoteReqs),
+    {LocalTraverseIds, _} = qos_traverse_req:split_local_and_remote(LocalReqs),
+    {_, RemoteTraverseIds} = qos_traverse_req:split_local_and_remote(RemoteReqs),
     Value#qos_entry{
         traverse_reqs = qos_traverse_req:select_traverse_reqs(
             LocalTraverseIds ++ RemoteTraverseIds, LocalReqs)
     }.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Splits given traverse reqs to those of current provider and those of remote providers.
-%% @end
-%%--------------------------------------------------------------------
--spec split_traverse_reqs(qos_traverse_req:traverse_reqs()) ->
-    {[qos_traverse_req:id()], [qos_traverse_req:id()]}.
-split_traverse_reqs(AllTraverseReqs) ->
-    maps:fold(fun(TaskId, TraverseReq, {LocalTraverseReqs, RemoteTraverseReqs}) ->
-        StorageId = qos_traverse_req:get_storage(TraverseReq),
-        case storage:is_local(StorageId) of
-            true -> {[TaskId | LocalTraverseReqs], RemoteTraverseReqs};
-            false -> {LocalTraverseReqs, [TaskId | RemoteTraverseReqs]}
-        end
-    end, {[], []}, AllTraverseReqs).

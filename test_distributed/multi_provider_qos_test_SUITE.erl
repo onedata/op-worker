@@ -56,9 +56,15 @@
 
     qos_restoration_file_test/1,
     qos_restoration_dir_test/1,
-    qos_status_test/1,
-
     reconcile_qos_using_file_meta_posthooks_test/1,
+    
+    qos_status_during_traverse_test/1,
+    qos_status_during_traverse_with_file_deletion_test/1,
+    qos_status_during_traverse_with_dir_deletion_test/1,
+    qos_status_during_reconciliation_test/1,
+    qos_status_during_reconciliation_prefix_file_test/1,
+    qos_status_during_reconciliation_with_file_deletion_test/1,
+    qos_status_during_reconciliation_with_dir_deletion_test/1,
 
     reevaluate_impossible_qos_test/1,
     reevaluate_impossible_qos_race_test/1,
@@ -92,9 +98,15 @@ all() -> [
 
     qos_restoration_file_test,
     qos_restoration_dir_test,
-    qos_status_test,
-
     reconcile_qos_using_file_meta_posthooks_test,
+    
+    qos_status_during_traverse_test,
+    qos_status_during_traverse_with_file_deletion_test,
+    qos_status_during_traverse_with_dir_deletion_test,
+    qos_status_during_reconciliation_test,
+    qos_status_during_reconciliation_prefix_file_test,
+    qos_status_during_reconciliation_with_file_deletion_test,
+    qos_status_during_reconciliation_with_dir_deletion_test,
 
     reevaluate_impossible_qos_test,
     reevaluate_impossible_qos_race_test,
@@ -105,7 +117,6 @@ all() -> [
 -define(FILE_PATH(FileName), filename:join([?SPACE_PATH1, FileName])).
 -define(TEST_FILE_PATH, ?FILE_PATH(<<"file1">>)).
 -define(TEST_DIR_PATH, ?FILE_PATH(<<"dir1">>)).
--define(TEST_DATA, <<"test_data">>).
 
 -define(SPACE_ID, <<"space1">>).
 -define(SPACE_PATH1, <<"/space1">>).
@@ -113,14 +124,12 @@ all() -> [
 -define(PROVIDER_ID(Worker), ?GET_DOMAIN_BIN(Worker)).
 -define(GET_FILE_UUID(Worker, SessId, FilePath), qos_tests_utils:get_guid(Worker, SessId, FilePath)).
 
--define(ATTEMPTS, 60).
 
 -define(simple_dir_structure(Name, Distribution),
     {?SPACE_ID, [
         {Name, ?TEST_DATA, Distribution}
     ]}
 ).
--define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
 -define(nested_dir_structure(Name, Distribution),
     {?SPACE_ID, [
         {Name, [
@@ -139,6 +148,8 @@ all() -> [
         ]}
     ]}
 ).
+
+-define(ATTEMPTS, 60).
 
 %%%====================================================================
 %%% Test function
@@ -604,87 +615,8 @@ effective_qos_for_files_in_different_directories_of_tree_structure(Config) ->
 qos_restoration_file_test(Config) ->
     basic_qos_restoration_test_base(Config, simple).
 
-
 qos_restoration_dir_test(Config) ->
     basic_qos_restoration_test_base(Config, nested).
-
-
-qos_status_test(Config) ->
-    Workers = [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
-    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    Filename = generator:gen_name(),
-    DirStructure = ?nested_dir_structure(Filename, [?GET_DOMAIN_BIN(Worker1)]),
-
-    QosSpec = #fulfill_qos_test_spec{
-        initial_dir_structure = #test_dir_structure{
-            dir_structure = DirStructure
-        },
-        qos_to_add = [
-            #qos_to_add{
-                worker = Worker1,
-                qos_name = ?QOS1,
-                path = ?FILE_PATH(Filename),
-                expression = <<"country=PT">>
-            }
-        ],
-        % do not wait for QoS fulfillment
-        wait_for_qos_fulfillment = []
-    },
-
-    {GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
-    QosList = maps:values(QosNameIdMapping),
-
-    lists:foreach(fun({Guid, Path}) ->
-        lists:foreach(fun(Worker) ->
-            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS),
-            ?assertEqual({ok, false}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, Path}), ?ATTEMPTS)
-        end, Workers)
-    end, maps:get(files, GuidsAndPaths)),
-
-    finish_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]),
-
-    lists:foreach(fun({Guid, Path}) ->
-        lists:foreach(fun(Worker) ->
-            ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), ?ATTEMPTS),
-            ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, Path}), ?ATTEMPTS)
-        end, Workers)
-    end, maps:get(files, GuidsAndPaths)),
-
-    % check status after restoration
-    FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
-
-    IsAncestor = fun(A, F) ->
-        str_utils:binary_starts_with(F, A)
-    end,
-
-    lists:foreach(fun({FileGuid, FilePath}) ->
-        ct:print("writing to file ~p", [FilePath]),
-        {ok, FileHandle} = lfm_proxy:open(Worker1, SessId(Worker1), {guid, FileGuid}, write),
-        {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
-        ok = lfm_proxy:close(Worker1, FileHandle),
-        lists:foreach(fun(Worker) ->
-            lists:foreach(fun({G, P}) ->
-                ct:print("Checking ~p: ~n\tfile: ~p~n\tis_ancestor: ~p", [Worker, P, IsAncestor(P, FilePath)]),
-                ?assertEqual(
-                    {ok, not IsAncestor(P, FilePath)},
-                    lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, G}),
-                    ?ATTEMPTS
-                ),
-                ?assertEqual(
-                    {ok, not IsAncestor(P, FilePath)},
-                    lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, P}),
-                    ?ATTEMPTS
-                )
-            end, FilesAndDirs)
-        end, Workers),
-        finish_transfers([FileGuid]),
-        lists:foreach(fun(Worker) ->
-            lists:foreach(fun({G, P}) ->
-                ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, G}), ?ATTEMPTS),
-                ?assertEqual({ok, true}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {path, P}), ?ATTEMPTS)
-            end, FilesAndDirs)
-        end, Workers)
-    end, maps:get(files, GuidsAndPaths)).
 
 
 reconcile_qos_using_file_meta_posthooks_test(Config) ->
@@ -735,6 +667,49 @@ reconcile_qos_using_file_meta_posthooks_test(Config) ->
     DirStructureAfter = get_expected_structure_for_single_dir([?PROVIDER_ID(Worker1), ?PROVIDER_ID(Worker2)]),
     qos_tests_utils:assert_distribution_in_dir_structure(Config, DirStructureAfter,  #{files => [{Guid, FilePath}], dirs => []}).
 
+
+%%%===================================================================
+%%% QoS status tests
+%%%===================================================================
+
+qos_status_during_traverse_test(Config) ->
+    qos_test_base:qos_status_during_traverse_test_base(Config, ?SPACE_ID, 8).
+
+qos_status_during_traverse_with_file_deletion_test(Config) ->
+    qos_test_base:qos_status_during_traverse_with_file_deletion_test_base(Config, ?SPACE_ID, 8).
+
+qos_status_during_traverse_with_dir_deletion_test(Config) ->
+    qos_test_base:qos_status_during_traverse_with_dir_deletion_test_base(Config, ?SPACE_ID, 1).
+
+qos_status_during_reconciliation_test(Config) ->
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    Filename = generator:gen_name(),
+    DirStructure = ?nested_dir_structure(Filename, [?GET_DOMAIN_BIN(Worker1)]),
+    qos_test_base:qos_status_during_reconciliation_test_base(Config, ?SPACE_ID, DirStructure, Filename).
+
+qos_status_during_reconciliation_prefix_file_test(Config) ->
+    [Worker1 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    Name = generator:gen_name(),
+    DirStructure =
+        {?SPACE_ID, [
+            {Name, [
+                {?filename(Name, 1), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]},
+                {?filename(Name, 11), ?TEST_DATA, [?GET_DOMAIN_BIN(Worker1)]}
+            ]}
+        ]},
+    
+    qos_test_base:qos_status_during_reconciliation_test_base(Config, ?SPACE_ID, DirStructure, Name).
+
+qos_status_during_reconciliation_with_file_deletion_test(Config) ->
+    qos_test_base:qos_status_during_reconciliation_with_file_deletion_test_base(Config, ?SPACE_ID).
+
+qos_status_during_reconciliation_with_dir_deletion_test(Config) ->
+    qos_test_base:qos_status_during_reconciliation_with_dir_deletion_test_base(Config, ?SPACE_ID).
+
+
+%%%===================================================================
+%%% QoS reevaluate
+%%%===================================================================
 
 reevaluate_impossible_qos_test(Config) ->
     [Worker1, Worker2, _Worker3 | _] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
@@ -950,18 +925,18 @@ end_per_suite(_Config) ->
     application:stop(ssl).
 
 
-init_per_testcase(qos_status_test, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= qos_status_during_traverse_test;
+    Case =:= qos_status_during_traverse_with_file_deletion_test;
+    Case =:= qos_status_during_traverse_with_dir_deletion_test;
+    Case =:= qos_status_during_reconciliation_test;
+    Case =:= qos_status_during_reconciliation_prefix_file_test;
+    Case =:= qos_status_during_reconciliation_with_file_deletion_test;
+    Case =:= qos_status_during_reconciliation_with_dir_deletion_test ->
+    
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, qos_traverse, [passthrough]),
-    TestPid = self(),
-    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(_, FileCtx, _, _, _, _) ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
-            TestPid ! {qos_slave_job, self(), FileGuid},
-            receive {completed, FileGuid} -> {ok, FileGuid} end
-        end),
+    qos_tests_utils:mock_transfers(Workers),
     init_per_testcase(default, Config);
-
 init_per_testcase(_, Config) ->
     ct:timetrap(timer:minutes(10)),
     NewConfig = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
@@ -1136,14 +1111,6 @@ get_expected_structure_for_single_dir(ProviderIdList) ->
             ]}
         ]}
     }.
-
-
-finish_transfers([]) -> ok;
-finish_transfers(Files) ->
-    receive {qos_slave_job, Pid, FileGuid} ->
-        Pid ! {completed, FileGuid},
-        finish_transfers(lists:delete(FileGuid, Files))
-    end.
 
 
 storage_file_path(Worker, SpaceId, FilePath) ->
