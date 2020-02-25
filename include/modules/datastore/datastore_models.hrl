@@ -376,6 +376,7 @@
 }).
 
 %% Model that maps space to storage
+%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
 -record(space_storage, {
     storage_ids = [] :: [storage:id()],
     mounted_in_root = [] :: [storage:id()]

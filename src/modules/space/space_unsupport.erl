@@ -21,6 +21,7 @@
 
 -type stage() :: qos | clear_storage | wait_for_dbsync | clean_docs.
 
+-export_type([stage/0]).
 
 run(SpaceId, StorageId) ->
     run_internal(qos,SpaceId, StorageId).
@@ -47,11 +48,11 @@ execute_stage(clear_storage, SpaceId, StorageId) ->
     % fixme remove file_location ()
     {ok, TaskId} = unsupport_traverse:start(SpaceId, StorageId),
     ok;
-execute_stage(wait_for_dbsync, SpaceId, StorageId) -> 
+execute_stage(wait_for_dbsync, _SpaceId, _StorageId) -> 
     % fixme
 %%    timer:sleep(timer:minutes(1)),
     ok;
-execute_stage(clean_docs, SpaceId, StorageId) -> 
+execute_stage(clean_docs, _SpaceId, _StorageId) -> 
     % fixme remove all synced using changes stream
     % fixme find which local documents are to be deleted and to it here (storage:space_unsupported?)
     ok.

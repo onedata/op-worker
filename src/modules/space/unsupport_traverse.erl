@@ -29,8 +29,8 @@
 -export([do_master_job/2, do_slave_job/2, task_finished/2,
     get_job/1, update_job_progress/5]).
 
--type task_type() :: traverse | reconcile.
--export_type([task_type/0]).
+-export([delete_ended/2]).
+
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
@@ -43,8 +43,9 @@
 % fixme
 start(SpaceId, StorageId) ->
     Options = #{
-        task_id => datastore_key:new_from_digest([SpaceId, StorageId]),
+        task_id => id(SpaceId, StorageId),
         batch_size => ?TRAVERSE_BATCH_SIZE,
+        % fixme first remove files then parent dirs
         execute_slave_on_dir => true,
         additional_data => #{
             <<"space_id">> => SpaceId,
@@ -96,7 +97,7 @@ task_finished(TaskId, _PoolName) ->
         <<"storage_id">> := StorageId
     }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     space_unsupport_worker:next_stage(SpaceId, StorageId),
-    traverse_task:delete_ended(?POOL_NAME, TaskId),
+    % fixme delete space root dir
     ok.
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
@@ -109,11 +110,29 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskI
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    case file_ctx:is_dir(FileCtx) of
-        {true, FC} ->
-            sd_utils:delete_storage_dir(FC, UserCtx);
-        {false, FC} ->
-            sd_utils:delete_storage_file(FC, UserCtx)
+    {P, _} = file_ctx:get_canonical_path(FileCtx),
+    ?notice("running for: ~p", [P]),
+    {FileLocation, FileCtx1} = file_ctx:get_local_file_location_doc(FileCtx, false),
+    % fixme file_qos?
+    case file_location:is_storage_file_created(FileLocation) of
+        false -> 
+            ?warning("ignoring: ~p", [P]),
+            ok;
+        true ->
+            case file_ctx:is_dir(FileCtx1) of
+                {true, FC} ->
+                    sd_utils:delete_storage_dir(FC, UserCtx);
+                {false, FC} ->
+                    LocationId = file_location:local_id(FileUuid),
+                    file_location:delete(LocationId),
+                    sd_utils:delete_storage_file(FC, UserCtx)
+            end
     end,
     ok.
 
+delete_ended(SpaceId, StorageId) ->
+    traverse_task:delete_ended(?POOL_NAME, id(SpaceId, StorageId)).
+
+
+id(SpaceId, StorageId) ->
+    datastore_key:new_from_digest([SpaceId, StorageId]).
