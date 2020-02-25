@@ -113,7 +113,7 @@ check_fulfillment(FileCtx, QosEntryId) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
     
-    not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId) orelse 
+    (not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId)) orelse 
         (qos_entry:is_possible(QosDoc) andalso 
         is_file_reconciled(FileCtx1, QosDoc) andalso
         are_traverses_finished_for_file(FileCtx1, QosDoc)).
@@ -146,15 +146,14 @@ report_traverse_finished(SpaceId, TraverseId, Uuid) ->
 report_next_traverse_batch(SpaceId, TraverseId, Uuid, ChildrenDirs, ChildrenFiles, BatchLastFilename) ->
     {ok, _} = update(TraverseId, Uuid,
         fun(#qos_status{
-            files_list = [], 
-            child_dirs_count = ChildDirs, 
+            child_dirs_count = ChildDirsCount, 
             current_batch_last_filename = LN
         } = Value) ->
             {ok, Value#qos_status{
                 files_list = ChildrenFiles,
                 previous_batch_last_filename = LN,
                 current_batch_last_filename = BatchLastFilename,
-                child_dirs_count = ChildDirs + length(ChildrenDirs)}
+                child_dirs_count = ChildDirsCount + length(ChildrenDirs)}
             }
         end),
     lists:foreach(fun(ChildDirUuid) ->

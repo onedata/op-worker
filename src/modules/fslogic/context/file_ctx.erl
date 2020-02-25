@@ -1260,13 +1260,11 @@ resolve_and_cache_path(FileCtx, Type) ->
         end
     end,
     
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    
-    {#document{key = Uuid, value = #file_meta{type = FileType, name = Filename}} = Doc, FileCtx2} =
+    {#document{key = Uuid, value = #file_meta{type = FileType, name = Filename}, scope = SpaceId} = Doc, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
     {FilenameOrUuid, CacheName} = case Type of
         name -> {Filename, location_and_link_utils:get_canonical_paths_cache_name(SpaceId)};
-        uuid -> {Uuid, location_and_link_utils:get_uuid_paths_cache_name(SpaceId)}
+        uuid -> {Uuid, location_and_link_utils:get_uuid_based_paths_cache_name(SpaceId)}
     end,
     case FileType of
         ?DIRECTORY_TYPE ->

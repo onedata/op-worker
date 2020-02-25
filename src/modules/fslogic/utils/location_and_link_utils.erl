@@ -23,8 +23,12 @@
 -export([get_new_file_location_doc/3, is_location_created/2,
     mark_location_created/3]).
 -export([create_imported_file_location/6, update_imported_file_location/2]).
--export([get_canonical_paths_cache_name/1, get_uuid_paths_cache_name/1, 
+-export([get_canonical_paths_cache_name/1, get_uuid_based_paths_cache_name/1, 
     invalidate_paths_caches/1, init_paths_cache_group/0, init_paths_caches/1]).
+
+-define(PATH_CACHE_GROUP, <<"paths_cache_group">>).
+-define(CANONICAL_PATHS_CACHE_NAME(SpaceId), binary_to_atom(<<"canonical_paths_cache_", SpaceId/binary>>, utf8)).
+-define(UUID_BASED_PATHS_CACHE_NAME(SpaceId), binary_to_atom(<<"uuid_paths_cache_", SpaceId/binary>>, utf8)).
 
 %%%===================================================================
 %%% API
@@ -142,16 +146,16 @@ update_imported_file_location(FileCtx, StorageSize) ->
 %%-------------------------------------------------------------------
 -spec get_canonical_paths_cache_name(od_space:id()) -> atom().
 get_canonical_paths_cache_name(Space) ->
-    binary_to_atom(<<"canonical_paths_cache_", Space/binary>>, utf8).
+    ?CANONICAL_PATHS_CACHE_NAME(Space).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Gets name of cache for particular space.
 %% @end
 %%-------------------------------------------------------------------
--spec get_uuid_paths_cache_name(od_space:id()) -> atom().
-get_uuid_paths_cache_name(Space) ->
-    binary_to_atom(<<"uuid_paths_cache_", Space/binary>>, utf8).
+-spec get_uuid_based_paths_cache_name(od_space:id()) -> atom().
+get_uuid_based_paths_cache_name(Space) ->
+    ?UUID_BASED_PATHS_CACHE_NAME(Space).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -161,7 +165,7 @@ get_uuid_paths_cache_name(Space) ->
 -spec invalidate_paths_caches(od_space:id()) -> ok.
 invalidate_paths_caches(Space) ->
     ok = bounded_cache:invalidate(get_canonical_paths_cache_name(Space)),
-    ok = bounded_cache:invalidate(get_uuid_paths_cache_name(Space)).
+    ok = bounded_cache:invalidate(get_uuid_based_paths_cache_name(Space)).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -172,7 +176,7 @@ invalidate_paths_caches(Space) ->
 init_paths_cache_group() ->
     CheckFrequency = application:get_env(?APP_NAME, canonical_paths_cache_frequency, 30000),
     Size = application:get_env(?APP_NAME, canonical_paths_cache_size, 20000),
-    ok = bounded_cache:init_group(<<"paths_cache_group">>, #{
+    ok = bounded_cache:init_group(?PATH_CACHE_GROUP, #{
         check_frequency => CheckFrequency,
         size => Size,
         worker => true
@@ -200,7 +204,7 @@ init_paths_caches(all) ->
     end;
 init_paths_caches(Space) ->
     ok = init_paths_caches(Space, get_canonical_paths_cache_name(Space)),
-    ok = init_paths_caches(Space, get_uuid_paths_cache_name(Space)).
+    ok = init_paths_caches(Space, get_uuid_based_paths_cache_name(Space)).
 
 -spec init_paths_caches(od_space:id(), bounded_cache:cache()) -> ok.
 init_paths_caches(Space, Name) ->
@@ -209,7 +213,7 @@ init_paths_caches(Space, Name) ->
             true ->
                 ok;
             _ ->
-                case bounded_cache:init_cache(Name, #{group => <<"paths_cache_group">>}) of
+                case bounded_cache:init_cache(Name, #{group => ?PATH_CACHE_GROUP}) of
                     ok ->
                         ok;
                     Error = {error, _} ->

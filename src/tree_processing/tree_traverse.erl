@@ -56,7 +56,7 @@
 }.
 
 % This callback is executed when each master job is finished 
-% and next master jobs and slave jobs are evaluated.
+% and lists of next master jobs and slave jobs are calculated.
 -type master_job_finished_callback() :: fun((traverse:id(), [{slave_job(), traverse_info()}], 
     [master_job()], od_space:id(), file_meta:uuid(), file_meta:name()) -> ok).
 % This callback is executed when last batch for a directory have been evaluated.
