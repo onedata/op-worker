@@ -43,8 +43,8 @@
 %% higher-level functions operating on file_qos document
 -export([
     get_effective/1, 
-    add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/2,
-    is_replica_protected/2, is_effective_qos_of_file/2,
+    add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
+    is_replica_required_on_storage/2, is_effective_qos_of_file/2,
     clean_up/1
 ]).
 
@@ -91,12 +91,9 @@ delete(Key) ->
     {ok, effective_file_qos()} | {error, term()} | undefined.
 get_effective(FileUuid) when is_binary(FileUuid) ->
     case file_meta:get(FileUuid) of
-        {ok, FileDoc} ->
-            get_effective(FileDoc);
-        ?ERROR_NOT_FOUND ->
-            {error, {file_meta_missing, FileUuid}};
-        _ ->
-            undefined
+        {ok, FileDoc} -> get_effective(FileDoc);
+        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}};
+        _ -> undefined
     end;
 get_effective(#document{scope = SpaceId} = FileDoc) ->
     Callback = fun([#document{key = Uuid}, ParentEffQos, CalculationInfo]) ->
@@ -130,9 +127,9 @@ get_effective(#document{scope = SpaceId} = FileDoc) ->
 %% add_qos_entry_id(FileUuid, SpaceId, QosEntryId, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_id(file_meta:uuid(), od_space:id(), qos_entry:id()) -> ok.
-add_qos_entry_id(FileUuid, SpaceId, QosEntryId) ->
-    add_qos_entry_id(FileUuid, SpaceId, QosEntryId, undefined).
+-spec add_qos_entry_id(od_space:id(), file_meta:uuid(), qos_entry:id()) -> ok.
+add_qos_entry_id(SpaceId, FileUuid, QosEntryId) ->
+    add_qos_entry_id(SpaceId, FileUuid, QosEntryId, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -141,8 +138,8 @@ add_qos_entry_id(FileUuid, SpaceId, QosEntryId) ->
 %% Creates file_qos document if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_id(file_meta:uuid(), od_space:id(), qos_entry:id(), storage:id() | undefined) -> ok.
-add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage) ->
+-spec add_qos_entry_id(od_space:id(), file_meta:uuid(), qos_entry:id(), storage:id() | undefined) -> ok.
+add_qos_entry_id(SpaceId, FileUuid, QosEntryId, Storage) ->
     NewDoc = #document{
         key = FileUuid,
         scope = SpaceId,
@@ -155,7 +152,7 @@ add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage) ->
         }
     },
 
-    Diff = fun(#file_qos{qos_entries = CurrQosEntries, assigned_entries = CurrAssignedEntries}) ->
+    UpdateFun = fun(#file_qos{qos_entries = CurrQosEntries, assigned_entries = CurrAssignedEntries}) ->
         UpdatedAssignedEntries = case Storage of
             undefined ->
                 CurrAssignedEntries;
@@ -170,8 +167,10 @@ add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage) ->
             assigned_entries = UpdatedAssignedEntries}
         }
     end,
-
-    ?extract_ok(datastore_model:update(?CTX, FileUuid, Diff, NewDoc)).
+    case datastore_model:update(?CTX, FileUuid, UpdateFun, NewDoc) of
+        {ok, _} -> ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+        {error, _} = Error -> Error
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -179,9 +178,9 @@ add_qos_entry_id(FileUuid, SpaceId, QosEntryId, Storage) ->
 %% Removes given QoS entry ID from both qos_entries and assigned_entries.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos_entry_id(file_meta:uuid(), qos_entry:id()) -> ok | {error, term()}.
-remove_qos_entry_id(FileUuid, QosEntryId) ->
-    Diff = fun(FileQos = #file_qos{qos_entries = QosEntries, assigned_entries = AssignedEntries}) ->
+-spec remove_qos_entry_id(od_space:id(), file_meta:uuid(), qos_entry:id()) -> ok | {error, term()}.
+remove_qos_entry_id(SpaceId, FileUuid, QosEntryId) ->
+    UpdateFun = fun(FileQos = #file_qos{qos_entries = QosEntries, assigned_entries = AssignedEntries}) ->
         UpdatedQosEntries = lists:delete(QosEntryId, QosEntries),
         UpdatedAssignedEntries = maps:fold(fun(StorageId, EntriesForStorage, UpdatedAssignedEntriesPartial) ->
             case lists:delete(QosEntryId, EntriesForStorage) of
@@ -197,17 +196,19 @@ remove_qos_entry_id(FileUuid, QosEntryId) ->
             assigned_entries = UpdatedAssignedEntries
         }}
     end,
-    
-    ?extract_ok(datastore_model:update(?CTX, FileUuid, Diff)).
+    case datastore_model:update(?CTX, FileUuid, UpdateFun) of
+        {ok, _} -> ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+        {error, _} = Error -> Error
+    end.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Checks whether given file is protected on given storage by QoS.
+%% Checks whether given file is required on given storage by QoS.
 %% @end
 %%--------------------------------------------------------------------
--spec is_replica_protected(file_meta:uuid(), storage:id()) -> boolean().
-is_replica_protected(FileUuid, StorageId) ->
+-spec is_replica_required_on_storage(file_meta:uuid(), storage:id()) -> boolean().
+is_replica_required_on_storage(FileUuid, StorageId) ->
     QosStorages = case get_effective(FileUuid) of
         {ok, #effective_file_qos{assigned_entries = AssignedEntries}} -> AssignedEntries;
         _ -> #{}
@@ -253,7 +254,8 @@ clean_up(FileCtx) ->
     case datastore_model:get(?CTX, Uuid) of
         {ok, #document{value = #file_qos{qos_entries = QosEntries}}} ->
             lists:foreach(fun(QosEntryId) ->
-                qos_entry:delete(QosEntryId)
+                ok = qos_hooks:handle_entry_delete(QosEntryId),
+                ok = qos_entry:delete(QosEntryId)
             end, QosEntries);
         ?ERROR_NOT_FOUND -> ok
     end,

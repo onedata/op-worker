@@ -257,7 +257,6 @@ delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
 %%% Internal functions
 %%%===================================================================
 
-
 %% @private
 -spec fetch_qos_entry(aai:auth(), qos_entry:id()) ->
     {ok, {qos_entry:record(), middleware:revision()}} | ?ERROR_NOT_FOUND.

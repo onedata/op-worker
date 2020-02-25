@@ -197,16 +197,10 @@ remove_qos_entry_insecure(_UserCtx, FileCtx, QosEntryId) ->
 
     % TODO: VFS-5567 For now QoS entry is added only for file or dir
     % for which it has been added, so starting traverse is not needed.
-    try
-        ok = file_qos:remove_qos_entry_id(FileUuid, QosEntryId),
-        SpaceId = file_ctx:get_space_id_const(FileCtx),
-        ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
-        ok = qos_entry:delete(QosEntryId),
-        #provider_response{status = #status{code = ?OK}}
-    catch
-        _ ->
-            #provider_response{status = #status{code = ?EAGAIN}}
-    end.
+    ok = file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId),
+    ok = qos_hooks:handle_entry_delete(QosEntryId),
+    ok = qos_entry:delete(QosEntryId),
+    #provider_response{status = #status{code = ?OK}}.
 
 
 %%--------------------------------------------------------------------
@@ -248,8 +242,7 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages) ->
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN,
                           ReplicasNum, true, AllTraverseReqs) of
         {ok, _} ->
-            file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
-            qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
             qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs),
             #provider_response{
                 status = #status{code = ?OK},
@@ -275,8 +268,7 @@ add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum) ->
 
     case qos_entry:create(SpaceId, QosEntryId, FileUuid, QosExpressionInRPN, ReplicasNum) of
         {ok, _} ->
-            ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+            ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
             #provider_response{
                 status = #status{code = ?OK},
                 provider_response = #qos_entry_id{id = QosEntryId}

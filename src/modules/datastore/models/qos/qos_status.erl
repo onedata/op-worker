@@ -75,7 +75,7 @@
     report_next_traverse_batch/6, report_traverse_finished_for_dir/3,
     report_traverse_finished_for_file/2]).
 -export([report_reconciliation_started/3, report_file_reconciled/3]).
--export([report_file_deleted/2]).
+-export([report_file_deleted/2, report_entry_deleted/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -115,8 +115,8 @@ check_fulfillment(FileCtx, QosEntryId) ->
     
     (not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId)) orelse 
         (qos_entry:is_possible(QosDoc) andalso 
-        is_file_reconciled(FileCtx1, QosDoc) andalso
-        are_traverses_finished_for_file(FileCtx1, QosDoc)).
+            is_file_reconciled(FileCtx1, QosDoc) andalso
+            are_traverses_finished_for_file(FileCtx1, QosDoc)).
 
 
 -spec report_traverse_start(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
@@ -241,9 +241,15 @@ report_file_deleted(FileCtx, QosEntryId) ->
     
     {ok, SpaceId} = qos_entry:get_space_id(QosDoc),
     {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx1),
-    % delete all reconcile links
+    % delete all reconcile links for given file
     delete_all_links_with_prefix(
         SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), ?RECONCILE_LINK_NAME(UuidBasedPath, <<"">>)).
+
+
+-spec report_entry_deleted(od_space:id(), qos_entry:id()) -> ok.
+report_entry_deleted(SpaceId, QosEntryId) ->
+    % delete all reconcile links for given entry
+    delete_all_links_with_prefix(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), <<"">>).
     
 
 %%%===================================================================
