@@ -72,6 +72,7 @@ mock_gs_client(Config) ->
         ?DUMMY_PROVIDER_ID
     end,
 
+    ok = test_utils:set_env(Nodes, op_worker, oz_domain, ?DUMMY_ONEZONE_DOMAIN),
     ok = test_utils:mock_expect(Nodes, oneprovider, get_id, GetProviderId),
     ok = test_utils:mock_expect(Nodes, oneprovider, get_id_or_undefined, GetProviderId),
 

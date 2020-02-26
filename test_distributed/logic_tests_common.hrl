@@ -25,6 +25,7 @@
 -include_lib("ctool/include/test/performance.hrl").
 
 -define(DUMMY_PROVIDER_ID, <<"dummyProviderId">>).
+-define(DUMMY_ONEZONE_DOMAIN, <<"onezone.test">>).
 
 -define(MOCK_PROVIDER_IDENTITY_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-TOKEN-", __ProviderId/binary>>).
 -define(MOCK_PROVIDER_ACCESS_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-ACCESS-TOKEN-", __ProviderId/binary>>).
