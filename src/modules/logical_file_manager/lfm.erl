@@ -69,8 +69,8 @@
 %% Utility functions
 -export([check_result/1]).
 %% Functions concerning qos
--export([add_qos_entry/4, get_qos_entry/2, remove_qos_entry/2, get_effective_file_qos/2,
-    check_qos_fulfilled/2, check_qos_fulfilled/3]).
+-export([add_qos_entry/4, add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2, remove_qos_entry/3, 
+    get_effective_file_qos/2, check_qos_fulfilled/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
 %%% API
@@ -747,7 +747,13 @@ check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 -spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | error_reply().
 add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
-    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum) end).
+    add_qos_entry(SessId, FileKey, Expression, ReplicasNum, undefined).
+
+% fixme maybe docs
+-spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
+    qos_entry:replicas_num(), module()) -> {ok, qos_entry:id()} | error_reply().
+add_qos_entry(SessId, FileKey, Expression, ReplicasNum, CallbackModule) ->
+    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum, CallbackModule) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -776,7 +782,11 @@ get_qos_entry(SessId, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec remove_qos_entry(session:id(), qos_entry:id()) -> ok | error_reply().
 remove_qos_entry(SessId, QosEntryId) ->
-    ?run(fun() -> lfm_qos:remove_qos_entry(SessId, QosEntryId) end).
+    remove_qos_entry(SessId, QosEntryId, false).
+
+-spec remove_qos_entry(session:id(), qos_entry:id(), boolean()) -> ok | error_reply().
+remove_qos_entry(SessId, QosEntryId, Force) ->
+    ?run(fun() -> lfm_qos:remove_qos_entry(SessId, QosEntryId, Force) end).
 
 %%--------------------------------------------------------------------
 %% @doc

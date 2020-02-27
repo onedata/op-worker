@@ -56,7 +56,7 @@
 
 %% functions operating on qos_entry record
 -export([get_expression/1, get_replicas_num/1, get_file_uuid/1, 
-    get_traverse_reqs/1, is_possible/1]).
+    get_traverse_reqs/1, is_possible/1, is_internal/1]).
 
 %%% functions operating on links tree lists
 -export([add_to_impossible_list/2, remove_from_impossible_list/2, 
@@ -105,17 +105,20 @@
 %%% Functions operating on document using datastore_model API
 %%%===================================================================
 
--spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
-    replicas_num()) -> {ok, doc()} | {error, term()}.
-create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum) ->
-    create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, false, 
+-spec create(od_space:id(), file_meta:uuid(), qos_expression:rpn(),
+    replicas_num(), module()) -> {ok, doc()} | {error, term()}.
+create(SpaceId, FileUuid, Expression, ReplicasNum, CallbackModule) ->
+    create(SpaceId, FileUuid, Expression, ReplicasNum, CallbackModule, false, 
         qos_traverse_req:build_traverse_reqs(FileUuid, [])).
 
 
--spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
-    replicas_num(), boolean(), qos_traverse_req:traverse_reqs()) ->
+-spec create(od_space:id(), file_meta:uuid(), qos_expression:rpn(),
+    replicas_num(), module(), boolean(), qos_traverse_req:traverse_reqs()) ->
     {ok, doc()} | {error, term()}.
-create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible, TraverseReqs) ->
+create(SpaceId, FileUuid, Expression, ReplicasNum, CallbackModule, Possible, TraverseReqs) ->
+    % fixme
+    QosEntryId = datastore_key:new(),
+    ?critical("qos_entry:create: ~p", [QosEntryId]),
     PossibilityCheck = case Possible of
         true ->
             {possible, oneprovider:get_id()};
@@ -123,15 +126,17 @@ create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible, Travers
             ok = add_to_impossible_list(SpaceId, QosEntryId),
             {impossible, oneprovider:get_id()}
     end,
-    datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
+    ?extract_key(datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
         value = #qos_entry{
             file_uuid = FileUuid,
             expression = Expression,
             replicas_num = ReplicasNum,
             possibility_check = PossibilityCheck,
-            traverse_reqs = TraverseReqs
+            traverse_reqs = TraverseReqs,
+            internal = CallbackModule =/= undefined, % fixme is it necessary?
+            callback_module = CallbackModule
         }
-    }).
+    })).
 
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
@@ -147,6 +152,8 @@ update(Key, Diff) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(QosEntryId) ->
+    % fixme
+    ?critical("qos_entry:delete"),
     datastore_model:delete(?CTX, QosEntryId).
 
 
@@ -222,14 +229,18 @@ mark_possible(QosEntryId, SpaceId, AllTraverseReqs) ->
 %% Removes given traverse from traverse reqs of given QoS entry.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_traverse_req(id(), qos_traverse_req:id()) -> ok.
+-spec remove_traverse_req(id(), qos_traverse_req:id()) -> ok | {error, term()}.
 remove_traverse_req(QosEntryId, TraverseId) ->
     Diff = fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
         {ok, QosEntry#qos_entry{
             traverse_reqs = qos_traverse_req:remove_req(TraverseId, TR)
         }}
     end,
-    ?ok_if_not_found(?extract_ok(update(QosEntryId, Diff))).
+    ?ok_if_not_found(case update(QosEntryId, Diff) of
+        {ok, #document{value = #qos_entry{callback_module = CallbackModule}}} ->
+            ok = call_callback(CallbackModule, qos_traverse_finished, [QosEntryId, TraverseId]);
+        {error, _} = Error -> Error
+    end).
 
 %%%===================================================================
 %%% Functions operating on qos_entry record.
@@ -270,6 +281,15 @@ is_possible(#qos_entry{possibility_check = {possible, _}}) ->
     true;
 is_possible(#qos_entry{possibility_check = {impossible, _}}) ->
     false.
+
+
+-spec is_internal(doc() | record()) -> boolean().
+is_internal(#document{value = QosEntry}) ->
+    is_internal(QosEntry);
+is_internal(#qos_entry{callback_module = undefined}) ->
+    false;
+is_internal(#qos_entry{callback_module = _CallbackModule}) ->
+    true.
 
 
 %%%===================================================================
@@ -375,7 +395,9 @@ get_record_struct(1) ->
             {start_file_uuid, string},
             {storage_id, string}
         ]}}},
-        {possibility_check, {atom, string}}
+        {possibility_check, {atom, string}},
+        {internal, boolean},
+        {callback_module, atom}
     ]}.
 
 
@@ -464,3 +486,14 @@ resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReq
         traverse_reqs = qos_traverse_req:select_traverse_reqs(
             LocalTraverseIds ++ RemoteTraverseIds, LocalReqs)
     }.
+
+%fixme internal
+
+call_callback(undefined, _, _) -> ok;
+call_callback(Module, Method, Args) ->
+    case erlang:function_exported(Module, Method, length(Args)) of
+        true ->
+            ok = erlang:apply(Module, Method, Args);
+        _ ->
+            ok
+    end.

@@ -325,7 +325,12 @@
     % Contains id of provider that marked given entry as possible or impossible.
     % If more than one provider concurrently marks entry as possible one provider is
     % deterministically selected during conflict resolution.
-    possibility_check :: {possible | impossible, od_provider:id()}
+    possibility_check :: {possible | impossible, od_provider:id()},
+    % True when entry was created by internal provider logic
+    internal = false :: boolean(), % fixme maybe not necessary - callback module means it is internal
+    % Module with callbacks fixme . Must implement qos_caller(tbd fixme) behaviour.
+    % Only applicable to internal entries
+    callback_module = undefined :: module() | undefined % fixme not needed (it is run on other provider)
 }).
 
 % This model holds information of QoS traverse state in a directory subtree in order 

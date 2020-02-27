@@ -37,8 +37,6 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-%% functions operating on file_qos document using datastore_model API
--export([delete/1]).
 
 %% higher-level functions operating on file_qos document
 -export([
@@ -197,7 +195,11 @@ remove_qos_entry_id(SpaceId, FileUuid, QosEntryId) ->
         }}
     end,
     case datastore_model:update(?CTX, FileUuid, UpdateFun) of
-        {ok, _} -> ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+        {ok, #document{value = #file_qos{qos_entries = []}}} -> 
+            ok = delete(FileUuid),
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+        {ok, _} ->
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
         {error, _} = Error -> Error
     end.
 

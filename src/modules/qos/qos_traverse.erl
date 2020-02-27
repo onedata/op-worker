@@ -49,6 +49,8 @@
 %%--------------------------------------------------------------------
 -spec start_initial_traverse(file_ctx:ctx(), qos_entry:id(), traverse:id()) -> ok.
 start_initial_traverse(FileCtx, QosEntryId, TaskId) ->
+%%    fixme
+    ?critical("qos_traverse:start_initial_traverse ~p", [QosEntryId]),
     Options = #{
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
