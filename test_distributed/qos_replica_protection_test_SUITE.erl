@@ -112,7 +112,6 @@ all() -> [
 }).
 
 -define(Q1, <<"q1">>).
--define(TEST_DATA, <<"test_data">>).
 
 -record(test_spec_eviction, {
     evicting_node :: node(),
@@ -784,7 +783,6 @@ end_per_suite(Config) ->
         {Name, ?TEST_DATA, Distribution}
     ]}
 ).
--define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
 -define(nested_dir_structure(Name, Distribution),
     {?SPACE_ID, [
         {Name, [

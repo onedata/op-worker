@@ -32,7 +32,7 @@
 -export([delete_child_link/4, foreach_child/3, add_child_link/4, delete_deletion_link/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
--export([get_parent/1, get_parent_uuid/1, get_parent_including_deleted/1]).
+-export([get_parent/1, get_parent_uuid/1]).
 -export([
     get_child/2, get_child_uuid/2,
     list_children/2, list_children/3, list_children/4,
@@ -55,6 +55,7 @@
 -type diff() :: datastore_doc:diff(file_meta()).
 -type uuid() :: datastore:key().
 -type path() :: binary().
+-type uuid_based_path() :: binary(). % similar to canonical, but path elements are uuids instead of filenames/dirnames
 -type name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
@@ -85,8 +86,8 @@
 %% @formatter:on
 
 -export_type([
-    doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
-    size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    doc/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0, 
+    type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
     offset/0, non_neg_offset/0, limit/0, file_meta/0
 ]).
 
@@ -494,10 +495,10 @@ list_children(Entry, Offset, Limit, Token, PrevLinkKey) ->
     Limit :: limit(),
     Token :: undefined | datastore_links_iter:token(),
     PrevLinkKey :: undefined | name(),
-    PrevTeeID :: undefined | oneprovider:id()
+    PrevTreeID :: undefined | oneprovider:id()
 ) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTeeID) ->
+list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTreeID) ->
     Opts = case Offset of
         0 -> #{size => Limit};
         _ -> #{offset => Offset, size => Limit}
@@ -513,9 +514,9 @@ list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTeeID) ->
         _ -> Opts2#{prev_link_name => PrevLinkKey}
     end,
 
-    Opts4 = case PrevTeeID of
+    Opts4 = case PrevTreeID of
         undefined -> Opts3;
-        _ -> Opts3#{prev_tree_id => PrevTeeID}
+        _ -> Opts3#{prev_tree_id => PrevTreeID}
     end,
 
     list_children_internal(Entry, Opts4).
@@ -629,13 +630,6 @@ rename(SourceDoc, SourceParentDoc, TargetParentDoc, TargetName) ->
 get_parent(Entry) ->
     case get_parent_uuid(Entry) of
         {ok, ParentUuid} -> file_meta:get({uuid, ParentUuid});
-        Error -> Error
-    end.
-
--spec get_parent_including_deleted(entry()) -> {ok, doc()} | {error, term()}.
-get_parent_including_deleted(Entry) ->
-    case get_parent_uuid(Entry) of
-        {ok, ParentUuid} -> file_meta:get_including_deleted(ParentUuid);
         Error -> Error
     end.
 

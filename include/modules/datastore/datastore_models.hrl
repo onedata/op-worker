@@ -196,6 +196,18 @@
     cache_state = #{} :: cache_state()
 }).
 
+-record(od_token, {
+    revoked = false :: boolean(),
+
+    cache_state = #{} :: cache_state()
+}).
+
+-record(temporary_token_secret, {
+    generation :: temporary_token_secret:generation(),
+
+    cache_state = #{} :: cache_state()
+}).
+
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
@@ -224,7 +236,7 @@
     accessed :: undefined | integer(),
     type :: undefined | session:type(),
     identity :: aai:subject(),
-    auth :: undefined | session:auth(),
+    credentials :: undefined | auth_manager:credentials(),
     data_constraints :: data_constraints:constraints(),
     node :: node(),
     supervisor :: undefined | pid(),
@@ -317,6 +329,18 @@
     % If more than one provider concurrently marks entry as possible one provider is
     % deterministically selected during conflict resolution.
     possibility_check :: {possible | impossible, od_provider:id()}
+}).
+
+% This model holds information of QoS traverse state in a directory subtree in order 
+% to calculate entry status.
+-record(qos_status, {
+    % Initialize with empty binary so it always compares as lower than any actual filename
+    previous_batch_last_filename = <<>> :: file_meta:name(),
+    current_batch_last_filename = <<>> :: file_meta:name(),
+    files_list = [] :: [file_meta:uuid()],
+    child_dirs_count = 0 :: non_neg_integer(),
+    is_last_batch = false :: boolean(),
+    is_start_dir :: boolean()
 }).
 
 -record(file_meta, {

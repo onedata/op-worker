@@ -21,13 +21,15 @@
 -export([
     build_traverse_reqs/2, remove_req/2,
     select_traverse_reqs/2, get_storage/1,
+    get_traverse_ids/1,
     are_all_finished/1,
-    start_applicable_traverses/3
+    start_applicable_traverses/3,
+    split_local_and_remote/1
 ]).
 
 -type id() :: traverse:id().
 -type traverse_req() :: #qos_traverse_req{}.
--type traverse_reqs() :: #{id() => #qos_traverse_req{}}.
+-opaque traverse_reqs() :: #{id() => #qos_traverse_req{}}.
 
 -export_type([id/0, traverse_req/0, traverse_reqs/0]).
 
@@ -76,6 +78,11 @@ get_storage(#qos_traverse_req{storage_id = StorageId}) ->
     StorageId.
 
 
+-spec get_traverse_ids(traverse_reqs()) -> [id()].
+get_traverse_ids(TraverseReqs) ->
+    maps:keys(TraverseReqs).
+
+
 -spec are_all_finished(traverse_reqs()) -> boolean().
 are_all_finished(AllTraverseReqs) ->
     maps:size(AllTraverseReqs) == 0.
@@ -112,8 +119,7 @@ start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs) ->
 start_traverse(FileCtx, QosEntryId, StorageId, TaskId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    ok = file_qos:add_qos_entry_id(FileUuid, SpaceId, QosEntryId, StorageId),
-    ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+    ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId, StorageId),
     case lookup_file_meta_doc(FileCtx) of
         {ok, FileCtx1} ->
             ok = qos_traverse:start_initial_traverse(FileCtx1, QosEntryId, TaskId);
@@ -124,6 +130,21 @@ start_traverse(FileCtx, QosEntryId, StorageId, TaskId) ->
             ok = qos_entry:remove_traverse_req(QosEntryId, TaskId)
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Splits given traverse reqs to those of current provider and those of remote providers.
+%% @end
+%%--------------------------------------------------------------------
+-spec split_local_and_remote(traverse_reqs()) -> {Local :: [id()], Remote :: [id()]}.
+split_local_and_remote(TraverseReqs) ->
+    maps:fold(fun(TaskId, TraverseReq, {LocalTraverseReqs, RemoteTraverseReqs}) ->
+        StorageId = qos_traverse_req:get_storage(TraverseReq),
+        case storage:is_local(StorageId) of
+            true -> {[TaskId | LocalTraverseReqs], RemoteTraverseReqs};
+            false -> {LocalTraverseReqs, [TaskId | RemoteTraverseReqs]}
+        end
+    end, {[], []}, TraverseReqs).
 
 %%%===================================================================
 %%% Utility functions

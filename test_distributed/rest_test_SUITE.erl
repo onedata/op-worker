@@ -54,22 +54,53 @@ all() -> ?ALL([
 token_auth(Config) ->
     % given
     [Worker | _] = ?config(op_worker_nodes, Config),
+    DummyUserId = <<"dummyUserId">>,
+    ShabbyUserId = <<"shabbyUserId">>,
     Endpoint = rest_endpoint(Worker),
 
-    SerializedToken = initializer:create_access_token(?USER_ID),
+    SerializedAccessToken = initializer:create_access_token(?USER_ID),
+    SerializedAccessTokenWithConsumerCaveats = tokens:confine(SerializedAccessToken, [
+        #cv_consumer{whitelist = [?SUB(user, DummyUserId)]}
+    ]),
+    SerializedDummyUserIdentityToken = initializer:create_identity_token(DummyUserId),
+    SerializedShabbyUserIdentityToken = initializer:create_identity_token(ShabbyUserId),
 
     % when
-    AuthFail = do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => <<"invalid">>}),
-    AuthSuccess1 = do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => SerializedToken}),
-    AuthSuccess3 = do_request(Config, get, Endpoint ++ "files", #{?HDR_AUTHORIZATION => <<"Bearer ", SerializedToken/binary>>}),
+    ?assertMatch(
+        {ok, 401, _, _},
+        do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => <<"invalid">>})
+    ),
+    ?assertMatch(
+        {ok, 200, _, _},
+        do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => SerializedAccessToken})
+    ),
+    ?assertMatch(
+        {ok, 401, _, _},
+        do_request(Config, get, Endpoint ++ "files", #{?HDR_X_AUTH_TOKEN => SerializedAccessTokenWithConsumerCaveats})
+    ),
+    ?assertMatch(
+        {ok, 401, _, _},
+        do_request(Config, get, Endpoint ++ "files", #{
+            ?HDR_X_AUTH_TOKEN => SerializedAccessTokenWithConsumerCaveats,
+            ?HDR_X_ONEDATA_CONSUMER_TOKEN => SerializedShabbyUserIdentityToken
+        })
+    ),
+    ?assertMatch(
+        {ok, 200, _, _},
+        do_request(Config, get, Endpoint ++ "files", #{
+            ?HDR_X_AUTH_TOKEN => SerializedAccessTokenWithConsumerCaveats,
+            ?HDR_X_ONEDATA_CONSUMER_TOKEN => SerializedDummyUserIdentityToken
+        })
+    ),
+    ?assertMatch(
+        {ok, 200, _, _},
+        do_request(Config, get, Endpoint ++ "files", #{?HDR_AUTHORIZATION => <<"Bearer ", SerializedAccessToken/binary>>})
+    ),
     %% @todo VFS-5554 Deprecated, included for backward compatibility
-    AuthSuccess2 = do_request(Config, get, Endpoint ++ "files", #{?HDR_MACAROON => SerializedToken}),
-
-    % then
-    ?assertMatch({ok, 401, _, _}, AuthFail),
-    ?assertMatch({ok, 200, _, _}, AuthSuccess1),
-    ?assertMatch({ok, 200, _, _}, AuthSuccess2),
-    ?assertMatch({ok, 200, _, _}, AuthSuccess3).
+    ?assertMatch(
+        {ok, 200, _, _},
+        do_request(Config, get, Endpoint ++ "files", #{?HDR_MACAROON => SerializedAccessToken})
+    ).
 
 internal_error_when_handler_crashes(Config) ->
     % given
@@ -237,7 +268,7 @@ mock_user_logic(Config) ->
     GetUserFun = fun
         (?ROOT_SESS_ID, ?USER_ID) ->
             UserDoc;
-        (?ROOT_AUTH, ?USER_ID) ->
+        (?ROOT_CREDENTIALS, ?USER_ID) ->
             UserDoc;
         (UserSessId, ?USER_ID) when is_binary(UserSessId) ->
             try session:get_user_id(UserSessId) of
@@ -246,8 +277,8 @@ mock_user_logic(Config) ->
             catch
                 _:_ -> ?ERROR_UNAUTHORIZED
             end;
-        (TokenAuth, ?USER_ID) ->
-            case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
+        (TokenCredentials, ?USER_ID) ->
+            case tokens:deserialize(auth_manager:get_access_token(TokenCredentials)) of
                 {ok, #token{subject = ?SUB(user, ?USER_ID)}} ->
                     UserDoc;
                 {error, _} = Error ->
@@ -256,18 +287,9 @@ mock_user_logic(Config) ->
         (_, _) ->
             {error, not_found}
     end,
+    initializer:mock_auth_manager(Config),
 
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
-    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(AccessToken, _, _, _) ->
-        TokenAuth = auth_manager:build_token_auth(
-            AccessToken, undefined,
-            undefined, undefined, disallow_data_access_caveats
-        ),
-        case GetUserFun(TokenAuth, ?USER_ID) of
-            {ok, #document{key = UserId}} -> {ok, ?SUB(user, UserId), undefined};
-            {error, _} = Error -> Error
-        end
-    end),
     test_utils:mock_expect(Workers, user_logic, exists,
         fun(Auth, UserId) ->
             case GetUserFun(Auth, UserId) of
@@ -283,6 +305,7 @@ mock_user_logic(Config) ->
 
 unmock_user_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
+    initializer:unmock_auth_manager(Config),
     test_utils:mock_validate_and_unload(Workers, user_logic).
 
 

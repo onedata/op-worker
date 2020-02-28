@@ -27,7 +27,7 @@
 
 
 %% @formatter:off
--type client() :: session:id() | session:auth().
+-type client() :: session:id() | auth_manager:credentials().
 -type create_result() :: {ok, Data :: term()} |
                          {ok, {gri:gri(), doc()}} |
                          errors:error().
@@ -97,7 +97,7 @@ force_terminate() ->
 %% @equiv request(?ROOT_SESS_ID, Req).
 %% @end
 %%--------------------------------------------------------------------
--spec request(gs_protocol:rpc_req() | gs_protocol:graph_req()) -> result().
+-spec request(gs_protocol:graph_req()) -> result().
 request(Req) ->
     request(?ROOT_SESS_ID, Req).
 
@@ -107,7 +107,7 @@ request(Req) ->
 %% @equiv request(Client, Req, ?GS_REQUEST_TIMEOUT).
 %% @end
 %%--------------------------------------------------------------------
--spec request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req()) -> result().
+-spec request(client(), gs_protocol:graph_req()) -> result().
 request(Client, Req) ->
     request(Client, Req, ?GS_REQUEST_TIMEOUT).
 
@@ -118,11 +118,11 @@ request(Client, Req) ->
 %% from cache if possible.
 %% @end
 %%--------------------------------------------------------------------
--spec request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req(), timeout()) ->
+-spec request(client(), gs_protocol:graph_req(), timeout()) ->
     result().
 request(Client, Req, Timeout) ->
     try
-        case check_api_authorization(client_to_auth(Client), Req) of
+        case check_api_authorization(client_to_credentials(Client), Req) of
             ok ->
                 do_request(Client, Req, Timeout);
             {error, _} = Err1 ->
@@ -146,7 +146,9 @@ request(Client, Req, Timeout) ->
 %%--------------------------------------------------------------------
 -spec invalidate_cache(gri:gri()) -> ok.
 invalidate_cache(#gri{type = Type, id = Id, aspect = instance}) ->
-    invalidate_cache(Type, Id).
+    invalidate_cache(Type, Id);
+invalidate_cache(#gri{type = temporary_token_secret, id = Id, aspect = user}) ->
+    temporary_token_secret:invalidate_cache(Id).
 
 
 %%--------------------------------------------------------------------
@@ -277,6 +279,7 @@ handle_info({check_timeout, ReqId}, #state{promises = Promises} = State) ->
     end;
 handle_info({'EXIT', Pid, Reason}, #state{client_ref = Pid} = State) ->
     ?warning("Connection to Onezone lost, reason: ~p", [Reason]),
+    oneprovider:on_disconnect_from_oz(),
     {stop, normal, State};
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
@@ -323,6 +326,10 @@ process_push_message(#gs_push_graph{gri = GRI, change_type = deleted}) ->
             oneprovider:on_deregister();
         #gri{type = od_space, id = SpaceId, aspect = instance} ->
             main_harvesting_stream:space_removed(SpaceId);
+        #gri{type = od_token, id = TokenId, aspect = instance} ->
+            auth_cache:report_token_deletion(TokenId);
+        #gri{type = temporary_token_secret, id = UserId, aspect = user} ->
+            auth_cache:report_temporary_tokens_deletion(UserId);
         _ ->
             ok
     end,
@@ -339,6 +346,7 @@ process_push_message(#gs_push_graph{gri = GRI, data = Resource, change_type = up
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec start_gs_connection() ->
     {ok, gs_client:client_ref(), gs_protocol:handshake_resp()} | errors:error().
 start_gs_connection() ->
@@ -350,7 +358,7 @@ start_gs_connection() ->
         CaCerts = oneprovider:trusted_ca_certs(),
         Opts = [{cacerts, CaCerts}],
         {ok, AccessToken} = provider_auth:get_access_token(),
-        OpWorkerAccessToken = tokens:build_oneprovider_access_token(?OP_WORKER, AccessToken),
+        OpWorkerAccessToken = tokens:add_oneprovider_service_indication(?OP_WORKER, AccessToken),
 
         gs_client:start_link(
             Address, {token, OpWorkerAccessToken}, [?GS_PROTOCOL_VERSION],
@@ -376,14 +384,14 @@ start_gs_connection() ->
 %% exfiltrated from the local provider cache in case of a limited token.
 %% @end
 %%--------------------------------------------------------------------
--spec check_api_authorization(session:auth(), gs_protocol:rpc_req() | gs_protocol:graph_req()) ->
+-spec check_api_authorization(auth_manager:credentials(), gs_protocol:graph_req()) ->
     ok | errors:error().
-check_api_authorization(?ROOT_AUTH, _) ->
+check_api_authorization(?ROOT_CREDENTIALS, _) ->
     ok;
-check_api_authorization(?GUEST_AUTH, _) ->
+check_api_authorization(?GUEST_CREDENTIALS, _) ->
     ok;
-check_api_authorization(TokenAuth, #gs_req_graph{operation = Operation, gri = GRI}) ->
-    case auth_manager:verify(TokenAuth) of
+check_api_authorization(TokenCredentials, #gs_req_graph{operation = Operation, gri = GRI}) ->
+    case auth_manager:verify_credentials(TokenCredentials) of
         {ok, Auth, _} ->
             api_auth:check_authorization(Auth, ?OZ_WORKER, Operation, GRI);
         {error, _} = Error ->
@@ -391,15 +399,9 @@ check_api_authorization(TokenAuth, #gs_req_graph{operation = Operation, gri = GR
     end.
 
 
--spec do_request(client(), gs_protocol:rpc_req() | gs_protocol:graph_req(), timeout()) ->
+%% @private
+-spec do_request(client(), gs_protocol:graph_req(), timeout()) ->
     result().
-do_request(Client, #gs_req_rpc{} = RpcReq, Timeout) ->
-    case call_onezone(Client, RpcReq, Timeout) of
-        {ok, #gs_resp_rpc{result = Res}} ->
-            {ok, Res};
-        {error, _} = Error ->
-            Error
-    end;
 do_request(Client, #gs_req_graph{operation = get} = GraphReq, Timeout) ->
     case maybe_serve_from_cache(Client, GraphReq) of
         {error, _} = Err1 ->
@@ -453,9 +455,9 @@ do_request(Client, #gs_req_graph{} = GraphReq, Timeout) ->
     end.
 
 
--spec call_onezone(client(), gs_protocol:rpc_req() | gs_protocol:graph_req() | gs_protocol:unsub_req(),
-    timeout()) -> {ok, gs_protocol:rpc_resp() | gs_protocol:graph_resp() | gs_protocol:unsub_resp()} |
-errors:error().
+%% @private
+-spec call_onezone(client(), gs_protocol:graph_req() | gs_protocol:unsub_req(), timeout()) ->
+    {ok, gs_protocol:graph_resp() | gs_protocol:unsub_resp()} | errors:error().
 call_onezone(Client, Request, Timeout) ->
     case get_connection_pid() of
         undefined ->
@@ -465,20 +467,18 @@ call_onezone(Client, Request, Timeout) ->
     end.
 
 
--spec call_onezone(connection_ref(), client(),
-    gs_protocol:rpc_req() | gs_protocol:graph_req() | gs_protocol:unsub_req(), timeout()) ->
-    {ok, gs_protocol:rpc_resp() | gs_protocol:graph_resp() | gs_protocol:unsub_resp()} |
-    errors:error().
+%% @private
+-spec call_onezone(connection_ref(), client(), gs_protocol:graph_req() | gs_protocol:unsub_req(),
+    timeout()) -> {ok, gs_protocol:graph_resp() | gs_protocol:unsub_resp()} | errors:error().
 call_onezone(ConnRef, Client, Request, Timeout) ->
     try
         SubType = case Request of
             #gs_req_graph{} -> graph;
-            #gs_req_rpc{} -> rpc;
             #gs_req_unsub{} -> unsub
         end,
         GsReq = #gs_req{
             subtype = SubType,
-            auth_override = resolve_auth_override(client_to_auth(Client)),
+            auth_override = auth_manager:credentials_to_gs_auth_override(client_to_credentials(Client)),
             request = Request
         },
         case gen_server2:call(ConnRef, {async_request, GsReq, Timeout}) of
@@ -506,9 +506,13 @@ call_onezone(ConnRef, Client, Request, Timeout) ->
     end.
 
 
+%% @private
 -spec maybe_serve_from_cache(client(), gs_protocol:graph_req()) ->
     {true, doc()} | false | errors:error().
-maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{aspect = instance} = GRI, auth_hint = AuthHint}) ->
+maybe_serve_from_cache(Client, #gs_req_graph{gri = #gri{type = Type, aspect = As} = GRI, auth_hint = AuthHint}) when
+    As =:= instance;
+    (Type =:= temporary_token_secret andalso As =:= user)
+->
     case get_from_cache(GRI) of
         false ->
             false;
@@ -542,9 +546,13 @@ maybe_serve_from_cache(_, _) ->
     false.
 
 
+%% @private
 -spec coalesce_cache(connection_ref(), gri:gri(), doc(), gs_protocol:revision()) ->
     {ok, doc()} | {error, stale_record}.
-coalesce_cache(ConnRef, GRI = #gri{aspect = instance}, Doc = #document{value = Record}, Rev) ->
+coalesce_cache(ConnRef, GRI = #gri{type = Type, aspect = As}, Doc = #document{value = Record}, Rev) when
+    As =:= instance;
+    (Type =:= temporary_token_secret andalso As =:= user)
+->
     #gri{type = Type, id = Id, scope = Scope} = GRI,
     CacheUpdateFun = fun(CachedRecord) ->
         #{scope := CachedScope} = CacheState = get_cache_state(CachedRecord),
@@ -595,6 +603,7 @@ coalesce_cache(_ConnRef, _GRI, Doc, _Revision) ->
     {ok, Doc}.
 
 
+%% @private
 -spec get_from_cache(gri:gri()) -> {true, doc()} | false.
 get_from_cache(#gri{type = Type, id = Id}) ->
     case Type:get_from_cache(Id) of
@@ -603,36 +612,22 @@ get_from_cache(#gri{type = Type, id = Id}) ->
     end.
 
 
+%% @private
 -spec get_connection_pid() -> undefined | pid().
 get_connection_pid() ->
     global:whereis_name(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 
--spec client_to_auth(client()) -> session:auth().
-client_to_auth(?ROOT_SESS_ID) ->
-    ?ROOT_AUTH;
-client_to_auth(?GUEST_SESS_ID) ->
-    ?GUEST_AUTH;
-client_to_auth(SessionId) when is_binary(SessionId) ->
-    {ok, Auth} = session:get_auth(SessionId),
-    client_to_auth(Auth);
-client_to_auth(?ROOT_AUTH) ->
-    ?ROOT_AUTH;
-client_to_auth(?GUEST_AUTH) ->
-    ?GUEST_AUTH;
-client_to_auth(TokenAuth) ->
-    TokenAuth.
+%% @private
+-spec client_to_credentials(client()) -> auth_manager:credentials().
+client_to_credentials(SessionId) when is_binary(SessionId) ->
+    {ok, Credentials} = session:get_credentials(SessionId),
+    Credentials;
+client_to_credentials(Credentials) ->
+    Credentials.
 
 
--spec resolve_auth_override(session:auth()) -> gs_protocol:auth_override().
-resolve_auth_override(?ROOT_AUTH) ->
-    undefined;
-resolve_auth_override(?GUEST_AUTH) ->
-    #auth_override{client_auth = nobody};
-resolve_auth_override(TokenAuth) ->
-    auth_manager:to_auth_override(TokenAuth).
-
-
+%% @private
 -spec put_cache_state(Record :: tuple(), cache_state()) -> Record :: tuple().
 put_cache_state(User = #od_user{}, CacheState) ->
     User#od_user{cache_state = CacheState};
@@ -651,9 +646,14 @@ put_cache_state(Handle = #od_handle{}, CacheState) ->
 put_cache_state(Harvester = #od_harvester{}, CacheState) ->
     Harvester#od_harvester{cache_state = CacheState};
 put_cache_state(Storage = #od_storage{}, CacheState) ->
-    Storage#od_storage{cache_state = CacheState}.
+    Storage#od_storage{cache_state = CacheState};
+put_cache_state(Token = #od_token{}, CacheState) ->
+    Token#od_token{cache_state = CacheState};
+put_cache_state(TTS = #temporary_token_secret{}, CacheState) ->
+    TTS#temporary_token_secret{cache_state = CacheState}.
 
 
+%% @private
 -spec get_cache_state(Record :: tuple() | doc()) -> cache_state().
 get_cache_state(#document{value = Record}) ->
     get_cache_state(Record);
@@ -674,9 +674,14 @@ get_cache_state(#od_handle{cache_state = CacheState}) ->
 get_cache_state(#od_harvester{cache_state = CacheState}) ->
     CacheState;
 get_cache_state(#od_storage{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#od_token{cache_state = CacheState}) ->
+    CacheState;
+get_cache_state(#temporary_token_secret{cache_state = CacheState}) ->
     CacheState.
 
 
+%% @private
 -spec cmp_scope(gs_protocol:scope(), gs_protocol:scope()) -> lower | same | greater.
 cmp_scope(public, public) -> same;
 cmp_scope(public, _) -> lower;
@@ -693,30 +698,67 @@ cmp_scope(private, private) -> same;
 cmp_scope(private, _) -> greater.
 
 
+%% @private
 -spec is_authorized_to_get(client(), gs_protocol:auth_hint(), gri:gri(), doc()) ->
     boolean() | unknown.
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_user, scope = private}, _) ->
+is_authorized_to_get(_, _, #gri{type = od_share, scope = public}, _) ->
+    true;
+
+is_authorized_to_get(_, _, #gri{type = od_handle, scope = public}, _) ->
+    true;
+
+is_authorized_to_get(?ROOT_SESS_ID, AuthHint, GRI, Doc) ->
+    is_root_authorized_to_get(AuthHint, GRI, Doc);
+
+is_authorized_to_get(?GUEST_SESS_ID, AuthHint, GRI, Doc) ->
+    is_guest_authorized_to_get(AuthHint, GRI, Doc);
+
+is_authorized_to_get(SessionId, AuthHint, GRI, CachedDoc) when is_binary(SessionId) ->
+    {ok, UserId} = session:get_user_id(SessionId),
+    is_user_authorized_to_get(UserId, SessionId, AuthHint, GRI, CachedDoc);
+
+is_authorized_to_get(Credentials, AuthHint, GRI, CachedDoc) ->
+    case auth_manager:verify_credentials(Credentials) of
+        {ok, ?ROOT, _} ->
+            is_root_authorized_to_get(AuthHint, GRI, CachedDoc);
+        {ok, ?NOBODY, _} ->
+            is_guest_authorized_to_get(AuthHint, GRI, CachedDoc);
+        {ok, ?USER(UserId), _} ->
+            is_user_authorized_to_get(UserId, Credentials, AuthHint, GRI, CachedDoc)
+    end.
+
+
+%% @private
+-spec is_root_authorized_to_get(gs_protocol:auth_hint(), gri:gri(), doc()) ->
+    boolean() | unknown.
+is_root_authorized_to_get(_, #gri{type = od_user, scope = private}, _) ->
     false;
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_user, scope = protected}, _) ->
+is_root_authorized_to_get(_, #gri{type = od_user, scope = protected}, _) ->
     true;
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_user, scope = shared}, _) ->
-    true;
-
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_group, scope = shared}, _) ->
+is_root_authorized_to_get(_, #gri{type = od_user, scope = shared}, _) ->
     true;
 
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_space, scope = private}, _) ->
-    true;
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_space, scope = protected}, _) ->
+is_root_authorized_to_get(_, #gri{type = od_token, scope = shared}, _) ->
     true;
 
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_harvester, scope = private}, _) ->
+is_root_authorized_to_get(_, #gri{type = temporary_token_secret, scope = shared}, _) ->
     true;
 
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_storage, id = StorageId, scope = private}, _) ->
+is_root_authorized_to_get(_, #gri{type = od_group, scope = shared}, _) ->
+    true;
+
+is_root_authorized_to_get(_, #gri{type = od_space, scope = private}, _) ->
+    true;
+is_root_authorized_to_get(_, #gri{type = od_space, scope = protected}, _) ->
+    true;
+
+is_root_authorized_to_get(_, #gri{type = od_harvester, scope = private}, _) ->
+    true;
+
+is_root_authorized_to_get(_, #gri{type = od_storage, id = StorageId, scope = private}, _) ->
     provider_logic:has_storage(StorageId);
 
-is_authorized_to_get(?ROOT_SESS_ID, AuthHint, #gri{type = od_storage, id = StorageId, scope = shared}, _) ->
+is_root_authorized_to_get(AuthHint, #gri{type = od_storage, id = StorageId, scope = shared}, _) ->
     case AuthHint of
         ?THROUGH_SPACE(SpaceId) ->
             space_logic:is_supported_by_storage(SpaceId, StorageId)
@@ -726,53 +768,40 @@ is_authorized_to_get(?ROOT_SESS_ID, AuthHint, #gri{type = od_storage, id = Stora
     end;
 
 % Provider can access shares of spaces that it supports
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_share, scope = private}, CachedDoc) ->
+is_root_authorized_to_get(_, #gri{type = od_share, scope = private}, CachedDoc) ->
     provider_logic:supports_space(
         ?ROOT_SESS_ID,
         oneprovider:get_id_or_undefined(),
         CachedDoc#document.value#od_share.space
     );
 
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_provider, scope = private}, _) ->
+is_root_authorized_to_get(_, #gri{type = od_provider, scope = private}, _) ->
     true;
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_provider, scope = protected}, _) ->
+is_root_authorized_to_get(_, #gri{type = od_provider, scope = protected}, _) ->
     true;
 
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_handle_service, scope = private}, _) ->
+is_root_authorized_to_get(_, #gri{type = od_handle_service, scope = private}, _) ->
     false;
 
-is_authorized_to_get(?ROOT_SESS_ID, _, #gri{type = od_handle, scope = private}, _) ->
+is_root_authorized_to_get(_, #gri{type = od_handle, scope = private}, _) ->
     false;
 
-is_authorized_to_get(?GUEST_SESS_ID, _, #gri{type = od_space}, _) ->
+is_root_authorized_to_get(_, _, _) ->
+    false.
+
+
+%% @private
+-spec is_guest_authorized_to_get(gs_protocol:auth_hint(), gri:gri(), doc()) ->
+    boolean() | unknown.
+is_guest_authorized_to_get(_, #gri{type = od_space}, _) ->
     % Guest session is a virtual session fully managed by provider, and it needs
     % access to space info to serve public data such as shares.
     true;
-
-is_authorized_to_get(_, _, #gri{type = od_share, scope = public}, _) ->
-    true;
-
-is_authorized_to_get(_, _, #gri{type = od_handle, scope = public}, _) ->
-    true;
-
-is_authorized_to_get(SessionId, AuthHint, GRI, CachedDoc) when is_binary(SessionId) ->
-    {ok, UserId} = session:get_user_id(SessionId),
-    is_user_authorized_to_get(UserId, SessionId, AuthHint, GRI, CachedDoc);
-
-is_authorized_to_get(TokenAuth, AuthHint, GRI, CachedDoc) ->
-    case auth_manager:is_token_auth(TokenAuth) of
-        true ->
-            case auth_manager:verify(TokenAuth) of
-                {ok, ?USER(UserId), _} ->
-                    is_user_authorized_to_get(UserId, TokenAuth, AuthHint, GRI, CachedDoc);
-                {error, _} = Error ->
-                    throw(Error)
-            end;
-        false ->
-            unknown
-    end.
+is_guest_authorized_to_get(_, #gri{type = od_user, scope = private}, _) ->
+    false.
 
 
+%% @private
 -spec is_user_authorized_to_get(od_user:id(), client(), gs_protocol:auth_hint(), gri:gri(), doc()) ->
     boolean() | unknown.
 is_user_authorized_to_get(UserId, _, _, #gri{type = od_user, id = UserId, scope = private}, _) ->
@@ -831,4 +860,3 @@ is_user_authorized_to_get(UserId, _, _, #gri{type = od_handle, scope = private},
 
 is_user_authorized_to_get(_, _, _, _, _) ->
     false.
-

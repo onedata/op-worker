@@ -38,8 +38,8 @@ all() ->
     ]).
 
 -define(ONEDATA_TOKEN, <<"ONEDATA_ACCESS_TOKEN">>).
--define(ADMIN_AUTH,
-    auth_manager:build_token_auth(
+-define(ADMIN_CREDENTIALS,
+    auth_manager:build_token_credentials(
         ?ONEDATA_TOKEN, undefined,
         undefined, rest, disallow_data_access_caveats
     )
@@ -122,15 +122,15 @@ get_idp_token_by_onedata_token(Config) ->
     end),
 
     ?assertMatch({ok, {?IDP_ACCESS_TOKEN1, _}},
-        acquire_token(Worker, ?ADMIN, ?ADMIN_AUTH, ?IDP)),
+        acquire_token(Worker, ?ADMIN, ?ADMIN_CREDENTIALS, ?IDP)),
     % 1st get should be served from onezone
-    ?assertFetchTokenCalls(Worker, [?ADMIN_AUTH, ?ADMIN, ?IDP], 1),
+    ?assertFetchTokenCalls(Worker, [?ADMIN_CREDENTIALS, ?ADMIN, ?IDP], 1),
 
     ?assertMatch({ok, {?IDP_ACCESS_TOKEN1, _}},
-        acquire_token(Worker, ?ADMIN, ?ADMIN_AUTH, ?IDP)),
+        acquire_token(Worker, ?ADMIN, ?ADMIN_CREDENTIALS, ?IDP)),
 
     % 2nd get should be served from cache
-    ?assertFetchTokenCalls(Worker, [?ADMIN_AUTH, ?ADMIN, ?IDP], 1).
+    ?assertFetchTokenCalls(Worker, [?ADMIN_CREDENTIALS, ?ADMIN, ?IDP], 1).
 
 
 token_should_be_acquired_from_onezone_due_to_too_short_ttl(Config) ->

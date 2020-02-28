@@ -28,7 +28,8 @@
 
 %% API
 -export([
-    create_access_token/1, create_access_token/2,
+    create_access_token/1, create_access_token/2, create_access_token/3,
+    create_identity_token/1,
     setup_session/3, teardown_session/2,
     setup_storage/1, setup_storage/2, teardown_storage/1,
     clean_test_users_and_spaces/1,
@@ -121,6 +122,7 @@
 ]).
 
 -define(TOKENS_SECRET, <<"secret">>).
+-define(TEMPORARY_TOKENS_GENERATION, 1).
 
 %%%===================================================================
 %%% API
@@ -230,14 +232,34 @@ create_access_token(UserId) ->
 
 -spec create_access_token(od_user:id(), [caveats:caveat()]) -> tokens:serialized().
 create_access_token(UserId, Caveats) ->
+    create_access_token(UserId, Caveats, temporary).
+
+
+-spec create_access_token(od_user:id(), [caveats:caveat()], Persistence :: named | temporary) ->
+    tokens:serialized().
+create_access_token(UserId, Caveats, Persistence) ->
+    create_token(?ACCESS_TOKEN, UserId, Caveats, Persistence).
+
+
+-spec create_identity_token(od_user:id()) -> tokens:serialized().
+create_identity_token(UserId) ->
+    create_token(?IDENTITY_TOKEN, UserId, [], temporary).
+
+
+-spec create_token(tokens:type(), od_user:id(), [caveats:caveat()], Persistence :: named | temporary) ->
+    tokens:serialized().
+create_token(TokenType, UserId, Caveats, Persistence) ->
     {ok, SerializedToken} = ?assertMatch(
         {ok, _},
         tokens:serialize(tokens:construct(#token{
             onezone_domain = <<"zone">>,
             subject = ?SUB(user, UserId),
             id = UserId,
-            type = ?ACCESS_TOKEN,
-            persistence = {temporary, 1}
+            type = TokenType,
+            persistence = case Persistence of
+                named -> named;
+                temporary -> {temporary, ?TEMPORARY_TOKENS_GENERATION}
+            end
         }, ?TOKENS_SECRET, Caveats))
     ),
     SerializedToken.
@@ -266,7 +288,7 @@ setup_session(Worker, [{_, #user_config{
     Nonce = Name(atom_to_list(?GET_DOMAIN(Worker)) ++ "_nonce", UserId),
 
     Identity = ?SUB(user, UserId),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         local_ip_v4(), oneclient, allow_data_access_caveats
     ),
@@ -274,7 +296,7 @@ setup_session(Worker, [{_, #user_config{
         Worker,
         session_manager,
         reuse_or_create_fuse_session,
-        [Nonce, Identity, TokenAuth])
+        [Nonce, Identity, TokenCredentials])
     ),
 
     lists:foreach(fun({SpaceId, SpaceName}) ->
@@ -292,7 +314,7 @@ setup_session(Worker, [{_, #user_config{
         {{user_id, UserId}, UserId},
         {{user_name, UserId}, UserName},
         {{access_token, UserId}, AccessToken},
-        {{token_auth, UserId}, TokenAuth},
+        {{token_credentials, UserId}, TokenCredentials},
         {{session_nonce, {UserId, ?GET_DOMAIN(Worker)}}, Nonce},
         {{session_id, {UserId, ?GET_DOMAIN(Worker)}}, SessId},
         {{fslogic_ctx, UserId}, Ctx}
@@ -308,9 +330,9 @@ setup_session(Worker, [{_, #user_config{
 teardown_session(Worker, Config) ->
     lists:foldl(fun
         ({{session_id, _}, SessId}, Acc) ->
-            case rpc:call(Worker, session, get_auth, [SessId]) of
-                {ok, Auth} ->
-                    rpc:call(Worker, auth_manager, invalidate, [Auth]),
+            case rpc:call(Worker, session, get_credentials, [SessId]) of
+                {ok, Credentials} ->
+                    rpc:call(Worker, auth_cache, delete_cache_entry, [Credentials]),
                     ?assertEqual(ok, rpc:call(Worker, session_manager, remove_session, [SessId]));
                 {error, not_found} ->
                     ok
@@ -468,16 +490,24 @@ unmock_test_file_context(Config) ->
 mock_auth_manager(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, auth_manager, [passthrough]),
-    test_utils:mock_expect(Workers, auth_manager, verify,
-        fun(TokenAuth) ->
-            case tokens:deserialize(auth_manager:get_access_token(TokenAuth)) of
+    test_utils:mock_expect(Workers, auth_manager, verify_credentials,
+        fun(TokenCredentials) ->
+            case tokens:deserialize(auth_manager:get_access_token(TokenCredentials)) of
                 {ok, Token} ->
+                    Consumer = case auth_manager:get_consumer_token(TokenCredentials) of
+                        undefined ->
+                            undefined;
+                        ConsumerToken ->
+                            {ok, #token{subject = Csm}} = tokens:deserialize(ConsumerToken),
+                            Csm
+                    end,
                     AuthCtx = #auth_ctx{
                         current_timestamp = time_utils:cluster_time_seconds(),
-                        ip = auth_manager:get_peer_ip(TokenAuth),
-                        interface = auth_manager:get_interface(TokenAuth),
+                        ip = auth_manager:get_peer_ip(TokenCredentials),
+                        interface = auth_manager:get_interface(TokenCredentials),
                         service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
-                        data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenAuth),
+                        consumer = Consumer,
+                        data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenCredentials),
                         group_membership_checker = fun(_, _) -> false end
                     },
                     case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx) of
@@ -491,8 +521,8 @@ mock_auth_manager(Config) ->
             end
         end
     ),
-    test_utils:mock_expect(Workers, auth_manager, get_caveats, fun(TokenAuth) ->
-        AccessToken = auth_manager:get_access_token(TokenAuth),
+    test_utils:mock_expect(Workers, auth_manager, get_caveats, fun(TokenCredentials) ->
+        AccessToken = auth_manager:get_access_token(TokenCredentials),
         case tokens:deserialize(AccessToken) of
             {ok, Token} ->
                 {ok, tokens:get_caveats(Token)};
@@ -779,7 +809,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     provider_logic_mock_setup(Config, AllWorkers, DomainMappings, SpacesSetup, SpacesSupports, CustomStorages, StoragesSetupMap),
 
     lists:foreach(fun(DomainWorker) ->
-        rpc:call(DomainWorker, fslogic_worker, init_cannonical_paths_cache, [all])
+        rpc:call(DomainWorker, fslogic_worker, init_paths_caches, [all])
     end, get_different_domain_workers(Config)),
 
     cluster_logic_mock_setup(AllWorkers),
@@ -923,8 +953,8 @@ user_logic_mock_setup(Workers, Users) ->
                 _ ->
                     {error, forbidden}
             end;
-        (_, TokenAuth, UserId) ->
-            AccessToken = auth_manager:get_access_token(TokenAuth),
+        (_, TokenCredentials, UserId) ->
+            AccessToken = auth_manager:get_access_token(TokenCredentials),
             case proplists:get_value(AccessToken, UsersByToken, undefined) of
                 undefined ->
                     {error, not_found};
@@ -940,15 +970,21 @@ user_logic_mock_setup(Workers, Users) ->
             end
     end,
 
-    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(UserToken, _, _, _) ->
+    test_utils:mock_expect(Workers, token_logic, verify_access_token, fun(UserToken, _, _, _, _) ->
         case proplists:get_value(UserToken, UsersByToken, undefined) of
             undefined -> {error, not_found};
             UserId -> {ok, ?SUB(user, UserId), undefined}
         end
     end),
+    test_utils:mock_expect(Workers, token_logic, is_token_revoked, fun(_TokenId) ->
+        {ok, false}
+    end),
+    test_utils:mock_expect(Workers, token_logic, get_temporary_tokens_generation, fun(_UserId) ->
+        {ok, ?TEMPORARY_TOKENS_GENERATION}
+    end),
 
-    test_utils:mock_expect(Workers, auth_manager, get_caveats, fun(TokenAuth) ->
-        AccessToken = auth_manager:get_access_token(TokenAuth),
+    test_utils:mock_expect(Workers, auth_manager, get_caveats, fun(TokenCredentials) ->
+        AccessToken = auth_manager:get_access_token(TokenCredentials),
         case tokens:deserialize(AccessToken) of
             {ok, Token} ->
                 {ok, tokens:get_caveats(Token)};

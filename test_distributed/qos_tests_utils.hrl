@@ -10,6 +10,7 @@
 %%%-------------------------------------------------------------------
 -author("Michal Cwiertnia").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
 
 
@@ -22,6 +23,10 @@
 -define(P2, <<"p2">>).
 -define(P3, <<"p3">>).
 
+
+-define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
+
+-define(TEST_DATA, <<"test_data">>).
 
 -type qos_name() :: binary().
 
