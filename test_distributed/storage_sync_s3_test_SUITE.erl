@@ -75,7 +75,7 @@
     cancel_scan,
     create_file_import_race_test,
     close_file_import_race_test,
-%%
+
     % tests of update
     update_syncs_files_after_import_failed_test,
     update_syncs_files_after_previous_update_failed_test,

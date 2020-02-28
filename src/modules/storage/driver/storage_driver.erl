@@ -20,7 +20,7 @@
 -include_lib("ctool/include/posix/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--export([new_handle/2, new_handle/3, new_handle/6, set_size/1, increase_size/2, get_storage_file_id/1]).
+-export([new_handle/2, new_handle/3, new_handle/5, new_handle/6, set_size/1, increase_size/2, get_storage_file_id/1]).
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
     get_child_handle/2, listobjects/4]).
 -export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
@@ -69,6 +69,10 @@ new_handle(SessionId, FileCtx, Generate) ->
             ShareId = file_ctx:get_share_id_const(FileCtx3),
             {new_handle(SessionId, SpaceId, FileUuid, StorageId, FileId, ShareId), FileCtx3}
     end.
+
+-spec new_handle(session:id(), od_space:id(), file_meta:uuid() | undefined, storage:id(), helpers:file_id()) -> handle().
+new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId) ->
+    new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc

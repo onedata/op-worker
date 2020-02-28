@@ -409,7 +409,7 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId, UpdateS
         {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, ChunkSize),
         maybe_increase_to_process_counter(SpaceId, StorageId, length(ChildrenCtxs), UpdateSyncCounters),
         lists:foreach(fun(ChildCtx) ->
-            maybe_delete_file_and_update_counters(ChildCtx, SpaceId, StorageId, UpdateSyncCounters)
+            delete_file_and_update_counters(ChildCtx, SpaceId, StorageId, UpdateSyncCounters)
         end, ChildrenCtxs),
         case length(ChildrenCtxs) < ChunkSize of
             true ->

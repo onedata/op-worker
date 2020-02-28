@@ -57,11 +57,6 @@ change_replicated_internal(SpaceId, #document{
     ?debug("change_replicated_internal: deleted file_meta ~p", [FileUuid]),
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     fslogic_delete:handle_remotely_deleted_file(FileCtx),
-    % TODO-JK move to fslogic_delete:remove_aux_docs
-    file_popularity:delete(FileUuid),
-    % TODO-JK chyba tu nie musi byc?
-    ok = file_qos:delete(FileUuid),
-    ok = file_meta_posthooks:delete(FileUuid),
     ok;
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,

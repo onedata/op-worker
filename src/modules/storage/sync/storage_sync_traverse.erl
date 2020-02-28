@@ -601,7 +601,7 @@ do_slave_job_on_directory(#storage_traverse_master{
     {ok, {?PROCESSED, FileCtx, StorageFileCtx}}.
 
 -spec process_storage_file(storage_file_ctx:ctx(), info()) ->
-    {ok, storage_sync_engine:result()} | {error, term()}.
+    {ok, {storage_sync_engine:result(), file_ctx:ctx(), storage_file_ctx:ctx()}} | {error, term()}.
 process_storage_file(StorageFileCtx, Info) ->
     % processed file can be a regular file or a directory
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),

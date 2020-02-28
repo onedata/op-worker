@@ -31,9 +31,9 @@
 
 get_storage_record(Worker, StorageId) ->
     rpc:call(Worker, storage, get, [StorageId]).
+
 new_handle(Worker, SpaceId, StorageFileId, StorageId) when is_binary(StorageId) ->
-    rpc:call(Worker, storage_driver, new_handle,
-        [?ROOT_SESS_ID, SpaceId, undefined, StorageId, StorageFileId, undefined]);
+    rpc:call(Worker, storage_driver, new_handle, [?ROOT_SESS_ID, SpaceId, undefined, StorageId, StorageFileId]);
 new_handle(Worker, SpaceId, StorageFileId, Storage) ->
     StorageId = storage:get_id(Storage),
     new_handle(Worker, SpaceId, StorageFileId, StorageId).

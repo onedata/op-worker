@@ -73,23 +73,17 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
 rename_storage_file(SessId, SpaceId, StorageId, FileUuid, SourceFileId, TargetFileId) ->
     %create target dir
     TargetDir = filename:dirname(TargetFileId),
-    TargetDirHandle = storage_driver:new_handle(?ROOT_SESS_ID,
-        SpaceId, undefined, StorageId, TargetDir, undefined),
-    case storage_driver:mkdir(TargetDirHandle,
-        ?AUTO_CREATED_PARENT_DIR_MODE, true)
-    of
-        ok ->
-            ok;
-        {error, ?EEXIST} ->
-            ok
+    TargetDirHandle = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId, TargetDir),
+    case storage_driver:mkdir(TargetDirHandle, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+        ok -> ok;
+        {error, ?EEXIST} -> ok
     end,
 
     case SourceFileId =/= TargetFileId of
         true ->
-            SourceHandle = storage_driver:new_handle(SessId, SpaceId,
-                FileUuid, StorageId, SourceFileId, undefined),
+            SourceHandle = storage_driver:new_handle(SessId, SpaceId, FileUuid, StorageId, SourceFileId),
             storage_driver:mv(SourceHandle, TargetFileId);
-            % TODO VFS-5290 - solution resutls in problems with sed
+            % TODO VFS-5290 - solution results in problems with sed
 %%            TargetHandle = storage_driver:new_handle(SessId, SpaceId,
 %%                FileUuid, Storage, TargetFileId, undefined),
 %%

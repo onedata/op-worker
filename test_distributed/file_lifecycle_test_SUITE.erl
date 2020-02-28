@@ -164,7 +164,7 @@ make_open_race_test(Config, Mock) ->
             ?assertEqual(get_file_id(W, Open1), get_file_id(W, Open2)),
             check_dir(W, 1);
         file_meta ->
-            ?assertMatch({error,enoent}, OpenAns),
+            ?assertMatch({error, ?ENOENT}, OpenAns),
             check_dir(W, 0)
     end,
 

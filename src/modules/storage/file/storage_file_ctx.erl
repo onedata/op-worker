@@ -137,8 +137,7 @@ get_handle_const(#storage_file_ctx{
     space_id = SpaceId,
     storage_id = StorageId
 }) ->
-    storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId,
-        StorageFileId, undefined).
+    storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId, StorageFileId).
 
 
 

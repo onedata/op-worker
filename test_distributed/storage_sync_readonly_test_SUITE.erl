@@ -29,6 +29,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+% TODO VFS-6161 divide to smaller test suites
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1,
@@ -45,7 +46,6 @@
     create_directory_import_many_test/1,
     create_empty_file_import_test/1,
     create_file_import_test/1,
-    import_file_with_link_but_no_doc_test/1,
     create_file_import_check_user_id_test/1,
     create_file_import_check_user_id_error_test/1,
     create_file_in_dir_import_test/1,
@@ -54,7 +54,6 @@
     create_remote_file_import_conflict_test/1,
     create_remote_dir_import_race_test/1,
     create_remote_file_import_race_test/1,
-    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed/1,
     cancel_scan/1,
     import_nfs_acl_test/1,
     import_nfs_acl_with_disabled_luma_should_fail_test/1,
@@ -83,6 +82,9 @@
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test/1,
     chmod_file_update_test/1,
     chmod_file_update2_test/1,
+    change_file_type_test/1,
+    change_file_type2_test/1,
+    change_file_type3_test/1,
     update_timestamps_file_import_test/1,
     should_not_detect_timestamp_update_test/1,
     update_nfs_acl_test/1,
@@ -101,7 +103,6 @@
     create_directory_import_many_test,
     create_empty_file_import_test,
     create_file_import_test,
-    import_file_with_link_but_no_doc_test,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
     create_file_in_dir_import_test,
@@ -110,7 +111,6 @@
     create_remote_file_import_conflict_test,
     create_remote_dir_import_race_test,
     create_remote_file_import_race_test,
-    sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed,
     cancel_scan,
     import_nfs_acl_test,
     import_nfs_acl_with_disabled_luma_should_fail_test,
@@ -139,6 +139,9 @@
     change_file_content_the_same_moment_when_sync_performs_stat_on_file_test,
     chmod_file_update_test,
     chmod_file_update2_test,
+    change_file_type_test,
+    change_file_type2_test,
+    change_file_type3_test,
     update_timestamps_file_import_test,
     should_not_detect_timestamp_update_test,
     update_nfs_acl_test,
@@ -162,6 +165,58 @@ create_directory_import_test(Config) ->
 create_directory_import_error_test(Config) ->
     storage_sync_test_base:create_directory_import_error_test(Config, true).
 
+create_directory_import_check_user_id_test(Config) ->
+    storage_sync_test_base:create_directory_import_check_user_id_test(Config, true).
+
+create_directory_import_check_user_id_error_test(Config) ->
+    storage_sync_test_base:create_directory_import_check_user_id_error_test(Config, true).
+
+create_directory_import_without_read_permission_test(Config) ->
+    storage_sync_test_base:create_directory_import_without_read_permission_test(Config, true).
+
+create_directory_import_many_test(Config) ->
+    storage_sync_test_base:create_directory_import_many_test(Config, true).
+
+create_file_import_test(Config) ->
+    storage_sync_test_base:create_file_import_test(Config, true).
+
+create_empty_file_import_test(Config) ->
+    storage_sync_test_base:create_empty_file_import_test(Config, true).
+
+create_file_import_check_user_id_test(Config) ->
+    storage_sync_test_base:create_file_import_check_user_id_test(Config, true).
+
+create_file_import_check_user_id_error_test(Config) ->
+    storage_sync_test_base:create_file_import_check_user_id_error_test(Config, true).
+
+create_file_in_dir_import_test(Config) ->
+    storage_sync_test_base:create_file_in_dir_import_test(Config, true).
+
+create_subfiles_import_many_test(Config) ->
+    storage_sync_test_base:create_subfiles_import_many_test(Config, true).
+
+create_subfiles_import_many2_test(Config) ->
+    storage_sync_test_base:create_subfiles_import_many2_test(Config, true).
+
+create_remote_file_import_conflict_test(Config) ->
+    storage_sync_test_base:create_remote_file_import_conflict_test(Config, true).
+
+create_remote_dir_import_race_test(Config) ->
+    storage_sync_test_base:create_remote_dir_import_race_test(Config, true).
+
+create_remote_file_import_race_test(Config) ->
+    storage_sync_test_base:create_remote_file_import_race_test(Config, true).
+
+cancel_scan(Config) ->
+    storage_sync_test_base:cancel_scan(Config, true).
+
+import_nfs_acl_test(Config) ->
+    storage_sync_test_base:import_nfs_acl_test(Config, true).
+
+import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
+    storage_sync_test_base:import_nfs_acl_with_disabled_luma_should_fail_test(Config, true).
+
+
 update_syncs_files_after_import_failed_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
 
@@ -182,9 +237,9 @@ update_syncs_files_after_import_failed_test(Config) ->
 
     %% Check if dir was not imported
     ?assertNotMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})),
     ?assertNotMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH})),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1})),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -233,9 +288,9 @@ update_syncs_files_after_import_failed_test(Config) ->
     }, ?SPACE_ID),
 
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS).
 
 update_syncs_files_after_previous_update_failed_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -302,9 +357,9 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
 
     %% Check if dir was not imported
     ?assertNotMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH})),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})),
     ?assertNotMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH})),
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1})),
 
     %next scan should import file
     ?assertMonitoring(W1, #{
@@ -330,9 +385,9 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     }, ?SPACE_ID, ?ATTEMPTS),
 
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH}), ?ATTEMPTS).
+        lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS).
 
 sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
     MountSpaceInRoot = true,
@@ -395,54 +450,6 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
-
-sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed(Config) ->
-    storage_sync_test_base:sync_should_not_reimport_file_when_link_is_missing_but_file_on_storage_has_not_changed(Config, true).
-
-create_directory_import_check_user_id_test(Config) ->
-    storage_sync_test_base:create_directory_import_check_user_id_test(Config, true).
-
-create_directory_import_check_user_id_error_test(Config) ->
-    storage_sync_test_base:create_directory_import_check_user_id_error_test(Config, true).
-
-create_directory_import_without_read_permission_test(Config) ->
-    storage_sync_test_base:create_directory_import_without_read_permission_test(Config, true).
-
-create_directory_import_many_test(Config) ->
-    storage_sync_test_base:create_directory_import_many_test(Config, true).
-
-create_file_import_test(Config) ->
-    storage_sync_test_base:create_file_import_test(Config, true).
-
-create_empty_file_import_test(Config) ->
-    storage_sync_test_base:create_empty_file_import_test(Config, true).
-
-create_file_import_check_user_id_test(Config) ->
-    storage_sync_test_base:create_file_import_check_user_id_test(Config, true).
-
-create_file_import_check_user_id_error_test(Config) ->
-    storage_sync_test_base:create_file_import_check_user_id_error_test(Config, true).
-
-create_file_in_dir_import_test(Config) ->
-    storage_sync_test_base:create_file_in_dir_import_test(Config, true).
-
-create_subfiles_import_many_test(Config) ->
-    storage_sync_test_base:create_subfiles_import_many_test(Config, true).
-
-create_subfiles_import_many2_test(Config) ->
-    storage_sync_test_base:create_subfiles_import_many2_test(Config, true).
-
-create_remote_file_import_conflict_test(Config) ->
-    storage_sync_test_base:create_remote_file_import_conflict_test(Config, true).
-
-create_remote_dir_import_race_test(Config) ->
-    storage_sync_test_base:create_remote_dir_import_race_test(Config, true).
-
-create_remote_file_import_race_test(Config) ->
-    storage_sync_test_base:create_remote_file_import_race_test(Config, true).
-
-cancel_scan(Config) ->
-    storage_sync_test_base:cancel_scan(Config, true).
 
 create_subfiles_and_delete_before_import_is_finished_test(Config) ->
     storage_sync_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config, true).
@@ -988,7 +995,6 @@ append_file_not_changing_mtime_update_test(Config) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
 
-
 append_empty_file_update_test(Config) ->
     MountSpaceInRoot = true,
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -1148,6 +1154,15 @@ truncate_file_update_test(Config) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
 
+change_file_content_constant_size_test(Config) ->
+    storage_sync_test_base:change_file_content_constant_size_test(Config, true).
+
+change_file_content_update_test(Config) ->
+    storage_sync_test_base:change_file_content_update_test(Config, true).
+
+change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config) ->
+    storage_sync_test_base:change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config, true).
+
 chmod_file_update_test(Config) ->
     MountSpaceInRoot = true,
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -1240,15 +1255,6 @@ chmod_file_update_test(Config) ->
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
-
-change_file_content_constant_size_test(Config) ->
-    storage_sync_test_base:change_file_content_constant_size_test(Config, true).
-
-change_file_content_update_test(Config) ->
-    storage_sync_test_base:change_file_content_update_test(Config, true).
-
-change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config) ->
-    storage_sync_test_base:change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config, true).
 
 chmod_file_update2_test(Config) ->
     % in this test storage_sync_dir_batch_size is set in init_per_testcase to 2
@@ -1357,6 +1363,15 @@ chmod_file_update2_test(Config) ->
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
+
+change_file_type_test(Config) ->
+    storage_sync_test_base:change_file_type_test(Config, true).
+
+change_file_type2_test(Config) ->
+    storage_sync_test_base:change_file_type2_test(Config, true).
+
+change_file_type3_test(Config) ->
+    storage_sync_test_base:change_file_type3_test(Config, true).
 
 update_timestamps_file_import_test(Config) ->
     MountSpaceInRoot = true,
@@ -1515,9 +1530,6 @@ should_not_detect_timestamp_update_test(Config) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID).
 
-import_nfs_acl_test(Config) ->
-    storage_sync_test_base:import_nfs_acl_test(Config, true).
-
 update_nfs_acl_test(Config) ->
     MountSpaceInRoot = true,
     Workers = [W1, _] = ?config(op_worker_nodes, Config),
@@ -1627,9 +1639,6 @@ sync_should_not_delete_dir_created_in_remote_provider(Config) ->
 
 sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config) ->
     storage_sync_test_base:sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config, true).
-
-import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
-    storage_sync_test_base:import_nfs_acl_with_disabled_luma_should_fail_test(Config, true).
 
 %===================================================================
 % SetUp and TearDown functions

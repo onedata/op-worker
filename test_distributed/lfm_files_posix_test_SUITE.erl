@@ -14,7 +14,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% export for ct
 -export([
@@ -181,12 +181,12 @@ rename_removed_opened_file_test(Config) ->
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other -> Other
     end,
     {ok, InitialDeletedDir} = case rpc:call(Worker, file, list_dir,
         [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other2 -> Other2
     end,
 
@@ -231,12 +231,12 @@ mkdir_removed_opened_file_test(Config) ->
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other -> Other
     end,
     {ok, InitialDeletedDir} = case rpc:call(Worker, file, list_dir,
         [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other2 -> Other2
     end,
 
@@ -293,18 +293,18 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
 
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(Worker)}, Config),
     {ok, InitialSpaceFiles} = case rpc:call(Worker, file, list_dir, [filename:join([StorageDir, SpaceID])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other -> Other
     end,
     {ok, InitialDeletedDir} = case rpc:call(Worker, file, list_dir,
         [filename:join([StorageDir, ?DELETED_OPENED_FILES_DIR])]) of
-        {error,enoent} -> {ok, []};
+        {error, ?ENOENT} -> {ok, []};
         Other2 -> Other2
     end,
 
     case MockOpts of
         before_mv ->
-            test_utils:mock_expect(Workers, storage_file_manager, mv,
+            test_utils:mock_expect(Workers, storage_driver, mv,
                 fun(Handle, TargetFileId) ->
                     case get(mv_test) of
                         undefined ->
@@ -319,7 +319,7 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
                     meck:passthrough([Handle, TargetFileId])
                 end);
         after_mv ->
-            test_utils:mock_expect(Workers, storage_file_manager, mv,
+            test_utils:mock_expect(Workers, storage_driver, mv,
                 fun(Handle, TargetFileId) ->
                     case meck:passthrough([Handle, TargetFileId]) of
                         ok ->
@@ -564,7 +564,7 @@ init_per_testcase(Case, Config) when
     Case =:= rename_removed_opened_file_races_test orelse
         Case =:= rename_removed_opened_file_races_test2 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, storage_file_manager, [passthrough]),
+    test_utils:mock_new(Workers, storage_driver, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(Case, Config) when
@@ -621,7 +621,7 @@ end_per_testcase(Case, Config) when
     Case =:= rename_removed_opened_file_races_test orelse
         Case =:= rename_removed_opened_file_races_test2 ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [storage_file_manager]),
+    test_utils:mock_unload(Workers, [storage_driver]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when

@@ -101,12 +101,13 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
     storage:id()) -> #fuse_response{}.
 create_storage_test_file(UserCtx, Guid, StorageId) ->
     % TODO VFS-6121 pass SpaceId instead of Guid here
-    SpaceId = case file_id:guid_to_space_id(Guid) of
-        undefined ->
+    SpaceId = try file_id:guid_to_space_id(Guid) of
+        <<_/binary>> = Id -> Id
+        catch
+            error:{invalid_guid, _Guid} ->
             % TODO VFS-6121 log not existing SpaceId here
             ?error("Detecting storage ~p failed due to not existing space.", [StorageId]),
-            throw(?ENOENT);
-        <<_/binary>> = Id -> Id
+            throw(?ENOENT)
     end,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
