@@ -18,7 +18,6 @@
 -include("global_definitions.hrl").
 -include("modules/storage/traverse/storage_traverse.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% storage_iterator callbacks
 -export([init/2, get_children_and_next_batch_job/1, is_dir/1]).

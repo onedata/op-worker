@@ -389,6 +389,7 @@ init_per_suite(Config) ->
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
         [W | _] = ?config(op_worker_nodes, NewConfig2),
+        mock_storage_sync_monitoring_update(W),
         rpc:call(W, storage_sync_worker, notify_connection_to_oz, []),
         NewConfig2
     end,
@@ -397,10 +398,12 @@ init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
 end_per_suite(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
     ok = worker_pool:stop_sup_pool(?POOL),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
     initializer:unmock_provider_ids(Config),
+    unmock_storage_sync_monitoring(W),
     ssl:stop().
 
 init_per_testcase(_Case, Config) ->
@@ -429,7 +432,7 @@ storage_file_id(Worker, FileGuid) ->
     StorageFileId.
 
 run_deletion(Worker, StorageFileCtx, FileCtx) ->
-    ok = rpc:call(Worker, storage_sync_traverse, run_deletion_scan, [StorageFileCtx, 0, #{max_depth => 1000000000000000000000}, FileCtx, false]).
+    ok = rpc:call(Worker, storage_sync_traverse, run_deletion_scan, [StorageFileCtx, 0, #{max_depth => 1000000000000000000000}, FileCtx]).
 
 clean_spaces(Worker) ->
     lfm_proxy:close_all(Worker),
@@ -522,3 +525,9 @@ delete_dir_on_storage(Worker, Guid) ->
     SDHandle = get_sd_handle(Worker, Guid),
     sd_test_utils:recursive_rm(Worker, SDHandle).
 
+mock_storage_sync_monitoring_update(Worker) ->
+    ok = test_utils:mock_new(Worker, storage_sync_monitoring),
+    ok = test_utils:mock_expect(Worker, storage_sync_monitoring, update, fun(_, _, _) -> {ok, undefined} end).
+
+unmock_storage_sync_monitoring(Worker) ->
+    ok = test_utils:mock_unload(Worker, storage_sync_monitoring).

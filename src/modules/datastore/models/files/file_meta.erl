@@ -42,7 +42,7 @@
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
-    get_locations_by_uuid/1, rename/4]).
+    get_locations_by_uuid/1, rename/4, get_type/1]).
 -export([check_name/3, has_suffix/1, is_deleted/1]).
 % For tests
 -export([get_all_links/2]).
@@ -685,6 +685,12 @@ get_scope_id(Entry) ->
         {ok, Doc} = file_meta:get(Entry),
         get_scope_id(Doc)
     end).
+
+-spec get_type(file_meta() | doc()) -> type().
+get_type(#file_meta{type = Type}) ->
+    Type;
+get_type(#document{value = FileMeta}) ->
+    get_type(FileMeta).
 
 %%--------------------------------------------------------------------
 %% @doc

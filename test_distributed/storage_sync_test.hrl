@@ -64,6 +64,7 @@
 -define(TEST_DATA_CHANGED, <<"test_modified_file">>).
 -define(TEST_DATA2, <<"test_data2">>).
 -define(TEST_DATA_SIZE2, byte_size(?TEST_DATA2)).
+-define(WRITE_TEXT, <<"overwrite_test_data">>).
 
 -define(TEST_UID, 1000).
 -define(TEST_GID, 1000).

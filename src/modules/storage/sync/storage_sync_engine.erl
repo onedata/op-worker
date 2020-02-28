@@ -44,6 +44,9 @@
 
 -export_type([result/0, file_attr_name/0]).
 
+-define(CREATE_MISSING_PARENT_CRITICAL_SECTION(ParentUUid, MissingParentName, Function),
+    critical_section:run({create_missing_parent, ParentUuid, MissingParentName}, Function)).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -73,22 +76,28 @@
 %%--------------------------------------------------------------------
 -spec process_file(storage_file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
-process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileId}) ->
+process_file(StorageFileCtx, Info) ->
+    case find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info) of
+        {ok, Info2} ->
+            process_file_internal(StorageFileCtx, Info2);
+        {error, ?ENOENT} ->
+            {?PROCESSED, undefined, StorageFileCtx}
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec process_file_internal(storage_file_ctx:ctx(), info()) -> {result(),
+    file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
+process_file_internal(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
-    Info2 =  #{parent_ctx := ParentCtx2} = case
-        storage_file_ctx:get_storage_file_id_const(StorageFileCtx) =:= SpaceStorageFileId
-    of
+    case file_ctx:is_root_dir_const(ParentCtx) of
         true ->
-            Info;
-        false ->
-            find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info#{parent_ctx => SpaceCtx})
-    end,
-    case file_ctx:is_root_dir_const(ParentCtx2) of
-        true ->
-            check_file_meta_and_maybe_sync(StorageFileCtx, SpaceCtx, Info2, true);
+            check_file_meta_and_maybe_sync(StorageFileCtx, SpaceCtx, Info, true);
         false ->
             % check whether FileName of processed file is in the form
             % FileName = <<FileBaseName, ?CONFLICTING_STORAGE_FILE_SUFFIX_SEPARATOR, FileUuid>>
@@ -99,12 +108,12 @@ process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileI
                 false -> {false, undefined, FileName}
             end,
 
-            case link_utils:try_to_resolve_child_link(FileBaseName, ParentCtx2) of
+            case link_utils:try_to_resolve_child_link(FileBaseName, ParentCtx) of
                 {error, not_found} ->
                     % Link from Parent to FileBaseName is missing.
                     % We must check deletion_link to ensure that file may be synced.
                     % Deletion links are removed if and only if file was successfully deleted from storage.
-                    case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx2) of
+                    case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                         {error, not_found} when HasSuffix =:= false ->
                             % We must ensure whether file is still on storage at the very moment
                             % to avoid stat/delete race.
@@ -112,7 +121,7 @@ process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileI
                             % deleted from the system and if links (and file) were deleted
                             % before we checked the links.
                             % maybe_import_file/2 will perform the check.
-                            maybe_import_file(StorageFileCtx, Info2);
+                            maybe_import_file(StorageFileCtx, Info);
                         % It's impossible that deletion link is not found and HasSuffix == true,
                         % which is proved below:
                         %
@@ -142,74 +151,124 @@ process_file(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileI
                     end;
                 {ok, ResolvedUuid} ->
                     FileUuid2 = utils:ensure_defined(FileUuid, undefined, ResolvedUuid),
-                    case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx2) of
+                    case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                         {error, not_found} ->
                             FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
                             FileCtx = file_ctx:new_by_guid(FileGuid),
-                            storage_sync_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info2);
+                            storage_sync_engine:check_location_and_maybe_sync(StorageFileCtx, FileCtx, Info);
                         {ok, _} ->
                             {?PROCESSED, undefined, StorageFileCtx}
                     end
             end
     end.
 
+-spec find_direct_parent_and_ensure_all_parents_exist(storage_file_ctx:ctx(), info()) -> {ok, info()} | {error, term()}.
+find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileId}) ->
+    case storage_file_ctx:get_storage_file_id_const(StorageFileCtx) =:= SpaceStorageFileId of
+        true ->
+            {ok, Info};
+        false ->
+            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+            SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+            ParentCtx = file_ctx:new_by_guid(SpaceGuid),
+            % ParentCtx may not be associated with direct parent of the file.
+            % This is caused by the fact that on object storages, file structure is flat
+            % and all files are "direct" children of the space directory.
+            {ParentStorageFileId, ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),
+            ParentStorageFileIdTokens = fslogic_path:split(ParentStorageFileId),
+            % Path to the direct parent of the child can be acquired from the file's path.
+            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+            DirectParentStorageFileId = filename:dirname(StorageFileId),
+            DirectParentStorageFileIdTokens = fslogic_path:split(DirectParentStorageFileId),
+            % compare tokens of both parents' paths
+            MissingParentTokens = DirectParentStorageFileIdTokens -- ParentStorageFileIdTokens,
+            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+            StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+            ParentStorageFileCtx = storage_file_ctx:new(ParentStorageFileId, SpaceId, StorageId),
+            Info2 = Info#{parent_ctx => ParentCtx2},
+            ensure_all_parents_exist_and_are_dirs(ParentStorageFileCtx, Info2, MissingParentTokens)
+    end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
--spec find_direct_parent_and_ensure_all_parents_exist(storage_file_ctx:ctx(), info()) ->
-    info().
-find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
-    % ParentCtx may not be associated with direct parent of the file.
-    % This is caused by the fact that on object storages, file structure is flat
-    % and all files are "direct" children of the space directory.
-    {ParentStorageFileId, ParentCtx2} = file_ctx:get_storage_file_id(ParentCtx),
-    ParentStorageFileIdTokens = fslogic_path:split(ParentStorageFileId),
-    % Path to the direct parent of the child can be acquired from the file's path.
-    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    DirectParentStorageFileId = filename:dirname(StorageFileId),
-    DirectParentStorageFileIdTokens = fslogic_path:split(DirectParentStorageFileId),
-    % compare tokens of both parents' paths
-    MissingParentTokens = DirectParentStorageFileIdTokens -- ParentStorageFileIdTokens,
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    ParentStorageFileCtx = storage_file_ctx:new(ParentStorageFileId, SpaceId, StorageId),
-    Info2 = Info#{parent_ctx => ParentCtx2},
-    Info3 = ensure_parents_exist(ParentStorageFileCtx, Info2, MissingParentTokens),
-    Info3.
-
--spec ensure_parents_exist(storage_file_ctx:ctx(), info(), [helpers:file_id()]) ->
-    info().
-ensure_parents_exist(_ParentStorageFileCtx, Info, []) ->
-    Info;
-ensure_parents_exist(ParentStorageFileCtx, Info = #{parent_ctx := ParentCtx}, [MissingParentName | Rest]) ->
+-spec ensure_all_parents_exist_and_are_dirs(storage_file_ctx:ctx(), info(), [helpers:file_id()]) -> {ok, info()} | {error, term()}.
+ensure_all_parents_exist_and_are_dirs(_ParentStorageFileCtx, Info, []) ->
+    {ok, Info};
+ensure_all_parents_exist_and_are_dirs(ParentStorageFileCtx, Info, [MissingParentName | Rest]) ->
     MissingParentStorageCtx = storage_file_ctx:get_child_ctx_const(ParentStorageFileCtx, MissingParentName),
+    case ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info) of
+        undefined ->
+            {error, ?ENOENT};
+        MissingParentCtx ->
+            ensure_all_parents_exist_and_are_dirs(MissingParentStorageCtx, Info#{parent_ctx => MissingParentCtx}, Rest)
+    end.
+
+-spec ensure_parent_exist_and_is_dir(file_meta:name(), storage_file_ctx:ctx(), info()) -> file_ctx:ctx() | undefined.
+ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info) ->
+    ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info, false).
+
+
+-spec ensure_parent_exist_and_is_dir(file_meta:name(), storage_file_ctx:ctx(), info(), InCriticalSection :: boolean()) ->
+    file_ctx:ctx() | undefined.
+ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info = #{parent_ctx := ParentCtx}, false) ->
     case get_child_safe(ParentCtx, MissingParentName) of
         {ok, MissingParentCtx} ->
-            ensure_parents_exist(MissingParentStorageCtx, Info#{parent_ctx => MissingParentCtx}, Rest);
+            % MissingParentName is child of ParentCtx
+            % we must ensure whether it is a directory
+            case file_ctx:is_dir(MissingParentCtx) of
+                {true, MissingParentCtx2} ->
+                    MissingParentCtx2;
+                {false, _} ->
+                    % MissingParent is not a directory, it means that regular file was deleted and directory with the
+                    % same name was created on storage. We muse delete stalled file.
+                    ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info, true)
+            end;
         {error, ?ENOENT} ->
-            ParentUuid = file_ctx:get_uuid_const(ParentCtx),
-            % TODO VFS-5881 get rid of this critical section
-            % this critical section is to avoid race on creating missing parent by call to import_file function
-            % in case of simultaneous creation of missing parent file_meta, one of syncing processes
-            % would get {error, already_exists} which is handled in import_file as a race between syncing process
-            % and creating a file via lfm. As a result there will be 2 parents created, one with suffix for
-            % conflicted files. Critical section is used to avoid this situation.
-            MissingParentCtx2 = critical_section:run({create_missing_parent, ParentUuid, MissingParentName},
-                fun() ->
-                    case get_child_safe(ParentCtx, MissingParentName) of
-                        {ok, MissingParentCtx} ->
-                            MissingParentCtx;
-                        {error, ?ENOENT} ->
-                            {?IMPORTED, MissingParentCtx, _StorageFileCtx} =
-                                maybe_import_file(MissingParentStorageCtx, Info),
-                            MissingParentCtx
+            ensure_missing_parent_exist(MissingParentName, MissingParentStorageCtx, Info)
+    end;
+ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info = #{parent_ctx := ParentCtx}, true) ->
+    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    ?CREATE_MISSING_PARENT_CRITICAL_SECTION(ParentUuid, MissingParentName, fun() ->
+        % check whether directory was not created by other process before entering critical section
+        case get_child_safe(ParentCtx, MissingParentName) of
+            {ok, MissingParentCtx2} ->
+                case file_ctx:is_dir(MissingParentCtx2) of
+                    {true, MissingParentCtx3} ->
+                        MissingParentCtx3;
+                    {false, _} ->
+                        case import_file_recreated_with_different_type(MissingParentStorageCtx, MissingParentCtx2, Info) of
+                            {?IMPORTED, MissingParentCtx4, _} ->
+                                MissingParentCtx4;
+                            {?PROCESSED, undefined, _} ->
+                                undefined
+                        end
+                end;
+            {error, ?ENOENT} ->
+                undefined
+        end
+    end).
+
+
+-spec ensure_missing_parent_exist(file_meta:name(), storage_file_ctx:ctx(), info()) -> file_ctx:ctx() | undefined.
+ensure_missing_parent_exist(MissingParentName, MissingParentStorageCtx, Info = #{parent_ctx := ParentCtx}) ->
+    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    % TODO VFS-5881 get rid of this critical section
+    % this critical section is to avoid race on creating missing parent by call to import_file function
+    % in case of simultaneous creation of missing parent file_meta, one of syncing processes
+    % would get {error, already_exists} which is handled in import_file as a race between syncing process
+    % and creating a file via lfm. As a result there will be 2 parents created, one with suffix for
+    % conflicted files. Critical section is used to avoid this situation.
+    ?CREATE_MISSING_PARENT_CRITICAL_SECTION(ParentUuid, MissingParentName,
+        fun() ->
+            case get_child_safe(ParentCtx, MissingParentName) of
+                {ok, MissingParentCtx} -> MissingParentCtx;
+                {error, ?ENOENT} ->
+                    case maybe_import_file(MissingParentStorageCtx, Info) of
+                        {?IMPORTED, MissingParentCtx, _StorageFileCtx} -> MissingParentCtx;
+                        {?PROCESSED, undefined, _} -> undefined;
+                        {error, ?ENOENT} -> undefined
                     end
-                end
-            ),
-            ensure_parents_exist(MissingParentStorageCtx, Info#{parent_ctx => MissingParentCtx2}, Rest)
-    end.
+            end
+        end
+    ).
 
 -spec get_child_safe(file_ctx:ctx(), file_meta:name()) -> {ok, file_ctx:ctx()} | {error, term()}.
 get_child_safe(FileCtx, ChildName) ->
@@ -353,19 +412,23 @@ check_file_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsD
 -spec check_file_meta_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), info(), boolean()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated) ->
-    case get_attr_including_deleted(FileCtx) of
-        {ok, _FileAttr, true} ->
-            {?PROCESSED, undefined, StorageFileCtx};
-        {ok, FileAttr, false} ->
-            check_file_type_and_maybe_sync(StorageFileCtx, FileAttr, FileCtx, Info, StorageFileCreated);
-        {error, ?ENOENT} ->
-            maybe_import_file(StorageFileCtx, Info)
+    try
+        case get_attr_including_deleted(FileCtx) of
+            {ok, _FileAttr, true} ->
+                {?PROCESSED, undefined, StorageFileCtx};
+            {ok, FileAttr, false} ->
+                check_file_type_and_maybe_sync(StorageFileCtx, FileAttr, FileCtx, Info, StorageFileCreated);
+            {error, ?ENOENT} ->
+                maybe_import_file(StorageFileCtx, Info)
+        end
+    catch
+        throw:?ENOENT ->
+            {error, ?ENOENT}
     end.
 
 -spec check_file_type_and_maybe_sync(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info(),
     boolean()) -> {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
-check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = FileMetaType}, FileCtx, Info, StorageFileCreated
-) ->
+check_file_type_and_maybe_sync(StorageFileCtx, FileAttr = #file_attr{type = FileMetaType}, FileCtx, Info, StorageFileCreated) ->
     {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     StorageFileType = file_meta:type(StMode),
     case {StorageFileType, FileMetaType, StorageFileCreated} of
@@ -389,7 +452,7 @@ import_file_recreated_with_different_type(StorageFileCtx, FileCtx, Info) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
-    storage_sync_deletion:delete_file_and_update_counters(FileCtx, SpaceId, StorageId, true),
+    storage_sync_deletion:delete_file_and_update_counters(FileCtx, SpaceId, StorageId),
     maybe_import_file(StorageFileCtx, Info).
 
 %%-------------------------------------------------------------------
@@ -418,20 +481,28 @@ import_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     try
         storage_sync_engine:import_file_unsafe(StorageFileCtx, Info)
     catch
+        throw:?ENOENT ->
+            cleanup_file(ParentCtx, StorageFileCtx),
+            {error, ?ENOENT};
         Error:Reason ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
             ?error_stacktrace("importing file ~p on storage ~p in space ~p failed due to ~w:~w",
                 [FileName, StorageId, SpaceId, Error, Reason]),
-            UserCtx = user_ctx:new(?ROOT_SESS_ID),
-            try
-                {FileCtx, _} = file_ctx:get_child(ParentCtx, FileName, UserCtx),
-                fslogic_delete:handle_file_deleted_on_synced_storage(FileCtx)
-            catch
-                throw:?ENOENT -> ok
-            end,
+            cleanup_file(ParentCtx, StorageFileCtx),
             {error, Reason}
+    end.
+
+-spec cleanup_file(file_ctx:ctx(), storage_file_ctx:ctx()) -> ok.
+cleanup_file(ParentCtx, StorageFileCtx) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+    try
+        {FileCtx, _} = file_ctx:get_child(ParentCtx, FileName, UserCtx),
+        fslogic_delete:handle_file_deleted_on_synced_storage(FileCtx)
+    catch
+        throw:?ENOENT -> ok
     end.
 
 -spec import_file_unsafe(storage_file_ctx:ctx(), info()) ->
@@ -592,7 +663,7 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
                     when Reason =:= ?ENOTSUP
                     orelse Reason =:= ?ENOENT
                     orelse Reason =:= ?ENODATA
-                    ->
+                ->
                     ok
             end
     end.
@@ -610,6 +681,8 @@ maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
         maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info)
     catch
         error:{badmatch, {error, not_found}} ->
+            {?PROCESSED, FileCtx, StorageFileCtx};
+        throw:?ENOENT ->
             {?PROCESSED, FileCtx, StorageFileCtx};
         Error:Reason ->
             FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
@@ -639,7 +712,7 @@ maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
     end,
 
     {StorageFileCtx2, FileCtx2, UpdatedAttrs} = lists:foldl(UpdateAttrsFoldFun, {StorageFileCtx, FileCtx, []}, [
-       fun check_type_and_maybe_update_file_location/4,
+       fun maybe_update_file_location/4,
        fun maybe_update_mode/4,
        fun maybe_update_times/4,
        fun maybe_update_owner/4,
@@ -659,10 +732,9 @@ maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
             {?UPDATED, FileCtx3, StorageFileCtx2}
     end.
 
--spec check_type_and_maybe_update_file_location(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(),
-    info()) ->
+-spec maybe_update_file_location(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-check_type_and_maybe_update_file_location(StorageFileCtx, _FileAttr, FileCtx, _Info) ->
+maybe_update_file_location(StorageFileCtx, _FileAttr, FileCtx, _Info) ->
     {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     case file_meta:type(StMode) of
         ?DIRECTORY_TYPE ->

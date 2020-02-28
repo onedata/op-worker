@@ -65,12 +65,14 @@
     create_subfiles_and_delete_before_import_is_finished_test/1,
     create_file_in_dir_update_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
+
     delete_empty_directory_update_test/1,
     delete_non_empty_directory_update_test/1,
     sync_works_properly_after_delete_test/1,
     delete_and_update_files_simultaneously_update_test/1,
     delete_file_update_test/1,
     delete_many_subfiles_test/1,
+
     append_file_update_test/1,
     append_file_not_changing_mtime_update_test/1,
     append_empty_file_update_test/1,
@@ -219,7 +221,6 @@ import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
 
 update_syncs_files_after_import_failed_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = storage_sync_test_base:storage_path(?SPACE_ID, ?TEST_FILE1, true),
@@ -332,6 +333,7 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     storage_sync_test_base:mock_import_file_error(W1, ?TEST_FILE1),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:disable_update(Config),
     storage_sync_test_base:unmock_import_file_error(W1),
 
     ?assertMonitoring(W1, #{
@@ -360,6 +362,10 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})),
     ?assertNotMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1})),
+
+    storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, 3, ?ATTEMPTS),
+    storage_sync_test_base:disable_update(Config),
 
     %next scan should import file
     ?assertMonitoring(W1, #{
@@ -866,6 +872,7 @@ append_file_update_test(Config) ->
     sd_test_utils:write_file(W1, SDHandle, ?TEST_DATA_SIZE, ?TEST_DATA2),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:disable_update(Config),
 
     %% Check if appended bytes were imported on worker1
     {ok, Handle2} = ?assertMatch({ok, _},
@@ -958,6 +965,7 @@ append_file_not_changing_mtime_update_test(Config) ->
 
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:disable_update(Config),
 
     %% Check if appended bytes were imported on worker1
     {ok, Handle3} = ?assertMatch({ok, _},
@@ -1041,6 +1049,7 @@ append_empty_file_update_test(Config) ->
     {ok, _} = sd_test_utils:write_file(W1, SDHandle, 0, ?TEST_DATA2),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:disable_update(Config),
 
     %% Check if appended bytes were imported on worker1
     {ok, Handle2} = ?assertMatch({ok, _},
@@ -1128,6 +1137,8 @@ truncate_file_update_test(Config) ->
     sd_test_utils:truncate(W1, SDHandle2, 1, ?TEST_DATA_SIZE),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:disable_update(Config),
+
     %% Check if file was truncated
     ?assertMatch({ok, #file_attr{size = 1}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
@@ -1225,6 +1236,7 @@ chmod_file_update_test(Config) ->
     ok = sd_test_utils:chmod(W1, FileSDHandle, NewMode),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:disable_update(Config),
 
     %% Check if file permissions were changed
     ?assertMatch({ok, #file_attr{mode = NewMode}},
@@ -1334,6 +1346,7 @@ chmod_file_update2_test(Config) ->
     ok = sd_test_utils:chmod(W1, FileSDHandle1, NewMode),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:disable_update(Config),
 
     %% Check if file permissions were changed
     ?assertMatch({ok, #file_attr{mode = NewMode}},
@@ -1426,9 +1439,9 @@ update_timestamps_file_import_test(Config) ->
         ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     ok = rpc:call(W1, storage_sync_test_base, change_time, [PathOnContainer, NewTimestamp, NewTimestamp]),
 
-%%    storage_sync_test_base:change_time(Path, NewTimestamp, NewTimestamp),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
-    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, 2, ?ATTEMPTS),
+    storage_sync_test_base:disable_update(Config),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -1502,7 +1515,8 @@ should_not_detect_timestamp_update_test(Config) ->
         ?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     ok = rpc:call(W1, storage_sync_test_base, change_time, [PathOnContainer, NewTimestamp, NewTimestamp]),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
-    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, 2, ?ATTEMPTS),
+    storage_sync_test_base:disable_update(Config),
 
     %% Check if timestamps hasn't changed
     ?assertNotMatch({ok, #file_attr{atime = NewTimestamp, mtime = NewTimestamp}},
@@ -1598,7 +1612,8 @@ update_nfs_acl_test(Config) ->
             {ok, EncACL}
     end),
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
-    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, 2, ?ATTEMPTS),
+    storage_sync_test_base:disable_update(Config),
 
     %% User1 should not be allowed to read acl
     ?assertMatch({error, ?EACCES},
