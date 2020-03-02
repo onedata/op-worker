@@ -80,7 +80,7 @@ get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec remove_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id(), boolean()) ->
     fslogic_worker:provider_response().
-% fixme better name (maybe not boolean flag)
+% fixme better name (maybe not boolean flag) InternalDelete?
 remove_qos_entry(UserCtx, FileCtx0, QosEntryId, ForceDelete) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
@@ -135,7 +135,7 @@ add_qos_entry_insecure(FileCtx, QosExpression, ReplicasNum, CallbackModule) ->
                 {true, Storages} ->
                     add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, CallbackModule, Storages);
                 false ->
-                    add_impossible_qos(FileCtx, QosExpressionInRPN, CallbackModule, ReplicasNum);
+                    add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, CallbackModule);
                 ?ERROR_INVALID_QOS_EXPRESSION ->
                     #provider_response{status = #status{code = ?EINVAL}}
             end;
@@ -204,7 +204,9 @@ remove_qos_entry_insecure(FileCtx, QosEntryId, ForceDelete) ->
 
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     
-    case not qos_entry:is_internal(QosDoc) or ForceDelete of
+    A = qos_entry:is_internal(QosDoc),
+    
+    case (not qos_entry:is_internal(QosDoc)) orelse ForceDelete of
         true ->
             % TODO: VFS-5567 For now QoS entry is added only for file or dir
             % for which it has been added, so starting traverse is not needed.

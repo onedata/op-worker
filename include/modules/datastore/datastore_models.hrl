@@ -327,7 +327,7 @@
     % deterministically selected during conflict resolution.
     possibility_check :: {possible | impossible, od_provider:id()},
     % True when entry was created by internal provider logic
-    internal = false :: boolean(), % fixme maybe not necessary - callback module means it is internal
+    internal = false :: boolean(), % fixme maybe not necessary
     % Module with callbacks fixme . Must implement qos_caller(tbd fixme) behaviour.
     % Only applicable to internal entries
     callback_module = undefined :: module() | undefined % fixme not needed (it is run on other provider)
@@ -385,6 +385,15 @@
 -record(space_storage, {
     storage_ids = [] :: [storage:id()],
     mounted_in_root = [] :: [storage:id()]
+}).
+
+-record(space_unsupport_job, {
+    stage = init :: space_unsupport:stage(),
+    task_id :: traverse:id(),
+    space_id :: od_space:id(),
+    storage_id :: storage:id(),
+    % fixme empty binary
+    slave_job_id = <<>> :: qos_entry:id() | traverse:id()
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.

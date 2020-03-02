@@ -118,9 +118,7 @@ create(SpaceId, FileUuid, Expression, ReplicasNum, CallbackModule) ->
     replicas_num(), module(), boolean(), qos_traverse_req:traverse_reqs()) ->
     {ok, doc()} | {error, term()}.
 create(SpaceId, FileUuid, Expression, ReplicasNum, CallbackModule, Possible, TraverseReqs) ->
-    % fixme
     QosEntryId = datastore_key:new(),
-    ?critical("qos_entry:create: ~p", [QosEntryId]),
     PossibilityCheck = case Possible of
         true ->
             {possible, oneprovider:get_id()};
@@ -154,8 +152,6 @@ update(Key, Diff) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(QosEntryId) ->
-    % fixme
-    ?critical("qos_entry:delete"),
     datastore_model:delete(?CTX, QosEntryId).
 
 
@@ -284,10 +280,8 @@ is_possible(#qos_entry{possibility_check = {impossible, _}}) ->
 -spec is_internal(doc() | record()) -> boolean().
 is_internal(#document{value = QosEntry}) ->
     is_internal(QosEntry);
-is_internal(#qos_entry{callback_module = undefined}) ->
-    false;
-is_internal(#qos_entry{callback_module = _CallbackModule}) ->
-    true.
+is_internal(#qos_entry{internal = Internal}) ->
+    Internal.
 
 
 %%%===================================================================

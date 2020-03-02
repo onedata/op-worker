@@ -749,7 +749,7 @@ check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
     add_qos_entry(SessId, FileKey, Expression, ReplicasNum, undefined).
 
-% fixme maybe docs
+% fixme maybe add docs
 -spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
     qos_entry:replicas_num(), module()) -> {ok, qos_entry:id()} | error_reply().
 add_qos_entry(SessId, FileKey, Expression, ReplicasNum, CallbackModule) ->
