@@ -37,6 +37,8 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
+%% functions operating on file_qos document using datastore_model API
+-export([delete/1]).
 
 %% higher-level functions operating on file_qos document
 -export([

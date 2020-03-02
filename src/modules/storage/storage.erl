@@ -55,7 +55,7 @@
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 % exported for initializer
--export([on_storage_created/2]).
+-export([on_storage_created/1]).
 
 % fixme
 -export([on_space_unsupported/2]).
@@ -444,7 +444,7 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 -spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
     % fixme first remove in zone
-    space_unsupport_worker:start(SpaceId, StorageId).
+    space_unsupport:run(SpaceId, StorageId).
 
 
 -spec supports_any_space(id()) -> boolean() | errors:error().
@@ -460,12 +460,17 @@ supports_any_space(StorageId) ->
 %%% Internal functions
 %%%===================================================================
 
+% fixme for tests
+-spec on_storage_created(id()) -> ok.
+on_storage_created(StorageId) ->
+    rtransfer_config:add_storage(StorageId).
+
 %% @private
 -spec on_storage_created(id(), qos_parameters()) -> ok.
 on_storage_created(StorageId, QosParameters) ->
     ExtendedQosParameters = QosParameters#{
         <<"storage_id">> => StorageId,
-        <<"provider_id">> => oneprovider:get_id()
+        <<"provider_id">> => oneprovider:get_id_or_undefined()
     },
     ok = set_qos_parameters(StorageId, ExtendedQosParameters),
     rtransfer_config:add_storage(StorageId).

@@ -68,6 +68,8 @@
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, resolve_conflict/3]).
 
 
+% fixme remove callback module
+
 -type id() :: datastore_doc:key().
 -type record() :: #qos_entry{}.
 -type doc() :: datastore_doc:doc(record()).
@@ -236,11 +238,7 @@ remove_traverse_req(QosEntryId, TraverseId) ->
             traverse_reqs = qos_traverse_req:remove_req(TraverseId, TR)
         }}
     end,
-    ?ok_if_not_found(case update(QosEntryId, Diff) of
-        {ok, #document{value = #qos_entry{callback_module = CallbackModule}}} ->
-            ok = call_callback(CallbackModule, qos_traverse_finished, [QosEntryId, TraverseId]);
-        {error, _} = Error -> Error
-    end).
+    ?ok_if_not_found(?extract_ok(update(QosEntryId, Diff))).
 
 %%%===================================================================
 %%% Functions operating on qos_entry record.
@@ -486,14 +484,3 @@ resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReq
         traverse_reqs = qos_traverse_req:select_traverse_reqs(
             LocalTraverseIds ++ RemoteTraverseIds, LocalReqs)
     }.
-
-%fixme internal
-
-call_callback(undefined, _, _) -> ok;
-call_callback(Module, Method, Args) ->
-    case erlang:function_exported(Module, Method, length(Args)) of
-        true ->
-            ok = erlang:apply(Module, Method, Args);
-        _ ->
-            ok
-    end.

@@ -49,7 +49,9 @@ start(SpaceId, StorageId) ->
         execute_slave_on_dir => true,
         additional_data => #{
             <<"space_id">> => SpaceId,
-            <<"storage_id">> => StorageId
+            <<"storage_id">> => StorageId,
+            % fixme better name or ath else
+            <<"inform_pid">> => term_to_binary(self())
         }
     },
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
@@ -93,10 +95,12 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 -spec task_finished(traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
     {ok, #{
-        <<"space_id">> := SpaceId,
-        <<"storage_id">> := StorageId
+        <<"space_id">> := _SpaceId,
+        <<"storage_id">> := _StorageId,
+        <<"inform_pid">> := EncodedPid
     }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
-    space_unsupport_worker:next_stage(SpaceId, StorageId),
+    Pid = binary_to_term(EncodedPid),
+    Pid ! end_of_traverse,
     % fixme delete space root dir
     ok.
 
@@ -111,21 +115,23 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskI
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     {P, _} = file_ctx:get_canonical_path(FileCtx),
+    % fixme 
     ?notice("running for: ~p", [P]),
     {FileLocation, FileCtx1} = file_ctx:get_local_file_location_doc(FileCtx, false),
-    % fixme file_qos?
-    case file_location:is_storage_file_created(FileLocation) of
-        false -> 
-            ?warning("ignoring: ~p", [P]),
-            ok;
-        true ->
-            case file_ctx:is_dir(FileCtx1) of
-                {true, FC} ->
-                    sd_utils:delete_storage_dir(FC, UserCtx);
-                {false, FC} ->
+    ok = file_qos:delete(FileUuid),
+    case file_ctx:is_dir(FileCtx1) of
+        {true, FC} ->
+            sd_utils:delete_storage_dir(FC, UserCtx);
+        {false, FC} ->
+            case file_location:is_storage_file_created(FileLocation) of
+                false ->
+                    % fixme
+                    ?warning("ignoring: ~p", [P]),
+                    ok;
+                true ->
                     LocationId = file_location:local_id(FileUuid),
-                    file_location:delete(LocationId),
-                    sd_utils:delete_storage_file(FC, UserCtx)
+                    sd_utils:delete_storage_file(FC, UserCtx),
+                    fslogic_location_cache:clear_blocks(FileCtx, LocationId)
             end
     end,
     ok.

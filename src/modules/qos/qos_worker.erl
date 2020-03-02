@@ -41,8 +41,8 @@ init(_Args) ->
     try
         qos_traverse:init_pool(),
             % fixme
-        unsupport_traverse:init_pool(),
-        space_unsupport_worker:start_link()
+        space_unsupport:init_pool(),
+        unsupport_traverse:init_pool()
     catch
         throw:{error, already_exists} -> ok
     end,
