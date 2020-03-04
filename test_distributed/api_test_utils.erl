@@ -55,10 +55,12 @@ run_scenario(Config, ScenarioSpec) ->
     true
     and run_unauthorized_test_cases(Config, ScenarioSpec)
     and run_forbidden_test_cases(Config, ScenarioSpec)
-    and run_malformed_data_test_cases(Config, ScenarioSpec).
+    and run_malformed_data_test_cases(Config, ScenarioSpec)
+    and run_valid_data_test_cases(Config, ScenarioSpec).
 
 
 run_unauthorized_test_cases(Config, #scenario_spec{
+    type = ScenarioType,
     client_spec = #client_spec{unauthorized = UnauthorizedClients},
     params_spec = ParamsSpec
 } = ScenarioSpec) ->
@@ -67,11 +69,17 @@ run_unauthorized_test_cases(Config, #scenario_spec{
         ScenarioSpec,
         UnauthorizedClients,
         required_data_sets(ParamsSpec),
-        ?ERROR_UNAUTHORIZED
+        case ScenarioType of
+            rest_with_file_path ->
+                ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
+            _ ->
+                ?ERROR_UNAUTHORIZED
+        end
     ).
 
 
 run_forbidden_test_cases(Config, #scenario_spec{
+    type = ScenarioType,
     client_spec = #client_spec{forbidden = ForbiddenClients},
     params_spec = ParamsSpec
 } = ScenarioSpec) ->
@@ -80,7 +88,12 @@ run_forbidden_test_cases(Config, #scenario_spec{
         ScenarioSpec,
         ForbiddenClients,
         required_data_sets(ParamsSpec),
-        ?ERROR_FORBIDDEN
+        case ScenarioType of
+            rest_with_file_path ->
+                ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
+            _ ->
+                ?ERROR_FORBIDDEN
+        end
     ).
 
 
@@ -149,7 +162,45 @@ run_malformed_data_test_cases(Config, #scenario_spec{
     Result.
 
 
-call_api(_Config, Node, Client, #rest_args{
+run_valid_data_test_cases(Config, #scenario_spec{
+    target_node = TargetNode,
+    client_spec = #client_spec{correct = CorrectClients},
+
+    setup_fun = EnvSetupFun,
+    teardown_fun = EnvTeardownFun,
+    verify_fun = EnvVerifyFun,
+
+    prepare_args_fun = PrepareArgsFun,
+    validate_result_fun = ValidateResultFun,
+    params_spec = ParamsSpec
+}) ->
+    CorrectDataSets = correct_data_sets(ParamsSpec),
+
+    Result = lists:foldl(fun(Client, OuterAcc) ->
+        OuterAcc and lists:foldl(fun(DataSet, InnerAcc) ->
+            Env = EnvSetupFun(),
+            Args = PrepareArgsFun(Env, DataSet),
+            Result = call_api(Config, TargetNode, Client, Args),
+            InnerAcc and try
+                ValidateResultFun(Result, Env, DataSet),
+                EnvVerifyFun(false, Env, DataSet)
+            catch _:_ ->
+                log_failure(TargetNode, Client, Args, succes, Result),
+                false
+            after
+                EnvTeardownFun(Env)
+            end
+        end, true, CorrectDataSets)
+    end, true, CorrectClients),
+
+    Result.
+
+
+call_api(Config, Node, Client, #rest_args{} = Args) ->
+    call_rest_api(Config, Node, Client, Args).
+
+
+call_rest_api(_Config, Node, Client, #rest_args{
     method = Method,
     path = Path,
     headers = Headers0,
@@ -183,7 +234,10 @@ call_api(_Config, Node, Client, #rest_args{
     end.
 
 
-validate_error_result(rest, ExpError, {ok, RespCode, RespBody}) ->
+validate_error_result(Type, ExpError, {ok, RespCode, RespBody}) when
+    Type == rest;
+    Type == rest_with_file_path
+->
     ExpCode = errors:to_http_code(ExpError),
     ExpBody = #{<<"error">> => errors:to_json(ExpError)},
 

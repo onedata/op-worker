@@ -312,7 +312,7 @@ resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
         {guid, Guid} ->
             Guid;
         _Error ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(Path))
+            throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>))
     end;
 resolve_bindings(SessionId, {Atom, PossibleBinding}, Req) when is_atom(Atom) ->
     {Atom, resolve_bindings(SessionId, PossibleBinding, Req)};

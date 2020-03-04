@@ -48,7 +48,7 @@
     verify_fun = fun(_, _, _) -> true end,
 
     prepare_args_fun :: fun((Env :: map(), Data :: map()) -> #rest_args{}),
-    validate_result_fun :: fun((Result :: term()) -> ok | no_return()),
+    validate_result_fun :: fun((Result :: term(), Env :: map(), Data :: map()) -> ok | no_return()),
     params_spec = undefined :: undefined | #params_spec{}
 }).
 
