@@ -68,26 +68,67 @@ list_dir_test(Config) ->
         FileObjectId
     end, [$0, $1, $2, $3, $4]),
 
+    ParamsSpec = #params_spec{
+        optional = [<<"limit">>, <<"offset">>],
+        correct_values = #{
+            <<"limit">> => [1, 100],
+            <<"offset">> => [0, 2]
+        },
+        bad_values = [
+            {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
+            {<<"limit">>, -100, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
+            {<<"limit">>, 0, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit2">>, 1)},
+            {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
+        ]
+    },
+
     ?assert(api_test_utils:run_scenarios(Config, [
         #scenario_spec{
             type = rest,
             target_node = W,
             client_spec = #client_spec{
+                correct = [{user, UserId}],
                 unauthorized = [{user, UserId}],
                 forbidden = [{user, UserId}]
             },
 
-            prepare_args_fun = fun(_Env, _Data) ->
+            prepare_args_fun = fun(_Env, Data) ->
+                Qs = qwe(Data),
                 #rest_args{
                     method = get,
-                    path = <<"files-id/", RootDirObjectId/binary>>
+                    path = <<"files-id/", RootDirObjectId/binary, Qs/binary>>
             }
             end,
             validate_result_fun = fun(Result) ->
                 ct:pal("~p", [Result])
-            end
+            end,
+
+            params_spec = ParamsSpec
         }
     ])).
+
+
+qwe(Data) ->
+    QsParams = [QsParam || QsParam <- [
+        asd(<<"limit">>, Data),
+        asd(<<"offset">>, Data)
+    ], QsParam /= <<>>],
+
+    case str_utils:join_binary(QsParams, <<"&">>) of
+        <<>> ->
+            <<>>;
+        Qs ->
+            <<"?", Qs/binary>>
+    end.
+
+
+asd(ParamName, Data) ->
+    case maps:get(ParamName, Data, undefined) of
+        undefined ->
+            <<>>;
+        Value ->
+            <<ParamName/binary, "=", (str_utils:to_binary(Value))/binary>>
+    end.
 
 
 %%%===================================================================

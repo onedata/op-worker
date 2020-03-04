@@ -52,11 +52,10 @@ run_scenarios(Config, ScenariosSpecs) ->
 
 
 run_scenario(Config, ScenarioSpec) ->
-    Res1 = run_unauthorized_test_cases(Config, ScenarioSpec),
-    Res2 = run_forbidden_test_cases(Config, ScenarioSpec),
-    Res3 = run_malformed_data_test_cases(Config, ScenarioSpec),
-
-    Res1 andalso Res2 andalso Res3.
+    true
+    and run_unauthorized_test_cases(Config, ScenarioSpec)
+    and run_forbidden_test_cases(Config, ScenarioSpec)
+    and run_malformed_data_test_cases(Config, ScenarioSpec).
 
 
 run_unauthorized_test_cases(Config, #scenario_spec{
@@ -97,12 +96,12 @@ run_invalid_clients_test_cases(Config, #scenario_spec{
 }, Clients, DataSets, ExpError) ->
     Env = EnvSetupFun(),
     Result = lists:foldl(fun(Client, OuterAcc) ->
-        OuterAcc andalso lists:foldl(fun(DataSet, InnerAcc) ->
+        OuterAcc and lists:foldl(fun(DataSet, InnerAcc) ->
                 Args = PrepareArgsFun(Env, DataSet),
                 Result = call_api(Config, TargetNode, Client, Args),
-                InnerAcc andalso try
+                InnerAcc and try
                     validate_error_result(ScenarioType, ExpError, Result),
-                    EnvVerifyFun(false, Env, Args)
+                    EnvVerifyFun(false, Env, DataSet)
                 catch _:_ ->
                     log_failure(TargetNode, Client, Args, ExpError, Result),
                     false
@@ -125,12 +124,10 @@ run_malformed_data_test_cases(Config, #scenario_spec{
     prepare_args_fun = PrepareArgsFun,
     params_spec = ParamsSpec
 }) ->
-    ct:pal("~p:~p", [?MODULE, ?LINE]),
     BadDataSets = bad_data_sets(ParamsSpec),
-
     Env = EnvSetupFun(),
     Result = lists:foldl(fun(Client, OuterAcc) ->
-        OuterAcc andalso lists:foldl(fun
+        OuterAcc and lists:foldl(fun
             % operations not requiring any data cannot be tested against
             % malformed data
             (?NO_DATA, InnerAcc) ->
@@ -138,9 +135,9 @@ run_malformed_data_test_cases(Config, #scenario_spec{
             ({DataSet, _BadKey, ExpError}, InnerAcc) ->
                 Args = PrepareArgsFun(Env, DataSet),
                 Result = call_api(Config, TargetNode, Client, Args),
-                InnerAcc andalso try
+                InnerAcc and try
                     validate_error_result(ScenarioType, ExpError, Result),
-                    EnvVerifyFun(false, Env, Args)
+                    EnvVerifyFun(false, Env, DataSet)
                 catch _:_ ->
                     log_failure(TargetNode, Client, Args, ExpError, Result),
                     false

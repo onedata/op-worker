@@ -332,7 +332,7 @@ data_spec_get(#gri{aspect = instance}) ->
 
 data_spec_get(#gri{aspect = list}) -> #{
     optional => #{
-        <<"limit">> => {integer, {between, 1, 1000}},
+        <<"limit">> => {integer, {not_lower_than, 1}},
         <<"offset">> => {integer, {not_lower_than, 0}}
     }
 };

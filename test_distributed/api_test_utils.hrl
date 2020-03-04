@@ -45,7 +45,7 @@
 
     setup_fun = fun() -> #{} end :: fun(() -> TestEnv :: map()),
     teardown_fun = fun(_) -> ok end :: fun((TestEnv :: map()) -> ok),
-    verify_fun = fun(_, _, _) -> ok end,
+    verify_fun = fun(_, _, _) -> true end,
 
     prepare_args_fun :: fun((Env :: map(), Data :: map()) -> #rest_args{}),
     validate_result_fun :: fun((Result :: term()) -> ok | no_return()),
