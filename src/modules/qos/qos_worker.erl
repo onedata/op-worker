@@ -39,10 +39,7 @@
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     try
-        qos_traverse:init_pool(),
-            % fixme
-        space_unsupport:init_pool(),
-        unsupport_traverse:init_pool()
+        qos_traverse:init_pool()
     catch
         throw:{error, already_exists} -> ok
     end,

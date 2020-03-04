@@ -747,13 +747,12 @@ check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 -spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | error_reply().
 add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
-    add_qos_entry(SessId, FileKey, Expression, ReplicasNum, undefined).
+    add_qos_entry(SessId, FileKey, Expression, ReplicasNum, user_defined).
 
-% fixme maybe add docs
 -spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
     qos_entry:replicas_num(), module()) -> {ok, qos_entry:id()} | error_reply().
-add_qos_entry(SessId, FileKey, Expression, ReplicasNum, CallbackModule) ->
-    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum, CallbackModule) end).
+add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) ->
+    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) end).
 
 %%--------------------------------------------------------------------
 %% @doc

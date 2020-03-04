@@ -35,7 +35,9 @@
 %%%       when traverse task for this request is completed
 %%%     - there are no links indicating that file has been changed and it should
 %%%       be reconciled (see qos_status.erl)
-%%%
+%%% 
+%%% Entry type denotes whether entry was created as part of internal provider logic (internal) 
+%%% or was created by a user (user_defined).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_entry).
@@ -68,13 +70,12 @@
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, resolve_conflict/3]).
 
 
-% fixme remove callback module
-
 -type id() :: datastore_doc:key().
 -type record() :: #qos_entry{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type replicas_num() :: pos_integer().
+-type type() :: internal | user_defined.
 
 -type qos_transfer_id() :: transfer:id().
 -type one_or_many(Type) :: Type | [Type].
@@ -84,7 +85,7 @@
 }.
 -type list_apply_fun() :: fun((datastore_links:link_name()) -> any()).
 
--export_type([id/0, doc/0, record/0, replicas_num/0]).
+-export_type([id/0, doc/0, record/0, type/0, replicas_num/0]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -108,18 +109,17 @@
 %%%===================================================================
 
 -spec create(od_space:id(), file_meta:uuid(), qos_expression:rpn(),
-    replicas_num(), module()) -> {ok, doc()} | {error, term()}.
-create(SpaceId, FileUuid, Expression, ReplicasNum, CallbackModule) ->
-    create(SpaceId, FileUuid, Expression, ReplicasNum, CallbackModule, false, 
+    replicas_num(), type()) -> {ok, doc()} | {error, term()}.
+create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
+    create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, false, 
         qos_traverse_req:build_traverse_reqs(FileUuid, [])).
 
 
 -spec create(od_space:id(), file_meta:uuid(), qos_expression:rpn(),
-    replicas_num(), module(), boolean(), qos_traverse_req:traverse_reqs()) ->
+    replicas_num(), type(), boolean(), qos_traverse_req:traverse_reqs()) ->
     {ok, doc()} | {error, term()}.
-create(SpaceId, FileUuid, Expression, ReplicasNum, CallbackModule, Possible, TraverseReqs) ->
+create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, TraverseReqs) ->
     QosEntryId = datastore_key:new(),
-    ?critical("qos_entry create: ~p", [QosEntryId]),
     PossibilityCheck = case Possible of
         true ->
             {possible, oneprovider:get_id()};
@@ -134,8 +134,7 @@ create(SpaceId, FileUuid, Expression, ReplicasNum, CallbackModule, Possible, Tra
             replicas_num = ReplicasNum,
             possibility_check = PossibilityCheck,
             traverse_reqs = TraverseReqs,
-            internal = CallbackModule =/= undefined, % fixme is it necessary?
-            callback_module = CallbackModule
+            type = EntryType
         }
     })).
 
@@ -153,7 +152,6 @@ update(Key, Diff) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(QosEntryId) ->
-    ?critical("qos_entry delete: ~p", [QosEntryId]),
     datastore_model:delete(?CTX, QosEntryId).
 
 
@@ -282,8 +280,8 @@ is_possible(#qos_entry{possibility_check = {impossible, _}}) ->
 -spec is_internal(doc() | record()) -> boolean().
 is_internal(#document{value = QosEntry}) ->
     is_internal(QosEntry);
-is_internal(#qos_entry{internal = Internal}) ->
-    Internal.
+is_internal(#qos_entry{type = Internal}) ->
+    Internal =:= internal.
 
 
 %%%===================================================================
@@ -382,6 +380,7 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
+        {internal, atom},
         {file_uuid, string},
         {expression, [string]},
         {replicas_num, integer},
@@ -389,9 +388,7 @@ get_record_struct(1) ->
             {start_file_uuid, string},
             {storage_id, string}
         ]}}},
-        {possibility_check, {atom, string}},
-        {internal, boolean},
-        {callback_module, atom}
+        {possibility_check, {atom, string}}
     ]}.
 
 

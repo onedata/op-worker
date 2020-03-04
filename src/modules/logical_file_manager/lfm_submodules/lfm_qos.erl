@@ -32,13 +32,13 @@
 %%--------------------------------------------------------------------
 -spec add_qos_entry(session:id(), lfm:file_key(), qos_expression:raw(),
     qos_entry:replicas_num(), module()) -> {ok, qos_entry:id()} | lfm:error_reply().
-add_qos_entry(SessId, FileKey, Expression, ReplicasNum, CallbackModule) ->
+add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
         #add_qos_entry{
             expression = Expression, 
             replicas_num = ReplicasNum, 
-            callback_module = CallbackModule
+            entry_type = EntryType
         },
         fun(#qos_entry_id{id = QosEntryId}) ->
             {ok, QosEntryId}

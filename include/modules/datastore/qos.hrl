@@ -30,7 +30,6 @@
 -define(R_PAREN, <<")">>).
 -define(EQUALITY, <<"=">>).
 
-% fixme tests
 -define(QOS_ALL_STORAGES, <<"all">>).
 
 % macros used for operations on QoS bounded cache

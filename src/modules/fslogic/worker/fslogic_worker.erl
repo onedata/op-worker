@@ -145,6 +145,8 @@ init(_Args) ->
     schedule_rerun_transfers(),
     schedule_restart_autocleaning_runs(),
     schedule_periodical_spaces_autocleaning_check(),
+    
+    space_unsupport:init(),
 
     lists:foreach(fun({Fun, Args}) ->
         case apply(Fun, Args) of
@@ -580,9 +582,9 @@ handle_provider_request(UserCtx, #create_share{name = Name}, FileCtx) ->
 handle_provider_request(UserCtx, #remove_share{share_id = ShareId}, FileCtx) ->
     share_req:remove_share(UserCtx, FileCtx, ShareId);
 handle_provider_request(UserCtx, #add_qos_entry{
-    expression = Expression, replicas_num = ReplicasNum, callback_module = CallbackModule
+    expression = Expression, replicas_num = ReplicasNum, entry_type = EntryType
 }, FileCtx) ->
-    qos_req:add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, CallbackModule);
+    qos_req:add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType);
 handle_provider_request(UserCtx, #get_effective_file_qos{}, FileCtx) ->
     qos_req:get_effective_file_qos(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->

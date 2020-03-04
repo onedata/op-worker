@@ -46,6 +46,7 @@
 %%% Support related functions
 -export([support_space/3, update_space_support_size/3, revoke_space_support/2]).
 -export([supports_any_space/1]).
+-export([on_space_unsupported/2]).
 
 %%% Upgrade from 19.02.*
 -export([migrate_to_zone/0]).
@@ -56,9 +57,6 @@
 
 % exported for initializer
 -export([on_storage_created/1]).
-
-% fixme
--export([on_space_unsupported/2]).
 
 
 -type id() :: od_storage:id().
@@ -97,8 +95,7 @@ create(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
 -spec create_insecure(name(), helpers:helper(), boolean(), luma_config:config(),
     boolean(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
-    % fixme create without qos params
-    case storage_logic:create_in_zone(Name, QosParameters) of
+    case storage_logic:create_in_zone(Name) of
         {ok, Id} ->
             case storage_config:create(Id, Helper, Readonly, LumaConfig, ImportedStorage) of
                 {ok, Id} ->
@@ -455,6 +452,17 @@ supports_any_space(StorageId) ->
     end.
 
 
+-spec on_space_unsupported(od_space:id(), id()) -> ok.
+on_space_unsupported(SpaceId, StorageId) ->
+    file_popularity_api:disable(SpaceId),
+    file_popularity_api:delete_config(SpaceId),
+    autocleaning_api:disable(SpaceId),
+    autocleaning_api:delete_config(SpaceId),
+    storage_sync:space_unsupported(SpaceId, StorageId),
+    space_quota:delete(SpaceId),
+    main_harvesting_stream:space_unsupported(SpaceId).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -463,6 +471,7 @@ supports_any_space(StorageId) ->
 -spec on_storage_created(id()) -> ok.
 on_storage_created(StorageId) ->
     rtransfer_config:add_storage(StorageId).
+
 
 %% @private
 -spec on_storage_created(id(), qos_parameters()) -> ok.
@@ -479,17 +488,6 @@ on_storage_created(StorageId, QosParameters) ->
 -spec on_space_supported(od_space:id()) -> ok.
 on_space_supported(SpaceId) ->
     ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
-
-
-%% @private
--spec on_space_unsupported(od_space:id(), id()) -> ok.
-on_space_unsupported(SpaceId, StorageId) ->
-    file_popularity_api:disable(SpaceId),
-    file_popularity_api:delete_config(SpaceId),
-    autocleaning_api:disable(SpaceId),
-    autocleaning_api:delete_config(SpaceId),
-    storage_sync:space_unsupported(SpaceId, StorageId),
-    main_harvesting_stream:space_unsupported(SpaceId).
 
 
 %% @private
@@ -586,7 +584,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            {ok, StorageId} = storage_logic:create_in_zone(Name, #{}, StorageId),
+            {ok, StorageId} = storage_logic:create_in_zone(Name, StorageId),
             ?notice("Storage ~p created in Onezone", [StorageId])
     end,
     ok = delete_deprecated(StorageId).

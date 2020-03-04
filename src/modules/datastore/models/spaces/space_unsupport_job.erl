@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% fixme move to datastore_models
+%%% Model for persisting space_unsupport_job.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(space_unsupport_job).
@@ -17,7 +17,6 @@
 
 -type id() :: datastore_model:key().
 -type record() :: #space_unsupport_job{}.
--type doc() :: datastore_model:doc(record()).
 
 -define(CTX, #{
     model => ?MODULE
@@ -27,11 +26,16 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+-export([encode/1, decode/1]).
 
 -compile({no_auto_import, [get/1]}).
 
-%% API
 
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+-spec save(record()) -> {ok, record()} | {error, term()}.
 save(Job) ->
     #space_unsupport_job{
         space_id = SpaceId, 
@@ -41,6 +45,7 @@ save(Job) ->
     } = Job,
     save(gen_id(SpaceId, StorageId, Stage), Job, TaskId).
 
+-spec save(id(), record(), traverse:id()) -> {ok, record()} | {error, term()}.
 save(Key, Job, TaskId) when is_atom(Key) ->
     #space_unsupport_job{
         space_id = SpaceId, 
@@ -57,10 +62,13 @@ save(Key, Job, TaskId) ->
     }),
     {ok, Key}.
 
+
+-spec get(od_space:id(), storage:id(), space_unsupport:stage()) -> 
+    {ok, record()} | {error, term()}.
 get(SpaceId, StorageId, Stage) ->
     get(gen_id(SpaceId, StorageId, Stage)).
 
--spec get(id()) -> {ok, doc()} | {error, term()}.
+-spec get(id()) -> {ok, record()} | {error, term()}.
 get(Key) ->
     {ok, #document{value = Job}} = datastore_model:get(?CTX, Key),
     {ok, Job}.
@@ -68,14 +76,11 @@ get(Key) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
-    ok = datastore_model:delete(?CTX, Key),
-    {ok, Key}.
+    datastore_model:delete(?CTX, Key).
 
+-spec delete(od_space:id(), storage:id(), space_unsupport:stage()) -> ok | {error, term()}.
 delete(SpaceId, StorageId, Stage) ->
     delete(gen_id(SpaceId, StorageId, Stage)).
-
-gen_id(SpaceId, StorageId, Stage) ->
-    datastore_key:new_from_digest([SpaceId, StorageId, Stage]).
 
 
 %%%===================================================================
@@ -100,5 +105,24 @@ get_record_struct(1) ->
         {task_id, string},
         {space_id, string},
         {storage_id, string},
-        {slave_job_id, binary}
+        {slave_job_id, {custom, string, {?MODULE, encode, decode}}}
     ]}.
+
+
+-spec encode(undefined | binary()) -> binary().
+encode(undefined) -> <<"undefined">>;
+encode(Binary) when is_binary(Binary) -> Binary.
+
+
+-spec decode(binary()) -> undefined | binary().
+decode(<<"undefined">>) -> undefined;
+decode(Binary) when is_binary(Binary) -> Binary.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec gen_id(od_space:id(), storage:id(), space_unsupport:stage()) -> id().
+gen_id(SpaceId, StorageId, Stage) ->
+    datastore_key:new_from_digest([SpaceId, StorageId, Stage]).

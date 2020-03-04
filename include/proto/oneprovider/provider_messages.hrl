@@ -116,7 +116,7 @@
 -record(add_qos_entry, {
     expression :: qos_expression:raw(),
     replicas_num :: qos_entry:replicas_num(),
-    callback_module = undefined :: module()
+    entry_type = user_defined :: qos_entry:type()
 }).
 
 -record(get_qos_entry, {

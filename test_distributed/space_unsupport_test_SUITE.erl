@@ -44,6 +44,7 @@ all() -> [
 ].
 
 -define(SPACE_ID, <<"space1">>).
+-define(TASK_ID, <<"task_id">>).
 -define(TEST_DATA, <<"test_data">>).
 -define(ATTEMPTS, 60).
 -define(ALL_STAGES, [init, qos, clear_storage, wait_for_dbsync, clean_database, finished]).
@@ -65,7 +66,7 @@ qos_stage_test(Config) ->
         storage_id = StorageId
     },
     
-    Promise = rpc:async_call(Worker1, space_unsupport, execute_stage, [StageJob]),
+    Promise = rpc:async_call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
     {ok, {[QosEntryId], _}} = ?assertMatch({ok, {[_], _}}, 
         lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, SpaceGuid}), 
@@ -101,7 +102,7 @@ qos_stage_persistence_test(Config) ->
     },
     
     test_utils:mock_new(Worker1, qos_entry, [passthrough]),
-    ok = rpc:call(Worker1, space_unsupport, execute_stage, [StageJob]),
+    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     % check that no additional entry was created
     test_utils:mock_assert_num_calls(Worker1, qos_entry, create, 5, 0, 1),
     test_utils:mock_assert_num_calls(Worker1, qos_entry, create, 7, 0, 1),
@@ -126,12 +127,7 @@ clear_storage_stage_persistence_test(Config) ->
     },
     
     test_utils:mock_new(Worker1, unsupport_traverse, [passthrough]),
-%%    test_utils:mock_expect(Worker1, unsupport_traverse, task_finished, 
-%%        fun(TaskId, Pool) -> 
-%%            timer:sleep(timer:seconds(4)), 
-%%            meck:passthrough([TaskId, Pool]) 
-%%        end),
-    ok = rpc:call(Worker1, space_unsupport, execute_stage, [StageJob]),
+    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     % check that no additional traverse was started
     test_utils:mock_assert_num_calls(Worker1, unsupport_traverse, start, 1, 0, 1),
     test_utils:mock_unload(Worker1, [unsupport_traverse]),
@@ -146,7 +142,7 @@ clear_storage_stage_test(Config) ->
     
     {{_,DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Config),
     
-    AllPaths = [DirPath, F1Path, F2Path], % empty binary represents space dir %fixme check space
+    AllPaths = [<<>>, DirPath, F1Path, F2Path], % empty binary represents space dir 
     lists:foreach(fun(FileRelativePath) -> 
         StoragePath = storage_file_path(Worker1, ?SPACE_ID, FileRelativePath),
         ?assertEqual(true, check_exists_on_storage(Worker1, StoragePath))
@@ -158,12 +154,11 @@ clear_storage_stage_test(Config) ->
         storage_id = StorageId
     },
     
-    ok = rpc:call(Worker1, space_unsupport, execute_stage, [StageJob]),
+    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
     lists:foreach(fun(FileRelativePath) ->
         StoragePath = storage_file_path(Worker1, ?SPACE_ID, FileRelativePath),
-        % fixme attempts for now(remove when better dir deletion)
-        ?assertEqual(false, check_exists_on_storage(Worker1, StoragePath), ?ATTEMPTS)
+        ?assertEqual(false, check_exists_on_storage(Worker1, StoragePath))
     end, AllPaths),
     
     check_distribution(Workers, SessId, [], G1),
@@ -195,7 +190,7 @@ finished_stage_test(Config) ->
         space_id = ?SPACE_ID,
         storage_id = StorageId
     },
-    ok = rpc:call(Worker1, space_unsupport, execute_stage, [StageJob]),
+    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
     ?assertEqual({error, not_found}, rpc:call(Worker1, space_strategies, get, [?SPACE_ID])),
     ?assertEqual({error, not_found}, rpc:call(Worker1, storage_sync_monitoring, get, [?SPACE_ID, StorageId])),
@@ -210,6 +205,7 @@ overall_test(Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
+    create_files_and_dirs(Config),
     ok = rpc:call(Worker1, storage, revoke_space_support, [StorageId, ?SPACE_ID]),
     
     % mocked in init_per_testcase
@@ -217,8 +213,8 @@ overall_test(Config) ->
     
     lists:foreach(fun(Stage) ->
         test_utils:mock_assert_num_calls(
-            Worker1, space_unsupport, execute_stage, 
-            [{space_unsupport_job, Stage, '_', ?SPACE_ID, StorageId, '_'}], 
+            Worker1, space_unsupport, do_slave_job, 
+            [{space_unsupport_job, Stage, '_', ?SPACE_ID, StorageId, '_'}, '_'], 
             1, 1
         )
     end, ?ALL_STAGES),

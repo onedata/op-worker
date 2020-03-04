@@ -317,6 +317,7 @@
 % document even if expressions are exactly the same. For each file / directory
 % multiple qos_entry can be defined.
 -record(qos_entry, {
+    type :: qos_entry:type(),
     file_uuid :: file_meta:uuid(),
     expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
@@ -325,13 +326,7 @@
     % Contains id of provider that marked given entry as possible or impossible.
     % If more than one provider concurrently marks entry as possible one provider is
     % deterministically selected during conflict resolution.
-    possibility_check :: {possible | impossible, od_provider:id()},
-    % True when entry was created by internal provider logic
-    % fixme maybe rename to type (normal(standard, user_defined, external) | internal) -> then deletion type (normal | internal)
-    internal = false :: boolean(), % fixme maybe not necessary
-    % Module with callbacks fixme . Must implement qos_caller(tbd fixme) behaviour.
-    % Only applicable to internal entries
-    callback_module = undefined :: module() | undefined % fixme not needed (it is run on other provider)
+    possibility_check :: {possible | impossible, od_provider:id()}
 }).
 
 % This model holds information of QoS traverse state in a directory subtree in order 
@@ -393,8 +388,8 @@
     task_id :: traverse:id(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),
-    % fixme empty binary
-    slave_job_id = <<>> :: qos_entry:id() | traverse:id()
+    % fixme name
+    slave_job_id = undefined :: undefined | qos_entry:id() | traverse:id()
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.

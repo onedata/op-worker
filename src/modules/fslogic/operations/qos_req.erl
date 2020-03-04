@@ -31,19 +31,18 @@
 %%%===================================================================
 
 
-
 %%--------------------------------------------------------------------
 %% @equiv add_qos_entry_insecure/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:raw(),
-    qos_entry:replicas_num(), module()) -> fslogic_worker:provider_response().
-add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, CallbackModule) ->
+    qos_entry:replicas_num(), qos_entry:type()) -> fslogic_worker:provider_response().
+add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx,
         [traverse_ancestors, ?write_metadata]
     ),
-    add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum, CallbackModule).
+    add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum, EntryType).
 
 
 %%--------------------------------------------------------------------
@@ -80,7 +79,6 @@ get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec remove_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id(), boolean()) ->
     fslogic_worker:provider_response().
-% fixme better name (maybe not boolean flag) InternalDelete?
 remove_qos_entry(UserCtx, FileCtx0, QosEntryId, ForceDelete) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
@@ -247,15 +245,15 @@ check_fulfillment_insecure(FileCtx, QosEntryId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_possible_qos(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), 
-    module(), [storage:id()]) -> fslogic_worker:provider_response().
-add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, CallbackModule, Storages) ->
+    qos_entry:type(), [storage:id()]) -> fslogic_worker:provider_response().
+add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, EntryType, Storages) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     AllTraverseReqs = qos_traverse_req:build_traverse_reqs(FileUuid, Storages),
 
     case qos_entry:create(
-        SpaceId, FileUuid, QosExpressionInRPN, ReplicasNum, CallbackModule, true, AllTraverseReqs
+        SpaceId, FileUuid, QosExpressionInRPN, ReplicasNum, EntryType, true, AllTraverseReqs
     ) of
         {ok, QosEntryId} ->
             file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
@@ -276,12 +274,12 @@ add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, CallbackModule, Stora
 %% @end
 %%--------------------------------------------------------------------
 -spec add_impossible_qos(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), 
-    module()) -> fslogic_worker:provider_response().
-add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, CallbackModule) ->
+    qos_entry:type()) -> fslogic_worker:provider_response().
+add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, EntryType) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    case qos_entry:create(SpaceId, FileUuid, QosExpressionInRPN, ReplicasNum, CallbackModule) of
+    case qos_entry:create(SpaceId, FileUuid, QosExpressionInRPN, ReplicasNum, EntryType) of
         {ok, QosEntryId} ->
             ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
             #provider_response{

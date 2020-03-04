@@ -6,10 +6,11 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% fixme
+%%% This module is responsible for traversing files tree in order to 
+%%% perform necessary clean up after space was unsupported.
 %%% @end
 %%%--------------------------------------------------------------------
-% sth like clear storage traverse?
+% fixme name
 -module(unsupport_traverse).
 -author("Michal Stanisz").
 
@@ -22,15 +23,19 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start/2, init_pool/0,
-    stop_pool/0]).
+-export([
+    start/2,
+    init_pool/0, stop_pool/0,
+    delete_ended/2,
+    is_finished/1
+]).
 
 %% Traverse behaviour callbacks
--export([do_master_job/2, do_slave_job/2, task_finished/2,
-    get_job/1, update_job_progress/5]).
-
--export([delete_ended/2]).
--export([is_finished/1]).
+-export([
+    get_job/1, 
+    update_job_progress/5,
+    do_master_job/2, do_slave_job/2
+]).
 
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
@@ -46,12 +51,8 @@ start(SpaceId, StorageId) ->
     Options = #{
         task_id => id(SpaceId, StorageId),
         batch_size => ?TRAVERSE_BATCH_SIZE,
-        % fixme first remove files then parent dirs
-        execute_slave_on_dir => true,
-        additional_data => #{
-            <<"space_id">> => SpaceId,
-            <<"storage_id">> => StorageId
-        }
+        %% @TODO VFS-6165 execute on dir after subtree
+        execute_slave_on_dir => true
     },
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     {ok, _} = tree_traverse:run(?POOL_NAME, file_ctx:new_by_guid(SpaceGuid), Options).
@@ -59,7 +60,6 @@ start(SpaceId, StorageId) ->
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    % Get pool limits from app.config
     % fixme 
     MasterJobsLimit = application:get_env(?APP_NAME, qos_traverse_master_jobs_limit, 10),
     SlaveJobsLimit = application:get_env(?APP_NAME, qos_traverse_slave_jobs_limit, 20),
@@ -71,6 +71,17 @@ init_pool() ->
 -spec stop_pool() -> ok.
 stop_pool() ->
     traverse:stop_pool(?POOL_NAME).
+
+-spec delete_ended(od_space:id(), storage:id()) -> ok.
+delete_ended(SpaceId, StorageId) ->
+    traverse_task:delete_ended(?POOL_NAME, id(SpaceId, StorageId)).
+
+-spec is_finished(traverse:id()) -> {ok, boolean()}.
+is_finished(TaskId) ->
+    case traverse_task:get(?POOL_NAME, TaskId) of
+        {ok, #document{value = #traverse_task{status = finished}}} -> {ok, true};
+        _ -> {ok, false}
+    end.
 
 %%%===================================================================
 %%% Traverse callbacks
@@ -87,15 +98,6 @@ get_job(DocOrID) ->
 update_job_progress(Id, Job, Pool, TaskId, Status) ->
     tree_traverse:update_job_progress(Id, Job, Pool, TaskId, Status, ?MODULE).
 
--spec task_finished(traverse:id(), traverse:pool()) -> ok.
-task_finished(TaskId, _PoolName) ->
-    {ok, #{
-        <<"space_id">> := SpaceId,
-        <<"storage_id">> := StorageId
-    }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
-    % fixme delete space root dir,
-    ok.
-
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
@@ -106,7 +108,6 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskI
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {P, _} = file_ctx:get_canonical_path(FileCtx),
     {FileLocation, FileCtx1} = file_ctx:get_local_file_location_doc(FileCtx, false),
     ok = file_qos:delete(FileUuid),
     case file_ctx:is_dir(FileCtx1) of
@@ -123,15 +124,12 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskI
     end,
     ok.
 
-delete_ended(SpaceId, StorageId) ->
-    traverse_task:delete_ended(?POOL_NAME, id(SpaceId, StorageId)).
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
+%% @private
+-spec id(od_space:id(), storage:id()) -> traverse:id().
 id(SpaceId, StorageId) ->
     datastore_key:new_from_digest([SpaceId, StorageId]).
-
-is_finished(TaskId) ->
-    case traverse_task:get(?POOL_NAME, TaskId) of
-        {ok, #document{value = #traverse_task{status = finished}}} -> true;
-        _ -> false
-    end.
