@@ -29,7 +29,11 @@
 -export([init_pool/0]).
 -export([delete_ended/2]).
 
--type stage() :: init | qos | clear_storage | wait_for_dbsync | clean_database.
+% for tests
+-export([execute_stage/1]).
+
+% fixme better names
+-type stage() :: init | qos | clear_storage | wait_for_dbsync | clean_database | finished.
 
 -export_type([stage/0]).
 
@@ -55,7 +59,7 @@ execute_stage(#space_unsupport_job{stage = qos, slave_job_id = <<"">>} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     % fixme if preferred provider replace AllStorages with provider Id (not really if other providers still allowed)
-    Expression = <<?ALL_STORAGES/binary, " - storage_id = ", StorageId/binary>>,
+    Expression = <<?QOS_ALL_STORAGES/binary, " - storage_id = ", StorageId/binary>>,
     {ok, QosEntryId} = lfm:add_qos_entry(?ROOT_SESS_ID, {guid, SpaceGuid}, Expression, 1, ?MODULE),
     ?notice("QosEntry: ~p", [QosEntryId]),
     NewJob = Job#space_unsupport_job{slave_job_id = QosEntryId},
@@ -68,17 +72,13 @@ execute_stage(#space_unsupport_job{stage = clear_storage, slave_job_id = <<"">>}
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
     % fixme do not clean storage if import is on
     {ok, TaskId} = unsupport_traverse:start(SpaceId, StorageId),
-    ?notice("TaskId: ~p", [TaskId]),
     NewJob = Job#space_unsupport_job{slave_job_id = TaskId},
-    space_unsupport_job:save(NewJob),
+    {ok, _} = space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
-execute_stage(#space_unsupport_job{stage = clear_storage} = _Job) ->
-    % fixme  no receive
-    receive end_of_traverse ->
-        ok
-        % fixme delete space root dir
-    end;
+execute_stage(#space_unsupport_job{stage = clear_storage, slave_job_id = TaskId} = Job) ->
+    wait_for_traverse(TaskId);
 execute_stage(#space_unsupport_job{stage = wait_for_dbsync, slave_job_id = <<"">>} = _Job) ->
+    % fixme better stage name (we are waiting for all docs to be persisted)
     % fixme wait for all docs to be saved on disc
     timer:sleep(timer:seconds(60)),
     % fixme stop dbsync
@@ -117,7 +117,8 @@ do_master_job(#space_unsupport_job{stage = Stage} = Job, _MasterJobArgs) ->
 do_slave_job(#space_unsupport_job{stage = Stage, space_id = SpaceId, storage_id = StorageId}, _TaskId) ->
     ?notice("starting stage: ~p", [Stage]),
     {ok, Job} = space_unsupport_job:get(SpaceId, StorageId, Stage),
-    execute_stage(Job),
+    ?MODULE:execute_stage(Job),
+    % call using module for tests
     ?notice("finished stage: ~p", [Stage]).
 
 task_finished(TaskId, Pool) ->
@@ -150,6 +151,16 @@ wait_for_qos(QosEntryId) ->
         {ok, false} ->
             timer:sleep(timer:seconds(1)),
             wait_for_qos(QosEntryId)
+    end.
+
+
+% fixme merge with above
+wait_for_traverse(TaskId) ->
+    case unsupport_traverse:is_finished(TaskId) of
+        true -> ok;
+        false ->
+            timer:sleep(timer:seconds(1)),
+            wait_for_traverse(TaskId)
     end.
 
 % fixme

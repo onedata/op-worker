@@ -30,6 +30,7 @@
     get_job/1, update_job_progress/5]).
 
 -export([delete_ended/2]).
+-export([is_finished/1]).
 
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
@@ -40,7 +41,7 @@
 %%% API
 %%%===================================================================
 
-% fixme
+-spec start(od_space:id(), storage:id()) -> {ok, traverse:id()}.
 start(SpaceId, StorageId) ->
     Options = #{
         task_id => id(SpaceId, StorageId),
@@ -49,19 +50,13 @@ start(SpaceId, StorageId) ->
         execute_slave_on_dir => true,
         additional_data => #{
             <<"space_id">> => SpaceId,
-            <<"storage_id">> => StorageId,
-            % fixme better name or ath else
-            <<"inform_pid">> => term_to_binary(self())
+            <<"storage_id">> => StorageId
         }
     },
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     {ok, _} = tree_traverse:run(?POOL_NAME, file_ctx:new_by_guid(SpaceGuid), Options).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Initializes pool for traverse tasks concerning QoS management.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
     % Get pool limits from app.config
@@ -95,13 +90,10 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 -spec task_finished(traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
     {ok, #{
-        <<"space_id">> := _SpaceId,
-        <<"storage_id">> := _StorageId,
-        <<"inform_pid">> := EncodedPid
+        <<"space_id">> := SpaceId,
+        <<"storage_id">> := StorageId
     }} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
-    Pid = binary_to_term(EncodedPid),
-    Pid ! end_of_traverse,
-    % fixme delete space root dir
+    % fixme delete space root dir,
     ok.
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
@@ -115,8 +107,6 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskI
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     {P, _} = file_ctx:get_canonical_path(FileCtx),
-    % fixme 
-    ?notice("running for: ~p", [P]),
     {FileLocation, FileCtx1} = file_ctx:get_local_file_location_doc(FileCtx, false),
     ok = file_qos:delete(FileUuid),
     case file_ctx:is_dir(FileCtx1) of
@@ -124,14 +114,11 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskI
             sd_utils:delete_storage_dir(FC, UserCtx);
         {false, FC} ->
             case file_location:is_storage_file_created(FileLocation) of
-                false ->
-                    % fixme
-                    ?warning("ignoring: ~p", [P]),
-                    ok;
+                false -> ok;
                 true ->
                     LocationId = file_location:local_id(FileUuid),
                     sd_utils:delete_storage_file(FC, UserCtx),
-                    fslogic_location_cache:clear_blocks(FileCtx, LocationId)
+                    fslogic_location_cache:delete_location(FileUuid, LocationId)
             end
     end,
     ok.
@@ -142,3 +129,9 @@ delete_ended(SpaceId, StorageId) ->
 
 id(SpaceId, StorageId) ->
     datastore_key:new_from_digest([SpaceId, StorageId]).
+
+is_finished(TaskId) ->
+    case traverse_task:get(?POOL_NAME, TaskId) of
+        {ok, #document{value = #traverse_task{status = finished}}} -> true;
+        _ -> false
+    end.

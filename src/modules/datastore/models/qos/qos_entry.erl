@@ -119,6 +119,7 @@ create(SpaceId, FileUuid, Expression, ReplicasNum, CallbackModule) ->
     {ok, doc()} | {error, term()}.
 create(SpaceId, FileUuid, Expression, ReplicasNum, CallbackModule, Possible, TraverseReqs) ->
     QosEntryId = datastore_key:new(),
+    ?critical("qos_entry create: ~p", [QosEntryId]),
     PossibilityCheck = case Possible of
         true ->
             {possible, oneprovider:get_id()};
@@ -152,6 +153,7 @@ update(Key, Diff) ->
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(QosEntryId) ->
+    ?critical("qos_entry delete: ~p", [QosEntryId]),
     datastore_model:delete(?CTX, QosEntryId).
 
 

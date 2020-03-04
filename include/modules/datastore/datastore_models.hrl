@@ -327,6 +327,7 @@
     % deterministically selected during conflict resolution.
     possibility_check :: {possible | impossible, od_provider:id()},
     % True when entry was created by internal provider logic
+    % fixme maybe rename to type (normal(standard, user_defined, external) | internal) -> then deletion type (normal | internal)
     internal = false :: boolean(), % fixme maybe not necessary
     % Module with callbacks fixme . Must implement qos_caller(tbd fixme) behaviour.
     % Only applicable to internal entries

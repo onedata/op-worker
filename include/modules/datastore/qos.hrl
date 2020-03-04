@@ -31,7 +31,7 @@
 -define(EQUALITY, <<"=">>).
 
 % fixme tests
--define(ALL_STORAGES, <<"all">>).
+-define(QOS_ALL_STORAGES, <<"all">>).
 
 % macros used for operations on QoS bounded cache
 -define(CACHE_TABLE_NAME(SpaceId),

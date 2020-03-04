@@ -1433,12 +1433,17 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
     [{binary(), [#{{binary(), binary()} => non_neg_integer()}]}]) -> ok.
 storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     StorageMap = maps:fold(fun(ProviderId, InitialStorageDesc, Acc) ->
-        NewStorageDesc = maps:map(fun(_StorageId, Desc) ->
+        NewStorageDesc = maps:map(fun(StorageId, Desc) ->
             Desc1 = case Desc of
                 [] -> #{};
                 _ -> Desc
             end,
-            Desc1#{<<"provider_id">> => ProviderId}
+            QosParameters = maps:get(<<"qos_parameters">>, Desc1, #{}),
+            ExtendedQosParameters = QosParameters#{
+                <<"storage_id">> => StorageId,
+                <<"provider_id">> => ProviderId
+            },
+            Desc1#{<<"provider_id">> => ProviderId, <<"qos_parameters">> => ExtendedQosParameters}
         end, InitialStorageDesc),
         maps:merge(Acc, NewStorageDesc)
     end, #{}, StoragesSetupMap),
@@ -1453,7 +1458,7 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
 
     GetStorageFun = fun(SM) ->
         fun (<<"all">>) ->
-                % This is useful when changing storage parameters. Used only in mock.
+                % This is useful when changing storage QoS parameters. Used only in mock.
                 {ok, SM};
             (StorageId) ->
                 StorageDesc = maps:get(StorageId, SM, #{}),

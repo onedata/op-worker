@@ -23,7 +23,7 @@
     model => ?MODULE
 }).
 
--export([save/1, save/3, get/1, get/3, delete/1]).
+-export([save/1, save/3, get/1, get/3, delete/1, delete/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -70,6 +70,9 @@ get(Key) ->
 delete(Key) ->
     ok = datastore_model:delete(?CTX, Key),
     {ok, Key}.
+
+delete(SpaceId, StorageId, Stage) ->
+    delete(gen_id(SpaceId, StorageId, Stage)).
 
 gen_id(SpaceId, StorageId, Stage) ->
     datastore_key:new_from_digest([SpaceId, StorageId, Stage]).

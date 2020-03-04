@@ -443,7 +443,6 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
-    % fixme first remove in zone
     space_unsupport:run(SpaceId, StorageId).
 
 
@@ -485,10 +484,10 @@ on_space_supported(SpaceId) ->
 %% @private
 -spec on_space_unsupported(od_space:id(), id()) -> ok.
 on_space_unsupported(SpaceId, StorageId) ->
-    autocleaning_api:disable(SpaceId),
-    autocleaning_api:delete_config(SpaceId),
     file_popularity_api:disable(SpaceId),
     file_popularity_api:delete_config(SpaceId),
+    autocleaning_api:disable(SpaceId),
+    autocleaning_api:delete_config(SpaceId),
     storage_sync:space_unsupported(SpaceId, StorageId),
     main_harvesting_stream:space_unsupported(SpaceId).
 
