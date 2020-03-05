@@ -71,6 +71,8 @@ run_unauthorized_clients_test_cases(Config, #scenario_spec{
         UnauthorizedClients,
         required_data_sets(DataSpec),
         case ScenarioType of
+            rest_not_supported ->
+                ?ERROR_NOT_SUPPORTED;
             rest_with_file_path ->
                 ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
             _ ->
@@ -90,6 +92,8 @@ run_forbidden_clients_test_cases(Config, #scenario_spec{
         ForbiddenClients,
         required_data_sets(DataSpec),
         case ScenarioType of
+            rest_not_supported ->
+                ?ERROR_NOT_SUPPORTED;
             rest_with_file_path ->
                 ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
             _ ->
@@ -156,7 +160,11 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                 % operations not requiring any data cannot be tested against
                 % malformed data
                 true;
-            (TargetNode, Client, {DataSet, _BadKey, ExpError}) ->
+            (TargetNode, Client, {DataSet, _BadKey, Error}) ->
+                ExpError = case ScenarioType of
+                    rest_not_supported -> ?ERROR_NOT_SUPPORTED;
+                    _ -> Error
+                end,
                 Args = PrepareArgsFun(Env, DataSet),
                 Result = make_call(Config, TargetNode, Client, Args),
                 try
@@ -233,7 +241,8 @@ make_call(Config, Node, Client, #gs_args{} = Args) ->
 
 validate_error_result(Type, ExpError, {ok, RespCode, RespBody}) when
     Type == rest;
-    Type == rest_with_file_path
+    Type == rest_with_file_path;
+    Type == rest_not_supported
 ->
     ExpCode = errors:to_http_code(ExpError),
     ExpBody = #{<<"error">> => errors:to_json(ExpError)},

@@ -123,6 +123,7 @@
             "space2": {
                 "displayed_name": "space2",
                 "users": [
+                    "user2",
                     "user3"
                 ],
                 "groups": [

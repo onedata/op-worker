@@ -15,7 +15,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 -type client() :: nobody | root | {user, UserId :: binary()}.
--type scenario_type() :: rest | rest_with_file_path | gs.
+-type scenario_type() :: rest | rest_with_file_path | rest_not_supported | gs.
 
 -record(client_spec, {
     correct = [] :: [client()],
