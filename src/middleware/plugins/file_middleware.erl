@@ -38,9 +38,11 @@
 -define(DEFAULT_LIST_ENTRIES, 1000).
 
 -define(ALL_BASIC_ATTRIBUTES, [
-    <<"mode">>, <<"size">>, <<"atime">>, <<"ctime">>,
-    <<"mtime">>, <<"storage_group_id">>, <<"storage_user_id">>, <<"name">>,
-    <<"owner_id">>, <<"shares">>, <<"type">>, <<"file_id">>
+    <<"file_id">>, <<"name">>, <<"mode">>,
+    <<"storage_user_id">>, <<"storage_group_id">>,
+    <<"atime">>, <<"mtime">>, <<"ctime">>,
+    <<"type">>, <<"size">>, <<"shares">>,
+    <<"provider_id">>, <<"owner_id">>
 ]).
 
 
@@ -338,10 +340,8 @@ data_spec_get(#gri{aspect = list}) -> #{
 };
 
 data_spec_get(#gri{aspect = children}) -> #{
-    required => #{
-        <<"limit">> => {integer, {not_lower_than, 1}}
-    },
     optional => #{
+        <<"limit">> => {integer, {not_lower_than, 1}},
         <<"index">> => {any, fun
             (null) ->
                 {true, undefined};
@@ -358,6 +358,7 @@ data_spec_get(#gri{aspect = children}) -> #{
     }
 };
 
+% TODO deprecated - remove
 data_spec_get(#gri{aspect = attrs}) -> #{
     optional => #{<<"attribute">> => {binary, ?ALL_BASIC_ATTRIBUTES}}
 };
@@ -475,9 +476,9 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}},
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
-    Limit = maps:get(<<"limit">>, Data),
+    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
     StartId = maps:get(<<"index">>, Data, undefined),
-    Offset = maps:get(<<"offset">>, Data, 0),
+    Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
     case lfm:ls(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
         {ok, Children, _, _} ->
@@ -849,6 +850,7 @@ get_attr(<<"atime">>, #file_attr{atime = ATime}) -> ATime;
 get_attr(<<"ctime">>, #file_attr{ctime = CTime}) -> CTime;
 get_attr(<<"mtime">>, #file_attr{mtime = MTime}) -> MTime;
 get_attr(<<"owner_id">>, #file_attr{owner_id = OwnerId}) -> OwnerId;
+get_attr(<<"provider_id">>, #file_attr{provider_id = ProviderId}) -> ProviderId;
 get_attr(<<"type">>, #file_attr{type = ?REGULAR_FILE_TYPE}) -> <<"reg">>;
 get_attr(<<"type">>, #file_attr{type = ?DIRECTORY_TYPE}) -> <<"dir">>;
 get_attr(<<"type">>, #file_attr{type = ?SYMLINK_TYPE}) -> <<"lnk">>;

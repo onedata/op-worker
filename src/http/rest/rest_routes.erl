@@ -2,7 +2,7 @@
 %%% This file has been automatically generated from Swagger
 %%% specification - DO NOT EDIT!
 %%%
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -32,6 +32,7 @@
 -spec routes() -> [{binary(), module(), map()}].
 routes() ->
     AllRoutes = lists:flatten([
+        data_rest_routes:routes(),
         file_rest_routes:routes(),
         monitoring_rest_routes:routes(),
         oneprovider_rest_routes:routes(),
