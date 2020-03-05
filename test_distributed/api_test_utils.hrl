@@ -15,7 +15,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 -type client() :: nobody | root | {user, UserId :: binary()}.
--type scenario_type() :: rest | gs.
+-type scenario_type() :: rest | rest_with_file_path | gs.
 
 -record(client_spec, {
     correct = [] :: [client()],
@@ -23,7 +23,7 @@
     forbidden = [] :: [client()]
 }).
 
--record(params_spec, {
+-record(data_spec, {
     required = [] :: [Key :: binary()],
     optional = [] :: [Key :: binary()],
     at_least_one = [] :: [Key :: binary()],
@@ -38,6 +38,14 @@
     body = <<>> :: binary()
 }).
 
+-record(gs_args, {
+    operation = get :: gs_protocol:operation(),
+    gri :: gri:gri(),
+    subscribe = false :: boolean(),
+    auth_hint = undefined :: gs_protocol:auth_hint(),
+    data = undefined :: undefined | map()
+}).
+
 -record(scenario_spec, {
     type :: scenario_type(),
     target_node :: node(),
@@ -49,7 +57,7 @@
 
     prepare_args_fun :: fun((Env :: map(), Data :: map()) -> #rest_args{}),
     validate_result_fun :: fun((Result :: term(), Env :: map(), Data :: map()) -> ok | no_return()),
-    params_spec = undefined :: undefined | #params_spec{}
+    data_spec = undefined :: undefined | #data_spec{}
 }).
 
 -endif.

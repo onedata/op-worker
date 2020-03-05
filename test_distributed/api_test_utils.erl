@@ -12,7 +12,6 @@
 
 -include("api_test_utils.hrl").
 -include("global_definitions.hrl").
--include("http/rest.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -20,6 +19,8 @@
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 -export([run_scenarios/2]).
+
+-type config() :: proplists:proplist().
 
 -define(NO_DATA, undefined).
 -define(GS_RESP(Result), #gs_resp_graph{data = Result}).
@@ -47,28 +48,28 @@ run_scenarios(Config, ScenariosSpecs) ->
 
 
 %%%===================================================================
-%%% Internal functions
+%%% Run scenario test cases combinations functions
 %%%===================================================================
 
 
 run_scenario(Config, ScenarioSpec) ->
     true
-    and run_unauthorized_test_cases(Config, ScenarioSpec)
-    and run_forbidden_test_cases(Config, ScenarioSpec)
+    and run_unauthorized_clients_test_cases(Config, ScenarioSpec)
+    and run_forbidden_clients_test_cases(Config, ScenarioSpec)
     and run_malformed_data_test_cases(Config, ScenarioSpec)
-    and run_valid_data_test_cases(Config, ScenarioSpec).
+    and run_expected_success_test_cases(Config, ScenarioSpec).
 
 
-run_unauthorized_test_cases(Config, #scenario_spec{
+run_unauthorized_clients_test_cases(Config, #scenario_spec{
     type = ScenarioType,
     client_spec = #client_spec{unauthorized = UnauthorizedClients},
-    params_spec = ParamsSpec
+    data_spec = DataSpec
 } = ScenarioSpec) ->
     run_invalid_clients_test_cases(
         Config,
         ScenarioSpec,
         UnauthorizedClients,
-        required_data_sets(ParamsSpec),
+        required_data_sets(DataSpec),
         case ScenarioType of
             rest_with_file_path ->
                 ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
@@ -78,16 +79,16 @@ run_unauthorized_test_cases(Config, #scenario_spec{
     ).
 
 
-run_forbidden_test_cases(Config, #scenario_spec{
+run_forbidden_clients_test_cases(Config, #scenario_spec{
     type = ScenarioType,
     client_spec = #client_spec{forbidden = ForbiddenClients},
-    params_spec = ParamsSpec
+    data_spec = DataSpec
 } = ScenarioSpec) ->
     run_invalid_clients_test_cases(
         Config,
         ScenarioSpec,
         ForbiddenClients,
-        required_data_sets(ParamsSpec),
+        required_data_sets(DataSpec),
         case ScenarioType of
             rest_with_file_path ->
                 ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
@@ -111,7 +112,7 @@ run_invalid_clients_test_cases(Config, #scenario_spec{
     Result = lists:foldl(fun(Client, OuterAcc) ->
         OuterAcc and lists:foldl(fun(DataSet, InnerAcc) ->
                 Args = PrepareArgsFun(Env, DataSet),
-                Result = call_api(Config, TargetNode, Client, Args),
+                Result = make_call(Config, TargetNode, Client, Args),
                 InnerAcc and try
                     validate_error_result(ScenarioType, ExpError, Result),
                     EnvVerifyFun(false, Env, DataSet)
@@ -120,7 +121,7 @@ run_invalid_clients_test_cases(Config, #scenario_spec{
                     false
                 end
         end, true, DataSets)
-    end, true, Clients),
+    end, true, filter_available_clients(ScenarioType, Clients)),
     EnvTeardownFun(Env),
     Result.
 
@@ -135,9 +136,9 @@ run_malformed_data_test_cases(Config, #scenario_spec{
     verify_fun = EnvVerifyFun,
 
     prepare_args_fun = PrepareArgsFun,
-    params_spec = ParamsSpec
+    data_spec = DataSpec
 }) ->
-    BadDataSets = bad_data_sets(ParamsSpec),
+    BadDataSets = bad_data_sets(DataSpec),
     Env = EnvSetupFun(),
     Result = lists:foldl(fun(Client, OuterAcc) ->
         OuterAcc and lists:foldl(fun
@@ -147,7 +148,7 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                 InnerAcc;
             ({DataSet, _BadKey, ExpError}, InnerAcc) ->
                 Args = PrepareArgsFun(Env, DataSet),
-                Result = call_api(Config, TargetNode, Client, Args),
+                Result = make_call(Config, TargetNode, Client, Args),
                 InnerAcc and try
                     validate_error_result(ScenarioType, ExpError, Result),
                     EnvVerifyFun(false, Env, DataSet)
@@ -156,13 +157,14 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                     false
                 end
         end, true, BadDataSets)
-    end, true, CorrectClients),
+    end, true, filter_available_clients(ScenarioType, CorrectClients)),
     EnvTeardownFun(Env),
 
     Result.
 
 
-run_valid_data_test_cases(Config, #scenario_spec{
+run_expected_success_test_cases(Config, #scenario_spec{
+    type = ScenarioType,
     target_node = TargetNode,
     client_spec = #client_spec{correct = CorrectClients},
 
@@ -172,18 +174,18 @@ run_valid_data_test_cases(Config, #scenario_spec{
 
     prepare_args_fun = PrepareArgsFun,
     validate_result_fun = ValidateResultFun,
-    params_spec = ParamsSpec
+    data_spec = DataSpec
 }) ->
-    CorrectDataSets = correct_data_sets(ParamsSpec),
+    CorrectDataSets = correct_data_sets(DataSpec),
 
     Result = lists:foldl(fun(Client, OuterAcc) ->
         OuterAcc and lists:foldl(fun(DataSet, InnerAcc) ->
             Env = EnvSetupFun(),
             Args = PrepareArgsFun(Env, DataSet),
-            Result = call_api(Config, TargetNode, Client, Args),
+            Result = make_call(Config, TargetNode, Client, Args),
             InnerAcc and try
                 ValidateResultFun(Result, Env, DataSet),
-                EnvVerifyFun(false, Env, DataSet)
+                EnvVerifyFun(true, Env, DataSet)
             catch _:_ ->
                 log_failure(TargetNode, Client, Args, succes, Result),
                 false
@@ -191,47 +193,22 @@ run_valid_data_test_cases(Config, #scenario_spec{
                 EnvTeardownFun(Env)
             end
         end, true, CorrectDataSets)
-    end, true, CorrectClients),
+    end, true, filter_available_clients(ScenarioType, CorrectClients)),
 
     Result.
 
 
-call_api(Config, Node, Client, #rest_args{} = Args) ->
-    call_rest_api(Config, Node, Client, Args).
+filter_available_clients(gs, Clients) ->
+    % TODO rm when connecting via gs as nobody becomes possible
+    Clients -- [nobody];
+filter_available_clients(_ScenarioType, Clients) ->
+    Clients.
 
 
-call_rest_api(_Config, Node, Client, #rest_args{
-    method = Method,
-    path = Path,
-    headers = Headers0,
-    body = Body
-}) ->
-    URL = rest_endpoint(Node, Path),
-
-    Headers = utils:ensure_defined(Headers0, undefined, #{}),
-    HeadersWithAuth = case Client of
-        nobody ->
-            Headers;
-        {user, UserId} ->
-            Headers#{
-                ?HDR_X_AUTH_TOKEN => initializer:create_access_token(UserId)
-            }
-    end,
-
-    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
-    Opts = [{ssl_options, [{cacerts, CaCerts}]}],
-
-    case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of
-        {ok, RespCode, RespHeaders, RespBody} ->
-            case maps:get(<<"content-type">>, RespHeaders, undefined) of
-                <<"application/json">> ->
-                    {ok, RespCode, json_utils:decode(RespBody)};
-                _ ->
-                    {ok, RespCode, RespBody}
-            end;
-        {error, _} = Error ->
-            Error
-    end.
+make_call(Config, Node, Client, #rest_args{} = Args) ->
+    make_rest_call(Config, Node, Client, Args);
+make_call(Config, Node, Client, #gs_args{} = Args) ->
+    make_gs_call(Config, Node, Client, Args).
 
 
 validate_error_result(Type, ExpError, {ok, RespCode, RespBody}) when
@@ -241,7 +218,10 @@ validate_error_result(Type, ExpError, {ok, RespCode, RespBody}) when
     ExpCode = errors:to_http_code(ExpError),
     ExpBody = #{<<"error">> => errors:to_json(ExpError)},
 
-    ?assertEqual({ExpCode, ExpBody}, {RespCode, RespBody}).
+    ?assertEqual({ExpCode, ExpBody}, {RespCode, RespBody});
+
+validate_error_result(gs, ExpError, Result) ->
+    ?assertEqual(ExpError, Result).
 
 
 log_failure(TargetNode, Client, Args, Expected, Got) ->
@@ -252,7 +232,7 @@ log_failure(TargetNode, Client, Args, Expected, Got) ->
     "Expected: ~p~n"
     "Got: ~p~n", [
         TargetNode,
-        aai:auth_to_printable(client_to_aai_auth(Client)),
+        aai:auth_to_printable(client_to_auth(Client)),
         io_lib_pretty:print(Args, fun get_record_def/2),
         Expected,
         Got
@@ -260,7 +240,7 @@ log_failure(TargetNode, Client, Args, Expected, Got) ->
 
 
 %%%===================================================================
-%%% Prepare data combinations
+%%% Prepare data combinations functions
 %%%===================================================================
 
 
@@ -268,7 +248,7 @@ log_failure(TargetNode, Client, Args, Expected, Got) ->
 required_data_sets(undefined) ->
     [?NO_DATA];
 required_data_sets(DataSpec) ->
-    #params_spec{
+    #data_spec{
         required = Required,
         at_least_one = AtLeastOne
     } = DataSpec,
@@ -311,7 +291,7 @@ required_data_sets(DataSpec) ->
 optional_data_sets(undefined, _) ->
     [?NO_DATA];
 optional_data_sets(DataSpec, RequiredWithAll) ->
-    #params_spec{
+    #data_spec{
         optional = Optional
     } = DataSpec,
 
@@ -353,7 +333,7 @@ correct_data_sets(DataSpec) ->
 bad_data_sets(undefined) ->
     [?NO_DATA];
 bad_data_sets(DataSpec) ->
-    #params_spec{
+    #data_spec{
         required = Required,
         at_least_one = AtLeastOne,
         optional = Optional,
@@ -370,7 +350,7 @@ bad_data_sets(DataSpec) ->
 
 
 % Converts correct value spec into a value
-get_correct_value(Key, #params_spec{correct_values = CorrectValues}) ->
+get_correct_value(Key, #data_spec{correct_values = CorrectValues}) ->
     case maps:get(Key, CorrectValues) of
         Fun when is_function(Fun, 0) ->
             Fun();
@@ -380,37 +360,148 @@ get_correct_value(Key, #params_spec{correct_values = CorrectValues}) ->
 
 
 %%%===================================================================
-%%% General use private functions
+%%% Internal functions
 %%%===================================================================
 
 
-rest_endpoint(Node, Path) ->
-    Port = case get(port) of
-        undefined ->
-            {ok, P} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
-            PStr = case P of
-                443 -> "";
-                _ -> ":" ++ integer_to_list(P)
-            end,
-            put(port, PStr),
-            PStr;
-        P ->
-            P
-    end,
+%% @private
+-spec make_gs_call(config(), node(), client(), #gs_args{}) ->
+    {ok, Result :: map()} | {error, term()}.
+make_gs_call(_Config, Node, Client, #gs_args{
+    operation = Operation,
+    gri = GRI,
+    subscribe = Subscribe,
+    auth_hint = AuthHint,
+    data = Data
+}) ->
+    GsClient = connect_via_gs(Node, Client),
+
+    case gs_client:graph_request(GsClient, GRI, Operation, Data, Subscribe, AuthHint) of
+        {ok, ?GS_RESP(Result)} ->
+            {ok, Result};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%% @private
+-spec connect_via_gs(node(), client()) -> GsClient :: pid().
+connect_via_gs(_Node, nobody) ->
+    % TODO fix when connecting as nobody via gs becomes possible
+    throw(fail);
+connect_via_gs(Node, {user, UserId}) ->
+    AccessToken = initializer:create_access_token(UserId),
+    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
+    connect_via_gs(
+        Node,
+        ?SUB(user, UserId),
+        {token, AccessToken},
+        [{cacerts, CaCerts}]
+    ).
+
+
+%% @private
+-spec connect_via_gs(node(), aai:subject(), client(), ConnectionOpts :: proplists:proplist()) ->
+    GsClient :: pid().
+connect_via_gs(Node, ExpIdentity, Authorization, Opts) ->
+    {ok, GsClient, #gs_resp_handshake{identity = ExpIdentity}} = gs_client:start_link(
+        gs_endpoint(Node),
+        Authorization,
+        rpc:call(Node, gs_protocol, supported_versions, []),
+        fun(_) -> ok end,
+        Opts
+    ),
+    GsClient.
+
+
+%% @private
+-spec gs_endpoint(node()) -> URL :: binary().
+gs_endpoint(Node) ->
+    Port = get_https_server_port_str(Node),
     {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
 
     str_utils:join_as_binaries(
-        ["https://", Domain, Port, "/api/v3/oneprovider/", Path],
+        ["wss://", Domain, Port, "/graph_sync/gui"],
         <<>>
     ).
 
 
-% Converts auth used in tests into aai auth
-client_to_aai_auth(nobody) ->
+%% @private
+-spec make_rest_call(config(), node(), client(), #rest_args{}) ->
+    {ok, RespCode :: non_neg_integer(), RespBody :: binary() | map()} |
+    {error, term()}.
+make_rest_call(_Config, Node, Client, #rest_args{
+    method = Method,
+    path = Path,
+    headers = Headers,
+    body = Body
+}) ->
+    URL = get_rest_endpoint(Node, Path),
+    HeadersWithAuth = maps:merge(
+        utils:ensure_defined(Headers, undefined, #{}),
+        get_auth_headers(Client)
+    ),
+    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
+    Opts = [{ssl_options, [{cacerts, CaCerts}]}],
+
+    case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of
+        {ok, RespCode, RespHeaders, RespBody} ->
+            case maps:get(<<"content-type">>, RespHeaders, undefined) of
+                <<"application/json">> ->
+                    {ok, RespCode, json_utils:decode(RespBody)};
+                _ ->
+                    {ok, RespCode, RespBody}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%% @private
+-spec get_auth_headers(client()) -> AuthHeaders :: map().
+get_auth_headers(nobody) ->
+    #{};
+get_auth_headers({user, UserId}) ->
+    #{?HDR_X_AUTH_TOKEN => initializer:create_access_token(UserId)}.
+
+
+%% @private
+-spec get_rest_endpoint(node(), ResourcePath :: string() | binary()) ->
+    URL :: binary().
+get_rest_endpoint(Node, ResourcePath) ->
+    Port = get_https_server_port_str(Node),
+    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
+
+    str_utils:join_as_binaries(
+        ["https://", Domain, Port, "/api/v3/oneprovider/", ResourcePath],
+        <<>>
+    ).
+
+
+%% @private
+-spec get_https_server_port_str(node()) -> PortStr :: string().
+get_https_server_port_str(Node) ->
+    case get(port) of
+        undefined ->
+            {ok, Port} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
+            PortStr = case Port of
+                443 -> "";
+                _ -> ":" ++ integer_to_list(Port)
+            end,
+            put(port, PortStr),
+            PortStr;
+        Port ->
+            Port
+    end.
+
+
+%% @private
+-spec client_to_auth(client()) -> aai:auth().
+client_to_auth(nobody) ->
     ?NOBODY;
-client_to_aai_auth(root) ->
+client_to_auth(root) ->
     ?ROOT;
-client_to_aai_auth({user, UserId}) ->
+client_to_auth({user, UserId}) ->
     ?USER(UserId).
 
 
@@ -418,24 +509,23 @@ client_to_aai_auth({user, UserId}) ->
 % required to for example pretty print it
 get_record_def(rest_args, N) ->
     case record_info(size, rest_args) - 1 of
-        N ->
-            record_info(fields, rest_args);
-        _ ->
-            no
+        N -> record_info(fields, rest_args);
+        _ -> no
     end;
-get_record_def(params_spec, N) ->
-    case record_info(size, params_spec) - 1 of
-        N ->
-            record_info(fields, params_spec);
-        _ ->
-            no
+get_record_def(gs_args, N) ->
+    case record_info(size, gs_args) - 1 of
+        N -> record_info(fields, gs_args);
+        _ -> no
+    end;
+get_record_def(data_spec, N) ->
+    case record_info(size, data_spec) - 1 of
+        N -> record_info(fields, data_spec);
+        _ -> no
     end;
 get_record_def(gri, N) ->
     case record_info(size, gri) - 1 of
-        N ->
-            record_info(fields, gri);
-        _ ->
-            no
+        N -> record_info(fields, gri);
+        _ -> no
     end;
 get_record_def(_, _) ->
     no.

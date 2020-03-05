@@ -18,6 +18,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/handshake_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/aai/caveats.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -76,7 +77,7 @@ list_dir_test(Config) ->
         unauthorized = [nobody],
         forbidden = [{user, <<"user1">>}]
     },
-    ParamsSpec = #params_spec{
+    ParamsSpec = #data_spec{
         optional = [<<"limit">>, <<"offset">>],
         correct_values = #{
             <<"limit">> => [1, 100],
@@ -113,7 +114,7 @@ list_dir_test(Config) ->
             }
             end,
             validate_result_fun = ValidateResultFun,
-            params_spec = ParamsSpec
+            data_spec = ParamsSpec
         },
         #scenario_spec{
             type = rest,
@@ -127,7 +128,23 @@ list_dir_test(Config) ->
                 }
             end,
             validate_result_fun = ValidateResultFun,
-            params_spec = ParamsSpec
+            data_spec = ParamsSpec
+        },
+        #scenario_spec{
+            type = gs,
+            target_node = W,
+            client_spec = ClientSpec,
+            prepare_args_fun = fun(_Env, Data) ->
+                #gs_args{
+                    operation = get,
+                    gri = #gri{type = op_file, id = RootDirGuid, aspect = children, scope = private},
+                    data = Data
+                }
+            end,
+            validate_result_fun = fun(Result, _, _) ->
+                ct:pal("QWE: ~p", [Result])
+            end,
+            data_spec = ParamsSpec
         }
     ])).
 
