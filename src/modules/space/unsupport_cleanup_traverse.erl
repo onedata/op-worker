@@ -10,8 +10,7 @@
 %%% perform necessary clean up after space was unsupported.
 %%% @end
 %%%--------------------------------------------------------------------
-% fixme name
--module(unsupport_traverse).
+-module(unsupport_cleanup_traverse).
 -author("Michal Stanisz").
 
 -behavior(traverse_behaviour).
@@ -60,10 +59,9 @@ start(SpaceId, StorageId) ->
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    % fixme 
-    MasterJobsLimit = application:get_env(?APP_NAME, qos_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, qos_traverse_slave_jobs_limit, 20),
-    ParallelismLimit = application:get_env(?APP_NAME, qos_traverse_parallelism_limit, 20),
+    MasterJobsLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_master_jobs_limit, 10),
+    SlaveJobsLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_slave_jobs_limit, 20),
+    ParallelismLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_parallelism_limit, 20),
     
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
@@ -119,6 +117,7 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskI
                 true ->
                     LocationId = file_location:local_id(FileUuid),
                     sd_utils:delete_storage_file(FC, UserCtx),
+                    fslogic_location_cache:clear_blocks(FC, LocationId),
                     fslogic_location_cache:delete_location(FileUuid, LocationId)
             end
     end,

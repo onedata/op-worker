@@ -317,7 +317,7 @@
 % document even if expressions are exactly the same. For each file / directory
 % multiple qos_entry can be defined.
 -record(qos_entry, {
-    type :: qos_entry:type(),
+    type = user_defined :: qos_entry:type(),
     file_uuid :: file_meta:uuid(),
     expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
@@ -388,8 +388,9 @@
     task_id :: traverse:id(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),
-    % fixme name
-    slave_job_id = undefined :: undefined | qos_entry:id() | traverse:id()
+    % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id). 
+    % It is persisted so when slave job is restarted no additional task is created.
+    subtask_id = undefined :: undefined | qos_entry:id() | traverse:id()
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.

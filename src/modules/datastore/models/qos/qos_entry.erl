@@ -117,7 +117,7 @@ create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
 
 -spec create(od_space:id(), file_meta:uuid(), qos_expression:rpn(),
     replicas_num(), type(), boolean(), qos_traverse_req:traverse_reqs()) ->
-    {ok, doc()} | {error, term()}.
+    {ok, id()} | {error, term()}.
 create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, TraverseReqs) ->
     QosEntryId = datastore_key:new(),
     PossibilityCheck = case Possible of

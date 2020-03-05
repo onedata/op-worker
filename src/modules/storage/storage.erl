@@ -55,7 +55,7 @@
 -export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
-% exported for initializer
+% exported for initializer and env_up escripts
 -export([on_storage_created/1]).
 
 
@@ -440,7 +440,10 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
-    space_unsupport:run(SpaceId, StorageId).
+    case storage_logic:revoke_space_support(StorageId, SpaceId) of
+        ok -> on_space_unsupported(SpaceId, StorageId);
+        Error -> Error
+    end.
 
 
 -spec supports_any_space(id()) -> boolean() | errors:error().
@@ -467,7 +470,6 @@ on_space_unsupported(SpaceId, StorageId) ->
 %%% Internal functions
 %%%===================================================================
 
-% fixme for tests
 -spec on_storage_created(id()) -> ok.
 on_storage_created(StorageId) ->
     rtransfer_config:add_storage(StorageId).
@@ -481,7 +483,7 @@ on_storage_created(StorageId, QosParameters) ->
         <<"provider_id">> => oneprovider:get_id_or_undefined()
     },
     ok = set_qos_parameters(StorageId, ExtendedQosParameters),
-    rtransfer_config:add_storage(StorageId).
+    on_storage_created(StorageId).
 
 
 %% @private

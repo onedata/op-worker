@@ -202,8 +202,6 @@ remove_qos_entry_insecure(FileCtx, QosEntryId, ForceDelete) ->
 
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     
-    A = qos_entry:is_internal(QosDoc),
-    
     case (not qos_entry:is_internal(QosDoc)) orelse ForceDelete of
         true ->
             % TODO: VFS-5567 For now QoS entry is added only for file or dir

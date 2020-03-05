@@ -85,7 +85,7 @@ remove_qos_entry(SessId, QosEntryId, Force) ->
     case qos_entry:get_file_guid(QosEntryId) of
         {ok, FileGuid} ->
             remote_utils:call_fslogic(SessId, provider_request, FileGuid, 
-                #remove_qos_entry{id = QosEntryId, force = Force},
+                #remove_qos_entry{id = QosEntryId, force_delete = Force},
                 fun(_) -> ok end);
         {error, _} = Error ->
             Error

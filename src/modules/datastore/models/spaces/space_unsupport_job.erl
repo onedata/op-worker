@@ -18,24 +18,26 @@
 -type id() :: datastore_model:key().
 -type record() :: #space_unsupport_job{}.
 
--define(CTX, #{
-    model => ?MODULE
-}).
+-export_type([record/0]).
 
 -export([save/1, save/3, get/1, get/3, delete/1, delete/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
--export([encode/1, decode/1]).
+-export([encode_subtask_id/1, decode_subtask_id/1]).
 
 -compile({no_auto_import, [get/1]}).
 
+
+-define(CTX, #{
+    model => ?MODULE
+}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec save(record()) -> {ok, record()} | {error, term()}.
+-spec save(record()) -> {ok, id()} | {error, term()}.
 save(Job) ->
     #space_unsupport_job{
         space_id = SpaceId, 
@@ -45,7 +47,7 @@ save(Job) ->
     } = Job,
     save(gen_id(SpaceId, StorageId, Stage), Job, TaskId).
 
--spec save(id(), record(), traverse:id()) -> {ok, record()} | {error, term()}.
+-spec save(id(), record(), traverse:id()) -> {ok, id()} | {error, term()}.
 save(Key, Job, TaskId) when is_atom(Key) ->
     #space_unsupport_job{
         space_id = SpaceId, 
@@ -105,18 +107,18 @@ get_record_struct(1) ->
         {task_id, string},
         {space_id, string},
         {storage_id, string},
-        {slave_job_id, {custom, string, {?MODULE, encode, decode}}}
+        {substask_id, {custom, string, {?MODULE, encode_subtask_id, decode_subtask_id}}}
     ]}.
 
 
--spec encode(undefined | binary()) -> binary().
-encode(undefined) -> <<"undefined">>;
-encode(Binary) when is_binary(Binary) -> Binary.
+-spec encode_subtask_id(undefined | binary()) -> binary().
+encode_subtask_id(undefined) -> <<"undefined">>;
+encode_subtask_id(Binary) when is_binary(Binary) -> Binary.
 
 
--spec decode(binary()) -> undefined | binary().
-decode(<<"undefined">>) -> undefined;
-decode(Binary) when is_binary(Binary) -> Binary.
+-spec decode_subtask_id(binary()) -> undefined | binary().
+decode_subtask_id(<<"undefined">>) -> undefined;
+decode_subtask_id(Binary) when is_binary(Binary) -> Binary.
 
 %%%===================================================================
 %%% Internal functions
