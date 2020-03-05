@@ -49,22 +49,21 @@ all() ->
 %%%===================================================================
 
 
-
 list_dir_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [Provider2, Provider1] = ?config(op_worker_nodes, Config),
 
     SpaceId = <<"space2">>,
     UserId = <<"user3">>,
-    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
+    UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(Provider2)}}, Config),
 
     RootDirName = ?SCENARIO_NAME,
     RootDirPath = filename:join(["/", SpaceId, RootDirName]),
-    {ok, RootDirGuid} = lfm_proxy:mkdir(W, UserSessId, RootDirPath, 8#777),
+    {ok, RootDirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, RootDirPath, 8#777),
     {ok, RootDirObjectId} = file_id:guid_to_objectid(RootDirGuid),
 
     Files = lists:map(fun(Num) ->
         FileName = <<"file", Num>>,
-        {ok, FileGuid} = lfm_proxy:create(W, UserSessId, RootDirGuid, FileName, 8#777),
+        {ok, FileGuid} = lfm_proxy:create(Provider2, UserSessId, RootDirGuid, FileName, 8#777),
         {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
         #{
             <<"id">> => FileObjectId,
@@ -90,21 +89,23 @@ list_dir_test(Config) ->
             {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
         ]
     },
-    ValidateResultFun = fun({ok, 200, Result}, _Env, Data) ->
+    ValidateResultFun = fun(_TargetNode, {ok, 200, Result}, _Env, Data) ->
         Limit = maps:get(<<"limit">>, Data, 100),
         Offset = maps:get(<<"offset">>, Data, 0) + 1,
         ExpFiles = case Offset >= length(Files) of
             true -> [];
             false -> lists:sublist(Files, Offset, Limit)
         end,
-        ct:pal("~p", [Data]),
+        ct:pal("~p", [{_TargetNode, Data}]),
         ?assertEqual(ExpFiles, Result)
     end,
+
+    timer:sleep(timer:seconds(5)),
 
     ?assert(api_test_utils:run_scenarios(Config, [
         #scenario_spec{
             type = rest_with_file_path,
-            target_node = W,
+            target_nodes = [Provider2, Provider1],
             client_spec = ClientSpec,
             prepare_args_fun = fun(_Env, Data) ->
                 Qs = prepare_list_dir_qs(Data),
@@ -118,7 +119,7 @@ list_dir_test(Config) ->
         },
         #scenario_spec{
             type = rest,
-            target_node = W,
+            target_nodes = [Provider2, Provider1],
             client_spec = ClientSpec,
             prepare_args_fun = fun(_Env, Data) ->
                 Qs = prepare_list_dir_qs(Data),
@@ -132,7 +133,7 @@ list_dir_test(Config) ->
         },
         #scenario_spec{
             type = gs,
-            target_node = W,
+            target_nodes = [Provider2, Provider1],
             client_spec = ClientSpec,
             prepare_args_fun = fun(_Env, Data) ->
                 #gs_args{
@@ -141,8 +142,8 @@ list_dir_test(Config) ->
                     data = Data
                 }
             end,
-            validate_result_fun = fun(Result, _, _) ->
-                ct:pal("QWE: ~p", [Result])
+            validate_result_fun = fun(TargetNode, Result, _, _) ->
+                ct:pal("QWE: ~p", [{TargetNode, Result}])
             end,
             data_spec = ParamsSpec
         }

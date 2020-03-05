@@ -33,7 +33,7 @@
 
 run_scenarios(Config, ScenariosSpecs) ->
     lists:foldl(fun(ScenarioSpec, AllScenariosPassed) ->
-        AllScenariosPassed andalso try
+        AllScenariosPassed and try
             run_scenario(Config, ScenarioSpec)
         catch
             throw:fail ->
@@ -100,7 +100,7 @@ run_forbidden_clients_test_cases(Config, #scenario_spec{
 
 run_invalid_clients_test_cases(Config, #scenario_spec{
     type = ScenarioType,
-    target_node = TargetNode,
+    target_nodes = TargetNodes,
 
     setup_fun = EnvSetupFun,
     teardown_fun = EnvTeardownFun,
@@ -109,26 +109,32 @@ run_invalid_clients_test_cases(Config, #scenario_spec{
     prepare_args_fun = PrepareArgsFun
 }, Clients, DataSets, ExpError) ->
     Env = EnvSetupFun(),
-    Result = lists:foldl(fun(Client, OuterAcc) ->
-        OuterAcc and lists:foldl(fun(DataSet, InnerAcc) ->
-                Args = PrepareArgsFun(Env, DataSet),
-                Result = make_call(Config, TargetNode, Client, Args),
-                InnerAcc and try
-                    validate_error_result(ScenarioType, ExpError, Result),
-                    EnvVerifyFun(false, Env, DataSet)
-                catch _:_ ->
-                    log_failure(TargetNode, Client, Args, ExpError, Result),
-                    false
-                end
-        end, true, DataSets)
-    end, true, filter_available_clients(ScenarioType, Clients)),
+
+    Result = run_test_cases(
+        ScenarioType,
+        TargetNodes,
+        Clients,
+        DataSets,
+        fun(TargetNode, Client, DataSet) ->
+            Args = PrepareArgsFun(Env, DataSet),
+            Result = make_call(Config, TargetNode, Client, Args),
+            try
+                validate_error_result(ScenarioType, ExpError, Result),
+                EnvVerifyFun(false, Env, DataSet)
+            catch _:_ ->
+                log_failure(TargetNode, Client, Args, ExpError, Result),
+                false
+            end
+        end
+    ),
+
     EnvTeardownFun(Env),
     Result.
 
 
 run_malformed_data_test_cases(Config, #scenario_spec{
     type = ScenarioType,
-    target_node = TargetNode,
+    target_nodes = TargetNodes,
     client_spec = #client_spec{correct = CorrectClients},
 
     setup_fun = EnvSetupFun,
@@ -138,34 +144,38 @@ run_malformed_data_test_cases(Config, #scenario_spec{
     prepare_args_fun = PrepareArgsFun,
     data_spec = DataSpec
 }) ->
-    BadDataSets = bad_data_sets(DataSpec),
     Env = EnvSetupFun(),
-    Result = lists:foldl(fun(Client, OuterAcc) ->
-        OuterAcc and lists:foldl(fun
-            % operations not requiring any data cannot be tested against
-            % malformed data
-            (?NO_DATA, InnerAcc) ->
-                InnerAcc;
-            ({DataSet, _BadKey, ExpError}, InnerAcc) ->
+
+    Result = run_test_cases(
+        ScenarioType,
+        TargetNodes,
+        CorrectClients,
+        bad_data_sets(DataSpec),
+        fun
+            (_TargetNode, _Client, ?NO_DATA) ->
+                % operations not requiring any data cannot be tested against
+                % malformed data
+                true;
+            (TargetNode, Client, {DataSet, _BadKey, ExpError}) ->
                 Args = PrepareArgsFun(Env, DataSet),
                 Result = make_call(Config, TargetNode, Client, Args),
-                InnerAcc and try
+                try
                     validate_error_result(ScenarioType, ExpError, Result),
                     EnvVerifyFun(false, Env, DataSet)
                 catch _:_ ->
                     log_failure(TargetNode, Client, Args, ExpError, Result),
                     false
                 end
-        end, true, BadDataSets)
-    end, true, filter_available_clients(ScenarioType, CorrectClients)),
-    EnvTeardownFun(Env),
+        end
+    ),
 
+    EnvTeardownFun(Env),
     Result.
 
 
 run_expected_success_test_cases(Config, #scenario_spec{
     type = ScenarioType,
-    target_node = TargetNode,
+    target_nodes = TargetNodes,
     client_spec = #client_spec{correct = CorrectClients},
 
     setup_fun = EnvSetupFun,
@@ -176,15 +186,17 @@ run_expected_success_test_cases(Config, #scenario_spec{
     validate_result_fun = ValidateResultFun,
     data_spec = DataSpec
 }) ->
-    CorrectDataSets = correct_data_sets(DataSpec),
-
-    Result = lists:foldl(fun(Client, OuterAcc) ->
-        OuterAcc and lists:foldl(fun(DataSet, InnerAcc) ->
+    run_test_cases(
+        ScenarioType,
+        TargetNodes,
+        CorrectClients,
+        correct_data_sets(DataSpec),
+        fun(TargetNode, Client, DataSet) ->
             Env = EnvSetupFun(),
             Args = PrepareArgsFun(Env, DataSet),
             Result = make_call(Config, TargetNode, Client, Args),
-            InnerAcc and try
-                ValidateResultFun(Result, Env, DataSet),
+            try
+                ValidateResultFun(TargetNode, Result, Env, DataSet),
                 EnvVerifyFun(true, Env, DataSet)
             catch _:_ ->
                 log_failure(TargetNode, Client, Args, succes, Result),
@@ -192,10 +204,18 @@ run_expected_success_test_cases(Config, #scenario_spec{
             after
                 EnvTeardownFun(Env)
             end
-        end, true, CorrectDataSets)
-    end, true, filter_available_clients(ScenarioType, CorrectClients)),
+        end
+    ).
 
-    Result.
+
+run_test_cases(ScenarioType, TargetNodes, Clients, DataSets, TestCaseFun) ->
+    lists:foldl(fun(TargetNode, OuterAcc) ->
+        OuterAcc and lists:foldl(fun(Client, MiddleAcc) ->
+            MiddleAcc and lists:foldl(fun(DataSet, InnerAcc) ->
+                InnerAcc and TestCaseFun(TargetNode, Client, DataSet)
+            end, true, DataSets)
+        end, true, filter_available_clients(ScenarioType, Clients))
+    end, true, TargetNodes).
 
 
 filter_available_clients(gs, Clients) ->

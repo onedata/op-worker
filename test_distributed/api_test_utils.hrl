@@ -48,7 +48,7 @@
 
 -record(scenario_spec, {
     type :: scenario_type(),
-    target_node :: node(),
+    target_nodes :: [node()],
     client_spec = undefined :: undefined | #client_spec{},
 
     setup_fun = fun() -> #{} end :: fun(() -> TestEnv :: map()),

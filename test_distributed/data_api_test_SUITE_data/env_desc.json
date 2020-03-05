@@ -15,10 +15,6 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st1"
-                },
-                {
-                    "type": "posix",
-                    "name": "/mnt/st2"
                 }
             ],
             "users": [],
@@ -106,28 +102,7 @@
         }
     },
     "test_global_setup": {
-        "users": {
-            "user1": {
-                "default_space": "space1"
-            },
-            "user2": {
-                "default_space": "space1"
-            },
-            "user3": {
-                "default_space": "space2"
-            }
-        },
         "groups": {
-            "group1": {
-                "users": [
-                    "user1"
-                ]
-            },
-            "group2": {
-                "users": [
-                    "user2"
-                ]
-            }
         },
         "spaces": {
             "space1": {
@@ -137,13 +112,11 @@
                     "user2"
                 ],
                 "groups": [
-                    "group1",
-                    "group2"
                 ],
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st1",
-                        "supported_size": 1000000000
+                        "supported_size": 10737418240
                     }
                 }
             },
@@ -156,12 +129,12 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st2",
-                        "supported_size": 1000000000
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
                     },
                     "p2": {
                         "storage": "/mnt/st2",
-                        "supported_size": 1000000000
+                        "supported_size": 10737418240
                     }
                 }
             }
