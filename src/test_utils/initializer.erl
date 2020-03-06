@@ -38,7 +38,7 @@
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1
 ]).
--export([mock_auth_manager/1, unmock_auth_manager/1]).
+-export([mock_auth_manager/1, mock_auth_manager/2, unmock_auth_manager/1]).
 -export([mock_provider_ids/1, mock_provider_id/4, unmock_provider_ids/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
@@ -488,33 +488,51 @@ unmock_test_file_context(Config) ->
 %%--------------------------------------------------------------------
 -spec mock_auth_manager(proplists:proplist()) -> ok.
 mock_auth_manager(Config) ->
+    mock_auth_manager(Config, _CheckIfUserIsSupported = false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks auth_manager:verify for all providers in given environment.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_auth_manager(proplists:proplist(), CheckIfUserIsSupported :: boolean()) -> ok.
+mock_auth_manager(Config, CheckIfUserIsSupported) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, auth_manager, [passthrough]),
     test_utils:mock_expect(Workers, auth_manager, verify_credentials,
         fun(TokenCredentials) ->
             case tokens:deserialize(auth_manager:get_access_token(TokenCredentials)) of
-                {ok, Token} ->
-                    Consumer = case auth_manager:get_consumer_token(TokenCredentials) of
-                        undefined ->
-                            undefined;
-                        ConsumerToken ->
-                            {ok, #token{subject = Csm}} = tokens:deserialize(ConsumerToken),
-                            Csm
+                {ok, #token{subject = ?SUB(user, UserId)} = Token} ->
+                    IsUserSupported = case CheckIfUserIsSupported of
+                        true -> provider_logic:has_eff_user(UserId);
+                        false -> true
                     end,
-                    AuthCtx = #auth_ctx{
-                        current_timestamp = time_utils:cluster_time_seconds(),
-                        ip = auth_manager:get_peer_ip(TokenCredentials),
-                        interface = auth_manager:get_interface(TokenCredentials),
-                        service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
-                        consumer = Consumer,
-                        data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenCredentials),
-                        group_membership_checker = fun(_, _) -> false end
-                    },
-                    case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx) of
-                        {ok, Auth} ->
-                            {ok, Auth, undefined};
-                        {error, _} = Err1 ->
-                            Err1
+                    case IsUserSupported of
+                        true ->
+                            Consumer = case auth_manager:get_consumer_token(TokenCredentials) of
+                                undefined ->
+                                    undefined;
+                                ConsumerToken ->
+                                    {ok, #token{subject = Csm}} = tokens:deserialize(ConsumerToken),
+                                    Csm
+                            end,
+                            AuthCtx = #auth_ctx{
+                                current_timestamp = time_utils:cluster_time_seconds(),
+                                ip = auth_manager:get_peer_ip(TokenCredentials),
+                                interface = auth_manager:get_interface(TokenCredentials),
+                                service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
+                                consumer = Consumer,
+                                data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenCredentials),
+                                group_membership_checker = fun(_, _) -> false end
+                            },
+                            case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx) of
+                                {ok, Auth} ->
+                                    {ok, Auth, undefined};
+                                {error, _} = Err1 ->
+                                    Err1
+                            end;
+                        false ->
+                            ?ERROR_USER_NOT_SUPPORTED
                     end;
                 {error, _} = Err2 ->
                     Err2

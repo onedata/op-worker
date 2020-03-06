@@ -39,8 +39,8 @@ run_scenarios(Config, ScenariosSpecs) ->
             throw:fail ->
                 false;
             Type:Reason ->
-                ct:pal("Unexpected error while running test scenarios ~p:~p", [
-                    Type, Reason
+                ct:pal("Unexpected error while running test scenarios ~p:~p ~p", [
+                    Type, Reason, erlang:get_stacktrace()
                 ]),
                 false
         end
@@ -62,11 +62,15 @@ run_scenario(Config, ScenarioSpec) ->
 
 run_unauthorized_clients_test_cases(Config, #scenario_spec{
     type = ScenarioType,
-    client_spec = #client_spec{unauthorized = UnauthorizedClients},
+    client_spec = #client_spec{
+        unauthorized = UnauthorizedClients,
+        supported_clients_per_node = SupportedClientsPerNode
+    },
     data_spec = DataSpec
 } = ScenarioSpec) ->
     run_invalid_clients_test_cases(
         Config,
+        SupportedClientsPerNode,
         ScenarioSpec,
         UnauthorizedClients,
         required_data_sets(DataSpec),
@@ -83,11 +87,15 @@ run_unauthorized_clients_test_cases(Config, #scenario_spec{
 
 run_forbidden_clients_test_cases(Config, #scenario_spec{
     type = ScenarioType,
-    client_spec = #client_spec{forbidden = ForbiddenClients},
+    client_spec = #client_spec{
+        forbidden = ForbiddenClients,
+        supported_clients_per_node = SupportedClientsPerNode
+    },
     data_spec = DataSpec
 } = ScenarioSpec) ->
     run_invalid_clients_test_cases(
         Config,
+        SupportedClientsPerNode,
         ScenarioSpec,
         ForbiddenClients,
         required_data_sets(DataSpec),
@@ -102,7 +110,7 @@ run_forbidden_clients_test_cases(Config, #scenario_spec{
     ).
 
 
-run_invalid_clients_test_cases(Config, #scenario_spec{
+run_invalid_clients_test_cases(Config, SupportedClientsPerNode, #scenario_spec{
     type = ScenarioType,
     target_nodes = TargetNodes,
 
@@ -111,7 +119,7 @@ run_invalid_clients_test_cases(Config, #scenario_spec{
     verify_fun = EnvVerifyFun,
 
     prepare_args_fun = PrepareArgsFun
-}, Clients, DataSets, ExpError) ->
+}, Clients, DataSets, Error) ->
     Env = EnvSetupFun(),
 
     Result = run_test_cases(
@@ -120,6 +128,10 @@ run_invalid_clients_test_cases(Config, #scenario_spec{
         Clients,
         DataSets,
         fun(TargetNode, Client, DataSet) ->
+            ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
+                true -> Error;
+                false -> ?ERROR_USER_NOT_SUPPORTED
+            end,
             Args = PrepareArgsFun(Env, DataSet),
             Result = make_call(Config, TargetNode, Client, Args),
             try
@@ -139,7 +151,10 @@ run_invalid_clients_test_cases(Config, #scenario_spec{
 run_malformed_data_test_cases(Config, #scenario_spec{
     type = ScenarioType,
     target_nodes = TargetNodes,
-    client_spec = #client_spec{correct = CorrectClients},
+    client_spec = #client_spec{
+        correct = CorrectClients,
+        supported_clients_per_node = SupportedClientsPerNode
+    },
 
     setup_fun = EnvSetupFun,
     teardown_fun = EnvTeardownFun,
@@ -161,9 +176,14 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                 % malformed data
                 true;
             (TargetNode, Client, {DataSet, _BadKey, Error}) ->
-                ExpError = case ScenarioType of
-                    rest_not_supported -> ?ERROR_NOT_SUPPORTED;
-                    _ -> Error
+                ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
+                    true ->
+                        case ScenarioType of
+                            rest_not_supported -> ?ERROR_NOT_SUPPORTED;
+                            _ -> Error
+                        end;
+                    false ->
+                        ?ERROR_USER_NOT_SUPPORTED
                 end,
                 Args = PrepareArgsFun(Env, DataSet),
                 Result = make_call(Config, TargetNode, Client, Args),
@@ -184,7 +204,10 @@ run_malformed_data_test_cases(Config, #scenario_spec{
 run_expected_success_test_cases(Config, #scenario_spec{
     type = ScenarioType,
     target_nodes = TargetNodes,
-    client_spec = #client_spec{correct = CorrectClients},
+    client_spec = #client_spec{
+        correct = CorrectClients,
+        supported_clients_per_node = SupportedClientsPerNode
+    },
 
     setup_fun = EnvSetupFun,
     teardown_fun = EnvTeardownFun,
@@ -204,8 +227,14 @@ run_expected_success_test_cases(Config, #scenario_spec{
             Args = PrepareArgsFun(Env, DataSet),
             Result = make_call(Config, TargetNode, Client, Args),
             try
-                ValidateResultFun(TargetNode, Result, Env, DataSet),
-                EnvVerifyFun(true, Env, DataSet)
+                case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
+                    true ->
+                        ValidateResultFun(TargetNode, Client, Result, Env, DataSet),
+                        EnvVerifyFun(true, Env, DataSet);
+                    false ->
+                        validate_error_result(ScenarioType, ?ERROR_USER_NOT_SUPPORTED, Result),
+                        EnvVerifyFun(false, Env, DataSet)
+                end
             catch _:_ ->
                 log_failure(TargetNode, Client, Args, succes, Result),
                 false
@@ -394,6 +423,15 @@ get_correct_value(Key, #data_spec{correct_values = CorrectValues}) ->
 
 
 %% @private
+-spec is_client_supported_by_node(client(), node(), #{node() => [client()]}) ->
+    boolean().
+is_client_supported_by_node(nobody, _Node, _SupportedClientsPerNode) ->
+    true;
+is_client_supported_by_node(Client, Node, SupportedClientsPerNode) ->
+    lists:member(Client, maps:get(Node, SupportedClientsPerNode)).
+
+
+%% @private
 -spec make_gs_call(config(), node(), client(), #gs_args{}) ->
     {ok, Result :: map()} | {error, term()}.
 make_gs_call(_Config, Node, Client, #gs_args{
@@ -403,18 +441,22 @@ make_gs_call(_Config, Node, Client, #gs_args{
     auth_hint = AuthHint,
     data = Data
 }) ->
-    GsClient = connect_via_gs(Node, Client),
-
-    case gs_client:graph_request(GsClient, GRI, Operation, Data, Subscribe, AuthHint) of
-        {ok, ?GS_RESP(Result)} ->
-            {ok, Result};
+    case connect_via_gs(Node, Client) of
+        {ok, GsClient} ->
+            case gs_client:graph_request(GsClient, GRI, Operation, Data, Subscribe, AuthHint) of
+                {ok, ?GS_RESP(Result)} ->
+                    {ok, Result};
+                {error, _} = Error ->
+                    Error
+            end;
         {error, _} = Error ->
             Error
     end.
 
 
 %% @private
--spec connect_via_gs(node(), client()) -> GsClient :: pid().
+-spec connect_via_gs(node(), client()) ->
+    {ok, GsClient :: pid()} | errors:error().
 connect_via_gs(_Node, nobody) ->
     % TODO fix when connecting as nobody via gs becomes possible
     throw(fail);
@@ -431,16 +473,20 @@ connect_via_gs(Node, {user, UserId}) ->
 
 %% @private
 -spec connect_via_gs(node(), aai:subject(), client(), ConnectionOpts :: proplists:proplist()) ->
-    GsClient :: pid().
+    {ok, GsClient :: pid()} | errors:error().
 connect_via_gs(Node, ExpIdentity, Authorization, Opts) ->
-    {ok, GsClient, #gs_resp_handshake{identity = ExpIdentity}} = gs_client:start_link(
+    case gs_client:start_link(
         gs_endpoint(Node),
         Authorization,
         rpc:call(Node, gs_protocol, supported_versions, []),
         fun(_) -> ok end,
         Opts
-    ),
-    GsClient.
+    ) of
+        {ok, GsClient, #gs_resp_handshake{identity = ExpIdentity}} ->
+            {ok, GsClient};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %% @private

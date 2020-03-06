@@ -20,7 +20,8 @@
 -record(client_spec, {
     correct = [] :: [client()],
     unauthorized = [] :: [client()],
-    forbidden = [] :: [client()]
+    forbidden = [] :: [client()],
+    supported_clients_per_node :: #{node() => [client()]}
 }).
 
 -record(data_spec, {
