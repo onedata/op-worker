@@ -363,17 +363,26 @@ list_children_test(Config) ->
         },
         % Special case - listing files using path '/' works for all users but
         % returns only user spaces
-        % TODO fix for all users
         #scenario_spec{
             type = rest_with_file_path,
             target_nodes = Providers,
-            client_spec = ClientSpecForUserInBothSpacesUserRootDirListing#client_spec{
-                unauthorized = [],
-                forbidden = []
+            client_spec = #client_spec{
+                correct = [UserInSpace1Client, UserInSpace2Client, UserInBothSpacesClient],
+                unauthorized = [nobody],
+                forbidden = [],
+                supported_clients_per_node = SupportedClientsPerNode
             },
             prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(<<"/">>),
-            validate_result_fun = fun(_Node, _Client, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
-                validate_listed_files(Response, deprecated_rest, undefined, Data, Spaces)
+            validate_result_fun = fun(_Node, Client, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
+                ClientSpaces = case Client of
+                    UserInSpace1Client ->
+                        [{Space1Guid, Space1, <<"/", Space1/binary>>}];
+                    UserInSpace2Client ->
+                        [{Space2Guid, Space2, <<"/", Space2/binary>>}];
+                    UserInBothSpacesClient ->
+                        Spaces
+                end,
+                validate_listed_files(Response, deprecated_rest, undefined, Data, ClientSpaces)
             end,
             data_spec = ParamsSpec
         },
