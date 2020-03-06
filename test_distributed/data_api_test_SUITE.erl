@@ -52,14 +52,8 @@ all() ->
 
 
 list_children_test(Config) ->
-    [Provider2, Provider1] = ?config(op_worker_nodes, Config),
+    [Provider2, Provider1] = Providers = ?config(op_worker_nodes, Config),
     Provider2DomainBin = atom_to_binary(?GET_DOMAIN(Provider2), utf8),
-
-    UserId = <<"user2">>,
-    SessId = fun(Node) -> ?config({session_id, {UserId, ?GET_DOMAIN(Node)}}, Config) end,
-
-    UserRootDirGuid = fslogic_uuid:user_root_dir_guid(UserId),
-    {ok, UserRootDirObjectId} = file_id:guid_to_objectid(UserRootDirGuid),
 
     Space1 = <<"space1">>,
     Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(Space1),
@@ -73,42 +67,77 @@ list_children_test(Config) ->
         {Space2Guid, Space2, <<"/", Space2/binary>>}
     ],
 
-    UserSessId = SessId(Provider2),
+    UserInSpace1 = <<"user1">>,
+    UserInSpace2 = <<"user3">>,
+    UserInBothSpaces = <<"user2">>,
 
-    RootDirName = ?SCENARIO_NAME,
-    RootDirPath = filename:join(["/", Space2, RootDirName]),
-    {ok, RootDirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, RootDirPath, 8#777),
-    {ok, RootDirObjectId} = file_id:guid_to_objectid(RootDirGuid),
+    GetSessionFun = fun(Node) ->
+        ?config({session_id, {UserInBothSpaces, ?GET_DOMAIN(Node)}}, Config)
+    end,
 
-    {ok, ShareId} = lfm_proxy:create_share(Provider2, UserSessId, {guid, RootDirGuid}, <<"share">>),
-    ShareRootDirGuid = file_id:guid_to_share_guid(RootDirGuid, ShareId),
-    {ok, ShareRootDirObjectId} = file_id:guid_to_objectid(ShareRootDirGuid),
+    UserInBothSpacesRootDirGuid = fslogic_uuid:user_root_dir_guid(UserInBothSpaces),
+    {ok, UserInBothSpacesRootDirObjectId} = file_id:guid_to_objectid(UserInBothSpacesRootDirGuid),
+
+    UserSessId = GetSessionFun(Provider2),
+
+    DirName = ?SCENARIO_NAME,
+    DirPath = filename:join(["/", Space2, DirName]),
+    {ok, DirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, DirPath, 8#777),
+    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+
+    {ok, ShareId} = lfm_proxy:create_share(Provider2, UserSessId, {guid, DirGuid}, <<"share">>),
+    ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
+    {ok, ShareDirObjectId} = file_id:guid_to_objectid(ShareDirGuid),
 
     Files = [{FileGuid1, _, FilePath1} | _] = lists:map(fun(Num) ->
         FileName = <<"file", Num>>,
-        {ok, FileGuid} = lfm_proxy:create(Provider2, UserSessId, RootDirGuid, FileName, 8#777),
-        {FileGuid, FileName, filename:join([RootDirPath, FileName])}
+        {ok, FileGuid} = lfm_proxy:create(Provider2, UserSessId, DirGuid, FileName, 8#777),
+        {FileGuid, FileName, filename:join([DirPath, FileName])}
     end, [$0, $1, $2, $3, $4]),
     {ok, FileObjectId1} = file_id:guid_to_objectid(FileGuid1),
 
-    % Wait for sync between providers
-    ?assertMatch({ok, _}, lfm_proxy:stat(Provider1, SessId(Provider1), {guid, FileGuid1}), ?ATTEMPTS),
+    % Wait for metadata sync between providers
+    ?assertMatch(
+        {ok, _},
+        lfm_proxy:stat(Provider1, GetSessionFun(Provider1), {guid, FileGuid1}),
+        ?ATTEMPTS
+    ),
 
-    ClientSpec = #client_spec{
-        correct = [{user, UserId}],
+    ClientSpecForSpace2Listing = #client_spec{
+        correct = [{user, UserInSpace2}, {user, UserInBothSpaces}],
         unauthorized = [nobody],
-        forbidden = [{user, <<"user1">>}]
+        forbidden = [{user, UserInSpace1}]
     },
 
-    ShareClientSpec = #client_spec{
-        correct = [nobody, {user, <<"user1">>}, {user, UserId}],
+    ClientSpecForUserInBothSpacesUserRootDirListing = #client_spec{
+        correct = [{user, UserInBothSpaces}],
+        unauthorized = [nobody],
+        forbidden = [{user, UserInSpace1}, {user, UserInSpace2}]
+    },
+
+    ClientSpecForShareListing = #client_spec{
+        correct = [nobody, {user, UserInSpace1}, {user, UserInSpace2}, {user, UserInBothSpaces}],
         unauthorized = [],
         forbidden = []
     },
 
+    ParamsSpec = #data_spec{
+        optional = [<<"limit">>, <<"offset">>],
+        correct_values = #{
+            <<"limit">> => [1, 100],
+            <<"offset">> => [1, 10]
+        },
+        bad_values = [
+            {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
+            {<<"limit">>, -100, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
+            {<<"limit">>, 0, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
+            {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
+        ]
+    },
+
     ConstructPrepareRestArgsFun = fun(FileId) ->
         fun(_Env, Data) ->
-            Qs = prepare_list_dir_qs(Data),
+            Qs = construct_list_files_qs(Data),
             #rest_args{
                 method = get,
                 path = <<"data/", FileId/binary, "/children", Qs/binary>>
@@ -117,7 +146,7 @@ list_children_test(Config) ->
     end,
     ConstructPrepareDeprecatedPathRestArgsFun = fun(FilePath) ->
         fun(_Env, Data) ->
-            Qs = prepare_list_dir_qs(Data),
+            Qs = construct_list_files_qs(Data),
             #rest_args{
                 method = get,
                 path = <<"files", FilePath/binary, Qs/binary>>
@@ -126,7 +155,7 @@ list_children_test(Config) ->
     end,
     ConstructPrepareDeprecatedIdRestArgsFun = fun(Fileid) ->
         fun(_Env, Data) ->
-            Qs = prepare_list_dir_qs(Data),
+            Qs = construct_list_files_qs(Data),
             #rest_args{
                 method = get,
                 path = <<"files-id/", Fileid/binary, Qs/binary>>
@@ -142,57 +171,6 @@ list_children_test(Config) ->
             }
         end
     end,
-    ValidateListedChildren = fun(ScenarioType, ObjectListed, ShareId, Data, Result) ->
-        Limit = maps:get(<<"limit">>, Data, 100),
-        Offset = maps:get(<<"offset">>, Data, 0),
-        ExpFiles0 = case ObjectListed of
-            files -> Files;
-            spaces -> Spaces
-        end,
-        ExpFiles1 = case Offset >= length(ExpFiles0) of
-            true -> [];
-            false -> lists:sublist(ExpFiles0, Offset+1, Limit)
-        end,
-        ExpFiles2 = lists:map(fun({Guid, Name, Path}) ->
-            {file_id:guid_to_share_guid(Guid, ShareId), Name, Path}
-        end, ExpFiles1),
-        ExpFiles3 = case ScenarioType of
-            deprecated_rest ->
-                lists:map(fun({Guid, _Name, Path}) ->
-                    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                    #{
-                        <<"id">> => ObjectId,
-                        <<"path">> => Path
-                    }
-                end, ExpFiles2);
-            rest ->
-                #{<<"children">> => lists:map(fun({Guid, Name, _Path}) ->
-                    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                    #{
-                        <<"id">> => ObjectId,
-                        <<"name">> => Name
-                    }
-                end, ExpFiles2)};
-            gs ->
-                #{<<"children">> => lists:map(fun({Guid, _Name, _Path}) ->
-                    Guid
-                end, ExpFiles2)}
-        end,
-        ?assertEqual(ExpFiles3, Result)
-    end,
-    ParamsSpec = #data_spec{
-        optional = [<<"limit">>, <<"offset">>],
-        correct_values = #{
-            <<"limit">> => [1, 100],
-            <<"offset">> => [1, 10]
-        },
-        bad_values = [
-            {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-            {<<"limit">>, -100, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
-            {<<"limit">>, 0, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
-            {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
-        ]
-    },
 
     ?assert(api_test_utils:run_scenarios(Config, [
 
@@ -200,21 +178,41 @@ list_children_test(Config) ->
 
         #scenario_spec{
             type = rest,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec,
-            prepare_args_fun = ConstructPrepareRestArgsFun(RootDirObjectId),
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace2Listing,
+            prepare_args_fun = ConstructPrepareRestArgsFun(DirObjectId),
             validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
-                ValidateListedChildren(rest, files, undefined, Data, Response)
+                validate_listed_files(Response, rest, undefined, Data, Files)
+            end,
+            data_spec = ParamsSpec
+        },
+        #scenario_spec{
+            type = rest_with_file_path,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace2Listing,
+            prepare_args_fun = ConstructPrepareDeprecatedPathRestArgsFun(DirPath),
+            validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
+                validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
+            end,
+            data_spec = ParamsSpec
+        },
+        #scenario_spec{
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace2Listing,
+            prepare_args_fun = ConstructPrepareDeprecatedIdRestArgsFun(DirObjectId),
+            validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
+                validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
             end,
             data_spec = ParamsSpec
         },
         #scenario_spec{
             type = gs,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec,
-            prepare_args_fun = ConstructPrepareGsArgsFun(RootDirGuid, private),
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace2Listing,
+            prepare_args_fun = ConstructPrepareGsArgsFun(DirGuid, private),
             validate_result_fun = fun(_TargetNode, {ok, Result}, _Env, Data) ->
-                ValidateListedChildren(gs, files, undefined, Data, Result)
+                validate_listed_files(Result, gs, undefined, Data, Files)
             end,
             data_spec = ParamsSpec
         },
@@ -223,21 +221,32 @@ list_children_test(Config) ->
 
         #scenario_spec{
             type = rest,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ShareClientSpec,
-            prepare_args_fun = ConstructPrepareRestArgsFun(ShareRootDirObjectId),
+            target_nodes = Providers,
+            client_spec = ClientSpecForShareListing,
+            prepare_args_fun = ConstructPrepareRestArgsFun(ShareDirObjectId),
             validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
-                ValidateListedChildren(rest, files, ShareId, Data, Response)
+                validate_listed_files(Response, rest, ShareId, Data, Files)
+            end,
+            data_spec = ParamsSpec
+        },
+        #scenario_spec{
+            type = rest_not_supported,
+            target_nodes = Providers,
+            client_spec = ClientSpecForShareListing,
+            prepare_args_fun = ConstructPrepareDeprecatedIdRestArgsFun(ShareDirObjectId),
+            validate_result_fun = fun(_TargetNode, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) ->
+                ExpError = #{<<"error">> => errors:to_json(?ERROR_NOT_SUPPORTED)},
+                ?assertEqual(ExpError, Response)
             end,
             data_spec = ParamsSpec
         },
         #scenario_spec{
             type = gs,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ShareClientSpec,
-            prepare_args_fun = ConstructPrepareGsArgsFun(ShareRootDirGuid, public),
+            target_nodes = Providers,
+            client_spec = ClientSpecForShareListing,
+            prepare_args_fun = ConstructPrepareGsArgsFun(ShareDirGuid, public),
             validate_result_fun = fun(_TargetNode, {ok, Result}, _Env, Data) ->
-                ValidateListedChildren(gs, files, ShareId, Data, Result)
+                validate_listed_files(Result, gs, ShareId, Data, Files)
             end,
             data_spec = ParamsSpec
         },
@@ -245,135 +254,33 @@ list_children_test(Config) ->
         % list children using normal guid
         #scenario_spec{
             type = gs,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ShareClientSpec,
-            prepare_args_fun = ConstructPrepareGsArgsFun(ShareRootDirGuid, private),
+            target_nodes = Providers,
+            client_spec = ClientSpecForShareListing,
+            prepare_args_fun = ConstructPrepareGsArgsFun(ShareDirGuid, private),
             validate_result_fun = fun(_TargetNode, Result, _Env, _Data) ->
                 ?assertEqual(?ERROR_UNAUTHORIZED, Result)
             end,
             data_spec = ParamsSpec
         },
 
-        %% LISTING FILE SHOULD FAIL WITH ?ENOTDIR ERROR
+        %% TEST LISTING FILE
 
-        #scenario_spec{
-            type = rest,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec,
-            prepare_args_fun = ConstructPrepareRestArgsFun(FileObjectId1),
-            validate_result_fun = fun(_TargetNode, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) ->
-                ExpError = #{<<"error">> => errors:to_json(?ERROR_POSIX(?ENOTDIR))},
-                ?assertEqual(ExpError, Response)
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            type = gs,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec,
-            prepare_args_fun = ConstructPrepareGsArgsFun(FileGuid1, private),
-            validate_result_fun = fun(_TargetNode, Result, _, _) ->
-                ?assertEqual(?ERROR_POSIX(?ENOTDIR), Result)
-            end,
-            data_spec = ParamsSpec
-        },
-
-        %% LISTING USER ROOT DIR SHOULD LIST ALL SPACES ALSO THOSE NOT SUPPORTED LOCALLY
-
-        #scenario_spec{
-            type = rest,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec,
-            prepare_args_fun = ConstructPrepareRestArgsFun(UserRootDirObjectId),
-            validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
-                ValidateListedChildren(rest, spaces, undefined, Data, Response)
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            type = gs,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec,
-            prepare_args_fun = ConstructPrepareGsArgsFun(UserRootDirGuid, private),
-            validate_result_fun = fun(_TargetNode, {ok, Result}, _, Data) ->
-                ValidateListedChildren(gs, spaces, undefined, Data, Result)
-            end,
-            data_spec = ParamsSpec
-        },
-
-        %% TEST LISTING ON PROVIDERS NOT SUPPORTING SPACE
-
-        #scenario_spec{
-            type = rest,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec#client_spec{forbidden = [{user, <<"user3">>}]},
-            prepare_args_fun = ConstructPrepareRestArgsFun(Space1ObjectId),
-            validate_result_fun = fun
-                (Target, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) when Target == Provider2 ->
-                    ExpError = #{<<"error">> => errors:to_json(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin))},
-                    ?assertEqual(ExpError, Response);
-                (_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, _Data) ->
-                    ?assertEqual(#{<<"children">> => []}, Response)
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            type = gs,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec#client_spec{forbidden = [{user, <<"user3">>}]},
-            prepare_args_fun = ConstructPrepareGsArgsFun(Space1Guid, private),
-            validate_result_fun = fun
-                (Target, Result, _, _Data) when Target == Provider2 ->
-                    ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
-                (_TargetNode, {ok, Result}, _, _Data) ->
-                    ?assertEqual(#{<<"children">> => []}, Result)
-            end,
-            data_spec = ParamsSpec
-        },
-
-        %% TEST DEPRECATED LISTING NORMAL DIR ENDPOINTS
-
+        % TODO fix
+%%        #scenario_spec{
+%%            type = rest,
+%%            target_nodes = Providers,
+%%            client_spec = ClientSpecForSpace2Listing,
+%%            prepare_args_fun = ConstructPrepareRestArgsFun(FileObjectId1),
+%%            validate_result_fun = fun(_TargetNode, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) ->
+%%                ExpError = #{<<"error">> => errors:to_json(?ERROR_POSIX(?ENOTDIR))},
+%%                ?assertEqual(ExpError, Response)
+%%            end,
+%%            data_spec = ParamsSpec
+%%        },
         #scenario_spec{
             type = rest_with_file_path,
-            target_nodes = [Provider2, Provider1],
-            client_spec = ClientSpec,
-            prepare_args_fun = ConstructPrepareDeprecatedPathRestArgsFun(RootDirPath),
-            validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
-                ValidateListedChildren(deprecated_rest, files, undefined, Data, Response)
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            type = rest,
-            target_nodes = [Provider2, Provider1],
-            client_spec = ClientSpec,
-            prepare_args_fun = ConstructPrepareDeprecatedIdRestArgsFun(RootDirObjectId),
-            validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
-                ValidateListedChildren(deprecated_rest, files, undefined, Data, Response)
-            end,
-            data_spec = ParamsSpec
-        },
-
-        %% TEST DEPRECATED LISTING SHARE ENDPOINTS
-
-        #scenario_spec{
-            type = rest_not_supported,
-            target_nodes = [Provider2, Provider1],
-            client_spec = ClientSpec,
-            prepare_args_fun = ConstructPrepareDeprecatedIdRestArgsFun(ShareRootDirObjectId),
-            validate_result_fun = fun(_TargetNode, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) ->
-                ExpError = #{<<"error">> => errors:to_json(?ERROR_NOT_SUPPORTED)},
-                ?assertEqual(ExpError, Response)
-            end,
-            data_spec = ParamsSpec
-        },
-
-        %% TEST DEPRECATED LISTING FILE ENDPOINTS
-
-        #scenario_spec{
-            type = rest_with_file_path,
-            target_nodes = [Provider2, Provider1],
-            client_spec = ClientSpec,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace2Listing,
             prepare_args_fun = ConstructPrepareDeprecatedPathRestArgsFun(FilePath1),
             validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, _Data) ->
                 ?assertEqual([#{
@@ -385,8 +292,8 @@ list_children_test(Config) ->
         },
         #scenario_spec{
             type = rest,
-            target_nodes = [Provider2, Provider1],
-            client_spec = ClientSpec,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace2Listing,
             prepare_args_fun = ConstructPrepareDeprecatedIdRestArgsFun(FileObjectId1),
             validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, _Data) ->
                 ?assertEqual([#{
@@ -396,60 +303,131 @@ list_children_test(Config) ->
             end,
             data_spec = ParamsSpec
         },
+        % TODO fix
+%%        #scenario_spec{
+%%            type = gs,
+%%            target_nodes = Providers,
+%%            client_spec = ClientSpecForSpace2Listing,
+%%            prepare_args_fun = ConstructPrepareGsArgsFun(FileGuid1, private),
+%%            validate_result_fun = fun(_TargetNode, Result, _, _) ->
+%%                ?assertEqual(?ERROR_POSIX(?ENOTDIR), Result)
+%%            end,
+%%            data_spec = ParamsSpec
+%%        },
 
-        %% TEST DEPRECATED LISTING USER ROOT DIR SHOULD LIST ALL SPACES ALSO THOSE NOT SUPPORTED LOCALLY
+
+        %% LISTING USER ROOT DIR SHOULD LIST ALL SPACES ALSO THOSE NOT SUPPORTED LOCALLY
 
         #scenario_spec{
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
+            prepare_args_fun = ConstructPrepareRestArgsFun(UserInBothSpacesRootDirObjectId),
+            validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
+                validate_listed_files(Response, rest, undefined, Data, Spaces)
+            end,
+            data_spec = ParamsSpec
+        },
+        % Special case - listing files using path '/' works for all users but
+        % returns only user spaces
+        % TODO fix for all users
+        #scenario_spec{
             type = rest_with_file_path,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec#client_spec{unauthorized = [], forbidden = []},
+            target_nodes = Providers,
+            client_spec = ClientSpecForUserInBothSpacesUserRootDirListing#client_spec{
+                unauthorized = [],
+                forbidden = []
+            },
             prepare_args_fun = ConstructPrepareDeprecatedPathRestArgsFun(<<"/">>),
             validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
-                ValidateListedChildren(deprecated_rest, spaces, undefined, Data, Response)
+                validate_listed_files(Response, deprecated_rest, undefined, Data, Spaces)
             end,
             data_spec = ParamsSpec
         },
         #scenario_spec{
             type = rest,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec,
-            prepare_args_fun = ConstructPrepareDeprecatedIdRestArgsFun(UserRootDirObjectId),
+            target_nodes = Providers,
+            client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
+            prepare_args_fun = ConstructPrepareDeprecatedIdRestArgsFun(UserInBothSpacesRootDirObjectId),
             validate_result_fun = fun(_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
-                ValidateListedChildren(deprecated_rest, spaces, undefined, Data, Response)
-            end,
-            data_spec = ParamsSpec
-        },
-
-        %% TEST DEPRECATED LISTING ON PROVIDERS NOT SUPPORTING SPACE
-
-        #scenario_spec{
-            type = rest_with_file_path,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec#client_spec{forbidden = [{user, <<"user3">>}]},
-            prepare_args_fun = ConstructPrepareDeprecatedPathRestArgsFun(<<"/", Space1/binary>>),
-            validate_result_fun = fun
-                (Target, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) when Target == Provider2 ->
-                    ExpError = #{<<"error">> => errors:to_json(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin))},
-                    ?assertEqual(ExpError, Response);
-                (_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, _Data) ->
-                    ?assertEqual([], Response)
+                validate_listed_files(Response, deprecated_rest, undefined, Data, Spaces)
             end,
             data_spec = ParamsSpec
         },
         #scenario_spec{
-            type = rest,
-            target_nodes = [Provider1, Provider2],
-            client_spec = ClientSpec#client_spec{forbidden = [{user, <<"user3">>}]},
-            prepare_args_fun = ConstructPrepareDeprecatedIdRestArgsFun(Space1ObjectId),
-            validate_result_fun = fun
-                (Target, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) when Target == Provider2 ->
-                    ExpError = #{<<"error">> => errors:to_json(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin))},
-                    ?assertEqual(ExpError, Response);
-                (_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, _Data) ->
-                    ?assertEqual([], Response)
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
+            prepare_args_fun = ConstructPrepareGsArgsFun(UserInBothSpacesRootDirGuid, private),
+            validate_result_fun = fun(_TargetNode, {ok, Result}, _, Data) ->
+                validate_listed_files(Result, gs, undefined, Data, Spaces)
             end,
             data_spec = ParamsSpec
         }
+
+
+
+
+
+
+
+%%        %% TEST LISTING ON PROVIDERS NOT SUPPORTING SPACE
+%%
+%%        #scenario_spec{
+%%            type = rest,
+%%            target_nodes = Providers,
+%%            client_spec = ClientSpecForSpace2Listing#client_spec{forbidden = [{user, <<"user3">>}]},
+%%            prepare_args_fun = ConstructPrepareRestArgsFun(Space1ObjectId),
+%%            validate_result_fun = fun
+%%                (Target, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) when Target == Provider2 ->
+%%                    ExpError = #{<<"error">> => errors:to_json(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin))},
+%%                    ?assertEqual(ExpError, Response);
+%%                (_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, _Data) ->
+%%                    ?assertEqual(#{<<"children">> => []}, Response)
+%%            end,
+%%            data_spec = ParamsSpec
+%%        },
+%%        #scenario_spec{
+%%            type = rest_with_file_path,
+%%            target_nodes = Providers,
+%%            client_spec = ClientSpecForSpace2Listing#client_spec{forbidden = [{user, <<"user3">>}]},
+%%            prepare_args_fun = ConstructPrepareDeprecatedPathRestArgsFun(<<"/", Space1/binary>>),
+%%            validate_result_fun = fun
+%%                (Target, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) when Target == Provider2 ->
+%%                    ExpError = #{<<"error">> => errors:to_json(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin))},
+%%                    ?assertEqual(ExpError, Response);
+%%                (_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, _Data) ->
+%%                    ?assertEqual([], Response)
+%%            end,
+%%            data_spec = ParamsSpec
+%%        },
+%%        #scenario_spec{
+%%            type = rest,
+%%            target_nodes = Providers,
+%%            client_spec = ClientSpecForSpace2Listing#client_spec{forbidden = [{user, <<"user3">>}]},
+%%            prepare_args_fun = ConstructPrepareDeprecatedIdRestArgsFun(Space1ObjectId),
+%%            validate_result_fun = fun
+%%                (Target, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) when Target == Provider2 ->
+%%                    ExpError = #{<<"error">> => errors:to_json(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin))},
+%%                    ?assertEqual(ExpError, Response);
+%%                (_TargetNode, {ok, ?HTTP_200_OK, Response}, _Env, _Data) ->
+%%                    ?assertEqual([], Response)
+%%            end,
+%%            data_spec = ParamsSpec
+%%        },
+%%        #scenario_spec{
+%%            type = gs,
+%%            target_nodes = Providers,
+%%            client_spec = ClientSpecForSpace2Listing#client_spec{forbidden = [{user, <<"user3">>}]},
+%%            prepare_args_fun = ConstructPrepareGsArgsFun(Space1Guid, private),
+%%            validate_result_fun = fun
+%%                (Target, Result, _, _Data) when Target == Provider2 ->
+%%                    ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
+%%                (_TargetNode, {ok, Result}, _, _Data) ->
+%%                    ?assertEqual(#{<<"children">> => []}, Result)
+%%            end,
+%%            data_spec = ParamsSpec
+%%        }
     ])).
 
 
@@ -509,10 +487,12 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
-prepare_list_dir_qs(Data) ->
+%% @private
+-spec construct_list_files_qs(Data :: map()) -> binary().
+construct_list_files_qs(Data) ->
     QsParams = [QsParam || QsParam <- [
-        prepare_qs_param(<<"limit">>, Data),
-        prepare_qs_param(<<"offset">>, Data)
+        construct_qs_param(<<"limit">>, Data),
+        construct_qs_param(<<"offset">>, Data)
     ], QsParam /= <<>>],
 
     case str_utils:join_binary(QsParams, <<"&">>) of
@@ -523,10 +503,62 @@ prepare_list_dir_qs(Data) ->
     end.
 
 
-prepare_qs_param(ParamName, Data) ->
+%% @private
+-spec construct_qs_param(ParamName :: binary(), Data :: map()) -> binary().
+construct_qs_param(ParamName, Data) ->
     case maps:get(ParamName, Data, undefined) of
         undefined ->
             <<>>;
         Value ->
             <<ParamName/binary, "=", (str_utils:to_binary(Value))/binary>>
     end.
+
+
+%% @private
+-spec validate_listed_files(
+    ListedChildren :: term(),
+    Format :: gs | rest | deprecated_rest,
+    ShareId :: undefined | od_share:id(),
+    Params :: map(),
+    AllFiles :: [{file_id:file_guid(), Name :: binary(), Path :: binary()}]
+) ->
+    ok | no_return().
+validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
+    Limit = maps:get(<<"limit">>, Params, 1000),
+    Offset = maps:get(<<"offset">>, Params, 0),
+
+    ExpFiles1 = case Offset >= length(AllFiles) of
+        true ->
+            [];
+        false ->
+            lists:sublist(AllFiles, Offset+1, Limit)
+    end,
+
+    ExpFiles2 = lists:map(fun({Guid, Name, Path}) ->
+        {file_id:guid_to_share_guid(Guid, ShareId), Name, Path}
+    end, ExpFiles1),
+
+    ExpFiles3 = case Format of
+        gs ->
+            #{<<"children">> => lists:map(fun({Guid, _Name, _Path}) ->
+                Guid
+            end, ExpFiles2)};
+        rest ->
+            #{<<"children">> => lists:map(fun({Guid, Name, _Path}) ->
+                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+                #{
+                    <<"id">> => ObjectId,
+                    <<"name">> => Name
+                }
+            end, ExpFiles2)};
+        deprecated_rest ->
+            lists:map(fun({Guid, _Name, Path}) ->
+                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+                #{
+                    <<"id">> => ObjectId,
+                    <<"path">> => Path
+                }
+            end, ExpFiles2)
+    end,
+
+    ?assertEqual(ExpFiles3, ListedChildren).
