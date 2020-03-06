@@ -48,6 +48,7 @@
 }).
 
 -record(scenario_spec, {
+    name :: binary(),
     type :: scenario_type(),
     target_nodes :: [node()],
     client_spec = undefined :: undefined | #client_spec{},

@@ -194,7 +194,7 @@ list_children_test(Config) ->
         end
     end,
 
-    ValidateRestListedFilesOnProvidersNotSupportingSpace = fun(ExpSuccessResult) -> fun
+    ValidateRestListedFilesOnProvidersNotSupportingUser = fun(ExpSuccessResult) -> fun
         (Node, Client, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) when
             Node == Provider2,
             Client == UserInBothSpacesClient
@@ -209,6 +209,7 @@ list_children_test(Config) ->
         %% TEST LISTING NORMAL DIR
 
         #scenario_spec{
+            name = <<"List normal dir using /data/ rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
@@ -219,6 +220,7 @@ list_children_test(Config) ->
             data_spec = ParamsSpec
         },
         #scenario_spec{
+            name = <<"List normal dir using /files/ rest endpoint">>,
             type = rest_with_file_path,
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
@@ -229,6 +231,7 @@ list_children_test(Config) ->
             data_spec = ParamsSpec
         },
         #scenario_spec{
+            name = <<"List normal dir using /files-id/ rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
@@ -239,6 +242,7 @@ list_children_test(Config) ->
             data_spec = ParamsSpec
         },
         #scenario_spec{
+            name = <<"List normal dir using gs api">>,
             type = gs,
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
@@ -252,6 +256,7 @@ list_children_test(Config) ->
         %% TEST LISTING SHARE DIR
 
         #scenario_spec{
+            name = <<"List shared dir using /data/ rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = ClientSpecForShareListing,
@@ -265,6 +270,7 @@ list_children_test(Config) ->
         % for shares so this method returns ?ERROR_NOT_SUPPORTED in case of
         % listing share dir
         #scenario_spec{
+            name = <<"List shared dir using /files-id/ rest endpoint">>,
             type = rest_not_supported,
             target_nodes = Providers,
             client_spec = ClientSpecForShareListing,
@@ -275,6 +281,7 @@ list_children_test(Config) ->
             data_spec = ParamsSpec
         },
         #scenario_spec{
+            name = <<"List shared dir using gs api with public scope">>,
             type = gs,
             target_nodes = Providers,
             client_spec = ClientSpecForShareListing,
@@ -287,6 +294,7 @@ list_children_test(Config) ->
         % 'private' scope is forbidden for shares even if user would be able to
         % list children using normal guid
         #scenario_spec{
+            name = <<"List shared dir using gs api with private scope">>,
             type = gs,
             target_nodes = Providers,
             client_spec = ClientSpecForShareListing,
@@ -299,8 +307,9 @@ list_children_test(Config) ->
 
         %% TEST LISTING FILE
 
-        % TODO fix
+%%        % TODO fix
 %%        #scenario_spec{
+%%            name = <<"List file using /data/ rest endpoint">>,
 %%            type = rest,
 %%            target_nodes = Providers,
 %%            client_spec = ClientSpecForSpace2Listing,
@@ -312,6 +321,7 @@ list_children_test(Config) ->
 %%            data_spec = ParamsSpec
 %%        },
         #scenario_spec{
+            name = <<"List file using /files/ rest endpoint">>,
             type = rest_with_file_path,
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
@@ -325,6 +335,7 @@ list_children_test(Config) ->
             data_spec = ParamsSpec
         },
         #scenario_spec{
+            name = <<"List file using /files-id/ rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
@@ -339,6 +350,7 @@ list_children_test(Config) ->
         },
 %%        % TODO fix
 %%        #scenario_spec{
+%%            name = <<"List file using gs api">>,
 %%            type = gs,
 %%            target_nodes = Providers,
 %%            client_spec = ClientSpecForSpace2Listing,
@@ -352,6 +364,7 @@ list_children_test(Config) ->
         % LISTING USER ROOT DIR SHOULD LIST ALL SPACES ALSO THOSE NOT SUPPORTED LOCALLY
 
         #scenario_spec{
+            name = <<"List user root dir using /data/ rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
@@ -364,6 +377,7 @@ list_children_test(Config) ->
         % Special case - listing files using path '/' works for all users but
         % returns only user spaces
         #scenario_spec{
+            name = <<"List user root dir using /files/ rest endpoint">>,
             type = rest_with_file_path,
             target_nodes = Providers,
             client_spec = #client_spec{
@@ -387,6 +401,7 @@ list_children_test(Config) ->
             data_spec = ParamsSpec
         },
         #scenario_spec{
+            name = <<"List user root dir using /files-id/ rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
@@ -397,6 +412,7 @@ list_children_test(Config) ->
             data_spec = ParamsSpec
         },
         #scenario_spec{
+            name = <<"List user root dir using gs api">>,
             type = gs,
             target_nodes = Providers,
             client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
@@ -410,30 +426,34 @@ list_children_test(Config) ->
         %% TEST LISTING ON PROVIDERS NOT SUPPORTING SPACE
 
         #scenario_spec{
+            name = <<"List dir on provider not supporting user using /data/ rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = ClientSpecForSpace1Listing,
             prepare_args_fun = ConstructPrepareRestArgsFun(Space1ObjectId),
-            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace(#{<<"children">> => []}),
+            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingUser(#{<<"children">> => []}),
             data_spec = ParamsSpec
         },
         #scenario_spec{
+            name = <<"List dir on provider not supporting user using /files/ rest endpoint">>,
             type = rest_with_file_path,
             target_nodes = Providers,
             client_spec = ClientSpecForSpace1Listing,
             prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(<<"/", Space1/binary>>),
-            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace([]),
+            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingUser([]),
             data_spec = ParamsSpec
         },
         #scenario_spec{
+            name = <<"List dir on provider not supporting user using /files-id/ rest endpoint">>,
             type = rest,
             target_nodes = Providers,
             client_spec = ClientSpecForSpace1Listing,
             prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(Space1ObjectId),
-            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace([]),
+            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingUser([]),
             data_spec = ParamsSpec
         },
         #scenario_spec{
+            name = <<"List dir on provider not supporting user using gs api">>,
             type = gs,
             target_nodes = Providers,
             client_spec = ClientSpecForSpace1Listing,

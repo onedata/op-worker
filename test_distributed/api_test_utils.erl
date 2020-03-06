@@ -111,6 +111,7 @@ run_forbidden_clients_test_cases(Config, #scenario_spec{
 
 
 run_invalid_clients_test_cases(Config, SupportedClientsPerNode, #scenario_spec{
+    name = ScenarioName,
     type = ScenarioType,
     target_nodes = TargetNodes,
 
@@ -138,7 +139,7 @@ run_invalid_clients_test_cases(Config, SupportedClientsPerNode, #scenario_spec{
                 validate_error_result(ScenarioType, ExpError, Result),
                 EnvVerifyFun(false, Env, DataSet)
             catch _:_ ->
-                log_failure(TargetNode, Client, Args, ExpError, Result),
+                log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result),
                 false
             end
         end
@@ -149,6 +150,7 @@ run_invalid_clients_test_cases(Config, SupportedClientsPerNode, #scenario_spec{
 
 
 run_malformed_data_test_cases(Config, #scenario_spec{
+    name = ScenarioName,
     type = ScenarioType,
     target_nodes = TargetNodes,
     client_spec = #client_spec{
@@ -191,7 +193,7 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                     validate_error_result(ScenarioType, ExpError, Result),
                     EnvVerifyFun(false, Env, DataSet)
                 catch _:_ ->
-                    log_failure(TargetNode, Client, Args, ExpError, Result),
+                    log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result),
                     false
                 end
         end
@@ -202,6 +204,7 @@ run_malformed_data_test_cases(Config, #scenario_spec{
 
 
 run_expected_success_test_cases(Config, #scenario_spec{
+    name = ScenarioName,
     type = ScenarioType,
     target_nodes = TargetNodes,
     client_spec = #client_spec{
@@ -236,7 +239,7 @@ run_expected_success_test_cases(Config, #scenario_spec{
                         EnvVerifyFun(false, Env, DataSet)
                 end
             catch _:_ ->
-                log_failure(TargetNode, Client, Args, succes, Result),
+                log_failure(ScenarioName, TargetNode, Client, Args, succes, Result),
                 false
             after
                 EnvTeardownFun(Env)
@@ -282,13 +285,14 @@ validate_error_result(gs, ExpError, Result) ->
     ?assertEqual(ExpError, Result).
 
 
-log_failure(TargetNode, Client, Args, Expected, Got) ->
-    ct:pal("API test case failed:~n"
+log_failure(ScenarioName, TargetNode, Client, Args, Expected, Got) ->
+    ct:pal("~s test case failed:~n"
     "Node: ~p~n"
     "Client: ~p~n"
     "Args: ~s~n"
     "Expected: ~p~n"
     "Got: ~p~n", [
+        ScenarioName,
         TargetNode,
         aai:auth_to_printable(client_to_auth(Client)),
         io_lib_pretty:print(Args, fun get_record_def/2),
