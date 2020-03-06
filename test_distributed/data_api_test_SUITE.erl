@@ -53,7 +53,7 @@ all() ->
 
 list_children_test(Config) ->
     [Provider2, Provider1] = Providers = ?config(op_worker_nodes, Config),
-    Provider2DomainBin = atom_to_binary(?GET_DOMAIN(Provider2), utf8),
+    Provider2DomainBin = ?GET_DOMAIN_BIN(Provider2),
 
     Space1 = <<"space1">>,
     Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(Space1),

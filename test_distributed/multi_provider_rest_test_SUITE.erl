@@ -362,6 +362,7 @@ attributes_list(Config) ->
             <<"name">> => <<"file1_al">>,
             <<"owner_id">> => UserId1,
             <<"shares">> => [],
+            <<"provider_id">> => rpc:call(WorkerP1, oneprovider, get_id, []),
             <<"type">> => <<"reg">>,
             <<"file_id">> => CdmiObjectId
         },
