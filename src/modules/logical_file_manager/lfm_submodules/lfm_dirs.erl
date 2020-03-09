@@ -17,7 +17,7 @@
 %% API
 -export([
     mkdir/2, mkdir/3, mkdir/4,
-    ls/4, ls/5, ls/6, read_dir_plus/4, read_dir_plus/5,
+    ls/4, ls/5, ls/6, read_dir_plus/4, read_dir_plus/5, read_dir_plus_plus/5,
     get_child_attr/3, get_children_count/2
 ]).
 
@@ -150,6 +150,32 @@ read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
         #get_file_children_attrs{offset = Offset, size = Limit, index_token = Token},
         fun(#file_children_attrs{child_attrs = Attrs, index_token = Token2, is_last = IL}) ->
             {ok, Attrs, Token2, IL}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists some contents of a directory. Returns details of files.
+%% Returns up to Limit of entries. Uses startid to choose starting entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir_plus_plus(
+    session:id(),
+    FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(),
+    Limit :: integer(),
+    StartId :: undefined | file_meta:name()
+) ->
+    {ok, [#file_details{}], IsLast :: boolean()} | lfm:error_reply().
+read_dir_plus_plus(SessId, FileKey, Offset, Limit, StartId) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
+        #get_file_children_details{
+            offset = Offset,
+            size = Limit,
+            index_startid = StartId
+        },
+        fun(#file_children_details{child_details = Details, is_last = IL}) ->
+            {ok, Details, IL}
         end).
 
 %%--------------------------------------------------------------------

@@ -896,14 +896,16 @@ is_child_of_hidden_dir(Path) ->
 %% or posix otherwise).
 %% @end
 %%--------------------------------------------------------------------
--spec get_active_perms_type(file_meta:uuid()) ->
+-spec get_active_perms_type(file_meta:uuid() | doc()) ->
     {ok, file_meta:permissions_type()} | {error, term()}.
+get_active_perms_type(#document{value = #file_meta{acl = []}}) ->
+    {ok, posix};
+get_active_perms_type(#document{value = #file_meta{}}) ->
+    {ok, acl};
 get_active_perms_type(FileUuid) ->
     case file_meta:get({uuid, FileUuid}) of
-        {ok, #document{value = #file_meta{acl = []}}} ->
-            {ok, posix};
-        {ok, _} ->
-            {ok, acl};
+        {ok, FileDoc} ->
+            get_active_perms_type(FileDoc);
         {error, _} = Error ->
             Error
     end.

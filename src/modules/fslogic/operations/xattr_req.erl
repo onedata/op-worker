@@ -19,7 +19,10 @@
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
--export([get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4]).
+-export([
+    get_xattr/4, set_xattr/5, remove_xattr/3,
+    list_xattr/4, list_xattr_insecure/4
+]).
 
 %%%===================================================================
 %%% API

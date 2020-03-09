@@ -34,6 +34,7 @@
     lfm_basic_rdwr_after_file_delete/1,
     lfm_write/1,
     lfm_stat/1,
+    lfm_get_details/1,
     lfm_synch_stat/1,
     lfm_truncate/1,
     lfm_acl/1,
@@ -1040,6 +1041,39 @@ lfm_stat(Config) ->
 
     ?assertMatch({ok, 9}, lfm_proxy:write(W, Handle11, 1, <<"123456789">>)),
     ?assertMatch({ok, #file_attr{size = 10}}, lfm_proxy:stat(W, SessId1, {path, <<"/space_name2/test5">>}), 10).
+
+lfm_get_details(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test5">>, 8#755)),
+
+    O11 = lfm_proxy:open(W, SessId1, {path, <<"/space_name2/test5">>}, rdwr),
+
+    ?assertMatch({ok, _}, O11),
+    {ok, Handle11} = O11,
+
+    ?assertMatch({ok, #file_details{
+        size = 0,
+        active_permissions_type = posix,
+        has_metadata = false
+    }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>})),
+
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 0, <<"abc">>)),
+    ?assertMatch({ok, #file_details{size = 3}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 3, <<"abc">>)),
+    ?assertMatch({ok, #file_details{size = 6}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+
+    ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 2, <<"abc">>)),
+    ?assertMatch({ok, #file_details{size = 6}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+
+    ?assertMatch({ok, 9}, lfm_proxy:write(W, Handle11, 1, <<"123456789">>)),
+    ?assertMatch({ok, #file_details{size = 10}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+
+    ?assertMatch(ok, lfm_proxy:set_xattr(W, SessId1, {guid, FileGuid}, #xattr{name = <<"123456789">>, value = <<"!@#">>})),
+    ?assertMatch({ok, #file_details{has_metadata = true}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10).
 
 lfm_synch_stat(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

@@ -17,10 +17,10 @@
 
 
 %% API
--export([init/1, teardown/1, stat/3, get_child_attr/4, truncate/4, create/4, create/5,
+-export([init/1, teardown/1, stat/3, get_details/3, get_child_attr/4, truncate/4, create/4, create/5,
     create_and_open/4, create_and_open/5, unlink/3, open/4, close/2, close_all/1,
     read/4, silent_read/4, write/4, get_file_path/3, get_parent/3, mkdir/3, mkdir/4, mkdir/5, mv/4, mv/5, ls/5, ls/6, ls/7,
-    read_dir_plus/5, read_dir_plus/6, set_perms/4,
+    read_dir_plus/5, read_dir_plus/6, read_dir_plus_plus/6, set_perms/4,
     update_times/6, get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5,
     get_acl/3, set_acl/4, remove_acl/3, write_and_check/4, get_transfer_encoding/3, set_transfer_encoding/4,
     get_cdmi_completion_status/3, set_cdmi_completion_status/4, get_mimetype/3,
@@ -87,6 +87,11 @@ teardown(Config) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
 stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_guid(Worker, FileKey))).
+
+-spec get_details(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
+    {ok, #file_details{}} | lfm:error_reply().
+get_details(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_details(SessId, uuid_to_guid(Worker, FileKey))).
 
 -spec get_child_attr(node(), session:id(), fslogic_worker:file_guid(), file_meta:name()) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
@@ -295,6 +300,12 @@ read_dir_plus(Worker, SessId, FileKey, Offset, Limit) ->
     {ok, [#file_attr{}],  binary(), boolean()} | lfm:error_reply().
 read_dir_plus(Worker, SessId, FileKey, Offset, Limit, Token) ->
     ?EXEC(Worker, lfm:read_dir_plus(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, Token)).
+
+-spec read_dir_plus_plus(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
+    integer(), integer(), undefined | binary()) ->
+    {ok, [#file_details{}], boolean()} | lfm:error_reply().
+read_dir_plus_plus(Worker, SessId, FileKey, Offset, Limit, StartId) ->
+    ?EXEC(Worker, lfm:read_dir_plus_plus(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, StartId)).
 
 -spec mv(node(), session:id(), fslogic_worker:file_guid_or_path(), file_meta:path()) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().

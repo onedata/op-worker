@@ -310,6 +310,8 @@ get_operation_supported(instance, public) -> true;
 get_operation_supported(list, private) -> true;
 get_operation_supported(children, private) -> true;
 get_operation_supported(children, public) -> true;
+get_operation_supported(children_details, private) -> true;
+get_operation_supported(children_details, public) -> true;
 get_operation_supported(attrs, private) -> true;
 get_operation_supported(xattrs, private) -> true;
 get_operation_supported(xattrs, public) -> true;
@@ -337,7 +339,10 @@ data_spec_get(#gri{aspect = list}) -> #{
     }
 };
 
-data_spec_get(#gri{aspect = children}) -> #{
+data_spec_get(#gri{aspect = As}) when
+    As =:= children;
+    As =:= children_details
+-> #{
     required => #{
         <<"limit">> => {integer, {not_lower_than, 1}}
     },
@@ -400,6 +405,7 @@ data_spec_get(#gri{aspect = download_url}) ->
 authorize_get(#op_req{gri = #gri{aspect = As, scope = public}}, _) when
     As =:= instance;
     As =:= children;
+    As =:= children_details;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
@@ -411,6 +417,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= list;
     As =:= children;
+    As =:= children_details;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
@@ -432,6 +439,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= instance;
     As =:= list;
     As =:= children;
+    As =:= children_details;
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
@@ -481,6 +489,19 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
 
     case lfm:ls(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
         {ok, Children, _, _} ->
+            {ok, value, Children};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end;
+
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
+    SessionId = Auth#auth.session_id,
+    Limit = maps:get(<<"limit">>, Data),
+    StartId = maps:get(<<"index">>, Data, undefined),
+    Offset = maps:get(<<"offset">>, Data, 0),
+
+    case lfm:read_dir_plus_plus(SessionId, {guid, FileGuid}, Offset, Limit, StartId) of
+        {ok, Children, _} ->
             {ok, value, Children};
         {error, Errno} ->
             ?ERROR_POSIX(Errno)

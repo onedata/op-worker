@@ -30,6 +30,7 @@
             {error, ___Reason}
     end).
 
+-include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -42,8 +43,11 @@
 -export_type([handle/0, file_key/0, error_reply/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, mkdir/4, ls/4, ls/5, ls/6, read_dir_plus/4, read_dir_plus/5,
-    get_child_attr/3, get_children_count/2, get_parent/2]).
+-export([
+    mkdir/2, mkdir/3, mkdir/4,
+    ls/4, ls/5, ls/6, read_dir_plus/4, read_dir_plus/5, read_dir_plus_plus/5,
+    get_child_attr/3, get_children_count/2, get_parent/2
+]).
 %% Functions operating on directories or files
 -export([mv/3, mv/4, cp/3, cp/4, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
 -export([
@@ -57,8 +61,11 @@
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
--export([stat/2, get_xattr/4, set_xattr/3, set_xattr/5, remove_xattr/3, list_xattr/4,
-    update_times/5]).
+-export([
+    stat/2, get_details/2,
+    get_xattr/4, set_xattr/3, set_xattr/5, remove_xattr/3, list_xattr/4,
+    update_times/5
+]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
@@ -174,6 +181,23 @@ read_dir_plus(SessId, FileKey, Offset, Limit) ->
     error_reply().
 read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
     ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit, Token) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Lists some contents of a directory. Returns details of files.
+%% Returns up to Limit of entries, starting with Offset-th entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec read_dir_plus_plus(
+    session:id(),
+    FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(),
+    Limit :: integer(),
+    StartId :: undefined | file_meta:name()
+) ->
+    {ok, [#file_details{}], IsLast :: boolean()} | error_reply().
+read_dir_plus_plus(SessId, FileKey, Offset, Limit, StartId) ->
+    ?run(fun() -> lfm_dirs:read_dir_plus_plus(SessId, FileKey, Offset, Limit, StartId) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -540,6 +564,16 @@ remove_acl(SessId, FileKey) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:stat(SessId, FileKey) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file details.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_details(session:id(), file_key()) ->
+    {ok, #file_details{}} | error_reply().
+get_details(SessId, FileKey) ->
+    ?run(fun() -> lfm_attrs:get_details(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc

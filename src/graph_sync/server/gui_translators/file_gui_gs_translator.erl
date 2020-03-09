@@ -14,6 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("modules/fslogic/file_details.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -32,6 +33,10 @@
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
 translate_value(#gri{aspect = children}, Children) ->
     #{<<"children">> => lists:map(fun({Guid, _Name}) -> Guid end, Children)};
+translate_value(#gri{aspect = children_details, scope = Scope}, ChildrenDetails) ->
+    #{<<"children">> => lists:map(fun(ChildDetails) ->
+        translate_file(ChildDetails, Scope)
+    end, ChildrenDetails)};
 translate_value(#gri{aspect = As}, Metadata) when
     As =:= xattrs;
     As =:= json_metadata;
@@ -209,3 +214,48 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
             })
         end, ShareIds)
     }.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec translate_file(#file_details{}, gri:scope()) -> map().
+translate_file(#file_details{
+    guid = FileGuid,
+    name = FileName,
+    active_permissions_type = ActivePermissionsType,
+    mode = Mode,
+    parent_guid = ParentGuid,
+    mtime = MTime,
+    type = Type,
+    size = Size,
+    shares = Shares,
+    provider_id = ProviderId,
+    owner_id = OwnerId,
+    has_metadata = HasMetadata
+}, Scope) ->
+    PublicFields = #{
+        <<"guid">> => FileGuid,
+        <<"index">> => FileName,
+        <<"name">> => FileName,
+        <<"activePermissionsType">> => ActivePermissionsType,
+        <<"mode">> => Mode,
+        <<"parentId">> => ParentGuid,
+        <<"mtime">> => MTime,
+        <<"type">> => Type,
+        <<"size">> => Size,
+        <<"shares">> => Shares,
+        <<"hasMetadata">> => HasMetadata
+    },
+    case Scope of
+        public ->
+            PublicFields;
+        private ->
+            PublicFields#{
+                <<"providerId">> => ProviderId,
+                <<"ownerId">> => OwnerId
+            }
+    end.

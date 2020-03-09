@@ -21,10 +21,16 @@
 -export_type([file_attributes/0]).
 
 %% API
--export([stat/2, get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4, update_times/5]).
--export([get_transfer_encoding/2, set_transfer_encoding/3,
+-export([
+    stat/2, get_details/2,
+    get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4,
+    update_times/5
+]).
+-export([
+    get_transfer_encoding/2, set_transfer_encoding/3,
     get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
-    set_mimetype/3]).
+    set_mimetype/3
+]).
 -export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
 
 %%%===================================================================
@@ -52,6 +58,20 @@ stat(SessId, FileKey) ->
                     {ok, Attrs}
                 end)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file details.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_details(session:id(), FileKey :: lfm:file_key()) ->
+    {ok, #file_details{}} | lfm:error_reply().
+get_details(SessId, FileKey) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(SessId, file_request, FileGuid, #get_file_details{},
+        fun(#file_details{} = Details) ->
+            {ok, Details}
+        end).
 
 %%--------------------------------------------------------------------
 %% @doc

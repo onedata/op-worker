@@ -12,15 +12,17 @@
 -module(attr_req).
 -author("Tomasz Lichon").
 
--include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
 %% API
 -export([
     get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
     get_file_attr_insecure/4, get_file_attr_light/3, get_file_attr_and_conflicts/5,
+    get_file_details/2,
     get_child_attr/3, chmod/3, update_times/5,
     chmod_attrs_only_insecure/2
 ]).
@@ -101,6 +103,9 @@ get_file_attr_light(UserCtx, FileCtx, IncludeSize) ->
     AllowDeletedFiles :: boolean(), IncludeSize :: boolean(), VerifyName :: boolean()) ->
     {fslogic_worker:fuse_response(), Conflicts :: [{file_meta:uuid(), file_meta:name()}]}.
 get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, VerifyName) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    ShareId = file_ctx:get_share_id_const(FileCtx),
+
     {#document{
         key = Uuid,
         value = #file_meta{
@@ -116,25 +121,8 @@ get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, Ve
         false ->
             file_ctx:get_file_doc(FileCtx)
     end,
-    ShareId = file_ctx:get_share_id_const(FileCtx),
-    % If file is accessed via share guid then attributes like `shares`
-    % should be filtered as to not show any private information,
-    % which includes Ids of other shares created for this file.
-    ShownShares = case ShareId of
-        undefined ->
-            Shares;
-        _ ->
-            % ShareId is added to file_meta.shares only for directly shared
-            % files/directories and not their children, so not every file
-            % accessed via share guid will have ShareId in `file_attrs.shares`
-            case lists:member(ShareId, Shares) of
-                true -> [ShareId];
-                false -> []
-            end
-    end,
 
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx3),
     {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3, UserCtx),
 
     {Size, FileCtx5} = case IncludeSize of
@@ -170,10 +158,23 @@ get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, Ve
             size = Size,
             name = FinalName,
             provider_id = ProviderId,
-            shares = ShownShares,
+            shares = filter_visible_shares(ShareId, Shares),
             owner_id = OwnerId  % TODO VFS-6095
         }
     }, ConflictingFiles}.
+
+
+%%--------------------------------------------------------------------
+%% @equiv get_file_details_insecure/2 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_details(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_file_details(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+    ),
+    get_file_details_insecure(UserCtx, FileCtx1).
 
 
 %%--------------------------------------------------------------------
@@ -313,3 +314,112 @@ update_times_insecure(_UserCtx, FileCtx, ATime, MTime, CTime) ->
     end,
     fslogic_times:update_times_and_emit(FileCtx, TimesDiff),
     #fuse_response{status = #status{code = ?OK}}.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file attributes and additional information like active permissions
+%% type or existence of metadata, qos.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_details_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_file_details_insecure(UserCtx, FileCtx) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    ShareId = file_ctx:get_share_id_const(FileCtx),
+
+    {#document{
+        key = Uuid,
+        value = #file_meta{
+            name = FileName,
+            type = Type,
+            mode = Mode,
+            provider_id = ProviderId,
+            owner = OwnerId,
+            shares = Shares
+        }
+    } = FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
+
+    {ShownName, FileCtx3} = case Uuid == SpaceId of
+        true -> file_ctx:get_aliased_name(FileCtx2, UserCtx);
+        _ -> {FileName, FileCtx2}
+    end,
+
+    {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3, UserCtx),
+
+    {Size, FileCtx5} = file_ctx:get_file_size(FileCtx4),
+    {{ATime, CTime, MTime}, FileCtx6} = file_ctx:get_times(FileCtx5),
+    {ParentGuid, FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_details{
+            guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId),
+            name = ShownName,
+            active_permissions_type = ActivePermissionsType,
+            mode = Mode,
+            parent_guid = ParentGuid,
+            uid = Uid,  % TODO VFS-6095
+            gid = Gid,  % TODO VFS-6095
+            atime = ATime,
+            mtime = MTime,
+            ctime = CTime,
+            type = Type,
+            size = Size,
+            shares = filter_visible_shares(ShareId, Shares),
+            provider_id = ProviderId,
+            owner_id = OwnerId,  % TODO VFS-6095
+            has_metadata = has_metadata(FileCtx7)
+        }
+    }.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Filters shares list as to not show other shares ids when accessing
+%% file via share guid (using specific ShareId).
+%% When accessing file in normal mode all shares are returned.
+%%
+%% NOTE !!!
+%% ShareId is added to file_meta.shares only for directly shared
+%% files/directories and not their children, so not every file
+%% accessed via share guid will have ShareId in `file_attrs.shares`
+%% @end
+%%--------------------------------------------------------------------
+-spec filter_visible_shares(undefined | od_share:id(), [od_share:id()]) ->
+    [od_share:id()].
+filter_visible_shares(undefined, Shares) ->
+    Shares;
+filter_visible_shares(ShareId, Shares) ->
+    case lists:member(ShareId, Shares) of
+        true -> [ShareId];
+        false -> []
+    end.
+
+
+%% @private
+-spec has_metadata(file_ctx:ctx()) -> boolean().
+has_metadata(FileCtx) ->
+    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+    case xattr_req:list_xattr_insecure(RootUserCtx, FileCtx, false, true) of
+        #fuse_response{
+            status = #status{code = ?OK},
+            fuse_response = #xattr_list{names = XattrList}
+        } ->
+            lists:any(fun
+                (?JSON_METADATA_KEY) ->
+                    true;
+                (?RDF_METADATA_KEY) ->
+                    true;
+                (<<?CDMI_PREFIX_STR, _/binary>>) ->
+                    false;
+                (<<?ONEDATA_PREFIX_STR, _/binary>>) ->
+                    false;
+                (_) ->
+                    true
+            end, XattrList);
+        _ ->
+            false
+    end.
