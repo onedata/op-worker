@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([apply_batch/2, apply/1]).
+-export([apply_batch/3, apply/1]).
 
 -type ctx() :: datastore_cache:ctx().
 -type key() :: datastore:key().
@@ -38,8 +38,8 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec apply_batch([datastore:doc()], {couchbase_changes:since(),
-    couchbase_changes:until()}) -> ok.
-apply_batch(Docs, BatchRange) ->
+    couchbase_changes:until()}, couchbase_changes:timestamp()) -> ok.
+apply_batch(Docs, BatchRange, Timestamp) ->
     Master = self(),
     spawn_link(fun() ->
         DocsGroups = group_changes(Docs),
@@ -65,7 +65,7 @@ apply_batch(Docs, BatchRange) ->
         Ref = make_ref(),
         Pids = parallel_apply(DocsList3, Ref),
         Ans = gather_answers(Pids, Ref),
-        Master ! {batch_applied, BatchRange, Ans}
+        Master ! {batch_applied, BatchRange, Timestamp, Ans}
     end),
     ok.
 

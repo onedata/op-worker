@@ -1043,12 +1043,14 @@ translate_from_protobuf(#'ChangesBatch'{
     space_id = SpaceId,
     since = Since,
     until = Until,
+    until_timestamp = Timestamp,
     compressed_docs = CompressedDocs
 }) ->
     #changes_batch{
         space_id = SpaceId,
         since = Since,
         until = Until,
+        until_timestamp = Timestamp,
         compressed_docs = CompressedDocs
     };
 translate_from_protobuf(#'ChangesRequest2'{
@@ -2057,6 +2059,7 @@ translate_to_protobuf(#changes_batch{} = CB) ->
         space_id = CB#'changes_batch'.space_id,
         since = CB#'changes_batch'.since,
         until = CB#'changes_batch'.until,
+        until_timestamp = CB#'changes_batch'.until_timestamp,
         compressed_docs = CB#'changes_batch'.compressed_docs
     }};
 translate_to_protobuf(#changes_request2{} = CR) ->

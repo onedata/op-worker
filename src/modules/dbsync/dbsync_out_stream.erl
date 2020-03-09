@@ -90,7 +90,7 @@ start_link(SpaceId, Opts) ->
 init([SpaceId, Opts]) ->
     Stream = self(),
     Bucket = dbsync_utils:get_bucket(),
-    Since = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
+    {Since, _} = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
     Callback = fun(Change) -> gen_server:cast(Stream, {change, Change}) end,
     case proplists:get_value(register, Opts, false) of
         true -> {ok, _} = couchbase_changes_worker:start_link(Bucket, SpaceId);
@@ -155,14 +155,14 @@ handle_cast({change, {ok, end_of_stream}}, State = #state{
     changes = Docs,
     handler = Handler
 }) ->
-    Handler(Since, end_of_stream, lists:reverse(Docs)),
+    Handler(Since, end_of_stream, Docs),
     {stop, normal, State#state{since = Until, changes = []}};
 handle_cast({change, {error, Seq, Reason}}, State = #state{
     since = Since,
     changes = Docs,
     handler = Handler
 }) ->
-    Handler(Since, Seq, lists:reverse(Docs)),
+    Handler(Since, Seq, Docs),
     {stop, Reason, State#state{since = Seq, changes = []}};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
@@ -248,11 +248,11 @@ handle_changes(State = #state{
     case length(Docs) >= MinSize of
         true ->
             spawn(fun() ->
-                Handler(Since, Until, lists:reverse(Docs))
+                Handler(Since, Until, Docs)
             end);
         _ ->
             try
-                Handler(Since, Until, lists:reverse(Docs))
+                Handler(Since, Until, Docs)
             catch
                 _:_ ->
                     % Handle should catch own errors
