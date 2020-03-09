@@ -636,8 +636,11 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
+    SpaceID = ?config(space_id, Config),
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
+
+    Timestamp0 = rpc:call(Worker1, provider_logic, zone_time_seconds, []),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -680,6 +683,32 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     verify(Config, fun(W) ->
         ?assertEqual(ok, lfm_proxy:close_all(W))
     end),
+
+    ProvIDs = lists:foldl(fun(W, Acc) ->
+        sets:add_element(rpc:call(W, oneprovider, get_id, []), Acc)
+    end, sets:new(), Workers),
+
+    CheckSeqs = fun() ->
+        Seqs = lists:map(fun(W) ->
+            lists:foldl(fun(ProvID, SeqAcc) ->
+                Seq = rpc:call(W, dbsync_state, get_seq_or_error, [SpaceID, ProvID]),
+                case Seq of
+                    % proxy providers
+                    {error, not_found} ->
+                        SeqAcc;
+                    {_, Timestamp} ->
+                        ?assert(Timestamp >= Timestamp0),
+                        [Seq | SeqAcc]
+                end
+            end, [], sets:to_list(ProvIDs))
+        end, Workers),
+
+        case sets:size(sets:del_element([], sets:from_list(Seqs))) of % del lists from providers that do not support space
+            1 -> true;
+            _ -> {false, lists:zip(Workers, Seqs)}
+        end
+    end,
+    ?assertEqual(true, CheckSeqs(), 15),
 
     ok.
 
@@ -1870,9 +1899,9 @@ extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfP
     end, {[], [], [], []}, Workers),
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1}, {workers2, Workers2},
-        {session, SessId}, {space_name, SpaceName}, {attempts, Attempts},
+        {session, SessId}, {space_id, SpaceId}, {space_name, SpaceName}, {attempts, Attempts},
         {nodes_number, {SyncNodes, ProxyNodes, ProxyNodesWritten, ProxyNodesWritten0, NodesOfProvider}} | Config].
 
 verify(Config, TestFun) ->

@@ -21,6 +21,9 @@
 %% datastore_model callbacks
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
+% Test API
+-export([get_seq_or_error/2]).
+
 -define(CTX, #{model => ?MODULE}).
 
 %%%===================================================================
@@ -47,9 +50,26 @@ delete(SpaceId) ->
 get_seq(SpaceId, ProviderId) ->
     case datastore_model:get(?CTX, SpaceId) of
         {ok, #document{value = #dbsync_state{seq = Seq}}} ->
-            maps:get(ProviderId, Seq, 1);
+            maps:get(ProviderId, Seq, {1, 0});
         {error, not_found} ->
             {1, 0}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns sequence number and sequence timestamp of the beginning of expected changes range
+%% from given space and provider.
+%% Function for test purposes.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_seq_or_error(od_space:id(), od_provider:id()) ->
+    {Number :: couchbase_changes:seq(), Timestamp :: couchbase_changes:timestamp()} | {error, term()}.
+get_seq_or_error(SpaceId, ProviderId) ->
+    case datastore_model:get(?CTX, SpaceId) of
+        {ok, #document{value = #dbsync_state{seq = Seq}}} ->
+            maps:get(ProviderId, Seq, {error, not_found});
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
@@ -64,6 +84,7 @@ set_seq(SpaceId, ProviderId, Number, Timestamp) ->
     Diff = fun(#dbsync_state{seq = Seq} = State) ->
         case Timestamp of
             0 ->
+                % Use old timestamp (no docs with timestamp in applied range)
                 Timestamp2 = maps:get(ProviderId, Seq, 0),
                 {ok, State#dbsync_state{seq = maps:put(ProviderId, {Number, Timestamp2}, Seq)}};
             _ ->
