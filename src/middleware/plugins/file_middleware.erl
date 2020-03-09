@@ -256,8 +256,8 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
         maps:get(<<"createAttempts">>, Data, 1)
     ),
 
-    {ok, Attrs} = ?check(lfm:stat(SessionId, {guid, Guid})),
-    {ok, resource, {GRI#gri{id = Guid}, Attrs}};
+    {ok, FileDetails} = ?check(lfm:get_details(SessionId, {guid, Guid})),
+    {ok, resource, {GRI#gri{id = Guid}, FileDetails}};
 
 create(#op_req{gri = #gri{id = FileGuid, aspect = object_id}}) ->
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -459,7 +459,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
-    ?check(lfm:stat(Auth#auth.session_id, {guid, FileGuid}));
+    ?check(lfm:get_details(Auth#auth.session_id, {guid, FileGuid}));
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
     SessionId = Auth#auth.session_id,
