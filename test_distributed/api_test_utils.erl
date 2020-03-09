@@ -133,8 +133,14 @@ run_invalid_clients_test_cases(Config, SupportedClientsPerNode, #scenario_spec{
                 true -> Error;
                 false -> ?ERROR_USER_NOT_SUPPORTED
             end,
-            Args = PrepareArgsFun(Env, DataSet),
-            Result = make_call(Config, TargetNode, Client, Args),
+            TestCaseCtx = #api_test_ctx{
+                node = TargetNode,
+                client = Client,
+                env = Env,
+                data = DataSet
+            },
+            Args = PrepareArgsFun(TestCaseCtx),
+            Result = make_request(Config, TargetNode, Client, Args),
             try
                 validate_error_result(ScenarioType, ExpError, Result),
                 EnvVerifyFun(false, Env, DataSet)
@@ -187,8 +193,14 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                     false ->
                         ?ERROR_USER_NOT_SUPPORTED
                 end,
-                Args = PrepareArgsFun(Env, DataSet),
-                Result = make_call(Config, TargetNode, Client, Args),
+                TestCaseCtx = #api_test_ctx{
+                    node = TargetNode,
+                    client = Client,
+                    env = Env,
+                    data = DataSet
+                },
+                Args = PrepareArgsFun(TestCaseCtx),
+                Result = make_request(Config, TargetNode, Client, Args),
                 try
                     validate_error_result(ScenarioType, ExpError, Result),
                     EnvVerifyFun(false, Env, DataSet)
@@ -227,12 +239,18 @@ run_expected_success_test_cases(Config, #scenario_spec{
         correct_data_sets(DataSpec),
         fun(TargetNode, Client, DataSet) ->
             Env = EnvSetupFun(),
-            Args = PrepareArgsFun(Env, DataSet),
-            Result = make_call(Config, TargetNode, Client, Args),
+            TestCaseCtx = #api_test_ctx{
+                node = TargetNode,
+                client = Client,
+                env = Env,
+                data = DataSet
+            },
+            Args = PrepareArgsFun(TestCaseCtx),
+            Result = make_request(Config, TargetNode, Client, Args),
             try
                 case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
                     true ->
-                        ValidateResultFun(TargetNode, Client, Result, Env, DataSet),
+                        ValidateResultFun(TestCaseCtx, Result),
                         EnvVerifyFun(true, Env, DataSet);
                     false ->
                         validate_error_result(ScenarioType, ?ERROR_USER_NOT_SUPPORTED, Result),
@@ -265,10 +283,10 @@ filter_available_clients(_ScenarioType, Clients) ->
     Clients.
 
 
-make_call(Config, Node, Client, #rest_args{} = Args) ->
-    make_rest_call(Config, Node, Client, Args);
-make_call(Config, Node, Client, #gs_args{} = Args) ->
-    make_gs_call(Config, Node, Client, Args).
+make_request(Config, Node, Client, #rest_args{} = Args) ->
+    make_rest_request(Config, Node, Client, Args);
+make_request(Config, Node, Client, #gs_args{} = Args) ->
+    make_gs_request(Config, Node, Client, Args).
 
 
 validate_error_result(Type, ExpError, {ok, RespCode, RespBody}) when
@@ -436,9 +454,9 @@ is_client_supported_by_node(Client, Node, SupportedClientsPerNode) ->
 
 
 %% @private
--spec make_gs_call(config(), node(), client(), #gs_args{}) ->
+-spec make_gs_request(config(), node(), client(), #gs_args{}) ->
     {ok, Result :: map()} | {error, term()}.
-make_gs_call(_Config, Node, Client, #gs_args{
+make_gs_request(_Config, Node, Client, #gs_args{
     operation = Operation,
     gri = GRI,
     subscribe = Subscribe,
@@ -506,10 +524,10 @@ gs_endpoint(Node) ->
 
 
 %% @private
--spec make_rest_call(config(), node(), client(), #rest_args{}) ->
+-spec make_rest_request(config(), node(), client(), #rest_args{}) ->
     {ok, RespCode :: non_neg_integer(), RespBody :: binary() | map()} |
     {error, term()}.
-make_rest_call(_Config, Node, Client, #rest_args{
+make_rest_request(_Config, Node, Client, #rest_args{
     method = Method,
     path = Path,
     headers = Headers,

@@ -158,7 +158,7 @@ list_children_test(Config) ->
     },
 
     ConstructPrepareRestArgsFun = fun(FileId) ->
-        fun(_Env, Data) ->
+        fun(#api_test_ctx{data = Data}) ->
             Qs = construct_list_files_qs(Data),
             #rest_args{
                 method = get,
@@ -167,7 +167,7 @@ list_children_test(Config) ->
         end
     end,
     ConstructPrepareDeprecatedFilePathRestArgsFun = fun(FilePath) ->
-        fun(_Env, Data) ->
+        fun(#api_test_ctx{data = Data}) ->
             Qs = construct_list_files_qs(Data),
             #rest_args{
                 method = get,
@@ -176,7 +176,7 @@ list_children_test(Config) ->
         end
     end,
     ConstructPrepareDeprecatedFileIdRestArgsFun = fun(Fileid) ->
-        fun(_Env, Data) ->
+        fun(#api_test_ctx{data = Data}) ->
             Qs = construct_list_files_qs(Data),
             #rest_args{
                 method = get,
@@ -185,7 +185,7 @@ list_children_test(Config) ->
         end
     end,
     ConstructPrepareGsArgsFun = fun(FileId, Scope) ->
-        fun(_Env, Data) ->
+        fun(#api_test_ctx{data = Data}) ->
             #gs_args{
                 operation = get,
                 gri = #gri{type = op_file, id = FileId, aspect = children, scope = Scope},
@@ -194,13 +194,13 @@ list_children_test(Config) ->
         end
     end,
 
-    ValidateRestListedFilesOnProvidersNotSupportingUser = fun(ExpSuccessResult) -> fun
-        (Node, Client, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) when
+    ValidateRestListedFilesOnProvidersNotSupportingSpace = fun(ExpSuccessResult) -> fun
+        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
             Node == Provider2,
             Client == UserInBothSpacesClient
         ->
             assert_error_json(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Response);
-        (_Node, _Client, {ok, ?HTTP_200_OK, Response}, _Env, _Data) ->
+        (_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
             ?assertEqual(ExpSuccessResult, Response)
     end end,
 
@@ -214,7 +214,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
             prepare_args_fun = ConstructPrepareRestArgsFun(DirObjectId),
-            validate_result_fun = fun(_Node, _Client, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
+            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
                 validate_listed_files(Response, rest, undefined, Data, Files)
             end,
             data_spec = ParamsSpec
@@ -225,7 +225,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
             prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(DirPath),
-            validate_result_fun = fun(_Node, _Client, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
+            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
                 validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
             end,
             data_spec = ParamsSpec
@@ -236,7 +236,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
             prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(DirObjectId),
-            validate_result_fun = fun(_Node, _Client, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
+            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
                 validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
             end,
             data_spec = ParamsSpec
@@ -247,7 +247,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
             prepare_args_fun = ConstructPrepareGsArgsFun(DirGuid, private),
-            validate_result_fun = fun(_Node, _Client, {ok, Result}, _Env, Data) ->
+            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
                 validate_listed_files(Result, gs, undefined, Data, Files)
             end,
             data_spec = ParamsSpec
@@ -261,7 +261,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForShareListing,
             prepare_args_fun = ConstructPrepareRestArgsFun(ShareDirObjectId),
-            validate_result_fun = fun(_Node, _Client, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
+            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
                 validate_listed_files(Response, rest, ShareId, Data, Files)
             end,
             data_spec = ParamsSpec
@@ -275,7 +275,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForShareListing,
             prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(ShareDirObjectId),
-            validate_result_fun = fun(_Node, _Client, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) ->
+            validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, Response}) ->
                 assert_error_json(?ERROR_NOT_SUPPORTED, Response)
             end,
             data_spec = ParamsSpec
@@ -286,7 +286,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForShareListing,
             prepare_args_fun = ConstructPrepareGsArgsFun(ShareDirGuid, public),
-            validate_result_fun = fun(_Node, _Client, {ok, Result}, _Env, Data) ->
+            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
                 validate_listed_files(Result, gs, ShareId, Data, Files)
             end,
             data_spec = ParamsSpec
@@ -299,7 +299,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForShareListing,
             prepare_args_fun = ConstructPrepareGsArgsFun(ShareDirGuid, private),
-            validate_result_fun = fun(_Node, _Client, Result, _Env, _Data) ->
+            validate_result_fun = fun(_TestCaseCtx, Result) ->
                 ?assertEqual(?ERROR_UNAUTHORIZED, Result)
             end,
             data_spec = ParamsSpec
@@ -314,7 +314,7 @@ list_children_test(Config) ->
 %%            target_nodes = Providers,
 %%            client_spec = ClientSpecForSpace2Listing,
 %%            prepare_args_fun = ConstructPrepareRestArgsFun(FileObjectId1),
-%%            validate_result_fun = fun(_Node, _Client, {ok, ?HTTP_400_BAD_REQUEST, Response}, _Env, _Data) ->
+%%            validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, Response}) ->
 %%                ExpError = #{<<"error">> => errors:to_json(?ERROR_POSIX(?ENOTDIR))},
 %%                ?assertEqual(ExpError, Response)
 %%            end,
@@ -326,7 +326,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
             prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(FilePath1),
-            validate_result_fun = fun(_Node, _Client, {ok, ?HTTP_200_OK, Response}, _Env, _Data) ->
+            validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
                 ?assertEqual([#{
                     <<"id">> => FileObjectId1,
                     <<"path">> => FilePath1
@@ -340,7 +340,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForSpace2Listing,
             prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(FileObjectId1),
-            validate_result_fun = fun(_Node, _Client, {ok, ?HTTP_200_OK, Response}, _Env, _Data) ->
+            validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
                 ?assertEqual([#{
                     <<"id">> => FileObjectId1,
                     <<"path">> => FilePath1
@@ -355,7 +355,7 @@ list_children_test(Config) ->
 %%            target_nodes = Providers,
 %%            client_spec = ClientSpecForSpace2Listing,
 %%            prepare_args_fun = ConstructPrepareGsArgsFun(FileGuid1, private),
-%%            validate_result_fun = fun(_Node, _Client, Result, _, _) ->
+%%            validate_result_fun = fun(_TestCaseCtx, Result) ->
 %%                ?assertEqual(?ERROR_POSIX(?ENOTDIR), Result)
 %%            end,
 %%            data_spec = ParamsSpec
@@ -369,7 +369,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
             prepare_args_fun = ConstructPrepareRestArgsFun(UserInBothSpacesRootDirObjectId),
-            validate_result_fun = fun(_Node, _Client, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
+            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
                 validate_listed_files(Response, rest, undefined, Data, Spaces)
             end,
             data_spec = ParamsSpec
@@ -387,7 +387,7 @@ list_children_test(Config) ->
                 supported_clients_per_node = SupportedClientsPerNode
             },
             prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(<<"/">>),
-            validate_result_fun = fun(_Node, Client, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
+            validate_result_fun = fun(#api_test_ctx{client = Client, data = Data}, {ok, ?HTTP_200_OK, Response}) ->
                 ClientSpaces = case Client of
                     UserInSpace1Client ->
                         [{Space1Guid, Space1, <<"/", Space1/binary>>}];
@@ -406,7 +406,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
             prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(UserInBothSpacesRootDirObjectId),
-            validate_result_fun = fun(_Node, _Client, {ok, ?HTTP_200_OK, Response}, _Env, Data) ->
+            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
                 validate_listed_files(Response, deprecated_rest, undefined, Data, Spaces)
             end,
             data_spec = ParamsSpec
@@ -417,7 +417,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
             prepare_args_fun = ConstructPrepareGsArgsFun(UserInBothSpacesRootDirGuid, private),
-            validate_result_fun = fun(_Node, _Client, {ok, Result}, _, Data) ->
+            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
                 validate_listed_files(Result, gs, undefined, Data, Spaces)
             end,
             data_spec = ParamsSpec
@@ -431,7 +431,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForSpace1Listing,
             prepare_args_fun = ConstructPrepareRestArgsFun(Space1ObjectId),
-            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingUser(#{<<"children">> => []}),
+            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace(#{<<"children">> => []}),
             data_spec = ParamsSpec
         },
         #scenario_spec{
@@ -440,7 +440,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForSpace1Listing,
             prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(<<"/", Space1/binary>>),
-            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingUser([]),
+            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace([]),
             data_spec = ParamsSpec
         },
         #scenario_spec{
@@ -449,7 +449,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = ClientSpecForSpace1Listing,
             prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(Space1ObjectId),
-            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingUser([]),
+            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace([]),
             data_spec = ParamsSpec
         },
         #scenario_spec{
@@ -459,9 +459,12 @@ list_children_test(Config) ->
             client_spec = ClientSpecForSpace1Listing,
             prepare_args_fun = ConstructPrepareGsArgsFun(Space1Guid, private),
             validate_result_fun = fun
-                (Node, Client, Result, _, _Data) when Node == Provider2 andalso Client == UserInBothSpacesClient ->
+                (#api_test_ctx{node = Node, client = Client}, Result) when
+                    Node == Provider2,
+                    Client == UserInBothSpacesClient
+                ->
                     ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
-                (_Node, _Client, {ok, Result}, _, _Data) ->
+                (_TestCaseCtx, {ok, Result}) ->
                     ?assertEqual(#{<<"children">> => []}, Result)
             end,
             data_spec = ParamsSpec

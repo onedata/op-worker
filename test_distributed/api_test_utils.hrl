@@ -23,6 +23,7 @@
     forbidden = [] :: [client()],
     supported_clients_per_node :: #{node() => [client()]}
 }).
+-type client_spec() :: #client_spec{}.
 
 -record(data_spec, {
     required = [] :: [Key :: binary()],
@@ -31,6 +32,7 @@
     correct_values = #{} :: #{Key :: binary() => Values :: [binary()]},
     bad_values = [] :: [{Key :: binary(), Value :: term(), errors:error()}]
 }).
+-type data_spec() :: #data_spec{}.
 
 -record(rest_args, {
     method = get :: get | patch | post | put | delete,
@@ -38,6 +40,7 @@
     headers = undefined :: undefined | #{Key :: binary() => Value :: binary()},
     body = <<>> :: binary()
 }).
+-type rest_args() :: #rest_args{}.
 
 -record(gs_args, {
     operation = get :: gs_protocol:operation(),
@@ -46,20 +49,31 @@
     auth_hint = undefined :: gs_protocol:auth_hint(),
     data = undefined :: undefined | map()
 }).
+-type gs_args() :: #gs_args{}.
+
+-record(api_test_ctx, {
+    node :: node(),
+    client :: client(),
+    env :: map(),
+    data :: map()
+}).
+-type api_test_ctx() :: #api_test_ctx{}.
 
 -record(scenario_spec, {
     name :: binary(),
     type :: scenario_type(),
     target_nodes :: [node()],
-    client_spec = undefined :: undefined | #client_spec{},
+    client_spec = undefined :: undefined | client_spec(),
 
+    % Function called before every testcase
     setup_fun = fun() -> #{} end :: fun(() -> TestEnv :: map()),
     teardown_fun = fun(_) -> ok end :: fun((TestEnv :: map()) -> ok),
+    % Function called after avery testcase to
     verify_fun = fun(_, _, _) -> true end,
 
-    prepare_args_fun :: fun((Env :: map(), Data :: map()) -> #rest_args{}),
-    validate_result_fun :: fun((Result :: term(), Env :: map(), Data :: map()) -> ok | no_return()),
-    data_spec = undefined :: undefined | #data_spec{}
+    prepare_args_fun :: fun((api_test_ctx()) -> rest_args() | gs_args()),
+    validate_result_fun :: fun((api_test_ctx(), Result :: term()) -> ok | no_return()),
+    data_spec = undefined :: undefined | data_spec()
 }).
 
 -endif.
