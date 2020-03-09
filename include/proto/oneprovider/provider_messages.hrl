@@ -125,7 +125,7 @@
 
 -record(remove_qos_entry, {
     id :: qos_entry:id(),
-    force_delete = false :: boolean()
+    preserve_internal = true :: boolean()
 }).
 
 -record(get_effective_file_qos, {

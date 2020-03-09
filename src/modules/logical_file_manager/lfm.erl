@@ -750,7 +750,7 @@ add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
     add_qos_entry(SessId, FileKey, Expression, ReplicasNum, user_defined).
 
 -spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
-    qos_entry:replicas_num(), module()) -> {ok, qos_entry:id()} | error_reply().
+    qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | error_reply().
 add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) ->
     ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) end).
 
@@ -781,11 +781,11 @@ get_qos_entry(SessId, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec remove_qos_entry(session:id(), qos_entry:id()) -> ok | error_reply().
 remove_qos_entry(SessId, QosEntryId) ->
-    remove_qos_entry(SessId, QosEntryId, false).
+    remove_qos_entry(SessId, QosEntryId, true).
 
 -spec remove_qos_entry(session:id(), qos_entry:id(), boolean()) -> ok | error_reply().
-remove_qos_entry(SessId, QosEntryId, Force) ->
-    ?run(fun() -> lfm_qos:remove_qos_entry(SessId, QosEntryId, Force) end).
+remove_qos_entry(SessId, QosEntryId, PreserveInternal) ->
+    ?run(fun() -> lfm_qos:remove_qos_entry(SessId, QosEntryId, PreserveInternal) end).
 
 %%--------------------------------------------------------------------
 %% @doc

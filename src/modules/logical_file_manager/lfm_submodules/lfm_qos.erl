@@ -31,7 +31,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec add_qos_entry(session:id(), lfm:file_key(), qos_expression:raw(),
-    qos_entry:replicas_num(), module()) -> {ok, qos_entry:id()} | lfm:error_reply().
+    qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | lfm:error_reply().
 add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
@@ -81,11 +81,11 @@ get_qos_entry(SessId, QosEntryId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_qos_entry(session:id(), qos_entry:id(), boolean()) -> ok | lfm:error_reply().
-remove_qos_entry(SessId, QosEntryId, Force) ->
+remove_qos_entry(SessId, QosEntryId, PreserveInternal) ->
     case qos_entry:get_file_guid(QosEntryId) of
         {ok, FileGuid} ->
             remote_utils:call_fslogic(SessId, provider_request, FileGuid, 
-                #remove_qos_entry{id = QosEntryId, force_delete = Force},
+                #remove_qos_entry{id = QosEntryId, preserve_internal = PreserveInternal},
                 fun(_) -> ok end);
         {error, _} = Error ->
             Error

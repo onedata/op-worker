@@ -35,9 +35,6 @@
 %%%       when traverse task for this request is completed
 %%%     - there are no links indicating that file has been changed and it should
 %%%       be reconciled (see qos_status.erl)
-%%% 
-%%% Entry type denotes whether entry was created as part of internal provider logic (internal) 
-%%% or was created by a user (user_defined).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_entry).
@@ -280,8 +277,8 @@ is_possible(#qos_entry{possibility_check = {impossible, _}}) ->
 -spec is_internal(doc() | record()) -> boolean().
 is_internal(#document{value = QosEntry}) ->
     is_internal(QosEntry);
-is_internal(#qos_entry{type = Internal}) ->
-    Internal =:= internal.
+is_internal(#qos_entry{type = Type}) ->
+    Type =:= internal.
 
 
 %%%===================================================================

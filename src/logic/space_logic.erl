@@ -171,7 +171,7 @@ get_shares(SessionId, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec get_local_storage_id(od_space:id()) -> {ok, storage:id()} | errors:error().
 get_local_storage_id(SpaceId) ->
-    case ?MODULE:get_local_storage_ids(SpaceId) of
+    case get_local_storage_ids(SpaceId) of
         {ok, []} -> {error, space_not_supported};
         {ok, [StorageId | _]} -> {ok, StorageId};
         Other -> Other

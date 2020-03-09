@@ -28,7 +28,7 @@
 -behaviour(traverse_behaviour).
 
 %% API
--export([init/0, run/2]).
+-export([init_pools/0, run/2]).
 
 %% traverse behaviour callbacks
 -export([get_job/1, update_job_progress/5]).
@@ -42,19 +42,21 @@
 -export_type([stage/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(EXPIRY, 60).
+-define(DOCUMENT_EXPIRY_TIME, 60). % in seconds
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-init() ->
+-spec init_pools() -> ok.
+init_pools() ->
     MasterJobsLimit = application:get_env(?APP_NAME, space_unsupport_master_jobs_limit, 1),
     SlaveJobsLimit = application:get_env(?APP_NAME, space_unsupport_slave_jobs_limit, 5),
     ParallelismLimit = application:get_env(?APP_NAME, space_unsupport_parallelism_limit, 5),
     traverse:init_pool(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit),
     unsupport_cleanup_traverse:init_pool().
 
+-spec run(od_space:id(), storage:id()) -> ok.
 run(SpaceId, StorageId) ->
     file_meta:make_space_exist(SpaceId),
     ?ok_if_exists(traverse:run(?POOL_NAME, datastore_key:new_from_digest([SpaceId, StorageId]), 
@@ -167,6 +169,7 @@ execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
     storage:on_space_unsupported(SpaceId, StorageId),
     unsupport_cleanup_traverse:delete_ended(SpaceId, StorageId),
+    dbsync_state:delete(SpaceId),
     ok.
 
 
@@ -177,11 +180,17 @@ execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
 %% @private
 -spec wait(fun(() -> {ok, boolean()})) -> ok.
 wait(Fun) ->
-    case Fun() of
-        {ok, true} -> ok;
-        {ok, false} ->
-            timer:sleep(timer:seconds(10)),
-            wait(Fun)
+    try
+        case Fun() of
+            {ok, true} -> ok;
+            {ok, false} ->
+                timer:sleep(timer:seconds(10)),
+                wait(Fun)
+        end
+    catch Error:Reason ->
+        ?warning("Error in space_unsupport:wait/1 ~p:~p", [Error, Reason]),
+        timer:sleep(timer:seconds(10)),
+        wait(Fun)
     end.
 
 
@@ -214,7 +223,7 @@ expire_docs(#document{value = Value} = Doc) ->
             Ctx = #{
                 model => element(1, Value),
                 hooks_disabled => true,
-                expiry => ?EXPIRY
+                expiry => ?DOCUMENT_EXPIRY_TIME
             },
             datastore_model:save(Ctx, Doc)
     end,
@@ -226,7 +235,7 @@ expire_docs(#document{value = Value} = Doc) ->
 expire_links(Model, RoutingKey, Doc = #document{key = Key}) ->
     Ctx = Model:get_ctx(),
     Ctx2 = Ctx#{
-        expiry => ?EXPIRY,
+        expiry => ?DOCUMENT_EXPIRY_TIME,
         routing_key => RoutingKey
     },
     Ctx3 = datastore_model_default:set_defaults(Ctx2),

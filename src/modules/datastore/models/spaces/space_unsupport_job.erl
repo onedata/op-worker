@@ -13,6 +13,7 @@
 -author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -type id() :: datastore_model:key().
@@ -56,13 +57,12 @@ save(Key, Job, TaskId) when is_atom(Key) ->
     } = Job,
     save(gen_id(SpaceId, StorageId, Stage), Job, TaskId);
 save(Key, Job, TaskId) ->
-    {ok, _} = datastore_model:save(?CTX, #document{
+    ?extract_key(datastore_model:save(?CTX, #document{
         key = Key, 
         value = Job#space_unsupport_job{
             task_id = TaskId
         }
-    }),
-    {ok, Key}.
+    })).
 
 
 -spec get(od_space:id(), storage:id(), space_unsupport:stage()) -> 

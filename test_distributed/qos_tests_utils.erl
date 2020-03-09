@@ -671,23 +671,21 @@ assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts, _Sleep) 
                 error(Error)
         end
     catch
-        Error2 ->
-            ct:pal(Error2)
+        Error2:Type->
+            ct:pal("~p:~p", [Error2, Type])
     end;
 
 assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected , Attempts, Sleep) ->
     try
         {ActualVal, _ErrMsg} = GetActualValAndErrMsgFun(),
         case ActualVal of
-            Expected ->
-                ?assertMatch(Expected, ActualVal),
-                ok;
+            Expected -> ok;
             _ ->
                 timer:sleep(Sleep),
                 assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts - 1, Sleep)
         end
     catch
-        _ ->
+        _:_ ->
             timer:sleep(Sleep),
             assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts - 1, Sleep)
     end.

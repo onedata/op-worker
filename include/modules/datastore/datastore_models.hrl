@@ -317,6 +317,8 @@
 % document even if expressions are exactly the same. For each file / directory
 % multiple qos_entry can be defined.
 -record(qos_entry, {
+    % Entry type denotes whether entry was created as part of internal 
+    % provider logic (internal) or was created by a user (user_defined).
     type = user_defined :: qos_entry:type(),
     file_uuid :: file_meta:uuid(),
     expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.

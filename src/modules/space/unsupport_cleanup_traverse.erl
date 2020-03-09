@@ -16,10 +16,7 @@
 -behavior(traverse_behaviour).
 
 -include("global_definitions.hrl").
--include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
@@ -38,7 +35,7 @@
 
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, qos_traverse_batch_size, 40)).
+-define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, unsupport_cleanup_traverse_batch_size, 40)).
 
 
 %%%===================================================================
@@ -48,13 +45,13 @@
 -spec start(od_space:id(), storage:id()) -> {ok, traverse:id()}.
 start(SpaceId, StorageId) ->
     Options = #{
-        task_id => id(SpaceId, StorageId),
+        task_id => gen_id(SpaceId, StorageId),
         batch_size => ?TRAVERSE_BATCH_SIZE,
         %% @TODO VFS-6165 execute on dir after subtree
         execute_slave_on_dir => true
     },
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    {ok, _} = tree_traverse:run(?POOL_NAME, file_ctx:new_by_guid(SpaceGuid), Options).
+    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    {ok, _} = tree_traverse:run(?POOL_NAME, file_ctx:new_by_guid(SpaceDirGuid), Options).
 
 
 -spec init_pool() -> ok  | no_return().
@@ -72,7 +69,7 @@ stop_pool() ->
 
 -spec delete_ended(od_space:id(), storage:id()) -> ok.
 delete_ended(SpaceId, StorageId) ->
-    traverse_task:delete_ended(?POOL_NAME, id(SpaceId, StorageId)).
+    traverse_task:delete_ended(?POOL_NAME, gen_id(SpaceId, StorageId)).
 
 -spec is_finished(traverse:id()) -> {ok, boolean()}.
 is_finished(TaskId) ->
@@ -129,6 +126,6 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskI
 %%%===================================================================
 
 %% @private
--spec id(od_space:id(), storage:id()) -> traverse:id().
-id(SpaceId, StorageId) ->
+-spec gen_id(od_space:id(), storage:id()) -> traverse:id().
+gen_id(SpaceId, StorageId) ->
     datastore_key:new_from_digest([SpaceId, StorageId]).

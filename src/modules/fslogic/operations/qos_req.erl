@@ -79,12 +79,12 @@ get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec remove_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id(), boolean()) ->
     fslogic_worker:provider_response().
-remove_qos_entry(UserCtx, FileCtx0, QosEntryId, ForceDelete) ->
+remove_qos_entry(UserCtx, FileCtx0, QosEntryId, PreserveInternal) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),
-    remove_qos_entry_insecure(FileCtx1, QosEntryId, ForceDelete).
+    remove_qos_entry_insecure(FileCtx1, QosEntryId, PreserveInternal).
 
 
 %%--------------------------------------------------------------------
@@ -116,8 +116,8 @@ check_fulfillment(UserCtx, FileCtx0, QosEntryId) ->
 %% traverse should be run.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:raw(), qos_entry:replicas_num(), module()) ->
-    fslogic_worker:provider_response().
+-spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:raw(), qos_entry:replicas_num(), 
+    qos_entry:type()) -> fslogic_worker:provider_response().
 add_qos_entry_insecure(FileCtx, QosExpression, ReplicasNum, CallbackModule) ->
     case qos_expression:raw_to_rpn(QosExpression) of
         {ok, QosExpressionInRPN} ->
@@ -196,21 +196,21 @@ get_qos_entry_insecure(QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec remove_qos_entry_insecure(file_ctx:ctx(), qos_entry:id(), boolean()) ->
     fslogic_worker:provider_response().
-remove_qos_entry_insecure(FileCtx, QosEntryId, ForceDelete) ->
+remove_qos_entry_insecure(FileCtx, QosEntryId, PreserveInternal) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     
-    case (not qos_entry:is_internal(QosDoc)) orelse ForceDelete of
-        true ->
+    case qos_entry:is_internal(QosDoc) andalso PreserveInternal of
+        false ->
             % TODO: VFS-5567 For now QoS entry is added only for file or dir
             % for which it has been added, so starting traverse is not needed.
             ok = file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId),
             ok = qos_hooks:handle_entry_delete(QosDoc),
             ok = qos_entry:delete(QosEntryId),
             #provider_response{status = #status{code = ?OK}};
-        false ->
+        true ->
             #provider_response{status = #status{code = ?EACCES}}
     end.
 

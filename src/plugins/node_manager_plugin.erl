@@ -23,7 +23,7 @@
 -export([oldest_known_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([listeners/0, modules_with_args/0]).
--export([before_init/1]).
+-export([before_init/1, after_init/1]).
 -export([upgrade_cluster/1]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
@@ -182,6 +182,16 @@ before_init([]) ->
                 [Error]),
             {error, cannot_start_node_manager_plugin}
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:after_init/1}.
+%% This callback is executed on all cluster nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec after_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
+after_init([]) ->
+    space_unsupport:init_pools().
 
 %%--------------------------------------------------------------------
 %% @doc
