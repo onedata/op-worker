@@ -636,7 +636,7 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
-    SpaceID = ?config(space_id, Config),
+    SpaceID = ?config(first_space_id, Config),
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
 
@@ -1901,7 +1901,7 @@ extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfP
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
     [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1}, {workers2, Workers2},
-        {session, SessId}, {space_id, SpaceId}, {space_name, SpaceName}, {attempts, Attempts},
+        {session, SessId}, {first_space_id, SpaceId}, {space_name, SpaceName}, {attempts, Attempts},
         {nodes_number, {SyncNodes, ProxyNodes, ProxyNodesWritten, ProxyNodesWritten0, NodesOfProvider}} | Config].
 
 verify(Config, TestFun) ->
