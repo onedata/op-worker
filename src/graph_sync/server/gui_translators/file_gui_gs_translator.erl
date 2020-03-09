@@ -230,20 +230,36 @@ translate_file(#file_details{
     mode = Mode,
     parent_guid = ParentGuid,
     mtime = MTime,
-    type = Type,
-    size = Size,
+    type = TypeAttr,
+    size = SizeAttr,
     shares = Shares,
     provider_id = ProviderId,
     owner_id = OwnerId,
     has_metadata = HasMetadata
 }, Scope) ->
+    {Type, Size} = case TypeAttr of
+        ?DIRECTORY_TYPE ->
+            {<<"dir">>, null};
+        _ ->
+            {<<"file">>, SizeAttr}
+    end,
+    IsRootDir = case file_id:guid_to_share_id(FileGuid) of
+        undefined ->
+            fslogic_uuid:is_space_dir_guid(FileGuid);
+        ShareId ->
+            lists:member(ShareId, Shares)
+    end,
+    ParentId = case IsRootDir of
+        true -> null;
+        false -> ParentGuid
+    end,
     PublicFields = #{
         <<"guid">> => FileGuid,
         <<"index">> => FileName,
         <<"name">> => FileName,
         <<"activePermissionsType">> => ActivePermissionsType,
         <<"mode">> => Mode,
-        <<"parentId">> => ParentGuid,
+        <<"parentId">> => ParentId,
         <<"mtime">> => MTime,
         <<"type">> => Type,
         <<"size">> => Size,
