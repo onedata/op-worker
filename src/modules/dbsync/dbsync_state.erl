@@ -85,7 +85,7 @@ set_seq(SpaceId, ProviderId, Number, Timestamp) ->
         case Timestamp of
             0 ->
                 % Use old timestamp (no docs with timestamp in applied range)
-                Timestamp2 = maps:get(ProviderId, Seq, 0),
+                {_, Timestamp2} = maps:get(ProviderId, Seq, {1, 0}),
                 {ok, State#dbsync_state{seq = maps:put(ProviderId, {Number, Timestamp2}, Seq)}};
             _ ->
                 {ok, State#dbsync_state{seq = maps:put(ProviderId, {Number, Timestamp}, Seq)}}
