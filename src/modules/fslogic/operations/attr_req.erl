@@ -27,6 +27,19 @@
     chmod_attrs_only_insecure/2
 ]).
 
+-type compute_file_attr_opts() :: #{
+    % Tells whether to calculate attr even if file was recently removed.
+    allow_deleted_files => boolean(),
+
+    % Tells whether to calculate size of file.
+    include_size => boolean(),
+
+    % Tells whether to perform a check if file name collide with other files in
+    % directory. If it does suffix will be glued to name to differentiate it
+    % and conflicting files will be returned.
+    verify_name => boolean()
+}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -103,65 +116,18 @@ get_file_attr_light(UserCtx, FileCtx, IncludeSize) ->
     AllowDeletedFiles :: boolean(), IncludeSize :: boolean(), VerifyName :: boolean()) ->
     {fslogic_worker:fuse_response(), Conflicts :: [{file_meta:uuid(), file_meta:name()}]}.
 get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, VerifyName) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    ShareId = file_ctx:get_share_id_const(FileCtx),
-
-    {#document{
-        key = Uuid,
-        value = #file_meta{
-            type = Type,
-            mode = Mode,
-            provider_id = ProviderId,
-            owner = OwnerId,
-            shares = Shares
+    {FileAttr, ConflictingFiles, _FileCtx2} = compute_file_attr(
+        UserCtx, FileCtx, #{
+            allow_deleted_files => AllowDeletedFiles,
+            include_size => IncludeSize,
+            verify_name => VerifyName
         }
-    } = Doc, FileCtx2} = case AllowDeletedFiles of
-        true ->
-            file_ctx:get_file_doc_including_deleted(FileCtx);
-        false ->
-            file_ctx:get_file_doc(FileCtx)
-    end,
-
-    {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
-    {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3, UserCtx),
-
-    {Size, FileCtx5} = case IncludeSize of
-        true -> file_ctx:get_file_size(FileCtx4);
-        _ -> {undefined, FileCtx4}
-    end,
-
-    {{ATime, CTime, MTime}, FileCtx6} = file_ctx:get_times(FileCtx5),
-    {ParentGuid, _FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
-
-    {FinalName, ConflictingFiles} = case VerifyName andalso ParentGuid =/= undefined of
-        true ->
-            case file_meta:check_name(file_id:guid_to_uuid(ParentGuid), FileName, Doc) of
-                {conflicting, ExtendedName, Others} -> {ExtendedName, Others};
-                _ -> {FileName, []}
-            end;
-        _ ->
-            {FileName, []}
-    end,
-
-    {#fuse_response{
+    ),
+    FuseResponse = #fuse_response{
         status = #status{code = ?OK},
-        fuse_response = #file_attr{
-            uid = Uid,  % TODO VFS-6095
-            gid = Gid,  % TODO VFS-6095
-            parent_uuid = ParentGuid,
-            guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId),
-            type = Type,
-            mode = Mode,
-            atime = ATime,
-            mtime = MTime,
-            ctime = CTime,
-            size = Size,
-            name = FinalName,
-            provider_id = ProviderId,
-            shares = filter_visible_shares(ShareId, Shares),
-            owner_id = OwnerId  % TODO VFS-6095
-        }
-    }, ConflictingFiles}.
+        fuse_response = FileAttr
+    },
+    {FuseResponse, ConflictingFiles}.
 
 
 %%--------------------------------------------------------------------
@@ -227,6 +193,7 @@ update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns attributes of directory child (if exists).
 %% @end
@@ -258,6 +225,7 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
     end.
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Changes file posix mode.
 %% @end
@@ -288,6 +256,7 @@ chmod_attrs_only_insecure(FileCtx, Mode) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Changes file access times.
 %% @end
@@ -317,62 +286,107 @@ update_times_insecure(_UserCtx, FileCtx, ATime, MTime, CTime) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns file attributes and additional information like active permissions
-%% type or existence of metadata, qos.
+%% type or existence of metadata.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_info_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 get_file_info_insecure(UserCtx, FileCtx) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    ShareId = file_ctx:get_share_id_const(FileCtx),
+    {FileAttr, _, FileCtx2} = compute_file_attr(
+        UserCtx, FileCtx, #{
+            allow_deleted_files => false,
+            include_size => true,
+            varify_name => false
+        }
+    ),
+    {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
+    {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #file_info{
+            file_attr = FileAttr,
+            active_permissions_type = ActivePermissionsType,
+            has_metadata = has_metadata(FileCtx3)
+        }
+    }.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Computes attributes of a file. Depending on compute_file_attr_opts() set
+%% some attributes may be left undefined (see description of individual
+%% options).
+%% @end
+%%--------------------------------------------------------------------
+-spec compute_file_attr(user_ctx:ctx(), file_ctx:ctx(), compute_file_attr_opts()) ->
+    {#file_attr{}, Conflicts :: [{file_meta:uuid(), file_meta:name()}], file_ctx:ctx()}.
+compute_file_attr(UserCtx, FileCtx, Opts) ->
+    FileGuid = file_ctx:get_guid_const(FileCtx),
+    {FileUuid, _SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
 
     {#document{
-        key = Uuid,
+        key = FileUuid,
         value = #file_meta{
-            name = FileName,
             type = Type,
             mode = Mode,
             provider_id = ProviderId,
             owner = OwnerId,
             shares = Shares
         }
-    } = FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
-
-    {ShownName, FileCtx3} = case Uuid == SpaceId of
-        true -> file_ctx:get_aliased_name(FileCtx2, UserCtx);
-        _ -> {FileName, FileCtx2}
+    } = FileDoc, FileCtx2} = case maps:get(allow_deleted_files, Opts, false) of
+        true ->
+            file_ctx:get_file_doc_including_deleted(FileCtx);
+        false ->
+            file_ctx:get_file_doc(FileCtx)
     end,
 
-    {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3, UserCtx),
+    {{Uid, Gid}, FileCtx3} = file_ctx:get_posix_storage_user_context(FileCtx2, UserCtx),
 
-    {Size, FileCtx5} = file_ctx:get_file_size(FileCtx4),
-    {{ATime, CTime, MTime}, FileCtx6} = file_ctx:get_times(FileCtx5),
-    {ParentGuid, FileCtx7} = file_ctx:get_parent_guid(FileCtx6, UserCtx),
+    {Size, FileCtx4} = case maps:get(include_size, Opts, true) of
+        true -> file_ctx:get_file_size(FileCtx3);
+        _ -> {undefined, FileCtx3}
+    end,
 
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = #file_info{
-            guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId),
-            name = ShownName,
-            active_permissions_type = ActivePermissionsType,
-            mode = Mode,
-            parent_guid = ParentGuid,
-            uid = Uid,  % TODO VFS-6095
-            gid = Gid,  % TODO VFS-6095
-            atime = ATime,
-            mtime = MTime,
-            ctime = CTime,
-            type = Type,
-            size = Size,
-            shares = filter_visible_shares(ShareId, Shares),
-            provider_id = ProviderId,
-            owner_id = OwnerId,  % TODO VFS-6095
-            has_metadata = has_metadata(FileCtx7)
-        }
-    }.
+    {{ATime, CTime, MTime}, FileCtx5} = file_ctx:get_times(FileCtx4),
+    {ParentGuid, FileCtx6} = file_ctx:get_parent_guid(FileCtx5, UserCtx),
+
+    VerifyName = maps:get(verify_name, Opts, true),
+
+    {FileName, FileCtx7} = file_ctx:get_aliased_name(FileCtx6, UserCtx),
+    {FinalName, ConflictingFiles} = case VerifyName andalso ParentGuid =/= undefined of
+        true ->
+            case file_meta:check_name(file_id:guid_to_uuid(ParentGuid), FileName, FileDoc) of
+                {conflicting, ExtendedName, Others} ->
+                    {ExtendedName, Others};
+                _ ->
+                    {FileName, []}
+            end;
+        _ ->
+            {FileName, []}
+    end,
+
+    FileAttr = #file_attr{
+        guid = FileGuid,
+        name = FinalName,
+        mode = Mode,
+        parent_uuid = ParentGuid,
+        uid = Uid,                     % TODO VFS-6095
+        gid = Gid,                     % TODO VFS-6095
+        atime = ATime,
+        mtime = MTime,
+        ctime = CTime,
+        type = Type,
+        size = Size,
+        shares = filter_visible_shares(ShareId, Shares),
+        provider_id = ProviderId,
+        owner_id = OwnerId             % TODO VFS-6095
+    },
+    {FileAttr, ConflictingFiles, FileCtx7}.
 
 
 %%--------------------------------------------------------------------

@@ -82,18 +82,20 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
 %% @private
 -spec translate_file_details(#file_info{}, gri:scope()) -> map().
 translate_file_details(#file_info{
-    guid = FileGuid,
-    name = FileName,
+    has_metadata = HasMetadata,
     active_permissions_type = ActivePermissionsType,
-    mode = Mode,
-    parent_guid = ParentGuid,
-    mtime = MTime,
-    type = TypeAttr,
-    size = SizeAttr,
-    shares = Shares,
-    provider_id = ProviderId,
-    owner_id = OwnerId,
-    has_metadata = HasMetadata
+    file_attr = #file_attr{
+        guid = FileGuid,
+        name = FileName,
+        mode = Mode,
+        parent_uuid = ParentGuid,
+        mtime = MTime,
+        type = TypeAttr,
+        size = SizeAttr,
+        shares = Shares,
+        provider_id = ProviderId,
+        owner_id = OwnerId
+    }
 }, Scope) ->
     {Type, Size} = case TypeAttr of
         ?DIRECTORY_TYPE ->
@@ -112,17 +114,17 @@ translate_file_details(#file_info{
         false -> ParentGuid
     end,
     PublicFields = #{
+        <<"hasMetadata">> => HasMetadata,
+        <<"activePermissionsType">> => ActivePermissionsType,
         <<"guid">> => FileGuid,
         <<"index">> => FileName,
         <<"name">> => FileName,
-        <<"activePermissionsType">> => ActivePermissionsType,
         <<"mode">> => Mode,
         <<"parentId">> => ParentId,
         <<"mtime">> => MTime,
         <<"type">> => Type,
         <<"size">> => Size,
-        <<"shares">> => Shares,
-        <<"hasMetadata">> => HasMetadata
+        <<"shares">> => Shares
     },
     case Scope of
         public ->

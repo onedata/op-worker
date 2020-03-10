@@ -72,7 +72,9 @@
 -export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
-    get_new_storage_file_id/1, get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
+    get_new_storage_file_id/1,
+    clear_cached_aliased_name/1, get_aliased_name/2,
+    get_posix_storage_user_context/2, get_times/1,
     get_parent_guid/2, get_child/3,
     get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
     get_logical_path/2,
@@ -567,6 +569,15 @@ get_space_name(FileCtx = #file_ctx{space_name = undefined}, UserCtx) ->
     end;
 get_space_name(FileCtx = #file_ctx{space_name = SpaceName}, _Ctx) ->
     {SpaceName, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Clears cached aliased name so it can be calculated anew.
+%% @end
+%%--------------------------------------------------------------------
+-spec clear_cached_aliased_name(ctx()) -> ctx().
+clear_cached_aliased_name(FileCtx) ->
+    FileCtx#file_ctx{file_name = undefined}.
 
 %%--------------------------------------------------------------------
 %% @doc

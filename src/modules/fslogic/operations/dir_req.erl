@@ -276,11 +276,15 @@ get_children_info_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWh
     {Children, _NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, undefined, StartId, ChildrenWhiteList
     ),
-    MapFun = fun(ChildCtx) ->
+    MapFun = fun(ChildCtx0) ->
+        % To return original file names it is necessary to clear cached
+        % aliased names with suffixes on conflicting files inserted during
+        % children listing.
+        ChildCtx1 = file_ctx:clear_cached_aliased_name(ChildCtx0),
         #fuse_response{
             status = #status{code = ?OK},
             fuse_response = FileInfo
-        } = attr_req:get_file_info(UserCtx, ChildCtx),
+        } = attr_req:get_file_info(UserCtx, ChildCtx1),
         FileInfo
     end,
     ChildrenInfo = process_children(MapFun, Children),

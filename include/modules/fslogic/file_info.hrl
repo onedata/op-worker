@@ -13,22 +13,10 @@
 -ifndef(FILE_INFO_HRL).
 -define(FILE_INFO_HRL, 1).
 
--record(file_info, {
-    guid :: undefined | binary() | atom() | integer(),
-    name :: binary(),
-    mode :: non_neg_integer(),
-    parent_guid :: undefined | binary(),
-    uid = 0 :: non_neg_integer(),
-    gid = 0 :: non_neg_integer(),
-    atime = 0 :: non_neg_integer(),
-    mtime = 0 :: non_neg_integer(),
-    ctime = 0 :: non_neg_integer(),
-    type :: file_meta:type(),
-    size = 0 :: undefined | non_neg_integer(),
-    shares = [] :: [binary()],
-    provider_id :: binary(),
-    owner_id :: binary(),
+-include_lib("ctool/include/posix/file_attr.hrl").
 
+-record(file_info, {
+    file_attr :: #file_attr{},
     active_permissions_type :: file_meta:permissions_type(),
     has_metadata :: boolean()
 }).
