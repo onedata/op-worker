@@ -36,8 +36,9 @@
     data_access_caveats_cache_test/1,
 
     mkdir_test/1,
-    ls_test/1,
-    readdir_plus_test/1,
+    get_children_test/1,
+    get_children_attrs_test/1,
+    get_children_details_test/1,
     get_child_attr_test/1,
     mv_dir_test/1,
     rm_dir_test/1,
@@ -55,6 +56,7 @@
     get_file_path_test/1,
     get_file_guid_test/1,
     get_file_attr_test/1,
+    get_file_details_test/1,
     get_file_distribution_test/1,
 
     set_perms_test/1,
@@ -103,8 +105,9 @@ all() ->
         data_access_caveats_cache_test,
 
         mkdir_test,
-        ls_test,
-        readdir_plus_test,
+        get_children_test,
+        get_children_attrs_test,
+        get_children_details_test,
         get_child_attr_test,
         mv_dir_test,
         rm_dir_test,
@@ -122,6 +125,7 @@ all() ->
         get_file_path_test,
         get_file_guid_test,
         get_file_attr_test,
+        get_file_details_test,
         get_file_distribution_test,
 
         set_perms_test,
@@ -697,7 +701,7 @@ mkdir_test(Config) ->
     }, Config).
 
 
-ls_test(Config) ->
+get_children_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
@@ -719,7 +723,7 @@ ls_test(Config) ->
     }, Config).
 
 
-readdir_plus_test(Config) ->
+get_children_attrs_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
     lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
@@ -737,6 +741,28 @@ readdir_plus_test(Config) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
             lfm_proxy:get_children_attrs(W, SessId, DirKey, 0, 100)
+        end
+    }, Config).
+
+
+get_children_details_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?traverse_container, ?list_container]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            DirKey = maps:get(DirPath, ExtraData),
+            lfm_proxy:get_children_details(W, SessId, DirKey, 0, 100, undefined)
         end
     }, Config).
 
@@ -1107,6 +1133,23 @@ get_file_attr_test(Config) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             lfm_proxy:stat(W, SessId, FileKey)
+        end
+    }, Config).
+
+
+get_file_details_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+
+    lfm_permissions_test_scenarios:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir = ?SCENARIO_NAME,
+        files = [#file{name = <<"file1">>}],
+        available_in_readonly_mode = true,
+        available_in_share_mode = true,
+        operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            lfm_proxy:get_details(W, SessId, FileKey)
         end
     }, Config).
 

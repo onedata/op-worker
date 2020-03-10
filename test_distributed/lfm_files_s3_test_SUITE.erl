@@ -32,6 +32,7 @@
     lfm_basic_rdwr_after_file_delete_test/1,
     lfm_write_test/1,
     lfm_stat_test/1,
+    lfm_get_details_test/1,
     lfm_synch_stat_test/1,
     lfm_truncate_test/1,
     lfm_acl_test/1,
@@ -91,6 +92,7 @@
     lfm_basic_rdwr_after_file_delete_test,
     lfm_write_test,
     lfm_stat_test,
+    lfm_get_details_test,
     lfm_synch_stat_test,
     lfm_truncate_test,
     lfm_acl_test,
@@ -256,6 +258,9 @@ lfm_write_test(Config) ->
 
 lfm_stat_test(Config) ->
     lfm_files_test_base:lfm_stat(Config).
+
+lfm_get_details_test(Config) ->
+    lfm_files_test_base:lfm_get_details(Config).
 
 lfm_synch_stat_test(Config) ->
     lfm_files_test_base:lfm_synch_stat(Config).

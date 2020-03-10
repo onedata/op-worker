@@ -299,7 +299,7 @@ get_file_details_insecure(UserCtx, FileCtx) ->
         UserCtx, FileCtx, #{
             allow_deleted_files => false,
             include_size => true,
-            varify_name => false
+            verify_name => false
         }
     ),
     {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
