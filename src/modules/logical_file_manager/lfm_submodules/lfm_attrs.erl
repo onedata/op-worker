@@ -23,7 +23,7 @@
 
 %% API
 -export([
-    stat/2, get_details/2,
+    stat/2, get_info/2,
     get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4,
     update_times/5
 ]).
@@ -62,16 +62,16 @@ stat(SessId, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file details.
+%% Returns file info.
 %% @end
 %%--------------------------------------------------------------------
--spec get_details(session:id(), FileKey :: lfm:file_key()) ->
-    {ok, #file_info{}} | lfm:error_reply().
-get_details(SessId, FileKey) ->
+-spec get_info(session:id(), FileKey :: lfm:file_key()) ->
+    {ok, file_info()} | lfm:error_reply().
+get_info(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, file_request, FileGuid, #get_file_details{},
-        fun(#file_info{} = Details) ->
-            {ok, Details}
+    remote_utils:call_fslogic(SessId, file_request, FileGuid, #get_file_info{},
+        fun(#file_info{} = FileInfo) ->
+            {ok, FileInfo}
         end).
 
 %%--------------------------------------------------------------------

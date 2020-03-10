@@ -22,7 +22,7 @@
 -export([
     get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
     get_file_attr_insecure/4, get_file_attr_light/3, get_file_attr_and_conflicts/5,
-    get_file_details/2,
+    get_file_info/2,
     get_child_attr/3, chmod/3, update_times/5,
     chmod_attrs_only_insecure/2
 ]).
@@ -168,13 +168,13 @@ get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, Ve
 %% @equiv get_file_details_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_details(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec get_file_info(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
-get_file_details(UserCtx, FileCtx0) ->
+get_file_info(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
     ),
-    get_file_details_insecure(UserCtx, FileCtx1).
+    get_file_info_insecure(UserCtx, FileCtx1).
 
 
 %%--------------------------------------------------------------------
@@ -322,9 +322,9 @@ update_times_insecure(_UserCtx, FileCtx, ATime, MTime, CTime) ->
 %% type or existence of metadata, qos.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_details_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec get_file_info_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
-get_file_details_insecure(UserCtx, FileCtx) ->
+get_file_info_insecure(UserCtx, FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     ShareId = file_ctx:get_share_id_const(FileCtx),
 

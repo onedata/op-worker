@@ -1,12 +1,12 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2015 ACK CYFRONET AGH
+%%% @copyright (C) 2015-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Proxy for logical files manager operations
+%%% Proxy for lfm (logical files manager) operations.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(lfm_proxy).
@@ -27,7 +27,6 @@
     update_times/6,
     unlink/3, rm_recursive/3,
     mv/4, mv/5,
-
 
     create/4, create/5,
     create_and_open/4, create_and_open/5,
@@ -206,7 +205,6 @@ mv(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
 %%%===================================================================
 %%% Regular file specific operations
 %%%===================================================================
-
 
 
 -spec create(node(), session:id(), file_meta:path(), file_meta:posix_permissions()) ->

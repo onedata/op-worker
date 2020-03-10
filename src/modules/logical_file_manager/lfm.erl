@@ -125,7 +125,7 @@ rm_recursive(SessId, FileKey) ->
     Offset :: integer(), Limit :: integer()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | error_reply().
 get_children(SessId, FileKey, Offset, Limit) ->
-    ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit) end).
+    ?run(fun() -> lfm_dirs:get_children(SessId, FileKey, Offset, Limit) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -155,7 +155,7 @@ get_children(SessId, FileKey, Offset, Limit, Token) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], NewToken :: binary(),
         IsLast :: boolean()} | error_reply().
 get_children(SessId, FileKey, Offset, Limit, Token, StartId) ->
-    ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit, Token, StartId) end).
+    ?run(fun() -> lfm_dirs:get_children(SessId, FileKey, Offset, Limit, Token, StartId) end).
 
 
 %%--------------------------------------------------------------------
@@ -172,7 +172,7 @@ get_children(SessId, FileKey, Offset, Limit, Token, StartId) ->
 ) ->
     {ok, [#file_attr{}]} | error_reply().
 get_children_attrs(SessId, FileKey, Offset, Limit) ->
-    ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit) end).
+    ?run(fun() -> lfm_dirs:get_children_attrs(SessId, FileKey, Offset, Limit) end).
 
 
 %%--------------------------------------------------------------------
@@ -191,7 +191,7 @@ get_children_attrs(SessId, FileKey, Offset, Limit) ->
     {ok, [#file_attr{}], NewToken :: binary(), IsLast :: boolean()} |
     error_reply().
 get_children_attrs(SessId, FileKey, Offset, Limit, Token) ->
-    ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit, Token) end).
+    ?run(fun() -> lfm_dirs:get_children_attrs(SessId, FileKey, Offset, Limit, Token) end).
 
 
 %%--------------------------------------------------------------------
@@ -221,7 +221,7 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 ) ->
     {ok, [lfm_attrs:file_info()], IsLast :: boolean()} | error_reply().
 get_children_info(SessId, FileKey, Offset, Limit, StartId) ->
-    ?run(fun() -> lfm_dirs:read_dir_plus_plus(SessId, FileKey, Offset, Limit, StartId) end).
+    ?run(fun() -> lfm_dirs:get_children_info(SessId, FileKey, Offset, Limit, StartId) end).
 
 
 %%--------------------------------------------------------------------
@@ -587,7 +587,7 @@ stat(SessId, FileKey) ->
 -spec get_info(session:id(), file_key()) ->
     {ok, lfm_attrs:file_info()} | error_reply().
 get_info(SessId, FileKey) ->
-    ?run(fun() -> lfm_attrs:get_details(SessId, FileKey) end).
+    ?run(fun() -> lfm_attrs:get_info(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc

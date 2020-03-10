@@ -20,7 +20,7 @@
 %% API
 -export([
     mkdir/4,
-    read_dir/5, read_dir/6, read_dir_plus/5, read_dir_plus_plus/5
+    read_dir/5, read_dir/6, read_dir_plus/5, get_children_info/5
 ]).
 
 
@@ -100,18 +100,18 @@ read_dir_plus(UserCtx, FileCtx0, Offset, Limit, Token) ->
 %% @equiv read_dir_plus_plus_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_plus_plus(
+-spec get_children_info(
     user_ctx:ctx(), file_ctx:ctx(),
     Offset :: file_meta:offset(), Limit :: file_meta:limit(),
     StartId :: undefined | file_meta:name()
 ) ->
     fslogic_worker:fuse_response().
-read_dir_plus_plus(UserCtx, FileCtx0, Offset, Limit, StartId) ->
+get_children_info(UserCtx, FileCtx0, Offset, Limit, StartId) ->
     {ChildrenWhiteList, FileCtx1} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?traverse_container, ?list_container]
     ),
-    read_dir_plus_plus_insecure(
+    get_children_info_insecure(
         UserCtx, FileCtx1, Offset, Limit, StartId, ChildrenWhiteList
     ).
 
@@ -246,7 +246,7 @@ read_dir_plus_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhiteLis
 %% Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_plus_plus_insecure(
+-spec get_children_info_insecure(
     user_ctx:ctx(),
     file_ctx:ctx(),
     Offset :: file_meta:offset(),
@@ -255,7 +255,7 @@ read_dir_plus_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhiteLis
     ChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
-read_dir_plus_plus_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWhiteList) ->
+get_children_info_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWhiteList) ->
     {Children, _NewToken, IsLast, FileCtx1} = get_file_children(
         UserCtx, FileCtx0, Offset, Limit, undefined, StartId, ChildrenWhiteList
     ),
@@ -265,7 +265,7 @@ read_dir_plus_plus_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenW
             #fuse_response{
                 status = #status{code = ?OK},
                 fuse_response = Details
-            } = attr_req:get_file_details(UserCtx, ChildCtx),
+            } = attr_req:get_file_info(UserCtx, ChildCtx),
             Details
         catch _:_ ->
             % File can be not synchronized with other provider
@@ -283,8 +283,8 @@ read_dir_plus_plus_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenW
 
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = #file_children_details{
-            child_details = ChildrenDetails,
+        fuse_response = #file_children_info{
+            child_info = ChildrenDetails,
             is_last = IsLast
         }
     }.

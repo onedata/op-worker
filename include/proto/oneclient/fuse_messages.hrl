@@ -35,7 +35,7 @@
 -record(get_file_attr, {
 }).
 
--record(get_file_details, {
+-record(get_file_info, {
 }).
 
 -record(get_child_attr, {
@@ -55,7 +55,7 @@
     index_token :: undefined | binary()
 }).
 
--record(get_file_children_details, {
+-record(get_file_children_info, {
     offset :: file_meta:offset(),
     size :: file_meta:size(),
     index_startid = undefined :: undefined | binary()
@@ -163,7 +163,7 @@
 
 -type file_request_type() ::
     #get_file_attr{} | #get_file_children{} | #get_file_children_attrs{} |
-    #get_file_details{} | #get_file_children_details{} |
+    #get_file_info{} | #get_file_children_info{} |
     #create_dir{} | #delete_file{} |
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
@@ -221,8 +221,8 @@
     is_last :: boolean()
 }).
 
--record(file_children_details, {
-    child_details :: [#file_info{}],
+-record(file_children_info, {
+    child_info :: [#file_info{}],
     is_last :: boolean()
 }).
 
@@ -290,7 +290,7 @@
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
     #file_children_attrs{} | #file_location_changed{} | #file_opened_extended{} |
-    #file_info{} | #file_children_details{} |
+    #file_info{} | #file_children_info{} |
     undefined.
 
 -record(fuse_response, {
