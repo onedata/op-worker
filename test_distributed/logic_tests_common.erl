@@ -64,6 +64,7 @@ mock_gs_client(Config) ->
     Nodes = ?NODES(Config),
     ok = test_utils:mock_new(Nodes, gs_client, []),
     ok = test_utils:mock_new(Nodes, provider_logic, [passthrough]),
+    ok = test_utils:mock_new(Nodes, space_logic, [passthrough]),
     ok = test_utils:mock_new(Nodes, oneprovider, [passthrough]),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, async_request, fun mock_async_request/2),
@@ -91,13 +92,19 @@ mock_gs_client(Config) ->
         lists:member(UserId, [?USER_1, ?USER_2, ?USER_3, ?USER_INCREASING_REV])
     end),
 
+    % dbsync reports its state regularly - mock the function so as not to generate
+    % requests to gs_client which would interfere with request counting in tests
+    ok = test_utils:mock_expect(Nodes, space_logic, report_dbsync_state, fun(_, _) ->
+        ok
+    end),
+
     % Fetch dummy provider so it is cached and does not generate Graph Sync requests.
     rpc:multicall(Nodes, provider_logic, get, []).
 
 
 unmock_gs_client(Config) ->
     Nodes = ?NODES(Config),
-    test_utils:mock_unload(Nodes, [gs_client, provider_logic, oneprovider]),
+    test_utils:mock_unload(Nodes, [gs_client, provider_logic, space_logic, oneprovider]),
     initializer:unmock_provider_ids(Nodes),
     ok.
 

@@ -113,6 +113,9 @@
 
     harvesters = [] :: [od_harvester:id()],
 
+    support_parameters = #{} :: space_support:parameters_per_provider(),
+    support_state = #{} :: space_support:support_state_per_provider(),
+
     cache_state = #{} :: cache_state()
 }).
 

@@ -116,6 +116,16 @@
 -define(SPACE_HARVESTERS(__Space), [?HARVESTER_1, ?HARVESTER_2]).
 -define(SPACE_STORAGES_VALUE(__Space), #{?STORAGE_1 => 1000000000, ?STORAGE_2 => 1000000000}).
 -define(SPACE_STORAGES_MATCHER(__Space), #{?STORAGE_1 := 1000000000, ?STORAGE_2 := 1000000000}).
+-define(SPACE_SUPPORT_PARAMETERS_VALUE(__Space), #{
+    ?PROVIDER_1 => #{<<"dataWrite">> => <<"global">>, <<"metadataReplication">> => <<"lazy">>},
+    ?PROVIDER_2 => #{<<"dataWrite">> => <<"none">>, <<"metadataReplication">> => <<"eager">>}
+}).
+-define(SPACE_SUPPORT_PARAMETERS_MATCHER(__Space), #{
+    ?PROVIDER_1 := {space_support_parameters, global, lazy},
+    ?PROVIDER_2 := {space_support_parameters, none, eager}
+}).
+-define(SPACE_SUPPORT_STATE_VALUE(__Space), #{?PROVIDER_1 => <<"active">>, ?PROVIDER_2 => <<"retiring">>}).
+-define(SPACE_SUPPORT_STATE_MATCHER(__Space), #{?PROVIDER_1 := active, ?PROVIDER_2 := retiring}).
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
@@ -254,7 +264,9 @@
     providers = ?SPACE_PROVIDERS_MATCHER(__Space),
     shares = ?SPACE_SHARES(__Space),
     harvesters = ?SPACE_HARVESTERS(__Space),
-    storages = ?SPACE_STORAGES_MATCHER(__Space)
+    storages = ?SPACE_STORAGES_MATCHER(__Space),
+    support_parameters = ?SPACE_SUPPORT_PARAMETERS_MATCHER(__Space),
+    support_state = ?SPACE_SUPPORT_STATE_MATCHER(__Space)
 }}).
 -define(SPACE_PROTECTED_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
@@ -393,7 +405,9 @@ end).
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
     <<"name">> => ?SPACE_NAME(__SpaceId),
-    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId)
+    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
+    <<"supportParameters">> => ?SPACE_SUPPORT_PARAMETERS_VALUE(__SpaceId),
+    <<"supportState">> => ?SPACE_SUPPORT_STATE_VALUE(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     (?SPACE_PROTECTED_DATA_VALUE(__SpaceId))#{
