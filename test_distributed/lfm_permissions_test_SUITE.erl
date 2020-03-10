@@ -217,7 +217,7 @@ data_access_caveats_test(Config) ->
     LsWithConfinedToken = fun(Guid, Caveats) ->
         LsToken = tokens:confine(MainToken, Caveats),
         LsSessId = lfm_permissions_test_utils:create_session(W, UserId, LsToken),
-        lfm_proxy:ls(W, LsSessId, {guid, Guid}, 0, 100)
+        lfm_proxy:get_children(W, LsSessId, {guid, Guid}, 0, 100)
     end,
 
 
@@ -335,7 +335,7 @@ data_access_caveats_test(Config) ->
     SessId12 = lfm_permissions_test_utils:create_session(W, UserId, MainToken),
     ?assertMatch(
         {ok, [_ | _]},
-        lfm_proxy:ls(W, SessId12, {guid, Space1RootDir}, 0, 100)
+        lfm_proxy:get_children(W, SessId12, {guid, Space1RootDir}, 0, 100)
     ),
     % And all operations on it and it's children should be allowed
     ?assertMatch(
@@ -351,13 +351,13 @@ data_access_caveats_test(Config) ->
     SessId13 = lfm_permissions_test_utils:create_session(W, UserId, Token13),
     ?assertMatch(
         {ok, [{DirGuid, DirName}]},
-        lfm_proxy:ls(W, SessId13, {guid, Space1RootDir}, 0, 100)
+        lfm_proxy:get_children(W, SessId13, {guid, Space1RootDir}, 0, 100)
     ),
     % On such dirs (ancestor) it should be possible to perform only certain
     % operations like ls, stat, resolve_guid, get_parent and resolve_path.
     ?assertMatch(
         {ok, [F1]},
-        lfm_proxy:ls(W, SessId13, {guid, DirGuid}, 0, 100)
+        lfm_proxy:get_children(W, SessId13, {guid, DirGuid}, 0, 100)
     ),
     ?assertMatch(
         {ok, #file_attr{name = DirName, type = ?DIRECTORY_TYPE}},
@@ -391,15 +391,15 @@ data_access_caveats_test(Config) ->
     SessId14 = lfm_permissions_test_utils:create_session(W, UserId, Token14),
     ?assertMatch(
         {ok, [F1, F2, F4]},
-        lfm_proxy:ls(W, SessId14, {guid, DirGuid}, 0, 3)
+        lfm_proxy:get_children(W, SessId14, {guid, DirGuid}, 0, 3)
     ),
     ?assertMatch(
         {ok, [F4, F5]},
-        lfm_proxy:ls(W, SessId14, {guid, DirGuid}, 2, 3)
+        lfm_proxy:get_children(W, SessId14, {guid, DirGuid}, 2, 3)
     ),
     ?assertMatch(
         {ok, [F4]},
-        lfm_proxy:ls(W, SessId14, {guid, DirGuid}, 2, 1)
+        lfm_proxy:get_children(W, SessId14, {guid, DirGuid}, 2, 1)
     ).
 
 
@@ -452,7 +452,7 @@ data_access_caveats_ancestors_test(Config) ->
             % to file allowed by caveats
             ?assertMatch(
                 {ok, [Child]},
-                lfm_proxy:ls(W, SessId, {guid, DirGuid}, 0, 100)
+                lfm_proxy:get_children(W, SessId, {guid, DirGuid}, 0, 100)
             ),
             ?assertMatch(
                 {ok, #file_attr{name = DirName, type = ?DIRECTORY_TYPE}},
@@ -523,23 +523,23 @@ data_access_caveats_ancestors_test2(Config) ->
     SessId1 = lfm_permissions_test_utils:create_session(W, UserId, Token1),
     ?assertMatch(
         {ok, [{SpaceRootDirGuid, SpaceName}]},
-        lfm_proxy:ls(W, SessId1, {guid, UserRootDir}, 0, 100)
+        lfm_proxy:get_children(W, SessId1, {guid, UserRootDir}, 0, 100)
     ),
     ?assertMatch(
         {ok, [{RootDirGuid, RootDirName}]},
-        lfm_proxy:ls(W, SessId1, {guid, SpaceRootDirGuid}, 0, 100)
+        lfm_proxy:get_children(W, SessId1, {guid, SpaceRootDirGuid}, 0, 100)
     ),
     ?assertMatch(
         {ok, [{LeftDirGuid, LeftDirName}, {RightDirGuid, RightDirName}]},
-        lfm_proxy:ls(W, SessId1, {guid, RootDirGuid}, 0, 100)
+        lfm_proxy:get_children(W, SessId1, {guid, RootDirGuid}, 0, 100)
     ),
     ?assertMatch(
         {ok, [LeftFile]},
-        lfm_proxy:ls(W, SessId1, {guid, LeftDirGuid}, 0, 100)
+        lfm_proxy:get_children(W, SessId1, {guid, LeftDirGuid}, 0, 100)
     ),
     ?assertMatch(
         {ok, [RightFile]},
-        lfm_proxy:ls(W, SessId1, {guid, RightDirGuid}, 0, 100)
+        lfm_proxy:get_children(W, SessId1, {guid, RightDirGuid}, 0, 100)
     ),
 
     % When caveats have empty intersection then ls should return []
@@ -550,15 +550,15 @@ data_access_caveats_ancestors_test2(Config) ->
     SessId2 = lfm_permissions_test_utils:create_session(W, UserId, Token2),
     ?assertMatch(
         {ok, [{SpaceRootDirGuid, SpaceName}]},
-        lfm_proxy:ls(W, SessId2, {guid, UserRootDir}, 0, 100)
+        lfm_proxy:get_children(W, SessId2, {guid, UserRootDir}, 0, 100)
     ),
     ?assertMatch(
         {ok, [{RootDirGuid, RootDirName}]},
-        lfm_proxy:ls(W, SessId2, {guid, SpaceRootDirGuid}, 0, 100)
+        lfm_proxy:get_children(W, SessId2, {guid, SpaceRootDirGuid}, 0, 100)
     ),
     ?assertMatch(
         {ok, []},
-        lfm_proxy:ls(W, SessId2, {guid, RootDirGuid}, 0, 100)
+        lfm_proxy:get_children(W, SessId2, {guid, RootDirGuid}, 0, 100)
     ).
 
 
@@ -652,7 +652,7 @@ data_access_caveats_cache_test(Config) ->
     % be changed to signal that file is ancestor and such operations can be performed
     ?assertMatch(
         {ok, [_]},
-        lfm_proxy:ls(W, SessId, {guid, DirGuid}, 0, 100)
+        lfm_proxy:get_children(W, SessId, {guid, DirGuid}, 0, 100)
     ),
     ?assertEqual(
         {ok, {ancestor, [<<"file">>]}},
@@ -667,7 +667,7 @@ data_access_caveats_cache_test(Config) ->
     )),
     ?assertMatch(
         {error, ?EACCES},
-        lfm_proxy:ls(W, SessId, {guid, OtherDirGuid}, 0, 100)
+        lfm_proxy:get_children(W, SessId, {guid, OtherDirGuid}, 0, 100)
     ),
     ?assertEqual(
         {ok, ?EACCES},
@@ -714,7 +714,7 @@ ls_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            lfm_proxy:ls(W, SessId, DirKey, 0, 100)
+            lfm_proxy:get_children(W, SessId, DirKey, 0, 100)
         end
     }, Config).
 
@@ -736,7 +736,7 @@ readdir_plus_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            lfm_proxy:read_dir_plus(W, SessId, DirKey, 0, 100)
+            lfm_proxy:get_children_attrs(W, SessId, DirKey, 0, 100)
         end
     }, Config).
 

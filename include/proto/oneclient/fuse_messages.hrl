@@ -15,7 +15,7 @@
 
 -include("common_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include("modules/fslogic/file_details.hrl").
+-include("modules/fslogic/file_info.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -define(AUTO_HELPER_MODE, 'AUTO').
@@ -222,7 +222,7 @@
 }).
 
 -record(file_children_details, {
-    child_details :: [#file_details{}],
+    child_details :: [#file_info{}],
     is_last :: boolean()
 }).
 
@@ -290,7 +290,7 @@
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
     #file_children_attrs{} | #file_location_changed{} | #file_opened_extended{} |
-    #file_details{} | #file_children_details{} |
+    #file_info{} | #file_children_details{} |
     undefined.
 
 -record(fuse_response, {

@@ -17,8 +17,9 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -type file_attributes() :: #file_attr{}.
+-type file_info() :: #file_info{}.
 
--export_type([file_attributes/0]).
+-export_type([file_attributes/0, file_info/0]).
 
 %% API
 -export([
@@ -65,11 +66,11 @@ stat(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_details(session:id(), FileKey :: lfm:file_key()) ->
-    {ok, #file_details{}} | lfm:error_reply().
+    {ok, #file_info{}} | lfm:error_reply().
 get_details(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid, #get_file_details{},
-        fun(#file_details{} = Details) ->
+        fun(#file_info{} = Details) ->
             {ok, Details}
         end).
 

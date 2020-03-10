@@ -14,7 +14,7 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
--include("modules/fslogic/file_details.hrl").
+-include("modules/fslogic/file_info.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -80,8 +80,8 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
 
 
 %% @private
--spec translate_file_details(#file_details{}, gri:scope()) -> map().
-translate_file_details(#file_details{
+-spec translate_file_details(#file_info{}, gri:scope()) -> map().
+translate_file_details(#file_info{
     guid = FileGuid,
     name = FileName,
     active_permissions_type = ActivePermissionsType,

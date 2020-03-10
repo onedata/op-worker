@@ -165,7 +165,7 @@ read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
     Limit :: integer(),
     StartId :: undefined | file_meta:name()
 ) ->
-    {ok, [#file_details{}], IsLast :: boolean()} | lfm:error_reply().
+    {ok, [#file_info{}], IsLast :: boolean()} | lfm:error_reply().
 read_dir_plus_plus(SessId, FileKey, Offset, Limit, StartId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,

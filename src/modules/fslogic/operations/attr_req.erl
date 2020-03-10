@@ -12,7 +12,7 @@
 -module(attr_req).
 -author("Tomasz Lichon").
 
--include("modules/fslogic/file_details.hrl").
+-include("modules/fslogic/file_info.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
@@ -354,7 +354,7 @@ get_file_details_insecure(UserCtx, FileCtx) ->
 
     #fuse_response{
         status = #status{code = ?OK},
-        fuse_response = #file_details{
+        fuse_response = #file_info{
             guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId),
             name = ShownName,
             active_permissions_type = ActivePermissionsType,

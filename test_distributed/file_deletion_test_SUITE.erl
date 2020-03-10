@@ -272,12 +272,12 @@ file_shouldnt_be_listed_after_deletion(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     {ok, FileGuid} = lfm_proxy:create(Worker, SessId, <<"/", SpaceName/binary, "/test_file">>, 8#770),
     {ok, #file_attr{guid = SpaceGuid}} = lfm_proxy:stat(Worker, SessId, {path, <<"/", SpaceName/binary>>}),
-    {ok, Children} = lfm_proxy:ls(Worker, SessId, {guid, SpaceGuid}, 0,10),
+    {ok, Children} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, 0,10),
     ?assertMatch(#{FileGuid := <<"test_file">>}, maps:from_list(Children)),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
 
-    {ok, NewChildren} = lfm_proxy:ls(Worker, SessId, {guid, SpaceGuid}, 0,10),
+    {ok, NewChildren} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, 0,10),
     ?assertNotMatch(#{FileGuid := <<"test_file">>}, maps:from_list(NewChildren)).
 
 file_stat_should_return_enoent_after_deletion(Config) ->
@@ -338,7 +338,7 @@ remove_file_on_ceph_using_client(Config0) ->
         fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}
     }, message_id = <<"2">>}, fuse_test_utils:receive_server_message()),
 
-    ?assertMatch({error, enoent}, lfm_proxy:ls(Worker, SessionId(Worker), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({error, enoent}, lfm_proxy:get_children(Worker, SessionId(Worker), {guid, Guid}, 0, 0), 60),
 
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 

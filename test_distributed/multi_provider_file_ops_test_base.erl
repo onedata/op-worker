@@ -88,7 +88,7 @@ create_on_different_providers_test_base(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:create(W1, UserW1SessId, FilePath, 8#755)),
 
     % file creation on provider2 after synchronizing documents should fail
-    ?assertMatch({ok, [{_, FileName}]}, lfm_proxy:ls(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
+    ?assertMatch({ok, [{_, FileName}]}, lfm_proxy:get_children(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
     ?assertMatch({error, ?EEXIST}, lfm_proxy:create(W2, UserW2SessId, FilePath, 8#755)),
 
     % file creation on provider2 after synchronizing documents should succeed
@@ -103,7 +103,7 @@ create_on_different_providers_test_base(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, UserW1SessId, DirPath, 8#755)),
 
     % dir creation on provider2 after synchronizing documents should fail
-    ?assertMatch({ok, [{_, DirName}]}, lfm_proxy:ls(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
+    ?assertMatch({ok, [{_, DirName}]}, lfm_proxy:get_children(W2, UserW2SessId, {path, SpaceRootDir}, 0, 10), 60),
     ?assertMatch({error, ?EEXIST}, lfm_proxy:mkdir(W2, UserW2SessId, DirPath, 8#755)),
 
     % file creation on provider2 after synchronizing documents should succeed
@@ -2144,7 +2144,7 @@ verify_dir_size(Config, DirToCheck, DSize) ->
 
     VerAns0 = verify(Config, fun(W) ->
         CountChilden = fun() ->
-            LSAns = lfm_proxy:ls(W, SessId(W), {path, DirToCheck}, 0, 20000),
+            LSAns = lfm_proxy:get_children(W, SessId(W), {path, DirToCheck}, 0, 20000),
             ?assertMatch({ok, _}, LSAns),
             {ok, ListedDirs} = LSAns,
             length(ListedDirs)

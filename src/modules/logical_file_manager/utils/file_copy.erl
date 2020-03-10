@@ -142,7 +142,7 @@ copy_file_content(SourceHandle, TargetHandle, Offset) ->
 -spec copy_children(session:id(), fslogic_worker:file_guid(), file_meta:path(),
     non_neg_integer()) -> {ok, [child_entry()]} | {error, term()}.
 copy_children(SessId, ParentGuid, TargetParentGuid, Offset) ->
-    case lfm:ls(SessId, {guid, ParentGuid}, Offset, ?COPY_LS_SIZE) of
+    case lfm:get_children(SessId, {guid, ParentGuid}, Offset, ?COPY_LS_SIZE) of
         {ok, []} ->
             {ok, []};
         {ok, Children} ->

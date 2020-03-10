@@ -116,7 +116,7 @@ empty_import_test(Config) ->
     % wait till scan is finished
     assertImportTimes(W1, ?SPACE_ID),
     ?assertMatch({ok, []},
-        lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
@@ -160,7 +160,7 @@ create_directory_import_test(Config, MountSpaceInRoot) ->
 
     %% Check if dir was imported
     ?assertMatch({ok, [{_, ?TEST_DIR}]},
-        lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
@@ -207,7 +207,7 @@ create_directory_import_error_test(Config, MountSpaceInRoot) ->
     assertImportTimes(W1, ?SPACE_ID),
 
     %% Check if dir was not imported
-    ?assertMatch({ok, []}, lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
     ?assertNotMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
     ?assertNotMatch({ok, #file_attr{}},
@@ -1370,7 +1370,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
     ?assertMatch({error, ?ENOENT}, sd_test_utils:ls(W1, SDHandle, 0, 100)),
     ?assertMatch({ok, []},
-        lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 5 * ?ATTEMPTS),
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 5 * ?ATTEMPTS),
     disable_update(Config),
     assertUpdateTimes(W1, ?SPACE_ID).
 
@@ -3694,7 +3694,7 @@ clean_space(Config) ->
     SpaceGuid = rpc:call(W, fslogic_uuid, spaceid_to_space_dir_guid, [?SPACE_ID]),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W)}}, Config),
     close_opened_files(W, SessId),
-    {ok, Children} = lfm_proxy:ls(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000),
+    {ok, Children} = lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000),
     Attempts = 5 * ?ATTEMPTS,
     Self = self(),
 
@@ -3720,8 +3720,8 @@ clean_space(Config) ->
     end, Children),
     test_utils:mock_unload(W, helpers),
     verify_deletions(Guids, Attempts),
-    ?assertMatch({ok, []}, lfm_proxy:ls(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS),
-    ?assertMatch({ok, []}, lfm_proxy:ls(W2, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS).
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS).
 
 close_opened_files(Worker, SessionId) ->
     {ok, Handles} = rpc:call(Worker, file_handles, list, []),

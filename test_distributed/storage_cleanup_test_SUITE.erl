@@ -383,7 +383,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
     
     ListDir = fun(Worker, Session, Path) ->
-        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        {ok, List} = lfm_proxy:get_children(Worker, Session, {path, Path}, 0, 100),
         List
     end,
     StorageFiles= case list_dir(Worker1, StorageSpacePathW1) of
@@ -461,7 +461,7 @@ sufix_in_metadata_and_storage_test(Config) ->
     StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
 
     ListDir = fun(Worker, Session, Path) ->
-        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        {ok, List} = lfm_proxy:get_children(Worker, Session, {path, Path}, 0, 100),
         List
               end,
     {ok, StorageFiles} = list_dir(Worker1, StorageSpacePathW1),
@@ -530,7 +530,7 @@ sufix_in_dir_metadata_test(Config) ->
     StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
 
     ListDir = fun(Worker, Session, Path) ->
-        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        {ok, List} = lfm_proxy:get_children(Worker, Session, {path, Path}, 0, 100),
         List
               end,
 

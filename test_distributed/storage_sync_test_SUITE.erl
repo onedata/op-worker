@@ -426,7 +426,7 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
 
     % there should be no files visible in the space
     ?assertMatch({ok, []},
-        lfm_proxy:ls(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
+        lfm_proxy:get_children(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -486,7 +486,7 @@ sync_should_not_import_recreated_file_with_suffix_on_storage(Config) ->
 
     % there should be only 1 file visible in the space
     ?assertMatch({ok, [_]},
-        lfm_proxy:ls(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
+        lfm_proxy:get_children(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -552,7 +552,7 @@ sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config) ->
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     % there should be only 1 file visible in the space
-    ?assertMatch({ok, [_]}, lfm_proxy:ls(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
+    ?assertMatch({ok, [_]}, lfm_proxy:get_children(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -647,7 +647,7 @@ sync_should_not_import_replicated_file_with_suffix_on_storage(Config) ->
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     % there should be only 2 files visible in the space
-    ?assertMatch({ok, [_, _]}, lfm_proxy:ls(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
+    ?assertMatch({ok, [_, _]}, lfm_proxy:get_children(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -667,7 +667,7 @@ sync_should_not_import_replicated_file_with_suffix_on_storage(Config) ->
 
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
     % there still should be only 2 files visible in the space
-    ?assertMatch({ok, [_, _]}, lfm_proxy:ls(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)).
+    ?assertMatch({ok, [_, _]}, lfm_proxy:get_children(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)).
 
 sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -704,7 +704,7 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID),
 
     % there should be only 2 files visible in the space
-    ?assertMatch({ok, [_, _]}, lfm_proxy:ls(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100), ?ATTEMPTS),
+    ?assertMatch({ok, [_, _]}, lfm_proxy:get_children(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100), ?ATTEMPTS),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
