@@ -439,8 +439,8 @@ handle_fuse_request(UserCtx, #verify_storage_test_file{
     fuse_response().
 handle_file_request(UserCtx, #get_file_attr{}, FileCtx) ->
     attr_req:get_file_attr(UserCtx, FileCtx);
-handle_file_request(UserCtx, #get_file_info{}, FileCtx) ->
-    attr_req:get_file_info(UserCtx, FileCtx);
+handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
+    attr_req:get_file_details(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_child_attr{name = Name}, ParentFileCtx) ->
     attr_req:get_child_attr(UserCtx, ParentFileCtx, Name);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
@@ -461,12 +461,12 @@ handle_file_request(UserCtx, #get_file_children{
 handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset,
     size = Size, index_token = Token}, FileCtx) ->
     dir_req:get_children_attrs(UserCtx, FileCtx, Offset, Size, Token);
-handle_file_request(UserCtx, #get_file_children_info{
+handle_file_request(UserCtx, #get_file_children_details{
     offset = Offset,
     size = Size,
     index_startid = StartId
 }, FileCtx) ->
-    dir_req:get_children_info(UserCtx, FileCtx, Offset, Size, StartId);
+    dir_req:get_children_details(UserCtx, FileCtx, Offset, Size, StartId);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName

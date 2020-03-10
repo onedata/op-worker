@@ -5,17 +5,17 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc File info record definition.
+%%% @doc File details record definition.
 %%% @end
 %%%-------------------------------------------------------------------
 -author("Bartosz Walkowicz").
 
--ifndef(FILE_INFO_HRL).
--define(FILE_INFO_HRL, 1).
+-ifndef(FILE_DETAILS_HRL).
+-define(FILE_DETAILS_HRL, 1).
 
 -include_lib("ctool/include/posix/file_attr.hrl").
 
--record(file_info, {
+-record(file_details, {
     file_attr :: #file_attr{},
     active_permissions_type :: file_meta:permissions_type(),
     has_metadata :: boolean()

@@ -22,7 +22,7 @@
     mkdir/4,
     get_children/5, get_children/6,
     get_children_attrs/5,
-    get_children_info/5
+    get_children_details/5
 ]).
 
 
@@ -117,7 +117,7 @@ get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token) ->
 %% @equiv get_children_info_insecure/6 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_info(
+-spec get_children_details(
     user_ctx:ctx(),
     file_ctx:ctx(),
     Offset :: file_meta:offset(),
@@ -125,12 +125,12 @@ get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token) ->
     StartId :: undefined | file_meta:name()
 ) ->
     fslogic_worker:fuse_response().
-get_children_info(UserCtx, FileCtx0, Offset, Limit, StartId) ->
+get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
     {ChildrenWhiteList, FileCtx1} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?traverse_container, ?list_container]
     ),
-    get_children_info_insecure(
+    get_children_details_insecure(
         UserCtx, FileCtx1, Offset, Limit, StartId, ChildrenWhiteList
     ).
 
@@ -259,11 +259,11 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhi
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Lists directory with info of each file.
+%% Lists directory with details of each file.
 %% Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_info_insecure(
+-spec get_children_details_insecure(
     user_ctx:ctx(),
     file_ctx:ctx(),
     Offset :: file_meta:offset(),
@@ -272,7 +272,7 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhi
     ChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
-get_children_info_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWhiteList) ->
+get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWhiteList) ->
     {Children, _NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, undefined, StartId, ChildrenWhiteList
     ),
@@ -283,16 +283,16 @@ get_children_info_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWh
         ChildCtx1 = file_ctx:clear_cached_aliased_name(ChildCtx0),
         #fuse_response{
             status = #status{code = ?OK},
-            fuse_response = FileInfo
-        } = attr_req:get_file_info(UserCtx, ChildCtx1),
-        FileInfo
+            fuse_response = FileDetails
+        } = attr_req:get_file_details(UserCtx, ChildCtx1),
+        FileDetails
     end,
-    ChildrenInfo = process_children(MapFun, Children),
+    ChildrenDetails = process_children(MapFun, Children),
 
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
-        fuse_response = #file_children_info{
-            child_info = ChildrenInfo,
+        fuse_response = #file_children_details{
+            child_details = ChildrenDetails,
             is_last = IsLast
         }
     }.

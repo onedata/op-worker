@@ -1054,26 +1054,26 @@ lfm_get_details(Config) ->
     ?assertMatch({ok, _}, O11),
     {ok, Handle11} = O11,
 
-    ?assertMatch({ok, #file_info{
-        size = 0,
+    ?assertMatch({ok, #file_details{
+        file_attr = #file_attr{size = 0},
         active_permissions_type = posix,
         has_metadata = false
-    }}, lfm_proxy:get_info(W, SessId1, {path, <<"/space_name2/test5">>})),
+    }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>})),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 0, <<"abc">>)),
-    ?assertMatch({ok, #file_info{size = 3}}, lfm_proxy:get_info(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+    ?assertMatch({ok, #file_details{file_attr = #file_attr{size = 3}}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 3, <<"abc">>)),
-    ?assertMatch({ok, #file_info{size = 6}}, lfm_proxy:get_info(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+    ?assertMatch({ok, #file_details{file_attr = #file_attr{size = 6}}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch({ok, 3}, lfm_proxy:write(W, Handle11, 2, <<"abc">>)),
-    ?assertMatch({ok, #file_info{size = 6}}, lfm_proxy:get_info(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+    ?assertMatch({ok, #file_details{file_attr = #file_attr{size = 6}}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch({ok, 9}, lfm_proxy:write(W, Handle11, 1, <<"123456789">>)),
-    ?assertMatch({ok, #file_info{size = 10}}, lfm_proxy:get_info(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
+    ?assertMatch({ok, #file_details{file_attr = #file_attr{size = 10}}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10),
 
     ?assertMatch(ok, lfm_proxy:set_xattr(W, SessId1, {guid, FileGuid}, #xattr{name = <<"123456789">>, value = <<"!@#">>})),
-    ?assertMatch({ok, #file_info{has_metadata = true}}, lfm_proxy:get_info(W, SessId1, {path, <<"/space_name2/test5">>}), 10).
+    ?assertMatch({ok, #file_details{has_metadata = true}}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>}), 10).
 
 lfm_synch_stat(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

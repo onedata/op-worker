@@ -256,7 +256,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
         maps:get(<<"createAttempts">>, Data, 1)
     ),
 
-    {ok, FileDetails} = ?check(lfm:get_info(SessionId, {guid, Guid})),
+    {ok, FileDetails} = ?check(lfm:get_details(SessionId, {guid, Guid})),
     {ok, resource, {GRI#gri{id = Guid}, FileDetails}};
 
 create(#op_req{gri = #gri{id = FileGuid, aspect = object_id}}) ->
@@ -459,7 +459,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
-    ?check(lfm:get_info(Auth#auth.session_id, {guid, FileGuid}));
+    ?check(lfm:get_details(Auth#auth.session_id, {guid, FileGuid}));
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -500,7 +500,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     StartId = maps:get(<<"index">>, Data, undefined),
     Offset = maps:get(<<"offset">>, Data, 0),
 
-    case lfm:get_children_info(SessionId, {guid, FileGuid}, Offset, Limit, StartId) of
+    case lfm:get_children_details(SessionId, {guid, FileGuid}, Offset, Limit, StartId) of
         {ok, Children, _} ->
             {ok, value, Children};
         {error, Errno} ->

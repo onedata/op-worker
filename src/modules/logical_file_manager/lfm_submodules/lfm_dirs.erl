@@ -19,7 +19,7 @@
     mkdir/2, mkdir/3, mkdir/4,
     get_children/4, get_children/5, get_children/6,
     get_children_attrs/4, get_children_attrs/5, get_child_attr/3,
-    get_children_info/5,
+    get_children_details/5,
     get_children_count/2
 ]).
 
@@ -198,27 +198,27 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory. Returns info of files.
+%% Lists some contents of a directory. Returns details of files.
 %% Returns up to Limit of entries. Uses startid to choose starting entry.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_info(
+-spec get_children_details(
     session:id(),
     FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(),
     Limit :: integer(),
     StartId :: undefined | file_meta:name()
 ) ->
-    {ok, [lfm_attrs:file_info()], IsLast :: boolean()} | lfm:error_reply().
-get_children_info(SessId, FileKey, Offset, Limit, StartId) ->
+    {ok, [lfm_attrs:file_details()], IsLast :: boolean()} | lfm:error_reply().
+get_children_details(SessId, FileKey, Offset, Limit, StartId) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
-        #get_file_children_info{
+        #get_file_children_details{
             offset = Offset,
             size = Limit,
             index_startid = StartId
         },
-        fun(#file_children_info{child_info = ChildrenInfo, is_last = IL}) ->
+        fun(#file_children_details{child_details = ChildrenInfo, is_last = IL}) ->
             {ok, ChildrenInfo, IL}
         end).
 

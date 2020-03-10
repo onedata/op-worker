@@ -19,7 +19,7 @@
 %% API
 -export([init/1, teardown/1]).
 -export([
-    stat/3, get_info/3,
+    stat/3, get_details/3,
     resolve_guid/3, get_file_path/3,
     get_parent/3,
     check_perms/4,
@@ -41,7 +41,7 @@
     get_children/5, get_children/6, get_children/7,
     get_children_attrs/5, get_children_attrs/6,
     get_child_attr/4,
-    get_children_info/6,
+    get_children_details/6,
 
     get_xattr/4, get_xattr/5,
     set_xattr/4, set_xattr/6,
@@ -133,10 +133,10 @@ stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_guid(Worker, FileKey))).
 
 
--spec get_info(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
-    {ok, lfm_attrs:file_info()} | lfm:error_reply().
-get_info(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_info(SessId, uuid_to_guid(Worker, FileKey))).
+-spec get_details(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
+    {ok, lfm_attrs:file_details()} | lfm:error_reply().
+get_details(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_details(SessId, uuid_to_guid(Worker, FileKey))).
 
 
 -spec resolve_guid(node(), session:id(), file_meta:path()) ->
@@ -473,7 +473,7 @@ get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
     ?EXEC(Worker, lfm:get_child_attr(SessId, ParentGuid, ChildName)).
 
 
--spec get_children_info(
+-spec get_children_details(
     node(),
     session:id(),
     FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(),
@@ -481,9 +481,9 @@ get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
     Limit :: integer(),
     StartId :: undefined | binary()
 ) ->
-    {ok, [lfm_attrs:file_info()], boolean()} | lfm:error_reply().
-get_children_info(Worker, SessId, FileKey, Offset, Limit, StartId) ->
-    ?EXEC(Worker, lfm:get_children_info(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, StartId)).
+    {ok, [lfm_attrs:file_details()], boolean()} | lfm:error_reply().
+get_children_details(Worker, SessId, FileKey, Offset, Limit, StartId) ->
+    ?EXEC(Worker, lfm:get_children_details(SessId, uuid_to_guid(Worker, FileKey), Offset, Limit, StartId)).
 
 
 %%%===================================================================

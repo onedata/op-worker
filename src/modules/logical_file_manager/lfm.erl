@@ -30,7 +30,7 @@
             {error, ___Reason}
     end).
 
--include("modules/fslogic/file_info.hrl").
+-include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -45,7 +45,7 @@
 %% Functions operating on directories
 -export([
     mkdir/2, mkdir/3, mkdir/4,
-    get_children/4, get_children/5, get_children/6, get_children_attrs/4, get_children_attrs/5, get_children_info/5,
+    get_children/4, get_children/5, get_children/6, get_children_attrs/4, get_children_attrs/5, get_children_details/5,
     get_child_attr/3, get_children_count/2, get_parent/2
 ]).
 %% Functions operating on directories or files
@@ -62,7 +62,7 @@
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
 -export([
-    stat/2, get_info/2,
+    stat/2, get_details/2,
     get_xattr/4, set_xattr/3, set_xattr/5, remove_xattr/3, list_xattr/4,
     update_times/5
 ]).
@@ -208,20 +208,20 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory. Returns info of files.
+%% Lists some contents of a directory. Returns details of files.
 %% Returns up to Limit of entries, starting with Offset-th entry.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_info(
+-spec get_children_details(
     session:id(),
     FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(),
     Limit :: integer(),
     StartId :: undefined | file_meta:name()
 ) ->
-    {ok, [lfm_attrs:file_info()], IsLast :: boolean()} | error_reply().
-get_children_info(SessId, FileKey, Offset, Limit, StartId) ->
-    ?run(fun() -> lfm_dirs:get_children_info(SessId, FileKey, Offset, Limit, StartId) end).
+    {ok, [lfm_attrs:file_details()], IsLast :: boolean()} | error_reply().
+get_children_details(SessId, FileKey, Offset, Limit, StartId) ->
+    ?run(fun() -> lfm_dirs:get_children_details(SessId, FileKey, Offset, Limit, StartId) end).
 
 
 %%--------------------------------------------------------------------
@@ -581,13 +581,13 @@ stat(SessId, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file info.
+%% Returns file details.
 %% @end
 %%--------------------------------------------------------------------
--spec get_info(session:id(), file_key()) ->
-    {ok, lfm_attrs:file_info()} | error_reply().
-get_info(SessId, FileKey) ->
-    ?run(fun() -> lfm_attrs:get_info(SessId, FileKey) end).
+-spec get_details(session:id(), file_key()) ->
+    {ok, lfm_attrs:file_details()} | error_reply().
+get_details(SessId, FileKey) ->
+    ?run(fun() -> lfm_attrs:get_details(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc
