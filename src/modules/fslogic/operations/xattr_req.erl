@@ -18,11 +18,10 @@
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
 
-%% API
--export([
-    get_xattr/4, set_xattr/5, remove_xattr/3,
-    list_xattr/4, list_xattr_insecure/4
-]).
+%% Public API
+-export([get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4]).
+%% Protected API - for use only by other *_req.erl modules
+-export([list_xattr_insecure/4]).
 
 %%%===================================================================
 %%% API

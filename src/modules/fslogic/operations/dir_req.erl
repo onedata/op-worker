@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -20,7 +20,9 @@
 %% API
 -export([
     mkdir/4,
-    read_dir/5, read_dir/6, read_dir_plus/5, get_children_info/5
+    get_children/5, get_children/6,
+    get_children_attrs/5,
+    get_children_info/5
 ]).
 
 
@@ -33,8 +35,12 @@
 %% @equiv mkdir_insecure/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
-    Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
+-spec mkdir(
+    user_ctx:ctx(),
+    ParentFileCtx :: file_ctx:ctx(),
+    Name :: file_meta:name(),
+    Mode :: file_meta:posix_permissions()
+) ->
     fslogic_worker:fuse_response().
 mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
@@ -46,63 +52,76 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv read_dir(UserCtx, FileCtx, Offset, Limit, Token, undefined).
+%% @equiv get_children(UserCtx, FileCtx, Offset, Limit, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: file_meta:offset(), Limit :: file_meta:limit(),
+-spec get_children(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
     Token :: undefined | binary()
 ) ->
     fslogic_worker:fuse_response().
-read_dir(UserCtx, FileCtx, Offset, Limit, Token) ->
-    read_dir(UserCtx, FileCtx, Offset, Limit, Token, undefined).
+get_children(UserCtx, FileCtx, Offset, Limit, Token) ->
+    get_children(UserCtx, FileCtx, Offset, Limit, Token, undefined).
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv read_dir_insecure/6 with permission checks
+%% @equiv get_children_insecure/7 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: file_meta:offset(), Limit :: file_meta:limit(),
+-spec get_children(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
     Token :: undefined | binary(),
     StartId :: undefined | file_meta:name()
 ) ->
     fslogic_worker:fuse_response().
-read_dir(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
+get_children(UserCtx, FileCtx0, Offset, Limit, Token, StartId) ->
     {ChildrenWhiteList, FileCtx1} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?list_container]
     ),
-    read_dir_insecure(
+    get_children_insecure(
         UserCtx, FileCtx1, Offset, Limit, Token, StartId, ChildrenWhiteList
     ).
 
 
 %%--------------------------------------------------------------------
-%% @equiv read_dir_plus_insecure/5 with permission checks
+%% @equiv get_children_attrs_insecure/6 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_plus(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: file_meta:offset(), Limit :: file_meta:limit(),
-    Token :: undefined | binary()) -> fslogic_worker:fuse_response().
-read_dir_plus(UserCtx, FileCtx0, Offset, Limit, Token) ->
+-spec get_children_attrs(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
+    Token :: undefined | binary()
+) ->
+    fslogic_worker:fuse_response().
+get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token) ->
     {ChildrenWhiteList, FileCtx1} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?traverse_container, ?list_container]
     ),
-    read_dir_plus_insecure(
+    get_children_attrs_insecure(
         UserCtx, FileCtx1, Offset, Limit, Token, ChildrenWhiteList
     ).
 
 
 %%--------------------------------------------------------------------
-%% @equiv read_dir_plus_plus_insecure/5 with permission checks
+%% @equiv get_children_info_insecure/6 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_info(
-    user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: file_meta:offset(), Limit :: file_meta:limit(),
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
     StartId :: undefined | file_meta:name()
 ) ->
     fslogic_worker:fuse_response().
@@ -127,8 +146,12 @@ get_children_info(UserCtx, FileCtx0, Offset, Limit, StartId) ->
 %% Creates new directory.
 %% @end
 %%--------------------------------------------------------------------
--spec mkdir_insecure(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
-    Name :: file_meta:name(), Mode :: file_meta:posix_permissions()) ->
+-spec mkdir_insecure(
+    user_ctx:ctx(),
+    ParentFileCtx :: file_ctx:ctx(),
+    Name :: file_meta:name(),
+    Mode :: file_meta:posix_permissions()
+) ->
     fslogic_worker:fuse_response().
 mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     CTime = time_utils:cluster_time_seconds(),
@@ -164,18 +187,20 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% Lists directory. Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: file_meta:offset(), Limit :: file_meta:limit(),
+-spec get_children_insecure(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
     Token :: undefined | binary(),
     StartId :: undefined | file_meta:name(),
     ChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
-read_dir_insecure(UserCtx, FileCtx0, Offset, Limit, Token, StartId, ChildrenWhiteList) ->
-    {Children, NewToken, IsLast, FileCtx1} = get_file_children(
+get_children_insecure(UserCtx, FileCtx0, Offset, Limit, Token, StartId, ChildrenWhiteList) ->
+    {Children, NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, Token, StartId, ChildrenWhiteList
     ),
-
     ChildrenLinks = lists:map(fun(ChildFile) ->
         ChildGuid = file_ctx:get_guid_const(ChildFile),
         {ChildName, _ChildFile3} = file_ctx:get_aliased_name(ChildFile, UserCtx),
@@ -199,35 +224,27 @@ read_dir_insecure(UserCtx, FileCtx0, Offset, Limit, Token, StartId, ChildrenWhit
 %% Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_plus_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    Offset :: file_meta:offset(), Limit :: file_meta:limit(),
+-spec get_children_attrs_insecure(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    Offset :: file_meta:offset(),
+    Limit :: file_meta:limit(),
     Token :: undefined | binary(),
     ChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
-read_dir_plus_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhiteList) ->
-    {Children, NewToken, IsLast, FileCtx1} = get_file_children(
+get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhiteList) ->
+    {Children, NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, Token, undefined, ChildrenWhiteList
     ),
-
     MapFun = fun(ChildCtx) ->
-        try
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = Attrs
-            } = attr_req:get_file_attr_light(UserCtx, ChildCtx, true),
-            Attrs
-        catch _:_ ->
-            % File can be not synchronized with other provider
-            error
-        end
+        #fuse_response{
+            status = #status{code = ?OK},
+            fuse_response = Attrs
+        } = attr_req:get_file_attr_light(UserCtx, ChildCtx, true),
+        Attrs
     end,
-    FilterFun = fun
-        (error) -> false;
-        (_Attrs) -> true
-    end,
-    MaxProcs = application:get_env(?APP_NAME, max_read_dir_plus_procs, 20),
-    ChildrenAttrs = filtermap(MapFun, FilterFun, Children, MaxProcs, length(Children)),
+    ChildrenAttrs = process_children(MapFun, Children),
 
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
@@ -242,7 +259,7 @@ read_dir_plus_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhiteLis
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Lists directory with details of each file.
+%% Lists directory with info of each file.
 %% Starts with Offset entity and limits returned list to Limit size.
 %% @end
 %%--------------------------------------------------------------------
@@ -256,42 +273,29 @@ read_dir_plus_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhiteLis
 ) ->
     fslogic_worker:fuse_response().
 get_children_info_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWhiteList) ->
-    {Children, _NewToken, IsLast, FileCtx1} = get_file_children(
+    {Children, _NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, undefined, StartId, ChildrenWhiteList
     ),
-
     MapFun = fun(ChildCtx) ->
-        try
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = Details
-            } = attr_req:get_file_info(UserCtx, ChildCtx),
-            Details
-        catch _:_ ->
-            % File can be not synchronized with other provider
-            error
-        end
+        #fuse_response{
+            status = #status{code = ?OK},
+            fuse_response = FileInfo
+        } = attr_req:get_file_info(UserCtx, ChildCtx),
+        FileInfo
     end,
-    FilterFun = fun
-        (error) -> false;
-        (_Attrs) -> true
-    end,
-    MaxProcs = application:get_env(?APP_NAME, max_read_dir_plus_procs, 20),
-    ChildrenDetails = filtermap(
-        MapFun, FilterFun, Children, MaxProcs, length(Children)
-    ),
+    ChildrenInfo = process_children(MapFun, Children),
 
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_info{
-            child_info = ChildrenDetails,
+            child_info = ChildrenInfo,
             is_last = IsLast
         }
     }.
 
 
 %% @private
--spec get_file_children(user_ctx:ctx(), file_ctx:ctx(),
+-spec list_children(user_ctx:ctx(), file_ctx:ctx(),
     Offset :: file_meta:offset(),
     Limit :: file_meta:limit(),
     Token :: undefined | datastore_links_iter:token(),
@@ -304,7 +308,7 @@ get_children_info_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, ChildrenWh
         IsLast :: boolean(),
         NewFileCtx :: file_ctx:ctx()
     }.
-get_file_children(UserCtx, FileCtx, Offset, Limit, Token, StartId, undefined) ->
+list_children(UserCtx, FileCtx, Offset, Limit, Token, StartId, undefined) ->
     {Token2, CachePid} = get_cached_token(Token),
 
     case file_ctx:get_file_children(FileCtx, UserCtx, Offset, Limit, Token2, StartId) of
@@ -318,7 +322,7 @@ get_file_children(UserCtx, FileCtx, Offset, Limit, Token, StartId, undefined) ->
             end,
             {C, NT2, IL, FC}
     end;
-get_file_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, ChildrenWhiteList0) ->
+list_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, ChildrenWhiteList0) ->
     ChildrenWhiteList1 = case StartId of
         undefined ->
             ChildrenWhiteList0;
@@ -329,6 +333,35 @@ get_file_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, ChildrenWhiteLis
         FileCtx0, UserCtx, Offset, Limit, ChildrenWhiteList1
     ),
     {Children, <<>>, length(Children) < Limit, FileCtx1}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Calls MapFunctionInsecure for every passed children in parallel and
+%% filters out children for which it raised error.
+%% @end
+%%--------------------------------------------------------------------
+-spec process_children(
+    MapFunInsecure :: fun((ChildCtx :: file_ctx:ctx()) -> Result),
+    Children :: [file_ctx:ctx()]
+) ->
+    [Result] when Result :: term().
+process_children(MapFunInsecure, Children) ->
+    MapFun = fun(ChildCtx) ->
+        try
+            MapFunInsecure(ChildCtx)
+        catch _:_ ->
+            % File can be not synchronized with other provider
+            error
+        end
+    end,
+    FilterFun = fun
+        (error) -> false;
+        (_Attrs) -> true
+    end,
+    MaxProcesses = application:get_env(?APP_NAME, max_read_dir_plus_procs, 20),
+    filtermap(MapFun, FilterFun, Children, MaxProcesses, length(Children)).
 
 
 %%--------------------------------------------------------------------

@@ -457,10 +457,10 @@ handle_file_request(UserCtx, #get_file_children{
     index_token = Token,
     index_startid = StartId
 }, FileCtx) ->
-    dir_req:read_dir(UserCtx, FileCtx, Offset, Size, Token, StartId);
+    dir_req:get_children(UserCtx, FileCtx, Offset, Size, Token, StartId);
 handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset,
     size = Size, index_token = Token}, FileCtx) ->
-    dir_req:read_dir_plus(UserCtx, FileCtx, Offset, Size, Token);
+    dir_req:get_children_attrs(UserCtx, FileCtx, Offset, Size, Token);
 handle_file_request(UserCtx, #get_file_children_info{
     offset = Offset,
     size = Size,
