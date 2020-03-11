@@ -276,18 +276,23 @@ get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, Childre
     {Children, _NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, undefined, StartId, ChildrenWhiteList
     ),
-    MapFun = fun(ChildCtx0) ->
-        % To return original file names it is necessary to clear cached
-        % aliased names with suffixes on conflicting files inserted during
-        % children listing.
-        ChildCtx1 = file_ctx:clear_cached_aliased_name(ChildCtx0),
+    ChildrenNum = length(Children),
+    NumberedChildren = lists:zip(lists:seq(1, ChildrenNum), Children),
+    MapFun = fun({Num, ChildCtx}) ->
         #fuse_response{
             status = #status{code = ?OK},
             fuse_response = FileDetails
-        } = attr_req:get_file_details(UserCtx, ChildCtx1),
+        } = case lists:member(Num, [1, ChildrenNum]) of
+            true ->
+                attr_req:get_file_details(UserCtx, ChildCtx);
+            false ->
+                % Other files than first and last don't need to verify name
+                % (to check for collisions) as list_children already did it
+                attr_req:get_file_details_light(UserCtx, ChildCtx)
+        end,
         FileDetails
     end,
-    ChildrenDetails = process_children(MapFun, Children),
+    ChildrenDetails = process_children(MapFun, NumberedChildren),
 
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},

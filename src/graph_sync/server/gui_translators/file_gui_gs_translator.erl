@@ -84,6 +84,7 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
 translate_file_details(#file_details{
     has_metadata = HasMetadata,
     active_permissions_type = ActivePermissionsType,
+    index_startid = StartId,
     file_attr = #file_attr{
         guid = FileGuid,
         name = FileName,
@@ -117,9 +118,9 @@ translate_file_details(#file_details{
         <<"hasMetadata">> => HasMetadata,
         <<"activePermissionsType">> => ActivePermissionsType,
         <<"guid">> => FileGuid,
-        <<"index">> => FileName,
         <<"name">> => FileName,
-        <<"mode">> => Mode,
+        <<"index">> => StartId,
+        <<"posixPermissions">> => integer_to_binary(Mode, 8),
         <<"parentId">> => ParentId,
         <<"mtime">> => MTime,
         <<"type">> => Type,

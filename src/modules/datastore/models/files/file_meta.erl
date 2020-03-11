@@ -39,6 +39,7 @@
     list_children/5, list_children/6,
     list_children_whitelisted/4
 ]).
+-export([get_name/1]).
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
@@ -888,6 +889,10 @@ is_child_of_hidden_dir(Path) ->
     {_, ParentPath} = fslogic_path:basename_and_parent(Path),
     {Parent, _} = fslogic_path:basename_and_parent(ParentPath),
     is_hidden(Parent).
+
+-spec get_name(doc()) -> binary().
+get_name(#document{value = #file_meta{name = Name}}) ->
+    Name.
 
 %%--------------------------------------------------------------------
 %% @doc

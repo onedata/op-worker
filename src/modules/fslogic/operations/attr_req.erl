@@ -22,7 +22,7 @@
 -export([
     get_file_attr/2, get_file_attr_insecure/2, get_file_attr_insecure/3,
     get_file_attr_insecure/4, get_file_attr_light/3, get_file_attr_and_conflicts/5,
-    get_file_details/2,
+    get_file_details/2, get_file_details_light/2,
     get_child_attr/3, chmod/3, update_times/5,
     chmod_attrs_only_insecure/2
 ]).
@@ -140,7 +140,29 @@ get_file_details(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
     ),
-    get_file_details_insecure(UserCtx, FileCtx1).
+    get_file_details_insecure(UserCtx, FileCtx1, #{
+        allow_deleted_files => false,
+        include_size => true,
+        verify_name => true
+    }).
+
+
+%%--------------------------------------------------------------------
+%% @equiv get_file_details_insecure/2 with permission checks.
+%% For internal use only - no name verification.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_details_light(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_file_details_light(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+    ),
+    get_file_details_insecure(UserCtx, FileCtx1, #{
+        allow_deleted_files => false,
+        include_size => true,
+        verify_name => false
+    }).
 
 
 %%--------------------------------------------------------------------
@@ -292,16 +314,10 @@ update_times_insecure(_UserCtx, FileCtx, ATime, MTime, CTime) ->
 %% type or existence of metadata.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_details_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
+-spec get_file_details_insecure(user_ctx:ctx(), file_ctx:ctx(), compute_file_attr_opts()) ->
     fslogic_worker:fuse_response().
-get_file_details_insecure(UserCtx, FileCtx) ->
-    {FileAttr, _, FileCtx2} = compute_file_attr(
-        UserCtx, FileCtx, #{
-            allow_deleted_files => false,
-            include_size => true,
-            verify_name => false
-        }
-    ),
+get_file_details_insecure(UserCtx, FileCtx, Opts) ->
+    {FileAttr, _, FileCtx2} = compute_file_attr(UserCtx, FileCtx, Opts),
     {FileDoc, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
 
@@ -309,6 +325,7 @@ get_file_details_insecure(UserCtx, FileCtx) ->
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
+            index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
             has_metadata = has_metadata(FileCtx3)
         }
