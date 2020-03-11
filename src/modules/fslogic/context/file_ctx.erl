@@ -1196,8 +1196,8 @@ file_exists_or_is_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
         {error, not_found} ->
             {?FILE_NEVER_EXISTED, FileCtx}
     end;
-file_exists_or_is_deleted(_) ->
-    ?FILE_EXISTS.
+file_exists_or_is_deleted(FileCtx) ->
+    {?FILE_EXISTS, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
