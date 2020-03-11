@@ -167,10 +167,12 @@ add_qos_entry_id(SpaceId, FileUuid, QosEntryId, Storage) ->
             assigned_entries = UpdatedAssignedEntries}
         }
     end,
-    case datastore_model:update(?CTX, FileUuid, UpdateFun, NewDoc) of
-        {ok, _} -> ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
-        {error, _} = Error -> Error
-    end.
+    lock_on_file(FileUuid, fun() ->
+        case datastore_model:update(?CTX, FileUuid, UpdateFun, NewDoc) of
+            {ok, _} -> ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+            {error, _} = Error -> Error
+        end
+    end).
 
 
 %%--------------------------------------------------------------------
@@ -196,14 +198,17 @@ remove_qos_entry_id(SpaceId, FileUuid, QosEntryId) ->
             assigned_entries = UpdatedAssignedEntries
         }}
     end,
-    case datastore_model:update(?CTX, FileUuid, UpdateFun) of
-        {ok, #document{value = #file_qos{qos_entries = []}}} -> 
-            ok = delete(FileUuid),
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
-        {ok, _} ->
-            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
-        {error, _} = Error -> Error
-    end.
+    % critical section to avoid adding new entry for file between update and delete
+    lock_on_file(FileUuid, fun() ->
+        case datastore_model:update(?CTX, FileUuid, UpdateFun) of
+            {ok, #document{value = #file_qos{qos_entries = []}}} -> 
+                ok = delete(FileUuid),
+                ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+            {ok, _} ->
+                ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+            {error, _} = Error -> Error
+        end
+    end).
 
 
 %%--------------------------------------------------------------------
@@ -319,6 +324,11 @@ merge_assigned_entries(ParentAssignedEntries, ChildAssignedEntries) ->
         end, StorageQosEntries, Acc)
     end, ParentAssignedEntries, ChildAssignedEntries).
 
+
+%% @private
+-spec lock_on_file(file_meta:uuid(), fun(() -> Result)) -> Result.
+lock_on_file(FileUuid, Fun) ->
+    critical_section:run({file_qos, FileUuid}, Fun).
 
 %%%===================================================================
 %%% datastore_model callbacks

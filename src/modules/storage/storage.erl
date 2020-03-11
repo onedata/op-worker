@@ -46,7 +46,6 @@
 %%% Support related functions
 -export([support_space/3, update_space_support_size/3, revoke_space_support/2]).
 -export([supports_any_space/1]).
--export([on_space_unsupported/2]).
 
 %%% Upgrade from 19.02.*
 -export([migrate_to_zone/0]).
@@ -328,7 +327,20 @@ set_imported_storage(StorageId, ImportedStorage) ->
 
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
-    case storage_logic:set_qos_parameters(StorageId, QosParameters) of
+    set_qos_parameters(StorageId, oneprovider:get_id(), QosParameters).
+
+
+-spec set_qos_parameters(id(), oneprovider:id(), qos_parameters()) -> ok | errors:error().
+set_qos_parameters(_StorageId, ProviderId, #{<<"providerId">> := OtherProvider}) when ProviderId =/= OtherProvider ->
+    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"providerId">>, [ProviderId]);
+set_qos_parameters(StorageId, _ProviderId, #{<<"storageId">> := OtherStorage}) when StorageId =/= OtherStorage ->
+    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"storageId">>, [StorageId]);
+set_qos_parameters(StorageId, ProviderId, QosParameters) ->
+    ExtendedQosParameters = QosParameters#{
+        <<"storageId">> => StorageId,
+        <<"providerId">> => ProviderId
+    },
+    case storage_logic:set_qos_parameters(StorageId, ExtendedQosParameters) of
         ok ->
             {ok, Spaces} = storage_logic:get_spaces(StorageId),
             lists:foreach(fun(SpaceId) ->
@@ -336,7 +348,6 @@ set_qos_parameters(StorageId, QosParameters) ->
             end, Spaces);
         Error -> Error
     end.
-
 
 -spec update_helper_args(id(), helper:args()) -> ok | {error, term()}.
 update_helper_args(StorageId, Changes) when is_map(Changes) ->
@@ -440,8 +451,9 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
+%%     @TODO VFS-6132 Use space_unsupport when it is implemented
     case storage_logic:revoke_space_support(StorageId, SpaceId) of
-        ok -> on_space_unsupported(SpaceId, StorageId);
+        ok -> space_unsupport:cleanup_local_documents(SpaceId, StorageId);
         Error -> Error
     end.
 
@@ -453,17 +465,6 @@ supports_any_space(StorageId) ->
         {ok, _Spaces} -> true;
         {error, _} = Error -> Error
     end.
-
-
--spec on_space_unsupported(od_space:id(), id()) -> ok.
-on_space_unsupported(SpaceId, StorageId) ->
-    file_popularity_api:disable(SpaceId),
-    file_popularity_api:delete_config(SpaceId),
-    autocleaning_api:disable(SpaceId),
-    autocleaning_api:delete_config(SpaceId),
-    storage_sync:space_unsupported(SpaceId, StorageId),
-    space_quota:delete(SpaceId),
-    main_harvesting_stream:space_unsupported(SpaceId).
 
 
 %%%===================================================================
@@ -478,11 +479,7 @@ on_storage_created(StorageId) ->
 %% @private
 -spec on_storage_created(id(), qos_parameters()) -> ok.
 on_storage_created(StorageId, QosParameters) ->
-    ExtendedQosParameters = QosParameters#{
-        <<"storage_id">> => StorageId,
-        <<"provider_id">> => oneprovider:get_id_or_undefined()
-    },
-    ok = set_qos_parameters(StorageId, ExtendedQosParameters),
+    ok = set_qos_parameters(StorageId, QosParameters),
     on_storage_created(StorageId).
 
 

@@ -1445,8 +1445,8 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
             end,
             QosParameters = maps:get(<<"qos_parameters">>, Desc1, #{}),
             ExtendedQosParameters = QosParameters#{
-                <<"storage_id">> => StorageId,
-                <<"provider_id">> => ProviderId
+                <<"storageId">> => StorageId,
+                <<"providerId">> => ProviderId
             },
             Desc1#{<<"provider_id">> => ProviderId, <<"qos_parameters">> => ExtendedQosParameters}
         end, InitialStorageDesc),

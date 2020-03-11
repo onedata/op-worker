@@ -6,7 +6,11 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Model for persisting space_unsupport_job.
+%%% This model holds information about current space unsupport job, i.e. what space is being 
+%%% unsuported, from which storage and what stage is currently running.
+%%% Some stages start internal task (like starting cleanup traverse or adding QoS entry). 
+%%% This tasks should not be started again after provider was restarted. For this purpose 
+%%% id of such internal task is persisted in this model as substask_id.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(space_unsupport_job).
@@ -26,6 +30,7 @@
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 -export([encode_subtask_id/1, decode_subtask_id/1]).
+-export([encode_slave_job_pid/1, decode_slave_job_pid/1]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -49,7 +54,7 @@ save(Job) ->
     save(gen_id(SpaceId, StorageId, Stage), Job, TaskId).
 
 -spec save(id(), record(), traverse:id()) -> {ok, id()} | {error, term()}.
-save(Key, Job, TaskId) when is_atom(Key) ->
+save(Key, Job, TaskId) when Key =:= main_job; Key =:= undefined ->
     #space_unsupport_job{
         space_id = SpaceId, 
         storage_id = StorageId, 
@@ -107,18 +112,29 @@ get_record_struct(1) ->
         {task_id, string},
         {space_id, string},
         {storage_id, string},
-        {substask_id, {custom, string, {?MODULE, encode_subtask_id, decode_subtask_id}}}
+        {substask_id, {custom, string, {?MODULE, encode_subtask_id, decode_subtask_id}}},
+        {slave_job_pid, {custom, string, {?MODULE, encode_slave_job_pid, decode_slave_job_pid}}}
     ]}.
 
 
--spec encode_subtask_id(undefined | binary()) -> binary().
+-spec encode_subtask_id(space_unsupport:subtask_id() | undefined) -> binary().
 encode_subtask_id(undefined) -> <<"undefined">>;
 encode_subtask_id(Binary) when is_binary(Binary) -> Binary.
 
 
--spec decode_subtask_id(binary()) -> undefined | binary().
+-spec decode_subtask_id(binary()) -> space_unsupport:subtask_id() | undefined.
 decode_subtask_id(<<"undefined">>) -> undefined;
 decode_subtask_id(Binary) when is_binary(Binary) -> Binary.
+
+
+-spec encode_slave_job_pid(pid() | undefined) -> binary().
+encode_slave_job_pid(undefined) -> <<"undefined">>;
+encode_slave_job_pid(Pid) -> list_to_binary(pid_to_list(Pid)).
+
+
+-spec decode_slave_job_pid(binary()) -> pid() | undefined.
+decode_slave_job_pid(<<"undefined">>) -> undefined;
+decode_slave_job_pid(Pid) -> list_to_pid(binary_to_list(Pid)).
 
 %%%===================================================================
 %%% Internal functions
@@ -127,4 +143,4 @@ decode_subtask_id(Binary) when is_binary(Binary) -> Binary.
 %% @private
 -spec gen_id(od_space:id(), storage:id(), space_unsupport:stage()) -> id().
 gen_id(SpaceId, StorageId, Stage) ->
-    datastore_key:new_from_digest([SpaceId, StorageId, Stage]).
+    datastore_key:adjacent_from_digest([SpaceId, StorageId, Stage], SpaceId).

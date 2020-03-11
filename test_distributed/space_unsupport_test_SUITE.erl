@@ -47,8 +47,6 @@ all() -> [
 -define(TASK_ID, <<"task_id">>).
 -define(TEST_DATA, <<"test_data">>).
 -define(ATTEMPTS, 60).
--define(ALL_STAGES, [init, replicate, cleanup_traverse, wait_for_dbsync, 
-    delete_synced_documents, delete_local_documents]).
 
 %%%===================================================================
 %%% Test functions
@@ -87,15 +85,19 @@ replicate_stage_test(Config) ->
 
 
 replicate_stage_persistence_test(Config) ->
-    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    [Worker1,   _Worker2] = ?config(op_worker_nodes, Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
     create_files_and_dirs(Config),
-    % add dummy QoS entry 
+    
+    % Create new QoS entry representing entry created before provider restart.
+    % Running stage again with existing entry should not create new one, 
+    % but wait for fulfillment of previous one.
     {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), {guid, SpaceGuid}, 
-        <<"provider_id = ", (?GET_DOMAIN_BIN(Worker2))/binary>>, 1),
+        <<?QOS_ANY_STORAGE/binary, " - storageId = ", StorageId/binary>>, 1),
+    
     StageJob = #space_unsupport_job{
         stage = replicate,
         space_id = ?SPACE_ID,
@@ -117,7 +119,9 @@ cleanup_traverse_stage_persistence_test(Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
-    % start dummy unsupport traverse
+    % Create new cleanup traverse representing traverse created before provider restart.
+    % Running stage again with existing traverse should not create new one, 
+    % but wait for previous one to finish.
     {ok, TaskId} = rpc:call(Worker1, unsupport_cleanup_traverse, start, [?SPACE_ID, StorageId]),
     
     StageJob = #space_unsupport_job{
@@ -127,11 +131,9 @@ cleanup_traverse_stage_persistence_test(Config) ->
         subtask_id = TaskId
     },
     
-    test_utils:mock_new(Worker1, unsupport_cleanup_traverse, [passthrough]),
     ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     % check that no additional traverse was started
     test_utils:mock_assert_num_calls(Worker1, unsupport_cleanup_traverse, start, 1, 0, 1),
-    test_utils:mock_unload(Worker1, [unsupport_cleanup_traverse]),
     
     rpc:call(Worker1, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]).
     
@@ -143,7 +145,8 @@ cleanup_traverse_stage_test(Config) ->
     
     {{_,DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Config),
     
-    AllPaths = [<<>>, DirPath, F1Path, F2Path], % empty binary represents space dir 
+    % Relative paths to space dir. Empty binary represents space dir.
+    AllPaths = [<<"">>, DirPath, F1Path, F2Path], 
     lists:foreach(fun(FileRelativePath) -> 
         StoragePath = storage_file_path(Worker1, ?SPACE_ID, FileRelativePath),
         ?assertEqual(true, check_exists_on_storage(Worker1, StoragePath))
@@ -212,13 +215,24 @@ overall_test(Config) ->
     % mocked in init_per_testcase
     receive task_finished -> ok end,
     
+    % check that all stages have been executed
     lists:foreach(fun(Stage) ->
         test_utils:mock_assert_num_calls(
-            Worker1, space_unsupport, do_slave_job, 
-            [{space_unsupport_job, Stage, '_', ?SPACE_ID, StorageId, '_'}, '_'], 
+            Worker1, space_unsupport, do_slave_job,
+            [{space_unsupport_job, Stage, '_', ?SPACE_ID, StorageId, '_', '_'}, '_'],
             1, 1
         )
-    end, ?ALL_STAGES),
+    end, space_unsupport:get_all_stages()),
+    
+    % check that stages have been executed in correct order 
+    % (sending message mocked in init_per_testcase)
+    lists:foldl(fun(Stage, CallNum) ->
+        receive {Stage, Num} ->
+            ct:pal("Stage: ~p - ~p", [Stage, Num]),
+            ?assertEqual(CallNum, Num)
+        end,
+        CallNum + 1
+    end, 0, space_unsupport:get_all_stages()),
     ok.
 
 %%%===================================================================
@@ -240,10 +254,24 @@ end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config).
 
 
+init_per_testcase(cleanup_traverse_stage_persistence_test, Config) ->
+    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker1, unsupport_cleanup_traverse, [passthrough]),
+    test_utils:mock_expect(Worker1, unsupport_cleanup_traverse, start, fun(SpaceId, StorageId) ->
+        % delay traverse start, so it does not finish before stage is even called
+        timer:sleep(timer:seconds(5)), 
+        meck:passthrough([SpaceId, StorageId])
+    end),
+    init_per_testcase(default, Config);
 init_per_testcase(overall_test, Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
     Self = self(),
     test_utils:mock_new(Worker1, space_unsupport, [passthrough]),
+    test_utils:mock_expect(Worker1, space_unsupport, do_slave_job,
+        fun(#space_unsupport_job{stage = Stage} = Job, TaskId) ->
+            Self ! {Stage, meck:num_calls(space_unsupport, do_slave_job, 2)},
+            meck:passthrough([Job, TaskId])
+        end),
     test_utils:mock_expect(Worker1, space_unsupport, task_finished, 
         fun(TaskId, Pool) ->
             Self ! task_finished,
@@ -255,6 +283,10 @@ init_per_testcase(_, Config) ->
     lfm_proxy:init(Config).
 
 
+end_per_testcase(cleanup_traverse_stage_persistence_test, Config) ->
+    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker1, [unsupport_cleanup_traverse]),
+    end_per_testcase(default, Config);
 end_per_testcase(overall_test, Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker1, [space_unsupport]),

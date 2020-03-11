@@ -18,7 +18,7 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% API
--export([add_qos_entry/5, get_qos_entry/2, remove_qos_entry/3, get_effective_file_qos/2,
+-export([add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2, get_effective_file_qos/2,
     check_qos_fulfilled/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
@@ -80,12 +80,12 @@ get_qos_entry(SessId, QosEntryId) ->
 %% Remove qos_entry.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos_entry(session:id(), qos_entry:id(), boolean()) -> ok | lfm:error_reply().
-remove_qos_entry(SessId, QosEntryId, PreserveInternal) ->
+-spec remove_qos_entry(session:id(), qos_entry:id()) -> ok | lfm:error_reply().
+remove_qos_entry(SessId, QosEntryId) ->
     case qos_entry:get_file_guid(QosEntryId) of
         {ok, FileGuid} ->
             remote_utils:call_fslogic(SessId, provider_request, FileGuid, 
-                #remove_qos_entry{id = QosEntryId, preserve_internal = PreserveInternal},
+                #remove_qos_entry{id = QosEntryId},
                 fun(_) -> ok end);
         {error, _} = Error ->
             Error

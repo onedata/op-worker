@@ -69,7 +69,7 @@
 %% Utility functions
 -export([check_result/1]).
 %% Functions concerning qos
--export([add_qos_entry/4, add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2, remove_qos_entry/3, 
+-export([add_qos_entry/4, add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2,
     get_effective_file_qos/2, check_qos_fulfilled/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
@@ -781,11 +781,7 @@ get_qos_entry(SessId, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec remove_qos_entry(session:id(), qos_entry:id()) -> ok | error_reply().
 remove_qos_entry(SessId, QosEntryId) ->
-    remove_qos_entry(SessId, QosEntryId, true).
-
--spec remove_qos_entry(session:id(), qos_entry:id(), boolean()) -> ok | error_reply().
-remove_qos_entry(SessId, QosEntryId, PreserveInternal) ->
-    ?run(fun() -> lfm_qos:remove_qos_entry(SessId, QosEntryId, PreserveInternal) end).
+    ?run(fun() -> lfm_qos:remove_qos_entry(SessId, QosEntryId) end).
 
 %%--------------------------------------------------------------------
 %% @doc

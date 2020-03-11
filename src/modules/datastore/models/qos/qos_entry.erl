@@ -72,6 +72,9 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type replicas_num() :: pos_integer().
+% Entry type denotes whether entry was created as part of internal 
+% provider logic (internal) or was created by a user (user_defined).
+% Internal entries can only be deleted by root.
 -type type() :: internal | user_defined.
 
 -type qos_transfer_id() :: transfer:id().
@@ -116,7 +119,7 @@ create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
     replicas_num(), type(), boolean(), qos_traverse_req:traverse_reqs()) ->
     {ok, id()} | {error, term()}.
 create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, TraverseReqs) ->
-    QosEntryId = datastore_key:new(),
+    QosEntryId = datastore_key:new_adjacent_to(SpaceId),
     PossibilityCheck = case Possible of
         true ->
             {possible, oneprovider:get_id()};
@@ -377,7 +380,7 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {internal, atom},
+        {type, atom},
         {file_uuid, string},
         {expression, [string]},
         {replicas_num, integer},

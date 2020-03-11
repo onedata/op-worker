@@ -319,6 +319,7 @@
 -record(qos_entry, {
     % Entry type denotes whether entry was created as part of internal 
     % provider logic (internal) or was created by a user (user_defined).
+    % Internal entries can only be deleted by root.
     type = user_defined :: qos_entry:type(),
     file_uuid :: file_meta:uuid(),
     expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.
@@ -392,7 +393,8 @@
     storage_id :: storage:id(),
     % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id). 
     % It is persisted so when slave job is restarted no additional task is created.
-    subtask_id = undefined :: undefined | qos_entry:id() | traverse:id()
+    subtask_id = undefined :: space_unsupport:subtask_id() | undefined,
+    slave_job_pid  = undefined :: pid() | undefined
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.

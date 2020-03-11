@@ -12,7 +12,9 @@
 %%%     * blocking all operations, that modify local files replicas 
 %%%     * replicating all local replicas to other providers 
 %%%     * cleaning up local storage and local metadata 
-%%%     * cleaning up database
+%%%     * waiting for all remote providers to be up to date with this provider dbsync changes
+%%%     * cleaning up database from documents synced in space scope 
+%%%     * cleaning up database from local documents related to space support
 %%% @end
 %%%--------------------------------------------------------------------
 -module(space_unsupport).
@@ -29,20 +31,27 @@
 
 %% API
 -export([init_pools/0, run/2]).
+-export([report_traverse_finished/2]).
+-export([get_all_stages/0]).
 
 %% traverse behaviour callbacks
 -export([get_job/1, update_job_progress/5]).
 -export([do_master_job/2, do_slave_job/2]).
 -export([task_finished/2]).
+%% @TODO VFS-6132 Do not export when space_unsupport is used in storage:revoke_space_support
+-export([cleanup_local_documents/2]).
 
 -type stage() :: init | replicate | cleanup_traverse | wait_for_dbsync 
     | delete_synced_documents | delete_local_documents.
 -type job() :: space_unsupport_job:record().
+% Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id). 
+-type subtask_id() :: qos_entry:id() | unsupport_cleanup_traverse:id().
 
--export_type([stage/0]).
+-export_type([stage/0, subtask_id/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(DOCUMENT_EXPIRY_TIME, 60). % in seconds
+
 
 %%%===================================================================
 %%% API
@@ -61,6 +70,24 @@ run(SpaceId, StorageId) ->
     file_meta:make_space_exist(SpaceId),
     ?ok_if_exists(traverse:run(?POOL_NAME, datastore_key:new_from_digest([SpaceId, StorageId]), 
         #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, stage = init})).
+
+-spec report_traverse_finished(od_space:id(), storage:id()) -> ok.
+report_traverse_finished(SpaceId, StorageId) ->
+    {ok, #space_unsupport_job{slave_job_pid = Pid}} = 
+        space_unsupport_job:get(SpaceId, StorageId, cleanup_traverse),
+    Pid ! cleanup_traverse_finished,
+    ok.
+
+-spec get_all_stages() -> [stage()].
+get_all_stages() -> 
+    [
+        init, 
+        replicate, 
+        cleanup_traverse, 
+        wait_for_dbsync, 
+        delete_synced_documents, 
+        delete_local_documents
+    ].
 
 %%%===================================================================
 %%% Traverse behaviour callbacks
@@ -87,11 +114,12 @@ update_job_progress(Id, Job, _PoolName, TaskId, _Status) ->
 
 -spec do_master_job(job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
-do_master_job(#space_unsupport_job{stage = delete_local_documents} = Job, _MasterJobArgs) ->
-    {ok, #{slave_jobs => [Job], master_jobs => []}};
 do_master_job(#space_unsupport_job{stage = Stage} = Job, _MasterJobArgs) ->
-    NextMasterJob = Job#space_unsupport_job{stage = get_next_stage(Stage), subtask_id = undefined},
-    {ok, #{slave_jobs => [Job], master_jobs => [NextMasterJob]}}.
+    NextStages = get_next_stages(Stage),
+    NextMasterJobs = lists:map(fun(NextStage) -> 
+        Job#space_unsupport_job{stage = NextStage, subtask_id = undefined}
+    end, NextStages),
+    {ok, #{slave_jobs => [Job], master_jobs => NextMasterJobs}}.
 
 -spec do_slave_job(job(), traverse:id()) -> ok | {ok, traverse:description()} | {error, term()}.
 do_slave_job(Job, _TaskId) ->
@@ -107,12 +135,14 @@ task_finished(TaskId, Pool) ->
 %%%===================================================================
 
 %% @private
--spec get_next_stage(stage()) -> stage().
-get_next_stage(init) -> replicate;
-get_next_stage(replicate) -> cleanup_traverse;
-get_next_stage(cleanup_traverse) -> wait_for_dbsync;
-get_next_stage(wait_for_dbsync) -> delete_synced_documents;
-get_next_stage(delete_synced_documents) -> delete_local_documents.
+-spec get_next_stages(stage()) -> [stage()].
+get_next_stages(init) -> [replicate];
+get_next_stages(replicate) -> [cleanup_traverse];
+get_next_stages(cleanup_traverse) -> [wait_for_dbsync];
+get_next_stages(wait_for_dbsync) -> [delete_synced_documents];
+get_next_stages(delete_synced_documents) -> [delete_local_documents];
+get_next_stages(delete_local_documents) -> [].
+
 
 %% @private
 -spec execute_stage(space_unsupport_job:record()) -> ok.
@@ -126,25 +156,41 @@ execute_stage(#space_unsupport_job{stage = init}) ->
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    Expression = <<?QOS_ALL_STORAGES/binary, " - storage_id = ", StorageId/binary>>,
+    Expression = <<?QOS_ANY_STORAGE/binary, " - storageId = ", StorageId/binary>>,
     {ok, QosEntryId} = lfm:add_qos_entry(?ROOT_SESS_ID, {guid, SpaceGuid}, Expression, 1, internal),
     NewJob = Job#space_unsupport_job{subtask_id = QosEntryId},
     space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = QosEntryId} = _Job) ->
     wait(fun() -> lfm:check_qos_fulfilled(?ROOT_SESS_ID, QosEntryId) end),
-    lfm:remove_qos_entry(?ROOT_SESS_ID, QosEntryId, true);
+    lfm:remove_qos_entry(?ROOT_SESS_ID, QosEntryId);
 
 execute_stage(#space_unsupport_job{stage = cleanup_traverse, subtask_id = undefined} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
     %% @TODO VFS-6175 Do not clean up storage when import is on
     {ok, TaskId} = unsupport_cleanup_traverse:start(SpaceId, StorageId),
-    NewJob = Job#space_unsupport_job{subtask_id = TaskId},
+    NewJob = Job#space_unsupport_job{subtask_id = TaskId, slave_job_pid = self()},
     {ok, _} = space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
-execute_stage(#space_unsupport_job{stage = cleanup_traverse, space_id = SpaceId, subtask_id = TraverseId} = _Job) ->
-    wait(fun() -> unsupport_cleanup_traverse:is_finished(TraverseId) end),
-    %% @TODO VFS-6165
+execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
+    #space_unsupport_job{
+        space_id = SpaceId, slave_job_pid = Pid, subtask_id = TraverseId
+    } = Job,
+    
+    case self() of
+        Pid -> ok;
+        _ -> space_unsupport_job:save(Job#space_unsupport_job{slave_job_pid = self()})
+    end, 
+    case unsupport_cleanup_traverse:is_finished(TraverseId) of
+        true -> ok;
+        false ->
+            receive cleanup_traverse_finished ->
+                ok
+            end
+    end,
+    
+    %% @TODO VFS-6165 Not needed after modifying cleanup traverse to delete dirs 
+    %% after all its children have been deleted
     FileGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
@@ -159,6 +205,7 @@ execute_stage(#space_unsupport_job{stage = wait_for_dbsync} = _Job) ->
 
 execute_stage(#space_unsupport_job{stage = delete_synced_documents} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
+    %% @TODO VFS-6136 Inform onezone that unsupport started in init
     storage_logic:revoke_space_support(StorageId, SpaceId),
     start_changes_stream(SpaceId),
     receive end_of_stream ->
@@ -167,9 +214,8 @@ execute_stage(#space_unsupport_job{stage = delete_synced_documents} = Job) ->
 
 execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
-    storage:on_space_unsupported(SpaceId, StorageId),
+    cleanup_local_documents(SpaceId, StorageId),
     unsupport_cleanup_traverse:delete_ended(SpaceId, StorageId),
-    dbsync_state:delete(SpaceId),
     ok.
 
 
@@ -233,12 +279,25 @@ expire_docs(#document{value = Value} = Doc) ->
 %% @private
 -spec expire_links(datastore_model:model(), datastore:key(), datastore:doc()) -> ok.
 expire_links(Model, RoutingKey, Doc = #document{key = Key}) ->
-    Ctx = Model:get_ctx(),
-    Ctx2 = Ctx#{
+    Ctx = #{
+        model => Model,
         expiry => ?DOCUMENT_EXPIRY_TIME,
         routing_key => RoutingKey
     },
-    Ctx3 = datastore_model_default:set_defaults(Ctx2),
-    Ctx4 = datastore_multiplier:extend_name(RoutingKey, Ctx3),
-    datastore_router:route(save, [Ctx4, Key, Doc]),
+    Ctx2 = datastore_model_default:set_defaults(Ctx),
+    Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
+    datastore_router:route(save, [Ctx3, Key, Doc]),
     ok.
+
+
+%% @private
+-spec cleanup_local_documents(od_space:id(), storage:id()) -> ok.
+cleanup_local_documents(SpaceId, StorageId) ->
+    file_popularity_api:disable(SpaceId),
+    file_popularity_api:delete_config(SpaceId),
+    autocleaning_api:disable(SpaceId),
+    autocleaning_api:delete_config(SpaceId),
+    storage_sync:space_unsupported(SpaceId, StorageId),
+    space_quota:delete(SpaceId),
+    dbsync_state:delete(SpaceId),
+    main_harvesting_stream:space_unsupported(SpaceId).

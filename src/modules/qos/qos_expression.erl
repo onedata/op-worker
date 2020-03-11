@@ -109,8 +109,8 @@ raw_to_rpn_internal([?L_PAREN | Expression], Stack, RPNExpression) ->
 raw_to_rpn_internal([?R_PAREN | Expression], Stack, RPNExpression) ->
     {Stack2, RPNExpression2} = handle_right_paren(Stack, RPNExpression),
     raw_to_rpn_internal(Expression, Stack2, RPNExpression2);
-raw_to_rpn_internal([?QOS_ALL_STORAGES | Expression], Stack, RPNExpression) ->
-    raw_to_rpn_internal(Expression, Stack, RPNExpression ++ [?QOS_ALL_STORAGES]);
+raw_to_rpn_internal([?QOS_ANY_STORAGE | Expression], Stack, RPNExpression) ->
+    raw_to_rpn_internal(Expression, Stack, RPNExpression ++ [?QOS_ANY_STORAGE]);
 raw_to_rpn_internal([Operand | Expression], Stack, RPNExpression) ->
     case binary:split(Operand, [?EQUALITY], [global]) of
         [_Key, _Val] ->
@@ -206,7 +206,7 @@ apply_operator(_, _) ->
 %%--------------------------------------------------------------------
 -spec select_storages_with_param(storages_with_params(), expr_token()) ->
     [[storage:id()] | expr_token()].
-select_storages_with_param(AllStoragesWithParams, ?QOS_ALL_STORAGES) ->
+select_storages_with_param(AllStoragesWithParams, ?QOS_ANY_STORAGE) ->
     maps:keys(AllStoragesWithParams);
 select_storages_with_param(AllStoragesWithParams, ExprToken) ->
     case binary:split(ExprToken, [?EQUALITY], [global]) of

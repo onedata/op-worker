@@ -21,7 +21,7 @@
 -export([
     add_qos_entry/5,
     get_qos_entry/3, 
-    remove_qos_entry/4, 
+    remove_qos_entry/3, 
     get_effective_file_qos/2,
     check_fulfillment/3
 ]).
@@ -77,14 +77,14 @@ get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 %% @equiv remove_qos_entry_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id(), boolean()) ->
+-spec remove_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
-remove_qos_entry(UserCtx, FileCtx0, QosEntryId, PreserveInternal) ->
+remove_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),
-    remove_qos_entry_insecure(FileCtx1, QosEntryId, PreserveInternal).
+    remove_qos_entry_insecure(UserCtx, FileCtx1, QosEntryId).
 
 
 %%--------------------------------------------------------------------
@@ -118,7 +118,7 @@ check_fulfillment(UserCtx, FileCtx0, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:raw(), qos_entry:replicas_num(), 
     qos_entry:type()) -> fslogic_worker:provider_response().
-add_qos_entry_insecure(FileCtx, QosExpression, ReplicasNum, CallbackModule) ->
+    add_qos_entry_insecure(FileCtx, QosExpression, ReplicasNum, EntryType) ->
     case qos_expression:raw_to_rpn(QosExpression) of
         {ok, QosExpressionInRPN} ->
             % TODO: VFS-5567 for now target storage for dir is selected here and
@@ -131,9 +131,9 @@ add_qos_entry_insecure(FileCtx, QosExpression, ReplicasNum, CallbackModule) ->
 
             case CalculatedStorages of
                 {true, Storages} ->
-                    add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, CallbackModule, Storages);
+                    add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, EntryType, Storages);
                 false ->
-                    add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, CallbackModule);
+                    add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, EntryType);
                 ?ERROR_INVALID_QOS_EXPRESSION ->
                     #provider_response{status = #status{code = ?EINVAL}}
             end;
@@ -194,23 +194,24 @@ get_qos_entry_insecure(QosEntryId) ->
 %% Removes qos_entry ID from file_qos documents then removes qos_entry document.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_qos_entry_insecure(file_ctx:ctx(), qos_entry:id(), boolean()) ->
+-spec remove_qos_entry_insecure(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
-remove_qos_entry_insecure(FileCtx, QosEntryId, PreserveInternal) ->
+remove_qos_entry_insecure(UserCtx, FileCtx, QosEntryId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     
-    case qos_entry:is_internal(QosDoc) andalso PreserveInternal of
-        false ->
+    % Only root can remove internal QoS entry
+    case (not qos_entry:is_internal(QosDoc)) orelse user_ctx:is_root(UserCtx) of
+        true ->
             % TODO: VFS-5567 For now QoS entry is added only for file or dir
             % for which it has been added, so starting traverse is not needed.
             ok = file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosEntryId),
             ok = qos_hooks:handle_entry_delete(QosDoc),
             ok = qos_entry:delete(QosEntryId),
             #provider_response{status = #status{code = ?OK}};
-        true ->
+        false ->
             #provider_response{status = #status{code = ?EACCES}}
     end.
 
