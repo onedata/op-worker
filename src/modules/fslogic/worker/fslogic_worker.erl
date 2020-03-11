@@ -103,9 +103,11 @@
     release,
 
     get_file_attr,
+    get_file_details,
     get_file_children,
     get_child_attr,
-    get_file_children_attrs
+    get_file_children_attrs,
+    get_file_children_details
 ]).
 
 %%%===================================================================
