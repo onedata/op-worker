@@ -12,17 +12,12 @@
 -module(data_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("global_definitions.hrl").
 -include("api_test_utils.hrl").
--include("lfm_permissions_test.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("proto/common/handshake_messages.hrl").
+-include("global_definitions.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/aai/caveats.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
--include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
