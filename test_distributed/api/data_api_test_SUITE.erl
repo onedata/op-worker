@@ -84,7 +84,7 @@ list_children_test(Config) ->
     ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
     {ok, ShareDirObjectId} = file_id:guid_to_objectid(ShareDirGuid),
 
-    Files = [{FileGuid1, _, FilePath1} | _] = lists:map(fun(Num) ->
+    Files = [{FileGuid1, FileName1, FilePath1} | _] = lists:map(fun(Num) ->
         FileName = <<"file", Num>>,
         {ok, FileGuid} = lfm_proxy:create(Provider2, UserSessId, DirGuid, FileName, 8#777),
         {FileGuid, FileName, filename:join([DirPath, FileName])}
@@ -302,19 +302,20 @@ list_children_test(Config) ->
 
         %% TEST LISTING FILE
 
-%%        % TODO fix
-%%        #scenario_spec{
-%%            name = <<"List file using /data/ rest endpoint">>,
-%%            type = rest,
-%%            target_nodes = Providers,
-%%            client_spec = ClientSpecForSpace2Listing,
-%%            prepare_args_fun = ConstructPrepareRestArgsFun(FileObjectId1),
-%%            validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, Response}) ->
-%%                ExpError = #{<<"error">> => errors:to_json(?ERROR_POSIX(?ENOTDIR))},
-%%                ?assertEqual(ExpError, Response)
-%%            end,
-%%            data_spec = ParamsSpec
-%%        },
+        #scenario_spec{
+            name = <<"List file using /data/ rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace2Listing,
+            prepare_args_fun = ConstructPrepareRestArgsFun(FileObjectId1),
+            validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
+                ?assertEqual(#{<<"children">> => [#{
+                    <<"id">> => FileObjectId1,
+                    <<"name">> => FileName1
+                }]}, Response)
+            end,
+            data_spec = ParamsSpec
+        },
         #scenario_spec{
             name = <<"List file using /files/ rest endpoint">>,
             type = rest_with_file_path,
@@ -322,10 +323,10 @@ list_children_test(Config) ->
             client_spec = ClientSpecForSpace2Listing,
             prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(FilePath1),
             validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
-                ?assertEqual([#{
-                    <<"id">> => FileObjectId1,
-                    <<"path">> => FilePath1
-                }], Response)
+                ?assertEqual(
+                    [#{<<"id">> => FileObjectId1, <<"path">> => FilePath1}],
+                    Response
+                )
             end,
             data_spec = ParamsSpec
         },
@@ -336,25 +337,24 @@ list_children_test(Config) ->
             client_spec = ClientSpecForSpace2Listing,
             prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(FileObjectId1),
             validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
-                ?assertEqual([#{
-                    <<"id">> => FileObjectId1,
-                    <<"path">> => FilePath1
-                }], Response)
+                ?assertEqual(
+                    [#{<<"id">> => FileObjectId1, <<"path">> => FilePath1}],
+                    Response
+                )
             end,
             data_spec = ParamsSpec
         },
-%%        % TODO fix
-%%        #scenario_spec{
-%%            name = <<"List file using gs api">>,
-%%            type = gs,
-%%            target_nodes = Providers,
-%%            client_spec = ClientSpecForSpace2Listing,
-%%            prepare_args_fun = ConstructPrepareGsArgsFun(FileGuid1, private),
-%%            validate_result_fun = fun(_TestCaseCtx, Result) ->
-%%                ?assertEqual(?ERROR_POSIX(?ENOTDIR), Result)
-%%            end,
-%%            data_spec = ParamsSpec
-%%        },
+        #scenario_spec{
+            name = <<"List file using gs api">>,
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace2Listing,
+            prepare_args_fun = ConstructPrepareGsArgsFun(FileGuid1, private),
+            validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
+                ?assertEqual(#{<<"children">> => [FileGuid1]}, Result)
+            end,
+            data_spec = ParamsSpec
+        },
 
         % LISTING USER ROOT DIR SHOULD LIST ALL SPACES ALSO THOSE NOT SUPPORTED LOCALLY
 

@@ -730,18 +730,26 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
         true ->
             {list_user_spaces(UserCtx, Offset, Limit, undefined), FileCtx};
         false ->
-            {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
+            {FileDoc = #document{value = #file_meta{
+                type = FileType
+            }}, FileCtx2} = get_file_doc(FileCtx),
             SpaceId = get_space_id_const(FileCtx2),
             ShareId = get_share_id_const(FileCtx2),
-            MapFun = fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
-                new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
-            end,
+            case FileType of
+                ?DIRECTORY_TYPE ->
+                    MapFun = fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
+                        new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
+                    end,
 
-            case file_meta:list_children(FileDoc, Offset, Limit, Token, StartId) of
-                {ok, ChildrenLinks, #{token := Token2}} ->
-                    {lists:map(MapFun, ChildrenLinks), Token2, FileCtx2};
-                {ok, ChildrenLinks, _} ->
-                    {lists:map(MapFun, ChildrenLinks), FileCtx2}
+                    case file_meta:list_children(FileDoc, Offset, Limit, Token, StartId) of
+                        {ok, ChildrenLinks, #{token := Token2}} ->
+                            {lists:map(MapFun, ChildrenLinks), Token2, FileCtx2};
+                        {ok, ChildrenLinks, _} ->
+                            {lists:map(MapFun, ChildrenLinks), FileCtx2}
+                    end;
+                _ ->
+                    % In case of listing regular file - return it
+                    {[FileCtx2], FileCtx2}
             end
     end.
 
