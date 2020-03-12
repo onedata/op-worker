@@ -170,7 +170,7 @@ invalidate_cache(Type, Id) ->
 %% performed automatically).
 %% @end
 %%--------------------------------------------------------------------
--spec process_push_message(gs_protocol:push()) -> ok.
+-spec process_push_message(gs_protocol:push()) -> pid().
 process_push_message(Message) ->
     spawn(fun() ->
         try

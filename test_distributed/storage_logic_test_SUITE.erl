@@ -84,7 +84,7 @@ subscribe_test(Config) ->
         <<"revision">> => 6
     },
     PushMessage1 = #gs_push_graph{gri = Storage1PrivateGRI, data = ChangedData1, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
+    logic_tests_common:simulate_push(Config, PushMessage1),
 
     ?assertMatch(
         {ok, #document{key = ?STORAGE_1, value = #od_storage{
@@ -98,7 +98,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage4 = #gs_push_graph{gri = Storage1PrivateGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
+    logic_tests_common:simulate_push(Config, PushMessage4),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_storage, get_from_cache, [?STORAGE_1])
@@ -113,7 +113,7 @@ subscribe_test(Config) ->
     ),
 
     PushMessage5 = #gs_push_nosub{gri = Storage1PrivateGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage5]),
+    logic_tests_common:simulate_push(Config, PushMessage5),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_storage, get_from_cache, [?STORAGE_1])

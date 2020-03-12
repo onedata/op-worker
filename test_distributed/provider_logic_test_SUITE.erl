@@ -197,7 +197,7 @@ subscribe_test(Config) ->
         <<"name">> => <<"changedName">>
     },
     PushMessage1 = #gs_push_graph{gri = Provider1ProtectedGRI, data = ChangedData1, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
+    logic_tests_common:simulate_push(Config, PushMessage1),
 
     ?assertMatch(
         {ok, #document{key = ?PROVIDER_1, value = #od_provider{
@@ -221,7 +221,7 @@ subscribe_test(Config) ->
         <<"name">> => <<"changedName2">>
     },
     PushMessage2 = #gs_push_graph{gri = Provider1PrivateGRI, data = ChangedData2, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
+    logic_tests_common:simulate_push(Config, PushMessage2),
 
     ?assertMatch(
         {ok, #document{key = ?PROVIDER_1, value = #od_provider{
@@ -242,7 +242,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage4 = #gs_push_graph{gri = Provider1PrivateGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
+    logic_tests_common:simulate_push(Config, PushMessage4),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_provider, get_from_cache, [?PROVIDER_1])
@@ -256,7 +256,7 @@ subscribe_test(Config) ->
     ),
 
     PushMessage5 = #gs_push_nosub{gri = Provider1PrivateGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage5]),
+    logic_tests_common:simulate_push(Config, PushMessage5),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_provider, get_from_cache, [?PROVIDER_1])
