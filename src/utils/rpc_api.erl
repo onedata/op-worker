@@ -52,6 +52,7 @@
     autocleaning_cancel_run/1,
     get_provider_id/0,
     get_access_token/0,
+    get_identity_token/0,
     is_connected_to_oz/0,
     is_registered/0,
     on_deregister/0,
@@ -258,6 +259,11 @@ get_provider_id() ->
 -spec get_access_token() -> {ok, tokens:serialized()} | {error, term()}.
 get_access_token() ->
     provider_auth:get_access_token().
+
+
+-spec get_identity_token() -> {ok, tokens:serialized()} | {error, term()}.
+get_identity_token() ->
+    provider_auth:get_identity_token().
 
 
 -spec is_connected_to_oz() -> boolean().

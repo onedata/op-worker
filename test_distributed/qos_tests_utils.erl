@@ -27,14 +27,8 @@
     assert_distribution_in_dir_structure/3,
     assert_effective_qos/4, assert_effective_qos/5,
     assert_file_qos_documents/4, assert_file_qos_documents/5,
-    assert_qos_entry_documents/3, assert_qos_entry_documents/4
-]).
-
-% mocks
--export([
-    mock_space_storages/2,
-    mock_storage_qos_parameters/2,
-    mock_synchronize_transfers/1
+    assert_qos_entry_documents/3, assert_qos_entry_documents/4,
+    assert_status_on_all_workers/4, assert_status_on_all_workers/5
 ]).
 
 % util functions
@@ -46,11 +40,11 @@
     wait_for_qos_fulfillment_in_parallel/4,
     add_qos/2, add_multiple_qos/2,
     map_qos_names_to_ids/2,
-    get_provider_storage/1,
-    inject_storage_id/2
+    set_qos_parameters/2,
+    mock_transfers/1,
+    finish_all_transfers/1
 ]).
 
--define(ATTEMPTS, 60).
 -define(USER_ID, <<"user1">>).
 -define(SESS_ID(Config, Worker), ?config({session_id, {?USER_ID, ?GET_DOMAIN(Worker)}}, Config)).
 -define(GET_FILE_UUID(Worker, SessId, FilePath),
@@ -60,6 +54,7 @@
     file_id:guid_to_space_id(qos_tests_utils:get_guid(Worker, SessId, FilePath))
 ).
 
+-define(ATTEMPTS, 60).
 
 %%%====================================================================
 %%% Util functions
@@ -303,18 +298,38 @@ map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->
     [maps:get(QosName, QosNameIdMapping) || QosName <- QosNamesList].
 
 
-get_provider_storage(Worker) ->
-    {ok, [StorageId]}  = rpc:call(Worker, provider_logic, get_storage_ids, [?GET_DOMAIN_BIN(Worker)]),
-    StorageId.
+set_qos_parameters(Worker, QosParameters) ->
+    ok = rpc:call(Worker, storage, set_qos_parameters,
+        [initializer:get_storage_id(Worker), QosParameters]).
 
 
-inject_storage_id(Workers, QosMockMap) ->
-    lists:foldl(fun(Worker, Acc) ->
-        [ProviderName | _] = binary:split(?GET_DOMAIN_BIN(Worker), <<".">>),
-        StorageId = qos_tests_utils:get_provider_storage(Worker),
-        Acc#{StorageId => maps:get(ProviderName, QosMockMap)}
-    end, #{}, Workers).
+mock_transfers(Workers) ->
+    test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
+    TestPid = self(),
+    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
+        fun(_, FileCtx, _, _, _, _) ->
+            FileGuid = file_ctx:get_guid_const(FileCtx),
+            TestPid ! {qos_slave_job, self(), FileGuid},
+            receive {completed, FileGuid} -> {ok, FileGuid} end
+        end).
 
+
+% above mock required for this function to work
+finish_all_transfers([]) -> ok;
+finish_all_transfers(Files) ->
+    receive {qos_slave_job, Pid, FileGuid} = Msg ->
+        case lists:member(FileGuid, Files) of
+            true ->
+                Pid ! {completed, FileGuid},
+                finish_all_transfers(lists:delete(FileGuid, Files));
+            false ->
+                erlang:send_after(timer:seconds(2), self(), Msg),
+                finish_all_transfers(Files)
+        end
+    after timer:seconds(10) ->
+        ct:print("Transfers not started: ~p", [Files]),
+        {error, transfers_not_started}
+    end.
 
 %%%====================================================================
 %%% Assertions
@@ -360,12 +375,14 @@ assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, Repl
         ?assertMatch({ok, _Doc}, rpc:call(Worker, qos_entry, get, [QosEntryId]), Attempts),
         {ok, #document{value = QosEntry, scope = SpaceId}} = rpc:call(Worker, qos_entry, get, [QosEntryId]),
         {ok, {Expression, ReplicasNum}} = get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId),
+        % do not assert traverse reqs
+        QosEntryWithoutTraverseReqs = QosEntry#qos_entry{traverse_reqs = #{}},
         ErrMsg = str_utils:format(
             "Worker: ~p ~n"
             "Expected qos_entry: ~p ~n"
-            "Got: ~p", [Worker, ExpectedQosEntry, QosEntry]
+            "Got: ~p", [Worker, ExpectedQosEntry, QosEntryWithoutTraverseReqs]
         ),
-        {QosEntry, ErrMsg}
+        {QosEntryWithoutTraverseReqs, ErrMsg}
     end,
     assert_match_with_err_msg(GetQosEntryFun, ExpectedQosEntry, Attempts, 200).
 
@@ -421,7 +438,7 @@ assert_file_qos_document(
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
             true ->
-                maps:filter(fun(Key, _Val) -> Key == get_provider_storage(Worker) end, AssignedEntries);
+                maps:filter(fun(Key, _Val) -> Key == initializer:get_storage_id(Worker) end, AssignedEntries);
             false ->
                 AssignedEntries
         end
@@ -477,11 +494,11 @@ assert_effective_qos(Config, ExpectedEffQosEntries, QosNameIdMapping, FilterAssi
         end, Workers)
     end, ExpectedEffQosEntries).
 
-assert_effective_qos(Config, Worker, FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts) ->
+assert_effective_qos(Config, Worker,  FilePath, QosEntries, AssignedEntries, FilterAssignedEntries, Attempts) ->
     ExpectedEffectiveQos = #effective_file_qos{
         qos_entries = QosEntries,
         assigned_entries = case FilterAssignedEntries of
-            true -> maps:filter(fun(Key, _Val) -> Key == get_provider_storage(Worker) end, AssignedEntries);
+            true -> maps:filter(fun(Key, _Val) -> Key == initializer:get_storage_id(Worker) end, AssignedEntries);
             false -> AssignedEntries
         end
     },
@@ -593,32 +610,17 @@ assert_file_distribution(Config, Workers, {FileName, FileContent, ExpectedFileDi
     end, true, Workers).
 
 
-%%%====================================================================
-%%% Mocks
-%%%====================================================================
+assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus) ->
+    assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus, 1).
 
-mock_space_storages(Config, StorageList) ->
-    Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_expect(Workers, space_logic, get_all_storage_ids,
-        fun(_) ->
-            {ok, StorageList}
-        end).
-
-
-mock_storage_qos_parameters(Workers, StorageQos) ->
-    test_utils:mock_expect(Workers, storage_logic, get_qos_parameters_of_remote_storage, fun(StorageId, _SpaceId) ->
-        {ok, maps:get(StorageId, StorageQos, #{})}
-    end).
-
-
-mock_synchronize_transfers(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, replica_synchronizer, [passthrough]),
-    ok = test_utils:mock_expect(Workers, replica_synchronizer, synchronize,
-        fun(_, _, _, _, _, _) ->
-            {ok, ok}
-        end).
-
+assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus, Attempts) ->
+    Workers = qos_tests_utils:get_op_nodes_sorted(Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    lists:foreach(fun(Worker) ->
+        lists:foreach(fun(Guid) ->
+            ?assertEqual({ok, ExpectedStatus}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), Attempts)
+        end, Guids)
+    end, Workers).
 
 %%%====================================================================
 %%% Internal functions
@@ -705,6 +707,8 @@ make_rest_request(Config, Worker, URL, Method, Headers, ReqBody, SpaceId, Requir
         initializer:testmaster_mock_space_user_privileges(AllWorkers, SpaceId, ?USER_ID, AllSpacePrivs),
         case rest_test_utils:request(Worker, URL, Method, Headers, EncodedReqBody) of
             {ok, 200, _, RespBody} ->
+                {ok, RespBody};
+            {ok, 201, _, RespBody} ->
                 {ok, RespBody};
             {ok, Code1, _, RespBody} ->
                 {error, {Code1, RespBody}}

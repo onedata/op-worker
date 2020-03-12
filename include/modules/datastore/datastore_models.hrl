@@ -71,7 +71,7 @@
     username :: undefined | binary(),
     emails = [] :: [binary()],
     linked_accounts = [] :: [od_user:linked_account()],
-    default_space :: binary() | undefined,
+
     % List of user's aliases for spaces
     space_aliases = #{} :: #{od_space:id() => od_space:alias()},
 
@@ -113,18 +113,23 @@
 
     harvesters = [] :: [od_harvester:id()],
 
+    support_parameters = #{} :: space_support:parameters_per_provider(),
+    support_state = #{} :: space_support:support_state_per_provider(),
+
     cache_state = #{} :: cache_state()
 }).
 
 %% Model for caching share details fetched from OZ
 -record(od_share, {
-    name = undefined :: undefined | binary(),
-    public_url = undefined :: undefined | binary(),
+    name :: binary(),
+    public_url :: binary(),
 
     % Direct relations to other entities
     space = undefined :: undefined | od_space:id(),
     handle = undefined :: undefined | od_handle:id(),
-    root_file = undefined :: undefined | binary(),
+
+    root_file :: binary(),
+    file_type :: od_share:file_type(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -164,11 +169,11 @@
 
 %% Model for caching handle details fetched from OZ
 -record(od_handle, {
-    public_handle :: od_handle:public_handle() | undefined,
+    public_handle :: od_handle:public_handle(),
     resource_type :: od_handle:resource_type() | undefined,
     resource_id :: od_handle:resource_id() | undefined,
     metadata :: od_handle:metadata() | undefined,
-    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp() | undefined,
+    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp(),
 
     % Direct relations to other entities
     handle_service :: od_handle_service:id() | undefined,
@@ -191,6 +196,18 @@
     provider :: od_provider:id() | undefined,
     spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_token, {
+    revoked = false :: boolean(),
+
+    cache_state = #{} :: cache_state()
+}).
+
+-record(temporary_token_secret, {
+    generation :: temporary_token_secret:generation(),
+
     cache_state = #{} :: cache_state()
 }).
 
@@ -222,7 +239,7 @@
     accessed :: undefined | integer(),
     type :: undefined | session:type(),
     identity :: aai:subject(),
-    auth :: undefined | session:auth(),
+    credentials :: undefined | auth_manager:credentials(),
     data_constraints :: data_constraints:constraints(),
     node :: node(),
     supervisor :: undefined | pid(),
@@ -312,6 +329,18 @@
     % If more than one provider concurrently marks entry as possible one provider is
     % deterministically selected during conflict resolution.
     possibility_check :: {possible | impossible, od_provider:id()}
+}).
+
+% This model holds information of QoS traverse state in a directory subtree in order 
+% to calculate entry status.
+-record(qos_status, {
+    % Initialize with empty binary so it always compares as lower than any actual filename
+    previous_batch_last_filename = <<>> :: file_meta:name(),
+    current_batch_last_filename = <<>> :: file_meta:name(),
+    files_list = [] :: [file_meta:uuid()],
+    child_dirs_count = 0 :: non_neg_integer(),
+    is_last_batch = false :: boolean(),
+    is_start_dir :: boolean()
 }).
 
 -record(file_meta, {

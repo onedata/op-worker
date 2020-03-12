@@ -157,20 +157,6 @@
         }
     },
     "test_global_setup": {
-        "users": {
-            "user1": {
-                "default_space": "space1"
-            },
-            "user2": {
-                "default_space": "space2"
-            },
-            "user3": {
-                "default_space": "space3"
-            },
-            "user4": {
-                "default_space": "space1"
-            }
-        },
         "groups": {
         },
         "spaces": {
@@ -263,6 +249,22 @@
                 "displayed_name": "space7",
                 "users": [
                     "user2"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "cephrados"
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2"
+                    }
+                }
+            },
+            "space8": {
+                "displayed_name": "space8",
+                "users": [
+                    "user3"
                 ],
                 "groups": [
                 ],

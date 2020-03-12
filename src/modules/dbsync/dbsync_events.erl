@@ -58,7 +58,7 @@ change_replicated_internal(SpaceId, #document{
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     fslogic_delete:check_if_opened_and_remove(user_ctx:new(?ROOT_SESS_ID), FileCtx, false, true, true),
     file_popularity:delete(FileUuid),
-    ok = file_qos:delete(FileUuid),
+    ok = file_qos:clean_up(FileCtx),
     ok = file_meta_posthooks:delete(FileUuid),
     ok;
 change_replicated_internal(SpaceId, #document{

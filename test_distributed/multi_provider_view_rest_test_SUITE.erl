@@ -753,10 +753,10 @@ query_geospatial_view(Config) ->
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
 
-    Path0 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f0"])),
-    Path1 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f1"])),
-    Path2 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f2"])),
-    Path3 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f3"])),
+    Path0 = filename:join(["/", SpaceName, "f0"]),
+    Path1 = filename:join(["/", SpaceName, "f1"]),
+    Path2 = filename:join(["/", SpaceName, "f2"]),
+    Path3 = filename:join(["/", SpaceName, "f3"]),
     {ok, _Guid0} = lfm_proxy:create(WorkerP1, SessionId, Path0, 8#777),
     {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1, 8#777),
     {ok, Guid2} = lfm_proxy:create(WorkerP1, SessionId, Path2, 8#777),
@@ -1322,9 +1322,7 @@ query_filter2(Config, SpaceId, ViewName) ->
 
 create_files_with_xattrs(Node, SessionId, SpaceName, Prefix, Num, XattrName) ->
     lists:map(fun(X) ->
-        Path = list_to_binary(filename:join(
-            ["/", binary_to_list(SpaceName), Prefix ++ integer_to_list(X)]
-        )),
+        Path = filename:join(["/", SpaceName, Prefix ++ integer_to_list(X)]),
         {ok, Guid} = lfm_proxy:create(Node, SessionId, Path, 8#777),
         ok = lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR(XattrName, X)),
         Guid

@@ -82,6 +82,7 @@ all() ->
 
 -define(TEST_PROVIDER_ID, <<"test_provider_id">>).
 -define(TEST_USER_ID, <<"test_user_id">>).
+-define(TEST_MAPPED_USER_ID, <<"test_mapped_user_id">>).
 -define(TEST_GROUP_ID, <<"test_group_id">>).
 -define(TEST_MAPPED_GROUP_ID, <<"test_mapped_group_id">>).
 
@@ -116,13 +117,13 @@ get_user_id_on_posix_storage(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE]),
-    ?assertEqual({ok, expected_user_id()}, Result).
+    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result).
 
 get_user_id_on_posix_storage_by_acl_username(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE]),
-    ?assertEqual({ok, expected_user_id()}, Result).
+    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result).
 
 get_user_id_on_posix_storage_should_return_root_user_id_when_reverse_luma_is_disabled(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -165,11 +166,11 @@ get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE]),
-    ?assertEqual({ok, expected_user_id()}, Result),
+    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE]),
-    ?assertEqual({ok, expected_user_id()}, Result2),
+    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
         ['_', '_', '_', '_'], 1).
@@ -179,11 +180,11 @@ get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Conf
 
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE]),
-    ?assertEqual({ok, expected_user_id()}, Result),
+    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE]),
-    ?assertEqual({ok, expected_user_id()}, Result2),
+    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id_by_name,
         ['_', '_', '_', '_'], 1).
@@ -193,14 +194,14 @@ get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
 
     Result = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE(?LUMA_CONFIG)]),
-    ?assertEqual({ok, expected_user_id()}, Result),
+    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result),
 
     rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id,
         [<<"0">>, ?STORAGE(?LUMA_CONFIG)]),
 
-    ?assertEqual({ok, expected_user_id()}, Result2),
+    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
         ['_', '_', '_', '_'], 2).
@@ -210,14 +211,14 @@ get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice(Con
 
     Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE(?LUMA_CONFIG)]),
-    ?assertEqual({ok, expected_user_id()}, Result),
+    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result),
 
     rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
 
     Result2 = rpc:call(Worker, reverse_luma, get_user_id_by_name,
         [<<"user@nfsdomain.org">>, ?STORAGE(?LUMA_CONFIG)]),
 
-    ?assertEqual({ok, expected_user_id()}, Result2),
+    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result2),
 
     test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id_by_name,
         ['_', '_', '_', '_'], 2).
@@ -456,6 +457,11 @@ init_per_testcase(Case = get_group_id_on_posix_storage_by_acl_groupname_should_f
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    mock_idp_user_mapping(Worker,
+        ?TEST_PROVIDER_ID, ?TEST_USER_ID,
+        ?TEST_MAPPED_USER_ID
+    ),
     Config.
 
 end_per_testcase(_Case, Config) ->
@@ -526,6 +532,13 @@ mock_idp_group_mapping(Worker, IdP, IdpGroupId, GroupId) ->
             end
         end).
 
-expected_user_id() ->
-    datastore_key:gen_legacy_key(<<"">>, str_utils:format_bin("~ts:~s",
-        [?TEST_PROVIDER_ID, ?TEST_USER_ID])).
+mock_idp_user_mapping(Worker, IdP, IdpUserId, UserId) ->
+    test_utils:mock_expect(Worker, provider_logic, map_idp_user_to_onedata,
+        fun(IdPArg, IdpUserIdArg) ->
+            case {IdPArg, IdpUserIdArg} of
+                {IdP, IdpUserId} ->
+                    {ok, UserId};
+                _ ->
+                    ?ERROR_BAD_VALUE_ID_NOT_FOUND(IdP)
+            end
+        end).

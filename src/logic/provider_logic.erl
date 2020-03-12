@@ -37,7 +37,7 @@
 -export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
 -export([supports_space/1, supports_space/2, supports_space/3]).
 -export([get_support_size/1]).
--export([map_idp_group_to_onedata/2]).
+-export([map_idp_user_to_onedata/2, map_idp_group_to_onedata/2]).
 -export([get_domain/0, get_domain/1, get_domain/2]).
 -export([set_domain/1, set_delegated_subdomain/1]).
 -export([is_subdomain_delegated/0, get_subdomain_delegation_ips/0]).
@@ -429,7 +429,7 @@ get_rtransfer_port(ProviderId) ->
             {ok, #{<<"rtransferPort">> := RtransferPort}} ->
                 RtransferPort;
             _ ->
-                ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~p", 
+                ?info("Cannot resolve rtransfer port for provider ~ts, defaulting to ~p",
                     [to_printable(ProviderId), ?RTRANSFER_PORT]),
                 ?RTRANSFER_PORT
         end,
@@ -613,6 +613,24 @@ set_subdomain_delegation(Subdomain, IPs) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Calls OZ to learn what's the onedata id of given user from certain IdP.
+%% @end
+%%--------------------------------------------------------------------
+-spec map_idp_user_to_onedata(Idp :: binary(), IdpGroupId :: binary()) ->
+    {ok, od_user:id()} | errors:error().
+map_idp_user_to_onedata(Idp, IdpUserId) ->
+    ?CREATE_RETURN_DATA(gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_provider, id = undefined, aspect = map_idp_user},
+        data = #{
+            <<"idp">> => Idp,
+            <<"userId">> => IdpUserId
+        }
+    })).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Calls OZ to learn what's the onedata id of given group from certain IdP.
 %% @end
 %%--------------------------------------------------------------------
@@ -701,18 +719,18 @@ zone_get_offline_access_idps() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec verify_provider_identity(od_provider:id()) -> ok | {error, term()}.
-verify_provider_identity(ProviderId) ->
+verify_provider_identity(TheirProviderId) ->
     try
-        {ok, Domain} = get_domain(ProviderId),
-        {ok, OurIdentityToken} = provider_auth:get_identity_token(
-            ?AUD(?OP_WORKER, ProviderId)
+        {ok, Domain} = get_domain(TheirProviderId),
+        {ok, OurIdentityToken} = provider_auth:get_identity_token_for_consumer(
+            ?SUB(?ONEPROVIDER, TheirProviderId)
         ),
-        Headers = tokens:build_access_token_header(OurIdentityToken),
+        Headers = tokens:access_token_header(OurIdentityToken),
         URL = str_utils:format_bin("https://~s~s", [Domain, ?IDENTITY_TOKEN_PATH]),
         SslOpts = [{ssl_options, provider_connection_ssl_opts(Domain)}],
         case http_client:get(URL, Headers, <<>>, SslOpts) of
             {ok, 200, _, TheirIdentityToken} ->
-                verify_provider_identity(ProviderId, TheirIdentityToken);
+                verify_provider_identity(TheirProviderId, TheirIdentityToken);
             {ok, Code, _, _} ->
                 {error, {bad_http_code, Code}};
             {error, _} = Error ->
@@ -720,7 +738,7 @@ verify_provider_identity(ProviderId) ->
         end
     catch Type:Reason ->
         ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
-            provider_logic:to_printable(ProviderId),
+            provider_logic:to_printable(TheirProviderId),
             Type, Reason
         ]),
         ?ERROR_UNAUTHORIZED
@@ -762,27 +780,33 @@ assert_zone_compatibility() ->
                 true ->
                     ok;
                 {false, CompOzVersions} ->
-                    ?critical("This provider is not compatible with its Onezone "
+                    ?critical("This Oneprovider is not compatible with its Onezone "
                     "service.~n"
-                    "Oneprovider version: ~s, supports zones: ~p~n"
+                    "Oneprovider version: ~s, supports zones: ~s~n"
                     "Onezone version: ~s~n"
-                    "The application will be terminated.", [
+                    "The service will not be operational until the problem is resolved "
+                    "(may require Oneprovider / Onezone upgrade or compatibility registry refresh).", [
                         OpVersion,
-                        binaries_to_strings(CompOzVersions),
+                        string:join(binaries_to_strings(CompOzVersions), ", "),
                         OzVersion
                     ]),
-                    init:stop();
+                    throw({error, incompatible_oneprovider_version});
                 {error, Error} ->
-                    error(Error)
+                    ?critical("Cannot check Oneprovider's compatibility due to ~w."
+                    "The service will not be operational until the problem is resolved.", [
+                        {error, Error}
+                    ]),
+                    throw({error, Error})
             end;
         {error, {bad_response, Code, ResponseBody}} ->
-            ?critical("Failure while checking Onezone version. The application "
-            "will be terminated. HTTP response: ~B: ~s", [
+            ?critical("Failure while checking Onezone version. "
+            "The service will not be operational until the problem is resolved.~n"
+            "HTTP response: ~B ~s", [
                 Code, ResponseBody
             ]),
-            init:stop();
+            throw({error, cannot_check_onezone_version});
         {error, Error} ->
-            error(Error)
+            throw({error, Error})
     end.
 
 

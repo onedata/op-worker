@@ -55,6 +55,7 @@
 -type diff() :: datastore_doc:diff(file_meta()).
 -type uuid() :: datastore:key().
 -type path() :: binary().
+-type uuid_based_path() :: binary(). % similar to canonical, but path elements are uuids instead of filenames/dirnames
 -type name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
@@ -85,8 +86,8 @@
 %% @formatter:on
 
 -export_type([
-    doc/0, uuid/0, path/0, name/0, uuid_or_path/0, entry/0, type/0,
-    size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
+    doc/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0, 
+    type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
     offset/0, non_neg_offset/0, limit/0, file_meta/0
 ]).
 
@@ -501,10 +502,10 @@ list_children(Entry, Offset, Limit, Token, PrevLinkKey) ->
     Limit :: limit(),
     Token :: undefined | datastore_links_iter:token(),
     PrevLinkKey :: undefined | name(),
-    PrevTeeID :: undefined | oneprovider:id()
+    PrevTreeID :: undefined | oneprovider:id()
 ) ->
     {ok, [#child_link_uuid{}], list_extended_info()} | {error, term()}.
-list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTeeID) ->
+list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTreeID) ->
     Opts = case Offset of
         0 -> #{size => Limit};
         _ -> #{offset => Offset, size => Limit}
@@ -520,9 +521,9 @@ list_children(Entry, Offset, Limit, Token, PrevLinkKey, PrevTeeID) ->
         _ -> Opts2#{prev_link_name => PrevLinkKey}
     end,
 
-    Opts4 = case PrevTeeID of
+    Opts4 = case PrevTreeID of
         undefined -> Opts3;
-        _ -> Opts3#{prev_tree_id => PrevTeeID}
+        _ -> Opts3#{prev_tree_id => PrevTreeID}
     end,
 
     list_children_internal(Entry, Opts4).
@@ -743,31 +744,37 @@ setup_onedata_user(UserId, EffSpaces) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Add shareId to file meta. Only one share per file is allowed.
+%% Add shareId to file meta.
 %% @end
 %%--------------------------------------------------------------------
 -spec add_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()}  | {error, term()}.
 add_share(FileCtx, ShareId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    update({uuid, FileUuid}, fun
-        (FileMeta = #file_meta{shares = []}) ->
-            {ok, FileMeta#file_meta{shares = [ShareId]}};
-        (#file_meta{shares = _}) ->
-            {error, already_exists}
+    update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
+        {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
     end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Remove shareId from file meta. Only one share per file is allowed.
+%% Remove shareId from file meta.
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()} | {error, term()}.
 remove_share(FileCtx, ShareId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
-        case Shares of
-            [ShareId] -> {ok, FileMeta#file_meta{shares = []}};
-            _ -> {error, not_found}
+        Result = lists:foldl(fun(ShId, {IsMember, Acc}) ->
+            case ShareId == ShId of
+                true -> {found, Acc};
+                false -> {IsMember, [ShId | Acc]}
+            end
+        end, {not_found, []}, Shares),
+
+        case Result of
+            {found, FilteredShares} ->
+                {ok, FileMeta#file_meta{shares = FilteredShares}};
+            {not_found, _} ->
+                {error, not_found}
         end
     end).
 
@@ -948,7 +955,7 @@ check_name(ParentUuid, Name, #document{
             end,
             WithTag = tag_children(Links2),
             {NameAns, OtherFiles} = lists:foldl(fun
-                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) when Uuid =:= ChildUuid->
+                (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {_NameAcc, OtherAcc}) when Uuid =:= ChildUuid->
                     {ExtendedName, OtherAcc};
                 (#child_link_uuid{uuid = Uuid, name = ExtendedName}, {NameAcc, OtherAcc}) ->
                     {NameAcc, [{Uuid, ExtendedName} | OtherAcc]}

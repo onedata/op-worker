@@ -111,7 +111,6 @@ all() -> [
 }).
 
 -define(Q1, <<"q1">>).
--define(TEST_DATA, <<"test_data">>).
 
 -record(test_spec_eviction, {
     evicting_node :: node(),
@@ -127,7 +126,7 @@ all() -> [
     % used in tests when storages have equal qos.
     % This is needed so it is deterministic on
     % which node QoS will replicate files
-    new_storages_mock = undefined
+    new_qos_params = undefined
 }).
 
 -record(test_spec_autocleaning, {
@@ -190,7 +189,7 @@ migration_of_replica_not_protected_by_qos_file(Config) ->
 
 
 migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -199,10 +198,8 @@ migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
         files_replicated = 1,
         files_evicted = 1,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2,
-        new_storages_mock = #{
-            ?GET_DOMAIN_BIN(WorkerP1) => ?TEST_QOS(<<"PL">>),
-            ?GET_DOMAIN_BIN(WorkerP2) => ?TEST_QOS(<<"other">>),
-            ?GET_DOMAIN_BIN(WorkerP3) => ?TEST_QOS(<<"PL">>)
+        new_qos_params = #{
+            initializer:get_storage_id(WorkerP3) => ?TEST_QOS(<<"PL">>)
         }
     }).
 
@@ -258,7 +255,7 @@ migration_of_replica_not_protected_by_qos_dir(Config) ->
 
 
 migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -268,10 +265,8 @@ migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
         files_evicted = 4,
         dir_structure_type = nested,
         function = fun transfers_test_mechanism:migrate_root_directory/2,
-        new_storages_mock = #{
-            ?GET_DOMAIN_BIN(WorkerP1) => ?TEST_QOS(<<"PL">>),
-            ?GET_DOMAIN_BIN(WorkerP2) => ?TEST_QOS(<<"other">>),
-            ?GET_DOMAIN_BIN(WorkerP3) => ?TEST_QOS(<<"PL">>)
+        new_qos_params = #{
+            initializer:get_storage_id(WorkerP3) => ?TEST_QOS(<<"PL">>)
         }
     }).
 
@@ -327,7 +322,7 @@ migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config) ->
 
 
 migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -337,10 +332,8 @@ migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately(
         files_evicted = 1,
         dir_structure_type = nested,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2,
-        new_storages_mock = #{
-            ?GET_DOMAIN_BIN(WorkerP1) => ?TEST_QOS(<<"PL">>),
-            ?GET_DOMAIN_BIN(WorkerP2) => ?TEST_QOS(<<"other">>),
-            ?GET_DOMAIN_BIN(WorkerP3) => ?TEST_QOS(<<"PL">>)
+        new_qos_params = #{
+            initializer:get_storage_id(WorkerP3) => ?TEST_QOS(<<"PL">>)
         }
     }).
 
@@ -396,7 +389,7 @@ remote_migration_of_replica_not_protected_by_qos_file(Config) ->
 
 
 remote_migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -406,10 +399,8 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_file(Config) ->
         files_replicated = 1,
         files_evicted = 1,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2,
-        new_storages_mock = #{
-            ?GET_DOMAIN_BIN(WorkerP1) => ?TEST_QOS(<<"PL">>),
-            ?GET_DOMAIN_BIN(WorkerP2) => ?TEST_QOS(<<"other">>),
-            ?GET_DOMAIN_BIN(WorkerP3) => ?TEST_QOS(<<"PL">>)
+        new_qos_params = #{
+            initializer:get_storage_id(WorkerP3) => ?TEST_QOS(<<"PL">>)
         }
     }).
 
@@ -469,7 +460,7 @@ remote_migration_of_replica_not_protected_by_qos_dir(Config) ->
 
 
 remote_migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -480,10 +471,8 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_dir(Config) ->
         files_evicted = 4,
         dir_structure_type = nested,
         function = fun transfers_test_mechanism:migrate_root_directory/2,
-        new_storages_mock = #{
-            ?GET_DOMAIN_BIN(WorkerP1) => ?TEST_QOS(<<"PL">>),
-            ?GET_DOMAIN_BIN(WorkerP2) => ?TEST_QOS(<<"other">>),
-            ?GET_DOMAIN_BIN(WorkerP3) => ?TEST_QOS(<<"PL">>)
+        new_qos_params = #{
+            initializer:get_storage_id(WorkerP3) => ?TEST_QOS(<<"PL">>)
         }
     }).
 
@@ -543,7 +532,7 @@ remote_migration_of_replica_not_protected_by_qos_dir_each_file_separately(Config
 
 
 remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_separately(Config) ->
-    [WorkerP1, WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
+    [WorkerP1, _WorkerP2, WorkerP3 | _] = qos_tests_utils:get_op_nodes_sorted(Config),
 
     qos_eviction_protection_test_base(Config, #test_spec_eviction{
         evicting_node = WorkerP1,
@@ -554,10 +543,8 @@ remote_migration_of_replica_protected_by_qos_on_equal_storage_dir_each_file_sepa
         files_evicted = 1,
         dir_structure_type = nested,
         function = fun transfers_test_mechanism:migrate_each_file_replica_separately/2,
-        new_storages_mock = #{
-            ?GET_DOMAIN_BIN(WorkerP1) => ?TEST_QOS(<<"PL">>),
-            ?GET_DOMAIN_BIN(WorkerP2) => ?TEST_QOS(<<"other">>),
-            ?GET_DOMAIN_BIN(WorkerP3) => ?TEST_QOS(<<"PL">>)
+        new_qos_params = #{
+            initializer:get_storage_id(WorkerP3) => ?TEST_QOS(<<"PL">>)
         }
     }).
 
@@ -624,7 +611,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         files_evicted = FilesEvicted,
         dir_structure_type = DirStructureType,
         function = Function,
-        new_storages_mock = NewStoragesMock
+        new_qos_params = NewQosParams
     } = TestSpec,
     [WorkerP1, WorkerP2, WorkerP3] = Workers = qos_tests_utils:get_op_nodes_sorted(Config),
 
@@ -632,11 +619,15 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
     QosSpec = create_basic_qos_test_spec(Config, DirStructureType, Filename),
     {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
 
-    case NewStoragesMock of
+    case NewQosParams of
         undefined ->
             ok;
         _ ->
-            qos_tests_utils:mock_storage_qos_parameters(Workers, NewStoragesMock)
+            lists:foreach(fun(Worker) ->
+                maps:fold(fun(StorageId, Params, _) ->
+                    rpc:call(Worker, storage, set_qos_parameters, [StorageId, Params])
+                end, ok, NewQosParams)
+            end, Workers)
     end,
 
     QosTransfers = transfers_test_utils:list_ended_transfers(WorkerP1, ?SPACE_ID),
@@ -759,13 +750,6 @@ init_per_suite(Config) ->
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(60)),
     lfm_proxy:init(Config),
-    Mock = #{
-        ?P1 => ?TEST_QOS(<<"PL">>),
-        ?P2 => ?TEST_QOS(<<"other">>),
-        ?P3 => ?TEST_QOS(<<"other">>)
-    },
-    Workers = qos_tests_utils:get_op_nodes_sorted(Config),
-    qos_tests_utils:mock_storage_qos_parameters(Workers, qos_tests_utils:inject_storage_id(Workers, Mock)),
     case ?config(?SPACE_ID_KEY, Config) of
         undefined ->
             [{?SPACE_ID_KEY, ?SPACE_ID} | Config];
@@ -798,7 +782,6 @@ end_per_suite(Config) ->
         {Name, ?TEST_DATA, Distribution}
     ]}
 ).
--define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
 -define(nested_dir_structure(Name, Distribution),
     {?SPACE_ID, [
         {Name, [
@@ -852,7 +835,7 @@ create_basic_qos_test_spec(Config, DirStructureType, QosFilename) ->
             #expected_file_qos{
                 path = ?FILE_PATH(QosFilename),
                 qos_entries = [?QOS1],
-                assigned_entries = #{qos_tests_utils:get_provider_storage(WorkerP1) => [?QOS1]}
+                assigned_entries = #{initializer:get_storage_id(WorkerP1) => [?QOS1]}
             }
         ],
         expected_dir_structure = #test_dir_structure{

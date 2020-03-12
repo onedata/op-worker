@@ -22,6 +22,7 @@
     init_per_testcase/1,
     get_user_session/2,
     mock_gs_client/1, unmock_gs_client/1,
+    set_envs_for_correct_connection/1,
     wait_for_mocked_connection/1,
     create_user_session/2,
     count_reqs/2,
@@ -63,7 +64,7 @@ mock_gs_client(Config) ->
     Nodes = ?NODES(Config),
     ok = test_utils:mock_new(Nodes, gs_client, []),
     ok = test_utils:mock_new(Nodes, provider_logic, [passthrough]),
-    ok = test_utils:mock_new(Nodes, token_logic, [passthrough]),
+    ok = test_utils:mock_new(Nodes, space_logic, [passthrough]),
     ok = test_utils:mock_new(Nodes, oneprovider, [passthrough]),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, async_request, fun mock_async_request/2),
@@ -79,11 +80,6 @@ mock_gs_client(Config) ->
         Nodes, ?PROVIDER_1, ?MOCK_PROVIDER_ACCESS_TOKEN(?PROVIDER_1), ?MOCK_PROVIDER_IDENTITY_TOKEN(?PROVIDER_1)
     ),
 
-    ok = test_utils:mock_expect(Nodes, token_logic, verify_access_token, fun(AccessToken, _, _, _) ->
-        {ok, #token{subject = ?SUB(user, UserId)}} = tokens:deserialize(AccessToken),
-        {ok, ?SUB(user, UserId), undefined}
-    end),
-
     % gs_client requires successful setting of subdomain delegation IPs, but it cannot
     % be achieved in test environment
     ok = test_utils:mock_expect(Nodes, provider_logic, update_subdomain_delegation_ips, fun() ->
@@ -96,33 +92,42 @@ mock_gs_client(Config) ->
         lists:member(UserId, [?USER_1, ?USER_2, ?USER_3, ?USER_INCREASING_REV])
     end),
 
+    % dbsync reports its state regularly - mock the function so as not to generate
+    % requests to gs_client which would interfere with request counting in tests
+    ok = test_utils:mock_expect(Nodes, space_logic, report_dbsync_state, fun(_, _) ->
+        ok
+    end),
+
     % Fetch dummy provider so it is cached and does not generate Graph Sync requests.
-    rpc:call(hd(Nodes), provider_logic, get, []).
+    rpc:multicall(Nodes, provider_logic, get, []).
 
 
 unmock_gs_client(Config) ->
     Nodes = ?NODES(Config),
-    test_utils:mock_unload(Nodes, [gs_client, provider_logic, oneprovider]),
+    test_utils:mock_unload(Nodes, [gs_client, provider_logic, space_logic, oneprovider]),
     initializer:unmock_provider_ids(Nodes),
     ok.
 
 
-wait_for_mocked_connection(Config) ->
+set_envs_for_correct_connection(Config) ->
     Nodes = ?NODES(Config),
     % Modify env variables to ensure frequent reconnect attempts
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_healthcheck_interval, 1000),
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_backoff_rate, 1),
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_reconnect_max_backoff, 1000),
     % Use graph sync path that allows correct mocked connection
-    test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_CORRECT_CONNECTION),
+    test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_CORRECT_CONNECTION).
 
+
+wait_for_mocked_connection(Config) ->
+    set_envs_for_correct_connection(Config),
+    Nodes = ?NODES(Config),
     CheckConnection = fun() ->
         case rpc:call(hd(Nodes), global, whereis_name, [?GS_CLIENT_WORKER_GLOBAL_NAME]) of
             Pid when is_pid(Pid) -> ok;
             _ -> error
         end
     end,
-
     ?assertMatch(ok, CheckConnection(), 60).
 
 
@@ -130,13 +135,13 @@ create_user_session(Config, UserId) ->
     [Node | _] = ?NODES(Config),
 
     AccessToken = initializer:create_access_token(UserId),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
     ),
-    {ok, ?USER(UserId), _} = rpc:call(Node, auth_manager, verify, [TokenAuth]),
+    {ok, ?USER(UserId), _} = rpc:call(Node, auth_manager, verify_credentials, [TokenCredentials]),
     {ok, SessionId} = rpc:call(Node, session_manager, reuse_or_create_gui_session, [
-        ?SUB(user, UserId), TokenAuth
+        ?SUB(user, UserId), TokenCredentials
     ]),
     % Make sure private user data is fetched (if user identity was cached, it might
     % not happen).
@@ -170,7 +175,9 @@ invalidate_all_test_records(Config) ->
         {od_provider, ?PROVIDER_1}, {od_provider, ?PROVIDER_2},
         {od_handle_service, ?HANDLE_SERVICE_1}, {od_handle_service, ?HANDLE_SERVICE_2},
         {od_handle, ?HANDLE_1}, {od_handle, ?HANDLE_2},
-        {od_harvester, ?HARVESTER_1}
+        {od_harvester, ?HARVESTER_1},
+        {od_token, ?TOKEN_1}, {od_token, ?TOKEN_2},
+        {temporary_token_secret, ?USER_1}, {temporary_token_secret, ?USER_2}, {temporary_token_secret, ?USER_3}
     ],
     lists:foreach(
         fun({Type, Id}) ->
@@ -289,7 +296,7 @@ mock_graph_request(GsGraph = #gs_req_graph{operation = delete}, AuthOverride) ->
     mock_graph_delete(GsGraph#gs_req_graph.gri, AuthOverride).
 
 
-mock_graph_create(#gri{type = od_token, id = undefined, aspect = preauthorize, scope = public}, _, Data) ->
+mock_graph_create(#gri{type = od_token, id = undefined, aspect = verify_access_token, scope = public}, _, Data) ->
     #{<<"token">> := Token} = Data,
     {ok, #token{subject = ?SUB(user, UserId)}} = tokens:deserialize(Token),
     {ok, #gs_resp_graph{data_format = value, data = #{
@@ -584,6 +591,42 @@ mock_graph_get(GRI = #gri{type = od_storage, id = StorageId, aspect = instance},
                 private -> ?STORAGE_PRIVATE_DATA_VALUE(StorageId)
             end,
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
+        false ->
+            ?ERROR_FORBIDDEN
+    end;
+
+mock_graph_get(#gri{type = od_token, id = TokenId, aspect = instance, scope = shared}, AuthOverride, _) ->
+    Authorized = case AuthOverride of
+        undefined ->
+            true;
+        {#auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)}, _} ->
+            token_to_user_id(SerializedToken) == ?USER_1
+    end,
+    case Authorized of
+        true ->
+            case lists:member(TokenId, [?TOKEN_1, ?TOKEN_2]) of
+                true ->
+                    {ok, #gs_resp_graph{data_format = resource, data = ?TOKEN_SHARED_DATA_VALUE(TokenId)}};
+                _ ->
+                    ?ERROR_NOT_FOUND
+            end;
+        false ->
+            ?ERROR_FORBIDDEN
+    end;
+
+mock_graph_get(#gri{type = temporary_token_secret, id = UserId, aspect = user, scope = shared}, AuthOverride, _) ->
+    Authorized = case AuthOverride of
+        undefined ->
+            true;
+        {#auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)}, _} ->
+            token_to_user_id(SerializedToken) == UserId
+    end,
+    case Authorized of
+        true ->
+            {ok, #gs_resp_graph{
+                data_format = resource,
+                data = ?TEMPORARY_TOKENS_SECRET_SHARED_DATA_VALUE(UserId)}
+            };
         false ->
             ?ERROR_FORBIDDEN
     end.

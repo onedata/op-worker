@@ -98,11 +98,6 @@
 
     },
     "test_global_setup": {
-        "users": {
-            "user1": {
-                "default_space": "space_id1"
-            }
-        },
         "groups": {
         },
         "spaces": {

@@ -33,6 +33,7 @@
 
 -record(file_ctx, {
     canonical_path :: undefined | file_meta:path(),
+    uuid_based_path :: undefined | file_meta:uuid_based_path(),
     guid :: fslogic_worker:file_guid(),
     file_doc :: undefined | file_meta:doc(),
     parent :: undefined | ctx(),
@@ -68,7 +69,7 @@
 -export([equals/2]).
 
 %% Functions modifying context
--export([get_canonical_path/1, get_canonical_path_tokens/1, get_file_doc/1,
+-export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2, get_posix_storage_user_context/2, get_times/1,
@@ -284,7 +285,7 @@ get_canonical_path(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {<<"/">>, FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            {Path, FileCtx2} = generate_canonical_path(FileCtx),
+            {Path, FileCtx2} = resolve_canonical_path_tokens(FileCtx),
             CanonicalPath = filename:join(Path),
             {CanonicalPath, FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
@@ -302,13 +303,22 @@ get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = undefined}) ->
         true ->
             {[<<"/">>], FileCtx#file_ctx{canonical_path = <<"/">>}};
         false ->
-            {CanonicalPathTokens, FileCtx2} = generate_canonical_path(FileCtx),
+            {CanonicalPathTokens, FileCtx2} = resolve_canonical_path_tokens(FileCtx),
             CanonicalPath = filename:join(CanonicalPathTokens),
             {CanonicalPathTokens,
                 FileCtx2#file_ctx{canonical_path = CanonicalPath}}
     end;
 get_canonical_path_tokens(FileCtx = #file_ctx{canonical_path = Path}) ->
     {fslogic_path:split(Path), FileCtx}.
+
+
+-spec get_uuid_based_path(ctx()) -> {file_meta:uuid_based_path(), ctx()}.
+get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = undefined}) ->
+    {UuidPathTokens, FileCtx2} = resolve_uuid_based_path_tokens(FileCtx),
+    UuidPath = filename:join(UuidPathTokens),
+    {UuidPath, FileCtx2#file_ctx{uuid_based_path = UuidPath}};
+get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = UuidPath}) ->
+    {UuidPath, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -393,54 +403,75 @@ get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns parent's file context.
+%% Returns parent's file context. In case of user root dir and share root
+%% dir/file returns the same file_ctx. Therefore, to check if given
+%% file_ctx points to root dir (either user root dir or share root) it is
+%% enough to call this function and compare returned parent ctx's guid
+%% with its own.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent(ctx(), user_ctx:ctx() | undefined) ->
     {ParentFileCtx :: ctx(), NewFileCtx :: ctx()}.
-get_parent(FileCtx = #file_ctx{parent = undefined}, UserCtx) ->
+get_parent(FileCtx = #file_ctx{guid = Guid, parent = undefined}, UserCtx) ->
+    {FileUuid, SpaceId, ShareId} = file_id:unpack_share_guid(Guid),
     {Doc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
-    ParentGuid =
-        case fslogic_uuid:is_root_dir_uuid(ParentUuid) of
-            true ->
-                case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
-                    andalso UserCtx =/= undefined
-                    andalso user_ctx:is_normal_user(UserCtx)
-                of
-                    true ->
-                        UserId = user_ctx:get_user_id(UserCtx),
-                        fslogic_uuid:user_root_dir_guid(UserId);
-                    _ ->
-                        fslogic_uuid:root_dir_guid()
-                end;
-            false ->
-                SpaceId = get_space_id_const(FileCtx2),
-                case get_share_id_const(FileCtx2) of
-                    undefined ->
-                        file_id:pack_guid(ParentUuid, SpaceId);
-                    ShareId ->
-                        file_id:pack_share_guid(ParentUuid, SpaceId, ShareId)
-                end
-        end,
-    Parent = new_by_guid(ParentGuid),
+
+    IsShareRootFile = case ShareId of
+        undefined ->
+            false;
+        _ ->
+            % ShareId is added to file_meta.shares only for directly shared
+            % files/directories and not their children
+            lists:member(ShareId, Doc#document.value#file_meta.shares)
+    end,
+
+    Parent = case {fslogic_uuid:is_root_dir_uuid(ParentUuid), IsShareRootFile} of
+        {true, false} ->
+            case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
+                andalso UserCtx =/= undefined
+                andalso user_ctx:is_normal_user(UserCtx)
+            of
+                true ->
+                    case is_user_root_dir_const(FileCtx2, UserCtx) of
+                        true ->
+                            FileCtx2;
+                        false ->
+                            UserId = user_ctx:get_user_id(UserCtx),
+                            new_by_guid(fslogic_uuid:user_root_dir_guid(UserId))
+                    end;
+                _ ->
+                    new_by_guid(fslogic_uuid:root_dir_guid())
+            end;
+        {true, true} ->
+            case fslogic_uuid:is_space_dir_uuid(FileUuid) of
+                true ->
+                    FileCtx2;
+                false ->
+                    % userRootDir and globalRootDir can not be shared
+                    throw(?EINVAL)
+            end;
+        {false, false} ->
+            new_by_guid(file_id:pack_share_guid(ParentUuid, SpaceId, ShareId));
+        {false, true} ->
+            FileCtx2
+    end,
     {Parent, FileCtx2#file_ctx{parent = Parent}};
 get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
     {Parent, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns GUID of parent or undefined when the file is a root dir.
+%% Returns GUID of parent or undefined when the file is a root/share root dir.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_parent_guid(ctx(), user_ctx:ctx() | undefined) -> {fslogic_worker:file_guid() | undefined, ctx()}.
-get_parent_guid(FileCtx, UserCtx) ->
-    case is_root_dir_const(FileCtx) of
-        true ->
-            {undefined, FileCtx};
-        false ->
-            {ParentFile, FileCtx2} = get_parent(FileCtx, UserCtx),
-            ParentGuid = get_guid_const(ParentFile),
+get_parent_guid(#file_ctx{guid = FileGuid} = FileCtx, UserCtx) ->
+    {ParentCtx, FileCtx2} = get_parent(FileCtx, UserCtx),
+    case get_guid_const(ParentCtx) of
+        FileGuid ->
+            {undefined, FileCtx2};
+        ParentGuid ->
             {ParentGuid, FileCtx2}
     end.
 
@@ -1201,14 +1232,16 @@ is_dir(FileCtx = #file_ctx{is_dir = IsDir}) ->
 new_child_by_uuid(Uuid, Name, SpaceId, ShareId) ->
     #file_ctx{guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId), file_name = Name}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Generates canonical path
-%% @end
-%%--------------------------------------------------------------------
--spec generate_canonical_path(ctx()) -> {[file_meta:name()], ctx()}.
-generate_canonical_path(FileCtx) ->
+-spec resolve_canonical_path_tokens(ctx()) -> {[file_meta:name()], ctx()}.
+resolve_canonical_path_tokens(FileCtx) ->
+    resolve_and_cache_path(FileCtx, name).
+
+-spec resolve_uuid_based_path_tokens(ctx()) -> {[file_meta:uuid()], ctx()}.
+resolve_uuid_based_path_tokens(FileCtx) ->
+    resolve_and_cache_path(FileCtx, uuid).
+
+-spec resolve_and_cache_path(ctx(), name | uuid) -> {[file_meta:uuid() | file_meta:name()], ctx()}.
+resolve_and_cache_path(FileCtx, Type) ->
     Callback = fun([#document{key = Uuid, value = #file_meta{name = Name}, scope = SpaceId}, ParentValue, CalculationInfo]) ->
         case fslogic_uuid:is_root_dir_uuid(Uuid) of
             true ->
@@ -1218,21 +1251,30 @@ generate_canonical_path(FileCtx) ->
                     true ->
                         {ok, [<<"/">>, SpaceId], CalculationInfo};
                     false ->
-                        {ok, ParentValue ++ [Name], CalculationInfo}
+                        NameOrUuid = case Type of
+                            uuid -> Uuid;
+                            name -> Name
+                        end,
+                        {ok, ParentValue ++ [NameOrUuid], CalculationInfo}
                 end
         end
     end,
-    {#document{value = #file_meta{name = FileName, type = FileType}, scope = Space} = Doc, FileCtx2} =
+
+    {#document{key = Uuid, value = #file_meta{type = FileType, name = Filename}, scope = SpaceId} = Doc, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
-    CacheName = location_and_link_utils:get_canonical_paths_cache_name(Space),
+    {FilenameOrUuid, CacheName} = case Type of
+        name -> {Filename, location_and_link_utils:get_canonical_paths_cache_name(SpaceId)};
+        uuid -> {Uuid, location_and_link_utils:get_uuid_based_paths_cache_name(SpaceId)}
+    end,
     case FileType of
         ?DIRECTORY_TYPE ->
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, Doc, Callback),
             {Path, FileCtx2};
         _ ->
-            {ok, ParentDoc} = file_meta:get_parent(Doc),
+            {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
+            {ok, ParentDoc} = file_meta:get_including_deleted(ParentUuid),
             {ok, Path, _} = effective_value:get_or_calculate(CacheName, ParentDoc, Callback),
-            {Path ++ [FileName], FileCtx2}
+            {Path ++ [FilenameOrUuid], FileCtx2}
     end.
 
 %%--------------------------------------------------------------------

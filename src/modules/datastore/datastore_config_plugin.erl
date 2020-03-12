@@ -31,6 +31,8 @@ get_models() -> [
     od_handle,
     od_harvester,
     od_storage,
+    od_token,
+    temporary_token_secret,
     provider_auth,
     file_download_code,
     subscription,
@@ -76,6 +78,7 @@ get_models() -> [
     file_meta_posthooks,
     storage_sync_links,
     storage_traverse_job,
+    qos_status,
 
     %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
     space_storage,

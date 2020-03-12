@@ -44,31 +44,28 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on document using datastore model API
--export([
-    get/1, delete/1, create/5, create/7,
-    add_synced_links/4, delete_synced_links/4, fold_links/5
-]).
+-export([create/5, create/7, get/1, delete/1]).
 
 %% higher-level functions operating on qos_entry document
--export([
-    add_to_impossible_list/2, get_impossible_list/1, delete_from_impossible_list/2,
-    mark_entry_possible/3, is_possible/1, get_space_id/1, remove_traverse_req/2
-]).
+-export([get_space_id/1, get_file_guid/1]).
+-export([mark_possible/3, remove_traverse_req/2]).
 
 %% functions operating on qos_entry record
--export([
-    get_file_guid/1, get_expression/1, get_replicas_num/1,
-    get_file_uuid/1, get_traverse_reqs/1
-]).
+-export([get_expression/1, get_replicas_num/1, get_file_uuid/1, 
+    get_traverse_reqs/1, is_possible/1]).
+
+%%% functions operating on links tree lists
+-export([add_to_impossible_list/2, remove_from_impossible_list/2, 
+    apply_to_all_impossible_in_space/2]).
+-export([add_transfer_to_list/2, remove_transfer_from_list/2, 
+    apply_to_all_transfers/2]).
 
 %% datastore_model callbacks
--export([
-    get_ctx/0, get_record_struct/1, get_record_version/0,
-    resolve_conflict/3
-]).
+-export([get_ctx/0, get_record_struct/1, get_record_version/0, resolve_conflict/3]).
 
 
 -type id() :: datastore_doc:key().
@@ -76,9 +73,18 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type replicas_num() :: pos_integer().
+
+-type qos_transfer_id() :: transfer:id().
 -type one_or_many(Type) :: Type | [Type].
+-type list_opts() :: #{
+    token => datastore_links_iter:token(), 
+    prev_link_name => datastore_links:link_name()
+}.
+-type list_apply_fun() :: fun((datastore_links:link_name()) -> any()).
 
 -export_type([id/0, doc/0, record/0, replicas_num/0]).
+
+-compile({no_auto_import, [get/1]}).
 
 -define(LOCAL_CTX, #{
     model => ?MODULE
@@ -91,6 +97,9 @@
 }).
 
 -define(IMPOSSIBLE_KEY(SpaceId), <<"impossible_qos_key_", SpaceId/binary>>).
+-define(TRANSFERS_KEY(QosEntryId), <<"transfer_qos_key_", QosEntryId/binary>>).
+
+-define(FOLD_LINKS_BATCH_SIZE, 100).
 
 %%%===================================================================
 %%% Functions operating on document using datastore_model API
@@ -99,7 +108,8 @@
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
     replicas_num()) -> {ok, doc()} | {error, term()}.
 create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum) ->
-    create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, false, #{}).
+    create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, false, 
+        qos_traverse_req:build_traverse_reqs(FileUuid, [])).
 
 
 -spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
@@ -110,7 +120,7 @@ create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible, Travers
         true ->
             {possible, oneprovider:get_id()};
         false ->
-            ok = add_to_impossible_list(QosEntryId, SpaceId),
+            ok = add_to_impossible_list(SpaceId, QosEntryId),
             {impossible, oneprovider:get_id()}
     end,
     datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
@@ -124,14 +134,15 @@ create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible, Travers
     }).
 
 
--spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
-update(Key, Diff) ->
-    datastore_model:update(?CTX, Key, Diff).
-
-
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(QosEntryId) ->
     datastore_model:get(?CTX, QosEntryId).
+
+
+%% @private
+-spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
+update(Key, Diff) ->
+    datastore_model:update(?CTX, Key, Diff).
 
 
 -spec delete(id()) -> ok | {error, term()}.
@@ -139,6 +150,7 @@ delete(QosEntryId) ->
     datastore_model:delete(?CTX, QosEntryId).
 
 
+%% @private
 -spec add_local_links(datastore:key(), datastore:tree_id(),
     one_or_many({datastore:link_name(), datastore:link_target()})) ->
     one_or_many({ok, datastore:link()} | {error, term()}).
@@ -146,13 +158,7 @@ add_local_links(Key, TreeId, Links) ->
     datastore_model:add_links(?LOCAL_CTX, Key, TreeId, Links).
 
 
--spec add_synced_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    one_or_many({datastore:link_name(), datastore:link_target()})) ->
-    one_or_many({ok, datastore:link()} | {error, term()}).
-add_synced_links(Scope, Key, TreeId, Links) ->
-    datastore_model:add_links(?CTX#{scope => Scope}, Key, TreeId, Links).
-
-
+%% @private
 -spec delete_local_links(datastore:key(), datastore:tree_id(),
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
@@ -160,25 +166,19 @@ delete_local_links(Key, TreeId, Links) ->
     datastore_model:delete_links(?LOCAL_CTX, Key, TreeId, Links).
 
 
--spec delete_synced_links(datastore_doc:scope(), datastore:key(), datastore:tree_id(),
-    one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
-    one_or_many(ok | {error, term()}).
-delete_synced_links(Scope, Key, TreeId, Links) ->
-    datastore_model:delete_links(?CTX#{scope => Scope}, Key, TreeId, Links).
-
-
--spec fold_links(id(), datastore_model:tree_ids(), datastore:fold_fun(datastore:link()),
+%% @private
+-spec fold_local_links(id(), datastore:fold_fun(datastore:link()),
     datastore:fold_acc(), datastore:fold_opts()) -> {ok, datastore:fold_acc()} |
     {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
-fold_links(Key, TreeIds, Fun, Acc, Opts) ->
-    datastore_model:fold_links(?CTX, Key, TreeIds, Fun, Acc, Opts).
+fold_local_links(Key, Fun, Acc, Opts) ->
+    datastore_model:fold_links(?LOCAL_CTX, Key, oneprovider:get_id(), Fun, Acc, Opts).
 
 
 %%%===================================================================
 %%% Higher-level functions operating on qos_entry document.
 %%%===================================================================
 
--spec get_file_guid(id() | doc()) -> {ok, file_id:file_guid()} | {error, term()}.
+-spec get_file_guid(doc() | id()) -> {ok, file_id:file_guid()} | {error, term()}.
 get_file_guid(#document{scope = SpaceId, value = #qos_entry{file_uuid = FileUuid}})  ->
     {ok, file_id:pack_guid(FileUuid, SpaceId)};
 
@@ -191,42 +191,14 @@ get_file_guid(QosEntryId) ->
     end.
 
 
--spec get_space_id(id()) -> {ok, od_space:id()} | {error, term()}.
+-spec get_space_id(doc() | id()) -> {ok, od_space:id()} | {error, term()}.
+get_space_id(#document{scope = SpaceId, value = #qos_entry{}}) ->
+    {ok, SpaceId};
 get_space_id(QosEntryId) ->
     case qos_entry:get(QosEntryId) of
-        {ok, #document{scope = SpaceId}} ->
-            {ok, SpaceId};
-        {error, _} = Error ->
-            Error
+        {ok, Doc} -> get_space_id(Doc);
+        {error, _} = Error -> Error
     end.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds QoS that cannot be fulfilled to links tree storing ID of all
-%% qos_entry documents that cannot be fulfilled at the moment.
-%% @end
-%%--------------------------------------------------------------------
--spec add_to_impossible_list(id(), od_space:id()) ->  ok.
-add_to_impossible_list(QosEntryId, SpaceId) ->
-    ?extract_ok(
-        add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId})
-    ).
-
-
--spec delete_from_impossible_list(id(), od_space:id()) ->  ok.
-delete_from_impossible_list(QosEntryId, SpaceId) ->
-    ?extract_ok(
-        delete_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)
-    ).
-
-
--spec get_impossible_list(od_space:id()) ->  {ok, [id()]} | {error, term()}.
-get_impossible_list(SpaceId) ->
-    fold_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(),
-        fun(#link{target = T}, Acc) -> {ok, [T | Acc]} end,
-        [], #{}
-    ).
 
 
 %%--------------------------------------------------------------------
@@ -234,15 +206,15 @@ get_impossible_list(SpaceId) ->
 %% Marks given entry as possible and saves for it given traverse requests.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_entry_possible(id(), od_space:id(), qos_traverse_req:traverse_reqs()) -> ok.
-mark_entry_possible(QosEntryId, SpaceId, AllTraverseReqs) ->
+-spec mark_possible(id(), od_space:id(), qos_traverse_req:traverse_reqs()) -> ok.
+mark_possible(QosEntryId, SpaceId, AllTraverseReqs) ->
     {ok, _} = update(QosEntryId, fun(QosEntry) ->
         {ok, QosEntry#qos_entry{
             possibility_check = {possible, oneprovider:get_id()},
             traverse_reqs = AllTraverseReqs
         }}
     end),
-    ok = delete_from_impossible_list(QosEntryId, SpaceId).
+    ok = remove_from_impossible_list(SpaceId, QosEntryId).
 
 
 %%--------------------------------------------------------------------
@@ -257,8 +229,7 @@ remove_traverse_req(QosEntryId, TraverseId) ->
             traverse_reqs = qos_traverse_req:remove_req(TraverseId, TR)
         }}
     end,
-
-    ?extract_ok(update(QosEntryId, Diff)).
+    ?ok_if_not_found(?extract_ok(update(QosEntryId, Diff))).
 
 %%%===================================================================
 %%% Functions operating on qos_entry record.
@@ -299,6 +270,84 @@ is_possible(#qos_entry{possibility_check = {possible, _}}) ->
     true;
 is_possible(#qos_entry{possibility_check = {impossible, _}}) ->
     false.
+
+
+%%%===================================================================
+%%% Functions operating on links tree lists
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds QoS that cannot be fulfilled to links tree storing ID of all
+%% qos_entry documents that cannot be fulfilled at the moment.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_to_impossible_list(od_space:id(), id()) ->  ok | {error, term()}.
+add_to_impossible_list(SpaceId, QosEntryId) ->
+    ?ok_if_exists(?extract_ok(
+        add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId}))).
+
+
+-spec remove_from_impossible_list(od_space:id(), id()) ->  ok | {error, term()}.
+remove_from_impossible_list(SpaceId, QosEntryId) ->
+    ?extract_ok(
+        delete_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)
+    ).
+
+
+-spec apply_to_all_impossible_in_space(od_space:id(), list_apply_fun()) -> ok.
+apply_to_all_impossible_in_space(SpaceId, Fun) ->
+    apply_to_all_in_list(?IMPOSSIBLE_KEY(SpaceId), Fun).
+
+
+-spec add_transfer_to_list(id(), qos_transfer_id()) -> ok | {error, term()}.
+add_transfer_to_list(QosEntryId, TransferId) ->
+    add_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), {TransferId, TransferId}).
+
+
+-spec remove_transfer_from_list(id(), qos_transfer_id()) -> ok | {error, term()}.
+remove_transfer_from_list(QosEntryId, TransferId)  ->
+    delete_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), TransferId).
+
+
+-spec apply_to_all_transfers(od_space:id(), list_apply_fun()) -> ok.
+apply_to_all_transfers(QosEntryId, Fun) ->
+    apply_to_all_in_list(?TRANSFERS_KEY(QosEntryId), Fun).
+
+
+%% @private
+-spec apply_to_all_in_list(datastore:key(), list_apply_fun()) -> ok.
+apply_to_all_in_list(Key, Fun) ->
+    {List, NextBatchOpts} = list_next_batch(Key, #{}),
+    apply_and_list_next_batch(Key, Fun, List, NextBatchOpts).
+
+
+%% @private
+-spec apply_and_list_next_batch(datastore:key(), list_apply_fun(), 
+    [datastore_links:link_name()], list_opts()) -> ok.
+apply_and_list_next_batch(_Key, _Fun, [], _Opts) -> ok;
+apply_and_list_next_batch(Key, Fun, List, Opts) ->
+    lists:foreach(Fun, List),
+    {NextBatch, NextBatchOpts} = list_next_batch(Key, Opts),
+    apply_and_list_next_batch(Key, Fun, NextBatch, NextBatchOpts).
+
+
+%% @private
+-spec list_next_batch(datastore:key(), list_opts()) ->
+    {[datastore_links:link_name()], list_opts()}.
+list_next_batch(Key, Opts) ->
+    Opts1 = case maps:is_key(token, Opts) of
+        true -> Opts;
+        false -> Opts#{token => #link_token{}}
+    end,
+    {{ok, Res}, Token} = fold_local_links(Key,
+        fun(#link{name = Name}, Acc) -> {ok, [Name | Acc]} end, [],
+        Opts1#{size => ?FOLD_LINKS_BATCH_SIZE}),
+    NextBatchOpts = case Res of
+        [] -> #{token => Token};
+        _ -> #{token => Token, prev_link_name => lists:last(Res)}
+    end,
+    {Res, NextBatchOpts}.
 
 
 %%%===================================================================
@@ -379,11 +428,10 @@ resolve_conflict_internal(SpaceId, QosId,
             % remote changes were made by provider with lower id ->
             %   trigger async removal of entry from file_qos and save remote changes
             spawn(fun() ->
-                case file_qos:remove_qos_entry_id(FileUuid, QosId) of
-                    ok ->
-                        ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+                case file_qos:remove_qos_entry_id(SpaceId, FileUuid, QosId) of
+                    ok -> ok;
                     {error, _} = Error ->
-                        ?error("Could not remvove qos_entry ~p from file_qos of file ~p: ~p",
+                        ?error("Could not remove qos_entry ~p from file_qos of file ~p: ~p",
                             [QosId, FileUuid, Error])
                 end
             end),
@@ -410,27 +458,9 @@ resolve_conflict_internal(_SpaceId, _QosId, #qos_entry{traverse_reqs = RemoteReq
     #qos_entry{traverse_reqs = LocalReqs} = Value) ->
     % traverse requests are different
 
-    {LocalTraverseIds, _} = split_traverse_reqs(LocalReqs),
-    {_, RemoteTraverseIds} = split_traverse_reqs(RemoteReqs),
+    {LocalTraverseIds, _} = qos_traverse_req:split_local_and_remote(LocalReqs),
+    {_, RemoteTraverseIds} = qos_traverse_req:split_local_and_remote(RemoteReqs),
     Value#qos_entry{
         traverse_reqs = qos_traverse_req:select_traverse_reqs(
             LocalTraverseIds ++ RemoteTraverseIds, LocalReqs)
     }.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Splits given traverse reqs to those of current provider and those of remote providers.
-%% @end
-%%--------------------------------------------------------------------
--spec split_traverse_reqs(qos_traverse_req:traverse_reqs()) ->
-    {[qos_traverse_req:id()], [qos_traverse_req:id()]}.
-split_traverse_reqs(AllTraverseReqs) ->
-    maps:fold(fun(TaskId, TraverseReq, {LocalTraverseReqs, RemoteTraverseReqs}) ->
-        StorageId = qos_traverse_req:get_storage(TraverseReq),
-        case storage:is_local(StorageId) of
-            true -> {[TaskId | LocalTraverseReqs], RemoteTraverseReqs};
-            false -> {LocalTraverseReqs, [TaskId | RemoteTraverseReqs]}
-        end
-    end, {[], []}, AllTraverseReqs).

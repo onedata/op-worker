@@ -22,7 +22,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([init_canonical_paths_cache/1]).
+-export([init_paths_caches/1]).
 -export([init/1, handle/1, cleanup/0]).
 -export([init_counters/0, init_report/0]).
 
@@ -55,7 +55,7 @@
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
--define(INIT_CANONICAL_PATHS_CACHE(Space), {init_canonical_paths_cache, Space}).
+-define(INIT_PATHS_CACHES(Space), {init_paths_caches, Space}).
 
 -define(SHOULD_PERFORM_PERIODICAL_SPACES_AUTOCLEANING_CHECK,
     application:get_env(?APP_NAME, autocleaning_periodical_spaces_check_enabled, true)).
@@ -88,19 +88,42 @@
 % This macro is used to disable automatic restart of autocleaning runs in tests
 -define(SHOULD_RESTART_AUTOCLEANING_RUNS, application:get_env(?APP_NAME, autocleaning_restart_runs, true)).
 
+-define(AVAILABLE_SHARE_OPERATIONS, [
+    check_perms,
+    get_parent,
+    % TODO VFS-6057 resolve share path up to share not user root dir
+    %%    get_file_path,
+
+    list_xattr,
+    get_xattr,
+    get_metadata,
+
+    open_file,
+    open_file_with_extended_info,
+    synchronize_block,
+    remote_read,
+    fsync,
+    release,
+
+    get_file_attr,
+    get_file_children,
+    get_child_attr,
+    get_file_children_attrs
+]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Initializes cache on all nodes.
+%% Initializes paths caches on all nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec init_canonical_paths_cache(od_space:id() | all) -> ok.
-init_canonical_paths_cache(Space) ->
+-spec init_paths_caches(od_space:id() | all) -> ok.
+init_paths_caches(Space) ->
     lists:foreach(fun(Node) ->
-        rpc:call(Node, erlang, send_after, [0, fslogic_worker, {sync_timer, ?INIT_CANONICAL_PATHS_CACHE(Space)}])
+        rpc:call(Node, erlang, send_after, [0, fslogic_worker, {sync_timer, ?INIT_PATHS_CACHES(Space)}])
     end, consistent_hashing:get_all_nodes()).
 
 %%%===================================================================
@@ -115,8 +138,8 @@ init_canonical_paths_cache(Space) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
-    location_and_link_utils:init_canonical_paths_cache_group(),
-    erlang:send_after(0, self(), {sync_timer, ?INIT_CANONICAL_PATHS_CACHE(all)}),
+    location_and_link_utils:init_paths_cache_group(),
+    erlang:send_after(0, self(), {sync_timer, ?INIT_PATHS_CACHES(all)}),
 
     transfer:init(),
     autocleaning_view_traverse:init_pool(),
@@ -199,8 +222,8 @@ handle({proxyio_request, SessId, ProxyIORequest}) ->
     {ok, Response};
 handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
-handle(?INIT_CANONICAL_PATHS_CACHE(Space)) ->
-    location_and_link_utils:init_canonical_paths_cache(Space);
+handle(?INIT_PATHS_CACHES(Space)) ->
+    location_and_link_utils:init_paths_caches(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -292,19 +315,45 @@ handle_request_and_process_response(SessId, Request) ->
 %%--------------------------------------------------------------------
 -spec handle_request_and_process_response_locally(user_ctx:ctx(), request(),
     file_partial_ctx:ctx() | undefined) -> response().
-handle_request_and_process_response_locally(UserCtx, Request, FilePartialCtx) ->
-    {FileCtx, _SpaceID} = case FilePartialCtx of
+handle_request_and_process_response_locally(UserCtx0, Request, FilePartialCtx) ->
+    {FileCtx1, ShareId} = case FilePartialCtx of
         undefined ->
             {undefined, undefined};
         _ ->
-            file_ctx:new_by_partial_context(FilePartialCtx)
+            {FileCtx0, _SpaceId0} = file_ctx:new_by_partial_context(FilePartialCtx),
+            {FileCtx0, file_ctx:get_share_id_const(FileCtx0)}
     end,
     try
-        handle_request_locally(UserCtx, Request, FileCtx)
+        UserCtx1 = case ShareId of
+            undefined ->
+                UserCtx0;
+            _ ->
+                Operation = get_operation(Request),
+                case lists:member(Operation, ?AVAILABLE_SHARE_OPERATIONS) of
+                    true -> ok;
+                    false -> throw(?EACCES)
+                end,
+                % Operations concerning shares must be carried with GUEST auth
+                case user_ctx:is_guest(UserCtx0) of
+                    true -> UserCtx0;
+                    false -> user_ctx:new(?GUEST_SESS_ID)
+                end
+        end,
+        handle_request_locally(UserCtx1, Request, FileCtx1)
     catch
         Type:Error ->
             fslogic_errors:handle_error(Request, Type, Error)
     end.
+
+%% @private
+get_operation(#fuse_request{fuse_request = #file_request{file_request = Req}}) ->
+    element(1, Req);
+get_operation(#fuse_request{fuse_request = Req}) ->
+    element(1, Req);
+get_operation(#provider_request{provider_request = Req}) ->
+    element(1, Req);
+get_operation(#proxyio_request{proxyio_request = Req}) ->
+    element(1, Req).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -533,8 +582,8 @@ handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
     permission_req:check_perms(UserCtx, FileCtx, Flag);
 handle_provider_request(UserCtx, #create_share{name = Name}, FileCtx) ->
     share_req:create_share(UserCtx, FileCtx, Name);
-handle_provider_request(UserCtx, #remove_share{}, FileCtx) ->
-    share_req:remove_share(UserCtx, FileCtx);
+handle_provider_request(UserCtx, #remove_share{share_id = ShareId}, FileCtx) ->
+    share_req:remove_share(UserCtx, FileCtx, ShareId);
 handle_provider_request(UserCtx, #add_qos_entry{expression = Expression, replicas_num = ReplicasNum}, FileCtx) ->
     qos_req:add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum);
 handle_provider_request(UserCtx, #get_effective_file_qos{}, FileCtx) ->

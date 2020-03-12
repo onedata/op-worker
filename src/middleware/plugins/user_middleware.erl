@@ -45,6 +45,7 @@
 operation_supported(get, instance, private) -> true;
 operation_supported(get, instance, shared) -> true;
 operation_supported(get, eff_spaces, private) -> true;
+operation_supported(get, eff_handle_services, private) -> true;
 
 operation_supported(_, _, _) -> false.
 
@@ -55,10 +56,11 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
-    undefined;
-
-data_spec(#op_req{operation = get, gri = #gri{aspect = eff_spaces}}) ->
+data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
+    As =:= instance;
+    As =:= eff_spaces;
+    As =:= eff_handle_services
+->
     undefined.
 
 
@@ -99,7 +101,7 @@ fetch_entity(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
-authorize(#op_req{auth = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
 %% User can perform all operations on his record
@@ -119,7 +121,8 @@ authorize(#op_req{operation = get, gri = #gri{aspect = instance, scope = shared}
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
 validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
     As =:= instance;
-    As =:= eff_spaces
+    As =:= eff_spaces;
+    As =:= eff_handle_services
 ->
     ok.
 
@@ -151,7 +154,9 @@ get(#op_req{gri = #gri{aspect = instance, scope = shared}}, #od_user{
         <<"username">> => Username
     }};
 get(#op_req{gri = #gri{aspect = eff_spaces}}, User) ->
-    user_logic:get_eff_spaces(User).
+    user_logic:get_eff_spaces(User);
+get(#op_req{gri = #gri{aspect = eff_handle_services}}, User) ->
+    user_logic:get_eff_handle_services(User).
 
 
 %%--------------------------------------------------------------------

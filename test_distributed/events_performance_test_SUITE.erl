@@ -391,8 +391,6 @@ init_per_testcase(subscribe_should_work_for_multiple_sessions, Config) ->
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    Self = self(),
-    Iden = ?SUB(user, <<"user_id">>),
     initializer:remove_pending_messages(),
     test_utils:mock_new(Worker, communicator),
     test_utils:mock_expect(Worker, communicator, send_to_oneclient, fun
@@ -402,14 +400,15 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
         {ok, [oneprovider:get_id()]}
     end),
-    Nonce = <<"nonce">>,
-    initializer:mock_auth_manager(Config),
-    {ok, SessId} = session_setup(Worker, Nonce, Iden, Self),
     initializer:mock_test_file_context(Config, <<"file_id">>),
-    initializer:create_test_users_and_spaces(
-        ?TEST_FILE(Config, "env_desc.json"),
-        [{session_id, SessId} | Config]
-    ).
+    NewConfig = initializer:create_test_users_and_spaces(
+        ?TEST_FILE(Config, "env_desc.json"), Config
+    ),
+    Nonce = <<"nonce">>,
+    Iden = ?SUB(user, <<"user_id">>),
+    initializer:mock_auth_manager(Config),
+    {ok, SessId} = session_setup(Worker, Nonce, Iden, self()),
+    [{session_id, SessId} | NewConfig].
 
 
 end_per_suite(_Config) ->
@@ -445,15 +444,15 @@ end_per_testcase(_Case, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec session_setup(Worker :: node(), Nonce :: binary(),
-    Iden :: session:auth(), Conn :: pid()) -> {ok, session:id()}.
+    Iden :: aai:subject(), Conn :: pid()) -> {ok, session:id()}.
 session_setup(Worker, Nonce, ?SUB(user, UserId) = Iden, Conn) ->
     AccessToken = initializer:create_access_token(UserId),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), oneclient, allow_data_access_caveats
     ),
     ?assertMatch({ok, _}, fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, Iden, TokenAuth, Conn
+        Worker, Nonce, Iden, TokenCredentials, Conn
     )).
 
 %%--------------------------------------------------------------------

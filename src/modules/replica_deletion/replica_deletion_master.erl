@@ -350,7 +350,7 @@ maybe_send_request(Request = #request{
 }, SpaceId
 ) ->
     {StorageId, _} = file_ctx:get_storage_id(file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))),
-    case file_qos:is_replica_protected(FileUuid, StorageId) of
+    case file_qos:is_replica_required_on_storage(FileUuid, StorageId) of
         false ->
             {ok, _} = request_deletion_support(SpaceId, FileUuid, ProviderId, Blocks, Version, JobId, JobType),
             ok;

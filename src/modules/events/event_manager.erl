@@ -144,7 +144,7 @@ init([MgrSup, SessId]) ->
     process_flag(trap_exit, true),
     init_memory(SessId),
     Self = self(),
-    {ok, SessId} = session:update(SessId, fun(Session = #session{}) ->
+    {ok, #document{key = SessId}} = session:update(SessId, fun(Session = #session{}) ->
         {ok, Session#session{event_manager = Self}}
     end),
     {ok, #state{manager_sup = MgrSup, session_id = SessId}, 0}.
@@ -417,13 +417,13 @@ handle_in_process(Request, _State) ->
     session:id()) -> ok.
 handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
     #flush_events{context = Context, notify = Notify} = Request,
-    {ok, Auth} = session:get_auth(SessId),
+    {ok, Credentials} = session:get_credentials(SessId),
     StreamId = sequencer:term_to_stream_id(Context),
     ClientMsg = #client_message{
         message_stream = #message_stream{stream_id = StreamId},
         message_body = Request,
         effective_session_id = SessId,
-        effective_session_credentials = auth_manager:get_credentials(Auth)
+        effective_client_tokens = auth_manager:get_client_tokens(Credentials)
     },
     Ref = session_utils:get_provider_session_id(outgoing, ProviderId),
     RequestTranslator = spawn(fun() ->
@@ -444,13 +444,13 @@ handle_remotely(#event{} = Evt, ProviderId, SessId) ->
 handle_remotely(Request, ProviderId, SessId) ->
     {file, FileUuid} = get_context(Request),
     StreamId = sequencer:term_to_stream_id(FileUuid),
-    {ok, Auth} = session:get_auth(SessId),
+    {ok, Credentials} = session:get_credentials(SessId),
     communicator:stream_to_provider(
         session_utils:get_provider_session_id(outgoing, ProviderId),
         #client_message{
             message_body = Request,
             effective_session_id = SessId,
-            effective_session_credentials = auth_manager:get_credentials(Auth)
+            effective_client_tokens = auth_manager:get_client_tokens(Credentials)
         },
         StreamId, undefined
     ),

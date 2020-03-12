@@ -55,6 +55,8 @@
 -define(HARVESTER_2, <<"harvester2Id">>).
 -define(STORAGE_1, <<"storage1Id">>).
 -define(STORAGE_2, <<"storage2Id">>).
+-define(TOKEN_1, <<"token1Id">>).
+-define(TOKEN_2, <<"token2Id">>).
 
 % User authorizations
 % Token auth is translated to {token, Token} before graph sync request.
@@ -87,7 +89,6 @@
 -define(USER_EMAIL_LIST(__User), [__User]).
 -define(USER_LINKED_ACCOUNTS_VALUE(__User), [#{<<"userId">> => __User}]).
 -define(USER_LINKED_ACCOUNTS_MATCHER(__User), [#{<<"userId">> := __User}]).
--define(USER_DEFAULT_SPACE(__User), __User).
 -define(USER_SPACE_ALIASES(__User), #{}).
 -define(USER_EFF_GROUPS(__User), [?GROUP_1, ?GROUP_2]).
 -define(USER_EFF_SPACES(__User), [?SPACE_1, ?SPACE_2]).
@@ -115,10 +116,21 @@
 -define(SPACE_HARVESTERS(__Space), [?HARVESTER_1, ?HARVESTER_2]).
 -define(SPACE_STORAGES_VALUE(__Space), #{?STORAGE_1 => 1000000000, ?STORAGE_2 => 1000000000}).
 -define(SPACE_STORAGES_MATCHER(__Space), #{?STORAGE_1 := 1000000000, ?STORAGE_2 := 1000000000}).
+-define(SPACE_SUPPORT_PARAMETERS_VALUE(__Space), #{
+    ?PROVIDER_1 => #{<<"dataWrite">> => <<"global">>, <<"metadataReplication">> => <<"lazy">>},
+    ?PROVIDER_2 => #{<<"dataWrite">> => <<"none">>, <<"metadataReplication">> => <<"eager">>}
+}).
+-define(SPACE_SUPPORT_PARAMETERS_MATCHER(__Space), #{
+    ?PROVIDER_1 := {space_support_parameters, global, lazy},
+    ?PROVIDER_2 := {space_support_parameters, none, eager}
+}).
+-define(SPACE_SUPPORT_STATE_VALUE(__Space), #{?PROVIDER_1 => <<"active">>, ?PROVIDER_2 => <<"retiring">>}).
+-define(SPACE_SUPPORT_STATE_MATCHER(__Space), #{?PROVIDER_1 := active, ?PROVIDER_2 := retiring}).
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
 -define(SHARE_PUBLIC_URL(__Share), __Share).
+-define(SHARE_FILE_TYPE(__Share), dir).
 -define(SHARE_SPACE(__Share), ?SPACE_1).
 -define(SHARE_HANDLE(__Share), ?HANDLE_1).
 -define(SHARE_ROOT_FILE(__Share), __Share).
@@ -207,7 +219,6 @@
     username = ?USER_USERNAME(__User),
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
-    default_space = ?USER_DEFAULT_SPACE(__User),
     space_aliases = ?USER_SPACE_ALIASES(__User),
     eff_groups = ?USER_EFF_GROUPS(__User),
     eff_spaces = ?USER_EFF_SPACES(__User),
@@ -219,7 +230,6 @@
     username = ?USER_USERNAME(__User),
     emails = ?USER_EMAIL_LIST(__User),
     linked_accounts = ?USER_LINKED_ACCOUNTS_MATCHER(__User),
-    default_space = undefined,
     space_aliases = #{},
     eff_groups = [],
     eff_spaces = [],
@@ -231,7 +241,6 @@
     username = ?USER_USERNAME(__User),
     emails = [],
     linked_accounts = [],
-    default_space = undefined,
     space_aliases = #{},
     eff_groups = [],
     eff_spaces = [],
@@ -255,7 +264,9 @@
     providers = ?SPACE_PROVIDERS_MATCHER(__Space),
     shares = ?SPACE_SHARES(__Space),
     harvesters = ?SPACE_HARVESTERS(__Space),
-    storages = ?SPACE_STORAGES_MATCHER(__Space)
+    storages = ?SPACE_STORAGES_MATCHER(__Space),
+    support_parameters = ?SPACE_SUPPORT_PARAMETERS_MATCHER(__Space),
+    support_state = ?SPACE_SUPPORT_STATE_MATCHER(__Space)
 }}).
 -define(SPACE_PROTECTED_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
@@ -272,6 +283,7 @@
 -define(SHARE_PRIVATE_DATA_MATCHER(__Share), #document{key = __Share, value = #od_share{
     name = ?SHARE_NAME(__Share),
     public_url = ?SHARE_PUBLIC_URL(__Share),
+    file_type = ?SHARE_FILE_TYPE(__ShareId),
     space = ?SHARE_SPACE(__Share),
     handle = ?SHARE_HANDLE(__Share),
     root_file = ?SHARE_ROOT_FILE(__Share)
@@ -279,6 +291,7 @@
 -define(SHARE_PUBLIC_DATA_MATCHER(__Share), #document{key = __Share, value = #od_share{
     name = ?SHARE_NAME(__Share),
     public_url = ?SHARE_PUBLIC_URL(__Share),
+    file_type = ?SHARE_FILE_TYPE(__ShareId),
     space = undefined,
     handle = ?SHARE_HANDLE(__Share),
     root_file = ?SHARE_ROOT_FILE(__Share)
@@ -370,7 +383,6 @@ end).
     __ProtectedData = ?USER_PROTECTED_DATA_VALUE(__UserId),
     __ProtectedData#{
         <<"gri">> => gri:serialize(#gri{type = od_user, id = __UserId, aspect = instance, scope = private}),
-        <<"defaultSpaceId">> => ?USER_DEFAULT_SPACE(__UserId),
         <<"spaceAliases">> => ?USER_SPACE_ALIASES(__UserId),
 
         <<"effectiveGroups">> => ?USER_EFF_GROUPS(__UserId),
@@ -393,7 +405,9 @@ end).
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
     <<"name">> => ?SPACE_NAME(__SpaceId),
-    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId)
+    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
+    <<"supportParameters">> => ?SPACE_SUPPORT_PARAMETERS_VALUE(__SpaceId),
+    <<"supportState">> => ?SPACE_SUPPORT_STATE_VALUE(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     (?SPACE_PROTECTED_DATA_VALUE(__SpaceId))#{
@@ -417,6 +431,7 @@ end).
     <<"gri">> => gri:serialize(#gri{type = od_share, id = __ShareId, aspect = instance, scope = public}),
     <<"name">> => ?SHARE_NAME(__ShareId),
     <<"publicUrl">> => ?SHARE_PUBLIC_URL(__ShareId),
+    <<"fileType">> => atom_to_binary(?SHARE_FILE_TYPE(__ShareId), utf8),
     <<"handleId">> => ?SHARE_HANDLE(__ShareId),
     <<"rootFileId">> => ?SHARE_ROOT_FILE(__ShareId)
 }).
@@ -505,3 +520,23 @@ end).
     <<"spaces">> => [],
     <<"qos_parameters">> => #{}
 }).
+
+
+-define(TOKEN_SHARED_DATA_VALUE(__TokenId), #{
+    <<"revision">> => 1,
+    <<"gri">> => gri:serialize(#gri{type = od_token, id = __TokenId, aspect = instance, scope = shared}),
+    <<"revoked">> => false
+}).
+
+-define(TOKEN_SHARED_DATA_MATCHER(__TokenId), #document{key = __TokenId, value = #od_token{
+    revoked = false
+}}).
+
+
+-define(TEMPORARY_TOKENS_SECRET_SHARED_DATA_VALUE(__UserId), #{
+    <<"revision">> => 1,
+    <<"gri">> => gri:serialize(#gri{type = temporary_token_secret, id = __UserId, aspect = user, scope = shared}),
+    <<"generation">> => 1
+}).
+
+-define(TEMPORARY_TOKENS_SECRET_GENERATION(__UserId), 1).

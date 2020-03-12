@@ -45,7 +45,7 @@ translate(#gri{type = od_user, id = Id, aspect = instance, scope = private}, Res
             username = utils:null_to_undefined(maps:get(<<"username">>, Result, maps:get(<<"alias">>, Result, null))),
             emails = maps:get(<<"emails">>, Result, maps:get(<<"emailList">>, Result, [])),
             linked_accounts = maps:get(<<"linkedAccounts">>, Result),
-            default_space = utils:null_to_undefined(maps:get(<<"defaultSpaceId">>, Result)),
+
             space_aliases = maps:get(<<"spaceAliases">>, Result),
 
             eff_groups = maps:get(<<"effectiveGroups">>, Result),
@@ -89,7 +89,9 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
         key = Id,
         value = #od_space{
             name = maps:get(<<"name">>, Result),
-            providers = maps:get(<<"providers">>, Result)
+            providers = maps:get(<<"providers">>, Result),
+            support_parameters = space_support:parameters_per_provider_from_json(maps:get(<<"supportParameters">>, Result)),
+            support_state = space_support:support_state_per_provider_from_json(maps:get(<<"supportState">>, Result))
         }
     };
 
@@ -115,7 +117,10 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
 
             providers = maps:get(<<"providers">>, Result),
             shares = maps:get(<<"shares">>, Result),
-            harvesters = maps:get(<<"harvesters">>, Result)
+            harvesters = maps:get(<<"harvesters">>, Result),
+
+            support_parameters = space_support:parameters_per_provider_from_json(maps:get(<<"supportParameters">>, Result)),
+            support_state = space_support:support_state_per_provider_from_json(maps:get(<<"supportState">>, Result))
         }
     };
 
@@ -126,6 +131,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = private}, Re
         value = #od_share{
             name = maps:get(<<"name">>, Result),
             public_url = maps:get(<<"publicUrl">>, Result),
+            file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
             space = maps:get(<<"spaceId">>, Result),
             handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result)),
             root_file = maps:get(<<"rootFileId">>, Result)
@@ -137,6 +143,7 @@ translate(#gri{type = od_share, id = Id, aspect = instance, scope = public}, Res
         value = #od_share{
             name = maps:get(<<"name">>, Result),
             public_url = maps:get(<<"publicUrl">>, Result),
+            file_type = binary_to_existing_atom(maps:get(<<"fileType">>, Result), utf8),
             handle = utils:null_to_undefined(maps:get(<<"handleId">>, Result)),
             root_file = maps:get(<<"rootFileId">>, Result)
         }
@@ -250,6 +257,17 @@ translate(#gri{type = od_storage, id = Id, aspect = instance, scope = shared}, R
         }
     };
 
+translate(#gri{type = od_token, id = Id, aspect = instance, scope = shared}, Result) ->
+    #document{
+        key = Id,
+        value = #od_token{revoked = maps:get(<<"revoked">>, Result)}
+    };
+
+translate(#gri{type = temporary_token_secret, id = Id, aspect = user, scope = shared}, Result) ->
+    #document{
+        key = Id,
+        value = #temporary_token_secret{generation = maps:get(<<"generation">>, Result)}
+    };
 
 translate(GRI, Result) ->
     ?error("Cannot translate graph sync response body for:~nGRI: ~p~nResult: ~p~n", [
@@ -269,7 +287,6 @@ translate(GRI, Result) ->
 apply_scope_mask(Doc = #document{value = User = #od_user{}}, protected) ->
     Doc#document{
         value = User#od_user{
-            default_space = undefined,
             space_aliases = #{},
 
             eff_groups = [],
@@ -283,7 +300,6 @@ apply_scope_mask(Doc = #document{value = User = #od_user{}}, shared) ->
         value = User#od_user{
             emails = [],
             linked_accounts = [],
-            default_space = undefined,
             space_aliases = #{},
 
             eff_groups = [],

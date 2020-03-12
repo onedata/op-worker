@@ -30,19 +30,29 @@
 
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = children}, Children) ->
+    #{<<"children">> => lists:map(fun({Guid, _Name}) -> Guid end, Children)};
+translate_value(#gri{aspect = As}, Metadata) when
+    As =:= xattrs;
+    As =:= json_metadata;
+    As =:= rdf_metadata
+->
+    #{<<"metadata">> => Metadata};
 translate_value(#gri{aspect = transfers}, TransfersForFile) ->
-    TransfersForFile.
+    TransfersForFile;
+translate_value(#gri{aspect = download_url}, URL) ->
+    #{<<"fileUrl">> => URL}.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
-translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
-    name = Name,
-    owner_id = Owner,
+translate_resource(#gri{id = Guid, aspect = instance, scope = public}, #file_attr{
+    name = FileName,
     type = TypeAttr,
     mode = Mode,
     size = SizeAttr,
-    mtime = ModificationTime
+    mtime = ModificationTime,
+    shares = Shares
 }) ->
     {Type, Size} = case TypeAttr of
         ?DIRECTORY_TYPE ->
@@ -50,12 +60,26 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
         _ ->
             {<<"file">>, SizeAttr}
     end,
+    {_, SpaceId, ShareId} = file_id:unpack_share_guid(Guid),
+    IsSpaceDir = fslogic_uuid:is_space_dir_guid(Guid),
 
-    fun(?USER(_UserId, SessId)) ->
-        FileUuid = file_id:guid_to_uuid(Guid),
-        {ok, ActivePermsType} = file_meta:get_active_perms_type(FileUuid),
-
-        Parent = case fslogic_uuid:is_space_dir_guid(Guid) of
+    fun(#auth{session_id = SessId}) ->
+        DisplayedName = case IsSpaceDir of
+            true ->
+                case space_logic:get_name(SessId, SpaceId) of
+                    {ok, SpaceName} -> SpaceName;
+                    {error, _} = Error -> throw(Error)
+                end;
+            false ->
+                FileName
+        end,
+        IsRootDir = case ShareId of
+            undefined ->
+                fslogic_uuid:is_space_dir_guid(Guid);
+            _ ->
+                lists:member(ShareId, Shares)
+        end,
+        Parent = case IsRootDir of
             true ->
                 null;
             false ->
@@ -64,19 +88,86 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
                     type = op_file,
                     id = ParentGuid,
                     aspect = instance,
+                    scope = public
+                })
+        end,
+        {ok, HasMetadata} = ?check(lfm:has_custom_metadata(
+            SessId, {guid, Guid}
+        )),
+
+        #{
+            <<"name">> => DisplayedName,
+            <<"index">> => FileName,
+            <<"type">> => Type,
+            <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
+            <<"mtime">> => ModificationTime,
+            <<"size">> => Size,
+            <<"hasMetadata">> => HasMetadata,
+            <<"parent">> => Parent
+        }
+    end;
+translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_attr{
+    name = FileName,
+    owner_id = Owner,
+    type = TypeAttr,
+    mode = Mode,
+    size = SizeAttr,
+    mtime = ModificationTime,
+    shares = Shares
+}) ->
+    {Type, Size} = case TypeAttr of
+        ?DIRECTORY_TYPE ->
+            {<<"dir">>, null};
+        _ ->
+            {<<"file">>, SizeAttr}
+    end,
+    {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
+
+    fun(#auth{session_id = SessId}) ->
+        {ok, ActivePermsType} = file_meta:get_active_perms_type(FileUuid),
+
+        {Parent, DisplayedName} = case fslogic_uuid:is_space_dir_guid(Guid) of
+            true ->
+                case space_logic:get_name(SessId, SpaceId) of
+                    {ok, SpaceName} ->
+                        {null, SpaceName};
+                    {error, _} = Error ->
+                        throw(Error)
+                end;
+            false ->
+                {ok, ParentGuid} = ?check(lfm:get_parent(SessId, {guid, Guid})),
+                ParentGRI = gri:serialize(#gri{
+                    type = op_file,
+                    id = ParentGuid,
+                    aspect = instance,
+                    scope = private
+                }),
+                {ParentGRI, FileName}
+        end,
+        {ok, HasMetadata} = ?check(lfm:has_custom_metadata(
+            SessId, {guid, Guid}
+        )),
+        SharesGRI = case Shares of
+            [] ->
+                null;
+            _ ->
+                gri:serialize(#gri{
+                    type = op_file,
+                    id = Guid,
+                    aspect = shares,
                     scope = private
                 })
         end,
 
         #{
-            <<"name">> => Name,
+            <<"name">> => DisplayedName,
             <<"owner">> => gri:serialize(#gri{
                 type = op_user,
                 id = Owner,
                 aspect = instance,
                 scope = shared
             }),
-            <<"index">> => Name,
+            <<"index">> => FileName,
             <<"type">> => Type,
             <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
             <<"activePermissionsType">> => ActivePermsType,
@@ -88,6 +179,8 @@ translate_resource(#gri{id = Guid, aspect = instance, scope = private}, #file_at
             }),
             <<"mtime">> => ModificationTime,
             <<"size">> => Size,
+            <<"hasMetadata">> => HasMetadata,
+            <<"shareList">> => SharesGRI,
             <<"distribution">> => gri:serialize(#gri{
                 type = op_replica,
                 id = Guid,
@@ -104,4 +197,15 @@ translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
         }
     catch throw:{error, Errno} ->
         throw(?ERROR_POSIX(Errno))
-    end.
+    end;
+translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
+    #{
+        <<"list">> => lists:map(fun(ShareId) ->
+            gri:serialize(#gri{
+                type = op_share,
+                id = ShareId,
+                aspect = instance,
+                scope = private
+            })
+        end, ShareIds)
+    }.

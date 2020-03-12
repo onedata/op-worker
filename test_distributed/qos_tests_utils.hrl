@@ -10,6 +10,7 @@
 %%%-------------------------------------------------------------------
 -author("Michal Cwiertnia").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/qos.hrl").
 
 
@@ -23,33 +24,9 @@
 -define(P3, <<"p3">>).
 
 
-% QoS for test providers
--define(P1_TEST_QOS, #{
-    <<"country">> => <<"PL">>,
-    <<"type">> => <<"disk">>,
-    <<"tier">> => <<"t3">>,
-    <<"param1">> => <<"val1">>
-}).
+-define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
 
--define(P2_TEST_QOS, #{
-    <<"country">> => <<"FR">>,
-    <<"type">> => <<"tape">>,
-    <<"tier">> => <<"t2">>
-}).
-
--define(P3_TEST_QOS, #{
-    <<"country">> => <<"PT">>,
-    <<"type">> => <<"disk">>,
-    <<"tier">> => <<"t2">>,
-    <<"param1">> => <<"val1">>
-}).
-
--define(TEST_PROVIDERS_QOS, #{
-    <<"p1">> => ?P1_TEST_QOS,
-    <<"p2">> => ?P2_TEST_QOS,
-    <<"p3">> => ?P3_TEST_QOS
-}).
-
+-define(TEST_DATA, <<"test_data">>).
 
 -type qos_name() :: binary().
 

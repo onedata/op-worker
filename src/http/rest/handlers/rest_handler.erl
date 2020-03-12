@@ -24,7 +24,7 @@
 -include_lib("ctool/include/http/headers.hrl").
 
 -type method() :: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'.
--type parse_body() :: ignore | as_json_params | as_is.
+-type parse_body() :: ignore | as_json_params | {as_is, KeyName :: binary()}.
 -type binding() :: {binding, atom()} | {objectid_binding, atom()} | path_binding.
 -type bound_gri() :: #b_gri{}.
 
@@ -65,7 +65,7 @@
 -spec init(cowboy_req:req(), opts()) ->
     {cowboy_rest, cowboy_req:req(), state()}.
 init(#{method := MethodBin} = Req, Opts) ->
-    Method = binary_to_method(MethodBin),
+    Method = http_utils:binary_to_method(MethodBin),
     % If given method is not allowed, it is not in the map. Such request
     % will stop execution on allowed_methods/2 callback. Use undefined if
     % the method does not exist.
@@ -83,7 +83,7 @@ init(#{method := MethodBin} = Req, Opts) ->
 -spec allowed_methods(cowboy_req:req(), state()) ->
     {[binary()], cowboy_req:req(), state()}.
 allowed_methods(Req, #state{allowed_methods = AllowedMethods} = State) ->
-    {[method_to_binary(M) || M <- AllowedMethods], Req, State}.
+    {[http_utils:method_to_binary(M) || M <- AllowedMethods], Req, State}.
 
 
 %%--------------------------------------------------------------------
@@ -347,7 +347,7 @@ get_data(Req, as_json_params, _Consumes) ->
     end,
     is_map(ParsedBody) orelse throw(?ERROR_MALFORMED_DATA),
     {maps:merge(ParsedBody, QueryParams), Req2};
-get_data(Req, as_is, Consumes) ->
+get_data(Req, {as_is, KeyName}, Consumes) ->
     QueryParams = parse_query_string(Req),
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     ContentType = case Consumes of
@@ -367,7 +367,7 @@ get_data(Req, as_is, Consumes) ->
         _ ->
             Body
     end,
-    {QueryParams#{ContentType => ParsedBody}, Req2}.
+    {QueryParams#{KeyName => ParsedBody}, Req2}.
 
 
 %%--------------------------------------------------------------------
@@ -397,36 +397,6 @@ parse_query_string(Req) ->
 -spec ensure_list(Val | [Val]) -> [Val] when Val :: true | binary().
 ensure_list(Val) when is_list(Val) -> Val;
 ensure_list(Val) -> [Val].
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts a binary representing a REST method to an atom representing
-%% the method.
-%% @end
-%%--------------------------------------------------------------------
--spec binary_to_method(BinMethod :: binary()) -> method().
-binary_to_method(<<"POST">>) -> 'POST';
-binary_to_method(<<"PUT">>) -> 'PUT';
-binary_to_method(<<"GET">>) -> 'GET';
-binary_to_method(<<"PATCH">>) -> 'PATCH';
-binary_to_method(<<"DELETE">>) -> 'DELETE'.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts an atom representing a REST method to a binary representing
-%% the method.
-%% @end
-%%--------------------------------------------------------------------
--spec method_to_binary(Method :: method()) -> binary().
-method_to_binary('POST') -> <<"POST">>;
-method_to_binary('PUT') -> <<"PUT">>;
-method_to_binary('GET') -> <<"GET">>;
-method_to_binary('PATCH') -> <<"PATCH">>;
-method_to_binary('DELETE') -> <<"DELETE">>.
 
 
 %%--------------------------------------------------------------------

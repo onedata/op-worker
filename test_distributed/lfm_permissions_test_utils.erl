@@ -40,7 +40,7 @@
 create_session(Node, UserId, AccessToken) ->
     Nonce = crypto:strong_rand_bytes(10),
     Identity = ?SUB(user, UserId),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), oneclient, allow_data_access_caveats
     ),
@@ -48,7 +48,7 @@ create_session(Node, UserId, AccessToken) ->
         Node,
         session_manager,
         reuse_or_create_fuse_session,
-        [Nonce, Identity, TokenAuth]
+        [Nonce, Identity, TokenCredentials]
     )),
     SessionId.
 

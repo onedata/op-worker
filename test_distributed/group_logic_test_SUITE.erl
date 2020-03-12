@@ -147,6 +147,10 @@ convenience_functions_test(Config) ->
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
+    % Spaces need to be fetched for provider to be able to assert
+    % THROUGH_SPACE authorization without making additional requests.
+    rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1]),
+
     GraphCalls = logic_tests_common:count_reqs(Config, graph),
 
     % Test convenience functions and if they fetch correct scopes
@@ -154,7 +158,12 @@ convenience_functions_test(Config) ->
     % Name is within shared scope
     ?assertMatch(
         {ok, ?GROUP_NAME(?GROUP_1)},
-        rpc:call(Node, group_logic, get_name, [User1Sess, ?GROUP_1])
+        rpc:call(Node, group_logic, get_name, [?GROUP_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertMatch(
+        {ok, ?GROUP_NAME(?GROUP_1)},
+        rpc:call(Node, group_logic, get_name, [User1Sess, ?GROUP_1, ?THROUGH_SPACE(?SPACE_1)])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
@@ -166,7 +175,7 @@ confined_access_token_test(Config) ->
 
     Caveat = #cv_data_path{whitelist = [<<"/spaceid/file/dir.txt">>]},
     AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), rest, allow_data_access_caveats
     ),
@@ -176,11 +185,12 @@ confined_access_token_test(Config) ->
     % data access caveat presence
     ?assertMatch(
         ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
-        rpc:call(Node, group_logic, get_shared_data, [TokenAuth, ?GROUP_1, undefined])
+        rpc:call(Node, group_logic, get_shared_data, [TokenCredentials, ?GROUP_1, undefined])
     ),
-    % Nevertheless, GraphCalls should be increased as TokenAuth was verified to
-    % retrieve caveats
-    ?assertEqual(GraphCalls+1, logic_tests_common:count_reqs(Config, graph)).
+    % Nevertheless, GraphCalls should be increased by 2 as:
+    % 1) TokenCredentials was verified to retrieve caveats
+    % 2) auth_manager fetched token data to subscribe itself for updates from oz
+    ?assertEqual(GraphCalls+2, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================

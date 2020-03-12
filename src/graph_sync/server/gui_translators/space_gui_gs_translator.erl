@@ -71,6 +71,12 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             aspect = eff_groups,
             scope = private
         }),
+        <<"shareList">> => gri:serialize(#gri{
+            type = op_space,
+            id = SpaceId,
+            aspect = shares,
+            scope = private
+        }),
         <<"providerList">> => gri:serialize(#gri{
             type = op_space,
             id = SpaceId,
@@ -100,6 +106,17 @@ translate_resource(#gri{aspect = eff_groups, scope = private}, Groups) ->
                 scope = shared
             })
         end, maps:keys(Groups))
+    };
+translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
+    #{
+        <<"list">> => lists:map(fun(ShareId) ->
+            gri:serialize(#gri{
+                type = op_share,
+                id = ShareId,
+                aspect = instance,
+                scope = private
+            })
+        end, ShareIds)
     };
 translate_resource(#gri{aspect = providers, scope = private}, ProviderIds) ->
     #{

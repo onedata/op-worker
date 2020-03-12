@@ -634,8 +634,8 @@ handle_protocol_upgrade_response(State, Data) ->
                 peer_id = ProviderId
             } = State,
             {ok, MsgId} = clproto_message_id:generate(self()),
-            {ok, Token} = provider_auth:get_identity_token(
-                ?AUD(?OP_WORKER, ProviderId)
+            {ok, Token} = provider_auth:get_identity_token_for_consumer(
+                ?SUB(?ONEPROVIDER, ProviderId)
             ),
             ClientMsg = #client_message{
                 message_id = MsgId,

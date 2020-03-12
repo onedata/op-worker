@@ -63,7 +63,7 @@
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
 %% Functions concerning file shares
--export([create_share/3, remove_share/2, remove_share_by_guid/2]).
+-export([create_share/3, remove_share/2]).
 %% Functions concerning metadata
 -export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
 %% Utility functions
@@ -671,7 +671,7 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name()) ->
-    {ok, {od_share:id(), od_share:root_file_guid()}} | error_reply().
+    {ok, od_share:id()} | error_reply().
 create_share(SessId, FileKey, Name) ->
     ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name) end).
 
@@ -683,15 +683,6 @@ create_share(SessId, FileKey, Name) ->
 -spec remove_share(session:id(), od_share:id()) -> ok | error_reply().
 remove_share(SessId, ShareID) ->
     ?run(fun() -> lfm_shares:remove_share(SessId, ShareID) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file share by ShareGuid.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_share_by_guid(session:id(), od_share:root_file_guid()) -> ok | error_reply().
-remove_share_by_guid(SessId, ShareGuid) ->
-    ?run(fun() -> lfm_shares:remove_share_by_guid(SessId, ShareGuid) end).
 
 %%--------------------------------------------------------------------
 %% @doc

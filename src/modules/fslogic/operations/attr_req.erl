@@ -117,6 +117,22 @@ get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, Ve
             file_ctx:get_file_doc(FileCtx)
     end,
     ShareId = file_ctx:get_share_id_const(FileCtx),
+    % If file is accessed via share guid then attributes like `shares`
+    % should be filtered as to not show any private information,
+    % which includes Ids of other shares created for this file.
+    ShownShares = case ShareId of
+        undefined ->
+            Shares;
+        _ ->
+            % ShareId is added to file_meta.shares only for directly shared
+            % files/directories and not their children, so not every file
+            % accessed via share guid will have ShareId in `file_attrs.shares`
+            case lists:member(ShareId, Shares) of
+                true -> [ShareId];
+                false -> []
+            end
+    end,
+
     {FileName, FileCtx3} = file_ctx:get_aliased_name(FileCtx2, UserCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx3),
     {{Uid, Gid}, FileCtx4} = file_ctx:get_posix_storage_user_context(FileCtx3, UserCtx),
@@ -142,8 +158,8 @@ get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, Ve
     {#fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_attr{
-            uid = Uid,
-            gid = Gid,
+            uid = Uid,  % TODO VFS-6095
+            gid = Gid,  % TODO VFS-6095
             parent_uuid = ParentGuid,
             guid = file_id:pack_share_guid(Uuid, SpaceId, ShareId),
             type = Type,
@@ -154,8 +170,8 @@ get_file_attr_and_conflicts(UserCtx, FileCtx, AllowDeletedFiles, IncludeSize, Ve
             size = Size,
             name = FinalName,
             provider_id = ProviderId,
-            shares = Shares,
-            owner_id = OwnerId
+            shares = ShownShares,
+            owner_id = OwnerId  % TODO VFS-6095
         }
     }, ConflictingFiles}.
 

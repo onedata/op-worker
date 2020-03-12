@@ -110,7 +110,7 @@ auth_to_rest_client(?GUEST_SESS_ID) ->
 auth_to_rest_client(SessId) when is_binary(SessId) ->
     {ok, #document{
         value = #session{
-            auth = Auth,
+            credentials = Credentials,
             type = Type
         }}} = session:get(SessId),
     case Type of
@@ -119,8 +119,8 @@ auth_to_rest_client(SessId) when is_binary(SessId) ->
         provider_incoming ->
             auth_to_rest_client(provider);
         _ ->
-            auth_to_rest_client(Auth)
+            auth_to_rest_client(Credentials)
     end;
 
-auth_to_rest_client(TokenAuth) ->
-    {user, token, auth_manager:get_access_token(TokenAuth)}.
+auth_to_rest_client(TokenCredentials) ->
+    {user, token, auth_manager:get_access_token(TokenCredentials)}.

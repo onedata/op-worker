@@ -36,6 +36,10 @@ translate_resource(GRI = #gri{aspect = instance, scope = private}, #od_user{
         <<"spaceList">> => gri:serialize(GRI#gri{
             aspect = eff_spaces,
             scope = private
+        }),
+        <<"handleServiceList">> => gri:serialize(GRI#gri{
+            aspect = eff_handle_services,
+            scope = private
         })
     };
 translate_resource(#gri{aspect = instance, scope = shared}, #{
@@ -56,4 +60,15 @@ translate_resource(#gri{aspect = eff_spaces, scope = private}, Spaces) ->
                 scope = private
             })
         end, Spaces)
+    };
+translate_resource(#gri{aspect = eff_handle_services, scope = private}, HServices) ->
+    #{
+        <<"list">> => lists:map(fun(HandleServiceId) ->
+            gri:serialize(#gri{
+                type = op_handle_service,
+                id = HandleServiceId,
+                aspect = instance,
+                scope = private
+            })
+        end, HServices)
     }.

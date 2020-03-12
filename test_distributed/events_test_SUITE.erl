@@ -183,30 +183,33 @@ init_per_testcase(Case, Config) when
 ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
-    {ok, SubId} = create_subscription(Case, Worker),
+    initializer:mock_test_file_context(Config, ?FILE_UUID),
+    NewConfig = initializer:create_test_users_and_spaces(
+        ?TEST_FILE(Config, "env_desc.json"), Config
+    ),
     initializer:mock_auth_manager(Config),
+    {ok, SubId} = create_subscription(Case, Worker),
     SessIds = lists:map(fun(N) ->
         Nonce = <<"nonce_", (integer_to_binary(N))/binary>>,
         {ok, SessId} = session_setup(Worker, Nonce),
         SessId
     end, lists:seq(0, 4)),
-    initializer:mock_test_file_context(Config, ?FILE_UUID),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
-        [{session_ids, SessIds}, {subscription_id, SubId} | Config]);
+    [{session_ids, SessIds}, {subscription_id, SubId} | NewConfig];
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Worker),
-    initializer:mock_auth_manager(Config),
-    {ok, SessId} = session_setup(Worker),
     test_utils:mock_new(Workers, space_logic),
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(_, _) ->
         {ok, [oneprovider:get_id()]}
     end),
     initializer:mock_test_file_context(Config, ?FILE_UUID),
-    initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"),
-        [{session_id, SessId} | Config]
-    ).
+    NewConfig = initializer:create_test_users_and_spaces(
+        ?TEST_FILE(Config, "env_desc.json"), Config
+    ),
+    initializer:mock_auth_manager(Config),
+    {ok, SessId} = session_setup(Worker),
+    [{session_id, SessId} | NewConfig].
 
 end_per_testcase(Case, Config) when
     Case =:= emit_file_read_event_should_execute_handler;
@@ -276,12 +279,12 @@ session_setup(Worker) ->
 session_setup(Worker, Nonce) ->
     UserId = <<"user1">>,
     AccessToken = initializer:create_access_token(UserId),
-    TokenAuth = auth_manager:build_token_auth(
+    TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
         initializer:local_ip_v4(), oneclient, allow_data_access_caveats
     ),
     fuse_test_utils:reuse_or_create_fuse_session(
-        Worker, Nonce, ?SUB(user, UserId), TokenAuth, self()
+        Worker, Nonce, ?SUB(user, UserId), TokenCredentials, self()
     ).
 
 %%--------------------------------------------------------------------

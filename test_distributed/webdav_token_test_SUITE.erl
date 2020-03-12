@@ -53,8 +53,8 @@ all() -> [
 
 -define(SPACE_ID, <<"space1">>).
 -define(STORAGE_FILE_ID, filename:join(["/", ?SPACE_ID, <<"dummyFile">>])).
--define(USER, <<"user1">>).
--define(SESSION(Worker, Config), ?SESSION(?USER, Worker, Config)).
+-define(USER1, <<"user1">>).
+-define(SESSION(Worker, Config), ?SESSION(?USER1, Worker, Config)).
 -define(SESSION(User, Worker, Config),
     ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config)).
 -define(UUID, <<"dummyUuid">>).
@@ -65,8 +65,8 @@ all() -> [
 -define(IDP, <<"IDP">>).
 -define(ONEDATA_ACCESS_TOKEN, <<"ONEDATA_ACCESS_TOKEN">>).
 -define(ADMIN_ID, <<"ADMIN_ID">>).
--define(ADMIN_AUTH,
-    auth_manager:build_token_auth(
+-define(ADMIN_CREDENTIALS,
+    auth_manager:build_token_credentials(
         ?ONEDATA_ACCESS_TOKEN, undefined,
         undefined, undefined, disallow_data_access_caveats
     )).
@@ -107,7 +107,7 @@ user_operation_fails_with_expired_token_on_secure_storage(Config) ->
     StorageId = initializer:get_storage_id(W),
     TTL = 0,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
-    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
 
     % setxattr should return EKEYEXPIRED due to TTL=0
@@ -117,7 +117,7 @@ user_operation_fails_with_expired_token_on_secure_storage(Config) ->
     % ensure that setxattr was repeated
     ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 2),
     % ensure that token was acquired in admin_ctx
-    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP])).
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP])).
 
 root_operation_fails_with_expired_token_on_secure_storage(Config) ->
     operation_with_expired_token_in_admin_ctx_should_fail_base(?ROOT_SESS_ID, Config).
@@ -128,7 +128,7 @@ user_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
     StorageId = initializer:get_storage_id(W),
     TTL = 5,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
-    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP]),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
 
     ?assertEqual(ok, setxattr(W, SDHandle, <<"K">>, <<"V">>)),
@@ -143,7 +143,7 @@ user_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
     % ensure that setxattr was repeated
     ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 3),
     % ensure that token was acquired in admin_ctx
-    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [SessionId, ?USER, ?IDP])).
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP])).
 
 
 root_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
@@ -158,7 +158,7 @@ operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     StorageId = initializer:get_storage_id(W),
     TTL = 0,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
-    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
 
     % setxattr should return EKEYEXPIRED due to TTL=0
@@ -168,7 +168,7 @@ operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     % ensure that setxattr was repeated
     ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 2),
     % ensure that token was acquired in admin_ctx
-    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP])).
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP])).
 
 
 operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Config) ->
@@ -177,7 +177,7 @@ operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Confi
     TTL = 5,
     SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
-    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP]),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP]),
 
     ?assertEqual(ok, setxattr(W, SDHandle, <<"K">>, <<"V">>)),
 
@@ -191,7 +191,7 @@ operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Confi
     % ensure that setxattr was repeated
     ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 3),
     % ensure that token was acquired in admin_ctx
-    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_AUTH, ?ADMIN_ID, ?IDP])).
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP])).
 
 
 %%%===================================================================
@@ -211,7 +211,7 @@ init_per_testcase(Case, Config) when
     Case =:= root_operation_fails_with_expired_token_on_insecure_storage;
     Case =:= user_operation_succeeds_with_refreshed_token_on_insecure_storage;
     Case =:= root_operation_succeeds_with_refreshed_token_on_insecure_storage
-    ->
+->
     [W | _] = ?config(op_worker_nodes, Config),
     enable_webdav_test_mode_insecure_storage(W, initializer:get_storage_id(W)),
     test_utils:mock_new(W, [helpers, helpers_fallback, helpers_reload], [passthrough]),
@@ -222,7 +222,7 @@ init_per_testcase(Case, Config) when
     Case =:= root_operation_fails_with_expired_token_on_secure_storage;
     Case =:= user_operation_succeeds_with_refreshed_token_on_secure_storage;
     Case =:= root_operation_succeeds_with_refreshed_token_on_secure_storage
-    ->
+->
     [W | _] = ?config(op_worker_nodes, Config),
     enable_webdav_test_mode_secure_storage(W, initializer:get_storage_id(W)),
     test_utils:mock_new(W, [helpers, helpers_fallback, helpers_reload], [passthrough]),

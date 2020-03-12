@@ -108,7 +108,7 @@ fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
-authorize(#op_req{auth = ?NOBODY}, _) ->
+authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
 authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
@@ -256,7 +256,6 @@ delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
 
 %% @private
 -spec fetch_qos_entry(aai:auth(), qos_entry:id()) ->
