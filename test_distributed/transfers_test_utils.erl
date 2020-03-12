@@ -125,11 +125,11 @@ root_name(FunctionName, Type, FileKeyType) ->
     RandIntBin = str_utils:to_binary(rand:uniform(?RANDOM_NAMESPACE_SIZE)),
     root_name(FunctionName, Type, FileKeyType, RandIntBin).
 
-root_name(FunctionName, Type, FileKeyType, RandomSufix) ->
+root_name(FunctionName, Type, FileKeyType, RandomSuffix) ->
     TypeBin = str_utils:to_binary(Type),
     FileKeyTypeBin = str_utils:to_binary(FileKeyType),
     FunctionNameBin = str_utils:to_binary(FunctionName),
-    SuffixBin = str_utils:to_binary(RandomSufix),
+    SuffixBin = str_utils:to_binary(RandomSuffix),
     <<FunctionNameBin/binary, "_", TypeBin/binary, "_", FileKeyTypeBin/binary, "_", SuffixBin/binary>>.
 
 %%-------------------------------------------------------------------
