@@ -293,10 +293,7 @@ delete(#document{
         ok = delete_child_link(ParentUuid, Scope, FileUuid, FileName),
         LocalLocationId = file_location:local_id(FileUuid),
         fslogic_location_cache:delete_location(FileUuid, LocalLocationId),
-        case datastore_model:delete(?CTX, FileUuid) of
-            {error, not_found} -> ok;
-            ok -> ok
-        end
+        datastore_model:delete(?CTX, FileUuid)
     end);
 delete({path, Path}) ->
     ?run(begin

@@ -15,11 +15,11 @@
 %%% Communication flow is present on the below example.
 %%% Let's assume that we have providers P1 and P2, both supporting
 %%% the same space.
-%%% 1. replica_deletion_master:enqueue is called on P1 as the result of
+%%% 1. replica_deletion_master:request_deletion is called on P1 as the result of
 %%%    autocleaning or replica_eviction
 %%% 2. Request for support of replica_deletion is sent to P2.
-%%%    replica_deletion_master calls ?MODULE:request which created
-%%%    replica_deletion document and sets action=request.
+%%%    replica_deletion_master calls ?MODULE:request which creates
+%%%    replica_deletion document and sets action=?REQUEST_DELETION_SUPPORT.
 %%% 3. P2 handles change of the document:
 %%%     1) if it can support deletion, it acquires write lock for given
 %%%        file and replies by calling ?MODULE:confirm

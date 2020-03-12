@@ -80,7 +80,10 @@ get_blocks_for_sync(Locations, Blocks) ->
 %% replicated in other provider.
 %% NOTE: Currently this functions support only whole files.
 %%       If remote provider doesn't have whole file, he is not included
-%% in the response.
+%%       in the response.
+%% NOTE: For better performance, pass location docs fetched without
+%%       local blocks (option skip_local_blocks). In such case,
+%%       duplicated blocks for local blocks won't be found.
 %% @end
 %%-------------------------------------------------------------------
 -spec get_remote_duplicated_blocks([file_location:doc()]) ->
@@ -97,7 +100,7 @@ get_remote_duplicated_blocks(LocationDocs) ->
                 LocalBlocks ->
                     RemoteLocations = LocationDocs -- [LocalLocation],
                     get_duplicated_blocks_per_provider(LocalBlocks, LocalVV, RemoteLocations)
-                %TODO VFS-4622 maybe result should be sorted by version or by size?
+                    %TODO VFS-4622 maybe result should be sorted by version or by size?
             end
     end.
 

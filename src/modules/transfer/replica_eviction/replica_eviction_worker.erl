@@ -17,6 +17,7 @@
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -138,7 +139,7 @@ transfer_regular_file(FileCtx, Params = #transfer_params{supporting_provider = u
         undefined ->
             transfer:increment_files_processed_counter(TransferId);
         DeletionRequest ->
-            replica_deletion_master:request_eviction_deletion(SpaceId, DeletionRequest, TransferId)
+            replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB)
     end,
     ok;
 transfer_regular_file(FileCtx, #transfer_params{
@@ -152,4 +153,4 @@ transfer_regular_file(FileCtx, #transfer_params{
     VV = file_location:get_version_vector(LocalFileLocationDoc),
     Blocks = [#file_block{offset = 0, size = Size}],
     DeletionRequest = replica_deletion_master:prepare_deletion_request(FileUuid, SupportingProvider, Blocks, VV),
-    replica_deletion_master:request_eviction_deletion(SpaceId, DeletionRequest, TransferId).
+    replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB).

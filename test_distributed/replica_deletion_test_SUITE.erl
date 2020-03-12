@@ -17,7 +17,7 @@
 
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1, all/0]).
 
-%% API
+%% tests
 -export([
     successful_replica_deletion_test/1,
     failed_replica_deletion_test/1,
@@ -223,18 +223,28 @@ mock_process_result_failure(Worker, CountdownServer, JobIdsToCounters) ->
     mock_process_result(Worker, CountdownServer, JobIdsToCounters, {error, replica_deletion_refused}).
 
 mock_process_result_cancel(Worker, CountdownServer, JobIdsToCounters) ->
-    ok = test_utils:mock_new(Worker, replica_deletion_master),
-    ok = test_utils:mock_expect(Worker, replica_deletion_master,  process_result, fun
-        (_SpaceId, FileUuid, Result = {error, Reason}, JobId, _JobType) when Reason =:= precondition_not_satisfied orelse Reason =:= canceled ->
-            countdown_server:decrease(CountdownServer, maps:get(JobId, JobIdsToCounters), {FileUuid, Result})
-    end).
+    mock_process_result(Worker, CountdownServer, JobIdsToCounters,
+        [{error, precondition_not_satisfied}, {error, canceled}]).
 
-mock_process_result(Worker, CountdownServer, JobIdsToCounters, ExpectedResult) ->
+%%ok = test_utils:mock_new(Worker, replica_deletion_master),
+%%    ok = test_utils:mock_expect(Worker, replica_deletion_master,  process_result, fun
+%%        (_SpaceId, FileUuid, Result = {error, Reason}, JobId, _JobType) when Reason =:= precondition_not_satisfied orelse Reason =:= canceled ->
+%%            countdown_server:decrease(CountdownServer, maps:get(JobId, JobIdsToCounters), {FileUuid, Result})
+%%    end).
+
+mock_process_result(Worker, CountdownServer, JobIdsToCounters, AcceptedResults) ->
+    AcceptedResults2 = utils:ensure_list(AcceptedResults),
     ok = test_utils:mock_new(Worker, replica_deletion_master),
-    ok = test_utils:mock_expect(Worker, replica_deletion_master,  process_result, fun
-        (_SpaceId, FileUuid, Result, JobId, _JobType) when Result =:= ExpectedResult ->
-            countdown_server:decrease(CountdownServer, maps:get(JobId, JobIdsToCounters), {FileUuid, Result})
-    end).
+    ok = test_utils:mock_expect(Worker, replica_deletion_master,  process_result,
+        fun(_SpaceId, FileUuid, Result, JobId, _JobType) ->
+            case lists:member(Result, AcceptedResults2) of
+                true ->
+                    countdown_server:decrease(CountdownServer, maps:get(JobId, JobIdsToCounters), {FileUuid, Result});
+                false ->
+                    ok
+            end
+        end
+    ).
 
 mock_deletion_predicate(Worker, Result) ->
     ok = test_utils:mock_new(Worker, replica_deletion_worker),

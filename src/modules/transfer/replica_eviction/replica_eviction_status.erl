@@ -67,6 +67,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 
 -export([
     handle_enqueued/1, handle_active/1,
@@ -120,7 +121,7 @@ handle_active(TransferId) ->
 -spec handle_aborting(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_aborting(TransferId) ->
     OnSuccessfulUpdate = fun(#document{value = #transfer{space_id = SpaceId}}) ->
-        replica_deletion_master:cancel_eviction_request(SpaceId, TransferId)
+        replica_deletion_master:cancel_request(SpaceId, TransferId, ?EVICTION_JOB)
     end,
 
     transfer:update_and_run(

@@ -148,7 +148,7 @@ end, __Distributions))).
                     true
                 catch
                     E:R ->
-                        ct:pal("ERROR: ~p", [{E, R}]),
+                        ct:pal("ERROR: ~p~nStacktrace:~n~p", [{E, R}, erlang:get_stacktrace()]),
                         false
                 end
         end, false, __ARIds)
@@ -972,7 +972,9 @@ list(Worker, SpaceId, LinkId, Offset, Limit) ->
     rpc:call(Worker, autocleaning_api, list_reports, [SpaceId, LinkId, Offset, Limit]).
 
 get_run_report(Worker, ARId) ->
-    rpc:call(Worker, autocleaning_api, get_run_report, [ARId]).
+    Result = rpc:call(Worker, autocleaning_api, get_run_report, [ARId]),
+    ct:print("Result: ~p", [Result]),
+    Result.
 
 delete(Worker, SpaceId, ARId) ->
     rpc:call(Worker, autocleaning_run, delete, [ARId, SpaceId]).

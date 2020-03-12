@@ -6,7 +6,9 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% gen_server started as a worker of replica_deletion_workers_pool
-%%% This processes are used to delete file_replicas from storage
+%%% This processes are used to delete file_replicas from storage after
+%%% request for deleting file replica has been granted by a remote
+%%% provider.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_deletion_worker).
@@ -174,35 +176,47 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec custom_predicate(od_space:id(), replica_deletion:job_type(), replica_deletion:job_id()) -> true | false.
-custom_predicate(SpaceId, ?AUTOCLEANING_JOB, BatchId) ->
-    autocleaning_run_controller:replica_deletion_predicate(SpaceId, BatchId);
-custom_predicate(_SpaceId, ?EVICTION_JOB, _) ->
-    % TODO VFS-5990 check whether eviction wasn't canceled
-    true.
+custom_predicate(SpaceId, JobType, JobId) ->
+    Module = replica_deletion_master:job_type_to_module(JobType),
+    case erlang:function_exported(Module, replica_deletion_predicate, 2) of
+        true -> Module:replica_deletion_predicate(SpaceId, JobId);
+        false -> true
+    end.
 
 -spec delete_if_not_opened(file_meta:uuid(), od_space:id(), [fslogic_blocks:blocks()], version_vector:version_vector(),
     replica_deletion:id(), replica_deletion:job_type(), replica_deletion:job_id()) -> any().
 delete_if_not_opened(FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
+    ?alert("DUPA1"),
     case file_handles:exists(FileUuid) of
         false ->
+            ?alert("DUPA2"),
             % file is not opened, we can delete it
             Result = case replica_deletion_lock:acquire_write_lock(FileUuid) of
                 ok ->
+                    ?alert("DUPA3"),
                     DeletionResult = case replica_deletion_req:delete_blocks(FileCtx, Blocks, VV) of
                         ok ->
+                            ?alert("DUPA4"),
                             {ok, fslogic_blocks:size(Blocks)};
                         Error ->
+                            ?alert("DUPA5"),
                             Error
                     end,
+                    ?alert("DUPA6"),
                     replica_deletion_lock:release_write_lock(FileUuid),
+                    ?alert("DUPA7"),
                     DeletionResult;
                 Error ->
+                    ?alert("DUPA8"),
                     Error
             end,
+            ?alert("DUPA9"),
             replica_deletion:release_supporting_lock(RDId),
+            ?alert("DUPA10"),
             replica_deletion_master:process_result(SpaceId, FileUuid, Result, JobId, JobType);
         true ->
+            ?alert("DUPA11"),
             replica_deletion_master:process_result(SpaceId, FileUuid, {error, file_opened}, JobId, JobType)
     end.

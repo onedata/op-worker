@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements view_traverse behaviour (see view_traverse.erl).
-%%% It is used by autocleaning mechanism to traverse over file_popularity_view
+%%% It is used by autocleaning_run_controller to traverse over file_popularity_view
 %%% in given space and schedule deletions of the least popular file replicas.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -17,6 +17,7 @@
 -behaviour(view_traverse).
 
 -include("modules/fslogic/file_popularity_view.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 -include_lib("cluster_worker/include/traverse/view_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -100,8 +101,10 @@ process_row(Row, #{
     BatchNo = autocleaning_run_controller:batch_no(RowNumber, BatchSize),
     try autocleaning_rules:are_all_rules_satisfied(FileCtx, AutocleaningRules) of
         true ->
+            ?alert("RULES SETISFIED"),
             maybe_schedule_replica_deletion_task(FileCtx, AutocleaningRunId, SpaceId, BatchNo);
         false ->
+            ?alert("RULES NOT SETISFIED"),
             autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo)
         catch
         Error:Reason ->
@@ -183,7 +186,7 @@ maybe_schedule_replica_deletion_task(FileCtx, ARId, SpaceId, BatchNo) ->
             autocleaning_run_controller:notify_processed_file(SpaceId, ARId, BatchNo);
         DeletionRequest ->
             BatchId = autocleaning_run_controller:pack_batch_id(ARId, BatchNo),
-            ok = replica_deletion_master:request_autocleaning_deletion(SpaceId, DeletionRequest, BatchId)
+            ok = replica_deletion_master:request_deletion(SpaceId, DeletionRequest, BatchId, ?AUTOCLEANING_JOB)
     end.
 
 -spec notify_finished_traverse(task_id()) -> ok.

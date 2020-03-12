@@ -142,6 +142,7 @@ init(_Args) ->
     erlang:send_after(0, self(), {sync_timer, ?INIT_PATHS_CACHES(all)}),
 
     transfer:init(),
+    replica_deletion_master:init_workers_pool(),
     autocleaning_view_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
 
@@ -239,6 +240,7 @@ handle(_Request) ->
 cleanup() ->
     transfer:cleanup(),
     autocleaning_view_traverse:stop_pool(),
+    replica_deletion_master:stop_workers_pool(),
     replica_synchronizer:terminate_all(),
     ok.
 

@@ -8,7 +8,7 @@
 %%% This gen_server is responsible for controlling run of autocleaning
 %%% with given configuration.
 %%% It is started per specific run and dies after the run is finished.
-%%% Only one run can be processed in the space at a time.
+%%% Only one run can be performed in the space at a time.
 %%%
 %%% It uses autocleaning_view_traverse to start traverse over file_popularity view
 %%% to choose the least popular files (according to the popularity
@@ -48,6 +48,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("modules/autocleaning/autocleaning.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -427,7 +428,7 @@ handle_cast(?MESSAGE(MessageContent, ARId), State = #state{
     catch
         E:R ->
             lists:foreach(fun(BatchNo) ->
-                replica_deletion_master:cancel_autocleaning_request(SpaceId, pack_batch_id(ARId, BatchNo))
+                cancel_replica_deletion_request(SpaceId, ARId, BatchNo)
             end, maps:keys(BatchesCounters)),
             autocleaning_view_traverse:cancel(SpaceId, ARId),
             {stop, {error, {E, R}}}
@@ -591,7 +592,7 @@ maybe_stop_cleaning(State = #state{
             autocleaning_view_traverse:cancel(SpaceId, ARId)
     end,
     lists:foreach(fun(BatchNo) ->
-        replica_deletion_master:cancel_autocleaning_request(SpaceId, pack_batch_id(ARId, BatchNo))
+        cancel_replica_deletion_request(SpaceId, ARId, BatchNo)
     end, maps:keys(BatchesCounters)),
     State#state{traverse_cancelled = true};
 maybe_stop_cleaning(State) ->
@@ -728,3 +729,6 @@ init_batch_file_counters(FilesToProcess) ->
         files_to_process = FilesToProcess,
         files_processed = 0
     }.
+
+cancel_replica_deletion_request(SpaceId, AutocleaningRunId, BatchNo) ->
+    replica_deletion_master:cancel_request(SpaceId, pack_batch_id(AutocleaningRunId, BatchNo), ?AUTOCLEANING_JOB).
