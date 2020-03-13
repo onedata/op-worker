@@ -27,7 +27,8 @@
 -export([
     open_race_test/1, make_open_race_test/1, make_open_race_test2/1, create_open_race_test/1,
     create_open_race_test2/1, create_delete_race_test/1,
-    rename_to_opened_file_test/1, create_file_existing_on_disk_test/1, open_delete_race_test/1
+    rename_to_opened_file_test/1, create_file_existing_on_disk_test/1, open_delete_race_test/1,
+    open_delete_race_test2/1
 ]).
 
 -define(TEST_CASES, [
@@ -35,7 +36,7 @@
     create_open_race_test2, create_delete_race_test,
 %%    rename_to_opened_file_test, % TODO VFS-5290
 %%    create_file_existing_on_disk_test, % TODO VFS-5271
-    open_delete_race_test
+    open_delete_race_test, open_delete_race_test2
 ]).
 
 -define(PERFORMANCE_TEST_CASES, []).
@@ -163,7 +164,7 @@ make_open_race_test(Config, Mock) ->
             ?assertEqual(get_file_id(W, Open1), get_file_id(W, Open2)),
             check_dir(W, 1);
         file_meta ->
-            ?assertMatch({error,enoent}, OpenAns),
+            ?assertMatch({error, ?ENOENT}, OpenAns),
             check_dir(W, 0)
     end,
 
@@ -335,10 +336,24 @@ create_file_existing_on_disk_test(Config) ->
     ok.
 
 open_delete_race_test(Config) ->
+    open_delete_race_test_base(Config, true).
+
+open_delete_race_test2(Config) ->
+    open_delete_race_test_base(Config, false).
+
+open_delete_race_test_base(Config, MockDeletionLink) ->
     [W | _] = ?config(op_worker_nodes, Config),
     Master = self(),
 
-    check_dir_init(W),
+    case MockDeletionLink of
+        true ->
+            check_dir_init(W),
+            test_utils:mock_new(W, fslogic_delete, [passthrough]),
+            test_utils:mock_expect(W, fslogic_delete, get_open_file_handling_method,
+                fun(Ctx) -> {deletion_link, Ctx} end);
+        _ ->
+            check_dir_init(W, [?DELETED_OPENED_FILES_DIR_STRING])
+    end,
 
     test_utils:mock_new(W, file_req, [passthrough]),
     test_utils:mock_expect(W, file_req, open_on_storage,
@@ -380,6 +395,8 @@ open_delete_race_test(Config) ->
     ?assertMatch({ok, _}, OpenAns),
 
     check_dir(W, 1),
+    ?assertEqual(ok, lfm_proxy:close_all(W)),
+    test_utils:mock_unload(W, [fslogic_delete]),
     ok.
 
 %%%===================================================================
@@ -403,15 +420,18 @@ end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    test_utils:mock_unload(Workers, [communicator, file_meta, file_req, sd_utils, fslogic_times]).
+    test_utils:mock_unload(Workers, [communicator, file_meta, file_req, sd_utils, fslogic_times, fslogic_delete]).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 check_dir_init(W) ->
+    check_dir_init(W, ["space_id1"]).
+
+check_dir_init(W, Path) ->
     MountPoint = get_mount_point(W),
-    StorageSpacePath = filename:join([MountPoint, "space_id1"]),
+    StorageSpacePath = filename:join([MountPoint | Path]),
 
     Size = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
         {ok, Dirs} -> length(Dirs);

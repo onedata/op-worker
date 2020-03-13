@@ -40,6 +40,9 @@
     get_finished_scans_num/1, get_finished_scans_num/2,
     get_import_finish_time/1, get_last_update_finish_time/1]).
 
+% export for mocking in CT tests
+-export([update/3]).
+
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
 
@@ -102,7 +105,7 @@ ensure_created(SpaceId, StorageId) ->
 %%-------------------------------------------------------------------
 -spec prepare_new_import_scan(od_space:id(), storage:id(), non_neg_integer()) -> {ok, doc()}.
 prepare_new_import_scan(SpaceId, StorageId, Timestamp) ->
-    {ok, _} = update(SpaceId, StorageId, fun(SSM) ->
+    {ok, _} = storage_sync_monitoring:update(SpaceId, StorageId, fun(SSM) ->
         SSM2 = reset_queue_length_histograms(SSM, Timestamp),
         SSM3 = increment_queue_length_histograms(SSM2, Timestamp, 1),
         SSM4 = reset_control_counters(SSM3),
@@ -124,7 +127,7 @@ prepare_new_import_scan(SpaceId, StorageId, Timestamp) ->
 %%-------------------------------------------------------------------
 -spec prepare_new_update_scan(od_space:id(), storage:id(), non_neg_integer()) -> {ok, doc()}.
 prepare_new_update_scan(SpaceId, StorageId, Timestamp) ->
-    {ok, _} = update(SpaceId, StorageId, fun(SSM) ->
+    {ok, _} = storage_sync_monitoring:update(SpaceId, StorageId, fun(SSM) ->
         SSM2 = reset_queue_length_histograms(SSM, Timestamp),
         SSM3 = increment_queue_length_histograms(SSM2, Timestamp, 1),
         SSM4 = reset_control_counters(SSM3),
@@ -142,7 +145,7 @@ prepare_new_update_scan(SpaceId, StorageId, Timestamp) ->
 %%-------------------------------------------------------------------
 -spec increase_to_process_counter(od_space:id(), storage:id(), non_neg_integer()) -> ok.
 increase_to_process_counter(SpaceId, StorageId, Value) ->
-    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(storage_sync_monitoring:update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         to_process = FilesToProcess
     }) ->
         Timestamp = time_utils:cluster_time_seconds(),
@@ -159,7 +162,7 @@ increase_to_process_counter(SpaceId, StorageId, Value) ->
 %%-------------------------------------------------------------------
 -spec mark_imported_file(od_space:id(), storage:id()) -> ok.
 mark_imported_file(SpaceId, StorageId) ->
-    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(storage_sync_monitoring:update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         imported = ImportedFiles,
         imported_sum = ImportedFilesSum,
         imported_min_hist = MinHist,
@@ -187,7 +190,7 @@ mark_imported_file(SpaceId, StorageId) ->
 %%-------------------------------------------------------------------
 -spec mark_updated_file(od_space:id(), storage:id()) -> ok.
 mark_updated_file(SpaceId, StorageId) ->
-    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(storage_sync_monitoring:update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         updated = UpdatedFiles,
         updated_sum = UpdatedFilesSum,
         updated_min_hist = MinHist,
@@ -215,7 +218,7 @@ mark_updated_file(SpaceId, StorageId) ->
 %%-------------------------------------------------------------------
 -spec mark_deleted_file(od_space:id(), storage:id()) -> ok.
 mark_deleted_file(SpaceId, StorageId) ->
-    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(storage_sync_monitoring:update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         deleted = DeletedFiles,
         deleted_sum = DeletedFilesSum,
         deleted_min_hist = MinHist,
@@ -245,7 +248,7 @@ mark_deleted_file(SpaceId, StorageId) ->
 %%-------------------------------------------------------------------
 -spec mark_processed_file(od_space:id(), storage:id()) -> ok.
 mark_processed_file(SpaceId, StorageId) ->
-    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(storage_sync_monitoring:update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         other_processed = FilesProcessed
     }) ->
         Timestamp = time_utils:cluster_time_seconds(),
@@ -263,7 +266,7 @@ mark_processed_file(SpaceId, StorageId) ->
 %%-------------------------------------------------------------------
 -spec mark_failed_file(od_space:id(), storage:id()) -> ok.
 mark_failed_file(SpaceId, StorageId) ->
-    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
+    ok = ?extract_ok(storage_sync_monitoring:update(SpaceId, StorageId, fun(SSM = #storage_sync_monitoring{
         failed = FilesFailed
     }) ->
         Timestamp = time_utils:cluster_time_seconds(),
@@ -479,7 +482,7 @@ get_metric(SpaceId, Type, Window) ->
 
 -spec reset(od_space:id(), storage:id()) -> ok.
 reset(SpaceId, StorageId) ->
-    ok = ?extract_ok(update(SpaceId, StorageId, fun(SSM) ->
+    ok = ?extract_ok(storage_sync_monitoring:update(SpaceId, StorageId, fun(SSM) ->
         case is_scan_in_progress(SSM) of
             true ->
                 SSM2 = case SSM of
@@ -497,7 +500,9 @@ reset(SpaceId, StorageId) ->
 
 -spec mark_finished_scan(od_space:id(), storage:id()) -> ok | {error, term()}.
 mark_finished_scan(SpaceId, StorageId) ->
-    ?extract_ok(update(SpaceId, StorageId, fun(SSM) -> {ok, mark_finished_scan(SSM)} end)).
+    ?extract_ok(storage_sync_monitoring:update(SpaceId, StorageId, fun(SSM) ->
+        {ok, mark_finished_scan(SSM)}
+    end)).
 
 %%%===================================================================
 %%% Internal functions

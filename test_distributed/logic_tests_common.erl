@@ -137,11 +137,11 @@ simulate_push(Config, PushMessage) when is_list(Config)->
     simulate_push(Node, PushMessage);
 simulate_push(Node, PushMessage) when is_atom(Node) ->
     Pid = rpc:call(Node, gs_client_worker, process_push_message, [PushMessage]),
-    WaitForCompletion = fun() ->
-        case erlang:is_process_alive(Pid) of
+    WaitForCompletion = fun F() ->
+        case rpc:call(Node, erlang, is_process_alive, [Pid]) of
             true ->
                 timer:sleep(100),
-                WaitForCompletion();
+                F();
             false ->
                 ok
         end
