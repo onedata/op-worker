@@ -41,7 +41,7 @@
 -record(rest_args, {
     method :: get | patch | post | put | delete,
     path = <<"/">> :: binary(),
-    headers = undefined :: undefined | #{Key :: binary() => Value :: binary()},
+    headers = #{} :: #{Key :: binary() => Value :: binary()},
     body = <<>> :: binary()
 }).
 -type rest_args() :: #rest_args{}.
@@ -49,7 +49,6 @@
 -record(gs_args, {
     operation :: gs_protocol:operation(),
     gri :: gri:gri(),
-    subscribe = false :: boolean(),
     auth_hint = undefined :: gs_protocol:auth_hint(),
     data = undefined :: undefined | map()
 }).

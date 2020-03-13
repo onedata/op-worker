@@ -461,13 +461,12 @@ is_client_supported_by_node(Client, Node, SupportedClientsPerNode) ->
 make_gs_request(_Config, Node, Client, #gs_args{
     operation = Operation,
     gri = GRI,
-    subscribe = Subscribe,
     auth_hint = AuthHint,
     data = Data
 }) ->
     case connect_via_gs(Node, Client) of
         {ok, GsClient} ->
-            case gs_client:graph_request(GsClient, GRI, Operation, Data, Subscribe, AuthHint) of
+            case gs_client:graph_request(GsClient, GRI, Operation, Data, false, AuthHint) of
                 {ok, ?GS_RESP(Result)} ->
                     {ok, Result};
                 {error, _} = Error ->
@@ -536,10 +535,7 @@ make_rest_request(_Config, Node, Client, #rest_args{
     body = Body
 }) ->
     URL = get_rest_endpoint(Node, Path),
-    HeadersWithAuth = maps:merge(
-        utils:ensure_defined(Headers, undefined, #{}),
-        get_auth_headers(Client)
-    ),
+    HeadersWithAuth = maps:merge(Headers, get_auth_headers(Client)),
     CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
     Opts = [{ssl_options, [{cacerts, CaCerts}]}],
 

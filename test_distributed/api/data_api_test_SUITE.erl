@@ -146,36 +146,43 @@ list_children_test(Config) ->
         },
         bad_values = [
             {<<"limit">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-            {<<"limit">>, -100, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
-            {<<"limit">>, 0, ?ERROR_BAD_VALUE_TOO_LOW(<<"limit">>, 1)},
+            {<<"limit">>, -100, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+            {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
+            {<<"limit">>, 1001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
             {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
         ]
     },
 
     ConstructPrepareRestArgsFun = fun(FileId) ->
         fun(#api_test_ctx{data = Data}) ->
-            Qs = construct_list_files_qs(Data),
             #rest_args{
                 method = get,
-                path = <<"data/", FileId/binary, "/children", Qs/binary>>
+                path = http_utils:append_url_parameters(
+                    <<"data/", FileId/binary, "/children">>,
+                    maps:with([<<"limit">>, <<"offset">>], Data)
+                )
             }
         end
     end,
     ConstructPrepareDeprecatedFilePathRestArgsFun = fun(FilePath) ->
         fun(#api_test_ctx{data = Data}) ->
-            Qs = construct_list_files_qs(Data),
             #rest_args{
                 method = get,
-                path = <<"files", FilePath/binary, Qs/binary>>
+                path = http_utils:append_url_parameters(
+                    <<"files", FilePath/binary>>,
+                    maps:with([<<"limit">>, <<"offset">>], Data)
+                )
             }
         end
     end,
     ConstructPrepareDeprecatedFileIdRestArgsFun = fun(Fileid) ->
         fun(#api_test_ctx{data = Data}) ->
-            Qs = construct_list_files_qs(Data),
             #rest_args{
                 method = get,
-                path = <<"files-id/", Fileid/binary, Qs/binary>>
+                path = http_utils:append_url_parameters(
+                    <<"files-id/", Fileid/binary>>,
+                    maps:with([<<"limit">>, <<"offset">>], Data)
+                )
             }
         end
     end,
@@ -528,33 +535,6 @@ end_per_testcase(_Case, Config) ->
 assert_error_json(ExpError, Json) ->
     ExpErrorJson = #{<<"error">> => errors:to_json(ExpError)},
     ?assertEqual(ExpErrorJson, Json).
-
-
-%% @private
--spec construct_list_files_qs(Data :: map()) -> binary().
-construct_list_files_qs(Data) ->
-    QsParams = [QsParam || QsParam <- [
-        construct_qs_param(<<"limit">>, Data),
-        construct_qs_param(<<"offset">>, Data)
-    ], QsParam /= <<>>],
-
-    case str_utils:join_binary(QsParams, <<"&">>) of
-        <<>> ->
-            <<>>;
-        Qs ->
-            <<"?", Qs/binary>>
-    end.
-
-
-%% @private
--spec construct_qs_param(ParamName :: binary(), Data :: map()) -> binary().
-construct_qs_param(ParamName, Data) ->
-    case maps:get(ParamName, Data, undefined) of
-        undefined ->
-            <<>>;
-        Value ->
-            <<ParamName/binary, "=", (str_utils:to_binary(Value))/binary>>
-    end.
 
 
 %% @private
