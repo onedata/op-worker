@@ -98,9 +98,9 @@ list_children_test(Config) ->
         ?ATTEMPTS
     ),
 
-    UserInSpace1Client = {user, UserInSpace1},
-    UserInSpace2Client = {user, UserInSpace2},
-    UserInBothSpacesClient = {user, UserInBothSpaces},
+    UserInSpace1Client = ?USER(UserInSpace1),
+    UserInSpace2Client = ?USER(UserInSpace2),
+    UserInBothSpacesClient = ?USER(UserInBothSpaces),
 
     SupportedClientsPerNode = #{
         Provider1 => [UserInSpace1Client, UserInSpace2Client, UserInBothSpacesClient],
@@ -109,21 +109,21 @@ list_children_test(Config) ->
 
     ClientSpecForSpace1Listing = #client_spec{
         correct = [UserInSpace1Client, UserInBothSpacesClient],
-        unauthorized = [nobody],
+        unauthorized = [?NOBODY],
         forbidden = [UserInSpace2Client],
         supported_clients_per_node = SupportedClientsPerNode
     },
 
     ClientSpecForSpace2Listing = #client_spec{
         correct = [UserInSpace2Client, UserInBothSpacesClient],
-        unauthorized = [nobody],
+        unauthorized = [?NOBODY],
         forbidden = [UserInSpace1Client],
         supported_clients_per_node = SupportedClientsPerNode
     },
 
     ClientSpecForUserInBothSpacesUserRootDirListing = #client_spec{
         correct = [UserInBothSpacesClient],
-        unauthorized = [nobody],
+        unauthorized = [?NOBODY],
         forbidden = [UserInSpace1Client, UserInSpace2Client],
         supported_clients_per_node = SupportedClientsPerNode
     },
@@ -132,7 +132,7 @@ list_children_test(Config) ->
     % being made using credentials by user not supported on specific provider
     % ?ERROR_USER_NOT_SUPPORTED will be returned
     ClientSpecForShareListing = #client_spec{
-        correct = [nobody, UserInSpace1Client, UserInSpace2Client, UserInBothSpacesClient],
+        correct = [?NOBODY, UserInSpace1Client, UserInSpace2Client, UserInBothSpacesClient],
         unauthorized = [],
         forbidden = [],
         supported_clients_per_node = SupportedClientsPerNode
@@ -384,7 +384,7 @@ list_children_test(Config) ->
             target_nodes = Providers,
             client_spec = #client_spec{
                 correct = [UserInSpace1Client, UserInSpace2Client, UserInBothSpacesClient],
-                unauthorized = [nobody],
+                unauthorized = [?NOBODY],
                 forbidden = [],
                 supported_clients_per_node = SupportedClientsPerNode
             },

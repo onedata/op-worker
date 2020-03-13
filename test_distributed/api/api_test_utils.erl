@@ -279,8 +279,8 @@ run_test_cases(ScenarioType, TargetNodes, Clients, DataSets, TestCaseFun) ->
 
 
 filter_available_clients(gs, Clients) ->
-    % TODO rm when connecting via gs as nobody becomes possible
-    Clients -- [nobody];
+    % TODO VFS-6201 rm when connecting via gs as nobody becomes possible
+    Clients -- [?NOBODY];
 filter_available_clients(_ScenarioType, Clients) ->
     Clients.
 
@@ -314,7 +314,7 @@ log_failure(ScenarioName, TargetNode, Client, Args, Expected, Got) ->
     "Got: ~p~n", [
         ScenarioName,
         TargetNode,
-        aai:auth_to_printable(client_to_auth(Client)),
+        aai:auth_to_printable(Client),
         io_lib_pretty:print(Args, fun get_record_def/2),
         Expected,
         Got
@@ -447,16 +447,16 @@ get_correct_value(Key, #data_spec{correct_values = CorrectValues}) ->
 
 
 %% @private
--spec is_client_supported_by_node(client(), node(), #{node() => [client()]}) ->
+-spec is_client_supported_by_node(aai:auth(), node(), #{node() => [aai:auth()]}) ->
     boolean().
-is_client_supported_by_node(nobody, _Node, _SupportedClientsPerNode) ->
+is_client_supported_by_node(?NOBODY, _Node, _SupportedClientsPerNode) ->
     true;
 is_client_supported_by_node(Client, Node, SupportedClientsPerNode) ->
     lists:member(Client, maps:get(Node, SupportedClientsPerNode)).
 
 
 %% @private
--spec make_gs_request(config(), node(), client(), #gs_args{}) ->
+-spec make_gs_request(config(), node(), aai:auth(), #gs_args{}) ->
     {ok, Result :: map()} | {error, term()}.
 make_gs_request(_Config, Node, Client, #gs_args{
     operation = Operation,
@@ -478,24 +478,27 @@ make_gs_request(_Config, Node, Client, #gs_args{
 
 
 %% @private
--spec connect_via_gs(node(), client()) ->
+-spec connect_via_gs(node(), aai:auth()) ->
     {ok, GsClient :: pid()} | errors:error().
-connect_via_gs(_Node, nobody) ->
-    % TODO fix when connecting as nobody via gs becomes possible
+connect_via_gs(_Node, ?NOBODY) ->
+    % TODO VFS-6201 fix when connecting as nobody via gs becomes possible
     throw(fail);
-connect_via_gs(Node, {user, UserId}) ->
-    AccessToken = initializer:create_access_token(UserId),
-    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
+connect_via_gs(Node, ?USER(UserId)) ->
     connect_via_gs(
         Node,
         ?SUB(user, UserId),
-        {token, AccessToken},
-        [{cacerts, CaCerts}]
+        {token, initializer:create_access_token(UserId)},
+        [{cacerts, rpc:call(Node, https_listener, get_cert_chain_pems, [])}]
     ).
 
 
 %% @private
--spec connect_via_gs(node(), aai:subject(), client(), ConnectionOpts :: proplists:proplist()) ->
+-spec connect_via_gs(
+    node(),
+    aai:subject(),
+    gs_protocol:client_auth(),
+    ConnectionOpts :: proplists:proplist()
+) ->
     {ok, GsClient :: pid()} | errors:error().
 connect_via_gs(Node, ExpIdentity, Authorization, Opts) ->
     case gs_client:start_link(
@@ -525,7 +528,7 @@ gs_endpoint(Node) ->
 
 
 %% @private
--spec make_rest_request(config(), node(), client(), #rest_args{}) ->
+-spec make_rest_request(config(), node(), aai:auth(), #rest_args{}) ->
     {ok, RespCode :: non_neg_integer(), RespBody :: binary() | map()} |
     {error, term()}.
 make_rest_request(_Config, Node, Client, #rest_args{
@@ -553,10 +556,10 @@ make_rest_request(_Config, Node, Client, #rest_args{
 
 
 %% @private
--spec get_auth_headers(client()) -> AuthHeaders :: map().
-get_auth_headers(nobody) ->
+-spec get_auth_headers(aai:auth()) -> AuthHeaders :: map().
+get_auth_headers(?NOBODY) ->
     #{};
-get_auth_headers({user, UserId}) ->
+get_auth_headers(?USER(UserId)) ->
     #{?HDR_X_AUTH_TOKEN => initializer:create_access_token(UserId)}.
 
 
@@ -588,16 +591,6 @@ get_https_server_port_str(Node) ->
         Port ->
             Port
     end.
-
-
-%% @private
--spec client_to_auth(client()) -> aai:auth().
-client_to_auth(nobody) ->
-    ?NOBODY;
-client_to_auth(root) ->
-    ?ROOT;
-client_to_auth({user, UserId}) ->
-    ?USER(UserId).
 
 
 % Returns information about chosen records, such as fields,

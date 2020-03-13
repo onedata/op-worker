@@ -16,16 +16,15 @@
 
 -include_lib("ctool/include/errors.hrl").
 
--type client() :: nobody | root | {user, UserId :: binary()}.
 -type scenario_type() :: rest | rest_with_file_path | rest_not_supported | gs.
 
 -type api_test_env() :: map().
 
 -record(client_spec, {
-    correct = [] :: [client()],
-    unauthorized = [] :: [client()],
-    forbidden = [] :: [client()],
-    supported_clients_per_node :: #{node() => [client()]}
+    correct = [] :: [aai:auth()],
+    unauthorized = [] :: [aai:auth()],
+    forbidden = [] :: [aai:auth()],
+    supported_clients_per_node :: #{node() => [aai:auth()]}
 }).
 -type client_spec() :: #client_spec{}.
 
@@ -56,7 +55,7 @@
 
 -record(api_test_ctx, {
     node :: node(),
-    client :: client(),
+    client :: aai:auth(),
     env :: api_test_env(),
     data :: map()
 }).
