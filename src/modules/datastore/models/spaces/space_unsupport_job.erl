@@ -53,8 +53,11 @@ save(Job) ->
     } = Job,
     save(gen_id(SpaceId, StorageId, Stage), Job, TaskId).
 
--spec save(id(), record(), traverse:id()) -> {ok, id()} | {error, term()}.
-save(Key, Job, TaskId) when Key =:= main_job; Key =:= undefined ->
+-spec save(id() | undefined | main_job, record(), traverse:id()) -> 
+    {ok, id()} | {error, term()}.
+save(main_job, Job, TaskId) ->
+    save(undefined, Job, TaskId);
+save(undefined, Job, TaskId) ->
     #space_unsupport_job{
         space_id = SpaceId, 
         storage_id = StorageId, 
@@ -143,4 +146,4 @@ decode_slave_job_pid(Pid) -> list_to_pid(binary_to_list(Pid)).
 %% @private
 -spec gen_id(od_space:id(), storage:id(), space_unsupport:stage()) -> id().
 gen_id(SpaceId, StorageId, Stage) ->
-    datastore_key:adjacent_from_digest([SpaceId, StorageId, Stage], SpaceId).
+    datastore_key:adjacent_from_digest([StorageId, Stage], SpaceId).

@@ -85,7 +85,7 @@ replicate_stage_test(Config) ->
 
 
 replicate_stage_persistence_test(Config) ->
-    [Worker1,   _Worker2] = ?config(op_worker_nodes, Config),
+    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),

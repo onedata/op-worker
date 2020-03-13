@@ -115,10 +115,10 @@ update_job_progress(Id, Job, _PoolName, TaskId, _Status) ->
 -spec do_master_job(job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
 do_master_job(#space_unsupport_job{stage = Stage} = Job, _MasterJobArgs) ->
-    NextStages = get_next_stages(Stage),
+    NextStageList = get_next_stage(Stage),
     NextMasterJobs = lists:map(fun(NextStage) -> 
         Job#space_unsupport_job{stage = NextStage, subtask_id = undefined}
-    end, NextStages),
+    end, NextStageList),
     {ok, #{slave_jobs => [Job], master_jobs => NextMasterJobs}}.
 
 -spec do_slave_job(job(), traverse:id()) -> ok | {ok, traverse:description()} | {error, term()}.
@@ -135,13 +135,13 @@ task_finished(TaskId, Pool) ->
 %%%===================================================================
 
 %% @private
--spec get_next_stages(stage()) -> [stage()].
-get_next_stages(init) -> [replicate];
-get_next_stages(replicate) -> [cleanup_traverse];
-get_next_stages(cleanup_traverse) -> [wait_for_dbsync];
-get_next_stages(wait_for_dbsync) -> [delete_synced_documents];
-get_next_stages(delete_synced_documents) -> [delete_local_documents];
-get_next_stages(delete_local_documents) -> [].
+-spec get_next_stage(stage()) -> [stage()].
+get_next_stage(init) -> [replicate];
+get_next_stage(replicate) -> [cleanup_traverse];
+get_next_stage(cleanup_traverse) -> [wait_for_dbsync];
+get_next_stage(wait_for_dbsync) -> [delete_synced_documents];
+get_next_stage(delete_synced_documents) -> [delete_local_documents];
+get_next_stage(delete_local_documents) -> [].
 
 
 %% @private

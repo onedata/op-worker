@@ -332,9 +332,9 @@ set_qos_parameters(StorageId, QosParameters) ->
 
 -spec set_qos_parameters(id(), oneprovider:id(), qos_parameters()) -> ok | errors:error().
 set_qos_parameters(_StorageId, ProviderId, #{<<"providerId">> := OtherProvider}) when ProviderId =/= OtherProvider ->
-    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"providerId">>, [ProviderId]);
+    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"qosParameters.providerId">>, [ProviderId]);
 set_qos_parameters(StorageId, _ProviderId, #{<<"storageId">> := OtherStorage}) when StorageId =/= OtherStorage ->
-    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"storageId">>, [StorageId]);
+    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"qosParameters.storageId">>, [StorageId]);
 set_qos_parameters(StorageId, ProviderId, QosParameters) ->
     ExtendedQosParameters = QosParameters#{
         <<"storageId">> => StorageId,
