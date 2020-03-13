@@ -18,7 +18,7 @@
 
 %% API
 -export([init/1, teardown/1, stat/3, get_child_attr/4, truncate/4, create/4, create/5,
-    create_and_open/4, create_and_open/5, unlink/3, open/4, close/2, close_all/1,
+    create_and_open/4, create_and_open/5, unlink/3, open/4, get_file_location/3, close/2, close_all/1,
     read/4, silent_read/4, write/4, get_file_path/3, get_parent/3, mkdir/3, mkdir/4, mkdir/5, mv/4, mv/5, ls/5, ls/6, ls/7,
     read_dir_plus/5, read_dir_plus/6, set_perms/4,
     update_times/6, get_xattr/4, get_xattr/5, set_xattr/4, set_xattr/6, remove_xattr/4, list_xattr/5,
@@ -153,6 +153,11 @@ open(Worker, SessId, FileKey, OpenFlag) ->
                 {ok, TestHandle};
             Other -> Other
         end).
+
+-spec get_file_location(node(), session:id(), FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+    {ok, file_location:record()} | lfm:error_reply().
+get_file_location(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_file_location(SessId, uuid_to_guid(Worker, FileKey))).
 
 -spec close(node(), lfm:handle()) ->
     ok | lfm:error_reply().

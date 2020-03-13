@@ -86,6 +86,9 @@ handle(Manager, Request, RetryCounter) ->
         case get_provider(Request, Manager) of
             self ->
                 handle_locally(Request, Manager);
+            ignore ->
+                ?debug("Ignore request: ~p", [Request]), % Manager is closing
+                ok;
             ProviderId ->
                 Self = oneprovider:get_id_or_undefined(),
                 case ProviderId of
@@ -261,7 +264,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_provider(Request :: term(), Manager :: pid()) ->
-    provider() | no_return().
+    provider() | ignore | no_return().
 get_provider(#flush_events{provider_id = ProviderId}, _Manager) ->
     ProviderId;
 get_provider(#event{type = Type}, Manager)
@@ -271,8 +274,10 @@ get_provider(#event{type = Type}, Manager)
     orelse is_record(Type, file_removed_event)
     orelse is_record(Type, file_renamed_event)
     orelse is_record(Type, quota_exceeded_event) ->
-    {ok, ProxyVia} = ets_state:get(session, Manager, proxy_via),
-    ProxyVia;
+    case ets_state:get(session, Manager, proxy_via) of
+        {ok, ProxyVia} -> ProxyVia;
+        _ -> ignore
+    end;
 get_provider(Request, Manager) ->
     RequestCtx = get_context(Request),
     case RequestCtx of
@@ -284,8 +289,10 @@ get_provider(Request, Manager) ->
                 {ok, ID} ->
                     ID;
                 _ ->
-                    {ok, SessId} = ets_state:get(session, Manager, session_id),
-                    get_provider(Request, SessId, FileCtx)
+                    case ets_state:get(session, Manager, session_id) of
+                        {ok, SessId} -> get_provider(Request, SessId, FileCtx);
+                        _ -> ignore
+                    end
             end
     end.
 

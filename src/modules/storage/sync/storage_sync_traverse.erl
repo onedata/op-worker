@@ -72,7 +72,7 @@
 -export([reset_info/1, get_next_batch_job_prehook/1, get_children_master_job_prehook/1, get_fold_children_fun/1]).
 
 %% exported for tests
--export([has_mtime_changed/2, run/4, run_deletion_scan/5]).
+-export([has_mtime_changed/2, run/4, run_deletion_scan/4]).
 
 %%%===================================================================
 %%% Macros
@@ -130,12 +130,16 @@ cancel(SpaceId, StorageId) ->
 %===================================================================
 
 -spec do_master_job(master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
-do_master_job(DeletionJob = #storage_traverse_master{info = #{detect_deletions := true}}, Args) ->
-    storage_sync_deletion:do_master_job(DeletionJob, Args);
-do_master_job(TraverseJob = #storage_traverse_master{info = #{scan_num := 1}}, Args) ->
-    do_import_master_job(TraverseJob, Args);
-do_master_job(TraverseJob = #storage_traverse_master{info = #{scan_num := ScanNum}}, Args) when ScanNum >= 1 ->
-    do_update_master_job(TraverseJob, Args).
+do_master_job(TraverseJob = #storage_traverse_master{storage_file_ctx = StorageFileCtx}, Args) ->
+    try
+        do_master_job_unsafe(TraverseJob, Args)
+    catch
+        throw:?ENOENT ->
+            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+            StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+            {ok, #{}}
+    end.
 
 -spec do_slave_job(slave_job(), traverse:id()) -> ok | {error, term()}.
 do_slave_job(Job = #storage_traverse_slave{info = #{detect_deletions := true}}, Task) ->
@@ -149,6 +153,9 @@ do_slave_job(#storage_traverse_slave{
     case process_storage_file(StorageFileCtx, Info) of
         {ok, {SyncResult, _, _}} ->
             increase_counter(SyncResult, SpaceId, StorageId);
+        {error, ?ENOENT} ->
+            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+            ok;
         Error = {error, _} ->
             storage_sync_monitoring:mark_failed_file(SpaceId, StorageId),
             Error
@@ -264,9 +271,8 @@ has_mtime_changed(SSIDoc, StorageFileCtx) ->
     {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
     storage_sync_info:get_mtime(SSIDoc) =/= STMtime.
 
--spec run_deletion_scan(storage_file_ctx:ctx(), non_neg_integer(), space_strategies:config(), file_ctx:ctx(), boolean())
-        -> ok.
-run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx, UpdateSyncCounters) ->
+-spec run_deletion_scan(storage_file_ctx:ctx(), non_neg_integer(), space_strategies:config(), file_ctx:ctx()) -> ok.
+run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     SpaceStorageFileId = storage_file_id:space_dir_id(SpaceId, StorageId),
@@ -280,7 +286,6 @@ run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx, UpdateSyncCounters) 
         space_storage_file_id => SpaceStorageFileId,
         file_ctx => FileCtx,
         detect_deletions => true,
-        update_sync_counters => UpdateSyncCounters,
         sync_links_token => #link_token{},
         sync_links_children => [],
         file_meta_token => #link_token{},
@@ -302,6 +307,14 @@ run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx, UpdateSyncCounters) 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec do_master_job_unsafe(master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
+do_master_job_unsafe(DeletionJob = #storage_traverse_master{info = #{detect_deletions := true}}, Args) ->
+    storage_sync_deletion:do_master_job(DeletionJob, Args);
+do_master_job_unsafe(TraverseJob = #storage_traverse_master{info = #{scan_num := 1}}, Args) ->
+    do_import_master_job(TraverseJob, Args);
+do_master_job_unsafe(TraverseJob = #storage_traverse_master{info = #{scan_num := ScanNum}}, Args) when ScanNum >= 1 ->
+    do_update_master_job(TraverseJob, Args).
 
 -spec run(od_space:id(), storage:id(), non_neg_integer(), space_strategies:config()) -> ok.
 run(SpaceId, StorageId, ScanNum, Config) ->
@@ -598,10 +611,10 @@ do_slave_job_on_directory(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = #{file_ctx := FileCtx}
 }) ->
-    {ok, {processed, FileCtx, StorageFileCtx}}.
+    {ok, {?PROCESSED, FileCtx, StorageFileCtx}}.
 
 -spec process_storage_file(storage_file_ctx:ctx(), info()) ->
-    {ok, storage_sync_engine:result()} | {error, term()}.
+    {ok, {storage_sync_engine:result(), file_ctx:ctx(), storage_file_ctx:ctx()}} | {error, term()}.
 process_storage_file(StorageFileCtx, Info) ->
     % processed file can be a regular file or a directory
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -610,11 +623,13 @@ process_storage_file(StorageFileCtx, Info) ->
     try
         case storage_sync_engine:process_file(StorageFileCtx, Info) of
             Result = {SyncResult, _, _}
-                when SyncResult =:= imported
-                orelse SyncResult =:= updated
-                orelse SyncResult =:= processed
+                when SyncResult =:= ?IMPORTED
+                orelse SyncResult =:= ?UPDATED
+                orelse SyncResult =:= ?PROCESSED
             ->
                 {ok, Result};
+            {error, ?ENOENT} ->
+                {error, ?ENOENT};
             Error = {error, _} ->
                 ?error(
                     "Syncing file ~p on storage ~p supported by space ~p failed due to ~w.",
@@ -623,9 +638,6 @@ process_storage_file(StorageFileCtx, Info) ->
         end
     catch
         throw:?ENOENT ->
-            ?warning_stacktrace(
-                "Syncing file ~p on storage ~p supported by space ~p failed due to ENOENT.",
-                [StorageFileId, StorageId, SpaceId]),
             {error, ?ENOENT};
         Error2:Reason2 ->
             ?error_stacktrace(
@@ -635,11 +647,11 @@ process_storage_file(StorageFileCtx, Info) ->
     end.
 
 -spec increase_counter(storage_sync_engine:result(), od_space:id(), storage:id()) -> ok.
-increase_counter(imported, SpaceId, StorageId) ->
+increase_counter(?IMPORTED, SpaceId, StorageId) ->
     storage_sync_monitoring:mark_imported_file(SpaceId, StorageId);
-increase_counter(updated, SpaceId, StorageId) ->
+increase_counter(?UPDATED, SpaceId, StorageId) ->
     storage_sync_monitoring:mark_updated_file(SpaceId, StorageId);
-increase_counter(processed, SpaceId, StorageId) ->
+increase_counter(?PROCESSED, SpaceId, StorageId) ->
     storage_sync_monitoring:mark_processed_file(SpaceId, StorageId).
 
 -spec get_storage_sync_info_doc(master_job()) -> storage_sync_info:doc().

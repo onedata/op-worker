@@ -65,8 +65,13 @@
     set_storage_path_type/2, get_storage_path_type_const/1, is_imported_storage/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
-    is_root_dir_const/1, file_exists_const/1, is_in_user_space_const/2]).
+    is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
+    is_in_user_space_const/2]).
 -export([equals/2]).
+
+%% Functions that do not modify context but does not have _const suffix and return context.
+% TODO VFS-6119 missing _const suffix in function name
+-export([get_local_file_location_doc/1, get_local_file_location_doc/2, get_dir_location_doc/1]).
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
@@ -78,15 +83,12 @@
     get_logical_path/2,
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2, fill_location_gaps/4,
-    get_or_create_local_file_location_doc/1, get_local_file_location_doc/1,
-    get_local_file_location_doc/2, get_or_create_local_file_location_doc/2,
-    get_or_create_local_regular_file_location_doc/3, get_file_location_ids/1,
-    get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2,
-    get_file_size/1, get_file_size_from_remote_locations/1, get_owner/1,
-    get_group_owner/1, get_local_storage_file_size/1,
-    is_space_synced/1, get_and_cache_file_doc_including_deleted/1, get_dir_location_doc/1
-]).
+    get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
+    get_or_create_local_regular_file_location_doc/3,
+    get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
+    get_file_size_from_remote_locations/1, get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
+    is_space_synced/1, get_and_cache_file_doc_including_deleted/1, is_storage_file_created/1]).
 -export([is_dir/1]).
 
 %%%===================================================================
@@ -373,10 +375,10 @@ is_imported_storage(FileCtx = #file_ctx{is_imported_storage = ImportedStorage}) 
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_uuid_const(FileCtx),
     {ok, Doc} = file_meta:get_including_deleted(FileUuid),
-    case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
-        {false, false} ->
+    case file_meta:is_deleted(Doc) of
+        false ->
             {Doc, FileCtx#file_ctx{file_doc = Doc}};
-        _ ->
+        true ->
             {Doc, FileCtx}
     end;
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
@@ -528,7 +530,7 @@ get_storage_file_id(FileCtx = #file_ctx{storage_file_id = StorageFileId}, _) ->
 
 -spec get_new_storage_file_id(ctx()) -> {helpers:file_id(), ctx()}.
 get_new_storage_file_id(FileCtx) ->
-    {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
+    {Storage, FileCtx2} = get_storage(FileCtx),
     Helper = storage:get_helper(Storage),
     case helper:get_storage_path_type(Helper) of
         ?FLAT_STORAGE_PATH ->
@@ -610,7 +612,7 @@ get_posix_storage_user_context(
                 value = #file_meta{
                     owner = OwnerId,
                     group_owner = GroupOwnerId
-            }}, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+            }}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
             SessionId = user_ctx:get_session_id(UserCtx),
             luma:get_posix_user_ctx(SessionId, OwnerId, GroupOwnerId, SpaceId)
     end,
@@ -679,7 +681,7 @@ get_child(FileCtx, Name, UserCtx) ->
 -spec get_child_canonical_path(ctx(), file_meta:name()) ->
     {file_meta:name(), NewParenCtx :: ctx()}.
 get_child_canonical_path(ParentCtx, FileName) ->
-    {ParentPath, ParentCtx2} = file_ctx:get_canonical_path(ParentCtx),
+    {ParentPath, ParentCtx2} = get_canonical_path(ParentCtx),
     CanonicalPath = filename:join(ParentPath, FileName),
     {CanonicalPath, ParentCtx2}.
 
@@ -823,11 +825,11 @@ get_file_location_with_filled_gaps(FileCtx) ->
 get_file_location_with_filled_gaps(FileCtx, ReqRange)
     when is_list(ReqRange) orelse ReqRange == undefined ->
     % get locations
-    {Locations, FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
+    {Locations, FileCtx2} = get_file_location_docs(FileCtx),
     {FileLocationDoc, FileCtx3} =
-        file_ctx:get_or_create_local_file_location_doc(FileCtx2),
+        get_or_create_local_file_location_doc(FileCtx2),
     {fill_location_gaps(ReqRange, FileLocationDoc, Locations,
-        file_ctx:get_uuid_const(FileCtx3)), FileCtx3};
+        get_uuid_const(FileCtx3)), FileCtx3};
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     get_file_location_with_filled_gaps(FileCtx, [ReqRange]).
 
@@ -902,6 +904,7 @@ get_or_create_local_file_location_doc(FileCtx, IncludeBlocks) ->
 -spec get_local_file_location_doc(ctx()) ->
     {file_location:doc() | undefined, ctx()}.
 get_local_file_location_doc(FileCtx) ->
+    % TODO VFS-6119 missing _const suffix in function name
     get_local_file_location_doc(FileCtx, true).
 
 %%--------------------------------------------------------------------
@@ -909,13 +912,12 @@ get_local_file_location_doc(FileCtx) ->
 %% Returns local file location doc.
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_file_location_doc(ctx(), boolean()) ->
+-spec get_local_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts()) ->
     {file_location:doc() | undefined, ctx()}.
-get_local_file_location_doc(FileCtx, IncludeBlocks) ->
+get_local_file_location_doc(FileCtx, GetDocOpts) ->
+    % TODO VFS-6119 missing _const suffix in function name
     FileUuid = get_uuid_const(FileCtx),
-    LocalLocationId = file_location:local_id(FileUuid),
-    case fslogic_location_cache:get_location(LocalLocationId, FileUuid,
-        IncludeBlocks) of
+    case fslogic_location_cache:get_local_location(FileUuid, GetDocOpts) of
         {ok, Location} ->
             {Location, FileCtx};
         {error, not_found} ->
@@ -930,6 +932,7 @@ get_local_file_location_doc(FileCtx, IncludeBlocks) ->
 -spec get_dir_location_doc(ctx()) ->
     {dir_location:doc() | undefined, ctx()}.
 get_dir_location_doc(FileCtx) ->
+    % TODO VFS-6119 missing _const suffix in function name
     FileUuid = get_uuid_const(FileCtx),
     case dir_location:get(FileUuid) of
         {ok, Location} ->
@@ -1022,6 +1025,17 @@ get_active_perms_type_from_doc(#document{value = #file_meta{acl = []}}, FileCtx)
 get_active_perms_type_from_doc(#document{value = #file_meta{}}, FileCtx) ->
     {acl, FileCtx}.
 
+-spec is_storage_file_created(ctx()) -> {boolean(), ctx()}.
+is_storage_file_created(FileCtx) ->
+    case is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            {DirLocation, _} = get_dir_location_doc(FileCtx2),
+            {dir_location:is_storage_file_created(DirLocation), FileCtx2};
+        {false, FileCtx2} ->
+            {FileLocation, _} = get_local_file_location_doc(FileCtx2, false),
+            {file_location:is_storage_file_created(FileLocation), FileCtx2}
+    end.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file Access Control List.
@@ -1055,10 +1069,10 @@ get_mode(FileCtx) ->
 %% Returns size of file
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_size(file_ctx:ctx() | file_meta:uuid()) ->
-    {Size :: non_neg_integer(), file_ctx:ctx()}.
+-spec get_file_size(ctx() | file_meta:uuid()) ->
+    {Size :: non_neg_integer(), ctx()}.
 get_file_size(FileCtx) ->
-    case file_ctx:get_local_file_location_doc(FileCtx, false) of
+    case get_local_file_location_doc(FileCtx, false) of
         {#document{
             value = #file_location{
                 size = undefined
@@ -1068,7 +1082,7 @@ get_file_size(FileCtx) ->
                 value = #file_location{
                     size = undefined
                 }
-            } = FL, _} = file_ctx:get_local_file_location_doc(FileCtx, true),
+            } = FL, _} = get_local_file_location_doc(FileCtx, true),
             {fslogic_blocks:upper(fslogic_location_cache:get_blocks(FL)), FileCtx2};
         {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
@@ -1081,8 +1095,8 @@ get_file_size(FileCtx) ->
 %% Returns size of file on local storage
 %% @end
 %%--------------------------------------------------------------------
--spec get_local_storage_file_size(file_ctx:ctx() | file_meta:uuid()) ->
-    {Size :: non_neg_integer(), file_ctx:ctx()}.
+-spec get_local_storage_file_size(ctx() | file_meta:uuid()) ->
+    {Size :: non_neg_integer(), ctx()}.
 get_local_storage_file_size(FileCtx) ->
     FileUuid = get_uuid_const(FileCtx),
     LocalLocationId = file_location:local_id(FileUuid),
@@ -1182,6 +1196,28 @@ file_exists_const(_) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Checks if file exists. Returns 'deleted' if files was created and then deleted.
+%% @end
+%%--------------------------------------------------------------------
+-spec file_exists_or_is_deleted(ctx()) -> {?FILE_EXISTS | ?FILE_DELETED | ?FILE_NEVER_EXISTED, ctx()}.
+file_exists_or_is_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
+    FileUuid = get_uuid_const(FileCtx),
+    case file_meta:get_including_deleted(FileUuid) of
+        {ok, Doc} ->
+            case {Doc#document.value#file_meta.deleted, Doc#document.deleted} of
+                {false, false} ->
+                    {?FILE_EXISTS, FileCtx#file_ctx{file_doc = Doc}};
+                _ ->
+                    {?FILE_DELETED, FileCtx}
+            end;
+        {error, not_found} ->
+            {?FILE_NEVER_EXISTED, FileCtx}
+    end;
+file_exists_or_is_deleted(FileCtx) ->
+    {?FILE_EXISTS, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Checks if file is located in space accessible by user.
 %% @end
 %%--------------------------------------------------------------------
@@ -1191,7 +1227,7 @@ is_in_user_space_const(FileCtx, UserCtx) ->
         true ->
             true;
         false ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            SpaceId = get_space_id_const(FileCtx),
             user_logic:has_eff_space(user_ctx:get_user(UserCtx), SpaceId)
     end.
 
@@ -1320,8 +1356,8 @@ get_or_create_local_regular_file_location_doc(FileCtx, _IncludeBlocks, _CheckLoc
 %% Returns size of file. File size is calculated from remote locations.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_size_from_remote_locations(file_ctx:ctx() | file_meta:uuid()) ->
-    {Size :: non_neg_integer(), file_ctx:ctx()}.
+-spec get_file_size_from_remote_locations(ctx() | file_meta:uuid()) ->
+    {Size :: non_neg_integer(), ctx()}.
 get_file_size_from_remote_locations(FileCtx) ->
     {LocationDocs, FileCtx2} = get_file_location_docs(FileCtx, true, false),
     case LocationDocs of

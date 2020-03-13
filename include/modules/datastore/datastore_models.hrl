@@ -265,7 +265,10 @@
     file_handle :: undefined | helpers:file_handle(),
     file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),
-    file_uuid :: file_meta:uuid(),
+    % file_uuid can be `undefined` if sfm_handle is not
+    % associated with any file in the system.
+    % It is associated only with file on storage.
+    file_uuid :: undefined | file_meta:uuid(),
     space_id :: undefined | od_space:id(),
     storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
@@ -485,6 +488,7 @@
     provider_id :: undefined | oneprovider:id(),
     storage_id :: undefined | storage:id(),
     file_id :: undefined | helpers:file_id(),
+    rename_src_file_id :: undefined | helpers:file_id(),
     blocks = [] :: fslogic_location_cache:stored_blocks(),
     version_vector = #{} :: version_vector:version_vector(),
     size = 0 :: non_neg_integer() | undefined,
