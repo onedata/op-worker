@@ -113,7 +113,7 @@ change_replicated_internal(_SpaceId, ReplicaDeletion = #document{
     key = MsgId,
     value = #replica_deletion{}
 }) ->
-    ?alert("change_replicated_internal: changed replica_deletion ~p", [ReplicaDeletion]),
+    ?debug("change_replicated_internal: changed replica_deletion ~p", [MsgId]),
     replica_deletion_changes:handle(ReplicaDeletion);
 change_replicated_internal(_SpaceId, Index = #document{
     key = IndexId,

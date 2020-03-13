@@ -101,10 +101,8 @@ process_row(Row, #{
     BatchNo = autocleaning_run_controller:batch_no(RowNumber, BatchSize),
     try autocleaning_rules:are_all_rules_satisfied(FileCtx, AutocleaningRules) of
         true ->
-            ?alert("RULES SETISFIED"),
             maybe_schedule_replica_deletion_task(FileCtx, AutocleaningRunId, SpaceId, BatchNo);
         false ->
-            ?alert("RULES NOT SETISFIED"),
             autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo)
         catch
         Error:Reason ->

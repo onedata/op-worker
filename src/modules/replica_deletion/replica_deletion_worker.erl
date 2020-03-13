@@ -188,35 +188,24 @@ custom_predicate(SpaceId, JobType, JobId) ->
 delete_if_not_opened(FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    ?alert("DUPA1"),
     case file_handles:exists(FileUuid) of
         false ->
-            ?alert("DUPA2"),
             % file is not opened, we can delete it
             Result = case replica_deletion_lock:acquire_write_lock(FileUuid) of
                 ok ->
-                    ?alert("DUPA3"),
                     DeletionResult = case replica_deletion_req:delete_blocks(FileCtx, Blocks, VV) of
                         ok ->
-                            ?alert("DUPA4"),
                             {ok, fslogic_blocks:size(Blocks)};
                         Error ->
-                            ?alert("DUPA5"),
                             Error
                     end,
-                    ?alert("DUPA6"),
                     replica_deletion_lock:release_write_lock(FileUuid),
-                    ?alert("DUPA7"),
                     DeletionResult;
                 Error ->
-                    ?alert("DUPA8"),
                     Error
             end,
-            ?alert("DUPA9"),
             replica_deletion:release_supporting_lock(RDId),
-            ?alert("DUPA10"),
             replica_deletion_master:process_result(SpaceId, FileUuid, Result, JobId, JobType);
         true ->
-            ?alert("DUPA11"),
             replica_deletion_master:process_result(SpaceId, FileUuid, {error, file_opened}, JobId, JobType)
     end.

@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -behaviour(gen_transfer_worker).
+-behaviour(replica_deletion_behaviour).
 
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
@@ -23,7 +24,7 @@
 %% API
 -export([
     enqueue_data_transfer/2,
-    process_replica_deletion_result/3
+    process_replica_deletion_result/4
 ]).
 
 %% gen_transfer_worker callbacks
@@ -54,25 +55,26 @@ enqueue_data_transfer(FileCtx, TransferParams) ->
 %% replica.
 %% @end
 %%-------------------------------------------------------------------
--spec process_replica_deletion_result(replica_deletion:result(), file_meta:uuid(),
+-spec process_replica_deletion_result(replica_deletion:result(), od_space:id(), file_meta:uuid(),
     transfer:id()) -> ok.
-process_replica_deletion_result({ok, ReleasedBytes}, FileUuid, TransferId) ->
-    ?debug("Replica eviction of file ~p in transfer ~p released ~p bytes.", [
-        FileUuid, TransferId, ReleasedBytes
+process_replica_deletion_result({ok, ReleasedBytes}, SpaceId, FileUuid, TransferId) ->
+    ?debug("Replica eviction of file ~p in transfer ~p in space ~p released ~p bytes.", [
+        FileUuid, TransferId, SpaceId, ReleasedBytes
     ]),
     {ok, _} = transfer:increment_files_evicted_and_processed_counters(TransferId),
     ok;
-process_replica_deletion_result({error, canceled}, FileUuid, TransferId) ->
-    ?debug("Replica eviction of file ~p in transfer ~p was canceled.", [FileUuid, TransferId]),
+process_replica_deletion_result({error, canceled}, SpaceId, FileUuid, TransferId) ->
+    ?debug("Replica eviction of file ~p in transfer ~p in space ~p was canceled.", [FileUuid, TransferId, SpaceId]),
     {ok, _} = transfer:increment_files_processed_counter(TransferId),
     ok;
-process_replica_deletion_result({error, file_opened}, FileUuid, TransferId) ->
-    ?debug("Replica eviction of file ~p in transfer ~p skipped because the file is opened.", [FileUuid, TransferId]),
+process_replica_deletion_result({error, file_opened}, SpaceId, FileUuid, TransferId) ->
+    ?debug("Replica eviction of file ~p in transfer ~p in space ~p skipped because the file is opened.",
+        [FileUuid, TransferId, SpaceId]),
     {ok, _} = transfer:increment_files_processed_counter(TransferId),
     ok;
-process_replica_deletion_result(Error, FileUuid, TransferId) ->
-    ?error("Error ~p occurred during replica eviction of file ~p in procedure ~p", [
-        Error, FileUuid, TransferId
+process_replica_deletion_result(Error, SpaceId, FileUuid, TransferId) ->
+    ?error("Error ~p occurred during replica eviction of file ~p in transfer ~p in space ~p", [
+        Error, FileUuid, TransferId, SpaceId
     ]),
     {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId),
     ok.

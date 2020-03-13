@@ -206,7 +206,7 @@ prepare_deletion_request(FileUuid, Provider, Blocks, VV) ->
 job_type_to_module(?AUTOCLEANING_JOB) ->
     autocleaning_run_controller;
 job_type_to_module(?EVICTION_JOB) ->
-    replica_eviction.
+    replica_eviction_worker.
 
 %%%===================================================================
 %%% gen_server callbacks
