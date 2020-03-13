@@ -3,6 +3,8 @@
 %%% @copyright (C) 2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
 %%% @doc
 %%% Utility functions used in API (REST + gs) tests.
 %%% @end

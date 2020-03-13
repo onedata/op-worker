@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of file REST methods.
+%%% This module contains definitions of deprecated_file REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_rest_routes).
+-module(deprecated_file_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,22 +25,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of file REST paths.
+%% Definitions of deprecated_file REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Lookup file id
-    {<<"/lookup-file-id/[...]">>, rest_handler, #rest_req{
-        method = 'POST',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_file, 
-            id = ?PATH_BINDING, 
-            aspect = object_id, 
-            scope = private
-        }
-    }},
     %% List files and directories (deprecated)
     {<<"/files/[...]">>, rest_handler, #rest_req{
         method = 'GET',

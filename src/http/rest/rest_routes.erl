@@ -32,8 +32,10 @@
 -spec routes() -> [{binary(), module(), map()}].
 routes() ->
     AllRoutes = lists:flatten([
-        data_rest_routes:routes(),
-        file_rest_routes:routes(),
+        deprecated_file_rest_routes:routes(),
+        file_data_rest_routes:routes(),
+        file_metadata_rest_routes:routes(),
+        file_path_rest_routes:routes(),
         monitoring_rest_routes:routes(),
         oneprovider_rest_routes:routes(),
         qos_rest_routes:routes(),

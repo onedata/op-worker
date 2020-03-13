@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of data REST methods.
+%%% This module contains definitions of file_metadata REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(data_rest_routes).
+-module(file_metadata_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,45 +25,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of data REST paths.
+%% Definitions of file_metadata REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Get file attributes
-    {<<"/data/:id">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_file, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = attrs, 
-            scope = private
-        }
-    }},
-    %% Set file attribute
-    {<<"/data/:id">>, rest_handler, #rest_req{
-        method = 'PUT',
-        parse_body = as_json_params,
-        consumes = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_file, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = attrs, 
-            scope = private
-        }
-    }},
-    %% List directory files and subdirectories
-    {<<"/data/:id/children">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_file, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = children, 
-            scope = private
-        }
-    }},
     %% Get file json metadata
     {<<"/data/:id/metadata/json">>, rest_handler, #rest_req{
         method = 'GET',
