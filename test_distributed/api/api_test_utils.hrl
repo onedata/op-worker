@@ -19,6 +19,8 @@
 -type client() :: nobody | root | {user, UserId :: binary()}.
 -type scenario_type() :: rest | rest_with_file_path | rest_not_supported | gs.
 
+-type api_test_env() :: map().
+
 -record(client_spec, {
     correct = [] :: [client()],
     unauthorized = [] :: [client()],
@@ -37,7 +39,7 @@
 -type data_spec() :: #data_spec{}.
 
 -record(rest_args, {
-    method = get :: get | patch | post | put | delete,
+    method :: get | patch | post | put | delete,
     path = <<"/">> :: binary(),
     headers = undefined :: undefined | #{Key :: binary() => Value :: binary()},
     body = <<>> :: binary()
@@ -45,7 +47,7 @@
 -type rest_args() :: #rest_args{}.
 
 -record(gs_args, {
-    operation = get :: gs_protocol:operation(),
+    operation :: gs_protocol:operation(),
     gri :: gri:gri(),
     subscribe = false :: boolean(),
     auth_hint = undefined :: gs_protocol:auth_hint(),
@@ -56,7 +58,7 @@
 -record(api_test_ctx, {
     node :: node(),
     client :: client(),
-    env :: map(),
+    env :: api_test_env(),
     data :: map()
 }).
 -type api_test_ctx() :: #api_test_ctx{}.
@@ -67,13 +69,22 @@
     target_nodes :: [node()],
     client_spec = undefined :: undefined | client_spec(),
 
-    % Function called before every testcase
-    setup_fun = fun() -> #{} end :: fun(() -> TestEnv :: map()),
-    teardown_fun = fun(_) -> ok end :: fun((TestEnv :: map()) -> ok),
-    % Function called after avery testcase to
-    verify_fun = fun(_, _, _) -> true end,
+    % Function called before every testcase. Can be used to create ephemeral
+    % things used in testcase as returned api_test_env() will be passed to
+    % below test functions
+    setup_fun = fun() -> #{} end :: fun(() -> api_test_env()),
+    % Function called after every testcase. Can be used to clear up things
+    % created in `setup_fun`
+    teardown_fun = fun(_) -> ok end :: fun((api_test_env()) -> ok),
+    % Function called after avery testcase. Can be used to check if test had
+    % desired effect on environment (e.g. check if resource deleted during
+    % test was truly deleted).
+    % First argument tells whether request made during testcase should succeed
+    verify_fun = fun(_, _) -> true end :: fun((ShouldSucceed :: boolean(), api_test_env()) -> ok),
 
+    % Function called during testcase to prepare request arguments
     prepare_args_fun :: fun((api_test_ctx()) -> rest_args() | gs_args()),
+    % Function called after testcases that should succeed to validate returned result
     validate_result_fun :: fun((api_test_ctx(), Result :: term()) -> ok | no_return()),
     data_spec = undefined :: undefined | data_spec()
 }).

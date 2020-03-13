@@ -145,7 +145,7 @@ run_invalid_clients_test_cases(Config, SupportedClientsPerNode, #scenario_spec{
             Result = make_request(Config, TargetNode, Client, Args),
             try
                 validate_error_result(ScenarioType, ExpError, Result),
-                EnvVerifyFun(false, Env, DataSet)
+                EnvVerifyFun(false, TestCaseCtx)
             catch _:_ ->
                 log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result),
                 false
@@ -205,7 +205,7 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                 Result = make_request(Config, TargetNode, Client, Args),
                 try
                     validate_error_result(ScenarioType, ExpError, Result),
-                    EnvVerifyFun(false, Env, DataSet)
+                    EnvVerifyFun(false, TestCaseCtx)
                 catch _:_ ->
                     log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result),
                     false
@@ -253,10 +253,10 @@ run_expected_success_test_cases(Config, #scenario_spec{
                 case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
                     true ->
                         ValidateResultFun(TestCaseCtx, Result),
-                        EnvVerifyFun(true, Env, DataSet);
+                        EnvVerifyFun(true, TestCaseCtx);
                     false ->
                         validate_error_result(ScenarioType, ?ERROR_USER_NOT_SUPPORTED, Result),
-                        EnvVerifyFun(false, Env, DataSet)
+                        EnvVerifyFun(false, TestCaseCtx)
                 end
             catch _:_ ->
                 log_failure(ScenarioName, TargetNode, Client, Args, succes, Result),

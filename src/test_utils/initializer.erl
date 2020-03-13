@@ -483,7 +483,7 @@ unmock_test_file_context(Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Mocks auth_manager:verify for all providers in given environment.
+%% Mocks auth_manager functions for all providers in given environment.
 %% @end
 %%--------------------------------------------------------------------
 -spec mock_auth_manager(proplists:proplist()) -> ok.
@@ -492,7 +492,7 @@ mock_auth_manager(Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Mocks auth_manager:verify for all providers in given environment.
+%% Mocks auth_manager functions for all providers in given environment.
 %% @end
 %%--------------------------------------------------------------------
 -spec mock_auth_manager(proplists:proplist(), CheckIfUserIsSupported :: boolean()) -> ok.
