@@ -28,6 +28,7 @@
     unlink/3, rm_recursive/3,
     mv/4, mv/5,
 
+    get_file_location/3,
     create/4, create/5,
     create_and_open/4, create_and_open/5,
     open/4,
@@ -205,6 +206,12 @@ mv(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
 %%%===================================================================
 %%% Regular file specific operations
 %%%===================================================================
+
+
+-spec get_file_location(node(), session:id(), FileKey :: fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path()) ->
+    {ok, file_location:record()} | lfm:error_reply().
+get_file_location(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_file_location(SessId, uuid_to_guid(Worker, FileKey))).
 
 
 -spec create(node(), session:id(), file_meta:path(), file_meta:posix_permissions()) ->

@@ -28,6 +28,7 @@
     fslogic_new_file/1,
     lfm_create_and_unlink/1,
     lfm_create_and_access/1,
+    lfm_create_failure/1,
     lfm_basic_rename/1,
     lfm_basic_rdwr/1,
     lfm_basic_rdwr_opens_file_once/1,
@@ -113,7 +114,8 @@ end).
 
 lfm_rmdir(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     DirPath = <<"/space_name1/dir1">>,
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId1, DirPath, 8#755)),
     ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, DirPath})).
@@ -584,14 +586,14 @@ ls_with_stats(Config) ->
             ]},
             {description, ""}
         ]},
-%%        {config, [{name, low_level_many_threads_large_dir},
-%%            {parameters, [
-%%                [{name, proc_num}, {value, 100}],
-%%                [{name, dir_level}, {value, 1}],
-%%                [{name, dirs_num_per_proc}, {value, 1}]
-%%            ]},
-%%            {description, ""}
-%%        ]},
+        %%        {config, [{name, low_level_many_threads_large_dir},
+        %%            {parameters, [
+        %%                [{name, proc_num}, {value, 100}],
+        %%                [{name, dir_level}, {value, 1}],
+        %%                [{name, dirs_num_per_proc}, {value, 1}]
+        %%            ]},
+        %%            {description, ""}
+        %%        ]},
         {config, [{name, high_level_single_thread_small_dir},
             {parameters, [
                 [{name, dir_level}, {value, 100}],
@@ -614,14 +616,14 @@ ls_with_stats(Config) ->
             ]},
             {description, ""}
         ]}
-%%        {config, [{name, high_level_many_threads_large_dir},
-%%            {parameters, [
-%%                [{name, proc_num}, {value, 100}],
-%%                [{name, dir_level}, {value, 100}],
-%%                [{name, dirs_num_per_proc}, {value, 1}]
-%%            ]},
-%%            {description, ""}
-%%        ]}
+        %%        {config, [{name, high_level_many_threads_large_dir},
+        %%            {parameters, [
+        %%                [{name, proc_num}, {value, 100}],
+        %%                [{name, dir_level}, {value, 100}],
+        %%                [{name, dirs_num_per_proc}, {value, 1}]
+        %%            ]},
+        %%            {description, ""}
+        %%        ]}
     ]).
 ls_with_stats_base(Config) ->
     % Get test and environment description
@@ -824,8 +826,10 @@ ls_base(Config) ->
 fslogic_new_file(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} =
+        {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     RootUuid1 = get_guid_privileged(Worker, SessId1, <<"/space_name1">>),
     RootUuid2 = get_guid_privileged(Worker, SessId2, <<"/space_name2">>),
@@ -868,8 +872,10 @@ fslogic_new_file(Config) ->
 lfm_create_and_access(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} =
+        {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     FilePath1 = <<"/space_name3/", (generator:gen_name())/binary>>,
     FilePath2 = <<"/space_name3/", (generator:gen_name())/binary>>,
@@ -927,8 +933,10 @@ lfm_create_and_access(Config) ->
 lfm_create_and_unlink(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} =
+        {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     FilePath11 = <<"/space_name2/", (generator:gen_name())/binary>>,
     FilePath12 = <<"/space_name2/", (generator:gen_name())/binary>>,
@@ -952,9 +960,20 @@ lfm_create_and_unlink(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath11, 8#755)),
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId2, FilePath21, 8#755)).
 
+lfm_create_failure(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, _UserId1} = {
+        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+        ?config({user_id, <<"user1">>}, Config)
+    },
+
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test_create_fail_dir">>, 8#755)),
+    ?assertEqual({error, ?ENOTDIR}, lfm_proxy:create(W, SessId1, <<"/space_name1/test_create_fail_dir/file">>, 8#755)).
+
 lfm_basic_rename(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_rename">>, 8#755),
 
     lfm_proxy:mv(W, SessId1, {guid, FileGuid}, <<"/space_name1/test_rename2">>),
@@ -965,7 +984,8 @@ lfm_basic_rename(Config) ->
 
 lfm_basic_rdwr(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
 
@@ -976,7 +996,8 @@ lfm_basic_rdwr(Config) ->
 
 lfm_basic_rdwr_opens_file_once(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
     test_utils:mock_new(W, storage_driver, [passthrough]),
     test_utils:mock_assert_num_calls(W, storage_driver, open, 2, 0),
@@ -996,7 +1017,8 @@ lfm_basic_rdwr_opens_file_once(Config) ->
 
 lfm_basic_rdwr_after_file_delete(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
     FileContent = <<"test_data">>,
@@ -1014,8 +1036,10 @@ lfm_basic_rdwr_after_file_delete(Config) ->
 lfm_write(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {SessId2, _UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId2, _UserId2} =
+        {?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test3">>, 8#755)),
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name1/test4">>, 8#755)),
@@ -1067,7 +1091,8 @@ lfm_write(Config) ->
 lfm_stat(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test5">>, 8#755)),
 
@@ -1134,7 +1159,8 @@ lfm_get_details(Config) ->
 lfm_synch_stat(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test6">>, 8#755)),
 
@@ -1156,7 +1182,8 @@ lfm_synch_stat(Config) ->
 lfm_truncate(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
 
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, <<"/space_name2/test7">>, 8#755)),
 
@@ -1200,7 +1227,8 @@ lfm_acl(Config) ->
 
     % test setting and getting acl
     Acl = [
-        #access_control_entity{acetype = ?allow_mask, identifier = UserId1, name = UserName1, aceflags = ?no_flags_mask, acemask = ?read_all_object_mask bor ?write_all_object_mask},
+        #access_control_entity{acetype = ?allow_mask, identifier = UserId1, name = UserName1, aceflags = ?no_flags_mask, acemask =
+        ?read_all_object_mask bor ?write_all_object_mask},
         #access_control_entity{acetype = ?deny_mask, identifier = GroupId1, name = GroupName1, aceflags = ?identifier_group_mask, acemask = ?write_all_object_mask}
     ],
     ?assertEqual(ok, lfm_proxy:set_acl(W, SessId1, {guid, FileGUID}, Acl)),
@@ -1426,7 +1454,7 @@ share_get_parent(Config) ->
     % Getting file parent in normal mode should return dir guid
     ?assertMatch({ok, DirGuid}, lfm_proxy:get_parent(W, SessId, {guid, FileGuid})),
     % Getting file parent in share mode should return share dir guid
-    ?assertMatch({ok, ShareDirGuid}, lfm_proxy:get_parent(W, SessId, {guid, ShareFileGuid})).
+        ?assertMatch({ok, ShareDirGuid}, lfm_proxy:get_parent(W, SessId, {guid, ShareFileGuid})).
 
 share_list(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -1461,7 +1489,8 @@ share_read(Config) ->
 
     {ok, [{ShareChildGuid, <<"share_file">>}]} = lfm_proxy:get_children(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 10),
 
-    {ok, FileShareHandle} = ?assertMatch({ok, <<_/binary>>}, lfm_proxy:open(W, ?GUEST_SESS_ID, {guid, ShareChildGuid}, read)),
+    {ok, FileShareHandle} =
+        ?assertMatch({ok, <<_/binary>>}, lfm_proxy:open(W, ?GUEST_SESS_ID, {guid, ShareChildGuid}, read)),
     verify_file_content(Config, FileShareHandle, <<"data">>, 0, 4),
     ?assertEqual(ok, lfm_proxy:close(W, FileShareHandle)).
 
@@ -1527,7 +1556,8 @@ share_child_read(Config) ->
     ok = lfm_proxy:close(W, Handle),
     {ok, [{ShareFileGuid, _}]} = lfm_proxy:get_children(W, ?GUEST_SESS_ID, {guid, ShareGuid}, 0, 1),
 
-    {ok, ShareHandle} = ?assertMatch({ok, <<_/binary>>}, lfm_proxy:open(W, ?GUEST_SESS_ID, {guid, ShareFileGuid}, read)),
+    {ok, ShareHandle} =
+        ?assertMatch({ok, <<_/binary>>}, lfm_proxy:open(W, ?GUEST_SESS_ID, {guid, ShareFileGuid}, read)),
     verify_file_content(Config, ShareHandle, <<"data">>, 0, 4),
     ?assertEqual(ok, lfm_proxy:close(W, ShareHandle)).
 
@@ -1541,7 +1571,8 @@ share_permission_denied(Config) ->
 
 storage_file_creation_should_be_delayed_until_open(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read1">>, 8#755),
     FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
     {SfmHandle, _} = rpc:call(W, storage_driver, new_handle, [SessId1, FileCtx]),
@@ -1560,7 +1591,8 @@ storage_file_creation_should_be_delayed_until_open(Config) ->
 
 delayed_creation_should_not_prevent_mv(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_move">>, 8#755),
 
     % move empty file
@@ -1574,7 +1606,8 @@ delayed_creation_should_not_prevent_mv(Config) ->
 
 delayed_creation_should_not_prevent_truncate(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     ProviderId = rpc:call(W, oneprovider, get_id, []),
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_truncate">>, 8#755),
 
