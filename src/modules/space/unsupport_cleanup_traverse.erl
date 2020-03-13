@@ -20,6 +20,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
@@ -50,11 +51,16 @@
 
 -spec start(od_space:id(), storage:id()) -> {ok, id()}.
 start(SpaceId, StorageId) ->
+    ?notice("cleanup traverse starting"),
     Options = #{
         task_id => gen_id(SpaceId, StorageId),
         batch_size => ?TRAVERSE_BATCH_SIZE,
         %% @TODO VFS-6165 execute on dir after subtree
         execute_slave_on_dir => true,
+        traverse_info => #{
+            % do not remove storage files if storage sync was enabled
+            remove_storage_files => not is_storage_sync_enabled(SpaceId, StorageId)
+        },
         additional_data => #{
             <<"space_id">> => SpaceId,
             <<"storage_id">> => StorageId
@@ -98,7 +104,7 @@ task_finished(TaskId, Pool) ->
         <<"space_id">> := SpaceId,
         <<"storage_id">> := StorageId
     }} = traverse_task:get_additional_data(Pool, TaskId),
-    space_unsupport:report_traverse_finished(SpaceId, StorageId).
+    space_unsupport:report_cleanup_traverse_finished(SpaceId, StorageId).
 
 -spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
     {ok, tree_traverse:master_job(), traverse:pool(), id()}  | {error, term()}.
@@ -117,24 +123,27 @@ do_master_job(Job, MasterJobArgs) ->
     tree_traverse:do_master_job(Job, MasterJobArgs).
 
 -spec do_slave_job(traverse:job(), id()) -> ok.
-do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskId) ->
+do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, _TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {FileLocation, FileCtx1} = file_ctx:get_local_file_location_doc(FileCtx, false),
+    #{remove_storage_files := RemoveStorageFiles} = TraverseInfo,
+    % fixme
+    {P, _} = file_ctx:get_canonical_path(FileCtx),
     ok = file_qos:delete(FileUuid),
-    case file_ctx:is_dir(FileCtx1) of
+    case file_ctx:is_dir(FileCtx) of
         {true, FC} ->
-            sd_utils:delete_storage_dir(FC, UserCtx); % this function also deletes dir_location
+            ?notice("dir doing slave job: ~p", [P]),
+            RemoveStorageFiles andalso sd_utils:delete_storage_dir(FC, UserCtx),
+            dir_location:delete(FileUuid);
         {false, FC} ->
-            case file_location:is_storage_file_created(FileLocation) of
-                false -> ok;
-                true -> sd_utils:delete_storage_file(FC, UserCtx)
-            end,
+            ?notice("file doing slave job: ~p", [P]),
+            RemoveStorageFiles andalso sd_utils:delete_storage_file(FC, UserCtx),
             LocationId = file_location:local_id(FileUuid),
             fslogic_location_cache:clear_blocks(FC, LocationId),
             fslogic_location_cache:delete_location(FileUuid, LocationId)
     end,
+    ?notice("finished slave job ~p", [P]),
     ok.
 
 %%%===================================================================
@@ -145,3 +154,16 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskI
 -spec gen_id(od_space:id(), storage:id()) -> id().
 gen_id(SpaceId, StorageId) ->
     datastore_key:new_from_digest([SpaceId, StorageId]).
+
+
+%% @private
+-spec is_storage_sync_enabled(od_space:id(), storage:id()) -> boolean().
+is_storage_sync_enabled(SpaceId, StorageId) ->
+    {ok, SyncConfigs} = space_strategies:get_sync_configs(SpaceId),
+    SyncConfig = maps:get(StorageId, SyncConfigs, undefined),
+    case SyncConfig of
+        undefined -> false;
+        _ ->
+            {ImportEnabled, _ImportConfig} = space_strategies:get_import_details(SyncConfig),
+            ImportEnabled
+    end.

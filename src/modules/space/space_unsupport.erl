@@ -31,7 +31,7 @@
 
 %% API
 -export([init_pools/0, run/2]).
--export([report_traverse_finished/2]).
+-export([report_cleanup_traverse_finished/2]).
 -export([get_all_stages/0]).
 
 %% traverse behaviour callbacks
@@ -71,10 +71,11 @@ run(SpaceId, StorageId) ->
     ?ok_if_exists(traverse:run(?POOL_NAME, datastore_key:new_from_digest([SpaceId, StorageId]), 
         #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, stage = init})).
 
--spec report_traverse_finished(od_space:id(), storage:id()) -> ok.
-report_traverse_finished(SpaceId, StorageId) ->
+-spec report_cleanup_traverse_finished(od_space:id(), storage:id()) -> ok.
+report_cleanup_traverse_finished(SpaceId, StorageId) ->
     {ok, #space_unsupport_job{slave_job_pid = Pid}} = 
         space_unsupport_job:get(SpaceId, StorageId, cleanup_traverse),
+    ?critical("Cleanup traverse finished: ~p", [Pid]),
     Pid ! cleanup_traverse_finished,
     ok.
 
@@ -123,6 +124,8 @@ do_master_job(#space_unsupport_job{stage = Stage} = Job, _MasterJobArgs) ->
 
 -spec do_slave_job(job(), traverse:id()) -> ok | {ok, traverse:description()} | {error, term()}.
 do_slave_job(Job, _TaskId) ->
+    % fixme
+    ?notice("~p", [Job]),
     execute_stage(Job).
 
 -spec task_finished(traverse:id(), traverse:pool()) -> ok.
@@ -167,7 +170,6 @@ execute_stage(#space_unsupport_job{stage = replicate, subtask_id = QosEntryId} =
 
 execute_stage(#space_unsupport_job{stage = cleanup_traverse, subtask_id = undefined} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
-    %% @TODO VFS-6175 Do not clean up storage when import is on
     {ok, TaskId} = unsupport_cleanup_traverse:start(SpaceId, StorageId),
     NewJob = Job#space_unsupport_job{subtask_id = TaskId, slave_job_pid = self()},
     {ok, _} = space_unsupport_job:save(NewJob),
@@ -176,6 +178,7 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
     #space_unsupport_job{
         space_id = SpaceId, slave_job_pid = Pid, subtask_id = TraverseId
     } = Job,
+    ?notice("Execute stage cleanup: ~p", [Pid]),
     
     % This clause can be run after provider restart so update slave_job_pid if needed
     case self() of
