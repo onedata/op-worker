@@ -88,7 +88,7 @@ subscribe_test(Config) ->
         <<"spaces">> => ?HARVESTER_SPACES2(?HARVESTER_1)
     },
     PushMessage1 = #gs_push_graph{gri = Harvester1PrivateGRI, data = ChangedData1, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
+    logic_tests_common:simulate_push(Config, PushMessage1),
 
     ?assertMatch(
         {ok, #document{key = ?HARVESTER_1, value = #od_harvester{
@@ -103,7 +103,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage4 = #gs_push_graph{gri = Harvester1PrivateGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
+    logic_tests_common:simulate_push(Config, PushMessage4),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_harvester, get_from_cache, [?HARVESTER_1])
@@ -118,7 +118,7 @@ subscribe_test(Config) ->
     ),
 
     PushMessage5 = #gs_push_nosub{gri = Harvester1PrivateGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage5]),
+    logic_tests_common:simulate_push(Config, PushMessage5),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_harvester, get_from_cache, [?HARVESTER_1])

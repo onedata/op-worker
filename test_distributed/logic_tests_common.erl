@@ -24,6 +24,7 @@
     mock_gs_client/1, unmock_gs_client/1,
     set_envs_for_correct_connection/1,
     wait_for_mocked_connection/1,
+    simulate_push/2,
     create_user_session/2,
     count_reqs/2,
     invalidate_cache/3,
@@ -129,6 +130,23 @@ wait_for_mocked_connection(Config) ->
         end
     end,
     ?assertMatch(ok, CheckConnection(), 60).
+
+
+simulate_push(Config, PushMessage) when is_list(Config)->
+    [Node | _] = ?config(op_worker_nodes, Config),
+    simulate_push(Node, PushMessage);
+simulate_push(Node, PushMessage) when is_atom(Node) ->
+    Pid = rpc:call(Node, gs_client_worker, process_push_message, [PushMessage]),
+    WaitForCompletion = fun F() ->
+        case rpc:call(Node, erlang, is_process_alive, [Pid]) of
+            true ->
+                timer:sleep(100),
+                F();
+            false ->
+                ok
+        end
+    end,
+    WaitForCompletion().
 
 
 create_user_session(Config, UserId) ->
