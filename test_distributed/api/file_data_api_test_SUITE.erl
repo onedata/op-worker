@@ -9,7 +9,7 @@
 %%% This file contains tests concerning data basic API (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
--module(data_api_test_SUITE).
+-module(file_data_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("api_test_utils.hrl").
@@ -28,12 +28,12 @@
 ]).
 
 -export([
-    list_children_test/1
+    get_children_test/1
 ]).
 
 all() ->
     ?ALL([
-        list_children_test
+        get_children_test
     ]).
 
 
@@ -46,7 +46,7 @@ all() ->
 %%%===================================================================
 
 
-list_children_test(Config) ->
+get_children_test(Config) ->
     [Provider2, Provider1] = Providers = ?config(op_worker_nodes, Config),
     Provider2DomainBin = ?GET_DOMAIN_BIN(Provider2),
 
@@ -201,7 +201,7 @@ list_children_test(Config) ->
             Node == Provider2,
             Client == UserInBothSpacesClient
         ->
-            assert_error_json(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Response);
+            ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Response);
         (_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
             ?assertEqual(ExpSuccessResult, Response)
     end end,
@@ -278,7 +278,7 @@ list_children_test(Config) ->
             client_spec = ClientSpecForShareListing,
             prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(ShareDirObjectId),
             validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, Response}) ->
-                assert_error_json(?ERROR_NOT_SUPPORTED, Response)
+                ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
             end,
             data_spec = ParamsSpec
         },
@@ -528,13 +528,6 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec assert_error_json(errors:error(), Json :: map()) -> ok | no_return().
-assert_error_json(ExpError, Json) ->
-    ExpErrorJson = #{<<"error">> => errors:to_json(ExpError)},
-    ?assertEqual(ExpErrorJson, Json).
 
 
 %% @private

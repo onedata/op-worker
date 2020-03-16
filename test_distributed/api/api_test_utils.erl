@@ -285,21 +285,15 @@ filter_available_clients(_ScenarioType, Clients) ->
     Clients.
 
 
-make_request(Config, Node, Client, #rest_args{} = Args) ->
-    make_rest_request(Config, Node, Client, Args);
-make_request(Config, Node, Client, #gs_args{} = Args) ->
-    make_gs_request(Config, Node, Client, Args).
-
-
 validate_error_result(Type, ExpError, {ok, RespCode, RespBody}) when
     Type == rest;
     Type == rest_with_file_path;
     Type == rest_not_supported
 ->
-    ExpCode = errors:to_http_code(ExpError),
-    ExpBody = #{<<"error">> => errors:to_json(ExpError)},
-
-    ?assertEqual({ExpCode, ExpBody}, {RespCode, RespBody});
+    ?assertEqual(
+        {errors:to_http_code(ExpError), ?REST_ERROR(ExpError)},
+        {RespCode, RespBody}
+    );
 
 validate_error_result(gs, ExpError, Result) ->
     ?assertEqual(ExpError, Result).
@@ -456,7 +450,16 @@ is_client_supported_by_node(Client, Node, SupportedClientsPerNode) ->
 
 
 %% @private
--spec make_gs_request(config(), node(), aai:auth(), #gs_args{}) ->
+-spec make_request(config(), node(), aai:auth(), rest_args() | gs_args()) ->
+    {ok, Result :: map()} | {error, term()}.
+make_request(Config, Node, Client, #rest_args{} = Args) ->
+    make_rest_request(Config, Node, Client, Args);
+make_request(Config, Node, Client, #gs_args{} = Args) ->
+    make_gs_request(Config, Node, Client, Args).
+
+
+%% @private
+-spec make_gs_request(config(), node(), aai:auth(), gs_args()) ->
     {ok, Result :: map()} | {error, term()}.
 make_gs_request(_Config, Node, Client, #gs_args{
     operation = Operation,
@@ -528,7 +531,7 @@ gs_endpoint(Node) ->
 
 
 %% @private
--spec make_rest_request(config(), node(), aai:auth(), #rest_args{}) ->
+-spec make_rest_request(config(), node(), aai:auth(), rest_args()) ->
     {ok, RespCode :: non_neg_integer(), RespBody :: binary() | map()} |
     {error, term()}.
 make_rest_request(_Config, Node, Client, #rest_args{
@@ -538,7 +541,7 @@ make_rest_request(_Config, Node, Client, #rest_args{
     body = Body
 }) ->
     URL = get_rest_endpoint(Node, Path),
-    HeadersWithAuth = maps:merge(Headers, get_auth_headers(Client)),
+    HeadersWithAuth = maps:merge(Headers, get_rest_auth_headers(Client)),
     CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
     Opts = [{ssl_options, [{cacerts, CaCerts}]}],
 
@@ -556,10 +559,10 @@ make_rest_request(_Config, Node, Client, #rest_args{
 
 
 %% @private
--spec get_auth_headers(aai:auth()) -> AuthHeaders :: map().
-get_auth_headers(?NOBODY) ->
+-spec get_rest_auth_headers(aai:auth()) -> AuthHeaders :: map().
+get_rest_auth_headers(?NOBODY) ->
     #{};
-get_auth_headers(?USER(UserId)) ->
+get_rest_auth_headers(?USER(UserId)) ->
     #{?HDR_X_AUTH_TOKEN => initializer:create_access_token(UserId)}.
 
 

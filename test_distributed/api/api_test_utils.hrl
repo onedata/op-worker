@@ -16,7 +16,20 @@
 
 -include_lib("ctool/include/errors.hrl").
 
--type scenario_type() :: rest | rest_with_file_path | rest_not_supported | gs.
+-type scenario_type() ::
+    % Standard rest scenario - using fileId in path so that no lookup
+    % takes place
+    rest |
+    % Rest scenario using file path in URL - causes fileId lookup in
+    % rest_handler. If path can't be resolved (this file/space is not
+    % supported by specific provider) rather then concrete error a
+    % ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>) will be returned
+    rest_with_file_path |
+    % Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
+    % of test case.
+    rest_not_supported |
+    % Standard graph sync scenario
+    gs.
 
 -type api_test_env() :: map().
 
@@ -86,5 +99,7 @@
     validate_result_fun :: fun((api_test_ctx(), Result :: term()) -> ok | no_return()),
     data_spec = undefined :: undefined | data_spec()
 }).
+
+-define(REST_ERROR(__ERROR), #{<<"error">> => errors:to_json(__ERROR)}).
 
 -endif.
