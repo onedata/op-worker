@@ -8,9 +8,13 @@
 %%% @doc
 %%% This module is responsible for traversing files tree in order to 
 %%% perform necessary clean up after space was unsupported, i.e foreach file: 
-%%%     * deletes it on storage, 
+%%%     * deletes it on storage (when storage sync is not enabled), 
 %%%     * deletes file_qos document
 %%%     * deletes local file_location or dir_location document
+%%% 
+%%% Clean up for directory is started after all its children have been traversed. 
+%%% This is determined using using cleanup_traverse_status document, 
+%%% which is created for each directory.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(unsupport_cleanup_traverse).
@@ -20,6 +24,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("tree_traverse.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -51,12 +56,12 @@
 
 -spec start(od_space:id(), storage:id()) -> {ok, id()}.
 start(SpaceId, StorageId) ->
-    ?notice("cleanup traverse starting"),
+    TaskId = gen_id(SpaceId, StorageId),
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     Options = #{
-        task_id => gen_id(SpaceId, StorageId),
+        task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
-        %% @TODO VFS-6165 execute on dir after subtree
-        execute_slave_on_dir => true,
         traverse_info => #{
             % do not remove storage files if storage sync was enabled
             remove_storage_files => not is_storage_sync_enabled(SpaceId, StorageId)
@@ -66,7 +71,7 @@ start(SpaceId, StorageId) ->
             <<"storage_id">> => StorageId
         }
     },
-    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    cleanup_traverse_status:create(TaskId, SpaceDirUuid),
     {ok, _} = tree_traverse:run(?POOL_NAME, file_ctx:new_by_guid(SpaceDirGuid), Options).
 
 
@@ -120,30 +125,48 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
-    tree_traverse:do_master_job(Job, MasterJobArgs).
+    #tree_traverse{traverse_info = TraverseInfo} = Job,
+    #{remove_storage_files := RemoveStorageFiles} = TraverseInfo,
+    MasterJobFinishedCallback = fun(TaskId, SlaveJobs, MasterJobs, _SpaceId, Uuid, _BatchLastFilename) ->
+        ChildrenCount = length(SlaveJobs) + length(MasterJobs),
+        cleanup_traverse_status:report_children_listed(TaskId, Uuid, ChildrenCount),
+    
+        lists:foreach(fun(#tree_traverse{doc = #document{key = ChildDirUuid}}) ->
+            cleanup_traverse_status:create(TaskId, ChildDirUuid)
+        end, MasterJobs)
+    end,
+    
+    LastBatchFinishedCallback = fun(TaskId, Uuid, SpaceId) ->
+        case cleanup_traverse_status:report_last_batch(TaskId, Uuid) of
+            traversed -> 
+                FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
+                cleanup_dir(TaskId, FileCtx, RemoveStorageFiles);
+            not_traversed -> ok
+        end
+    end, 
+    tree_traverse:do_master_job(Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchFinishedCallback).
 
 -spec do_slave_job(traverse:job(), id()) -> ok.
-do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, _TaskId) ->
+do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
     #{remove_storage_files := RemoveStorageFiles} = TraverseInfo,
-    % fixme
-    {P, _} = file_ctx:get_canonical_path(FileCtx),
+    
     ok = file_qos:delete(FileUuid),
-    case file_ctx:is_dir(FileCtx) of
-        {true, FC} ->
-            ?notice("dir doing slave job: ~p", [P]),
-            RemoveStorageFiles andalso sd_utils:delete_storage_dir(FC, UserCtx),
-            dir_location:delete(FileUuid);
-        {false, FC} ->
-            ?notice("file doing slave job: ~p", [P]),
-            RemoveStorageFiles andalso sd_utils:delete_storage_file(FC, UserCtx),
-            LocationId = file_location:local_id(FileUuid),
-            fslogic_location_cache:clear_blocks(FC, LocationId),
-            fslogic_location_cache:delete_location(FileUuid, LocationId)
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    LocationId = file_location:local_id(FileUuid),
+    
+    {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
+    
+    RemoveStorageFiles andalso sd_utils:delete_storage_file(FileCtx1, UserCtx),
+    fslogic_location_cache:clear_blocks(FileCtx1, LocationId),
+    fslogic_location_cache:delete_location(FileUuid, LocationId),
+    
+    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    case cleanup_traverse_status:report_child_traversed(TaskId, ParentUuid) of
+        traversed -> cleanup_dir(TaskId, ParentFileCtx, RemoveStorageFiles);
+        not_traversed -> ok
     end,
-    ?notice("finished slave job ~p", [P]),
     ok.
 
 %%%===================================================================
@@ -166,4 +189,22 @@ is_storage_sync_enabled(SpaceId, StorageId) ->
         _ ->
             {ImportEnabled, _ImportConfig} = space_strategies:get_import_details(SyncConfig),
             ImportEnabled
+    end.
+
+
+%% @private
+-spec cleanup_dir(id(), file_ctx:ctx(), boolean()) -> ok.
+cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    RemoveStorageFiles andalso sd_utils:delete_storage_dir(FileCtx, UserCtx),
+    dir_location:delete(file_ctx:get_uuid_const(FileCtx)),
+    case file_ctx:is_space_dir_const(FileCtx) of
+        true -> ok;
+        false ->
+            {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
+            ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+            case cleanup_traverse_status:report_child_traversed(TaskId, ParentUuid) of
+                traversed -> cleanup_dir(TaskId, ParentFileCtx, RemoveStorageFiles);
+                not_traversed -> ok
+            end
     end.

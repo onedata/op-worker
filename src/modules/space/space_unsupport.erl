@@ -75,7 +75,6 @@ run(SpaceId, StorageId) ->
 report_cleanup_traverse_finished(SpaceId, StorageId) ->
     {ok, #space_unsupport_job{slave_job_pid = Pid}} = 
         space_unsupport_job:get(SpaceId, StorageId, cleanup_traverse),
-    ?critical("Cleanup traverse finished: ~p", [Pid]),
     Pid ! cleanup_traverse_finished,
     ok.
 
@@ -124,8 +123,6 @@ do_master_job(#space_unsupport_job{stage = Stage} = Job, _MasterJobArgs) ->
 
 -spec do_slave_job(job(), traverse:id()) -> ok | {ok, traverse:description()} | {error, term()}.
 do_slave_job(Job, _TaskId) ->
-    % fixme
-    ?notice("~p", [Job]),
     execute_stage(Job).
 
 -spec task_finished(traverse:id(), traverse:pool()) -> ok.
@@ -175,10 +172,7 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse, subtask_id = undefi
     {ok, _} = space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
 execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
-    #space_unsupport_job{
-        space_id = SpaceId, slave_job_pid = Pid, subtask_id = TraverseId
-    } = Job,
-    ?notice("Execute stage cleanup: ~p", [Pid]),
+    #space_unsupport_job{slave_job_pid = Pid, subtask_id = TraverseId} = Job,
     
     % This clause can be run after provider restart so update slave_job_pid if needed
     case self() of
@@ -191,15 +185,7 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
             receive cleanup_traverse_finished ->
                 ok
             end
-    end,
-    
-    %% @TODO VFS-6165 Not needed after modifying cleanup traverse to delete dirs 
-    %% after all its children have been deleted
-    FileGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    FileCtx = file_ctx:new_by_guid(FileGuid),
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    sd_utils:delete(FileCtx, UserCtx),
-    ok;
+    end;
 
 execute_stage(#space_unsupport_job{stage = wait_for_dbsync} = _Job) ->
     %% @TODO VFS-6164 wait for all documents to be saved on disc

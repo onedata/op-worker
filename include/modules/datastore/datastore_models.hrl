@@ -400,6 +400,11 @@
     slave_job_pid  = undefined :: pid() | undefined
 }).
 
+-record(cleanup_traverse_status, {
+    children_count = 0 :: integer(),
+    last_batch = false :: boolean()
+}).
+
 %% Model that stores config of file-popularity mechanism per given space.
 -record(file_popularity_config, {
     enabled = false :: boolean(),

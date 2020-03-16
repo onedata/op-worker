@@ -60,7 +60,7 @@ replicate_stage_test(Config) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
-    {_Dir, {G1, _}, {G2, _}} = create_files_and_dirs(Config),
+    {{DirGuid, _}, {G1, _}, {G2, _}} = create_files_and_dirs(Config),
     StageJob = #space_unsupport_job{
         stage = replicate,
         space_id = ?SPACE_ID,
@@ -83,7 +83,11 @@ replicate_stage_test(Config) ->
     
     Size = size(?TEST_DATA),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G1),
-    check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G2).
+    check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G2),
+    
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}).
 
 
 replicate_stage_persistence_test(Config) ->
@@ -91,8 +95,6 @@ replicate_stage_persistence_test(Config) ->
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
-    
-    create_files_and_dirs(Config),
     
     % Create new QoS entry representing entry created before provider restart.
     % Running stage again with existing entry should not create new one, 
@@ -122,7 +124,7 @@ cleanup_traverse_stage_test(Config) ->
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
-    {{_,DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Config),
+    {{DirGuid, DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Config),
     
     % Relative paths to space dir. Empty binary represents space dir.
     AllPaths = [<<"">>, DirPath, F1Path, F2Path],
@@ -140,6 +142,9 @@ cleanup_traverse_stage_test(Config) ->
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
     
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}),
     rpc:call(Worker1, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]).
 
 
@@ -148,7 +153,7 @@ cleanup_traverse_stage_with_import_test(Config) ->
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
-    {{_,DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Config),
+    {{DirGuid, DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Config),
     ok = rpc:call(Worker1, storage_sync, configure_import, [?SPACE_ID, true, #{max_depth => 5, sync_acl => true}]),
     
     % Relative paths to space dir. Empty binary represents space dir.
@@ -167,6 +172,9 @@ cleanup_traverse_stage_with_import_test(Config) ->
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
     
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}),
     rpc:call(Worker1, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]).
 
 
