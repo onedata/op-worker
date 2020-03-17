@@ -24,6 +24,9 @@
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
 -type model() :: datastore_model:model().
+-type timestamp() :: datastore_doc:timestamp() | undefined.
+
+-export_type([timestamp/0]).
 
 %% Time to wait for worker process
 -define(WORKER_TIMEOUT, 90000).
@@ -38,7 +41,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec apply_batch([datastore:doc()], {couchbase_changes:since(),
-    couchbase_changes:until()}, couchbase_changes:timestamp()) -> ok.
+    couchbase_changes:until()}, timestamp()) -> ok.
 apply_batch(Docs, BatchRange, Timestamp) ->
     Master = self(),
     spawn_link(fun() ->

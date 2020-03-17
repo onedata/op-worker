@@ -96,9 +96,9 @@ get_throttled_models() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns timestamp to be used to tag document's sequence.
+%% Returns timestamp to be used to tag document.
 %% @end
 %%--------------------------------------------------------------------
--spec get_timestamp() -> non_neg_integer().
+-spec get_timestamp() -> datastore_doc:timestamp().
 get_timestamp() ->
     provider_logic:zone_time_seconds().

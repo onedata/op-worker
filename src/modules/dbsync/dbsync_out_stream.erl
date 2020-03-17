@@ -32,6 +32,7 @@
 -type filter() :: fun((datastore:doc()) -> boolean()).
 -type handler() :: fun((couchbase_changes:since(),
                         couchbase_changes:until() | end_of_stream,
+                        dbsync_changes:timestamp(),
                         [datastore:doc()]) -> any()).
 -type option() :: {register, boolean()} |
                   {filter, filter()} |
@@ -90,7 +91,7 @@ start_link(SpaceId, Opts) ->
 init([SpaceId, Opts]) ->
     Stream = self(),
     Bucket = dbsync_utils:get_bucket(),
-    {Since, _} = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
+    Since = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
     Callback = fun(Change) -> gen_server:cast(Stream, {change, Change}) end,
     case proplists:get_value(register, Opts, false) of
         true -> {ok, _} = couchbase_changes_worker:start_link(Bucket, SpaceId);
@@ -155,14 +156,14 @@ handle_cast({change, {ok, end_of_stream}}, State = #state{
     changes = Docs,
     handler = Handler
 }) ->
-    Handler(Since, end_of_stream, Docs),
+    Handler(Since, end_of_stream, get_timestamp(Docs), lists:reverse(Docs)),
     {stop, normal, State#state{since = Until, changes = []}};
 handle_cast({change, {error, Seq, Reason}}, State = #state{
     since = Since,
     changes = Docs,
     handler = Handler
 }) ->
-    Handler(Since, Seq, Docs),
+    Handler(Since, Seq, get_timestamp(Docs), lists:reverse(Docs)),
     {stop, Reason, State#state{since = Seq, changes = []}};
 handle_cast(Request, #state{} = State) ->
     ?log_bad_request(Request),
@@ -248,11 +249,11 @@ handle_changes(State = #state{
     case length(Docs) >= MinSize of
         true ->
             spawn(fun() ->
-                Handler(Since, Until, Docs)
+                Handler(Since, Until, get_timestamp(Docs), lists:reverse(Docs))
             end);
         _ ->
             try
-                Handler(Since, Until, Docs)
+                Handler(Since, Until, get_timestamp(Docs), lists:reverse(Docs))
             catch
                 _:_ ->
                     % Handle should catch own errors
@@ -306,3 +307,10 @@ handle_doc_change(#document{seq = Seq} = Doc, _Filter,
     ?error("Received change with old sequence ~p. Expected sequences"
     " greater than or equal to ~p~n~p", [Seq, Until, Doc]),
     State.
+
+%% @private
+-spec get_timestamp([datastore:doc()]) -> dbsync_changes:timestamp().
+get_timestamp([]) ->
+    undefined;
+get_timestamp([#document{timestamp = Timestamp} | _]) ->
+    Timestamp.

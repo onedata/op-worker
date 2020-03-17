@@ -67,11 +67,10 @@ start_link(SpaceId, ProviderId) ->
     {ok, State :: state()} | {ok, State :: state(), timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
 init([SpaceId, ProviderId]) ->
-    {Seq, _} = dbsync_state:get_seq(SpaceId, ProviderId),
     {ok, #state{
         space_id = SpaceId,
         provider_id = ProviderId,
-        seq = Seq,
+        seq = dbsync_state:get_seq(SpaceId, ProviderId),
         changes_stash = ets:new(changes_stash, [ordered_set, private])
     }}.
 
@@ -216,7 +215,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
-    couchbase_changes:timestamp(), [datastore:doc()], state()) -> state().
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
 handle_changes_batch(Since, Until, Timestamp, Docs,
     State0 = #state{seq = Seq, apply_batch = Apply, first_batch_processed = FBP,
         lower_changes_count = LCC, first_lower_seq = FLS, space_id = SpaceID}) ->
@@ -267,7 +266,7 @@ handle_changes_batch(Since, Until, Timestamp, Docs,
 %% @end
 %%--------------------------------------------------------------------
 -spec stash_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
-    couchbase_changes:timestamp(), [datastore:doc()], state()) -> state().
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
 stash_changes_batch(Since, Until, Timestamp, Docs, State = #state{
     changes_stash = Stash,
     seq = Seq
@@ -296,7 +295,7 @@ stash_changes_batch(Since, Until, Timestamp, Docs, State = #state{
 %% @end
 %%--------------------------------------------------------------------
 -spec apply_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
-    couchbase_changes:timestamp(), [datastore:doc()], state()) -> state().
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
 apply_changes_batch(Since, Until, Timestamp, Docs, State) ->
     State2 = cancel_changes_request(State),
     {Docs2, Timestamp2, Until2, State3} = prepare_batch(Docs, Timestamp, Until, State2),
@@ -317,7 +316,7 @@ apply_changes_batch(Since, Until, Timestamp, Docs, State) ->
 %% Updates sequence when changes applying ends.
 %% @end
 %%--------------------------------------------------------------------
--spec change_applied(couchbase_changes:since(), couchbase_changes:until(), couchbase_changes:timestamp(),
+-spec change_applied(couchbase_changes:since(), couchbase_changes:until(), dbsync_changes:timestamp(),
     ok | timeout | {error, datastore_doc:seq(), term()}, state()) -> state().
 change_applied(_Since, Until, Timestamp, Ans, State) ->
     State2 = State#state{apply_batch = undefined},
@@ -326,7 +325,7 @@ change_applied(_Since, Until, Timestamp, Ans, State) ->
             gen_server2:cast(self(), check_batch_stash),
             update_seq(Until, Timestamp, State2);
         {error, Seq, _} ->
-            State3 = update_seq(Seq - 1, 0, State2),
+            State3 = update_seq(Seq - 1, undefined, State2),
             schedule_changes_request(State3);
         timeout ->
             schedule_changes_request(State2)
@@ -339,8 +338,8 @@ change_applied(_Since, Until, Timestamp, Ans, State) ->
 %% it merges them.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_batch([datastore:doc()], couchbase_changes:timestamp(), couchbase_changes:until(), state()) ->
-    {[datastore:doc()], couchbase_changes:timestamp(), couchbase_changes:until(), state()}.
+-spec prepare_batch([datastore:doc()], dbsync_changes:timestamp(), couchbase_changes:until(), state()) ->
+    {[datastore:doc()], dbsync_changes:timestamp(), couchbase_changes:until(), state()}.
 prepare_batch(Docs, Timestamp, Until, State = #state{
     changes_stash = Stash
 }) ->
@@ -369,11 +368,11 @@ prepare_batch(Docs, Timestamp, Until, State = #state{
 %% Updates sequence number of the beginning of expected changes range.
 %% @end
 %%--------------------------------------------------------------------
--spec update_seq(couchbase_changes:seq(), couchbase_changes:timestamp(), state()) -> state().
+-spec update_seq(couchbase_changes:seq(), dbsync_changes:timestamp() | undefined, state()) -> state().
 update_seq(Seq, _Timestamp, State = #state{seq = Seq}) ->
     State;
 update_seq(Seq, Timestamp, State = #state{space_id = SpaceId, provider_id = ProviderId}) ->
-    dbsync_state:set_seq(SpaceId, ProviderId, Seq, Timestamp),
+    dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Seq, Timestamp),
     State#state{seq = Seq}.
 
 %%--------------------------------------------------------------------

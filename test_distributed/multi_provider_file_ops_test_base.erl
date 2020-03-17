@@ -59,6 +59,7 @@
 -export([sync_blocks/4]).
 -export([request_synchronization/3]).
 -export([async_synchronize/3]).
+-export([get_seq_and_timestamp_or_error/2]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -636,7 +637,7 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
-    SpaceID = ?config(first_space_id, Config),
+    SpaceId = ?config(first_space_id, Config),
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
 
@@ -684,31 +685,42 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
         ?assertEqual(ok, lfm_proxy:close_all(W))
     end),
 
-    ProvIDs = lists:foldl(fun(W, Acc) ->
+    ProvIds = lists:foldl(fun(W, Acc) ->
         sets:add_element(rpc:call(W, oneprovider, get_id, []), Acc)
     end, sets:new(), Workers),
 
-    CheckSeqs = fun() ->
-        Seqs = lists:map(fun(W) ->
-            lists:foldl(fun(ProvID, SeqAcc) ->
-                Seq = rpc:call(W, dbsync_state, get_seq_or_error, [SpaceID, ProvID]),
-                case Seq of
-                    % proxy providers
+    AreAllSeqsEqual = fun() ->
+        % Get list of states of all dbsync streams (for tested space) from all workers (all providers), e.g.:
+        % WorkersDbsyncStates = [StateOnWorker1, StateOnWorker2 ... StateOnWorkerN],
+        % StateOnWorker = [ProgressOfSynWithProv1, ProgressOfSynWithProv2 ... ProgressOfSynWithProvM]
+        WorkersDbsyncStates = lists:foldl(fun(W, Acc) ->
+            WorkerState = lists:foldl(fun(ProvID, Acc2) ->
+                case rpc:call(W, ?MODULE, get_seq_and_timestamp_or_error, [SpaceId, ProvID]) of
                     {error, not_found} ->
-                        SeqAcc;
-                    {_, Timestamp} ->
+                        % provider `ProvID` does not support space so there is no synchronization progress data
+                        % on this worker
+                        Acc2;
+                    {_, Timestamp} = Ans ->
                         ?assert(Timestamp >= Timestamp0),
-                        [Seq | SeqAcc]
+                        [Ans | Acc2]
                 end
-            end, [], sets:to_list(ProvIDs))
-        end, Workers),
+            end, [], sets:to_list(ProvIds)),
 
-        case sets:size(sets:del_element([], sets:from_list(Seqs))) of % del lists from providers that do not support space
-            1 -> true;
-            _ -> {false, lists:zip(Workers, Seqs)}
+            case WorkerState of
+                [] -> Acc; % this worker belongs to provider that does not support this space
+                _ -> [WorkerState | Acc]
+            end
+        end, [], Workers),
+
+        % States of all workers (that belong to providers that support tested space) should be equal
+        % create set from list to remove duplicates
+        WorkersDbsyncStatesSet = sets:from_list(WorkersDbsyncStates),
+        case sets:size(WorkersDbsyncStatesSet) of
+            1 -> true; % States of all workers are equal
+            _ -> {false, WorkersDbsyncStates}
         end
     end,
-    ?assertEqual(true, CheckSeqs(), 15),
+    ?assertEqual(true, AreAllSeqsEqual(), 15),
 
     ok.
 
@@ -2263,3 +2275,11 @@ do_sync_test(FileCtxs, Worker1, Session, BlockSize, Blocks) ->
 
     SyncTime_2 = timer:now_diff(os:timestamp(), Start),
     {SyncTime / length(FileCtxs), SyncTime_2}.
+
+get_seq_and_timestamp_or_error(SpaceId, ProviderId) ->
+    case datastore_model:get(#{model => dbsync_state}, SpaceId) of
+        {ok, #document{value = #dbsync_state{seq = Seq}}} ->
+            maps:get(ProviderId, Seq, {error, not_found});
+        Error ->
+            Error
+    end.

@@ -188,14 +188,12 @@ start_out_stream(SpaceId) ->
             false
     end,
     Handler = fun
-        (Since, Until, Docs) when Since =:= Until ->
-            Timestamp = get_last_timestamp(Docs),
-            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, lists:reverse(Docs));
-        (Since, Until, Docs) ->
+        (Since, Until, Timestamp, Docs) when Since =:= Until ->
+            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs);
+        (Since, Until, Timestamp, Docs) ->
             ProviderId = oneprovider:get_id(),
-            Timestamp = get_last_timestamp(Docs),
-            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, lists:reverse(Docs)),
-            dbsync_state:set_seq(SpaceId, ProviderId, Until, Timestamp)
+            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs),
+            dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp)
     end,
     Spec = dbsync_out_stream_spec(SpaceId, SpaceId, [
         {register, true},
@@ -219,7 +217,7 @@ handle_changes_batch(ProviderId, MsgId, #changes_batch{
     space_id = SpaceId,
     since = Since,
     until = Until,
-    until_timestamp = Timestamp,
+    timestamp = Timestamp,
     compressed_docs = CompressedDocs
 }) ->
     Name = {dbsync_in_stream, SpaceId},
@@ -242,15 +240,13 @@ handle_changes_request(ProviderId, #changes_request2{
     until = Until
 }) ->
     Handler = fun
-        (BatchSince, end_of_stream, Docs) ->
-            Timestamp = get_last_timestamp(Docs),
+        (BatchSince, end_of_stream, Timestamp, Docs) ->
             dbsync_communicator:send_changes(
-                ProviderId, SpaceId, BatchSince, Until, Timestamp, lists:reverse(Docs)
+                ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs
             );
-        (BatchSince, BatchUntil, Docs) ->
-            Timestamp = get_last_timestamp(Docs),
+        (BatchSince, BatchUntil, Timestamp, Docs) ->
             dbsync_communicator:send_changes(
-                ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, lists:reverse(Docs)
+                ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )
     end,
     ReqId = dbsync_utils:gen_request_id(),
@@ -280,10 +276,3 @@ handle_tree_broadcast(BroadcastMsg = #tree_broadcast2{
 }) ->
     handle_changes_batch(SrcProviderId, MsgId, Msg),
     dbsync_communicator:forward(BroadcastMsg).
-
-%% @private
--spec get_last_timestamp([datastore:doc()]) -> non_neg_integer().
-get_last_timestamp([]) ->
-    0;
-get_last_timestamp([#document{timestamp = Timestamp} | _]) ->
-    Timestamp.

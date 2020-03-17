@@ -16,13 +16,10 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([delete/1, get_seq/2, set_seq/4]).
+-export([delete/1, get_seq/2, get_seq_and_timestamp/2, set_seq_and_timestamp/4]).
 
 %% datastore_model callbacks
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
-
-% Test API
--export([get_seq_or_error/2]).
 
 -define(CTX, #{model => ?MODULE}).
 
@@ -41,13 +38,23 @@ delete(SpaceId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns sequence number and sequence timestamp of the beginning of expected changes range
+%% Returns sequence number of the beginning of expected changes range
 %% from given space and provider.
 %% @end
 %%--------------------------------------------------------------------
--spec get_seq(od_space:id(), od_provider:id()) ->
-    {Number :: couchbase_changes:seq(), Timestamp :: couchbase_changes:timestamp()}.
+-spec get_seq(od_space:id(), od_provider:id()) -> couchbase_changes:seq().
 get_seq(SpaceId, ProviderId) ->
+    {Seq, _Timestamp} = get_seq_and_timestamp(SpaceId, ProviderId),
+    Seq.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns sequence number and timestamp of the beginning of expected changes range
+%% from given space and provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_seq_and_timestamp(od_space:id(), od_provider:id()) -> {couchbase_changes:seq(), datastore_doc:timestamp()}.
+get_seq_and_timestamp(SpaceId, ProviderId) ->
     case datastore_model:get(?CTX, SpaceId) of
         {ok, #document{value = #dbsync_state{seq = Seq}}} ->
             maps:get(ProviderId, Seq, {1, 0});
@@ -57,41 +64,28 @@ get_seq(SpaceId, ProviderId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns sequence number and sequence timestamp of the beginning of expected changes range
-%% from given space and provider.
-%% Function for test purposes.
-%% @end
-%%--------------------------------------------------------------------
--spec get_seq_or_error(od_space:id(), od_provider:id()) ->
-    {Number :: couchbase_changes:seq(), Timestamp :: couchbase_changes:timestamp()} | {error, term()}.
-get_seq_or_error(SpaceId, ProviderId) ->
-    case datastore_model:get(?CTX, SpaceId) of
-        {ok, #document{value = #dbsync_state{seq = Seq}}} ->
-            maps:get(ProviderId, Seq, {error, not_found});
-        Error ->
-            Error
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets sequence number of the beginning of expected changes range
+%% Sets sequence number and timestamp of the beginning of expected changes range
 %% from given space and provider.
 %% @end
 %%--------------------------------------------------------------------
--spec set_seq(od_space:id(), od_provider:id(), couchbase_changes:seq(), couchbase_changes:timestamp()) ->
-    ok | {error, Reason :: term()}.
-set_seq(SpaceId, ProviderId, Number, Timestamp) ->
-    Diff = fun(#dbsync_state{seq = Seq} = State) ->
-        case Timestamp of
-            0 ->
-                % Use old timestamp (no docs with timestamp in applied range)
+-spec set_seq_and_timestamp(od_space:id(), od_provider:id(), couchbase_changes:seq(),
+    dbsync_changes:timestamp() | undefined) -> ok | {error, Reason :: term()}.
+set_seq_and_timestamp(SpaceId, ProviderId, Number, Timestamp) ->
+    {Diff, Default} = case Timestamp of
+        undefined ->
+            DiffFun = fun(#dbsync_state{seq = Seq} = State) ->
+                % Use old timestamp (no doc with timestamp in applied range)
                 {_, Timestamp2} = maps:get(ProviderId, Seq, {1, 0}),
-                {ok, State#dbsync_state{seq = maps:put(ProviderId, {Number, Timestamp2}, Seq)}};
-            _ ->
+                {ok, State#dbsync_state{seq = maps:put(ProviderId, {Number, Timestamp2}, Seq)}}
+            end,
+            {DiffFun, #dbsync_state{seq = #{ProviderId => {Number, 0}}}};
+        _ ->
+            DiffFun = fun(#dbsync_state{seq = Seq} = State) ->
                 {ok, State#dbsync_state{seq = maps:put(ProviderId, {Number, Timestamp}, Seq)}}
-        end
+            end,
+            {DiffFun, #dbsync_state{seq = #{ProviderId => {Number, Timestamp}}}}
     end,
-    Default = #dbsync_state{seq = #{ProviderId => {Number, Timestamp}}},
+
     case datastore_model:update(?CTX, SpaceId, Diff, Default) of
         {ok, _} -> ok;
         {error, Reason} -> {error, Reason}

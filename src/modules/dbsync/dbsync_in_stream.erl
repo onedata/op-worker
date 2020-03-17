@@ -163,7 +163,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 -spec handle_changes_batch(undefined | dbsync_communicator:msg_id(),
     od_provider:id(), couchbase_changes:since(), couchbase_changes:until(),
-    couchbase_changes:timestamp(), [datastore:doc()], state()) -> state().
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
 handle_changes_batch(undefined, ProviderId, Since, Until, Timestamp, Docs, State) ->
     forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State);
 handle_changes_batch(MsgId, ProviderId, Since, Until, Timestamp, Docs, State = #state{
@@ -186,7 +186,7 @@ handle_changes_batch(MsgId, ProviderId, Since, Until, Timestamp, Docs, State = #
 %% @end
 %%--------------------------------------------------------------------
 -spec forward_changes_batch(od_provider:id(), couchbase_changes:since(), couchbase_changes:until(),
-    couchbase_changes:timestamp(), [datastore:doc()], state()) -> state().
+    dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
 forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
     space_id = SpaceId,
     workers = Workers

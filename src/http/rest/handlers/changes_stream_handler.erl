@@ -334,8 +334,7 @@ parse_timeout(Params) ->
 parse_last_seq(SpaceId, Params) ->
     case maps:get(<<"last_seq">>, Params, ?DEFAULT_LAST_SEQ) of
         <<"now">> ->
-            {Seq, _} = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
-            Seq;
+            dbsync_state:get_seq(SpaceId, oneprovider:get_id());
         Number ->
             try
                 binary_to_integer(Number)

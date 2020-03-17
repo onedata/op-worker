@@ -1043,14 +1043,18 @@ translate_from_protobuf(#'ChangesBatch'{
     space_id = SpaceId,
     since = Since,
     until = Until,
-    until_timestamp = Timestamp,
+    timestamp = Timestamp,
     compressed_docs = CompressedDocs
 }) ->
+    Timestamp2 = case Timestamp of
+        0 -> undefined;
+        _ -> Timestamp
+    end,
     #changes_batch{
         space_id = SpaceId,
         since = Since,
         until = Until,
-        until_timestamp = Timestamp,
+        timestamp = Timestamp2,
         compressed_docs = CompressedDocs
     };
 translate_from_protobuf(#'ChangesRequest2'{
@@ -2055,11 +2059,15 @@ translate_to_protobuf(#tree_broadcast2{message_body = CB} = TB) ->
         changes_batch = CB2
     }};
 translate_to_protobuf(#changes_batch{} = CB) ->
+    Timestamp = case CB#'changes_batch'.timestamp of
+        undefined -> 0;
+        Other -> Other
+    end,
     {changes_batch, #'ChangesBatch'{
         space_id = CB#'changes_batch'.space_id,
         since = CB#'changes_batch'.since,
         until = CB#'changes_batch'.until,
-        until_timestamp = CB#'changes_batch'.until_timestamp,
+        timestamp = Timestamp,
         compressed_docs = CB#'changes_batch'.compressed_docs
     }};
 translate_to_protobuf(#changes_request2{} = CR) ->
