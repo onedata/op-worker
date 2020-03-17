@@ -24,7 +24,7 @@
 -export([handle/1]).
 
 % exported for test
--export([can_support_deletion/1]).
+-export([handle_confirmation/1, can_support_deletion/1]).
 
 -define(run_if_is_self(ProviderId, F),
     case oneprovider:is_self(ProviderId) of
@@ -57,7 +57,7 @@ handle(REDoc = #document{value = #replica_deletion{
     requester = Requester
 }}) ->
     ?run_if_is_self(Requester, fun() ->
-        handle_confirmation(REDoc)
+        replica_deletion_changes:handle_confirmation(REDoc)
     end);
 handle(REDoc = #document{value = #replica_deletion{
     action = ?REFUSE_DELETION_SUPPORT,

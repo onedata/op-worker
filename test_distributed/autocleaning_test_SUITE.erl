@@ -148,6 +148,7 @@ end, __Distributions))).
                     true
                 catch
                     E:R ->
+                        % todo remove this log
                         ct:pal("ERROR: ~p~nStacktrace:~n~p", [{E, R}, erlang:get_stacktrace()]),
                         false
                 end
@@ -973,6 +974,7 @@ list(Worker, SpaceId, LinkId, Offset, Limit) ->
 
 get_run_report(Worker, ARId) ->
     Result = rpc:call(Worker, autocleaning_api, get_run_report, [ARId]),
+    % todo remove this log
     ct:print("Result: ~p", [Result]),
     Result.
 
