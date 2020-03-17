@@ -24,6 +24,7 @@
     mock_gs_client/1, unmock_gs_client/1,
     set_envs_for_correct_connection/1,
     wait_for_mocked_connection/1,
+    simulate_push/2,
     create_user_session/2,
     count_reqs/2,
     invalidate_cache/3,
@@ -64,6 +65,7 @@ mock_gs_client(Config) ->
     Nodes = ?NODES(Config),
     ok = test_utils:mock_new(Nodes, gs_client, []),
     ok = test_utils:mock_new(Nodes, provider_logic, [passthrough]),
+    ok = test_utils:mock_new(Nodes, space_logic, [passthrough]),
     ok = test_utils:mock_new(Nodes, oneprovider, [passthrough]),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, async_request, fun mock_async_request/2),
@@ -91,13 +93,19 @@ mock_gs_client(Config) ->
         lists:member(UserId, [?USER_1, ?USER_2, ?USER_3, ?USER_INCREASING_REV])
     end),
 
+    % dbsync reports its state regularly - mock the function so as not to generate
+    % requests to gs_client which would interfere with request counting in tests
+    ok = test_utils:mock_expect(Nodes, space_logic, report_dbsync_state, fun(_, _) ->
+        ok
+    end),
+
     % Fetch dummy provider so it is cached and does not generate Graph Sync requests.
     rpc:multicall(Nodes, provider_logic, get, []).
 
 
 unmock_gs_client(Config) ->
     Nodes = ?NODES(Config),
-    test_utils:mock_unload(Nodes, [gs_client, provider_logic, oneprovider]),
+    test_utils:mock_unload(Nodes, [gs_client, provider_logic, space_logic, oneprovider]),
     initializer:unmock_provider_ids(Nodes),
     ok.
 
@@ -122,6 +130,23 @@ wait_for_mocked_connection(Config) ->
         end
     end,
     ?assertMatch(ok, CheckConnection(), 60).
+
+
+simulate_push(Config, PushMessage) when is_list(Config)->
+    [Node | _] = ?config(op_worker_nodes, Config),
+    simulate_push(Node, PushMessage);
+simulate_push(Node, PushMessage) when is_atom(Node) ->
+    Pid = rpc:call(Node, gs_client_worker, process_push_message, [PushMessage]),
+    WaitForCompletion = fun F() ->
+        case rpc:call(Node, erlang, is_process_alive, [Pid]) of
+            true ->
+                timer:sleep(100),
+                F();
+            false ->
+                ok
+        end
+    end,
+    WaitForCompletion().
 
 
 create_user_session(Config, UserId) ->

@@ -641,46 +641,42 @@ mock_token_logic_is_revoked(Nodes, RevokedTokens) ->
 
 -spec simulate_gs_token_status_update(node(), binary(), boolean()) -> ok.
 simulate_gs_token_status_update(Node, TokenId, Revoked) ->
-    rpc:call(Node, gs_client_worker, process_push_message, [#gs_push_graph{
+    logic_tests_common:simulate_push(Node, #gs_push_graph{
         gri = #gri{type = od_token, id = TokenId, aspect = instance, scope = shared},
         data = #{
             <<"revision">> => erlang:unique_integer([monotonic, positive]),
             <<"revoked">> => Revoked
         },
         change_type = updated
-    }]),
-    ok.
+    }).
 
 
 -spec simulate_gs_token_deletion(node(), binary()) -> ok.
 simulate_gs_token_deletion(Node, TokenId) ->
-    rpc:call(Node, gs_client_worker, process_push_message, [#gs_push_graph{
+    logic_tests_common:simulate_push(Node, #gs_push_graph{
         gri = #gri{type = od_token, id = TokenId, aspect = instance, scope = shared},
         change_type = deleted
-    }]),
-    ok.
+    }).
 
 
 -spec simulate_gs_temporary_tokens_revocation(node(), binary()) -> ok.
 simulate_gs_temporary_tokens_revocation(Node, UserId) ->
-    rpc:call(Node, gs_client_worker, process_push_message, [#gs_push_graph{
+    logic_tests_common:simulate_push(Node, #gs_push_graph{
         gri = #gri{type = temporary_token_secret, id = UserId, aspect = user, scope = shared},
         data = #{
             <<"revision">> => erlang:unique_integer([monotonic, positive]),
             <<"generation">> => erlang:unique_integer([monotonic, positive])
         },
         change_type = updated
-    }]),
-    ok.
+    }).
 
 
 -spec simulate_gs_temporary_tokens_deletion(node(), binary()) -> ok.
 simulate_gs_temporary_tokens_deletion(Node, UserId) ->
-    rpc:call(Node, gs_client_worker, process_push_message, [#gs_push_graph{
+    logic_tests_common:simulate_push(Node, #gs_push_graph{
         gri = #gri{type = temporary_token_secret, id = UserId, aspect = user, scope = shared},
         change_type = deleted
-    }]),
-    ok.
+    }).
 
 
 -spec set_auth_cache_size_limit(node(), SizeLimit :: non_neg_integer()) -> ok.

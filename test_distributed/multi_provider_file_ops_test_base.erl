@@ -1096,7 +1096,7 @@ distributed_delete_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWr
         lists:foreach(fun(_) ->
             RmAnsCheck =
                 receive
-                    {rm_ans, W, D, Uuid, {error, enoent}} ->
+                    {rm_ans, W, D, Uuid, {error, ?ENOENT}} ->
                         {rm_ans, W, D, Uuid, ok};
                     {rm_ans, W, D, Uuid, RmAns} ->
                         {rm_ans, W, D, Uuid, RmAns}
@@ -1867,7 +1867,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     {ok, _} = datastore_model:save(Ctx, LocationDoc),
 
     LeafLess = filename:dirname(FileId),
-    SDHandle0 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, LeafLess, undefined),
+    SDHandle0 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, LeafLess),
     case storage_driver:mkdir(SDHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
         ok -> ok;
         {error, eexist} ->
@@ -1875,7 +1875,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
     end,
 
 
-    SDHandle1 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, FileId, undefined),
+    SDHandle1 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, FileId),
     FileContent = <<"abc">>,
     storage_driver:unlink(SDHandle1, size(FileContent)),
     ok = storage_driver:create(SDHandle1, 8#775),
