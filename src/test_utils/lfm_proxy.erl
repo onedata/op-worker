@@ -720,7 +720,7 @@ get_file_distribution(Worker, SessId, FileKey) ->
 
 
 -spec get_effective_file_qos(node(), session:id(), lfm:file_key()) ->
-    {ok, {[qos_entry:id()], file_qos:assigned_entries()}} | lfm:error_reply().
+    {ok, {#{qos_entry:id() => qos_status:status()}, file_qos:assigned_entries()}} | lfm:error_reply().
 get_effective_file_qos(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_effective_file_qos(SessId, FileKey)).
 

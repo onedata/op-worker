@@ -46,7 +46,6 @@
 operation_supported(create, instance, private) -> true;
 
 operation_supported(get, instance, private) -> true;
-operation_supported(get, effective_qos, private) -> true;
 
 operation_supported(delete, instance, private) -> true;
 
@@ -60,14 +59,21 @@ operation_supported(_, _, _) -> false.
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
-    required => #{<<"expression">> => {binary, non_empty}},
+    required => #{
+        <<"expression">> => {binary, non_empty},
+        <<"fileId">> => {binary, fun(ObjectId) ->
+            case catch file_id:objectid_to_guid(ObjectId) of
+                {ok, Guid} ->
+                    {true, Guid};
+                _Error ->
+                    throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>))
+            end
+        end}
+    },
     optional => #{<<"replicasNum">> => {integer, {not_lower_than, 1}}}
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
-    undefined;
-
-data_spec(#op_req{operation = get, gri = #gri{aspect = effective_qos}}) ->
     undefined;
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
@@ -90,9 +96,6 @@ fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
 }}) ->
     fetch_qos_entry(Auth, QosEntryId);
 
-fetch_entity(#op_req{operation = get, gri = #gri{aspect = effective_qos}}) ->
-    {ok, {undefined, 1}};
-
 fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
     id = QosEntryId,
     aspect = instance
@@ -111,9 +114,8 @@ fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
-    id = FileGuid,
-    aspect = instance
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{aspect = instance}, data = #{
+    <<"fileId">> := FileGuid
 }}, _) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_QOS);
@@ -123,13 +125,6 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     aspect = instance
 }}, _QosEntry) ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
-
-authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
-    id = FileGuid,
-    aspect = effective_qos
-}}, _) ->
-    SpaceId = file_id:guid_to_space_id(FileGuid),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
 
 authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
@@ -146,11 +141,10 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = create, gri = #gri{
-    id = Guid,
-    aspect = instance
+validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = #{
+    <<"fileId">> := FileGuid
 }}, _) ->
-    SpaceId = file_id:guid_to_space_id(Guid),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = get, gri = #gri{
@@ -158,13 +152,6 @@ validate(#op_req{operation = get, gri = #gri{
     aspect = instance
 }}, _QosEntry) ->
     {ok, SpaceId} = ?check(qos_entry:get_space_id(QosEntryId)),
-    middleware_utils:assert_space_supported_locally(SpaceId);
-
-validate(#op_req{operation = get, gri = #gri{
-    id = Guid,
-    aspect = effective_qos
-}}, _) ->
-    SpaceId = file_id:guid_to_space_id(Guid),
     middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = delete, gri = #gri{
@@ -181,14 +168,17 @@ validate(#op_req{operation = delete, gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
-create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}} = Req) ->
+create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     SessionId = Auth#auth.session_id,
-    QosExpression = maps:get(<<"expression">>, Req#op_req.data),
+    ExpressionInRPN = maps:get(<<"expression">>, Req#op_req.data),
     ReplicasNum = maps:get(<<"replicasNum">>, Req#op_req.data, 1),
+    FileGuid = maps:get(<<"fileId">>, Req#op_req.data),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
 
-    case lfm:add_qos_entry(SessionId, {guid, FileGuid}, QosExpression, ReplicasNum) of
+    case lfm:add_qos_entry(SessionId, {guid, FileGuid}, ExpressionInRPN, ReplicasNum) of
         {ok, QosEntryId} ->
-            {ok, value, QosEntryId};
+            {ok, QosEntry} = ?check(lfm:get_qos_entry(SessionId, QosEntryId)),
+            {ok, resource, {GRI#gri{id = QosEntryId}, entry_to_details(QosEntry, false, SpaceId)}};
         ?ERROR_INVALID_QOS_EXPRESSION ->
             ?ERROR_INVALID_QOS_EXPRESSION;
         {error, Errno} ->
@@ -202,35 +192,11 @@ create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}} = Req)
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = effective_qos}}, _) ->
-    SessionId = Auth#auth.session_id,
-    case lfm:get_effective_file_qos(SessionId, {guid, FileGuid}) of
-        {ok, {QosEntries, AssignedEntries}} ->
-            {ok, Fulfilled} = ?check(lfm_qos:check_qos_fulfilled(
-                SessionId, QosEntries, {guid, FileGuid})
-            ),
-            {ok, #{
-                <<"qosEntries">> => QosEntries,
-                <<"assignedEntries">> => AssignedEntries,
-                <<"fulfilled">> => Fulfilled
-            }};
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND;
-        {error, Errno} ->
-            ?ERROR_POSIX(Errno)
-    end;
-
 get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEntry) ->
     SessionId = Auth#auth.session_id,
-    {ok, Fulfilled} = ?check(lfm_qos:check_qos_fulfilled(SessionId, QosEntryId)),
-    {ok, Expression} = qos_entry:get_expression(QosEntry),
-    {ok, ReplicasNum} = qos_entry:get_replicas_num(QosEntry),
-    {ok, #{
-        <<"qosEntryId">> => QosEntryId,
-        <<"expression">> => Expression,
-        <<"replicasNum">> => ReplicasNum,
-        <<"fulfilled">> => Fulfilled
-    }}.
+    {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
+    {ok, Status} = ?check(lfm_qos:check_qos_fulfilled(SessionId, QosEntryId)),
+    {ok, entry_to_details(QosEntry, Status, SpaceId)}.
 
 
 %%--------------------------------------------------------------------
@@ -267,3 +233,18 @@ fetch_qos_entry(?USER(_UserId, SessionId), QosEntryId) ->
         _ ->
             ?ERROR_NOT_FOUND
     end.
+
+%% @private
+-spec entry_to_details(qos_entry:record(), qos_status:status(), od_space:id()) -> map().
+entry_to_details(QosEntry, Status, SpaceId) ->
+    {ok, ExpressionInRPN} = qos_entry:get_expression(QosEntry),
+    {ok, ReplicasNum} = qos_entry:get_replicas_num(QosEntry),
+    {ok, QosRootFileUuid} = qos_entry:get_file_uuid(QosEntry),
+    QosRootFileGuid = file_id:pack_guid(QosRootFileUuid, SpaceId),
+    {ok, QosRootFileObjectId} = file_id:guid_to_objectid(QosRootFileGuid),
+    #{
+        <<"expression">> => ExpressionInRPN,
+        <<"replicasNum">> => ReplicasNum,
+        <<"fileId">> => QosRootFileObjectId,
+        <<"fulfilled">> => Status
+    }.

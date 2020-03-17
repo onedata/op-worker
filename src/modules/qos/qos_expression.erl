@@ -19,7 +19,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([raw_to_rpn/1, calculate_assigned_storages/3]).
+-export([raw_to_rpn/1, rpn_to_infix/1, calculate_assigned_storages/3]).
 
 
 % The raw type stores expression as single binary. It is used to store input
@@ -58,6 +58,11 @@ raw_to_rpn(Expression) ->
         throw:?ERROR_INVALID_QOS_EXPRESSION ->
             ?ERROR_INVALID_QOS_EXPRESSION
     end.
+
+
+-spec rpn_to_infix(rpn()) -> {ok, raw()}.
+rpn_to_infix(RPNExpression) ->
+    rpn_to_infix(RPNExpression, []).
 
 
 %%--------------------------------------------------------------------
@@ -116,6 +121,25 @@ raw_to_rpn_internal([Operand | Expression], Stack, RPNExpression) ->
         _ ->
             throw(?ERROR_INVALID_QOS_EXPRESSION)
     end.
+
+
+%% @private
+-spec rpn_to_infix(rpn(), [expr_token()]) -> {ok, raw()}.
+rpn_to_infix([ExprToken | ExpressionTail], Stack) ->
+    case lists:member(ExprToken, ?OPERATORS) of
+        true ->
+            [Operand1, Operand2 | StackTail] = Stack,
+            InfixTokens = [Operand2, ExprToken, Operand1],
+            ExtendedInfixTokens = case ExpressionTail of
+                [] -> InfixTokens;
+                _ -> [<<"(">> | InfixTokens] ++ [<<")">>]
+            end,
+            rpn_to_infix(ExpressionTail, [str_utils:join_binary(ExtendedInfixTokens) | StackTail]);
+        false ->
+            rpn_to_infix(ExpressionTail, [ExprToken | Stack])
+    end;
+rpn_to_infix([], [Res]) ->
+    {ok, Res}.
 
 
 %%--------------------------------------------------------------------

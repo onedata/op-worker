@@ -33,6 +33,7 @@
 routes() ->
     AllRoutes = lists:flatten([
         file_rest_routes:routes(),
+        file_qos_rest_routes:routes(),
         monitoring_rest_routes:routes(),
         oneprovider_rest_routes:routes(),
         qos_rest_routes:routes(),

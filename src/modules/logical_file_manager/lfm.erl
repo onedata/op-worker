@@ -816,7 +816,7 @@ add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos(session:id(), file_key()) ->
-    {ok, {[qos_entry:id()], file_qos:assigned_entries()}} | error_reply().
+    {ok, {#{qos_entry:id() => qos_status:status()}, file_qos:assigned_entries()}} | error_reply().
 get_effective_file_qos(SessId, FileKey) ->
     ?run(fun() -> lfm_qos:get_effective_file_qos(SessId, FileKey) end).
 

@@ -17,60 +17,56 @@
 -include_lib("eunit/include/eunit.hrl").
 
 
-parse_to_rpn_test() ->
+qos_expression_test() ->
     % test empty
     ?assertEqual({ok, []}, qos_expression:raw_to_rpn(<<"">>)),
 
     % test simple equality
-    ?assertEqual({ok, [<<"country=PL">>]}, qos_expression:raw_to_rpn(<<"country=PL">>)),
+    Expr0 = <<"country=PL">>,
+    {ok, RPN0} = qos_expression:raw_to_rpn(Expr0),
+    ?assertEqual([<<"country=PL">>], RPN0),
+    ?assertEqual({ok, Expr0}, qos_expression:rpn_to_infix(RPN0)),
 
     % test operators precedence
     Operators = [<<"|">>, <<"&">>, <<"-">>],
     OperatorPairs = [{Op1, Op2} || Op1 <- Operators, Op2 <- Operators],
     lists:foreach(
         fun({Op1, Op2}) ->
-            ?assertEqual(
-                {ok, [<<"country=PL">>, <<"type=disk">>, Op1, <<"country=FR">>, Op2]},
-                qos_expression:raw_to_rpn(<<"country=PL", Op1/binary,
-                    "type=disk", Op2/binary, "country=FR">>)
-            )
+            Expr = <<"country=PL", Op1/binary, "type=disk", Op2/binary, "country=FR">>,
+            {ok, RPN} = qos_expression:raw_to_rpn(Expr),
+            ?assertEqual([<<"country=PL">>, <<"type=disk">>, Op1, <<"country=FR">>, Op2], RPN)
         end, OperatorPairs),
 
-    % test parens
     Expr1 = <<"country=PL&type=disk|country=FR">>,
-    ?assertEqual(
-        {ok, [<<"country=PL">>, <<"type=disk">>, <<"&">>, <<"country=FR">>, <<"|">>]},
-        qos_expression:raw_to_rpn(Expr1)
-    ),
-
+    {ok, RPN1} = qos_expression:raw_to_rpn(Expr1),
+    ?assertEqual([<<"country=PL">>, <<"type=disk">>, <<"&">>, <<"country=FR">>, <<"|">>], RPN1),
+    
+    % test parens
     Expr2 = <<"(country=PL&type=disk)|country=FR">>,
-    ?assertEqual(
-        {ok, [<<"country=PL">>, <<"type=disk">>, <<"&">>, <<"country=FR">>, <<"|">>]},
-        qos_expression:raw_to_rpn(Expr2)
-    ),
+    {ok, RPN2} = qos_expression:raw_to_rpn(Expr2),
+    ?assertEqual([<<"country=PL">>, <<"type=disk">>, <<"&">>, <<"country=FR">>, <<"|">>], RPN2),
+    ?assertEqual({ok, Expr2}, qos_expression:rpn_to_infix(RPN2)),
 
     Expr3 = <<"country=PL&(type=disk|country=FR)">>,
-    ?assertEqual(
-        {ok, [<<"country=PL">>, <<"type=disk">>, <<"country=FR">>, <<"|">>, <<"&">>]},
-        qos_expression:raw_to_rpn(Expr3)
-    ),
+    {ok, RPN3} = qos_expression:raw_to_rpn(Expr3),
+    ?assertEqual([<<"country=PL">>, <<"type=disk">>, <<"country=FR">>, <<"|">>, <<"&">>], RPN3),
+    ?assertEqual({ok, Expr3}, qos_expression:rpn_to_infix(RPN3)),
 
     Expr4 = <<"(country=PL&type=tape)|(type=disk&country=FR)">>,
-    ?assertEqual(
-        {ok, [<<"country=PL">>, <<"type=tape">>, <<"&">>,
-         <<"type=disk">>, <<"country=FR">>, <<"&">>, <<"|">>]},
-        qos_expression:raw_to_rpn(Expr4)
-    ),
+    {ok, RPN4} = qos_expression:raw_to_rpn(Expr4),
+    ?assertEqual([<<"country=PL">>, <<"type=tape">>, <<"&">>,
+         <<"type=disk">>, <<"country=FR">>, <<"&">>, <<"|">>], RPN4),
+    ?assertEqual({ok, Expr4}, qos_expression:rpn_to_infix(RPN4)),
 
     % test invalid
     Expr5 = <<"country">>,
-    ?assertMatch(
+    ?assertEqual(
         ?ERROR_INVALID_QOS_EXPRESSION,
         qos_expression:raw_to_rpn(Expr5)
     ),
 
     Expr6 = <<"country|type">>,
-    ?assertMatch(
+    ?assertEqual(
         ?ERROR_INVALID_QOS_EXPRESSION,
         qos_expression:raw_to_rpn(Expr6)
     ),
@@ -83,13 +79,13 @@ parse_to_rpn_test() ->
 %%    ),
 
     Expr8 = <<"type=disk)">>,
-    ?assertMatch(
+    ?assertEqual(
         ?ERROR_INVALID_QOS_EXPRESSION,
         qos_expression:raw_to_rpn(Expr8)
     ),
 
     Expr9 = <<")(country=PL">>,
-    ?assertMatch(
+    ?assertEqual(
         ?ERROR_INVALID_QOS_EXPRESSION,
         qos_expression:raw_to_rpn(Expr9)
     ).

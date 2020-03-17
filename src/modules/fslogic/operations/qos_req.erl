@@ -149,17 +149,22 @@ get_effective_file_qos_insecure(_UserCtx, FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case file_qos:get_effective(FileUuid) of
         {ok, EffQos} ->
+            QosEntriesList = file_qos:get_qos_entries(EffQos),
+            EntriesWithStatus = lists:foldl(fun(QosEntryId, Acc) ->
+                Status = qos_status:check_fulfillment(FileCtx, QosEntryId),
+                Acc#{QosEntryId => Status}
+            end, #{}, QosEntriesList),
             #provider_response{
                 status = #status{code = ?OK},
-                provider_response = #effective_file_qos{
-                    qos_entries = file_qos:get_qos_entries(EffQos),
+                provider_response = #eff_qos_response{
+                    entries_with_status = EntriesWithStatus,
                     assigned_entries = file_qos:get_assigned_entries(EffQos)
                 }
             };
         undefined ->
             #provider_response{
                 status = #status{code = ?OK},
-                provider_response = #effective_file_qos{}
+                provider_response = #eff_qos_response{}
             };
         {error, _} ->
             #provider_response{status = #status{code = ?EAGAIN}}

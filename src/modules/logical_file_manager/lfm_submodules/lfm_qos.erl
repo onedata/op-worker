@@ -46,12 +46,12 @@ add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos(session:id(), lfm:file_key()) ->
-    {ok, {[qos_entry:id()], file_qos:assigned_entries()}} | lfm:error_reply().
+    {ok, {#{qos_entry:id() => qos_status:status()}, file_qos:assigned_entries()}} | lfm:error_reply().
 get_effective_file_qos(SessId, FileKey) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid, #get_effective_file_qos{},
-        fun(#effective_file_qos{qos_entries = QosEntries, assigned_entries = AssignedEntries}) ->
-            {ok, {QosEntries, AssignedEntries}}
+        fun(#eff_qos_response{entries_with_status = EntriesWithStatus, assigned_entries = AssignedEntries}) ->
+            {ok, {EntriesWithStatus, AssignedEntries}}
         end).
 
 %%--------------------------------------------------------------------

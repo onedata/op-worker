@@ -32,7 +32,7 @@
 -spec create_response(gri:gri(), middleware:auth_hint(),
     middleware:data_format(), Result :: term() | {gri:gri(), term()} |
     {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
-create_response(#gri{aspect = instance}, _, value, QosEntryId) ->
+create_response(#gri{aspect = instance}, _, resource, {#gri{id = QosEntryId}, _}) ->
     PathTokens = [<<"qos-entry">>, QosEntryId],
     ?CREATED_REPLY(PathTokens, #{<<"qosEntryId">> => QosEntryId}).
 
@@ -44,4 +44,6 @@ create_response(#gri{aspect = instance}, _, value, QosEntryId) ->
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(_, QosData) ->
-    ?OK_REPLY(QosData).
+    #{<<"expression">> := RPNExpression} = QosData,
+    {ok, InfixExpression} = qos_expression:rpn_to_infix(RPNExpression),
+    ?OK_REPLY(QosData#{<<"expression">> => InfixExpression}).
