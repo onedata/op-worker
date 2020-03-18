@@ -144,13 +144,12 @@ resupport_cleanup_test(Config) ->
     ?assertMatch({ok, _}, rpc:call(Node, autocleaning, get, [SpaceId])),
     ?assertMatch({ok, _}, rpc:call(Node, file_popularity_config, get, [SpaceId])),
     ?assertMatch(true, rpc:call(Node, file_popularity_api, is_enabled, [SpaceId])),
-    ?assertMatch({ok, [_], _}, rpc:call(Node, traverse_task_list, list, [<<"storage_sync_traverse">>, ended]), 10),
     
     {ok, Token} = tokens:serialize(tokens:construct(#token{
         onezone_domain = <<"zone">>,
         subject = ?SUB(user, <<"user1">>),
         id = <<"user1">>,
-        type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId),
+        type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId, space_support:build_parameters(global, eager)),
         persistence = named
     }, <<"secret">>, [])),
     
@@ -162,8 +161,7 @@ resupport_cleanup_test(Config) ->
     ?assertEqual(undefined, rpc:call(Node, autocleaning, get_config, [SpaceId])),
     ?assertEqual({error, not_found}, rpc:call(Node, autocleaning, get, [SpaceId])),
     ?assertEqual(false, rpc:call(Node, file_popularity_api, is_enabled, [SpaceId])),
-    ?assertEqual({error, not_found}, rpc:call(Node, file_popularity_config, get, [SpaceId])),
-    ?assertMatch({ok, [], _}, rpc:call(Node, traverse_task_list, list, [<<"storage_sync_traverse">>, ended])).
+    ?assertEqual({error, not_found}, rpc:call(Node, file_popularity_config, get, [SpaceId])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

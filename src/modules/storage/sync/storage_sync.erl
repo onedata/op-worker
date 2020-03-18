@@ -81,7 +81,5 @@ cancel(SpaceId, StorageId) ->
 
 -spec clean_up(od_space:id(), storage:id()) -> ok | {error, term()}.
 clean_up(SpaceId, StorageId) ->
-    cancel(SpaceId, StorageId),
-    storage_sync_traverse:delete_ended(),
     storage_sync_monitoring:delete(SpaceId, StorageId),
     space_strategies:delete(SpaceId).

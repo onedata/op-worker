@@ -62,7 +62,7 @@
 -export_type([scan_status/0, info/0, master_job/0, slave_job/0]).
 
 %% API
--export([init_pool/0, stop_pool/0, run_import/3, run_update/3, cancel/2, delete_ended/0]).
+-export([init_pool/0, stop_pool/0, run_import/3, run_update/3, cancel/2]).
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, get_job/1, update_job_progress/5, to_string/1,
@@ -125,13 +125,6 @@ cancel(SpaceId, StorageId) ->
                 [SpaceId, StorageId]),
             ok
     end.
-
--spec delete_ended() -> ok.
-delete_ended() ->
-    {ok, TaskIds, _} = traverse_task_list:list(?POOL_BIN, ended),
-    lists:foreach(fun(T) ->
-        ok = traverse_task:delete_ended(?POOL_BIN, T)
-    end, TaskIds).
     
 
 %===================================================================

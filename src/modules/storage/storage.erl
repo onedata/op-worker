@@ -439,6 +439,7 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
+    %% @TODO VFS-6208 Cancel sync and auto-cleaning traverse and clean up ended tasks when unsupporting
     case storage_logic:revoke_space_support(StorageId, SpaceId) of
         ok -> on_space_unsupported(SpaceId, StorageId);
         Error -> Error
