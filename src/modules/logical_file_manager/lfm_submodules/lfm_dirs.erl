@@ -62,8 +62,8 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory.
-%% Returns up to Limit of entries, starting with Offset-th entry.
+%% Gets {Guid, Name} for each directory children starting with Offset-th
+%% entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children(
@@ -84,7 +84,7 @@ get_children(SessId, FileKey, Offset, Limit) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv ls(SessId, FileKey, Offset, Limit, Token, undefined).
+%% @equiv get_children(SessId, FileKey, Offset, Limit, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children(
@@ -102,9 +102,8 @@ get_children(SessId, FileKey, Offset, Limit, Token) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory.
-%% Returns up to Limit of entries. Uses token or start_id (if token is undefined)
-%% to choose starting entry.
+%% Gets {Guid, Name} for each directory children starting with Offset-th
+%% from specified StartId or Token entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children(session:id(), fslogic_worker:file_guid_or_path(),
@@ -133,8 +132,8 @@ get_children(SessId, FileKey, Offset, Limit, Token, StartId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory. Returns attributes of files.
-%% Returns up to Limit of entries, starting with Offset-th entry.
+%% Gets file basic attributes (see file_attr.hrl) for each directory children
+%% starting with Offset-th entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_attrs(
@@ -155,8 +154,8 @@ get_children_attrs(SessId, FileKey, Offset, Limit) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory. Returns attributes of files.
-%% Returns up to Limit of entries. Uses token to choose starting entry.
+%% Gets file basic attributes (see file_attr.hrl) for each directory children
+%% starting with Offset-th from specified Token entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_attrs(
@@ -198,8 +197,9 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory. Returns details of files.
-%% Returns up to Limit of entries. Uses startid to choose starting entry.
+%% Gets file details (see file_details.hrl) for each directory children
+%% starting with Offset-th from specified StartId entry and up to Limit
+%% of entries.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_details(

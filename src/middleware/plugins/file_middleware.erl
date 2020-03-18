@@ -501,8 +501,8 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     Offset = maps:get(<<"offset">>, Data, 0),
 
     case lfm:get_children_details(SessionId, {guid, FileGuid}, Offset, Limit, StartId) of
-        {ok, Children, _} ->
-            {ok, value, Children};
+        {ok, ChildrenDetails, _} ->
+            {ok, value, ChildrenDetails};
         {error, Errno} ->
             ?ERROR_POSIX(Errno)
     end;

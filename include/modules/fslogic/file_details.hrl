@@ -5,11 +5,13 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc File details record definition.
+%%% @doc
+%%% File details record definition. This record is used exclusively by gui
+%%% to get and show, in one go instead of multiple requests, not only file
+%%% basic attributes (#file_attr{}) but also additional information about
+%%% active permissions type or existence of metadata.
 %%% @end
 %%%-------------------------------------------------------------------
--author("Bartosz Walkowicz").
-
 -ifndef(FILE_DETAILS_HRL).
 -define(FILE_DETAILS_HRL, 1).
 

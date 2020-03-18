@@ -25,6 +25,9 @@
     get_children_details/5
 ]).
 
+-define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
+    ?APP_NAME, max_read_dir_plus_procs, 20
+)).
 
 %%%===================================================================
 %%% API
@@ -114,7 +117,7 @@ get_children_attrs(UserCtx, FileCtx0, Offset, Limit, Token) ->
 
 
 %%--------------------------------------------------------------------
-%% @equiv get_children_info_insecure/6 with permission checks
+%% @equiv get_children_details_insecure/6 with permission checks
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_details(
@@ -184,7 +187,9 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Lists directory. Starts with Offset entity and limits returned list to Limit size.
+%% Gets {Guid, Name} for each directory children starting with Offset-th
+%% from specified StartId or Token entry and up to Limit of entries
+%% and allowed by ChildrenWhiteList.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_insecure(
@@ -220,8 +225,9 @@ get_children_insecure(UserCtx, FileCtx0, Offset, Limit, Token, StartId, Children
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Lists directory with stats of each file.
-%% Starts with Offset entity and limits returned list to Limit size.
+%% Gets file basic attributes (see file_attr.hrl) for each directory children
+%% starting with Offset-th from specified Token entry and up to Limit of entries.
+%% and allowed by ChildrenWhiteList.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_attrs_insecure(
@@ -244,7 +250,7 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhi
         } = attr_req:get_file_attr_light(UserCtx, ChildCtx, true),
         Attrs
     end,
-    ChildrenAttrs = process_children(MapFun, Children),
+    ChildrenAttrs = map_children(MapFun, Children),
 
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
@@ -259,8 +265,9 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhi
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Lists directory with details of each file.
-%% Starts with Offset entity and limits returned list to Limit size.
+%% Gets file details (see file_details.hrl) for each directory children
+%% starting with Offset-th from specified StartId entry and up to Limit
+%% of entries and allowed by ChildrenWhiteList.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_details_insecure(
@@ -292,7 +299,7 @@ get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, Childre
         end,
         FileDetails
     end,
-    ChildrenDetails = process_children(MapFun, NumberedChildren),
+    ChildrenDetails = map_children(MapFun, NumberedChildren),
 
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
@@ -351,12 +358,12 @@ list_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, ChildrenWhiteList0) 
 %% filters out children for which it raised error.
 %% @end
 %%--------------------------------------------------------------------
--spec process_children(
+-spec map_children(
     MapFunInsecure :: fun((ChildCtx :: file_ctx:ctx()) -> Result),
     Children :: [file_ctx:ctx()]
 ) ->
     [Result] when Result :: term().
-process_children(MapFunInsecure, Children) ->
+map_children(MapFunInsecure, Children) ->
     MapFun = fun(ChildCtx) ->
         try
             MapFunInsecure(ChildCtx)
@@ -369,8 +376,8 @@ process_children(MapFunInsecure, Children) ->
         (error) -> false;
         (_Attrs) -> true
     end,
-    MaxProcesses = application:get_env(?APP_NAME, max_read_dir_plus_procs, 20),
-    filtermap(MapFun, FilterFun, Children, MaxProcesses, length(Children)).
+    ChildrenNum = length(Children),
+    filtermap(MapFun, FilterFun, Children, ?MAX_MAP_CHILDREN_PROCESSES, ChildrenNum).
 
 
 %%--------------------------------------------------------------------

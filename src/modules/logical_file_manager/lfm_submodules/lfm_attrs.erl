@@ -40,7 +40,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file attributes.
+%% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(SessId :: session:id(), FileKey :: lfm:file_key()) ->
@@ -62,8 +62,7 @@ stat(SessId, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file details, that is attrs with additional information like
-%% active permissions type or existence of metadata.
+%% Returns file details (see file_details.hrl).
 %% @end
 %%--------------------------------------------------------------------
 -spec get_details(session:id(), FileKey :: lfm:file_key()) ->

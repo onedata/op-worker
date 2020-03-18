@@ -120,7 +120,7 @@ translate_file_details(#file_details{
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
         <<"index">> => StartId,
-        <<"posixPermissions">> => integer_to_binary(Mode, 8),
+        <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
         <<"parentId">> => ParentId,
         <<"mtime">> => MTime,
         <<"type">> => Type,
