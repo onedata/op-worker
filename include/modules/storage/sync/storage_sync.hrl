@@ -21,4 +21,10 @@
 -define(DEFAULT_SYNC_MAX_DEPTH, 65535).
 -define(SYNC_DIR_BATCH_SIZE, application:get_env(?APP_NAME, storage_sync_dir_batch_size, 1000)).
 
+% storage_sync_engine results
+-define(IMPORTED, imported).
+-define(UPDATED, updated).
+-define(PROCESSED, processed).
+-define(FAILED, failed).
+
 -endif.

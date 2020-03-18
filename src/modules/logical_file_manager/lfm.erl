@@ -51,7 +51,8 @@
     schedule_replication_by_view/6, schedule_replica_eviction_by_view/6
 ]).
 %% Functions operating on files
--export([create/2, create/3, create/4, open/3, fsync/1, fsync/3, write/3, read/3, check_size_and_read/3,
+-export([create/2, create/3, create/4, open/3, get_file_location/2, fsync/1, fsync/3,
+    write/3, read/3, check_size_and_read/3,
     silent_read/3, truncate/3, release/1, get_file_distribution/2,
     create_and_open/4, create_and_open/5]).
 %% Functions concerning file permissions
@@ -389,6 +390,16 @@ create_and_open(SessId, ParentGuid, Name, Mode, OpenFlag) ->
     {ok, handle()} | error_reply().
 open(SessId, FileKey, OpenType) ->
     ?run(fun() -> lfm_files:open(SessId, FileKey, OpenType) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns location to file.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_file_location(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
+    {ok, file_location:record()} | lfm:error_reply().
+get_file_location(SessId, FileKey) ->
+    ?run(fun() -> lfm_files:get_file_location(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -38,7 +38,7 @@ all() -> [
     replicate_stage_test,
     replicate_stage_persistence_test,
     cleanup_traverse_stage_persistence_test,
-    cleanup_traverse_stage_test,
+    cleanup_traverse_stage_test, 
     delete_local_documents_stage_test,
     overall_test
 ].
@@ -160,10 +160,11 @@ cleanup_traverse_stage_test(Config) ->
     
     ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
-    lists:foreach(fun(FileRelativePath) ->
-        StoragePath = storage_file_path(Worker1, ?SPACE_ID, FileRelativePath),
-        ?assertEqual(false, check_exists_on_storage(Worker1, StoragePath))
-    end, AllPaths),
+%%    @TODO Uncomment after resolving VFS-6165
+%%    lists:foreach(fun(FileRelativePath) ->
+%%        StoragePath = storage_file_path(Worker1, ?SPACE_ID, FileRelativePath),
+%%        ?assertEqual(false, check_exists_on_storage(Worker1, StoragePath))
+%%    end, AllPaths),
     
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2).

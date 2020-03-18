@@ -177,6 +177,7 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
         space_id = SpaceId, slave_job_pid = Pid, subtask_id = TraverseId
     } = Job,
     
+    % This clause can be run after provider restart so update slave_job_pid if needed
     case self() of
         Pid -> ok;
         _ -> space_unsupport_job:save(Job#space_unsupport_job{slave_job_pid = self()})
@@ -194,7 +195,8 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
     FileGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    sd_utils:recursive_delete(FileCtx, UserCtx);
+    sd_utils:delete(FileCtx, UserCtx),
+    ok;
 
 execute_stage(#space_unsupport_job{stage = wait_for_dbsync} = _Job) ->
     %% @TODO VFS-6164 wait for all documents to be saved on disc

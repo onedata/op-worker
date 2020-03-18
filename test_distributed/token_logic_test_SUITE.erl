@@ -92,7 +92,7 @@ subscribe_test(Config) ->
         <<"revoked">> => true
     },
     PushMessage1 = #gs_push_graph{gri = Token1SharedGRI, data = ChangedData1, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
+    logic_tests_common:simulate_push(Config, PushMessage1),
 
     ?assertMatch(
         {ok, #document{key = ?TOKEN_1, value = #od_token{
@@ -105,7 +105,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage3 = #gs_push_graph{gri = Token1SharedGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
+    logic_tests_common:simulate_push(Config, PushMessage3),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_token, get_from_cache, [?TOKEN_1])
@@ -120,7 +120,7 @@ subscribe_test(Config) ->
     ),
 
     PushMessage4 = #gs_push_nosub{gri = Token1SharedGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
+    logic_tests_common:simulate_push(Config, PushMessage4),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_token, get_from_cache, [?TOKEN_1])
@@ -200,7 +200,7 @@ subscribe_for_temporary_tokens_generation_test(Config) ->
         data = ChangedData1,
         change_type = updated
     },
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
+    logic_tests_common:simulate_push(Config, PushMessage1),
 
     ?assertMatch(
         {ok, 2},
@@ -210,7 +210,7 @@ subscribe_for_temporary_tokens_generation_test(Config) ->
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage3 = #gs_push_graph{gri = TemporaryTokenSecretSharedGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
+    logic_tests_common:simulate_push(Config, PushMessage3),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, temporary_token_secret, get_from_cache, [?USER_1])
@@ -226,7 +226,7 @@ subscribe_for_temporary_tokens_generation_test(Config) ->
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     PushMessage4 = #gs_push_nosub{gri = TemporaryTokenSecretSharedGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
+    logic_tests_common:simulate_push(Config, PushMessage4),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, temporary_token_secret, get_from_cache, [?USER_1])
