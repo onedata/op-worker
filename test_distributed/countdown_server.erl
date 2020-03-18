@@ -310,29 +310,6 @@ decrease_and_save_data(Counter = #counter{value = Value, data = Data0}, Data) ->
         data = [Data | Data0]
     }.
 
-%%-spec await_all_internal(node_counters(), non_neg_integer(), node_counters_data(), [term()]) -> node_counters_data().
-%%await_all_internal(NodesToCounterIds, _Timeout, DataAcc, NotMatchedMessages) when map_size(NodesToCounterIds) =:= 0 ->
-%%    resend_messages_to_self(NotMatchedMessages),
-%%    DataAcc;
-%%await_all_internal(NodesToCounterIds, Timeout, DataAcc, NotMatchedMessages) ->
-%%    receive
-%%        Msg = ?COUNTDOWN_FINISHED(CounterId, Node, Data) ->
-%%            case is_expected_counter(Node, CounterId, NodesToCounterIds) of
-%%                true ->
-%%                    NodesToCounterIds2 = remove_counter(Node, CounterId, NodesToCounterIds),
-%%                    await_all_internal(NodesToCounterIds2, Timeout, maps:update_with(Node,
-%%                        fun(NodeCounterIdsToData) -> NodeCounterIdsToData#{CounterId => Data} end,
-%%                    #{CounterId => Data}, DataAcc), NotMatchedMessages);
-%%                false ->
-%%                    await_all_internal(NodesToCounterIds, Timeout, DataAcc, [Msg | NotMatchedMessages])
-%%            end
-%%    after
-%%        Timeout ->
-%%            ErrorMsg = str_utils:format_bin("countdown_server:await_all timeout for counters ~p",
-%%                [NodesToCounterIds]),
-%%            ct:print(ErrorMsg),
-%%            ct:fail(ErrorMsg)
-%%    end.
 
 -spec await_many_internal(node_counters(), non_neg_integer(), non_neg_integer(), node_counters_data(), [term()]) ->
     {node_counters_data(), node_counters()}.
@@ -404,6 +381,7 @@ remove_counter(Node, ExpectedCounterId, NodesToCounterIds) ->
     end, NodesToCounterIds),
     case maps:get(Node, NodesToCounterIds2) of
         [] -> maps:remove(Node, NodesToCounterIds2);
+        undefined -> maps:remove(Node, NodesToCounterIds2);
         _ -> NodesToCounterIds2
     end.
 

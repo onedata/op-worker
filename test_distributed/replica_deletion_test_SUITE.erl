@@ -40,19 +40,21 @@ all() -> [
 -define(CASE, (atom_to_binary(?FUNCTION_NAME, utf8))).
 -define(BLOCK(Offset, Size), #file_block{offset = Offset, size = Size}).
 -define(VV, #{}).
+-define(RUN_TEST(Config, TestFun, Setups),
+    run_test(Config, TestFun, ?FUNCTION_NAME, Setups)).
 
 -define(SETUPS, [
     % Tests are run with 2 parameters: FilesNum and JobsNum.
     % Number of total replica_deletion requests is equal to FilesNum * JobsNum.
 %   {FileNums, JobNums}
     {1, 1},
-    {10, 1},
+    {10
     {100, 1},
     {1000, 1},
-%%    {10000, 1},
-%%    {1000, 10},
-%%    {100, 100},
-%%    {10, 1000},
+    {10000, 1},
+    {1000, 10},
+    {100, 100},
+    {10, 1000},
     {1, 10000}
 ]).
 
@@ -63,13 +65,13 @@ all() -> [
 %%%===================================================================
 
 successful_replica_deletion_test(Config) ->
-    run_test(Config, fun successful_replica_deletion_test_base/3, ?SETUPS).
+    ?RUN_TEST(Config, fun successful_replica_deletion_test_base/3, ?SETUPS).
 
 failed_replica_deletion_test(Config) ->
-    run_test(Config, fun failed_replica_deletion_test_base/3, ?SETUPS).
+    ?RUN_TEST(Config, fun failed_replica_deletion_test_base/3, ?SETUPS).
 
 canceled_replica_deletion_test(Config) ->
-    run_test(Config, fun canceled_replica_deletion_test_base/3, ?SETUPS).
+    ?RUN_TEST(Config, fun canceled_replica_deletion_test_base/3, ?SETUPS).
 
 throttling_test(Config) ->
     % This test checks whether throttling works properly in replica_deletion_master process
@@ -78,7 +80,7 @@ throttling_test(Config) ->
     % NOTE!!! replica_deletion_max_parallel_requests is decreased to 10 in init_per_testcase
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, MaxParallelRequests} = test_utils:get_env(W1, op_worker, replica_deletion_max_parallel_requests),
-    run_test(Config, fun throttling_test_base/3, [
+    ?RUN_TEST(Config, fun throttling_test_base/3, [
         % {FilesNum, JobsNum}
         % test with number of requests less than MaxParallelRequests
         {MaxParallelRequests - 1, 1},
@@ -287,7 +289,7 @@ init_per_testcase(throttling_test, Config) ->
     init_per_testcase(default, [{old_replica_deletion_max_parallel_requests, OldValue} | Config]);
 init_per_testcase(_Case, Config) ->
     Config2 = sort_workers(Config),
-    ct:timetrap(timer:minutes(60)),
+    ct:timetrap(timer:minutes(20)),
     lfm_proxy:init(Config2).
 
 end_per_testcase(throttling_test, Config) ->
@@ -382,15 +384,16 @@ sort_workers(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lists:keyreplace(op_worker_nodes, 1, Config, {op_worker_nodes, lists:sort(Workers)}).
 
-run_test(Config, Testcase, FilesAndJobsNums) ->
+run_test(Config, Testcase, TestcaseName, FilesAndJobsNums) ->
     Results = lists:map(fun({FilesNum, JobsNum}) ->
         try
+            ct:print("Starting testcase ~p with FilesNum = ~p and JobsNum = ~p.", [TestcaseName, FilesNum, JobsNum]),
             Testcase(Config, FilesNum, JobsNum),
             ok
         catch
             E:R ->
                 ct:print("Testcase ~p failed due to ~p for FilesNum = ~p, JobsNum = ~p.~nStacktrace: ~n~p",
-                    [Testcase, {E, R}, FilesNum, JobsNum, erlang:get_stacktrace()]),
+                    [TestcaseName, {E, R}, FilesNum, JobsNum, erlang:get_stacktrace()]),
                 error
         after
             cleanup(Config)
