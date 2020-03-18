@@ -95,7 +95,7 @@ get_file_attr_insecure(UserCtx, FileCtx, Opts) ->
         IsDeleted :: boolean()
     }.
 get_file_attr_and_conflicts_insecure(UserCtx, FileCtx, Opts) ->
-    {FileAttr, FileDoc, ConflictingFiles, _FileCtx2} = compute_file_attr(
+    {FileAttr, FileDoc, ConflictingFiles, _FileCtx2} = resolve_file_attr(
         UserCtx, FileCtx, Opts
     ),
     FuseResponse = #fuse_response{
@@ -130,7 +130,7 @@ get_file_details(UserCtx, FileCtx0) ->
 -spec get_file_details_insecure(user_ctx:ctx(), file_ctx:ctx(), compute_file_attr_opts()) ->
     fslogic_worker:fuse_response().
 get_file_details_insecure(UserCtx, FileCtx, Opts) ->
-    {FileAttr, FileDoc, _, FileCtx2} = compute_file_attr(UserCtx, FileCtx, Opts),
+    {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
 
     #fuse_response{
@@ -290,19 +290,19 @@ update_times_insecure(_UserCtx, FileCtx, ATime, MTime, CTime) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Computes attributes of a file. Depending on compute_file_attr_opts() set
+%% Resolves attributes of a file. Depending on compute_file_attr_opts() set
 %% some attributes may be left undefined (see description of individual
 %% options).
 %% @end
 %%--------------------------------------------------------------------
--spec compute_file_attr(user_ctx:ctx(), file_ctx:ctx(), compute_file_attr_opts()) ->
+-spec resolve_file_attr(user_ctx:ctx(), file_ctx:ctx(), compute_file_attr_opts()) ->
     {
         #file_attr{},
         FileDoc :: file_meta:doc(),
         Conflicts :: [{file_meta:uuid(), file_meta:name()}],
         file_ctx:ctx()
     }.
-compute_file_attr(UserCtx, FileCtx, Opts) ->
+resolve_file_attr(UserCtx, FileCtx, Opts) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {FileUuid, _SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
 
