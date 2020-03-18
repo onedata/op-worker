@@ -1187,7 +1187,11 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
 emit_space_dir_created(DirUuid, SpaceId) ->
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
     #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_light(user_ctx:new(?ROOT_USER_ID), FileCtx, false),
+        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
+            allow_deleted_files => false,
+            include_size => false,
+            name_conflicts_resolution_policy => allow_name_conflicts
+        }),
     FileAttr2 = FileAttr#file_attr{size = 0},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
 

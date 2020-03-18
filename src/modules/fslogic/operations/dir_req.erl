@@ -176,7 +176,11 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
     #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_light(UserCtx, FileCtx, false),
+        attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
+            allow_deleted_files => false,
+            include_size => false,
+            name_conflicts_resolution_policy => allow_name_conflicts
+        }),
     FileAttr2 = FileAttr#file_attr{size = 0},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, [user_ctx:get_session_id(UserCtx)]),
     #fuse_response{status = #status{code = ?OK},
@@ -247,7 +251,11 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhi
         #fuse_response{
             status = #status{code = ?OK},
             fuse_response = Attrs
-        } = attr_req:get_file_attr_light(UserCtx, ChildCtx, true),
+        } = attr_req:get_file_attr_insecure(UserCtx, ChildCtx, #{
+            allow_deleted_files => false,
+            include_size => true,
+            name_conflicts_resolution_policy => allow_name_conflicts
+        }),
         Attrs
     end,
     ChildrenAttrs = map_children(MapFun, Children),
@@ -285,17 +293,25 @@ get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, Childre
     ),
     ChildrenNum = length(Children),
     NumberedChildren = lists:zip(lists:seq(1, ChildrenNum), Children),
+    ComputeFileAttrOpts = #{
+        allow_deleted_files => false,
+        include_size => true
+    },
     MapFun = fun({Num, ChildCtx}) ->
         #fuse_response{
             status = #status{code = ?OK},
             fuse_response = FileDetails
         } = case lists:member(Num, [1, ChildrenNum]) of
             true ->
-                attr_req:get_file_details(UserCtx, ChildCtx);
+                attr_req:get_file_details_insecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
+                    name_conflicts_resolution_policy => resolve_name_conflicts
+                });
             false ->
-                % Other files than first and last don't need to verify name
+                % Other files than first and last don't need to resolve name conflicts
                 % (to check for collisions) as list_children already did it
-                attr_req:get_file_details_light(UserCtx, ChildCtx)
+                attr_req:get_file_details_insecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
+                    name_conflicts_resolution_policy => allow_name_conflicts
+                })
         end,
         FileDetails
     end,
