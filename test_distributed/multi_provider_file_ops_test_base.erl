@@ -695,7 +695,7 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
         % StateOnWorker = [ProgressOfSynWithProv1, ProgressOfSynWithProv2 ... ProgressOfSynWithProvM]
         WorkersDbsyncStates = lists:foldl(fun(W, Acc) ->
             WorkerState = lists:foldl(fun(ProvID, Acc2) ->
-                case rpc:call(W, ?MODULE, get_seq_and_timestamp_or_error, [SpaceId, ProvID]) of
+                case get_seq_and_timestamp_or_error(W, SpaceId, ProvID) of
                     {error, not_found} ->
                         % provider `ProvID` does not support space so there is no synchronization progress data
                         % on this worker
@@ -2275,6 +2275,9 @@ do_sync_test(FileCtxs, Worker1, Session, BlockSize, Blocks) ->
 
     SyncTime_2 = timer:now_diff(os:timestamp(), Start),
     {SyncTime / length(FileCtxs), SyncTime_2}.
+
+get_seq_and_timestamp_or_error(Worker, SpaceId, ProviderId) ->
+    rpc:call(Worker, ?MODULE, get_seq_and_timestamp_or_error, [SpaceId, ProviderId]).
 
 get_seq_and_timestamp_or_error(SpaceId, ProviderId) ->
     case datastore_model:get(#{model => dbsync_state}, SpaceId) of
