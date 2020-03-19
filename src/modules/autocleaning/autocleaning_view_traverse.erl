@@ -41,7 +41,7 @@
 -define(AUTOCLEANING_MASTER_JOBS_NUM,
     application:get_env(?APP_NAME, autocleaning_master_jobs_num, 10)).
 -define(AUTOCLEANING_SLAVE_JOBS_NUM,
-    application:get_env(?APP_NAME, autocleaning_slave_jobs_num, 20)).
+    application:get_env(?APP_NAME, autocleaning_slave_jobs_num, 50)).
 -define(AUTOCLEANING_PARALLEL_ORDERS_LIMIT,
     application:get_env(?APP_NAME, autocleaning_parallel_orders_limit, 10)).
 
@@ -66,6 +66,7 @@ run(SpaceId, AutocleaningRunId, AutocleaningRules, BatchSize, Token) ->
     TaskId = pack_task_id(SpaceId, AutocleaningRunId),
     view_traverse:run(?MODULE, ?FILE_POPULARITY_VIEW(SpaceId), TaskId, #{
         query_opts => #{limit => BatchSize},
+        async_next_batch_job => true,
         info => #{
             batch_size => BatchSize,
             run_id => AutocleaningRunId,
@@ -99,10 +100,10 @@ process_row(Row, #{
     {ok, Guid} = file_id:objectid_to_guid(FileId),
     FileCtx = file_ctx:new_by_guid(Guid),
     BatchNo = autocleaning_run_controller:batch_no(RowNumber, BatchSize),
-    try autocleaning_rules:are_all_rules_satisfied(FileCtx, AutocleaningRules) of
-        true ->
+    try {autocleaning_rules:are_all_rules_satisfied(FileCtx, AutocleaningRules), autocleaning_run:is_active(AutocleaningRunId)} of
+        {true, true} ->
             maybe_schedule_replica_deletion_task(FileCtx, AutocleaningRunId, SpaceId, BatchNo);
-        false ->
+        _ ->
             autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo)
         catch
         Error:Reason ->

@@ -95,7 +95,7 @@
 -define(FINISHED, finished).
 
 
--define(MAX_REQUESTS_NUM, application:get_env(?APP_NAME, replica_deletion_max_parallel_requests, 1000)).
+-define(MAX_REQUESTS_NUM, application:get_env(?APP_NAME, replica_deletion_max_parallel_requests, 10000)).
 
 -record(state, {
     space_id :: od_space:id(),

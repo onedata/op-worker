@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @copyright (C) 2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
@@ -46,9 +46,9 @@ all() -> [
 -define(SETUPS, [
     % Tests are run with 2 parameters: FilesNum and JobsNum.
     % Number of total replica_deletion requests is equal to FilesNum * JobsNum.
-%   {FileNums, JobNums}
+    % {FileNums, JobNums}
     {1, 1},
-    {10
+    {10, 1},
     {100, 1},
     {1000, 1},
     {10000, 1},

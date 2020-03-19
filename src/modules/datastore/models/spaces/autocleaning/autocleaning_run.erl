@@ -31,7 +31,7 @@
 -export([get/1, update/2, delete/1, delete/2, create/2,
     mark_cancelling/1, mark_finished/1, mark_finished/3, mark_released_file/2, set_view_traverse_token/2,
     get_view_traverse_token/1, get_bytes_to_release/1, get_released_bytes/1, get_status/1, get_started_at/1,
-    update_counters/3, get_released_files/1]).
+    update_counters/3, get_released_files/1, is_active/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2]).
@@ -174,6 +174,22 @@ get_started_at(ARId) ->
 -spec get_status(record()) -> status().
 get_status(#autocleaning_run{status = Status}) ->
     Status.
+
+
+-spec is_active(id() | record() | doc()) -> boolean().
+is_active(#autocleaning_run{status = ?ACTIVE}) ->
+    true;
+is_active(#autocleaning_run{}) ->
+    false;
+is_active(#document{value = AR = #autocleaning_run{}}) ->
+    is_active(AR);
+is_active(ARId) ->
+    case autocleaning_run:get(ARId) of
+        {ok, Doc} ->
+            is_active(Doc);
+        {error, not_found} ->
+            false
+    end.
 
 %%%===================================================================
 %%% Internal functions
