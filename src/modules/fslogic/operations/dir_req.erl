@@ -247,20 +247,14 @@ get_children_attrs_insecure(UserCtx, FileCtx0, Offset, Limit, Token, ChildrenWhi
     {Children, NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, Token, undefined, ChildrenWhiteList
     ),
-    MapFun = fun(ChildCtx) ->
-        #fuse_response{
-            status = #status{code = ?OK},
-            fuse_response = Attrs
-        } = attr_req:get_file_attr_insecure(UserCtx, ChildCtx, #{
-            allow_deleted_files => false,
-            include_size => true,
-            name_conflicts_resolution_policy => allow_name_conflicts
-        }),
-        Attrs
-    end,
-    ChildrenAttrs = map_children(MapFun, Children),
+    ChildrenAttrs = map_children(
+        UserCtx,
+        fun attr_req:get_file_attr_insecure/3,
+        Children
+    ),
 
     fslogic_times:update_atime(FileCtx1),
+
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
             child_attrs = ChildrenAttrs,
@@ -291,33 +285,14 @@ get_children_details_insecure(UserCtx, FileCtx0, Offset, Limit, StartId, Childre
     {Children, _NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, undefined, StartId, ChildrenWhiteList
     ),
-    ChildrenNum = length(Children),
-    NumberedChildren = lists:zip(lists:seq(1, ChildrenNum), Children),
-    ComputeFileAttrOpts = #{
-        allow_deleted_files => false,
-        include_size => true
-    },
-    MapFun = fun({Num, ChildCtx}) ->
-        #fuse_response{
-            status = #status{code = ?OK},
-            fuse_response = FileDetails
-        } = case lists:member(Num, [1, ChildrenNum]) of
-            true ->
-                attr_req:get_file_details_insecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
-                    name_conflicts_resolution_policy => resolve_name_conflicts
-                });
-            false ->
-                % Other files than first and last don't need to resolve name conflicts
-                % (to check for collisions) as list_children already did it
-                attr_req:get_file_details_insecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
-                    name_conflicts_resolution_policy => allow_name_conflicts
-                })
-        end,
-        FileDetails
-    end,
-    ChildrenDetails = map_children(MapFun, NumberedChildren),
+    ChildrenDetails = map_children(
+        UserCtx,
+        fun attr_req:get_file_details_insecure/3,
+        Children
+    ),
 
     fslogic_times:update_atime(FileCtx1),
+
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_details{
             child_details = ChildrenDetails,
@@ -371,18 +346,43 @@ list_children(UserCtx, FileCtx0, Offset, Limit, _, StartId, ChildrenWhiteList0) 
 %% @private
 %% @doc
 %% Calls MapFunctionInsecure for every passed children in parallel and
-%% filters out children for which it raised error.
+%% filters out children for which it raised error (potentially docs not
+%% synchronized between providers or deleted files).
 %% @end
 %%--------------------------------------------------------------------
 -spec map_children(
-    MapFunInsecure :: fun((ChildCtx :: file_ctx:ctx()) -> Result),
+    UserCtx,
+    MapFunInsecure :: fun((UserCtx, ChildCtx :: file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
+        fslogic_worker:fuse_response()),
     Children :: [file_ctx:ctx()]
 ) ->
-    [Result] when Result :: term().
-map_children(MapFunInsecure, Children) ->
-    MapFun = fun(ChildCtx) ->
+    [fuse_response_type()] when UserCtx :: user_ctx:ctx().
+map_children(UserCtx, MapFunInsecure, Children) ->
+    ChildrenNum = length(Children),
+    NumberedChildren = lists:zip(lists:seq(1, ChildrenNum), Children),
+    ComputeFileAttrOpts = #{
+        allow_deleted_files => false,
+        include_size => true
+    },
+    MapFun = fun({Num, ChildCtx}) ->
         try
-            MapFunInsecure(ChildCtx)
+            #fuse_response{
+                status = #status{code = ?OK},
+                fuse_response = Result
+            } = case Num == 1 orelse Num == ChildrenNum of
+                true ->
+                    MapFunInsecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
+                        name_conflicts_resolution_policy => resolve_name_conflicts
+                    });
+                false ->
+                    % Other files than first and last don't need to resolve name
+                    % conflicts (to check for collisions) as list_children
+                    % (file_meta:tag_children to be precise) already did it
+                    MapFunInsecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
+                        name_conflicts_resolution_policy => allow_name_conflicts
+                    })
+            end,
+            Result
         catch _:_ ->
             % File can be not synchronized with other provider
             error
@@ -392,8 +392,10 @@ map_children(MapFunInsecure, Children) ->
         (error) -> false;
         (_Attrs) -> true
     end,
-    ChildrenNum = length(Children),
-    filtermap(MapFun, FilterFun, Children, ?MAX_MAP_CHILDREN_PROCESSES, ChildrenNum).
+    filtermap(
+        MapFun, FilterFun, NumberedChildren,
+        ?MAX_MAP_CHILDREN_PROCESSES, ChildrenNum
+    ).
 
 
 %%--------------------------------------------------------------------
