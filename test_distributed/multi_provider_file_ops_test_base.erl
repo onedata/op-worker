@@ -59,6 +59,7 @@
 -export([sync_blocks/4]).
 -export([request_synchronization/3]).
 -export([async_synchronize/3]).
+-export([get_seq_and_timestamp_or_error/2]).
 
 -define(match(Expect, Expr, Attempts),
     case Attempts of
@@ -636,8 +637,11 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
+    SpaceId = ?config(first_space_id, Config),
     Worker1 = ?config(worker1, Config),
     Workers = ?config(op_worker_nodes, Config),
+
+    Timestamp0 = rpc:call(Worker1, provider_logic, zone_time_seconds, []),
 
     Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
     Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
@@ -680,6 +684,43 @@ basic_opts_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     verify(Config, fun(W) ->
         ?assertEqual(ok, lfm_proxy:close_all(W))
     end),
+
+    ProvIds = lists:foldl(fun(W, Acc) ->
+        sets:add_element(rpc:call(W, oneprovider, get_id, []), Acc)
+    end, sets:new(), Workers),
+
+    AreAllSeqsEqual = fun() ->
+        % Get list of states of all dbsync streams (for tested space) from all workers (all providers), e.g.:
+        % WorkersDbsyncStates = [StateOnWorker1, StateOnWorker2 ... StateOnWorkerN],
+        % StateOnWorker = [ProgressOfSynWithProv1, ProgressOfSynWithProv2 ... ProgressOfSynWithProvM]
+        WorkersDbsyncStates = lists:foldl(fun(W, Acc) ->
+            WorkerState = lists:foldl(fun(ProvID, Acc2) ->
+                case get_seq_and_timestamp_or_error(W, SpaceId, ProvID) of
+                    {error, not_found} ->
+                        % provider `ProvID` does not support space so there is no synchronization progress data
+                        % on this worker
+                        Acc2;
+                    {_, Timestamp} = Ans ->
+                        ?assert(Timestamp >= Timestamp0),
+                        [Ans | Acc2]
+                end
+            end, [], sets:to_list(ProvIds)),
+
+            case WorkerState of
+                [] -> Acc; % this worker belongs to provider that does not support this space
+                _ -> [WorkerState | Acc]
+            end
+        end, [], Workers),
+
+        % States of all workers (that belong to providers that support tested space) should be equal
+        % create set from list to remove duplicates
+        WorkersDbsyncStatesSet = sets:from_list(WorkersDbsyncStates),
+        case sets:size(WorkersDbsyncStatesSet) of
+            1 -> true; % States of all workers are equal
+            _ -> {false, WorkersDbsyncStates}
+        end
+    end,
+    ?assertEqual(true, AreAllSeqsEqual(), 15),
 
     ok.
 
@@ -1870,9 +1911,9 @@ extend_config(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfP
     end, {[], [], [], []}, Workers),
 
     SessId = fun(W) -> ?config({session_id, {User, ?GET_DOMAIN(W)}}, Config) end,
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     [{worker1, Worker1}, {workers1, Workers1}, {workers_not1, WorkersNot1}, {workers2, Workers2},
-        {session, SessId}, {space_name, SpaceName}, {attempts, Attempts},
+        {session, SessId}, {first_space_id, SpaceId}, {space_name, SpaceName}, {attempts, Attempts},
         {nodes_number, {SyncNodes, ProxyNodes, ProxyNodesWritten, ProxyNodesWritten0, NodesOfProvider}} | Config].
 
 verify(Config, TestFun) ->
@@ -2234,3 +2275,14 @@ do_sync_test(FileCtxs, Worker1, Session, BlockSize, Blocks) ->
 
     SyncTime_2 = timer:now_diff(os:timestamp(), Start),
     {SyncTime / length(FileCtxs), SyncTime_2}.
+
+get_seq_and_timestamp_or_error(Worker, SpaceId, ProviderId) ->
+    rpc:call(Worker, ?MODULE, get_seq_and_timestamp_or_error, [SpaceId, ProviderId]).
+
+get_seq_and_timestamp_or_error(SpaceId, ProviderId) ->
+    case datastore_model:get(#{model => dbsync_state}, SpaceId) of
+        {ok, #document{value = #dbsync_state{seq = Seq}}} ->
+            maps:get(ProviderId, Seq, {error, not_found});
+        Error ->
+            Error
+    end.

@@ -195,12 +195,12 @@ start_out_stream(SpaceId) ->
             false
     end,
     Handler = fun
-        (Since, Until, Docs) when Since =:= Until ->
-            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Docs);
-        (Since, Until, Docs) ->
+        (Since, Until, Timestamp, Docs) when Since =:= Until ->
+            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs);
+        (Since, Until, Timestamp, Docs) ->
             ProviderId = oneprovider:get_id(),
-            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Docs),
-            dbsync_state:set_seq(SpaceId, ProviderId, Until)
+            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs),
+            dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp)
     end,
     Spec = dbsync_out_stream_spec(SpaceId, SpaceId, [
         {register, true},
@@ -224,12 +224,13 @@ handle_changes_batch(ProviderId, MsgId, #changes_batch{
     space_id = SpaceId,
     since = Since,
     until = Until,
+    timestamp = Timestamp,
     compressed_docs = CompressedDocs
 }) ->
     Name = {dbsync_in_stream, SpaceId},
     Docs = dbsync_utils:uncompress(CompressedDocs),
     gen_server:cast(
-        {global, Name}, {changes_batch, MsgId, ProviderId, Since, Until, Docs}
+        {global, Name}, {changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}
     ).
 
 %%--------------------------------------------------------------------
@@ -246,13 +247,13 @@ handle_changes_request(ProviderId, #changes_request2{
     until = Until
 }) ->
     Handler = fun
-        (BatchSince, end_of_stream, Docs) ->
+        (BatchSince, end_of_stream, Timestamp, Docs) ->
             dbsync_communicator:send_changes(
-                ProviderId, SpaceId, BatchSince, Until, Docs
+                ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs
             );
-        (BatchSince, BatchUntil, Docs) ->
+        (BatchSince, BatchUntil, Timestamp, Docs) ->
             dbsync_communicator:send_changes(
-                ProviderId, SpaceId, BatchSince, BatchUntil, Docs
+                ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )
     end,
     ReqId = dbsync_utils:gen_request_id(),
