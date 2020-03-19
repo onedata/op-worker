@@ -320,7 +320,24 @@ log_failure(ScenarioName, TargetNode, Client, Args, Expected, Got) ->
 %%%===================================================================
 
 
-% Generates all combinations of "required" and "at_least_one" data
+% Returns data sets that are correct
+correct_data_sets(undefined) ->
+    [?NO_DATA];
+correct_data_sets(DataSpec) ->
+    RequiredDataSets = required_data_sets(DataSpec),
+
+    AllRequiredParamsDataSet = case RequiredDataSets of
+        [] -> #{};
+        _ -> hd(RequiredDataSets)
+    end,
+    AllRequiredWithOptionalDataSets = lists:map(fun(OptionalDataSet) ->
+        maps:merge(AllRequiredParamsDataSet, OptionalDataSet)
+    end, optional_data_sets(DataSpec)),
+
+    RequiredDataSets ++ AllRequiredWithOptionalDataSets.
+
+
+% Generates all combinations of "required" params and one "at_least_one" param
 required_data_sets(undefined) ->
     [?NO_DATA];
 required_data_sets(DataSpec) ->
@@ -362,67 +379,41 @@ required_data_sets(DataSpec) ->
     end.
 
 
-% Data sets wih required params and one or all optional params
-% (e.g. returns 5 data sets for 4 optional params).
-optional_data_sets(undefined, _) ->
+% Generates all combinations for optional params
+optional_data_sets(undefined) ->
     [?NO_DATA];
-optional_data_sets(DataSpec, RequiredWithAll) ->
-    #data_spec{
-        optional = Optional
-    } = DataSpec,
+optional_data_sets(#data_spec{optional = []}) ->
+    [];
+optional_data_sets(#data_spec{optional = Optional} = DataSpec) ->
+    OptionalParamsWithValues = lists:flatten(lists:map(fun(Key) ->
+        [#{Key => Val} || Val <- get_correct_value(Key, DataSpec)]
+    end, Optional)),
 
-    OptionalWithValues = lists:flatten(lists:map(
-        fun(Key) ->
-            [#{Key => Val} || Val <- get_correct_value(Key, DataSpec)]
-        end, Optional)
-    ),
-    RequiredWithOneOptional = lists:map(
-        fun(OneOptionalMap) ->
-            maps:merge(OneOptionalMap, RequiredWithAll)
-        end, OptionalWithValues
-    ),
-    AllOptionalsMap = lists:foldl(fun maps:merge/2, #{}, OptionalWithValues),
-    RequiredWithAllOptional = maps:merge(RequiredWithAll, AllOptionalsMap),
+    OptionalParamsCombinations = lists:usort(lists:foldl(fun(ParamWithValue, Acc) ->
+        [maps:merge(Combination, ParamWithValue) || Combination <- Acc] ++ Acc
+    end, [#{}], OptionalParamsWithValues)),
 
-    case Optional of
-        [] -> [];
-        [_] -> RequiredWithOneOptional;
-        _ -> [RequiredWithAllOptional | RequiredWithOneOptional]
-    end.
+    lists:delete(#{}, OptionalParamsCombinations).
 
 
-% Returns all data sets that are correct
-correct_data_sets(undefined) ->
-    [?NO_DATA];
-correct_data_sets(DataSpec) ->
-    RequiredDataSets = required_data_sets(DataSpec),
-    AllRequired = case RequiredDataSets of
-        [] -> #{};
-        _ -> hd(RequiredDataSets)
-    end,
-    OptionalDataSets = optional_data_sets(DataSpec, AllRequired),
-    RequiredDataSets ++ OptionalDataSets.
-
-
-% Generates all combinations of bad data sets by adding wrong values to
-% correct data sets.
+% Generates combinations of bad data sets by adding wrong values to
+% correct data set (one set with correct values for all params).
 bad_data_sets(undefined) ->
     [?NO_DATA];
-bad_data_sets(DataSpec) ->
-    #data_spec{
-        required = Required,
-        at_least_one = AtLeastOne,
-        optional = Optional,
-        bad_values = BadValues
-    } = DataSpec,
-    AllCorrect = maps:from_list(lists:map(fun(Key) ->
-        {Key, hd(get_correct_value(Key, DataSpec))}
-    end, Required ++ AtLeastOne ++ Optional)),
-    lists:map(
-        fun({Key, Value, ErrorType}) ->
-            Data = AllCorrect#{Key => Value},
-            {Data, Key, ErrorType}
-        end, BadValues).
+bad_data_sets(#data_spec{
+    required = Required,
+    at_least_one = AtLeastOne,
+    optional = Optional,
+    bad_values = BadValues
+} = DataSpec) ->
+    AllCorrect = lists:foldl(fun(Param, Acc) ->
+        Acc#{Param => hd(get_correct_value(Param, DataSpec))}
+    end, #{}, Required ++ AtLeastOne ++ Optional),
+
+    lists:map(fun({Param, InvalidValue, ExpError}) ->
+        Data = AllCorrect#{Param => InvalidValue},
+        {Data, Param, ExpError}
+    end, BadValues).
 
 
 % Converts correct value spec into a value
