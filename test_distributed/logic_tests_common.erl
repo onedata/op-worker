@@ -67,6 +67,7 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_new(Nodes, provider_logic, [passthrough]),
     ok = test_utils:mock_new(Nodes, space_logic, [passthrough]),
     ok = test_utils:mock_new(Nodes, oneprovider, [passthrough]),
+    ok = test_utils:mock_new(Nodes, rtransfer_config, [passthrough]),
     ok = test_utils:mock_expect(Nodes, gs_client, start_link, fun mock_start_link/5),
     ok = test_utils:mock_expect(Nodes, gs_client, async_request, fun mock_async_request/2),
 
@@ -98,6 +99,9 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_expect(Nodes, space_logic, report_dbsync_state, fun(_, _) ->
         ok
     end),
+    
+    % adding dummy storages to rtransfer would fail
+    ok = test_utils:mock_expect(Nodes, rtransfer_config, add_storages, fun() -> ok end),
 
     % Fetch dummy provider so it is cached and does not generate Graph Sync requests.
     rpc:multicall(Nodes, provider_logic, get, []).
