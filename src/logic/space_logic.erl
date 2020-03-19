@@ -39,6 +39,7 @@
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
 -export([report_dbsync_state/2]).
+-export([on_space_supported/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
     ?APP_NAME, graph_sync_harvest_metadata_request_timeout, 120000
@@ -346,4 +347,10 @@ report_dbsync_state(SpaceId, SeqPerProvider) ->
         gri = #gri{type = od_space, id = SpaceId, aspect = {dbsync_state, oneprovider:get_id()}},
         data = #{<<"seqPerProvider">> => SeqPerProvider}
     }).
+
+
+-spec on_space_supported(od_space:id()) -> ok.
+on_space_supported(SpaceId) ->
+    ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
+
 

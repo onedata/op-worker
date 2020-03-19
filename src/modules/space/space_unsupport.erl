@@ -67,6 +67,8 @@ init_pools() ->
 
 -spec run(od_space:id(), storage:id()) -> ok.
 run(SpaceId, StorageId) ->
+    % ensure that file_meta doc for space is created, so it is not needed to always 
+    % check if it exists when doing operations on files
     file_meta:make_space_exist(SpaceId),
     ?ok_if_exists(traverse:run(?POOL_NAME, datastore_key:new_from_digest([SpaceId, StorageId]), 
         #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, stage = init})).
@@ -115,10 +117,10 @@ update_job_progress(Id, Job, _PoolName, TaskId, _Status) ->
 -spec do_master_job(job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} | {error, term()}.
 do_master_job(#space_unsupport_job{stage = Stage} = Job, _MasterJobArgs) ->
-    NextStageList = get_next_stage(Stage),
+    NextMasterJobsBase = get_next_jobs_base(Stage),
     NextMasterJobs = lists:map(fun(NextStage) -> 
         Job#space_unsupport_job{stage = NextStage, subtask_id = undefined}
-    end, NextStageList),
+    end, NextMasterJobsBase),
     {ok, #{slave_jobs => [Job], master_jobs => NextMasterJobs}}.
 
 -spec do_slave_job(job(), traverse:id()) -> ok | {ok, traverse:description()} | {error, term()}.
@@ -127,6 +129,7 @@ do_slave_job(Job, _TaskId) ->
 
 -spec task_finished(traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, Pool) ->
+    %% @TODO Sleep not needed after resolving VFS-6212
     spawn(fun() -> timer:sleep(timer:seconds(2)), traverse_task:delete_ended(Pool, TaskId) end),
     ok.
 
@@ -135,13 +138,13 @@ task_finished(TaskId, Pool) ->
 %%%===================================================================
 
 %% @private
--spec get_next_stage(stage()) -> [stage()].
-get_next_stage(init) -> [replicate];
-get_next_stage(replicate) -> [cleanup_traverse];
-get_next_stage(cleanup_traverse) -> [wait_for_dbsync];
-get_next_stage(wait_for_dbsync) -> [delete_synced_documents];
-get_next_stage(delete_synced_documents) -> [delete_local_documents];
-get_next_stage(delete_local_documents) -> [].
+-spec get_next_jobs_base(stage()) -> [stage()].
+get_next_jobs_base(init) -> [replicate];
+get_next_jobs_base(replicate) -> [cleanup_traverse];
+get_next_jobs_base(cleanup_traverse) -> [wait_for_dbsync];
+get_next_jobs_base(wait_for_dbsync) -> [delete_synced_documents];
+get_next_jobs_base(delete_synced_documents) -> [delete_local_documents];
+get_next_jobs_base(delete_local_documents) -> [].
 
 
 %% @private
@@ -162,6 +165,7 @@ execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = 
     space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = QosEntryId} = _Job) ->
+    %% @TODO Use subscription after resolving VFS-5647
     wait(fun() -> lfm:check_qos_fulfilled(?ROOT_SESS_ID, QosEntryId) end),
     lfm:remove_qos_entry(?ROOT_SESS_ID, QosEntryId);
 
@@ -173,15 +177,11 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse, subtask_id = undefi
     {ok, _} = space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
 execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
-    #space_unsupport_job{
-        space_id = SpaceId, slave_job_pid = Pid, subtask_id = TraverseId
-    } = Job,
-    
     % This clause can be run after provider restart so update slave_job_pid if needed
-    case self() of
-        Pid -> ok;
-        _ -> space_unsupport_job:save(Job#space_unsupport_job{slave_job_pid = self()})
-    end, 
+    maybe_update_slave_job_pid(Job),
+    
+    #space_unsupport_job{space_id = SpaceId, subtask_id = TraverseId} = Job,
+    
     case unsupport_cleanup_traverse:is_finished(TraverseId) of
         true -> ok;
         false ->
@@ -241,6 +241,15 @@ wait(Fun) ->
         wait(Fun)
     end.
 
+%% @private
+-spec maybe_update_slave_job_pid(job()) -> ok.
+maybe_update_slave_job_pid(#space_unsupport_job{slave_job_pid = Pid} = Job) ->
+    case self() of
+        Pid -> ok;
+        _ -> 
+            space_unsupport_job:save(Job#space_unsupport_job{slave_job_pid = self()}),
+            ok
+    end.
 
 %% @private
 -spec start_changes_stream(od_space:id()) -> ok.
@@ -268,12 +277,13 @@ expire_docs(#document{value = Value} = Doc) ->
         #links_forest{model = Model, key = Key} -> expire_links(Model, Key, Doc);
         #links_node{model = Model, key = Key} -> expire_links(Model, Key, Doc);
         _ ->
-            Ctx = #{
-                model => element(1, Value),
+            Model  = element(1, Value),
+            Ctx = Model:get_ctx(),
+            Ctx1 = Ctx#{
                 hooks_disabled => true,
                 expiry => ?DOCUMENT_EXPIRY_TIME
             },
-            datastore_model:save(Ctx, Doc)
+            datastore_model:save(Ctx1, Doc)
     end,
     ok.
 
@@ -281,14 +291,14 @@ expire_docs(#document{value = Value} = Doc) ->
 %% @private
 -spec expire_links(datastore_model:model(), datastore:key(), datastore:doc()) -> ok.
 expire_links(Model, RoutingKey, Doc = #document{key = Key}) ->
-    Ctx = #{
-        model => Model,
+    Ctx = Model:get_ctx(),
+    Ctx1 = Ctx#{
         expiry => ?DOCUMENT_EXPIRY_TIME,
         routing_key => RoutingKey
     },
-    Ctx2 = datastore_model_default:set_defaults(Ctx),
-    Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
-    datastore_router:route(save, [Ctx3, Key, Doc]),
+    Ctx3 = datastore_model_default:set_defaults(Ctx1),
+    Ctx4 = datastore_multiplier:extend_name(RoutingKey, Ctx3),
+    datastore_router:route(save, [Ctx4, Key, Doc]),
     ok.
 
 

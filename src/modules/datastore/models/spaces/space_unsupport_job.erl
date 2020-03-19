@@ -63,6 +63,8 @@ save(undefined, Job, TaskId) ->
         storage_id = StorageId, 
         stage = Stage
     } = Job,
+    % use fixed id so document can be accessed knowing only 
+    % SpaceId, StorageId and Stage e.g. in slave_job
     save(gen_id(SpaceId, StorageId, Stage), Job, TaskId);
 save(Key, Job, TaskId) ->
     ?extract_key(datastore_model:save(?CTX, #document{

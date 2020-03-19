@@ -401,7 +401,7 @@ support_space_insecure(StorageId, SpaceSupportToken, SupportSize) ->
                 false ->
                     case storage_logic:support_space(StorageId, SpaceSupportToken, SupportSize) of
                         {ok, SpaceId} ->
-                            on_space_supported(SpaceId),
+                            space_logic:on_space_supported(SpaceId),
                             {ok, SpaceId};
                         {error, _} = Error ->
                             Error
@@ -481,12 +481,6 @@ on_storage_created(StorageId) ->
 on_storage_created(StorageId, QosParameters) ->
     ok = set_qos_parameters(StorageId, QosParameters),
     on_storage_created(StorageId).
-
-
-%% @private
--spec on_space_supported(od_space:id()) -> ok.
-on_space_supported(SpaceId) ->
-    ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 
 %% @private
