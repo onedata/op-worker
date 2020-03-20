@@ -109,7 +109,7 @@ rename_file_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/renamed_file3_target"))),
     ?assertEqual({error, ?EISDIR}, lfm_proxy:mv(W, SessId, {guid, File3Guid}, filename(1, TestDir, "/renamed_file3_target"))),
 
-    {ok, Children} = lfm_proxy:ls(W, SessId, {guid, DirGuid}, 0, 10),
+    {ok, Children} = lfm_proxy:get_children(W, SessId, {guid, DirGuid}, 0, 10),
     ActualLs = ordsets:from_list([Name || {_, Name} <- Children]),
     ExpectedLs = ordsets:from_list([
         <<"renamed_file1_target">>,
@@ -288,7 +288,7 @@ rename_dir_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(1, TestDir, "/renamed_dir4_target/some_file"), 8#770)),
     ?assertEqual({error, ?ENOTEMPTY}, lfm_proxy:mv(W, SessId, {guid, Dir4Guid}, filename(1, TestDir, "/renamed_dir4_target"))),
 
-    {ok, Children} = lfm_proxy:ls(W, SessId, {guid, DirGuid}, 0, 10),
+    {ok, Children} = lfm_proxy:get_children(W, SessId, {guid, DirGuid}, 0, 10),
     ActualLs = ordsets:from_list([Name || {_, Name} <- Children]),
     ExpectedLs = ordsets:from_list([
         <<"renamed_dir1_target">>,
@@ -615,13 +615,13 @@ moving_dir_into_itself_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, ""))),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir"))),
     ?assertMatch({ok, [{_, <<"dir">>}]},
-        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+        lfm_proxy:get_children(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
 
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")},
         filename(1, TestDir, "/dir/dir_target"))),
 
     ?assertMatch({ok, [{_, <<"dir">>}]},
-        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)).
+        lfm_proxy:get_children(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)).
 
 moving_dir_into_child_test(Config) ->
     [W | _] = sorted_workers(Config),
@@ -632,23 +632,23 @@ moving_dir_into_child_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir"))),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir/dir2"))),
     ?assertMatch({ok, [{_, <<"dir">>}]},
-        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+        lfm_proxy:get_children(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
 
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")},
         filename(1, TestDir, "/dir/dir2/dir_target"))),
     ?assertMatch({ok, [{_, <<"dir">>}]},
-        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+        lfm_proxy:get_children(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
 
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")},
         filename(1, TestDir, "/dir/dir2"))),
     ?assertMatch({ok, [{_, <<"dir">>}]},
-        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+        lfm_proxy:get_children(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
 
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir/dir2/dir3"))),
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir")},
         filename(1, TestDir, "/dir/dir2/dir3/dir_target"))),
     ?assertMatch({ok, [{_, <<"dir">>}]},
-        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)).
+        lfm_proxy:get_children(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)).
 
 moving_dir_permutated_path_test(Config) ->
     [W | _] = sorted_workers(Config),
@@ -661,17 +661,17 @@ moving_dir_permutated_path_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir2"))),
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(1, TestDir, "/dir2/dir"))),
     ?assertMatch({ok, [{_, <<"dir">>}, {_, <<"dir2">>}]},
-        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+        lfm_proxy:get_children(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
 
     ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/dir/dir2")},
         filename(1, TestDir, "/dir2/dir/dir_target"))),
 
     ?assertMatch({ok, [{_, <<"dir">>}, {_, <<"dir2">>}]},
-        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
+        lfm_proxy:get_children(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)),
     ?assertMatch({ok, []},
-        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "/dir")}, 0, 100)),
+        lfm_proxy:get_children(W, SessId, {path, filename(1, TestDir, "/dir")}, 0, 100)),
     ?assertMatch({ok, [{_, <<"dir_target">>}]},
-        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "/dir2/dir")}, 0, 100)).
+        lfm_proxy:get_children(W, SessId, {path, filename(1, TestDir, "/dir2/dir")}, 0, 100)).
 
 moving_file_onto_itself_test(Config) ->
     [W | _] = sorted_workers(Config),
@@ -684,7 +684,7 @@ moving_file_onto_itself_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {path, filename(1, TestDir, "/file")},
         filename(1, TestDir, "/file"))),
     ?assertMatch({ok, [{_, <<"file">>}]},
-        lfm_proxy:ls(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)).
+        lfm_proxy:get_children(W, SessId, {path, filename(1, TestDir, "")}, 0, 100)).
 
 reading_from_open_file_after_rename_test(Config) ->
     [W | _] = sorted_workers(Config),

@@ -487,7 +487,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
     ?assertMatch({ok, []}, sd_test_utils:listobjects(W1, SDHandle, ?SPACE_PATH, 0, 100)),
-    ?assertMatch({ok, []}, lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 100), ?ATTEMPTS).
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), ?ATTEMPTS).
 
 
 delete_non_empty_directory_update_test(Config, MountSpaceInRoot) ->
@@ -817,7 +817,7 @@ delete_many_subfiles_test(Config, MountSpaceInRoot) ->
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, 2, Timeout),
     storage_sync_test_base:disable_update(Config),
-    ?assertEqual({ok, []}, lfm_proxy:ls(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
+    ?assertEqual({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 1)),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -1066,7 +1066,7 @@ change_file_type_test(Config, MountSpaceInRoot) ->
     {ok, #file_attr{guid = FileGuid2}} = ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
         lfm_proxy:stat(W2, SessId2, {path, SpaceTestFileinDirPath}), ?ATTEMPTS),
     ?assertMatch({ok, [{FileGuid2, ?TEST_FILE2}]},
-        lfm_proxy:ls(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, 0, 10), ?ATTEMPTS),
+        lfm_proxy:get_children(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}, 0, 10), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {path, SpaceTestFileinDirPath}, read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA2}, lfm_proxy:read(W2, Handle2, 0, ?TEST_DATA_SIZE2), ?ATTEMPTS),
 
@@ -1101,7 +1101,7 @@ change_file_type3_test(Config, MountSpaceInRoot) ->
     {ok, #file_attr{guid = DirGuid}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     {ok, [{FileGuid, _}]} = ?assertMatch({ok, [{_, _}]},
-        lfm_proxy:ls(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 1)),
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 1)),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,

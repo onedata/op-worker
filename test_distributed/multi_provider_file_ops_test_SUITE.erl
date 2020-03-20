@@ -271,7 +271,7 @@ concurrent_create_test(Config) ->
     lists:foreach(
         fun(WId) ->
             Check = fun() ->
-                {ok, CL} = lfm_proxy:ls(Worker(WId), SessId(Worker(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
+                {ok, CL} = lfm_proxy:get_children(Worker(WId), SessId(Worker(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
                 {FetchedIds, FetchedNames} = lists:unzip(CL),
 
 %%                ExpectedChildCount = ProvIdCount * FileCount,
@@ -282,7 +282,7 @@ concurrent_create_test(Config) ->
             end,
             ?assertMatch({ExpectedChildCount, ExpectedChildCount, ExpectedIds}, Check(), 15),
 
-            {ok, ChildList} = lfm_proxy:ls(Worker(WId), SessId(Worker(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
+            {ok, ChildList} = lfm_proxy:get_children(Worker(WId), SessId(Worker(WId)), {path, <<"/", Dir0Name/binary>>}, 0, 1000),
             lists:foreach(
                 fun(FileNo) ->
                     LocalIdsPerWorker = proplists:get_value(FileNo, AllFiles),
@@ -636,13 +636,13 @@ remove_file_on_remote_provider_ceph(Config0) ->
     {ok, _} = lfm_proxy:write(Worker1, Handle, 0, crypto:strong_rand_bytes(100)),
     ok = lfm_proxy:close(Worker1, Handle),
 
-    ?assertMatch({ok, _}, lfm_proxy:ls(Worker2, SessionId(Worker2), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({ok, _}, lfm_proxy:get_children(Worker2, SessionId(Worker2), {guid, Guid}, 0, 0), 60),
     L = utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"]),
     ?assertEqual(true, length(L) > 0),
        
     lfm_proxy:unlink(Worker2, SessionId(Worker2), {guid, Guid}),
 
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:ls(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(Worker1, SessionId(Worker1), {guid, Guid}, 0, 0), 60),
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 
 evict_on_ceph(Config0) ->
