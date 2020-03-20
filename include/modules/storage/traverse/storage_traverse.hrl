@@ -23,6 +23,7 @@
 -define(DEFAULT_MAX_DEPTH, 65535).
 -define(DEFAULT_NEXT_BATCH_JOB_PREHOOK, fun(_StorageTraverse) -> ok end).
 -define(DEFAULT_CHILDREN_BATCH_JOB_PREHOOK, fun(_StorageTraverse) -> ok end).
+-define(DEFAULT_MARKER, <<"">>).
 
 % record defining master job executed by traverse framework
 % master jobs defined by #storage_traverse record are associated with directories found on storage
@@ -41,7 +42,7 @@
     % size of batch used to list children files on storage
     batch_size = ?DEFAULT_BATCH_SIZE :: non_neg_integer(),
     % marker passed to helpers:listobjects function when iterator=canonical_object_storage_iterator
-    marker :: undefined | helpers:marker(),
+    marker = ?DEFAULT_MARKER :: helpers:marker(),
     % depth of directory in the tree structure
     depth = 0 :: non_neg_integer(),
     % max depth of directory tree structure that will be processed

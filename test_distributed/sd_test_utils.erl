@@ -21,7 +21,7 @@
 -export([get_storage_record/2, new_handle/4, new_child_handle/2,
     setup_test_files_structure/3, setup_test_files_structure/4, recursive_rm/3]).
 -export([mkdir/3, create_file/3, write_file/4, read_file/4, unlink/3, chown/4,
-    chmod/3, stat/2, ls/4, rmdir/2, truncate/4, recursive_rm/2, open/3, listobjects/5, storage_ls/6]).
+    chmod/3, stat/2, ls/4, rmdir/2, truncate/4, recursive_rm/2, open/3, listobjects/5, storage_ls/5]).
 
 -define(DEFAULT_TIMEOUT, timer:minutes(1)).
 
@@ -118,10 +118,10 @@ ls(Worker, SDHandle, Offset, Count) ->
 listobjects(Worker, SDHandle, Marker, Offset, Count) ->
     rpc:call(Worker, storage_driver, listobjects, [SDHandle, Marker, Offset, Count]).
 
-storage_ls(Worker, SDHandle, _Marker, Offset, Count, ?POSIX_HELPER_NAME) ->
+storage_ls(Worker, SDHandle, Offset, Count, ?POSIX_HELPER_NAME) ->
     ls(Worker, SDHandle, Offset, Count);
-storage_ls(Worker, SDHandle, Marker, Offset, Count, ?S3_HELPER_NAME) ->
-    listobjects(Worker, SDHandle, Marker, Offset, Count).
+storage_ls(Worker, SDHandle, Offset, Count, ?S3_HELPER_NAME) ->
+    listobjects(Worker, SDHandle, <<"">>, Offset, Count).
 
 rmdir(Worker, SDHandle) ->
     rpc:call(Worker, storage_driver, rmdir, [SDHandle]).

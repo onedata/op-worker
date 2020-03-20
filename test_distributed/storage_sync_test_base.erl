@@ -1689,7 +1689,7 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
     ok = lfm_proxy:unlink(W1, SessId, {guid, G1}),
 
     % there should be 1 file on storage
-    ?assertMatch({ok, [_]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, ?SPACE_CANONICAL_PATH, 0, 10, StorageType)),
+    ?assertMatch({ok, [_]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, 0, 10, StorageType)),
     SyncedStorage = get_synced_storage(Config, W1),
     enable_import(Config, ?SPACE_ID, SyncedStorage),
     assertImportTimes(W1, ?SPACE_ID),
@@ -1928,7 +1928,7 @@ sync_should_not_import_recreated_file_with_suffix_on_storage(Config, StorageType
     ok = lfm_proxy:close(W1, H3),
 
     % there should be 2 files on storage
-    ?assertMatch({ok, [_, _]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, ?SPACE_CANONICAL_PATH, 0, 10, StorageType)),
+    ?assertMatch({ok, [_, _]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, 0, 10, StorageType)),
     SyncedStorage = get_synced_storage(Config, W1),
 
     enable_import(Config, ?SPACE_ID, SyncedStorage),
@@ -1997,7 +1997,7 @@ sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config, Stora
     FileWithSuffixHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePathWithSuffix, RDWRStorage),
 
     % there should be 2 files on storage
-    ?assertMatch({ok, [_, _]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, ?SPACE_CANONICAL_PATH, 0, 10, StorageType)),
+    ?assertMatch({ok, [_, _]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, 0, 10, StorageType)),
     SyncedStorage = get_synced_storage(Config, W1),
     enable_import(Config, ?SPACE_ID, SyncedStorage),
     assertImportTimes(W1, ?SPACE_ID),
@@ -2081,7 +2081,7 @@ sync_should_not_import_replicated_file_with_suffix_on_storage(Config, StorageTyp
     ok = lfm_proxy:close(W1, H3),
 
     % there should be 2 files on storage
-    ?assertMatch({ok, [_, _]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, ?SPACE_CANONICAL_PATH, 0, 10, StorageType)),
+    ?assertMatch({ok, [_, _]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, 0, 10, StorageType)),
     SyncedStorage = get_synced_storage(Config, W1),
     enable_import(Config, ?SPACE_ID, SyncedStorage),
     assertImportTimes(W1, ?SPACE_ID),
@@ -2137,7 +2137,7 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config, StorageType) -
     ok = lfm_proxy:close(W1, H3),
 
     % there should be 2 files on storage
-    ?assertMatch({ok, [_, _]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, ?SPACE_CANONICAL_PATH, 0, 10, StorageType)),
+    ?assertMatch({ok, [_, _]}, sd_test_utils:storage_ls(W1, SpaceSDHandle, 0, 10, StorageType)),
     SyncedStorage = get_synced_storage(Config, W1),
 
     enable_import(Config, ?SPACE_ID, SyncedStorage),
@@ -5343,12 +5343,7 @@ create_init_file(Config, Readonly) ->
 is_empty(Worker, SDHandle = #sd_handle{storage_id = StorageId}) ->
     Helper = rpc:call(Worker, storage, get_helper, [StorageId]),
     HelperName = helper:get_name(Helper),
-    case HelperName of
-        ?POSIX_HELPER_NAME ->
-            sd_test_utils:ls(Worker, SDHandle, 0, 1);
-        ?S3_HELPER_NAME ->
-            sd_test_utils:listobjects(Worker, SDHandle, <<"/">>, 0, 1)
-    end.
+    sd_test_utils:storage_ls(Worker, SDHandle, 0, 1, HelperName).
 
 cancel(Worker, SpaceId, StorageId) when is_binary(StorageId) ->
     ?assertMatch(ok, rpc:call(Worker, storage_sync, cancel, [SpaceId, StorageId]));
