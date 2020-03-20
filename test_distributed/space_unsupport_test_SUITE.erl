@@ -30,6 +30,7 @@
     replicate_stage_persistence_test/1,
     cleanup_traverse_stage_persistence_test/1,
     cleanup_traverse_stage_test/1,
+    delete_synced_documents_stage_test/1,
     delete_local_documents_stage_test/1,
     overall_test/1
 ]).
@@ -38,7 +39,8 @@ all() -> [
     replicate_stage_test,
     replicate_stage_persistence_test,
     cleanup_traverse_stage_persistence_test,
-    cleanup_traverse_stage_test, 
+    cleanup_traverse_stage_test,
+    delete_synced_documents_stage_test,
     delete_local_documents_stage_test,
     overall_test
 ].
@@ -58,7 +60,7 @@ replicate_stage_test(Config) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
-    {_Dir, {G1, _}, {G2, _}} = create_files_and_dirs(Config),
+    {_Dir, {G1, _}, {G2, _}} = create_files_and_dirs(Worker1, SessId),
     StageJob = #space_unsupport_job{
         stage = replicate,
         space_id = ?SPACE_ID,
@@ -90,13 +92,13 @@ replicate_stage_persistence_test(Config) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
-    create_files_and_dirs(Config),
+    create_files_and_dirs(Worker1, SessId),
     
     % Create new QoS entry representing entry created before provider restart.
     % Running stage again with existing entry should not create new one, 
     % but wait for fulfillment of previous one.
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(Worker1, SessId(Worker1), {guid, SpaceGuid}, 
-        <<?QOS_ANY_STORAGE/binary, " - storageId = ", StorageId/binary>>, 1),
+    Expression = <<?QOS_ANY_STORAGE/binary, " - storageId = ", StorageId/binary>>,
+    {ok, QosEntryId} = create_qos_entry(Worker1, SessId, SpaceGuid, Expression),
     
     StageJob = #space_unsupport_job{
         stage = replicate,
@@ -143,7 +145,7 @@ cleanup_traverse_stage_test(Config) ->
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
-    {{_,DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Config),
+    {{_,DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Worker1, SessId),
     
     % Relative paths to space dir. Empty binary represents space dir.
     AllPaths = [<<"">>, DirPath, F1Path, F2Path], 
@@ -169,6 +171,63 @@ cleanup_traverse_stage_test(Config) ->
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2).
 
+
+delete_synced_documents_stage_test(Config) ->
+    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
+    
+    % create synced documents on remote provider
+    {{DirGuid,_}, {G1, _}, {G2, _}} = create_files_and_dirs(Worker2, SessId),
+    {ok, _} = create_qos_entry(Worker2, SessId, DirGuid, <<"key=value">>),
+    {ok, _} = create_replication(Worker2, SessId, G2, Worker1),
+    {ok, _} = create_eviction(Worker2, SessId, G1, Worker1),
+    ok = create_view(Worker2, ?SPACE_ID, Worker1),
+    ok = create_custom_metadata(Worker2, SessId, G1),
+    
+    StageJob = #space_unsupport_job{
+        stage = delete_synced_documents,
+        space_id = ?SPACE_ID,
+        storage_id = StorageId
+    },
+    
+    % wait for documents to be dbsynced and saved in database
+    timer:sleep(timer:seconds(60)),
+    
+    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
+    
+    % wait for documents to expire 
+    timer:sleep(timer:seconds(70)),
+    
+    %% @TODO VFS-6135 Add model transferred_file when stopping dbsync is implemented
+    SyncedModels = [
+        file_meta, file_location, custom_metadata, times, space_transfer_stats, transfer,
+        replica_deletion, index, tree_traverse_job, qos_entry, qos_status
+    ], 
+    
+    lists:foreach(fun(Model) ->
+        #{
+            memory_driver_ctx := #{table := Table},
+            disc_driver_ctx := DiscDriverCtx
+        } = 
+            datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
+        Keys = lists:foldl(fun(Num, AccOut) ->
+            TableName = list_to_atom(atom_to_list(Table) ++ integer_to_list(Num)),
+            AccOut ++ rpc:call(Worker1, ets, foldl, [fun
+                ({Key, _Doc}, AccIn) -> [Key | AccIn]
+            end, [], TableName])
+        end, [], lists:seq(1,20)),
+    
+        Result = rpc:call(Worker1, couchbase_driver, get, [DiscDriverCtx, Keys]),
+        ?assert(lists:foldl(
+            fun (?ERROR_NOT_FOUND, Acc) -> Acc;
+                ({ok, _, #document{scope = <<>>}}, Acc) -> Acc; 
+                ({ok, _, Doc}, _) ->
+                    ct:pal("Document not cleaned up in model ~p:~n ~p", [Model, Doc]),
+                    false
+            end, true, Result))
+    end, SyncedModels).
+    
 
 delete_local_documents_stage_test(Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
@@ -208,9 +267,10 @@ delete_local_documents_stage_test(Config) ->
 
 overall_test(Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
-    create_files_and_dirs(Config),
+    create_files_and_dirs(Worker1, SessId),
     ok = rpc:call(Worker1, space_unsupport, run, [?SPACE_ID, StorageId]),
     
     % mocked in init_per_testcase
@@ -246,7 +306,7 @@ init_per_suite(Config) ->
         application:start(ssl),
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), NewConfig)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, qos_tests_utils]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 
 end_per_suite(Config) ->
@@ -301,19 +361,47 @@ end_per_testcase(_, Config) ->
 
 -define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
 
-create_files_and_dirs(Config) ->
-    [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
-    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+create_files_and_dirs(Worker, SessId) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     Name = generator:gen_name(),
-    {ok, DirGuid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, ?filename(Name, 0), 8#775),
-    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), DirGuid, ?filename(Name, 1), 8#664),
-    {ok, _} = lfm_proxy:write(Worker1, H1, 0, ?TEST_DATA),
-    ok = lfm_proxy:close(Worker1, H1),
-    {ok, {G2, H2}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), SpaceGuid, ?filename(Name, 2), 8#664),
-    {ok, _} = lfm_proxy:write(Worker1, H2, 0, ?TEST_DATA),
-    ok = lfm_proxy:close(Worker1, H2),
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId(Worker), SpaceGuid, ?filename(Name, 0), 8#775),
+    {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId(Worker), DirGuid, ?filename(Name, 1), 8#664),
+    {ok, _} = lfm_proxy:write(Worker, H1, 0, ?TEST_DATA),
+    ok = lfm_proxy:close(Worker, H1),
+    {ok, {G2, H2}} = lfm_proxy:create_and_open(Worker, SessId(Worker), SpaceGuid, ?filename(Name, 2), 8#664),
+    {ok, _} = lfm_proxy:write(Worker, H2, 0, ?TEST_DATA),
+    ok = lfm_proxy:close(Worker, H2),
     {{DirGuid, ?filename(Name, 0)}, {G1, filename:join([?filename(Name, 0), ?filename(Name, 1)])}, {G2, ?filename(Name, 2)}}.
+
+create_qos_entry(Worker, SessId, FileGuid, Expression) ->
+    lfm_proxy:add_qos_entry(Worker, SessId(Worker), {guid, FileGuid}, Expression, 1).
+
+create_custom_metadata(Worker, SessId, FileGuid) ->
+    lfm_proxy:set_metadata(Worker, SessId(Worker), {guid, FileGuid}, json,
+        #{<<"key">> => <<"value">>}, []).
+
+create_replication(Worker, SessId, FileGuid, TargetWorker) ->
+    lfm_proxy:schedule_file_replication(Worker, SessId(Worker), {guid, FileGuid},
+        ?GET_DOMAIN_BIN(TargetWorker)).
+
+create_eviction(Worker, SessId, FileGuid, TargetWorker) ->
+    lfm_proxy:schedule_file_replica_eviction(Worker, SessId(Worker), {guid, FileGuid},
+        ?GET_DOMAIN_BIN(TargetWorker), undefined).
+
+create_view(Worker, SpaceId, TargetWorker) ->
+    ViewFunction =
+        <<"function (id, type, meta, ctx) {
+             if(type == 'custom_metadata'
+                && meta['onedata_json']
+                && meta['onedata_json']['meta']
+                && meta['onedata_json']['meta']['color'])
+             {
+                 return [meta['onedata_json']['meta']['color'], id];
+             }
+             return null;
+       }">>,
+    ok = rpc:call(Worker, index, save, [SpaceId, <<"view_name">>, ViewFunction, undefined,
+        [], false, [?GET_DOMAIN_BIN(TargetWorker)]]).
 
 check_distribution(Workers, SessId, Desc, Guid) ->
     ExpectedDistribution = lists:map(fun({W, TotalBlocksSize}) ->

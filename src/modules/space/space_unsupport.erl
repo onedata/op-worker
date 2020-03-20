@@ -149,7 +149,8 @@ get_next_jobs_base(delete_local_documents) -> [].
 
 %% @private
 -spec execute_stage(space_unsupport_job:record()) -> ok.
-execute_stage(#space_unsupport_job{stage = init}) ->
+execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId}) ->
+    main_harvesting_stream:space_unsupported(SpaceId),
     %% @TODO VFS-6133 Stop all incoming transfers
     %% @TODO VFS-6134 Close all open file handles
     %% @TODO VFS-6135 Block all modifying file operations
@@ -216,7 +217,11 @@ execute_stage(#space_unsupport_job{stage = delete_synced_documents} = Job) ->
 
 execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
+    %% @TODO VFS-6241 Properly clean up users root dirs
     cleanup_local_documents(SpaceId, StorageId),
+    qos_entry:apply_to_all_impossible_in_space(SpaceId, fun(QosEntryId) -> 
+        qos_entry:remove_from_impossible_list(SpaceId, QosEntryId)
+    end),
     unsupport_cleanup_traverse:delete_ended(SpaceId, StorageId),
     ok.
 
@@ -311,5 +316,4 @@ cleanup_local_documents(SpaceId, StorageId) ->
     autocleaning_api:delete_config(SpaceId),
     storage_sync:space_unsupported(SpaceId, StorageId),
     space_quota:delete(SpaceId),
-    dbsync_state:delete(SpaceId),
-    main_harvesting_stream:space_unsupported(SpaceId).
+    dbsync_state:delete(SpaceId).
