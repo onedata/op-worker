@@ -120,10 +120,12 @@ cancel(SpaceId, StorageId) ->
     case storage_sync_monitoring:get_finished_scans_num(SpaceId, StorageId) of
         {ok, ScansNum} ->
             traverse:cancel(?POOL_BIN, encode_task_id(SpaceId, StorageId, ScansNum + 1));
-        {error, ?ENOENT} ->
-            ?warning("Cannot cancel storage sync for space ~p and storage ~p as it is not configured"),
+        {error, not_found} ->
+            ?debug("Cannot cancel storage sync for space ~p and storage ~p as it is not configured", 
+                [SpaceId, StorageId]),
             ok
     end.
+    
 
 %===================================================================
 % Pool callbacks
