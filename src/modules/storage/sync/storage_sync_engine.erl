@@ -775,18 +775,25 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
     {{_, _, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
     NewLastStat = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx),
     LastReplicationTimestamp = file_location:get_last_replication_timestamp(FileLocationDoc),
-    Result2 = case {LastReplicationTimestamp, StorageSyncInfo} of
+    {FileDoc, FileCtx4} = file_ctx:get_file_doc(FileCtx3),
+    ProviderId = file_meta:get_provider_id(FileDoc),
+    IsLocallyCreatedFile = oneprovider:get_id() =:= ProviderId,
+    Result2 = case {IsLocallyCreatedFile, LastReplicationTimestamp, StorageSyncInfo} of
         %todo VFS-4847 refactor this case, use when wherever possible
-        {undefined, undefined} when MTime < StMtime ->
+        {false, undefined, _} ->
+            % file created remotely and not yet replicated
+            false;
+
+        {true, undefined, undefined} when MTime < StMtime ->
             % file created locally and modified on storage
-            location_and_link_utils:update_imported_file_location(FileCtx3, StSize),
+            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
             true;
 
-        {undefined, undefined} ->
+        {true, undefined, undefined} ->
             % file created locally and not modified on storage
             false;
 
-        {undefined, #document{value = #storage_sync_info{
+        {true, undefined, #document{value = #storage_sync_info{
             mtime = LastMtime,
             last_stat = LastStat
         }}} when LastMtime =:= StMtime
@@ -796,16 +803,16 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
             % file not replicated and already handled because LastStat > StMtime
             false;
 
-        {undefined, #document{value = #storage_sync_info{}}} ->
+        {true, undefined, #document{value = #storage_sync_info{}}} ->
             case (MTime < StMtime) or (Size =/= StSize) of
                 true ->
-                    location_and_link_utils:update_imported_file_location(FileCtx3, StSize),
+                    location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
                     true;
                 false ->
                     false
             end;
 
-        {_, undefined} ->
+        {_, _, undefined} ->
             case LastReplicationTimestamp < StMtime of
                 true ->
                     % file was modified after replication and has never been synced
@@ -823,7 +830,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
                     false
             end;
 
-        {_, #document{value = #storage_sync_info{
+        {_, _, #document{value = #storage_sync_info{
             mtime = LastMtime,
             last_stat = LastStat
         }}} when LastMtime =:= StMtime
@@ -833,14 +840,14 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
             % file replicated and already handled because LastStat > StMtime
             false;
 
-        {_, #document{value = #storage_sync_info{}}} ->
+        {_, _, #document{value = #storage_sync_info{}}} ->
             case LastReplicationTimestamp < StMtime of
                 true ->
                     % file was modified after replication
                     case (MTime < StMtime) of
                         true ->
                             %there was modified on storage
-                            location_and_link_utils:update_imported_file_location(FileCtx3, StSize),
+                            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
                             true;
                         false ->
                             % file was modified via onedata
@@ -852,10 +859,12 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
             end
     end,
     storage_sync_info:update_mtime(StorageFileId, SpaceId, StMtime, NewLastStat),
-    {Result2, FileCtx3, StorageFileCtx2, ?FILE_LOCATION_ATTR_NAME}.
+    {Result2, FileCtx4, StorageFileCtx2, ?FILE_LOCATION_ATTR_NAME}.
 
 -spec maybe_update_mode(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_mode(StorageFileCtx, #file_attr{}, FileCtx, #{storage_type := ?OBJECT_STORAGE}) ->
+    {false, FileCtx, StorageFileCtx, ?MODE_ATTR_NAME};
 maybe_update_mode(StorageFileCtx, #file_attr{mode = OldMode}, FileCtx, _Info) ->
     {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     Result = case file_ctx:is_space_dir_const(FileCtx) of
@@ -912,6 +921,8 @@ update_times(FileCtx, #statbuf{st_atime = StorageATime, st_mtime = StorageMTime,
 
 -spec maybe_update_owner(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_owner(StorageFileCtx, #file_attr{}, FileCtx, #{storage_type := ?OBJECT_STORAGE}) ->
+    {false, FileCtx, StorageFileCtx, ?OWNER_ATTR_NAME};
 maybe_update_owner(StorageFileCtx, #file_attr{owner_id = OldOwnerId}, FileCtx, _Info) ->
     {Updated, StorageFileCtx3} = case file_ctx:is_space_dir_const(FileCtx) of
         true -> {false, StorageFileCtx};
@@ -940,6 +951,10 @@ update_owner(FileCtx, NewOwnerId) ->
 %%-------------------------------------------------------------------
 -spec maybe_update_nfs4_acl(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
+maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{storage_type := ?OBJECT_STORAGE}) ->
+    {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME};
+maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := false}) ->
+    {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME};
 maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := true}) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     case file_ctx:is_space_dir_const(FileCtx) of
@@ -969,9 +984,7 @@ maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := true}) -
                 ->
                     {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME}
             end
-    end;
-maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, _Info) ->
-    {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME}.
+    end.
 
 %%-------------------------------------------------------------------
 %% @private
