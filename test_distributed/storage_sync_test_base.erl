@@ -5261,7 +5261,7 @@ should_not_sync_file_during_replication(Config, FileSize) ->
 
     {ok, TransferId} = lfm_proxy:schedule_file_replication(W1, SessId, {guid, FileGuid}, provider_id(W1)),
     ?assertMatch({ok, #document{value = #transfer{replication_status = completed}}},
-        rpc:call(W1, transfer, get, [TransferId]), ?ATTEMPTS),
+        rpc:call(W1, transfer, get, [TransferId]), 600),
 
     ?assertBlocks(W2, SessId2, [
         #{
