@@ -5247,12 +5247,35 @@ should_not_sync_file_during_replication(Config, FileSize) ->
     ok = lfm_proxy:close(W2, FileHandle),
     SyncedStorage = get_synced_storage(Config, W1),
 
+    ?assertBlocks(W1, SessId, [
+        #{
+            <<"blocks">> => [[0, FileSize]],
+            <<"providerId">> => ?GET_DOMAIN_BIN(W2),
+            <<"totalBlocksSize">> => FileSize
+        }
+    ], FileGuid),
+
     enable_import(Config, ?SPACE_ID, SyncedStorage),
     enable_update(Config, ?SPACE_ID, SyncedStorage),
     schedule_spaces_check(W1, 2),
 
-    {ok, FileHandle2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, FileGuid}, read)),
-    ?assertMatch({ok, TestData}, lfm_proxy:read(W1, FileHandle2, 0, FileSize), ?ATTEMPTS),
+    {ok, TransferId} = lfm_proxy:schedule_file_replication(W1, SessId, {guid, FileGuid}, provider_id(W1)),
+    ?assertMatch({ok, #document{value = #transfer{replication_status = completed}}},
+        rpc:call(W1, transfer, get, [TransferId]), ?ATTEMPTS),
+
+    ?assertBlocks(W2, SessId2, [
+        #{
+            <<"blocks">> => [[0, FileSize]],
+            <<"providerId">> => ?GET_DOMAIN_BIN(W1),
+            <<"totalBlocksSize">> => FileSize
+        },
+        #{
+            <<"blocks">> => [[0, FileSize]],
+            <<"providerId">> => ?GET_DOMAIN_BIN(W2),
+            <<"totalBlocksSize">> => FileSize
+        }
+    ], FileGuid),
+
     ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(W2, SessId2, {guid, FileGuid})).
 
 sync_should_not_invalidate_file_after_replication(Config) ->
@@ -5270,8 +5293,6 @@ sync_should_not_invalidate_file_after_replication(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
     % replicate file to W1
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _},
         lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)),
     ?assertMatch({ok, ?TEST_DATA},
