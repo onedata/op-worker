@@ -76,7 +76,8 @@ do_master_job(Job = #storage_traverse_master{
         sync_links_token := SLToken,
         sync_links_children := SLChildren,
         file_meta_token := FMToken,
-        file_meta_children := FMChildren
+        file_meta_children := FMChildren,
+        storage_type := StorageType
 }}, _Args) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
@@ -107,7 +108,15 @@ do_master_job(Job = #storage_traverse_master{
         throw:?ENOENT ->
             {ok, #{}}
     end,
-    ok = storage_sync_links:delete_recursive(StorageFileId, StorageId),
+    case StorageType of
+        ?OBJECT_STORAGE ->
+            % on object storage, whole tree structure is processed recursively,
+            % therefore we cannot delete whole tree now (see storage_sync_links.erl for more details)
+            ok;
+        ?BLOCK_STORAGE ->
+            % each directory on block storage is processed separately so we can safely delete its links tree
+            storage_sync_links:delete_recursive(StorageFileId, StorageId)
+    end,
     storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
     Result.
 

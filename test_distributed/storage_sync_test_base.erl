@@ -3004,7 +3004,7 @@ delete_file_update_test(Config, MountSpaceInRoot) ->
     ?assertMatch({error, not_found}, rpc:call(W1, custom_metadata, get, [FileUuid])).
 
 delete_file_in_dir_update_test(Config, MountSpaceInRoot) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     StorageTestDirPath = storage_path(?SPACE_ID, ?TEST_DIR, MountSpaceInRoot),

@@ -153,7 +153,7 @@ delete_file_update_test(Config) ->
     storage_sync_test_base:delete_file_update_test(Config, true).
 
 delete_file_in_dir_update_test(Config) ->
-    storage_sync_test_base:delete_file_in_dir_update_test(Config, true).
+    storage_sync_s3_test_base:delete_file_in_dir_update_test(Config, true).
 
 delete_many_subfiles_test(Config) ->
     storage_sync_s3_test_base:delete_many_subfiles_test(Config, true).
