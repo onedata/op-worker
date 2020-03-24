@@ -80,6 +80,7 @@ do_master_job(Job = #storage_traverse_master{
 }}, _Args) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     Result = try
         case refill_file_meta_children(FMChildren, FileCtx, FMToken) of
             {error, not_found} ->
@@ -91,7 +92,6 @@ do_master_job(Job = #storage_traverse_master{
                     {error, not_found} ->
                         {ok, #{}};
                     {SLChildren2, SLToken2} ->
-                        StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                         {MasterJobs, SlaveJobs} = generate_deletion_jobs(Job, SLChildren2, SLToken2, FMChildren2, FMToken2),
                         storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, length(SlaveJobs) + length(MasterJobs)),
                         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
@@ -107,6 +107,7 @@ do_master_job(Job = #storage_traverse_master{
         throw:?ENOENT ->
             {ok, #{}}
     end,
+    ok = storage_sync_links:delete_recursive(StorageFileId, StorageId),
     storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
     Result.
 
