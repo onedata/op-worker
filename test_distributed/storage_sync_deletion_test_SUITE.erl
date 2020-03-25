@@ -229,7 +229,7 @@ delete_nested_child_on_object_storage_test_base(Config) ->
     FileGuid = create_file(W, DirGuid3, ChildFile1, SessionId),
     FileGuid2 = create_file(W, DirGuid3, ChildFile2, SessionId),
 
-    % pretend that links were added by sync for files down ot ChildFile1
+    % pretend that links were added by sync for files down to ChildFile1
     Child1FilePath = filename:join([SpaceStorageFileId, ChildDir1, ChildDir2, ChildDir3, ChildFile1]),
     ok = add_storage_sync_link(W, SpaceStorageFileId, Child1FilePath, StorageId, true),
 
