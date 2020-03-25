@@ -557,7 +557,7 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
 %% Returns file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec get_xattr(session:id(), file_key(), xattr:name(), boolean()) ->
+-spec get_xattr(session:id(), file_key(), custom_metadata:name(), boolean()) ->
     {ok, #xattr{}} | error_reply().
 get_xattr(SessId, FileKey, XattrName, Inherited) ->
     ?run(fun() -> lfm_attrs:get_xattr(SessId, FileKey, XattrName, Inherited) end).
@@ -586,7 +586,8 @@ set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
 %% Removes file's extended attribute by key.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_xattr(session:id(), file_key(), xattr:name()) -> ok | error_reply().
+-spec remove_xattr(session:id(), file_key(), custom_metadata:name()) ->
+    ok | error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
     ?run(fun() -> lfm_attrs:remove_xattr(SessId, FileKey, XattrName) end).
 
@@ -596,7 +597,7 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec list_xattr(session:id(), file_key(), boolean(), boolean()) ->
-    {ok, [xattr:name()]} | error_reply().
+    {ok, [custom_metadata:name()]} | error_reply().
 list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
     ?run(fun() -> lfm_attrs:list_xattr(SessId, FileKey, Inherited, ShowInternal) end).
 
@@ -606,7 +607,7 @@ list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(session:id(), file_key()) ->
-    {ok, xattr:transfer_encoding()} | error_reply().
+    {ok, custom_metadata:transfer_encoding()} | error_reply().
 get_transfer_encoding(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:get_transfer_encoding(SessId, FileKey) end).
 
@@ -615,7 +616,7 @@ get_transfer_encoding(SessId, FileKey) ->
 %% Sets encoding suitable for rest transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec set_transfer_encoding(session:id(), file_key(), xattr:transfer_encoding()) ->
+-spec set_transfer_encoding(session:id(), file_key(), custom_metadata:transfer_encoding()) ->
     ok | error_reply().
 set_transfer_encoding(SessId, FileKey, Encoding) ->
     ?run(fun() ->
@@ -628,7 +629,7 @@ set_transfer_encoding(SessId, FileKey, Encoding) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi_completion_status(session:id(), file_key()) ->
-    {ok, xattr:cdmi_completion_status()} | error_reply().
+    {ok, custom_metadata:cdmi_completion_status()} | error_reply().
 get_cdmi_completion_status(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:get_cdmi_completion_status(SessId, FileKey) end).
 
@@ -638,7 +639,7 @@ get_cdmi_completion_status(SessId, FileKey) ->
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_cdmi_completion_status(session:id(), file_key(), xattr:cdmi_completion_status()) ->
+-spec set_cdmi_completion_status(session:id(), file_key(), custom_metadata:cdmi_completion_status()) ->
     ok | error_reply().
 set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
     ?run(fun() ->
@@ -650,7 +651,7 @@ set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_mimetype(session:id(), file_key()) ->
-    {ok, xattr:mimetype()} | error_reply().
+    {ok, custom_metadata:mimetype()} | error_reply().
 get_mimetype(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:get_mimetype(SessId, FileKey) end).
 
@@ -659,7 +660,7 @@ get_mimetype(SessId, FileKey) ->
 %% Sets mimetype of file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_mimetype(session:id(), file_key(), xattr:mimetype()) ->
+-spec set_mimetype(session:id(), file_key(), custom_metadata:mimetype()) ->
     ok | error_reply().
 set_mimetype(SessId, FileKey, Mimetype) ->
     ?run(fun() -> lfm_attrs:set_mimetype(SessId, FileKey, Mimetype) end).
@@ -692,8 +693,8 @@ remove_share(SessId, ShareID) ->
 -spec get_metadata(session:id(), file_key(), custom_metadata:type(),
     custom_metadata:filter(), boolean()) ->
     {ok, custom_metadata:value()} | error_reply().
-get_metadata(SessId, FileKey, Type, Names, Inherited) ->
-    ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Names, Inherited) end).
+get_metadata(SessId, FileKey, Type, Filter, Inherited) ->
+    ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Filter, Inherited) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -702,8 +703,8 @@ get_metadata(SessId, FileKey, Type, Names, Inherited) ->
 %%--------------------------------------------------------------------
 -spec set_metadata(session:id(), file_key(), custom_metadata:type(),
     custom_metadata:value(), custom_metadata:filter()) -> ok | error_reply().
-set_metadata(SessId, FileKey, Type, Value, Names) ->
-    ?run(fun() -> lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Names) end).
+set_metadata(SessId, FileKey, Type, Value, Filter) ->
+    ?run(fun() -> lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Filter) end).
 
 %%--------------------------------------------------------------------
 %% @doc

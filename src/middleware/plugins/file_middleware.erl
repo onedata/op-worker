@@ -373,7 +373,7 @@ data_spec_get(#gri{aspect = xattrs}) -> #{
 
 data_spec_get(#gri{aspect = json_metadata}) -> #{
     optional => #{
-        <<"filter_type">> => {binary, any},
+        <<"filter_type">> => {binary, [<<"keypath">>]},
         <<"filter">> => {binary, any},
         <<"inherited">> => {boolean, any}
     }

@@ -124,7 +124,7 @@
 }).
 
 -record(get_xattr, {
-    name :: xattr:name(),
+    name :: custom_metadata:name(),
     inherited = false :: boolean()
 }).
 
@@ -135,7 +135,7 @@
 }).
 
 -record(remove_xattr, {
-    name :: xattr:name()
+    name :: custom_metadata:name()
 }).
 
 -record(list_xattr, {
@@ -265,7 +265,7 @@
 }).
 
 -record(xattr_list, {
-    names :: [xattr:name()]
+    names :: [custom_metadata:name()]
 }).
 
 -type fuse_response_type() ::

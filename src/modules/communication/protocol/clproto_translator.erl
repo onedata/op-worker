@@ -875,21 +875,21 @@ translate_from_protobuf(#'ScheduleReplicaInvalidation'{
     };
 translate_from_protobuf(#'ReadMetadata'{
     type = Type,
-    names = Names,
+    names = Filter,
     inherited = Inherited
 }) ->
     #get_metadata{
         type = binary_to_existing_atom(Type, utf8),
-        names = Names,
+        filter = Filter,
         inherited = Inherited
     };
 translate_from_protobuf(#'WriteMetadata'{
     metadata = Metadata,
-    names = Names
+    names = Filter
 }) ->
     #set_metadata{
         metadata = translate_from_protobuf(Metadata),
-        names = Names
+        filter = Filter
     };
 translate_from_protobuf(#'RemoveMetadata'{type = Type}) ->
     #remove_metadata{
@@ -1886,22 +1886,22 @@ translate_to_protobuf(#query_view_params{params = Params}) ->
     }};
 translate_to_protobuf(#get_metadata{
     type = Type,
-    names = Names,
+    filter = Filter,
     inherited = Inherited
 }) ->
     {read_metadata, #'ReadMetadata'{
         type = atom_to_binary(Type, utf8),
-        names = Names,
+        names = Filter,
         inherited = Inherited
     }};
 translate_to_protobuf(#set_metadata{
     metadata = Metadata,
-    names = Names
+    filter = Filter
 }) ->
     {_, MetadataProto} = translate_to_protobuf(Metadata),
     {write_metadata, #'WriteMetadata'{
         metadata = MetadataProto,
-        names = Names
+        names = Filter
     }};
 translate_to_protobuf(#remove_metadata{type = Type}) ->
     {remove_metadata, #'RemoveMetadata'{
