@@ -122,7 +122,7 @@
     sync_should_not_delete_not_replicated_file_created_in_remote_provider/2,
     sync_should_not_delete_dir_created_in_remote_provider/2,
     sync_should_not_delete_not_replicated_files_created_in_remote_provider2/2,
-    should_not_sync_file_during_replication/2,
+    should_not_sync_file_during_replication/1,
     sync_should_not_invalidate_file_after_replication/1
 ]).
 
@@ -5053,6 +5053,9 @@ recreate_file_deleted_by_sync_test(Config, MountSpaceInRoot) ->
     StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
 
+    % ensure that dir mtime will change
+    timer:sleep(timer:seconds(1)),
+
     %% delete file on storage
     ok = sd_test_utils:unlink(W1, SDHandle, ?TEST_DATA_SIZE),
 
@@ -5227,7 +5230,8 @@ sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config, 
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS).
 
-should_not_sync_file_during_replication(Config, FileSize) ->
+should_not_sync_file_during_replication(Config) ->
+    % storage sync scans are set in init_per_testcase to be executed with interval of 1 seconds
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -5239,43 +5243,62 @@ should_not_sync_file_during_replication(Config, FileSize) ->
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
-    {ok, FileHandle} =
-        ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, FileGuid}, write)),
-    TestData = crypto:strong_rand_bytes(FileSize),
-    ?assertEqual({ok, FileSize}, lfm_proxy:write(W2, FileHandle, 0, TestData)),
+    {ok, FileHandle} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {guid, FileGuid}, write)),
+    ?assertMatch({ok, _}, lfm_proxy:write(W2, FileHandle, 0, ?TEST_DATA)),
     ?assertEqual(ok, lfm_proxy:fsync(W2, FileHandle)),
     ok = lfm_proxy:close(W2, FileHandle),
     SyncedStorage = get_synced_storage(Config, W1),
 
     ?assertBlocks(W1, SessId, [
         #{
-            <<"blocks">> => [[0, FileSize]],
+            <<"blocks">> => [[0, ?TEST_DATA_SIZE]],
             <<"providerId">> => ?GET_DOMAIN_BIN(W2),
-            <<"totalBlocksSize">> => FileSize
+            <<"totalBlocksSize">> => ?TEST_DATA_SIZE
         }
     ], FileGuid),
 
     enable_import(Config, ?SPACE_ID, SyncedStorage),
     enable_update(Config, ?SPACE_ID, SyncedStorage),
-    schedule_spaces_check(W1, 2),
+
+    % add sleep after creating file by RTransfer, to pretend that replication lasts longer
+    % there will be file on storage which should be detected as "in replication"
+    ok = test_utils:mock_new(W1, rtransfer_config),
+    ok = test_utils:mock_expect(W1, rtransfer_config, open, fun(Guid, Flag) ->
+        R = meck:passthrough([Guid, Flag]),
+        timer:sleep(timer:seconds(10)),
+        R
+    end),
 
     {ok, TransferId} = lfm_proxy:schedule_file_replication(W1, SessId, {guid, FileGuid}, provider_id(W1)),
     ?assertMatch({ok, #document{value = #transfer{replication_status = completed}}},
         rpc:call(W1, transfer, get, [TransferId]), 600),
 
-    ?assertBlocks(W2, SessId2, [
+    % ensure that sync did not invalidate file blocks
+    ?assertBlocks(W1, SessId, [
         #{
-            <<"blocks">> => [[0, FileSize]],
+            <<"blocks">> => [[0, ?TEST_DATA_SIZE]],
             <<"providerId">> => ?GET_DOMAIN_BIN(W1),
-            <<"totalBlocksSize">> => FileSize
+            <<"totalBlocksSize">> => ?TEST_DATA_SIZE
         },
         #{
-            <<"blocks">> => [[0, FileSize]],
+            <<"blocks">> => [[0, ?TEST_DATA_SIZE]],
             <<"providerId">> => ?GET_DOMAIN_BIN(W2),
-            <<"totalBlocksSize">> => FileSize
+            <<"totalBlocksSize">> => ?TEST_DATA_SIZE
         }
     ], FileGuid),
-
+    ?assertBlocks(W2, SessId2, [
+        #{
+            <<"blocks">> => [[0, ?TEST_DATA_SIZE]],
+            <<"providerId">> => ?GET_DOMAIN_BIN(W1),
+            <<"totalBlocksSize">> => ?TEST_DATA_SIZE
+        },
+        #{
+            <<"blocks">> => [[0, ?TEST_DATA_SIZE]],
+            <<"providerId">> => ?GET_DOMAIN_BIN(W2),
+            <<"totalBlocksSize">> => ?TEST_DATA_SIZE
+        }
+    ], FileGuid),
+    FileSize = ?TEST_DATA_SIZE,
     ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(W2, SessId2, {guid, FileGuid})).
 
 sync_should_not_invalidate_file_after_replication(Config) ->
@@ -5323,7 +5346,8 @@ sync_should_not_invalidate_file_after_replication(Config) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID),
 
-    timer:sleep(timer:seconds(20)),
+    % wait to ensure that file_location docs are synchronized
+    timer:sleep(timer:seconds(10)),
 
     ?assertBlocks(W2, SessId2, [
         #{
@@ -6144,6 +6168,20 @@ init_per_testcase(create_list_race_test, Config, Readonly) ->
     ],
     init_per_testcase(default, Config2, Readonly);
 
+init_per_testcase(should_not_sync_file_during_replication, Config, Readonly) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    {ok, OldInterval} = test_utils:get_env(W1, op_worker, storage_sync_check_interval),
+    test_utils:set_env(W1, op_worker, storage_sync_check_interval, 1),
+    Config2 = [
+        {update_config, #{
+            scan_interval => 1,
+            delete_enable => false,
+            write_once => true}},
+        {old_storage_sync_check_interval, OldInterval}
+        | Config
+    ],
+    init_per_testcase(default, Config2, Readonly);
+
 init_per_testcase(_Case, Config, Readonly) ->
     Workers = ?config(op_worker_nodes, Config),
     ct:timetrap({minutes, 20}),
@@ -6227,6 +6265,13 @@ end_per_testcase(sync_should_not_reimport_file_that_was_not_successfully_deleted
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     remove_deletion_link(W1, ?SPACE_ID, TestFile, SpaceCtx),
+    end_per_testcase(default, Config, Readonly);
+
+end_per_testcase(should_not_sync_file_during_replication, Config, Readonly) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(W1, [rtransfer_config]),
+    OldInterval = ?config(old_storage_sync_check_interval, Config),
+    test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, OldInterval),
     end_per_testcase(default, Config, Readonly);
 
 end_per_testcase(_Case, Config, Readonly) ->

@@ -782,6 +782,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
         %todo VFS-4847 refactor this case, use when wherever possible
         {false, undefined, _} ->
             % file created remotely and not yet replicated
+            % empty file on storage was created after 'open' operation
             false;
 
         {true, undefined, undefined} when MTime < StMtime ->
