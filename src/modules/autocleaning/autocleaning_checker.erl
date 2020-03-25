@@ -7,9 +7,9 @@
 %%% @doc
 %%% This gen_server is responsible for aggregating requests for
 %%% checking autocleaning in given space.
-%%% One such gen_server is started per Oneprovider cluster.
+%%% For each space there is only one such gen_server started in the cluster.
 %%% The gen_server checks autocleaning when shutting down.
-%%% see autocleaning_run_controller.erl for more information on
+%%% See autocleaning_run_controller.erl for more information on
 %%% autocleaning mechanism.
 %%% @end
 %%%-------------------------------------------------------------------

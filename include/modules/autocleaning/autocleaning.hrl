@@ -13,6 +13,7 @@
 -ifndef(AUTOCLEANING_HRL).
 -define(AUTOCLEANING_HRL, 1).
 
+% Macros defining possible states of an autocleaning run.
 -define(ACTIVE, active).
 -define(CANCELLING, cancelling).
 -define(COMPLETED, completed).

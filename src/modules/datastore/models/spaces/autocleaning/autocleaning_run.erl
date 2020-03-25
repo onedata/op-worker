@@ -94,9 +94,9 @@ mark_released_file(ARId, Size) ->
     end)).
 
 -spec update_counters(undefined | id(), non_neg_integer(), non_neg_integer()) -> ok.
-update_counters(undefined, _, _ )-> ok;
+update_counters(undefined, _, _) -> ok;
 update_counters(ARId, ReleasedFiles, ReleasedBytes) ->
-    ok = ?extract_ok(update(ARId, fun(AC)->
+    ok = ?extract_ok(update(ARId, fun(AC) ->
         {ok, AC#autocleaning_run{
             released_files = ReleasedFiles,
             released_bytes = ReleasedBytes
@@ -278,13 +278,8 @@ get_record_struct(2) ->
 upgrade_record(1, {?MODULE, SpaceId, StartedAt, StoppedAt, _Status,
     ReleasedBytes, BytesToRelease, ReleasedFiles, _IndexToken
 }) ->
-    {2, #autocleaning_run{
-        space_id = SpaceId,
-        started_at = StartedAt,
-        stopped_at = StoppedAt,
-        released_bytes = ReleasedBytes,
-        bytes_to_release = BytesToRelease,
-        released_files = ReleasedFiles,
+    {2, {?MODULE, SpaceId, StartedAt, StoppedAt, ReleasedBytes,
+        BytesToRelease, ReleasedFiles,
         % index token was wrongly persisted, therefore we can ignore it
-        view_traverse_token = #view_traverse_token{}
+        #view_traverse_token{}
     }}.

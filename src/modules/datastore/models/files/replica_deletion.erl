@@ -267,15 +267,6 @@ upgrade_record(1, {?MODULE, FileUuid, SpaceId, Status, RequestedBlocks,
 upgrade_record(2, {?MODULE, FileUuid, SpaceId, Status, RequestedBlocks,
     SupportedBlocks, VersionVector, Requester, Requestee, DocId, Type}
 ) ->
-    {3, #replica_deletion{
-        file_uuid = FileUuid,
-        space_id = SpaceId,
-        action = Status,
-        requested_blocks = RequestedBlocks,
-        supported_blocks = SupportedBlocks,
-        version_vector = VersionVector,
-        requester = Requester,
-        requestee = Requestee,
-        job_id = DocId,
-        job_type = Type
+    {3, {?MODULE, FileUuid, SpaceId, Status, RequestedBlocks, SupportedBlocks,
+        VersionVector, Requester, Requestee, DocId, Type
     }}.

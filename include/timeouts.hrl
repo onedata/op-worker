@@ -8,7 +8,7 @@
 %%% @doc
 %%% This file contains timeout definitions
 %%% @end
--author("Jakub Kudzia").
+%%%-------------------------------------------------------------------
 
 -ifndef(TIMEOUTS_HRL).
 -define(TIMEOUTS_HRL, 1).
