@@ -397,6 +397,8 @@
     % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id). 
     % It is persisted so when slave job is restarted no additional task is created.
     subtask_id = undefined :: space_unsupport:subtask_id() | undefined,
+    % Id of process waiting to be notified of task finish
+    % NOTE: should be updated after provider restart
     slave_job_pid  = undefined :: pid() | undefined
 }).
 
@@ -590,7 +592,7 @@
 
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
-    seq = #{} :: #{od_provider:id() => couchbase_changes:seq()}
+    seq = #{} :: #{od_provider:id() => {couchbase_changes:seq(), datastore_doc:timestamp()}}
 }).
 
 %% Model that holds state entries for DBSync worker

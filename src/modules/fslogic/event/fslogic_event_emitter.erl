@@ -42,8 +42,14 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
         {error, not_found} ->
             ok;
         {#document{}, FileCtx2} ->
-            {#fuse_response{fuse_response = #file_attr{} = FileAttr}, OtherFiles, _} =
-                attr_req:get_file_attr_and_conflicts(user_ctx:new(?ROOT_SESS_ID), FileCtx2, true, true, true),
+            RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+            {#fuse_response{
+                fuse_response = #file_attr{} = FileAttr
+            }, OtherFiles, _} = attr_req:get_file_attr_and_conflicts_insecure(RootUserCtx, FileCtx2, #{
+                allow_deleted_files => true,
+                include_size => true,
+                name_conflicts_resolution_policy => resolve_name_conflicts
+            }),
             emit_suffixes(OtherFiles, {ctx, FileCtx2}),
             emit_file_attr_changed(FileCtx2, FileAttr, ExcludedSessions);
         Other ->
@@ -74,9 +80,14 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
         {error, not_found} ->
             ok;
         {#document{}, FileCtx2} ->
-            #fuse_response{fuse_response = #file_attr{} = FileAttr} =
-                attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID),
-                    FileCtx2, true, false),
+            RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+            #fuse_response{
+                fuse_response = #file_attr{} = FileAttr
+            } = attr_req:get_file_attr_insecure(RootUserCtx, FileCtx2, #{
+                allow_deleted_files => true,
+                include_size => false,
+                name_conflicts_resolution_policy => resolve_name_conflicts
+            }),
             event:emit_to_filtered_subscribers(#file_attr_changed_event{
                 file_attr = FileAttr
             }, #{file_ctx => FileCtx2}, []);
