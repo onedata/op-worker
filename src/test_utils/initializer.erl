@@ -1115,6 +1115,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         {ok, #document{value = #od_space{storages = StorageIds}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
         {ok, maps:keys(StorageIds)}
     end),
+    
+    test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(SpaceId) ->
+        space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceId)
+    end),
 
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(Client, SpaceId) ->
         {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(Client, SpaceId),
@@ -1139,6 +1143,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 
     test_utils:mock_expect(Workers, space_logic, get_harvesters, fun(SpaceId) ->
         {ok, proplists:get_value(SpaceId, SpacesHarvesters, [])}
+    end),
+    
+    test_utils:mock_expect(Workers, space_logic, report_dbsync_state, fun(SpaceId, _) ->
+        ok
     end).
 
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
