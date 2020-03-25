@@ -39,6 +39,7 @@
     list_children/5, list_children/6,
     list_children_whitelisted/4
 ]).
+-export([get_name/1]).
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
@@ -897,6 +898,10 @@ is_child_of_hidden_dir(Path) ->
     {Parent, _} = fslogic_path:basename_and_parent(ParentPath),
     is_hidden(Parent).
 
+-spec get_name(doc()) -> binary().
+get_name(#document{value = #file_meta{name = Name}}) ->
+    Name.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file active permissions type, that is info which permissions
@@ -904,14 +909,16 @@ is_child_of_hidden_dir(Path) ->
 %% or posix otherwise).
 %% @end
 %%--------------------------------------------------------------------
--spec get_active_perms_type(file_meta:uuid()) ->
+-spec get_active_perms_type(file_meta:uuid() | doc()) ->
     {ok, file_meta:permissions_type()} | {error, term()}.
+get_active_perms_type(#document{value = #file_meta{acl = []}}) ->
+    {ok, posix};
+get_active_perms_type(#document{value = #file_meta{}}) ->
+    {ok, acl};
 get_active_perms_type(FileUuid) ->
     case file_meta:get({uuid, FileUuid}) of
-        {ok, #document{value = #file_meta{acl = []}}} ->
-            {ok, posix};
-        {ok, _} ->
-            {ok, acl};
+        {ok, FileDoc} ->
+            get_active_perms_type(FileDoc);
         {error, _} = Error ->
             Error
     end.
@@ -1180,7 +1187,11 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
 emit_space_dir_created(DirUuid, SpaceId) ->
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
     #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_light(user_ctx:new(?ROOT_USER_ID), FileCtx, false),
+        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
+            allow_deleted_files => false,
+            include_size => false,
+            name_conflicts_resolution_policy => allow_name_conflicts
+        }),
     FileAttr2 = FileAttr#file_attr{size = 0},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
 

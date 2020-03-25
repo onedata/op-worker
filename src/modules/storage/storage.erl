@@ -349,6 +349,7 @@ set_qos_parameters(StorageId, ProviderId, QosParameters) ->
         Error -> Error
     end.
 
+
 -spec update_helper_args(id(), helper:args()) -> ok | {error, term()}.
 update_helper_args(StorageId, Changes) when is_map(Changes) ->
     UpdateFun = fun(Helper) -> helper:update_args(Helper, Changes) end,
@@ -401,7 +402,7 @@ support_space_insecure(StorageId, SpaceSupportToken, SupportSize) ->
                 false ->
                     case storage_logic:support_space(StorageId, SpaceSupportToken, SupportSize) of
                         {ok, SpaceId} ->
-                            space_logic:on_space_supported(SpaceId),
+                            on_space_supported(SpaceId, StorageId),
                             {ok, SpaceId};
                         {error, _} = Error ->
                             Error
@@ -451,9 +452,10 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
-%%     @TODO VFS-6132 Use space_unsupport when it is implemented
+    %% @TODO VFS-6132 Use space_unsupport when it is implemented
+    %% @TODO VFS-6208 Cancel sync and auto-cleaning traverse and clean up ended tasks when unsupporting
     case storage_logic:revoke_space_support(StorageId, SpaceId) of
-        ok -> space_unsupport:cleanup_local_documents(SpaceId, StorageId);
+        ok -> on_space_unsupported(SpaceId, StorageId);
         Error -> Error
     end.
 
@@ -481,6 +483,22 @@ on_storage_created(StorageId) ->
 on_storage_created(StorageId, QosParameters) ->
     ok = set_qos_parameters(StorageId, QosParameters),
     on_storage_created(StorageId).
+
+
+%% @private
+-spec on_space_supported(od_space:id(), id()) -> ok.
+on_space_supported(SpaceId, StorageId) ->
+    % remove possible remnants of previous support 
+    % (when space was unsupported in Onezone without provider knowledge)
+    space_unsupport:cleanup_local_documents(SpaceId, StorageId),
+    space_logic:on_space_supported(SpaceId).
+
+
+%% @private
+-spec on_space_unsupported(od_space:id(), id()) -> ok.
+on_space_unsupported(SpaceId, StorageId) ->
+    space_unsupport:cleanup_local_documents(SpaceId, StorageId),
+    main_harvesting_stream:space_unsupported(SpaceId).
 
 
 %% @private

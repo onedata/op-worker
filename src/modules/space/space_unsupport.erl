@@ -314,6 +314,6 @@ cleanup_local_documents(SpaceId, StorageId) ->
     file_popularity_api:delete_config(SpaceId),
     autocleaning_api:disable(SpaceId),
     autocleaning_api:delete_config(SpaceId),
-    storage_sync:space_unsupported(SpaceId, StorageId),
+    storage_sync:clean_up(SpaceId, StorageId),
     space_quota:delete(SpaceId),
     dbsync_state:delete(SpaceId).

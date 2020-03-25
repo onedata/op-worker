@@ -78,6 +78,7 @@
     sync_works_properly_after_delete_test/1,
     delete_and_update_files_simultaneously_update_test/1,
     delete_file_update_test/1,
+    delete_file_in_dir_update_test/1,
     delete_many_subfiles_test/1,
     create_delete_race_test/1,
     create_list_race_test/1,
@@ -159,6 +160,7 @@
     sync_works_properly_after_delete_test,
     delete_and_update_files_simultaneously_update_test,
     delete_file_update_test,
+    delete_file_in_dir_update_test,
     delete_many_subfiles_test,
     create_delete_race_test,
     create_list_race_test,
@@ -329,6 +331,9 @@ delete_and_update_files_simultaneously_update_test(Config) ->
 
 delete_file_update_test(Config) ->
     storage_sync_test_base:delete_file_update_test(Config, false).
+
+delete_file_in_dir_update_test(Config) ->
+    storage_sync_test_base:delete_file_in_dir_update_test(Config, false).
 
 delete_many_subfiles_test(Config) ->
     storage_sync_test_base:delete_many_subfiles_test(Config, false).

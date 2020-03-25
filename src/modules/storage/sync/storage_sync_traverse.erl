@@ -120,10 +120,12 @@ cancel(SpaceId, StorageId) ->
     case storage_sync_monitoring:get_finished_scans_num(SpaceId, StorageId) of
         {ok, ScansNum} ->
             traverse:cancel(?POOL_BIN, encode_task_id(SpaceId, StorageId, ScansNum + 1));
-        {error, ?ENOENT} ->
-            ?warning("Cannot cancel storage sync for space ~p and storage ~p as it is not configured"),
+        {error, not_found} ->
+            ?debug("Cannot cancel storage sync for space ~p and storage ~p as it is not configured", 
+                [SpaceId, StorageId]),
             ok
     end.
+    
 
 %===================================================================
 % Pool callbacks
@@ -673,26 +675,26 @@ get_storage_sync_info_doc(#storage_traverse_master{
 
 -spec maybe_add_deletion_detection_link(storage_file_ctx:ctx(), info()) -> ok.
 maybe_add_deletion_detection_link(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileId}) ->
-    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    ParentStorageFileCtx = storage_file_ctx:get_parent_ctx_const(StorageFileCtx),
-    ParentStorageFileId = storage_file_ctx:get_storage_file_id_const(ParentStorageFileCtx),
-    {ParentStorageFileId2, MarkLeaves} = case maps:get(storage_type, Info) of
-        ?OBJECT_STORAGE ->
-            %% When storage_sync is run on object storages we set MarkLeaves parameter to true
-            %% in the below call which allows to determine when link is associated with
-            %% a regular file which is necessary for storage_sync_deletion on object storages
-            {SpaceStorageFileId, true};
-        ?BLOCK_STORAGE ->
-            %% On the other hand, on block storages MarkLeaves = false.
-            %% storage_sync_deletion on block storages processes only direct children of a directory
-            %% so it does not need to traverse recursively down the file structure.
-            %% It also allows to create storage_sync_link for directory and its children simultaneously
-            %% as we are sure that value of a subdirectory link won't be set to undefined.
-            {ParentStorageFileId, false}
-    end,
     case maps:get(add_deletion_detection_link, Info, false) of
         true ->
+            StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+            ParentStorageFileCtx = storage_file_ctx:get_parent_ctx_const(StorageFileCtx),
+            ParentStorageFileId = storage_file_ctx:get_storage_file_id_const(ParentStorageFileCtx),
+            {ParentStorageFileId2, MarkLeaves} = case maps:get(storage_type, Info) of
+                ?OBJECT_STORAGE ->
+                    %% When storage_sync is run on object storages we set MarkLeaves parameter to true
+                    %% in the below call which allows to determine when link is associated with
+                    %% a regular file which is necessary for storage_sync_deletion on object storages
+                    {SpaceStorageFileId, true};
+                ?BLOCK_STORAGE ->
+                    %% On the other hand, on block storages MarkLeaves = false.
+                    %% storage_sync_deletion on block storages processes only direct children of a directory
+                    %% so it does not need to traverse recursively down the file structure.
+                    %% It also allows to create storage_sync_link for directory and its children simultaneously
+                    %% as we are sure that value of a subdirectory link won't be set to undefined.
+                    {ParentStorageFileId, false}
+            end,
             storage_sync_links:add_link_recursive(ParentStorageFileId2, StorageId, StorageFileId, MarkLeaves);
         _ ->
             ok

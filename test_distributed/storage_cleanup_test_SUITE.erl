@@ -233,7 +233,7 @@ directory_should_be_deleted_from_storage_after_releasing_handle_to_its_child(Con
 
     % then
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, {guid, DirGuid})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:ls(Worker, SessId, {guid, DirGuid}, 0, 1)),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(Worker, SessId, {guid, DirGuid}, 0, 1)),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, {guid, FileGuid})),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, read)),
 
@@ -527,7 +527,7 @@ suffix_in_metadata_and_storage_test(Config) ->
     StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
 
     ListDir = fun(Worker, Session, Path) ->
-        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        {ok, List} = lfm_proxy:get_children(Worker, Session, {path, Path}, 0, 100),
         List
               end,
     {ok, StorageFiles} = list_dir(Worker1, StorageSpacePathW1),
@@ -596,7 +596,7 @@ suffix_in_dir_metadata_test(Config) ->
     StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
 
     ListDir = fun(Worker, Session, Path) ->
-        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        {ok, List} = lfm_proxy:get_children(Worker, Session, {path, Path}, 0, 100),
         List
               end,
 
@@ -678,7 +678,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
 
     ListDir = fun(Worker, Session, Path) ->
-        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        {ok, List} = lfm_proxy:get_children(Worker, Session, {path, Path}, 0, 100),
         List
     end,
     StorageFiles= case list_dir(Worker1, StorageSpacePathW1) of

@@ -35,6 +35,7 @@
     lfm_basic_rdwr_after_file_delete_test/1,
     lfm_write_test/1,
     lfm_stat_test/1,
+    lfm_get_details_test/1,
     lfm_synch_stat_test/1,
     lfm_truncate_test/1,
     lfm_acl_test/1,
@@ -71,6 +72,12 @@
     readdir_should_work_with_token/1,
     readdir_should_work_with_token2/1,
     readdir_should_work_with_startid/1,
+    get_children_details_should_return_empty_result_for_empty_dir/1,
+    get_children_details_should_return_empty_result_zero_size/1,
+    get_children_details_should_work_with_zero_offset/1,
+    get_children_details_should_work_with_non_zero_offset/1,
+    get_children_details_should_work_with_size_greater_than_dir_size/1,
+    get_children_details_should_work_with_startid/1,
     lfm_recreate_handle_test/1,
     lfm_write_after_create_no_perms_test/1,
     lfm_recreate_handle_after_delete_test/1,
@@ -100,6 +107,7 @@
     lfm_basic_rdwr_after_file_delete_test,
     lfm_write_test,
     lfm_stat_test,
+    lfm_get_details_test,
     lfm_synch_stat_test,
     lfm_truncate_test,
     lfm_acl_test,
@@ -137,6 +145,12 @@
     readdir_should_work_with_token,
     readdir_should_work_with_token2,
     readdir_should_work_with_startid,
+    get_children_details_should_return_empty_result_for_empty_dir,
+    get_children_details_should_return_empty_result_zero_size,
+    get_children_details_should_work_with_zero_offset,
+    get_children_details_should_work_with_non_zero_offset,
+    get_children_details_should_work_with_size_greater_than_dir_size,
+    get_children_details_should_work_with_startid,
     lfm_recreate_handle_test,
     lfm_write_after_create_no_perms_test,
     lfm_recreate_handle_after_delete_test,
@@ -438,6 +452,24 @@ readdir_should_work_with_token2(Config) ->
 readdir_should_work_with_startid(Config) ->
     lfm_files_test_base:readdir_should_work_with_startid(Config).
 
+get_children_details_should_return_empty_result_for_empty_dir(Config) ->
+    lfm_files_test_base:get_children_details_should_return_empty_result_for_empty_dir(Config).
+
+get_children_details_should_return_empty_result_zero_size(Config) ->
+    lfm_files_test_base:get_children_details_should_return_empty_result_zero_size(Config).
+
+get_children_details_should_work_with_zero_offset(Config) ->
+    lfm_files_test_base:get_children_details_should_work_with_zero_offset(Config).
+
+get_children_details_should_work_with_non_zero_offset(Config) ->
+    lfm_files_test_base:get_children_details_should_work_with_non_zero_offset(Config).
+
+get_children_details_should_work_with_size_greater_than_dir_size(Config) ->
+    lfm_files_test_base:get_children_details_should_work_with_size_greater_than_dir_size(Config).
+
+get_children_details_should_work_with_startid(Config) ->
+    lfm_files_test_base:get_children_details_should_work_with_startid(Config).
+
 echo_loop_test(Config) ->
     lfm_files_test_base:echo_loop(Config).
 
@@ -476,6 +508,9 @@ lfm_write_test(Config) ->
 
 lfm_stat_test(Config) ->
     lfm_files_test_base:lfm_stat(Config).
+
+lfm_get_details_test(Config) ->
+    lfm_files_test_base:lfm_get_details(Config).
 
 lfm_synch_stat_test(Config) ->
     lfm_files_test_base:lfm_synch_stat(Config).

@@ -20,7 +20,7 @@
 
 %% API
 -export([send/2, forward/1, broadcast/4]).
--export([request_changes/4, send_changes/5, broadcast_changes/4]).
+-export([request_changes/4, send_changes/6, broadcast_changes/5]).
 
 -type changes_batch() :: #changes_batch{}.
 -type changes_request() :: #changes_request2{}.
@@ -147,13 +147,14 @@ request_changes(ProviderId, SpaceId, Since, Until) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec send_changes(od_provider:id(), od_space:id(), couchbase_changes:since(),
-    couchbase_changes:until(), [datastore:doc()]) ->
+    couchbase_changes:until(), dbsync_changes:timestamp(), [datastore:doc()]) ->
     ok | {error, Reason :: term()}.
-send_changes(ProviderId, SpaceId, Since, Until, Docs) ->
+send_changes(ProviderId, SpaceId, Since, Until, Timestamp, Docs) ->
     dbsync_communicator:send(ProviderId, #changes_batch{
         space_id = SpaceId,
         since = Since,
         until = Until,
+        timestamp = Timestamp,
         compressed_docs = dbsync_utils:compress(Docs)
     }).
 
@@ -164,13 +165,14 @@ send_changes(ProviderId, SpaceId, Since, Until, Docs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec broadcast_changes(od_space:id(), couchbase_changes:since(),
-    couchbase_changes:until(), [datastore:doc()]) -> ok.
-broadcast_changes(SpaceId, Since, Until, Docs) ->
+    couchbase_changes:until(), dbsync_changes:timestamp(), [datastore:doc()]) -> ok.
+broadcast_changes(SpaceId, Since, Until, Timestamp, Docs) ->
     MsgId = dbsync_utils:gen_request_id(),
     Msg = #changes_batch{
         space_id = SpaceId,
         since = Since,
         until = Until,
+        timestamp = Timestamp,
         compressed_docs = dbsync_utils:compress(Docs)
     },
     case broadcast(SpaceId, MsgId, Msg, []) of

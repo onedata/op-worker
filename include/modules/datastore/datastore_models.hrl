@@ -587,7 +587,7 @@
 
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
-    seq = #{} :: #{od_provider:id() => couchbase_changes:seq()}
+    seq = #{} :: #{od_provider:id() => {couchbase_changes:seq(), datastore_doc:timestamp()}}
 }).
 
 %% Model that holds state entries for DBSync worker
