@@ -816,7 +816,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
     Result2 = case {IsLocallyCreatedFile, LastReplicationTimestamp, StorageSyncInfo} of
         %todo VFS-4847 refactor this case, use when wherever possible
         {false, undefined, _} ->
-            % file created remotely and not yet replicated
+            % remote file created on storage by open and not yet replicated
             false;
 
         {true, undefined, undefined} when MTime < StMtime ->
