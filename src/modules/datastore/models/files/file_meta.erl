@@ -32,7 +32,7 @@
 -export([delete_child_link/4, foreach_child/3, add_child_link/4, delete_deletion_link/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
--export([get_parent/1, get_parent_uuid/1, get_parent_including_deleted/1]).
+-export([get_parent/1, get_parent_uuid/1, get_parent_including_deleted/1, get_provider_id/1]).
 -export([
     get_child/2, get_child_uuid/2,
     list_children/2, list_children/3, list_children/4,
@@ -835,6 +835,12 @@ is_child_of_hidden_dir(Path) ->
     {_, ParentPath} = fslogic_path:basename_and_parent(Path),
     {Parent, _} = fslogic_path:basename_and_parent(ParentPath),
     is_hidden(Parent).
+
+-spec get_provider_id(doc() | file_meta()) -> oneprovider:id().
+get_provider_id(#file_meta{provider_id = ProviderId}) ->
+    ProviderId;
+get_provider_id(#document{value = FileMeta}) ->
+    get_provider_id(FileMeta).
 
 %%--------------------------------------------------------------------
 %% @doc
