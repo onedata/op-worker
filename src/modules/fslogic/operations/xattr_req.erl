@@ -44,8 +44,9 @@
     ShowInternal :: boolean()
 ) ->
     fslogic_worker:fuse_response().
-list_xattr(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
-    {ok, Xattrs} = xattr:list(UserCtx, FileCtx, IncludeInherited, ShowInternal),
+list_xattr(UserCtx, FileCtx0, IncludeInherited, ShowInternal) ->
+    {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0), % check if file exists
+    {ok, Xattrs} = xattr:list(UserCtx, FileCtx1, IncludeInherited, ShowInternal),
     ?FUSE_OK_RESP(#xattr_list{names = Xattrs}).
 
 
@@ -113,8 +114,9 @@ get_xattr(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited) ->
 get_xattr(_UserCtx, _FileCtx, <<?ONEDATA_PREFIX_STR, _/binary>>, _) ->
     throw(?EPERM);
 
-get_xattr(UserCtx, FileCtx, XattrName, Inherited) ->
-    case xattr:get(UserCtx, FileCtx, XattrName, Inherited) of
+get_xattr(UserCtx, FileCtx0, XattrName, Inherited) ->
+    {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0), % check if file exists
+    case xattr:get(UserCtx, FileCtx1, XattrName, Inherited) of
         {ok, XattrValue} ->
             #fuse_response{
                 status = #status{code = ?OK},
@@ -169,9 +171,10 @@ set_xattr(UserCtx, FileCtx, ?XATTR(?RDF_METADATA_KEY, Rdf), Create, Replace) ->
 set_xattr(_, _, ?XATTR(<<?ONEDATA_PREFIX_STR, _/binary>>, _), _Create, _Replace) ->
     throw(?EPERM);
 
-set_xattr(UserCtx, FileCtx, ?XATTR(XattrName, XattrValue), Create, Replace) ->
-    {ok, _} = xattr:set(UserCtx, FileCtx, XattrName, XattrValue, Create, Replace),
-    fslogic_times:update_ctime(FileCtx),
+set_xattr(UserCtx, FileCtx0, ?XATTR(XattrName, XattrValue), Create, Replace) ->
+    {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0), % check if file exists
+    {ok, _} = xattr:set(UserCtx, FileCtx1, XattrName, XattrValue, Create, Replace),
+    fslogic_times:update_ctime(FileCtx1),
     #fuse_response{status = #status{code = ?OK}}.
 
 

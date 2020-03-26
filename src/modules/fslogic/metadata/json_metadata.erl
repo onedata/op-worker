@@ -38,7 +38,7 @@
 ) ->
     {ok, custom_metadata:value()} | {error, term()}.
 get(UserCtx, FileCtx, Filter, Inherited) ->
-    {ok, Json} = case Inherited of
+    Result = case Inherited of
         true ->
             case gather_ancestors_json_metadata(UserCtx, FileCtx, []) of
                 {ok, []} ->
@@ -49,7 +49,12 @@ get(UserCtx, FileCtx, Filter, Inherited) ->
         false ->
             get_direct_json_metadata(UserCtx, FileCtx)
     end,
-    {ok, find(Json, Filter)}.
+    case Result of
+        {ok, Json} ->
+            {ok, find(Json, Filter)};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec set(

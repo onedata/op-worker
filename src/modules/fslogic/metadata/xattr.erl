@@ -160,10 +160,10 @@ list_direct_xattrs(FileCtx) ->
     {ok, [custom_metadata:name()]} | {error, term()}.
 list_ancestor_xattrs(UserCtx, FileCtx0, GatheredXattrNames) ->
     AllXattrNames = case list_direct_xattrs(FileCtx0) of
+        {ok, []} ->
+            GatheredXattrNames;
         {ok, XattrNames} ->
-            lists:usort(XattrNames ++ GatheredXattrNames);
-        ?ERROR_NOT_FOUND ->
-            GatheredXattrNames
+            lists:usort(XattrNames ++ GatheredXattrNames)
     end,
 
     FileGuid = file_ctx:get_guid_const(FileCtx0),
