@@ -360,10 +360,15 @@ delete_shares(UserCtx, FileCtx) ->
 
 -spec delete_storage_sync_info(file_ctx:ctx()) -> file_ctx:ctx().
 delete_storage_sync_info(FileCtx) ->
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    storage_sync_info:delete(StorageFileId, SpaceId),
-    FileCtx2.
+    try
+        {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+        SpaceId = file_ctx:get_space_id_const(FileCtx2),
+        storage_sync_info:delete(StorageFileId, SpaceId),
+        FileCtx2
+    catch
+        error:{badmatch, {error, not_found}} ->
+            FileCtx
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

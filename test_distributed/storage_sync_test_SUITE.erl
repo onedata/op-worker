@@ -506,7 +506,7 @@ sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config) 
     storage_sync_test_base:sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config, false).
 
 should_not_sync_file_during_replication(Config) ->
-    storage_sync_test_base:should_not_sync_file_during_replication(Config, 100 * 1024 * 1024).
+    storage_sync_test_base:should_not_sync_file_during_replication(Config).
 
 sync_should_not_invalidate_file_after_replication(Config) ->
     storage_sync_test_base:sync_should_not_invalidate_file_after_replication(Config).
