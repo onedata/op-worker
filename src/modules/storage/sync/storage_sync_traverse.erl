@@ -439,6 +439,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
                     traverse_only_directories(TraverseJob2#storage_traverse_master{fold_enabled = false}, Args);
                 {_, _, _} ->
                     % Hash of children attrs might have changed, therefore it must be computed
+                    % Do not detect deletions as (MtimeHasChanged and DeleteEnable) = false
                     traverse(TraverseJob2, Args, false)
             end;
         {error, ?ENOENT} ->

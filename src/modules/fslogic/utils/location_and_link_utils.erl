@@ -23,7 +23,7 @@
 -export([get_new_file_location_doc/3, is_location_created/2,
     mark_location_created/3]).
 -export([create_imported_file_location/6, update_imported_file_location/2]).
--export([get_canonical_paths_cache_name/1, get_uuid_based_paths_cache_name/1, 
+-export([get_canonical_paths_cache_name/1, get_uuid_based_paths_cache_name/1,
     invalidate_paths_caches/1, init_paths_cache_group/0, init_paths_caches/1]).
 
 -define(PATH_CACHE_GROUP, <<"paths_cache_group">>).

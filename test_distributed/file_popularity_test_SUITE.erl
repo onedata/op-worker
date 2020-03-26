@@ -6,10 +6,13 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module contains tests of file_popularity_view.
+%%% The view is queried using view_traverse mechanism.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_popularity_test_SUITE).
 -author("Jakub Kudzia").
+
+-behaviour(view_traverse).
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/file_popularity_view.hrl").
@@ -29,11 +32,6 @@
     query_should_return_file_when_file_has_been_opened/1,
     query_should_return_files_sorted_by_increasing_last_open_timestamp/1,
     query_should_return_files_sorted_by_increasing_avg_open_count_per_day/1,
-    query_with_option_limit_should_return_limited_number_of_files/1,
-    iterate_over_100_results_using_limit_1_and_startkey_docid/1,
-    iterate_over_100_results_using_limit_10_and_startkey_docid/1,
-    iterate_over_100_results_using_limit_100_and_startkey_docid/1,
-    iterate_over_100_results_using_limit_1000_and_startkey_docid/1,
     file_should_have_correct_popularity_value/1,
     file_should_have_correct_popularity_value2/1,
     file_should_have_correct_popularity_value3/1,
@@ -44,9 +42,14 @@
     changing_avg_open_count_weight_should_reindex_the_file/1
 ]).
 
-%% utils
--export([current_timestamp_hours/1, change_last_open/3]).
+%% view_traverse callbacks
+-export([process_row/3, task_finished/1]).
 
+%% view_processing_module API
+-export([init/0, stop/0, run/2]).
+
+%% exported for RPC
+-export([start_collector/1, collector_loop/1]).
 
 all() -> [
     query_should_return_error_when_file_popularity_is_disabled,
@@ -62,15 +65,11 @@ all() -> [
     changing_last_open_weight_should_reindex_the_file,
     changing_avg_open_count_weight_should_reindex_the_file,
     query_should_return_files_sorted_by_increasing_avg_open_count_per_day,
-    query_should_return_files_sorted_by_increasing_last_open_timestamp,
-    query_with_option_limit_should_return_limited_number_of_files,
-    iterate_over_100_results_using_limit_1_and_startkey_docid,
-    iterate_over_100_results_using_limit_10_and_startkey_docid,
-    iterate_over_100_results_using_limit_100_and_startkey_docid,
-    iterate_over_100_results_using_limit_1000_and_startkey_docid
+    query_should_return_files_sorted_by_increasing_last_open_timestamp
 ].
 
 -define(SPACE_ID, <<"space1">>).
+-define(VIEW_PROCESSING_MODULE, ?MODULE).
 
 -define(FILE_PATH(FileName), filename:join(["/", ?SPACE_ID, FileName])).
 
@@ -80,7 +79,14 @@ all() -> [
     ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config)).
 
 -define(ATTEMPTS, 10).
--define(LIMIT, 10).
+
+% name for process responsible for collecting traverse results
+-define(COLLECTOR, collector).
+
+% messages used to communicate with ?COLLECTOR process
+-define(FINISHED, finished).
+-define(COLLECTED_RESULTS(Rows), {collected_results, Rows}).
+-define(ROW(FileId, Popularity, RowNum), {row, FileId, Popularity, RowNum}).
 
 %%%===================================================================
 %%% API
@@ -88,14 +94,12 @@ all() -> [
 
 query_should_return_error_when_file_popularity_is_disabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ?assertMatch({error, {<<"not_found">>, _}},
-        query(W, ?SPACE_ID, ?LIMIT)).
+    ?assertMatch({error, not_found}, query2(W, ?SPACE_ID, #{})).
 
 query_should_return_empty_list_when_file_popularity_is_enabled(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     ok = enable_file_popularity(W, ?SPACE_ID),
-    ?assertMatch({[], undefined},
-        query(W, ?SPACE_ID, ?LIMIT)).
+    ?assertMatch([], query2(W, ?SPACE_ID, #{})).
 
 query_should_return_empty_list_when_file_has_not_been_opened(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -103,8 +107,7 @@ query_should_return_empty_list_when_file_has_not_been_opened(Config) ->
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
     {ok, _} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
-    ?assertMatch({[], undefined},
-        query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch([], query2(W, ?SPACE_ID, #{})).
 
 query_should_return_file_when_file_has_been_opened(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -115,8 +118,7 @@ query_should_return_file_when_file_has_been_opened(Config) ->
     {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
     ok = lfm_proxy:close(W, H),
     {ok, FileId} = file_id:guid_to_objectid(G),
-    ?assertMatch({[FileId], #index_token{}},
-        query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 file_should_have_correct_popularity_value(Config) ->
     file_should_have_correct_popularity_value_base(Config, 1.123, 0).
@@ -148,13 +150,7 @@ avg_open_count_per_day_parameter_should_be_bounded_by_100_by_default(Config) ->
     open_and_close_file(W, ?SESSION(W, Config), G1, OpenCountPerMonth1),
     open_and_close_file(W, ?SESSION(W, Config), G2, OpenCountPerMonth2),
 
-    ?assertEqual(true, begin
-        {_, T1 = #index_token{start_key = Key1}} =
-            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
-        {_, #index_token{start_key = Key2}} =
-            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, T1, 1), ?ATTEMPTS),
-        Key1 == Key2
-    end, ?ATTEMPTS).
+    ?assertMatch([{_, _Popularity}, {_, _Popularity}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 avg_open_count_per_day_parameter_should_be_bounded_by_custom_value(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -178,13 +174,7 @@ avg_open_count_per_day_parameter_should_be_bounded_by_custom_value(Config) ->
     open_and_close_file(W, ?SESSION(W, Config), G1, OpenCountPerMonth1),
     open_and_close_file(W, ?SESSION(W, Config), G2, OpenCountPerMonth2),
 
-    ?assertEqual(true, begin
-        {_, T1 = #index_token{start_key = Key1}} =
-            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
-        {_, #index_token{start_key = Key2}} =
-            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, T1, 1), ?ATTEMPTS),
-        Key1 == Key2
-    end, ?ATTEMPTS).
+    ?assertMatch([{_, _Popularity}, {_, _Popularity}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 changing_max_avg_open_count_per_day_limit_should_reindex_the_file(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -197,18 +187,14 @@ changing_max_avg_open_count_per_day_limit_should_reindex_the_file(Config) ->
     OpenCountPerMonth = 15 * 30, % avg_open_count = 15
     ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
+    {ok, FileId} = file_id:guid_to_objectid(G),
     open_and_close_file(W, ?SESSION(W, Config), G, OpenCountPerMonth),
 
-    {_, #index_token{start_key = Key1}} =
-        ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
-
+    [{_, Popularity}] = ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS),
     ok = configure_file_popularity(W, ?SPACE_ID, undefined, undefined, undefined, MaxOpenCount2),
 
-    ?assertEqual(true, begin
-        {_, #index_token{start_key = Key2}} =
-            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
-        Key1 =/= Key2
-    end, ?ATTEMPTS).
+    ?assertNotMatch([{_, Popularity}], query2(W, ?SPACE_ID, #{})),
+    ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{})).
 
 changing_last_open_weight_should_reindex_the_file(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -221,18 +207,14 @@ changing_last_open_weight_should_reindex_the_file(Config) ->
 
     ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
+    {ok, FileId} = file_id:guid_to_objectid(G),
     open_and_close_file(W, ?SESSION(W, Config), G, 1),
 
-    {_, #index_token{start_key = Key1}} =
-        ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
-
+    [{_, Popularity}] = ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS),
     ok = configure_file_popularity(W, ?SPACE_ID, undefined, LastOpenWeight2, undefined, undefined),
 
-    ?assertEqual(true, begin
-        {_, #index_token{start_key = Key2}} =
-            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
-        Key1 =/= Key2
-    end, ?ATTEMPTS).
+    ?assertNotMatch([{_, Popularity}], query2(W, ?SPACE_ID, #{})),
+    ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{})).
 
 changing_avg_open_count_weight_should_reindex_the_file(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -245,18 +227,14 @@ changing_avg_open_count_weight_should_reindex_the_file(Config) ->
 
     ok = configure_file_popularity(W, ?SPACE_ID, true, LastOpenWeight, AvgOpenCountPerDayWeight, MaxOpenCount),
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
+    {ok, FileId} = file_id:guid_to_objectid(G),
     open_and_close_file(W, ?SESSION(W, Config), G, 1),
 
-    {_, #index_token{start_key = Key1}} =
-        ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
-
+    [{_, Popularity}] = ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS),
     ok = configure_file_popularity(W, ?SPACE_ID, undefined, undefined, AvgOpenCountPerDayWeight2, undefined),
 
-    ?assertEqual(true, begin
-        {_, #index_token{start_key = Key2}} =
-            ?assertMatch({[_], #index_token{}}, query(W, ?SPACE_ID, 1), ?ATTEMPTS),
-        Key1 =/= Key2
-    end, ?ATTEMPTS).
+    ?assertNotMatch([{_, Popularity}], query2(W, ?SPACE_ID, #{})),
+    ?assertMatch([{FileId, _}], query2(W, ?SPACE_ID, #{})).
 
 query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -293,8 +271,7 @@ query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
     {ok, FileId2} = file_id:guid_to_objectid(G2),
     {ok, FileId3} = file_id:guid_to_objectid(G3),
 
-    ?assertMatch({[FileId1, FileId2, FileId3], #index_token{}},
-        query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch([{FileId1, _}, {FileId2, _}, {FileId3, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -330,74 +307,10 @@ query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
     {ok, FileId2} = file_id:guid_to_objectid(G2),
     {ok, FileId3} = file_id:guid_to_objectid(G3),
 
-    ?assertMatch({[FileId1, FileId2, FileId3], #index_token{}},
-        query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
-
-query_with_option_limit_should_return_limited_number_of_files(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    ok = enable_file_popularity(W, ?SPACE_ID),
-    FilePrefix = <<"file_">>,
-    Limit = 3,
-    NumberOfFiles = 10,
-    SessId = ?SESSION(W, Config),
-
-    % ensure that all files will have the same timestamp
-    mock_cluster_time_hours(W, current_timestamp_hours(W)),
-
-    IdsAndOpensNum = lists:map(fun(N) ->
-        % each file will be opened N times
-        FilePath = ?FILE_PATH(<<FilePrefix/binary, (integer_to_binary(N))/binary>>),
-        {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
-        open_and_close_file(W, SessId, G, N),
-        {ok, FileId} = file_id:guid_to_objectid(G),
-        {FileId, N}
-    end, lists:seq(1, NumberOfFiles)), % the resulting list will bo sorted ascending by number of opens
-    Ids = [C || {C, _} <- IdsAndOpensNum],
-    ExpectedResult = lists:sublist(Ids, Limit),
-
-    ?assertMatch({ExpectedResult, #index_token{}}, query(W, ?SPACE_ID, Limit), ?ATTEMPTS).
-
-iterate_over_100_results_using_limit_1_and_startkey_docid(Config) ->
-    iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 1).
-
-iterate_over_100_results_using_limit_10_and_startkey_docid(Config) ->
-    iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 10).
-
-iterate_over_100_results_using_limit_100_and_startkey_docid(Config) ->
-    iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 100).
-
-iterate_over_100_results_using_limit_1000_and_startkey_docid(Config) ->
-    iterate_over_100_results_using_given_limit_and_startkey_docid(Config, 1000).
+    ?assertMatch([{FileId1, _}, {FileId2, _}, {FileId3, _}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
 %%%===================================================================
-%%% SetUp and TearDown functions
-%%%===================================================================
-
-init_per_suite(Config) ->
-    Posthook = fun(NewConfig) ->
-        application:start(ssl),
-        hackney:start(),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
-    end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
-
-init_per_testcase(_Case, Config) ->
-    lfm_proxy:init(Config).
-
-end_per_testcase(_Case, Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    disable_file_popularity(W, ?SPACE_ID),
-    test_utils:mock_unload(W, file_popularity),
-    clean_space(?SPACE_ID, Config),
-    lfm_proxy:teardown(Config).
-
-end_per_suite(Config) ->
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
-    application:stop(ssl).
-
-%%%===================================================================
-%%% Internal functions
+%%% Test base functions
 %%%===================================================================
 
 file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
@@ -412,31 +325,114 @@ file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
     open_and_close_file(W, ?SESSION(W, Config), G),
     {ok, FileId} = file_id:guid_to_objectid(G),
-    ?assertMatch({[FileId], #index_token{start_key = Popularity}},
-        query(W, ?SPACE_ID, ?LIMIT), ?ATTEMPTS).
+    ?assertMatch([{FileId, Popularity}], query2(W, ?SPACE_ID, #{}), ?ATTEMPTS).
 
+%%%===================================================================
+%%% SetUp and TearDown functions
+%%%===================================================================
 
-iterate_over_100_results_using_given_limit_and_startkey_docid(Config, Limit) ->
+init_per_suite(Config) ->
+    Posthook = fun(NewConfig) ->
+        application:start(ssl),
+        hackney:start(),
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
+    end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
+
+init_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ok = enable_file_popularity(W, ?SPACE_ID),
-    FilePrefix = <<"file_">>,
-    NumberOfFiles = 100,
-    SessId = ?SESSION(W, Config),
+    init_pool(W),
+    lfm_proxy:init(Config).
 
-    % ensure that all files will have the same timestamp
-    mock_cluster_time_hours(W, current_timestamp_hours(W)),
+end_per_testcase(_Case, Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    disable_file_popularity(W, ?SPACE_ID),
+    ensure_collector_stopped(W),
+    test_utils:mock_unload(W, file_popularity),
+    clean_space(?SPACE_ID, Config),
+    lfm_proxy:teardown(Config).
 
-    IdsAndOpensNum = lists:map(fun(N) ->
-        % each file will be opened N times
-        FilePath = ?FILE_PATH(<<FilePrefix/binary, (integer_to_binary(N))/binary>>),
-        {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath, 8#664),
-        open_and_close_file(W, SessId, G, N),
-        {ok, FileId} = file_id:guid_to_objectid(G),
-        {FileId, N}
-    end, lists:seq(1, NumberOfFiles)),
-    Ids = [C || {C, _} <- IdsAndOpensNum],
+end_per_suite(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    stop_pool(W),
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    hackney:stop(),
+    application:stop(ssl).
 
-    ?assertMatch(Ids, iterate(W, ?SPACE_ID, Limit), ?ATTEMPTS).
+%%%===================================================================
+%%% view_traverse callbacks
+%%%===================================================================
+
+process_row(Row, _Info, RowNum) ->
+    Popularity = maps:get(<<"key">>, Row),
+    FileId = maps:get(<<"value">>, Row),
+    ?COLLECTOR ! ?ROW(FileId, Popularity, RowNum),
+    ok.
+
+task_finished(_TaskId) ->
+    whereis(?COLLECTOR) ! ?FINISHED.
+
+%%%===================================================================
+%%% view processing module API function
+%%%===================================================================
+
+init() ->
+    view_traverse:init(?VIEW_PROCESSING_MODULE).
+
+stop() ->
+    view_traverse:stop(?VIEW_PROCESSING_MODULE).
+
+run(SpaceId, Opts) ->
+    view_traverse:run(?VIEW_PROCESSING_MODULE, ?FILE_POPULARITY_VIEW(SpaceId), Opts).
+
+%%%===================================================================
+%%% Functions exported for RPC
+%%%===================================================================
+
+start_collector(TestMasterPid) ->
+    register(?COLLECTOR, spawn_link(?MODULE, collector_loop, [TestMasterPid])).
+
+collector_loop(TestMaster) ->
+    collector_loop(TestMaster, #{}).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+init_pool(Worker) ->
+    rpc:call(Worker, ?MODULE, init, []).
+
+stop_pool(Worker) ->
+    rpc:call(Worker, ?MODULE, stop, []).
+
+run(Worker, SpaceId, Opts) ->
+    rpc:call(Worker, ?MODULE, run, [SpaceId, Opts]).
+
+start_collector_remote(Worker) ->
+    true = rpc:call(Worker, ?MODULE, start_collector, [self()]).
+
+collector_loop(TestMaster, RowsMap) ->
+    receive
+        ?FINISHED ->
+            TestMaster ! ?COLLECTED_RESULTS([ {FileId, PopValue} || {_RN, {FileId, PopValue}} <- lists:sort(maps:to_list(RowsMap))]);
+        ?ROW(FileId, Popularity, RowNum) ->
+            collector_loop(TestMaster, RowsMap#{RowNum => {FileId, Popularity}})
+    end.
+
+query2(Worker, SpaceId, Opts) ->
+    start_collector_remote(Worker),
+    case run(Worker, SpaceId, Opts) of
+        {ok, _} ->
+            receive ?COLLECTED_RESULTS(Rows) -> Rows end;
+        Error  = {error, _} ->
+            Error
+    end.
+
+ensure_collector_stopped(Worker) ->
+    case whereis(Worker, ?COLLECTOR) of
+        undefined -> ok;
+        CollectorPid -> exit(CollectorPid, kill)
+    end.
 
 enable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, enable, [SpaceId]).
@@ -458,12 +454,6 @@ configure_file_popularity(Worker, SpaceId, Enabled, LastOpenWeight, AvgOpenCount
 
 disable_file_popularity(Worker, SpaceId) ->
     rpc:call(Worker, file_popularity_api, disable, [SpaceId]).
-
-query(Worker, SpaceId, Limit) ->
-    rpc:call(Worker, file_popularity_api, query, [SpaceId, Limit]).
-
-query(Worker, SpaceId, IndexToken, Limit) ->
-    rpc:call(Worker, file_popularity_api, query, [SpaceId, IndexToken, Limit]).
 
 clean_space(SpaceId, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -500,25 +490,8 @@ open_and_close_file(Worker, SessId, Guid) ->
     {ok, H} = lfm_proxy:open(Worker, SessId, {guid, Guid}, read),
     ok = lfm_proxy:close(Worker, H).
 
-iterate(Worker, SpaceId, Limit) ->
-    iterate(Worker, SpaceId, undefined, Limit, []).
-
-iterate(Worker, SpaceId, IndexToken, Limit, Result) ->
-    case query(Worker, SpaceId, IndexToken, Limit) of
-        {Ids, _NewIndexToken} when length(Ids) < Limit ->
-            Result ++ Ids;
-        {Ids, NewIndexToken} ->
-            iterate(Worker, SpaceId, NewIndexToken, Limit, Result ++ Ids)
-    end.
-
 popularity(LastOpen, LastOpenW, AvgOpen, AvgOpenW) ->
     LastOpen * LastOpenW + AvgOpen * AvgOpenW.
-
-change_last_open(Worker, FileGuid, NewLastOpen) ->
-    Uuid = file_id:guid_to_uuid(FileGuid),
-    rpc:call(Worker, file_popularity, update, [Uuid, fun(FP) ->
-        {ok, FP#file_popularity{last_open = NewLastOpen}}
-    end]).
 
 filter_undefined_values(Map) ->
     maps:filter(fun
@@ -529,3 +502,6 @@ filter_undefined_values(Map) ->
 mock_cluster_time_hours(Worker, Hours) ->
     test_utils:mock_new(Worker, file_popularity),
     ok = test_utils:mock_expect(Worker, file_popularity, cluster_time_hours, fun() -> Hours end).
+
+whereis(Node, Name) ->
+    rpc:call(Node, erlang, whereis, [Name]).

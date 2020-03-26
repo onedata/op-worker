@@ -466,7 +466,7 @@
     bytes_to_release = 0 :: non_neg_integer(),
     released_files = 0 :: non_neg_integer(),
 
-    index_token :: undefined | file_popularity_view:index_token()
+    view_traverse_token :: undefined | view_traverse:token()
 }).
 
 %% Model which stores information about auto-cleaning per given space.
@@ -490,7 +490,7 @@
     file_id :: undefined | helpers:file_id(),
     rename_src_file_id :: undefined | helpers:file_id(),
     blocks = [] :: fslogic_location_cache:stored_blocks(),
-    version_vector = #{},
+    version_vector = #{} :: version_vector:version_vector(),
     size = 0 :: non_neg_integer() | undefined,
     space_id :: undefined | od_space:id(),
     recent_changes = {[], []} :: {
@@ -616,8 +616,7 @@
 
 %% Model for holding current quota state for spaces
 -record(space_quota, {
-    current_size = 0 :: non_neg_integer(),
-    last_autocleaning_check = 0 :: non_neg_integer()
+    current_size = 0 :: non_neg_integer()
 }).
 
 %% Record that holds monitoring id
@@ -788,8 +787,8 @@
     version_vector = #{} :: version_vector:version_vector(),
     requester :: od_provider:id(),
     requestee :: od_provider:id(),
-    report_id :: replica_deletion:report_id(),
-    type :: replica_deletion:type()
+    job_id :: replica_deletion:job_id(),
+    job_type :: replica_deletion:job_type()
 }).
 
 %% Model used for setting read-write lock to synchronize replica deletion

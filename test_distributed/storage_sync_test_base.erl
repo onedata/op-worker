@@ -5993,10 +5993,7 @@ init_per_suite(Config) ->
 
 end_per_suite(Config) ->
     ok = wpool:stop_sup_pool(?VERIFY_POOL),
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    initializer:unload_quota_mocks(Config),
-    initializer:unmock_provider_ids(Config),
-    ssl:stop().
+    multi_provider_file_ops_test_base:teardown_env(Config).
 
 
 init_per_testcase(Case, Config, Readonly)
