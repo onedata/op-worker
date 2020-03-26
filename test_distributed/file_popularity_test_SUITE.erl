@@ -463,7 +463,7 @@ clean_space(SpaceId, Config) ->
     clean_space(Worker, SessId, SpaceGuid, 0, BatchSize).
 
 clean_space(Worker, SessId, SpaceGuid, Offset, BatchSize) ->
-    {ok, GuidsAndPaths} = lfm_proxy:ls(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
+    {ok, GuidsAndPaths} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
     FilesNum = length(GuidsAndPaths),
     delete_files(Worker, SessId, GuidsAndPaths),
     case FilesNum < BatchSize of

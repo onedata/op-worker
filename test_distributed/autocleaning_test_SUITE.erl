@@ -905,7 +905,7 @@ clean_space(SpaceId, Config) ->
     clean_space(W1, SessId, SpaceGuid, 0, BatchSize).
 
 clean_space(Worker, SessId, SpaceGuid, Offset, BatchSize) ->
-    {ok, GuidsAndPaths} = lfm_proxy:ls(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
+    {ok, GuidsAndPaths} = lfm_proxy:get_children(Worker, SessId, {guid, SpaceGuid}, Offset, BatchSize),
     FilesNum = length(GuidsAndPaths),
     delete_files(Worker, SessId, GuidsAndPaths),
     case FilesNum < BatchSize of
@@ -924,7 +924,7 @@ ensure_space_empty(SpaceId, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     lists:foreach(fun(W) ->
-        ?assertMatch({ok, []}, lfm_proxy:ls(W, ?SESSION(W, Config), {guid, Guid}, 0, 1), ?ATTEMPTS)
+        ?assertMatch({ok, []}, lfm_proxy:get_children(W, ?SESSION(W, Config), {guid, Guid}, 0, 1), ?ATTEMPTS)
     end, Workers).
 
 

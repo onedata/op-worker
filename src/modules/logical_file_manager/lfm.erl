@@ -30,6 +30,7 @@
             {error, ___Reason}
     end).
 
+-include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -42,8 +43,12 @@
 -export_type([handle/0, file_key/0, error_reply/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, mkdir/4, ls/4, ls/5, ls/6, read_dir_plus/4, read_dir_plus/5,
-    get_child_attr/3, get_children_count/2, get_parent/2]).
+-export([
+    mkdir/2, mkdir/3, mkdir/4,
+    get_children/4, get_children/5, get_children/6,
+    get_children_attrs/4, get_children_attrs/5, get_children_details/5,
+    get_child_attr/3, get_children_count/2, get_parent/2
+]).
 %% Functions operating on directories or files
 -export([mv/3, mv/4, cp/3, cp/4, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
 -export([
@@ -58,8 +63,11 @@
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
--export([stat/2, get_xattr/4, set_xattr/3, set_xattr/5, remove_xattr/3, list_xattr/4,
-    update_times/5]).
+-export([
+    stat/2, get_details/2,
+    get_xattr/4, set_xattr/3, set_xattr/5, remove_xattr/3, list_xattr/4,
+    update_times/5
+]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
@@ -111,35 +119,35 @@ rm_recursive(SessId, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory.
-%% Returns up to Limit of entries, starting with Offset-th entry.
+%% Gets {Guid, Name} for each directory children starting with Offset-th
+%% entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec ls(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+-spec get_children(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | error_reply().
-ls(SessId, FileKey, Offset, Limit) ->
-    ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit) end).
+get_children(SessId, FileKey, Offset, Limit) ->
+    ?run(fun() -> lfm_dirs:get_children(SessId, FileKey, Offset, Limit) end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv ls(SessId, FileKey, Offset, Limit, Token, undefined).
+%% @equiv get_children(SessId, FileKey, Offset, Limit, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec ls(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+-spec get_children(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], NewToken :: binary(),
         IsLast :: boolean()} | error_reply().
-ls(SessId, FileKey, Offset, Limit, Token) ->
-    ls(SessId, FileKey, Offset, Limit, Token, undefined).
+get_children(SessId, FileKey, Offset, Limit, Token) ->
+    get_children(SessId, FileKey, Offset, Limit, Token, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory starting from specified startId.
-%% Returns up to Limit of entries, starting with Offset-th entry.
+%% Gets {Guid, Name} for each directory children starting with Offset-th
+%% from specified StartId or Token entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec ls(session:id(),
+-spec get_children(session:id(),
     FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(),
     Limit :: integer(),
@@ -148,37 +156,49 @@ ls(SessId, FileKey, Offset, Limit, Token) ->
 ) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], NewToken :: binary(),
         IsLast :: boolean()} | error_reply().
-ls(SessId, FileKey, Offset, Limit, Token, StartId) ->
-    ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit, Token, StartId) end).
+get_children(SessId, FileKey, Offset, Limit, Token, StartId) ->
+    ?run(fun() -> lfm_dirs:get_children(SessId, FileKey, Offset, Limit, Token, StartId) end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory. Returns attributes of files.
-%% Returns up to Limit of entries. Uses token to choose starting entry.
+%% Gets file basic attributes (see file_attr.hrl) for each directory children
+%% starting with Offset-th entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_plus(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(), Limit :: integer()) ->
+-spec get_children_attrs(
+    session:id(),
+    FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(),
+    Limit :: integer()
+) ->
     {ok, [#file_attr{}]} | error_reply().
-read_dir_plus(SessId, FileKey, Offset, Limit) ->
-    ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit) end).
+get_children_attrs(SessId, FileKey, Offset, Limit) ->
+    ?run(fun() -> lfm_dirs:get_children_attrs(SessId, FileKey, Offset, Limit) end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory. Returns attributes of files.
-%% Returns up to Limit of entries, starting with Offset-th entry.
+%% Gets file basic attributes (see file_attr.hrl) for each directory children
+%% starting with Offset-th from specified Token entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_plus(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
+-spec get_children_attrs(
+    session:id(),
+    FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(),
+    Limit :: integer(),
+    Token :: undefined | binary()
+) ->
     {ok, [#file_attr{}], NewToken :: binary(), IsLast :: boolean()} |
     error_reply().
-read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
-    ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit, Token) end).
+get_children_attrs(SessId, FileKey, Offset, Limit, Token) ->
+    ?run(fun() -> lfm_dirs:get_children_attrs(SessId, FileKey, Offset, Limit, Token) end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets attribute of a child with given name.
+%% Gets basic file attributes (see file_attr.hrl) of a child with given name.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(session:id(), ParentGuid :: fslogic_worker:file_guid(),
@@ -186,6 +206,26 @@ read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
     {ok, #file_attr{}} | error_reply().
 get_child_attr(SessId, ParentGuid, ChildName)  ->
     ?run(fun() -> lfm_dirs:get_child_attr(SessId, ParentGuid, ChildName) end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets file details (see file_details.hrl) for each directory children
+%% starting with Offset-th from specified StartId entry and up to Limit
+%% of entries.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_children_details(
+    session:id(),
+    FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(),
+    Limit :: integer(),
+    StartId :: undefined | file_meta:name()
+) ->
+    {ok, [lfm_attrs:file_details()], IsLast :: boolean()} | error_reply().
+get_children_details(SessId, FileKey, Offset, Limit, StartId) ->
+    ?run(fun() -> lfm_dirs:get_children_details(SessId, FileKey, Offset, Limit, StartId) end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -544,13 +584,23 @@ remove_acl(SessId, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file attributes.
+%% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(session:id(), file_key()) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:stat(SessId, FileKey) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file details (see file_details.hrl).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_details(session:id(), file_key()) ->
+    {ok, lfm_attrs:file_details()} | error_reply().
+get_details(SessId, FileKey) ->
+    ?run(fun() -> lfm_attrs:get_details(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc

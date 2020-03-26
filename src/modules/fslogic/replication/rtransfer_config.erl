@@ -26,7 +26,7 @@
 %% API
 -export([start_rtransfer/0, restart_link/0, fetch/6]).
 -export([get_nodes/1, open/2, fsync/1, close/1, auth_request/2, get_connection_secret/2]).
--export([add_storage/1, generate_secret/2]).
+-export([add_storage/1, add_storages/0, generate_secret/2]).
 -export([get_local_ip_and_port/0]).
 
 %% Dialyzer doesn't find the behaviour
@@ -47,8 +47,7 @@ start_rtransfer() ->
     prepare_graphite_opts(),
     {ok, RtransferPid} = rtransfer_link_sup:start_link(no_cluster),
     rtransfer_link:set_provider_nodes([node()], ?MODULE),
-    StorageIds = get_storages(10),
-    lists:foreach(fun add_storage/1, StorageIds),
+    ok = add_storages(),
     {ok, RtransferPid}.
 
 %%--------------------------------------------------------------------
@@ -218,6 +217,17 @@ add_storage(StorageId) ->
                                   [StorageId, HelperName, HelperArgs]),
     BadNodes =/= [] andalso
         ?error("Failed to add storage ~p on nodes ~p", [StorageId, BadNodes]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds all provider storages to rtransfer.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_storages() -> ok.
+add_storages() ->
+    StorageIds = get_storages(10),
+    lists:foreach(fun add_storage/1, StorageIds).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -409,6 +419,8 @@ get_storages(Retries) ->
             StorageIds;
         {?ERROR_UNREGISTERED_ONEPROVIDER, 0} ->
             [];
+        {?ERROR_NO_CONNECTION_TO_ONEZONE, 0} ->
+            []; % will be called again when connection is established
         {Error, 0} ->
             Error;
         _ ->
