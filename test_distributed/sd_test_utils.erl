@@ -14,6 +14,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/storage/traverse/storage_traverse.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
@@ -121,7 +122,7 @@ listobjects(Worker, SDHandle, Marker, Offset, Count) ->
 storage_ls(Worker, SDHandle, Offset, Count, ?POSIX_HELPER_NAME) ->
     ls(Worker, SDHandle, Offset, Count);
 storage_ls(Worker, SDHandle, Offset, Count, ?S3_HELPER_NAME) ->
-    listobjects(Worker, SDHandle, <<"">>, Offset, Count).
+    listobjects(Worker, SDHandle, ?DEFAULT_MARKER, Offset, Count).
 
 rmdir(Worker, SDHandle) ->
     rpc:call(Worker, storage_driver, rmdir, [SDHandle]).
