@@ -488,7 +488,8 @@ create_subfiles_and_delete_before_import_is_finished_test(Config, MountSpaceInRo
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
     ?assertMatch({ok, []}, sd_test_utils:listobjects(W1, SDHandle,  <<"">>, 0, 100)),
-    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), ?ATTEMPTS).
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId,  {path, ?SPACE_TEST_DIR_PATH}), 2 * ?ATTEMPTS),
+    ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 2 * ?ATTEMPTS).
 
 
 delete_non_empty_directory_update_test(Config, MountSpaceInRoot) ->
