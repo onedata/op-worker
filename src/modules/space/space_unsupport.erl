@@ -167,6 +167,7 @@ execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = 
     execute_stage(NewJob);
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = QosEntryId} = _Job) ->
     %% @TODO Use subscription after resolving VFS-5647
+    %% @TODO Insecure(fulfilling qos can fail - wait will never end) before resolving VFS-5737
     wait(fun() -> lfm:check_qos_fulfilled(?ROOT_SESS_ID, QosEntryId) end),
     lfm:remove_qos_entry(?ROOT_SESS_ID, QosEntryId);
 
