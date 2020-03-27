@@ -16,7 +16,7 @@
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include("modules/communication/connection.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([
@@ -119,7 +119,7 @@ send_to_provider(SessionId, #client_message{} = Msg0, RecipientPid, Retries) ->
         {ok, _} ->
             {ok, MsgId};
         {{error, no_connections}, _} ->
-            ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER;
+            ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER;
         {Error, _} ->
             Error
     end;
@@ -136,7 +136,7 @@ send_to_provider(SessionId, Msg, RecipientPid, Retries) ->
 -spec communicate_with_provider(session:id(), generic_message()) ->
     {ok | message()} | error().
 communicate_with_provider(SessionId, Msg) ->
-    communicate_with_provider(SessionId, Msg, 1).
+    communicate_with_provider(SessionId, Msg, 3).
 
 
 %%--------------------------------------------------------------------
@@ -155,7 +155,7 @@ communicate_with_provider(SessionId, #client_message{} = Msg0, Retries) ->
         ok ->
             await_response(MsgId);
         {error, no_connections} ->
-            ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER;
+            ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER;
         Error ->
             Error
     end;

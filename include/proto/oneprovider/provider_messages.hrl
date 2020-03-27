@@ -12,6 +12,8 @@
 -ifndef(PROVIDER_MESSAGES_HRL).
 -define(PROVIDER_MESSAGES_HRL, 1).
 
+-include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/qos.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
@@ -107,6 +109,28 @@
 }).
 
 -record(remove_share, {
+    share_id :: od_share:id()
+}).
+
+% messages for adding, getting and removing QoS entry
+-record(add_qos_entry, {
+    expression :: qos_expression:raw(),
+    replicas_num :: qos_entry:replicas_num()
+}).
+
+-record(get_qos_entry, {
+    id :: qos_entry:id()
+}).
+
+-record(remove_qos_entry, {
+    id :: qos_entry:id()
+}).
+
+-record(get_effective_file_qos, {
+}).
+
+-record(check_qos_fulfillment, {
+    qos_id :: qos_entry:id()
 }).
 
 -type provider_request_type() ::
@@ -116,7 +140,8 @@
 #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
 #get_file_distribution{} | #schedule_file_replication{} | #schedule_replica_invalidation{} |
 #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
-#create_share{} | #remove_share{}.
+#create_share{} | #remove_share{} |
+#add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_fulfillment{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -149,18 +174,26 @@
 }).
 
 -record(share, {
-    share_id :: od_share:id(),
-    root_file_guid :: od_share:root_file_guid()
+    share_id :: od_share:id()
 }).
 
 -record(scheduled_transfer, {
     transfer_id :: transfer:id()
 }).
 
+-record(qos_entry_id, {
+    id :: qos_entry:id()
+}).
+
+-record(qos_fulfillment, {
+    fulfilled :: boolean()
+}).
+
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
-    #scheduled_transfer{} | undefined.
+    #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #effective_file_qos{} |
+    #qos_fulfillment{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

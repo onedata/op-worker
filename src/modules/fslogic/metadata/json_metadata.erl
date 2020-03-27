@@ -13,7 +13,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([get/3, set/5, remove/1]).

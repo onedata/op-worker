@@ -15,8 +15,9 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([get_bucket/0]).
@@ -69,9 +70,9 @@ get_spaces() ->
 %%--------------------------------------------------------------------
 -spec get_provider(session:id()) -> od_provider:id().
 get_provider(SessId) ->
-    {ok, #document{value = #session{identity = #user_identity{
-        provider_id = ProviderId
-    }}}} = session:get(SessId),
+    {ok, #document{value = #session{
+        identity = ?SUB(?ONEPROVIDER, ProviderId)
+    }}} = session:get(SessId),
     ProviderId.
 
 %%--------------------------------------------------------------------

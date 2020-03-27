@@ -53,19 +53,20 @@ all() ->
 subscribe_on_dir_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    AccessToken = ?config({access_token, <<"user1">>}, Config),
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
 
     {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
         generator:gen_name(), 8#755)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     Filename = generator:gen_name(),
     Dirname = generator:gen_name(),
 
     DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
-    Seq1 = get_seq(Config, 1),
+    Seq1 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId))),
     {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = DirId}),
@@ -78,29 +79,30 @@ subscribe_on_dir_test(Config) ->
     ?assertEqual(ok, lfm_proxy:unlink(Worker1, <<"0">>, {guid, FileGuid})),
     ?assertEqual(ok, receive_file_removed_event()),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, 1), -Seq1))),
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
 subscribe_on_user_root_test(Config) ->
-    subscribe_on_user_root_test_base(Config, 1, ok).
+    subscribe_on_user_root_test_base(Config, <<"user1">>, ok).
 
 subscribe_on_user_root_filter_test(Config) ->
-    subscribe_on_user_root_test_base(Config, 2, {error,timeout}).
+    subscribe_on_user_root_test_base(Config, <<"user2">>, {error,timeout}).
 
-subscribe_on_user_root_test_base(Config, UserNum, ExpectedAns) ->
+subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user", (integer_to_binary(UserNum))/binary>>, ?GET_DOMAIN(Worker1)}}, Config),
-    EmmiterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmmiterSessionId, <<"/space_name1">>),
+    SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
+    AccessToken = ?config({access_token, User}, Config),
+    EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
 
     UserCtx = rpc:call(Worker1, user_ctx, new, [SessionId]),
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
     DirId = fslogic_uuid:user_root_dir_guid(UserId),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_custom_macaroon(Worker1, [{active, true}], SessionId, UserNum),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
-    Seq1 = get_seq(Config, UserNum),
+    Seq1 = get_seq(Config, User),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirId, 500))),
     {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_attr_changed_subscription{file_guid = DirId}),
@@ -110,22 +112,23 @@ subscribe_on_user_root_test_base(Config, UserNum, ExpectedAns) ->
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(SpaceGuid), []]),
     ?assertEqual(ExpectedAns, receive_file_attr_changed_event()),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, UserNum), -Seq1))),
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq1))),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
 subscribe_on_new_space_test(Config) ->
-    subscribe_on_new_space_test_base(Config, 1, ok).
+    subscribe_on_new_space_test_base(Config, <<"user1">>, ok).
 
 subscribe_on_new_space_filter_test(Config) ->
-    subscribe_on_new_space_test_base(Config, 2, {error,timeout}).
+    subscribe_on_new_space_test_base(Config, <<"user2">>, {error,timeout}).
 
-subscribe_on_new_space_test_base(Config, UserNum, ExpectedAns) ->
+subscribe_on_new_space_test_base(Config, User, ExpectedAns) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user", (integer_to_binary(UserNum))/binary>>, ?GET_DOMAIN(Worker1)}}, Config),
-    EmmiterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
+    AccessToken = ?config({access_token, User}, Config),
+    EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
 
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmmiterSessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
     SpaceDirUuid = file_id:guid_to_uuid(SpaceGuid),
     ?assertEqual(ok, rpc:call(Worker1, file_meta, delete, [SpaceDirUuid])),
 
@@ -133,9 +136,9 @@ subscribe_on_new_space_test_base(Config, UserNum, ExpectedAns) ->
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
     DirId = fslogic_uuid:user_root_dir_guid(UserId),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_custom_macaroon(Worker1, [{active, true}], SessionId, UserNum),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
-    Seq1 = get_seq(Config, UserNum),
+    Seq1 = get_seq(Config, User),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirId, 500))),
     {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_attr_changed_subscription{file_guid = DirId}),
@@ -145,7 +148,7 @@ subscribe_on_new_space_test_base(Config, UserNum, ExpectedAns) ->
     rpc:call(Worker1, file_meta, make_space_exist, [<<"space_id1">>]),
     ?assertEqual(ExpectedAns, receive_file_attr_changed_event()),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, UserNum), -Seq1))),
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq1))),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
 
@@ -155,12 +158,13 @@ events_on_conflicts_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    AccessToken = ?config({access_token, <<"user1">>}, Config),
 
     {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
         generator:gen_name(), 8#755)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     Filename = ?CONFLICTING_FILE_NAME,
     Dirname = generator:gen_name(),
@@ -202,16 +206,7 @@ events_on_conflicts_test(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(Config2) ->
         Config3 = initializer:setup_storage(init_seq_counter(Config2)),
-        Workers = ?config(op_worker_nodes, Config3),
-        test_utils:mock_new(Workers, user_identity),
-        test_utils:mock_expect(Workers, user_identity, get_or_fetch,
-            fun
-                (#macaroon_auth{macaroon = ?MACAROON, disch_macaroons = ?DISCH_MACAROONS}) ->
-                    {ok, #document{value = #user_identity{user_id = <<"user1">>}}};
-                (#macaroon_auth{macaroon = ?MACAROON2, disch_macaroons = ?DISCH_MACAROONS2}) ->
-                    {ok, #document{value = #user_identity{user_id = <<"user2">>}}}
-            end
-        ),
+        initializer:mock_auth_manager(Config3),
         initializer:create_test_users_and_spaces(?TEST_FILE(Config3, "env_desc.json"), Config3)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils, ?MODULE]} | Config].
@@ -243,9 +238,8 @@ end_per_testcase(_Case, Config) ->
     ssl:stop().
 
 end_per_suite(Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, [user_identity]),
-    initializer:clean_test_users_and_spaces_no_validate(Config).
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    initializer:unmock_auth_manager(Config).
 
 %%%===================================================================
 %%% Internal functions

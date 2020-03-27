@@ -14,12 +14,11 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/cdmi.hrl").
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 %% API
@@ -231,13 +230,13 @@ get_directory_info(RequestedInfo, #cdmi_req{
             MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
             {ok, ChildNum} = ?check(lfm:get_children_count(SessionId, {guid, Guid})),
             {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
-            {ok, List} = ?check(lfm:ls(SessionId, {guid, Guid}, From1, To1 - From1 + 1)),
+            {ok, List} = ?check(lfm:get_children(SessionId, {guid, Guid}, From1, To1 - From1 + 1)),
             Acc#{<<"children">> => lists:map(fun({FileGuid, Name}) ->
                 distinguish_directories(SessionId, FileGuid, Name)
             end, List)};
         (<<"children">>, Acc) ->
             MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
-            {ok, List} = ?check(lfm:ls(SessionId, {guid, Guid}, 0, MaxChildren + 1)),
+            {ok, List} = ?check(lfm:get_children(SessionId, {guid, Guid}, 0, MaxChildren + 1)),
             case length(List) > MaxChildren of
                 true ->
                     throw(?ERROR_BAD_VALUE_TOO_HIGH(<<"childrenrange">>, MaxChildren));

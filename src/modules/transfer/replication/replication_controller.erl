@@ -37,7 +37,7 @@
 -type state() :: #state{}.
 
 -define(log_bad_replication_msg(__Req, __Status, __TransferId),
-    ?warning("~p:~p - bad request ~p while in status ~p, transfer: ~p", [
+    ?debug("~p:~p - bad request ~p while in status ~p, transfer: ~p", [
         ?MODULE, ?LINE, __Req, __Status, __TransferId
     ])
 ).

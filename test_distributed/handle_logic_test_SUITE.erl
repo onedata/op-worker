@@ -23,7 +23,8 @@
     mixed_get_test/1,
     subscribe_test/1,
     convenience_functions_test/1,
-    create_test/1
+    create_test/1,
+    confined_access_token_test/1
 ]).
 
 all() -> ?ALL([
@@ -32,7 +33,8 @@ all() -> ?ALL([
     mixed_get_test,
     subscribe_test,
     convenience_functions_test,
-    create_test
+    create_test,
+    confined_access_token_test
 ]).
 
 %%%===================================================================
@@ -212,7 +214,7 @@ subscribe_test(Config) ->
         <<"publicHandle">> => <<"changedPublicHandle">>
     },
     PushMessage1 = #gs_push_graph{gri = Handle1PublicGRI, data = ChangedData1, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
+    logic_tests_common:simulate_push(Config, PushMessage1),
 
     ?assertMatch(
         {ok, #document{key = ?HANDLE_1, value = #od_handle{
@@ -236,7 +238,7 @@ subscribe_test(Config) ->
         <<"publicHandle">> => <<"changedPublicHandle2">>
     },
     PushMessage2 = #gs_push_graph{gri = Handle1PrivateGRI, data = ChangedData2, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
+    logic_tests_common:simulate_push(Config, PushMessage2),
     ?assertMatch(
         {ok, #document{key = ?HANDLE_1, value = #od_handle{
             public_handle = <<"changedPublicHandle2">>,
@@ -248,7 +250,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage4 = #gs_push_graph{gri = Handle1PrivateGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
+    logic_tests_common:simulate_push(Config, PushMessage4),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_handle, get_from_cache, [?HANDLE_1])
@@ -263,7 +265,7 @@ subscribe_test(Config) ->
     ),
 
     PushMessage5 = #gs_push_nosub{gri = Handle1PrivateGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage5]),
+    logic_tests_common:simulate_push(Config, PushMessage5),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_handle, get_from_cache, [?HANDLE_1])
@@ -332,6 +334,29 @@ create_test(Config) ->
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
+
+
+confined_access_token_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    Caveat = #cv_data_readonly{},
+    AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
+    TokenCredentials = auth_manager:build_token_credentials(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), rest, allow_data_access_caveats
+    ),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    % Request should be denied before contacting Onezone because of the
+    % data access caveat
+    ?assertMatch(
+        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
+        rpc:call(Node, handle_logic, get, [TokenCredentials, ?HANDLE_1])
+    ),
+    % Nevertheless, GraphCalls should be increased by 2 as:
+    % 1) TokenCredentials was verified to retrieve caveats
+    % 2) auth_manager fetched token data to subscribe itself for updates from oz
+    ?assertEqual(GraphCalls+2, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================

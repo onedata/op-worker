@@ -24,17 +24,14 @@
 % Endpoint for nagios healthcheck
 -define(NAGIOS_OZ_CONNECTIVITY_PATH, "/nagios/oz_connectivity").
 
-% Endpoint for uploading files
--define(FILE_UPLOAD_PATH, "/upload").
+% New endpoint for uploading files
+-define(FILE_UPLOAD_PATH, "/file_upload").
 
 % Endpoint for downloading files
 -define(FILE_DOWNLOAD_PATH, "/download").
 
-%% Endpoint used to get provider's identity macaroon
--define(IDENTITY_MACAROON_PATH, "/get_identity_macaroon").
-
-%% Endpoint used to verify authorization nonces issued by this provider
--define(NONCE_VERIFY_PATH, "/verify_authorization_nonce").
+%% Endpoint used to get provider's identity token
+-define(IDENTITY_TOKEN_PATH, "/identity_token").
 
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").
@@ -49,7 +46,7 @@
 %% All requests to this endpoint will be proxied to onepanel.
 -define(PANEL_REST_PROXY_PATH, "/api/v3/onepanel/").
 
+% Graph Sync websocket endpoint
+-define(GUI_GRAPH_SYNC_WS_PATH, "/graph_sync/gui").
+
 -endif.
-
-
-

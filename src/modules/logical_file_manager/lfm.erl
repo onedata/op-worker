@@ -30,11 +30,11 @@
             {error, ___Reason}
     end).
 
+-include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
 
 -type handle() :: lfm_context:ctx().
 -type file_key() :: fslogic_worker:file_guid_or_path() | {handle, handle()}.
@@ -43,8 +43,12 @@
 -export_type([handle/0, file_key/0, error_reply/0]).
 
 %% Functions operating on directories
--export([mkdir/2, mkdir/3, mkdir/4, ls/4, ls/5, ls/6, read_dir_plus/4, read_dir_plus/5,
-    get_child_attr/3, get_children_count/2, get_parent/2]).
+-export([
+    mkdir/2, mkdir/3, mkdir/4,
+    get_children/4, get_children/5, get_children/6,
+    get_children_attrs/4, get_children_attrs/5, get_children_details/5,
+    get_child_attr/3, get_children_count/2, get_parent/2
+]).
 %% Functions operating on directories or files
 -export([mv/3, mv/4, cp/3, cp/4, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
 -export([
@@ -59,17 +63,23 @@
 %% Functions concerning file permissions
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
--export([stat/2, get_xattr/4, set_xattr/3, set_xattr/5, remove_xattr/3, list_xattr/4,
-    update_times/5]).
+-export([
+    stat/2, get_details/2,
+    get_xattr/4, set_xattr/3, set_xattr/5, remove_xattr/3, list_xattr/4,
+    update_times/5
+]).
 %% Functions concerning cdmi attributes
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
 %% Functions concerning file shares
--export([create_share/3, remove_share/2, remove_share_by_guid/2]).
+-export([create_share/3, remove_share/2]).
 %% Functions concerning metadata
 -export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
 %% Utility functions
 -export([check_result/1]).
+%% Functions concerning qos
+-export([add_qos_entry/4, get_qos_entry/2, remove_qos_entry/2, get_effective_file_qos/2,
+    check_qos_fulfilled/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
 %%% API
@@ -109,35 +119,35 @@ rm_recursive(SessId, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory.
-%% Returns up to Limit of entries, starting with Offset-th entry.
+%% Gets {Guid, Name} for each directory children starting with Offset-th
+%% entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec ls(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+-spec get_children(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | error_reply().
-ls(SessId, FileKey, Offset, Limit) ->
-    ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit) end).
+get_children(SessId, FileKey, Offset, Limit) ->
+    ?run(fun() -> lfm_dirs:get_children(SessId, FileKey, Offset, Limit) end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv ls(SessId, FileKey, Offset, Limit, Token, undefined).
+%% @equiv get_children(SessId, FileKey, Offset, Limit, Token, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec ls(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
+-spec get_children(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], NewToken :: binary(),
         IsLast :: boolean()} | error_reply().
-ls(SessId, FileKey, Offset, Limit, Token) ->
-    ls(SessId, FileKey, Offset, Limit, Token, undefined).
+get_children(SessId, FileKey, Offset, Limit, Token) ->
+    get_children(SessId, FileKey, Offset, Limit, Token, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory starting from specified startId.
-%% Returns up to Limit of entries, starting with Offset-th entry.
+%% Gets {Guid, Name} for each directory children starting with Offset-th
+%% from specified StartId or Token entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec ls(session:id(),
+-spec get_children(session:id(),
     FileKey :: fslogic_worker:file_guid_or_path(),
     Offset :: integer(),
     Limit :: integer(),
@@ -146,37 +156,49 @@ ls(SessId, FileKey, Offset, Limit, Token) ->
 ) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], NewToken :: binary(),
         IsLast :: boolean()} | error_reply().
-ls(SessId, FileKey, Offset, Limit, Token, StartId) ->
-    ?run(fun() -> lfm_dirs:ls(SessId, FileKey, Offset, Limit, Token, StartId) end).
+get_children(SessId, FileKey, Offset, Limit, Token, StartId) ->
+    ?run(fun() -> lfm_dirs:get_children(SessId, FileKey, Offset, Limit, Token, StartId) end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory. Returns attributes of files.
-%% Returns up to Limit of entries. Uses token to choose starting entry.
+%% Gets file basic attributes (see file_attr.hrl) for each directory children
+%% starting with Offset-th entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_plus(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(), Limit :: integer()) ->
+-spec get_children_attrs(
+    session:id(),
+    FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(),
+    Limit :: integer()
+) ->
     {ok, [#file_attr{}]} | error_reply().
-read_dir_plus(SessId, FileKey, Offset, Limit) ->
-    ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit) end).
+get_children_attrs(SessId, FileKey, Offset, Limit) ->
+    ?run(fun() -> lfm_dirs:get_children_attrs(SessId, FileKey, Offset, Limit) end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Lists some contents of a directory. Returns attributes of files.
-%% Returns up to Limit of entries, starting with Offset-th entry.
+%% Gets file basic attributes (see file_attr.hrl) for each directory children
+%% starting with Offset-th from specified Token entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec read_dir_plus(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    Offset :: integer(), Limit :: integer(), Token :: undefined | binary()) ->
+-spec get_children_attrs(
+    session:id(),
+    FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(),
+    Limit :: integer(),
+    Token :: undefined | binary()
+) ->
     {ok, [#file_attr{}], NewToken :: binary(), IsLast :: boolean()} |
     error_reply().
-read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
-    ?run(fun() -> lfm_dirs:read_dir_plus(SessId, FileKey, Offset, Limit, Token) end).
+get_children_attrs(SessId, FileKey, Offset, Limit, Token) ->
+    ?run(fun() -> lfm_dirs:get_children_attrs(SessId, FileKey, Offset, Limit, Token) end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets attribute of a child with given name.
+%% Gets basic file attributes (see file_attr.hrl) of a child with given name.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_child_attr(session:id(), ParentGuid :: fslogic_worker:file_guid(),
@@ -184,6 +206,26 @@ read_dir_plus(SessId, FileKey, Offset, Limit, Token) ->
     {ok, #file_attr{}} | error_reply().
 get_child_attr(SessId, ParentGuid, ChildName)  ->
     ?run(fun() -> lfm_dirs:get_child_attr(SessId, ParentGuid, ChildName) end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets file details (see file_details.hrl) for each directory children
+%% starting with Offset-th from specified StartId entry and up to Limit
+%% of entries.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_children_details(
+    session:id(),
+    FileKey :: fslogic_worker:file_guid_or_path(),
+    Offset :: integer(),
+    Limit :: integer(),
+    StartId :: undefined | file_meta:name()
+) ->
+    {ok, [lfm_attrs:file_details()], IsLast :: boolean()} | error_reply().
+get_children_details(SessId, FileKey, Offset, Limit, StartId) ->
+    ?run(fun() -> lfm_dirs:get_children_details(SessId, FileKey, Offset, Limit, StartId) end).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -506,7 +548,7 @@ set_perms(SessId, FileKey, NewPerms) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_perms(session:id(), file_key(), helpers:open_flag()) ->
-    {ok, boolean()} | error_reply().
+    ok | error_reply().
 check_perms(SessId, FileKey, PermType) ->
     ?run(fun() -> lfm_perms:check_perms(SessId, FileKey, PermType) end).
 
@@ -516,7 +558,7 @@ check_perms(SessId, FileKey, PermType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path()) ->
-    {ok, [lfm_perms:access_control_entity()]} | error_reply().
+    {ok, acl:acl()} | error_reply().
 get_acl(SessId, FileKey) ->
     ?run(fun() -> lfm_perms:get_acl(SessId, FileKey) end).
 
@@ -526,7 +568,7 @@ get_acl(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_acl(session:id(), FileKey :: fslogic_worker:file_guid_or_path(),
-    EntityList :: [lfm_perms:access_control_entity()]) -> ok | error_reply().
+    acl:acl()) -> ok | error_reply().
 set_acl(SessId, FileKey, EntityList) ->
     ?run(fun() -> lfm_perms:set_acl(SessId, FileKey, EntityList) end).
 
@@ -542,13 +584,23 @@ remove_acl(SessId, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file attributes.
+%% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(session:id(), file_key()) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:stat(SessId, FileKey) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns file details (see file_details.hrl).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_details(session:id(), file_key()) ->
+    {ok, lfm_attrs:file_details()} | error_reply().
+get_details(SessId, FileKey) ->
+    ?run(fun() -> lfm_attrs:get_details(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -680,7 +732,7 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name()) ->
-    {ok, {od_share:id(), od_share:root_file_guid()}} | error_reply().
+    {ok, od_share:id()} | error_reply().
 create_share(SessId, FileKey, Name) ->
     ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name) end).
 
@@ -692,15 +744,6 @@ create_share(SessId, FileKey, Name) ->
 -spec remove_share(session:id(), od_share:id()) -> ok | error_reply().
 remove_share(SessId, ShareID) ->
     ?run(fun() -> lfm_shares:remove_share(SessId, ShareID) end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes file share by ShareGuid.
-%% @end
-%%--------------------------------------------------------------------
--spec remove_share_by_guid(session:id(), od_share:root_file_guid()) -> ok | error_reply().
-remove_share_by_guid(SessId, ShareGuid) ->
-    ?run(fun() -> lfm_shares:remove_share_by_guid(SessId, ShareGuid) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -756,3 +799,62 @@ check_result({ok, _} = Res) -> Res;
 check_result({ok, _, _} = Res) -> Res;
 check_result({ok, _, _, _} = Res) -> Res;
 check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Adds new qos_entry for file or directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
+    qos_entry:replicas_num()) -> {ok, qos_entry:id()} | error_reply().
+add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
+    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Gets effective QoS for file or directory.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_effective_file_qos(session:id(), file_key()) ->
+    {ok, {[qos_entry:id()], file_qos:assigned_entries()}} | error_reply().
+get_effective_file_qos(SessId, FileKey) ->
+    ?run(fun() -> lfm_qos:get_effective_file_qos(SessId, FileKey) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get details of specified qos_entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_qos_entry(session:id(), qos_entry:id()) ->
+    {ok, qos_entry:record()} | error_reply().
+get_qos_entry(SessId, QosEntryId) ->
+    ?run(fun() -> lfm_qos:get_qos_entry(SessId, QosEntryId) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Remove qos_entry.
+%% @end
+%%--------------------------------------------------------------------
+-spec remove_qos_entry(session:id(), qos_entry:id()) -> ok | error_reply().
+remove_qos_entry(SessId, QosEntryId) ->
+    ?run(fun() -> lfm_qos:remove_qos_entry(SessId, QosEntryId) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if QoS requirements defined in qos_entry document are fulfilled.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_qos_fulfilled(session:id(), qos_entry:id()) -> {ok, boolean()} | error_reply().
+check_qos_fulfilled(SessId, QosEntryId) ->
+    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosEntryId) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Check if QoS requirements defined in qos_entry document/documents
+%% are fulfilled for given file.
+%% @end
+%%--------------------------------------------------------------------
+-spec check_qos_fulfilled(session:id(), qos_entry:id(), file_key()) ->
+    {ok, boolean()} | error_reply().
+check_qos_fulfilled(SessId, QosEntryId, FileKey) ->
+    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosEntryId, FileKey) end).

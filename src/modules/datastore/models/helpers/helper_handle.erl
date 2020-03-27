@@ -41,14 +41,12 @@
 %% Creates and caches helper handle.
 %% @end
 %%--------------------------------------------------------------------
--spec create(session:id(), od_user:id(), od_space:id(), storage:doc()) ->
+-spec create(session:id(), od_user:id(), od_space:id(), storage:id()) ->
     {ok, doc()}.
-create(SessionId, UserId, SpaceId, StorageDoc) ->
-    {ok, Helper} = fslogic_storage:select_helper(StorageDoc),
-    HelperName = helper:get_name(Helper),
-    {ok, UserCtx} = luma:get_server_user_ctx(
-        SessionId, UserId, undefined, SpaceId, StorageDoc, HelperName
-    ),
+create(SessionId, UserId, SpaceId, StorageId) ->
+    {ok, Storage} = storage:get(StorageId),
+    Helper = storage:get_helper(Storage),
+    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, Storage),
     HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
     HelperDoc = #document{value = HelperHandle},
     datastore_model:create(?CTX, HelperDoc).
