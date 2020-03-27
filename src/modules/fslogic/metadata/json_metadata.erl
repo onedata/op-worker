@@ -19,10 +19,8 @@
 %% API
 -export([get/4, set/6, remove/2]).
 
--ifdef(TEST).
-%% Export for unit testing
+%% Private API - Export for unit and ct testing
 -export([find/2, insert/3, merge/1]).
--endif.
 
 
 %%%===================================================================

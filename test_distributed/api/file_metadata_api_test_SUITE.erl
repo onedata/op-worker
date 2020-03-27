@@ -381,22 +381,6 @@ get_rdf_metadata_test(Config) ->
         <<"attr32">> => [<<"a">>, <<"b">>, <<"c">>]
     }
 }).
--define(DIR_LAYERS_4_AND_5_MERGED_JSON_METADATA, #{
-    <<"attr3">> => #{
-        <<"attr31">> => null,
-        <<"attr32">> => [<<"a">>, <<"b">>, <<"c">>]
-    }
-}).
--define(DIR_ALL_LAYERS_MERGED_JSON_METADATA, #{
-    <<"attr2">> => #{
-        <<"attr22">> => [1, 2, 3],
-        <<"attr23">> => <<"val23">>
-    },
-    <<"attr3">> => #{
-        <<"attr31">> => null,
-        <<"attr32">> => [<<"a">>, <<"b">>, <<"c">>]
-    }
-}).
 
 
 get_json_metadata_test(Config) ->
@@ -522,10 +506,9 @@ get_json_metadata_test(Config) ->
         }
     end end,
 
-
-    GetExpectedResultFun = fun(#api_test_ctx{client = Client, data = Data}, ShareId) ->
+    GetExpectedResultFun = fun(#api_test_ctx{client = Client, data = Data}, ShareId, DirectMetadataSet) ->
         try
-            Inherited = maps:get(<<"inherited">>, Data, false),
+            IncludeInherited = maps:get(<<"inherited">>, Data, false),
             FilterType = maps:get(<<"filter_type">>, Data, undefined),
             Filter = maps:get(<<"filter">>, Data, undefined),
 
@@ -538,8 +521,8 @@ get_json_metadata_test(Config) ->
                     binary:split(Filter, <<".">>, [global])
             end,
 
-            ExpJsonMetadata = case Inherited of
-                true ->
+            ExpJsonMetadata = case {DirectMetadataSet, IncludeInherited} of
+                {true, true} ->
                     case ShareId of
                         undefined when Client == ?USER_IN_SPACE_2_AUTH ->
                             % User belonging to the same space as owner of files
@@ -547,35 +530,55 @@ get_json_metadata_test(Config) ->
                             % insufficient perms on DirLayer2
                             throw(?ERROR_POSIX(?EACCES));
                         undefined ->
-                            ?DIR_ALL_LAYERS_MERGED_JSON_METADATA;
+                            json_metadata:merge([
+                                ?DIR_LAYER_1_JSON_METADATA,
+                                ?DIR_LAYER_2_JSON_METADATA,
+                                ?DIR_LAYER_3_JSON_METADATA,
+                                ?DIR_LAYER_4_JSON_METADATA,
+                                ?DIR_LAYER_5_JSON_METADATA
+                            ]);
                         _ ->
-                            ?DIR_LAYERS_4_AND_5_MERGED_JSON_METADATA
+                            json_metadata:merge([
+                                ?DIR_LAYER_4_JSON_METADATA,
+                                ?DIR_LAYER_5_JSON_METADATA
+                            ])
                     end;
-                false ->
-                    ?DIR_LAYER_5_JSON_METADATA
+                {true, false} ->
+                    ?DIR_LAYER_5_JSON_METADATA;
+                {false, true} ->
+                    case ShareId of
+                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
+                            % User belonging to the same space as owner of files
+                            % shouldn't be able to get inherited metadata due to
+                            % insufficient perms on DirLayer2
+                            throw(?ERROR_POSIX(?EACCES));
+                        undefined ->
+                            json_metadata:merge([
+                                ?DIR_LAYER_1_JSON_METADATA,
+                                ?DIR_LAYER_2_JSON_METADATA,
+                                ?DIR_LAYER_3_JSON_METADATA,
+                                ?DIR_LAYER_4_JSON_METADATA
+                            ]);
+                        _ ->
+                            ?DIR_LAYER_4_JSON_METADATA
+                    end;
+                {false, false} ->
+                    throw(?ERROR_POSIX(?ENODATA))
             end,
 
-            case FilterList of
-                [] ->
-                    {ok, ExpJsonMetadata};
-                [<<"attr3">>, <<"attr32">>] ->
-                    {ok, [<<"a">>, <<"b">>, <<"c">>]};
-                [<<"attr2">>, <<"attr22">>, <<"[2]">>] ->
-                    case maps:is_key(<<"attr2">>, ExpJsonMetadata) of
-                        true ->
-                            {ok, 3};
-                        false ->
-                            ?ERROR_POSIX(?ENOATTR)
-                    end
+            try
+                {ok, json_metadata:find(ExpJsonMetadata, FilterList)}
+            catch throw:{error, ?ENOATTR} ->
+                ?ERROR_POSIX(?ENODATA)
             end
         catch throw:Error ->
             Error
         end
     end,
 
-    ConstructValidateSuccessfulRestResultFun = fun(ShareId) ->
+    ConstructValidateSuccessfulRestResultFun = fun(ShareId, DirectMetadataSet) ->
         fun(TestCtx, {ok, RespCode, RespBody}) ->
-            {ExpCode, ExpBody} = case GetExpectedResultFun(TestCtx, ShareId) of
+            {ExpCode, ExpBody} = case GetExpectedResultFun(TestCtx, ShareId, DirectMetadataSet) of
                 {ok, ExpResult} ->
                     {?HTTP_200_OK, ExpResult};
                 {error, _} = ExpError ->
@@ -584,9 +587,9 @@ get_json_metadata_test(Config) ->
             ?assertEqual({ExpCode, ExpBody}, {RespCode, RespBody})
         end
     end,
-    ConstructValidateSuccessfulGsResultFun = fun(ShareId) ->
+    ConstructValidateSuccessfulGsResultFun = fun(ShareId, DirectMetadataSet) ->
         fun(TestCtx, Result) ->
-            case GetExpectedResultFun(TestCtx, ShareId) of
+            case GetExpectedResultFun(TestCtx, ShareId, DirectMetadataSet) of
                 {ok, ExpResult} ->
                     ?assertEqual({ok, #{<<"metadata">> => ExpResult}}, Result);
                 {error, _} = ExpError ->
@@ -594,9 +597,6 @@ get_json_metadata_test(Config) ->
             end
         end
     end,
-%%    ValidateNoJsonSetRestResultFun = fun(_, {ok, ?HTTP_400_BAD_REQUEST, Response}) ->
-%%        ?assertEqual(?REST_ERROR(?ERROR_POSIX(?ENODATA)), Response)
-%%    end,
 
     lists:foreach(fun({
         FileType,
@@ -619,7 +619,7 @@ get_json_metadata_test(Config) ->
                 target_nodes = Providers,
                 client_spec = ClientSpecForGetJsonInSpace2Scenarios,
                 prepare_args_fun = ConstructPrepareRestArgsFun(FileWithJsonMetadataObjectId),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined),
+                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, true),
                 data_spec = DataSpec
             },
             #scenario_spec{
@@ -628,7 +628,7 @@ get_json_metadata_test(Config) ->
                 target_nodes = Providers,
                 client_spec = ClientSpecForGetJsonInSpace2Scenarios,
                 prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(FileWithJsonMetadataPath),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined),
+                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, true),
                 data_spec = DataSpec
             },
             #scenario_spec{
@@ -637,7 +637,7 @@ get_json_metadata_test(Config) ->
                 target_nodes = Providers,
                 client_spec = ClientSpecForGetJsonInSpace2Scenarios,
                 prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(FileWithJsonMetadataObjectId),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined),
+                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, true),
                 data_spec = DataSpec
             },
             #scenario_spec{
@@ -646,7 +646,7 @@ get_json_metadata_test(Config) ->
                 target_nodes = Providers,
                 client_spec = ClientSpecForGetJsonInSpace2Scenarios,
                 prepare_args_fun = ConstructPrepareGsArgsFun(FileWithJsonMetadataGuid, private),
-                validate_result_fun = ConstructValidateSuccessfulGsResultFun(undefined),
+                validate_result_fun = ConstructValidateSuccessfulGsResultFun(undefined, true),
                 data_spec = DataSpec
             },
 
@@ -658,7 +658,7 @@ get_json_metadata_test(Config) ->
                 target_nodes = Providers,
                 client_spec = ClientSpecForShareScenarios,
                 prepare_args_fun = ConstructPrepareRestArgsFun(ShareObjectId),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId),
+                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId, true),
                 data_spec = DataSpec
             },
             #scenario_spec{
@@ -667,7 +667,7 @@ get_json_metadata_test(Config) ->
                 target_nodes = Providers,
                 client_spec = ClientSpecForShareScenarios,
                 prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(ShareObjectId),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId),
+                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId, true),
                 data_spec = DataSpec
             },
             #scenario_spec{
@@ -676,7 +676,7 @@ get_json_metadata_test(Config) ->
                 target_nodes = Providers,
                 client_spec = ClientSpecForShareScenarios,
                 prepare_args_fun = ConstructPrepareGsArgsFun(ShareGuid, public),
-                validate_result_fun = ConstructValidateSuccessfulGsResultFun(ShareId),
+                validate_result_fun = ConstructValidateSuccessfulGsResultFun(ShareId, true),
                 data_spec = DataSpec
             },
             #scenario_spec{
@@ -687,7 +687,47 @@ get_json_metadata_test(Config) ->
                 prepare_args_fun = ConstructPrepareGsArgsFun(ShareGuid, private),
                 validate_result_fun = fun(_, Result) ->
                     ?assertEqual(?ERROR_UNAUTHORIZED, Result)
-                end
+                end,
+                data_spec = DataSpec
+            },
+
+            %% TEST GET JSON METADATA FOR FILE WITHOUT JSON METADATA SET
+
+            #scenario_spec{
+                name = <<"Get json metadata from ", FileType/binary, " without json set using /data/ rest endpoint">>,
+                type = rest,
+                target_nodes = Providers,
+                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareRestArgsFun(FileWithoutJsonMetadataObjectId),
+                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, false),
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Get json metadata from ", FileType/binary, " without json set using /files/ rest endpoint">>,
+                type = rest_with_file_path,
+                target_nodes = Providers,
+                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(FileWithoutJsonMetadataPath),
+                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, false),
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Get json metadata from ", FileType/binary, " without json set using /files-id/ rest endpoint">>,
+                type = rest,
+                target_nodes = Providers,
+                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(FileWithoutJsonMetadataObjectId),
+                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, false),
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Get json metadata from ", FileType/binary, " without json set using gs api">>,
+                type = gs,
+                target_nodes = Providers,
+                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareGsArgsFun(FileWithoutJsonMetadataGuid, private),
+                validate_result_fun = ConstructValidateSuccessfulGsResultFun(undefined, false),
+                data_spec = DataSpec
             }
         ]))
     end, [
@@ -746,7 +786,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_Case, Config) ->
     initializer:mock_share_logic(Config),
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({minutes, 15}),
     lfm_proxy:init(Config).
 
 
