@@ -117,18 +117,18 @@ subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
     ok.
 
 subscribe_on_new_space_test(Config) ->
-    subscribe_on_new_space_test_base(Config, <<"user1">>, ok).
+    subscribe_on_new_space_test_base(Config, <<"user3">>, <<"user3">>, <<"4">>, ok).
 
 subscribe_on_new_space_filter_test(Config) ->
-    subscribe_on_new_space_test_base(Config, <<"user2">>, {error,timeout}).
+    subscribe_on_new_space_test_base(Config, <<"user4">>, <<"user3">>, <<"3">>, {error,timeout}).
 
-subscribe_on_new_space_test_base(Config, User, ExpectedAns) ->
+subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
-    EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    EmitterSessionId = ?config({session_id, {DomainUser, ?GET_DOMAIN(Worker1)}}, Config),
 
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, EmitterSessionId, <<"/space_name", SpaceNum/binary>>),
     SpaceDirUuid = file_id:guid_to_uuid(SpaceGuid),
     ?assertEqual(ok, rpc:call(Worker1, file_meta, delete, [SpaceDirUuid])),
 
@@ -145,7 +145,7 @@ subscribe_on_new_space_test_base(Config, User, ExpectedAns) ->
     ?assertMatch({ok, [_]},
         rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey, undefined]), 10),
 
-    rpc:call(Worker1, file_meta, make_space_exist, [<<"space_id1">>]),
+    rpc:call(Worker1, file_meta, make_space_exist, [<<"space_id", SpaceNum/binary>>]),
     ?assertEqual(ExpectedAns, receive_file_attr_changed_event()),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq1))),
@@ -170,8 +170,8 @@ events_on_conflicts_test(Config) ->
     Dirname = generator:gen_name(),
 
     DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
-    Seq1 = get_seq(Config, 1),
-    Seq2 = get_seq(Config, 1),
+    Seq1 = get_seq(Config, <<"user1">>),
+    Seq2 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId))),
     ?assertEqual(ok, ssl:send(Sock,
@@ -194,7 +194,7 @@ events_on_conflicts_test(Config) ->
 
     lists:foreach(fun(Seq) ->
         ?assertEqual(ok, ssl:send(Sock,
-            fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, 1), -Seq)))
+            fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq)))
     end, [Seq1, Seq2]),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
