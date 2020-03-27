@@ -15,8 +15,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([enable/1, disable/1, is_enabled/1, get_configuration/1, query/2,
-    query/3, delete_config/1, configure/2]).
+-export([enable/1, disable/1, is_enabled/1, get_configuration/1, delete_config/1, configure/2]).
 
 %%%===================================================================
 %%% API
@@ -76,22 +75,10 @@ get_configuration(SpaceId) ->
                 example_query => file_popularity_view:example_query(SpaceId)
             }};
         {error, not_found} ->
-            {ok, #{
-                enabled => false
-            }};
+            {ok, #{enabled => false}};
         Error ->
             Error
     end.
-
--spec query(od_space:id(), non_neg_integer()) ->
-    {[file_id:objectid()], file_popularity_view:index_token() | undefined} | {error, term()}.
-query(SpaceId, Limit) ->
-    file_popularity_view:query(SpaceId, undefined, Limit).
-
--spec query(od_space:id(), file_popularity_view:index_token() | undefined, non_neg_integer()) ->
-    {[file_id:objectid()], file_popularity_view:index_token()} | {error, term()}.
-query(SpaceId, IndexToken, Limit) ->
-    file_popularity_view:query(SpaceId, IndexToken, Limit).
 
 -spec assert_types_and_values(map()) -> ok | {error, term()}.
 assert_types_and_values(Configuration) ->

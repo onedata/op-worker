@@ -17,7 +17,6 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("transfers_test_mechanism.hrl").
--include("countdown_server.hrl").
 -include("rest_test_utils.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -727,10 +726,11 @@ maybe_prereplicate_files(Config, #setup{
     attempts = Attempts,
     timeout = Timetrap
 }) ->
-    Refs = lists:map(fun(Node) ->
-        cast_files_prereplication(Config, Node, User, Size, Attempts)
-    end, ReplicateToNodes),
-    await_countdown(Refs, Timetrap).
+    NodesToCounterIds = lists:foldl(fun(Node, NodesToCounterIdsAcc) ->
+        CounterId = cast_files_prereplication(Config, Node, User, Size, Attempts),
+        NodesToCounterIdsAcc#{Node => CounterId}
+    end, #{}, ReplicateToNodes),
+    countdown_server:await_all(NodesToCounterIds, Timetrap).
 
 assert_expectations(_Config, undefined) ->
     ok;
@@ -889,32 +889,12 @@ assert_setup(Config, #setup{
     assert_files_distribution_on_all_nodes(Config, AssertionNodes, User,
         ExpectedDistribution, undefined, Attempts, Timetrap).
 
-await_countdown(Refs, Timetrap) when is_list(Refs) ->
-    await_countdown(sets:from_list(Refs), Timetrap);
-await_countdown(Refs, Timetrap) ->
-    await_countdown(Refs, #{}, Timetrap).
-
-await_countdown(Refs, DataMap, Timetrap) ->
-    case sets:size(Refs) of
-        0 ->
-            DataMap;
-        _ ->
-            receive
-                {?COUNTDOWN_FINISHED, Ref, _AssertionNode, Data} ->
-                    Refs2 = sets:del_element(Ref, Refs),
-                    DataMap2 = DataMap#{Ref => Data},
-                    await_countdown(Refs2, DataMap2, Timetrap)
-            after
-                Timetrap ->
-                    throw(?TEST_TIMEOUT(?FUNCTION_NAME))
-            end
-    end.
-
 assert_files_visible_on_all_nodes(Config, AssertionNodes, User, Attempts, Timetrap) ->
-    Refs = lists:map(fun(AssertionNode) ->
-        cast_files_visible_assertion(Config, AssertionNode, User, Attempts)
-    end, AssertionNodes),
-    await_countdown(Refs, Timetrap).
+    NodesToCounterIds = lists:foldl(fun(AssertionNode, NodesToCounterIdsAcc) ->
+        CounterId = cast_files_visible_assertion(Config, AssertionNode, User, Attempts),
+        NodesToCounterIdsAcc#{AssertionNode => CounterId}
+    end, #{}, AssertionNodes),
+    countdown_server:await_all(NodesToCounterIds, Timetrap).
 
 assert_files_distribution_on_all_nodes(_Config, _AssertionNodes, _User, undefined, _AssertDistributionForFiles, _Attempts, _Timetrap) ->
     ok;
@@ -928,10 +908,12 @@ assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDis
         }
     end, ExpectedDistribution),
 
-    Refs = lists:map(fun(AssertionNode) ->
-        cast_files_distribution_assertion(Config, AssertionNode, User, ExpectedDistributionWithBlockSize, AssertDistributionForFiles, Attempts)
-    end, AssertionNodes),
-    await_countdown(Refs, Timetrap).
+    NodesToCounterIds = lists:foldl(fun(AssertionNode, NodesToCounterIdsAcc) ->
+        CounterId = cast_files_distribution_assertion(Config, AssertionNode, User, ExpectedDistributionWithBlockSize, 
+            AssertDistributionForFiles, Attempts),
+        NodesToCounterIdsAcc#{AssertionNode => CounterId}
+    end, #{}, AssertionNodes),
+    countdown_server:await_all(NodesToCounterIds, Timetrap).
 
 cast_files_distribution_assertion(Config, Node, User, Expected, AssertDistributionForFiles, Attempts) ->
     FileGuidsAndPaths = ?config(?FILES_KEY, Config),

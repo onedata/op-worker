@@ -158,12 +158,13 @@ events_on_conflicts_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    AccessToken = ?config({access_token, <<"user1">>}, Config),
 
     {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
         generator:gen_name(), 8#755)),
     ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
 
-    {ok, {Sock, _}} = fuse_test_utils:connect_via_macaroon(Worker1, [{active, true}], SessionId),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
     Filename = ?CONFLICTING_FILE_NAME,
     Dirname = generator:gen_name(),

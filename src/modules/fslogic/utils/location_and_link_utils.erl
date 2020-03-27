@@ -23,7 +23,7 @@
 -export([get_new_file_location_doc/3, is_location_created/2,
     mark_location_created/3]).
 -export([create_imported_file_location/6, update_imported_file_location/2]).
--export([get_canonical_paths_cache_name/1, get_uuid_based_paths_cache_name/1, 
+-export([get_canonical_paths_cache_name/1, get_uuid_based_paths_cache_name/1,
     invalidate_paths_caches/1, init_paths_cache_group/0, init_paths_caches/1]).
 
 -define(PATH_CACHE_GROUP, <<"paths_cache_group">>).
@@ -133,11 +133,9 @@ create_imported_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size,
 %%-------------------------------------------------------------------
 -spec update_imported_file_location(file_ctx:ctx(), non_neg_integer()) -> ok.
 update_imported_file_location(FileCtx, StorageSize) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
     NewFileBlocks = create_file_blocks(StorageSize),
-    replica_updater:update(FileCtx, NewFileBlocks, StorageSize, true),
-    ok = lfm_event_emitter:emit_file_written(
-        FileGuid, NewFileBlocks, StorageSize, {exclude, ?ROOT_SESS_ID}).
+    {ok, _} = replica_updater:update(FileCtx, NewFileBlocks, StorageSize, true),
+    ok.
 
 %%-------------------------------------------------------------------
 %% @doc

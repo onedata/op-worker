@@ -28,6 +28,7 @@
     space_id :: od_space:id(),
     since :: couchbase_changes:since(),
     until :: couchbase_changes:until(),
+    timestamp :: dbsync_changes:timestamp(),
     compressed_docs :: binary()
 }).
 

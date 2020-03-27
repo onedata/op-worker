@@ -203,6 +203,7 @@ cancel(TransferId) ->
 %%--------------------------------------------------------------------
 -spec cancel_transfers_of_session(file_meta:uuid(), session:id()) -> ok.
 cancel_transfers_of_session(FileUuid, SessionId) ->
+    % TODO VFS-6153 race with open
     apply_if_alive(FileUuid, {async, {cancel_transfers_of_session, SessionId}}).
 
 %%--------------------------------------------------------------------
@@ -1542,26 +1543,20 @@ wait_for_terminate(Pid) ->
 %% given replica is unique.
 %% @end
 %%--------------------------------------------------------------------
--spec delete_whole_file_replica_internal(version_vector:version_vector(), #state{})
-        -> {ok | {error, term()}, #state{}}.
+-spec delete_whole_file_replica_internal(version_vector:version_vector(), #state{}) ->
+    {ok | {error, term()}, #state{}}.
 delete_whole_file_replica_internal(AllowedVV, #state{file_ctx = FileCtx} = State) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     try
         LocalFileLocId = file_location:local_id(FileUuid),
         ProviderId = oneprovider:get_id(),
-        {ok, LocDoc} = fslogic_location_cache:get_location(LocalFileLocId, FileUuid),
-        CurrentVV = file_location:get_version_vector(LocDoc),
+        {ok, LocationDoc} = fslogic_location_cache:get_location(LocalFileLocId, FileUuid),
+        CurrentVV = file_location:get_version_vector(LocationDoc),
         AllowedLocalV = version_vector:get_version(LocalFileLocId, ProviderId, AllowedVV),
         CurrentLocalV = version_vector:get_version(LocalFileLocId, ProviderId, CurrentVV),
         case AllowedLocalV =:= CurrentLocalV of
             true ->
-                UserCtx = user_ctx:new(?ROOT_SESS_ID),
-                #fuse_response{status = #status{code = ?OK}} =
-                    truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
-                %todo VFS-4433 file_popularity should be updated after updates on file_location
-                fslogic_location_cache:clear_blocks(FileCtx, LocalFileLocId),
-                State2 = flush_events(State),
-                {fslogic_event_emitter:emit_file_location_changed(FileCtx, []), State2};
+                try_to_clear_blocks_and_truncate(LocalFileLocId, LocationDoc, State);
             _ ->
                 {{error, file_modified_locally}, State}
         end
@@ -1570,4 +1565,23 @@ delete_whole_file_replica_internal(AllowedVV, #state{file_ctx = FileCtx} = State
             ?error_stacktrace("Deletion of replica of file ~p failed due to ~p",
                 [FileUuid, {Error, Reason}]),
             {{error, Reason}, State}
+    end.
+
+-spec try_to_clear_blocks_and_truncate(file_location:id(), file_location:doc(), #state{}) ->
+    {ok | {error, term()}, #state{}}.
+try_to_clear_blocks_and_truncate(LocalFileLocId, LocationDoc, #state{file_ctx = FileCtx} = State) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    Blocks = fslogic_location_cache:get_blocks(LocationDoc),
+    fslogic_location_cache:clear_blocks(FileCtx, LocalFileLocId),
+    try
+        #fuse_response{status = #status{code = ?OK}} = truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
+        %todo VFS-4433 file_popularity should be updated after updates on file_location, not in truncate_req
+        State2 = flush_events(State),
+        {fslogic_event_emitter:emit_file_location_changed(FileCtx, []), State2}
+    catch
+        E:R ->
+            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            ?error_stacktrace("Unexpected error ~p:~p when truncating file ~p.", [E, R, FileUuid]),
+            fslogic_location_cache:set_blocks(LocationDoc, Blocks),
+            {{error, {E, R}}, State}
     end.

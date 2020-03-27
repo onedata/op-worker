@@ -13,6 +13,7 @@
 
 -include("transfers_test_mechanism.hrl").
 -include("qos_tests_utils.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
@@ -692,7 +693,7 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
     lfm_proxy:rm_recursive(RunNode, SessId(RunNode), {path, <<"/", ?SPACE_ID/binary, "/", Name/binary>>}),
     lists:foreach(fun(Worker) ->
         ?assertEqual(
-            {error, enoent},
+            {error, ?ENOENT},
             lfm_proxy:stat(Worker, SessId(Worker), {path, <<"/", ?SPACE_ID/binary, "/", Name/binary>>}),
             ?ATTEMPTS)
     end, Workers),
@@ -707,7 +708,7 @@ qos_autocleaning_protection_test_base(Config, TestSpec) ->
         threshold => 100
     },
     rpc:call(RunNode, autocleaning_api, configure, [?SPACE_ID, Configuration]),
-    {ok, ARId} = rpc:call(RunNode, autocleaning_api, force_start, [?SPACE_ID]),
+    {ok, ARId} = rpc:call(RunNode, autocleaning_api, force_run, [?SPACE_ID]),
 
     F = fun() ->
         {ok, #{stopped_at := StoppedAt}} = rpc:call(RunNode, autocleaning_api, get_run_report, [ARId]),

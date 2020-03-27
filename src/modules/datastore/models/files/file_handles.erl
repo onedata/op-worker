@@ -20,7 +20,7 @@
 %% API
 -export([delete/1, exists/1, list/0]).
 -export([register_open/4, register_release/3, mark_to_remove/1,
-    invalidate_session_entry/2, get_creation_handle/1]).
+    invalidate_session_entry/2, is_used_by_session/2, get_creation_handle/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -160,8 +160,6 @@ register_open(FileCtx, SessId, Count, CreateHandleID) ->
     ok | {error, term()}.
 register_release(FileCtx, SessId, Count) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    replica_synchronizer:cancel_transfers_of_session(FileUuid, SessId),
-
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Diff = fun(Handle = #file_handles{is_removed = Removed, descriptors = Fds}) ->
         FdCount = maps:get(SessId, Fds, 0),
@@ -182,7 +180,9 @@ register_release(FileCtx, SessId, Count) ->
         {ok, #document{value = #file_handles{descriptors = Fds}}} ->
             case maps:is_key(SessId, Fds) of
                 true -> ok;
-                false -> session_open_files:deregister(SessId, FileGuid)
+                false ->
+                    % TODO VFS-6153 race with open
+                    session_open_files:deregister(SessId, FileGuid)
             end,
             Pred = fun(#file_handles{descriptors = Fds2}) ->
                 maps:size(Fds2) == 0
@@ -194,7 +194,7 @@ register_release(FileCtx, SessId, Count) ->
             end;
         {error, removed} ->
             session_open_files:deregister(SessId, FileGuid),
-            fslogic_delete:remove_opened_file(FileCtx, true),
+            fslogic_delete:handle_release_of_deleted_file(FileCtx),
             datastore_model:delete(?CTX, FileUuid);
         {error, not_found} ->
             ok;
@@ -230,6 +230,20 @@ invalidate_session_entry(FileCtx, SessId) ->
     case register_release(FileCtx, SessId, infinity) of
         ok -> ok;
         {error, not_found} -> ok;
+        {error, Reason} -> {error, Reason}
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns information if file is opened by particular session.
+%% @end
+%%--------------------------------------------------------------------
+-spec is_used_by_session(file_ctx:ctx(), session:id()) -> boolean() | {error, term()}.
+is_used_by_session(FileCtx, SessId) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    case datastore_model:get(?CTX, FileUuid) of
+        {ok, #document{value = #file_handles{descriptors = Fds}}} -> maps:is_key(SessId, Fds);
+        {error, not_found} -> false;
         {error, Reason} -> {error, Reason}
     end.
 

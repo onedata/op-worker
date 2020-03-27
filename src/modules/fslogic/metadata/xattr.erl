@@ -18,6 +18,8 @@
 
 %% API
 -export([list/4, get/4, set/6, remove/3]).
+%% Protected API - for use only by *_req.erl modules
+-export([list_xattrs_insecure/4]).
 
 
 %%%===================================================================
