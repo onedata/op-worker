@@ -389,7 +389,7 @@ support_space_insecure(StorageId, SpaceSupportToken, SupportSize) ->
                 false ->
                     case storage_logic:support_space(StorageId, SpaceSupportToken, SupportSize) of
                         {ok, SpaceId} ->
-                            on_space_supported(SpaceId),
+                            on_space_supported(SpaceId, StorageId),
                             {ok, SpaceId};
                         {error, _} = Error ->
                             Error
@@ -439,6 +439,7 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
+    %% @TODO VFS-6208 Cancel sync and auto-cleaning traverse and clean up ended tasks when unsupporting
     case storage_logic:revoke_space_support(StorageId, SpaceId) of
         ok -> on_space_unsupported(SpaceId, StorageId);
         Error -> Error
@@ -465,19 +466,18 @@ on_storage_created(StorageId) ->
 
 
 %% @private
--spec on_space_supported(od_space:id()) -> ok.
-on_space_supported(SpaceId) ->
+-spec on_space_supported(od_space:id(), id()) -> ok.
+on_space_supported(SpaceId, StorageId) ->
+    % remove possible remnants of previous support 
+    % (when space was unsupported in Onezone without provider knowledge)
+    delete_associated_documents(SpaceId, StorageId),
     ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 
 %% @private
 -spec on_space_unsupported(od_space:id(), id()) -> ok.
 on_space_unsupported(SpaceId, StorageId) ->
-    autocleaning_api:disable(SpaceId),
-    autocleaning_api:delete_config(SpaceId),
-    file_popularity_api:disable(SpaceId),
-    file_popularity_api:delete_config(SpaceId),
-    storage_sync:space_unsupported(SpaceId, StorageId),
+    delete_associated_documents(SpaceId, StorageId),
     main_harvesting_stream:space_unsupported(SpaceId).
 
 
@@ -489,6 +489,16 @@ on_helper_changed(StorageId) ->
     rtransfer_config:add_storage(StorageId),
     rpc:multicall(Nodes, rtransfer_config, restart_link, []),
     helpers_reload:refresh_helpers_by_storage(StorageId).
+
+
+%% @private
+-spec delete_associated_documents(od_space:id(), id()) -> ok.
+delete_associated_documents(SpaceId, StorageId) ->
+    file_popularity_api:disable(SpaceId),
+    file_popularity_api:delete_config(SpaceId),
+    autocleaning_api:disable(SpaceId),
+    autocleaning_api:delete_config(SpaceId),
+    storage_sync:clean_up(SpaceId, StorageId).
 
 
 %% @private

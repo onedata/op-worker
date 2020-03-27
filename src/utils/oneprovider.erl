@@ -301,6 +301,7 @@ on_connect_to_oz() ->
     ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
     ok = fslogic_worker:init_paths_caches(all),
     ok = auth_cache:report_oz_connection_start(),
+    ok = rtransfer_config:add_storages(),
     storage_sync_worker:notify_connection_to_oz().
 
 

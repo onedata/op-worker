@@ -31,13 +31,14 @@
 -export([has_eff_privilege/3, has_eff_privileges/3]).
 -export([get_eff_groups/2, get_shares/2, get_local_storage_ids/1,
     get_local_storage_id/1, get_all_storage_ids/1]).
--export([get_provider_ids/2]).
+-export([get_provider_ids/1, get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
 -export([is_supported_by_storage/2]).
 -export([can_view_user_through_space/3, can_view_user_through_space/4]).
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
+-export([report_dbsync_state/2]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
     ?APP_NAME, graph_sync_harvest_metadata_request_timeout, 120000
@@ -171,7 +172,8 @@ get_shares(SessionId, SpaceId) ->
 %%-------------------------------------------------------------------
 -spec get_local_storage_id(od_space:id()) -> {ok, storage:id()} | errors:error().
 get_local_storage_id(SpaceId) ->
-    case get_local_storage_ids(SpaceId) of
+    % called by module to be mocked in tests
+    case space_logic:get_local_storage_ids(SpaceId) of
         {ok, []} -> {error, space_not_supported};
         {ok, [StorageId | _]} -> {ok, StorageId};
         Other -> Other
@@ -200,6 +202,12 @@ get_all_storage_ids(SpaceId) ->
         {error, _} = Error ->
             Error
     end.
+
+
+-spec get_provider_ids(od_space:id()) ->
+    {ok, [od_provider:id()]} | errors:error().
+get_provider_ids(SpaceId) ->
+    get_provider_ids(?ROOT_SESS_ID, SpaceId).
 
 
 -spec get_provider_ids(gs_client_worker:client(), od_space:id()) ->
@@ -302,7 +310,7 @@ can_view_group_through_space(SpaceDoc, ClientUserId, GroupId) ->
 -spec harvest_metadata(od_space:id(), harvesting_destination:destination(),
     harvesting_batch:batch_entries(), couchbase_changes:seq(),
     couchbase_changes:seq()) -> {ok, harvesting_result:failure_map()} | errors:error().
-harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq)->
+harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_space, id = SpaceId,
@@ -316,6 +324,7 @@ harvest_metadata(SpaceId, Destination, Batch, MaxStreamSeq, MaxSeq)->
         }
     }, ?HARVEST_METADATA_TIMEOUT).
 
+
 -spec get_harvesters(od_space:doc() | od_space:id()) ->
     {ok, [od_harvester:id()]} | errors:error().
 get_harvesters(#document{value = #od_space{harvesters = Harvesters}}) ->
@@ -328,3 +337,13 @@ get_harvesters(SpaceId) ->
             ?error("space_logic:get_harvesters(~p) failed due to ~p", [SpaceId, Error]),
             Error
     end.
+
+
+-spec report_dbsync_state(od_space:id(), space_support:seq_per_provider()) -> ok | errors:error().
+report_dbsync_state(SpaceId, SeqPerProvider) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_space, id = SpaceId, aspect = {dbsync_state, oneprovider:get_id()}},
+        data = #{<<"seqPerProvider">> => SeqPerProvider}
+    }).
+

@@ -28,8 +28,6 @@
 -define(ATTEMPTS, 60).
 -define(DEFAULT_TIMETRAP, timer:minutes(2)).
 
--define(TEST_TIMEOUT(Function), {test_timeout, Function}).
-
 -define(FILE_PREFIX, <<"file_">>).
 -define(DIR_PREFIX, <<"dir_">>).
 

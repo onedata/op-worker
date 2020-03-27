@@ -32,14 +32,6 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Initialises iterator specific options.
-%% @end
-%%-------------------------------------------------------------------
--callback init(MasterJob :: storage_traverse:master_job(), RunOpts :: storage_traverse:run_opts()) ->
-    InitialisedMasterJob :: storage_traverse:master_job().
-
-%%-------------------------------------------------------------------
-%% @doc
 %% Returns next batch of children of directory associated with
 %% StorageFileCtx stored in StorageTraverse record.
 %% Each ChildId is associated with its depth in the tree structure.

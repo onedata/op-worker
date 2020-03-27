@@ -343,7 +343,7 @@ subscribe_test(Config) ->
         <<"fullName">> => <<"changedName">>
     },
     PushMessage1 = #gs_push_graph{gri = User1SharedGRI, data = ChangedData, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
+    logic_tests_common:simulate_push(Config, PushMessage1),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
@@ -366,7 +366,7 @@ subscribe_test(Config) ->
         <<"fullName">> => <<"changedName2">>
     },
     PushMessage2 = #gs_push_graph{gri = User1ProtectedGRI, data = ChangedData2, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
+    logic_tests_common:simulate_push(Config, PushMessage2),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
@@ -389,7 +389,7 @@ subscribe_test(Config) ->
         <<"fullName">> => <<"changedName4">>
     },
     PushMessage4 = #gs_push_graph{gri = User1PrivateGRI, data = ChangedData4, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
+    logic_tests_common:simulate_push(Config, PushMessage4),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
@@ -402,7 +402,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage7 = #gs_push_graph{gri = User1PrivateGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage7]),
+    logic_tests_common:simulate_push(Config, PushMessage7),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_user, get_from_cache, [?USER_1])
@@ -417,7 +417,7 @@ subscribe_test(Config) ->
     ),
 
     PushMessage8 = #gs_push_nosub{gri = User1PrivateGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage8]),
+    logic_tests_common:simulate_push(Config, PushMessage8),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_user, get_from_cache, [?USER_1])

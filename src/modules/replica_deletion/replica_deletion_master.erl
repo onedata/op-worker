@@ -5,11 +5,43 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% gen_server responsible for requesting support for deletion of files,
-%%% in the given space, from other providers.
-%%% It is responsible for limiting number of
-%%% concurrent requests so that remote provider won't be flooded with them.
+%%% gen_server responsible for requesting support for deletion of
+%%% files' replicas, in the given space, from other providers.
+%%%
+%%% Communication between providers is performed via DBSync
+%%% (for more info see replica_deletion.erl and replica_deletion_changes.erl)
+%%%
+%%% Currently, 2 mechanisms can use replica_deletion_mechanism:
+%%%   * replica_eviction (including migration)
+%%%   * autocleaning
+%%%
+%%% To add new mechanism, new job type must be defined (see replica_deletion.hrl)
+%%% and mapping from job_type to callback module muse be defined in
+%%% ?MODULE:job_type_to_module/1 function.
+%%% Callback module must implement replica_deletion_behaviour
+%%% (see replica_deletion_behaviour.erl).
+%%%
 %%% One such server is started in the cluster.
+%%% It is responsible for limiting number of
+%%% concurrent requests so that DBSync won't be flooded with them.
+%%% The mechanism of limiting number of requests works as follows:
+%%%   * when number of currently processed deletion requests is lesser
+%%%     than ?MAX_REQUESTS_NUM, the requesting process is replied immediately
+%%%     with an 'ok' similarly to "cast"
+%%%   * when number of currently processed deletion requests is equal to
+%%%     ?MAX_REQUESTS_NUM, the requesting process is not replied, and the
+%%%     request is queued. As a result, the requesting process is blocked.
+%%%     As both mechanisms that use replica_deletion
+%%%     (autocleaning and replica_eviction) use pool of workers, all processes
+%%%     in the corresponding pools will be blocked and DBSync won't be flooded.
+%%%     Blocked request will be popped from the queue when any of currently
+%%%     processed requests is finished. When request is popped from the
+%%%     queue, requesting process is replied and is no longer blocked.
+%%%
+%%% If support for deleting replica is granted by a remote provider,
+%%% job for deleting the replica from storage is scheduled on
+%%% replica_deletion_workers pool (see replica_deletion_worker.erl).
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replica_deletion_master).
@@ -19,20 +51,24 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include("modules/datastore/transfer.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/1,
-    enqueue_task/7, enqueue_task_internal/7,
-    cancel/2, cancel_internal/2,
-    cancelling_finished/2, cancelling_finished_internal/2,
-    notify_finished_task/1, notify_finished_task_internal/1,
-    notify_finished_task_async/1, notify_finished_task_async_internal/1,
-    process_result/5, get_setting_for_deletion_task/1]).
+-export([
+    init_workers_pool/0,
+    stop_workers_pool/0,
+    request_deletion/4,
+    cancel_request/3,
+    notify_handled_request/3,
+    process_result/5,
+    find_supporter_and_prepare_deletion_request/1,
+    prepare_deletion_request/4,
+    job_type_to_module/1
+]).
 
-%% function exported for monitoring performance
--export([check/1 , check_internal/1]).
+%% functions exported for RPC
+-export([call/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -45,384 +81,232 @@
 
 -define(SERVER(SpaceId), {global, {?MODULE, SpaceId}}).
 
-% messages
--define(TASK(Task, ReportId), #task{task = Task, id = ReportId}).
--define(DELETE(FileUuid, ProviderId, Blocks, Version, Type), #deletion_task{
+% request
+-define(REQUEST(RequestType, JobId, JobType), #request{type = RequestType, job_id = JobId, job_type = JobType}).
+
+% message types
+-define(DELETION(FileUuid, ProviderId, Blocks, Version), #deletion{
     uuid = FileUuid,
     supporting_provider = ProviderId,
     blocks = Blocks,
-    version = Version,
-    type = Type
+    version = Version
 }).
 -define(CANCEL, cancel).
--define(CANCEL(ReportId), {?CANCEL, ReportId}).
--define(CANCEL_DONE, cancel_done).
--define(CANCEL_DONE(ReportId), {?CANCEL_DONE, ReportId}).
 -define(FINISHED, finished).
 
-%% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
--define(DIE_AFTER, timer:minutes(1)).
--define(MAX_ACTIVE_TASKS, application:get_env(?APP_NAME, max_active_deletion_tasks, 2000)).
+
+-define(MAX_REQUESTS_NUM, application:get_env(?APP_NAME, replica_deletion_max_parallel_requests, 10000)).
 
 -record(state, {
     space_id :: od_space:id(),
-    active_tasks = 0 :: non_neg_integer(),
-    queues = #{} :: #{replica_deletion:report_id() => queue:queue()},
-    ids_queue = queue:new() :: queue:queue(),
-    ids_to_cancel = gb_sets:new() :: gb_sets:set(),
-    max_active_tasks = ?MAX_ACTIVE_TASKS
+    active_requests_num = 0 :: non_neg_integer(),
+    max_requests_num = ?MAX_REQUESTS_NUM,
+    jobs_to_cancel = gb_sets:new() :: gb_sets:set(job_key()),
+    queue = queue:new() :: queue:queue({request(), From :: {pid(), Tag :: term()}})
 }).
 
--record(deletion_task, {
+-record(request, {
+    type :: request_type(),
+    job_id :: replica_deletion:job_id(),
+    job_type :: replica_deletion:job_type()
+}).
+-record(deletion, {
     uuid :: file_meta:uuid(),
-    file :: file_ctx:ctx() | undefined,
     supporting_provider :: od_provider:id(),
     blocks :: fslogic_blocks:blocks(),
-    version :: version_vector:version_vector(),
-    type :: replica_deletion:type()
-}).
-
--record(task, {
-    task :: deletion_task(),
-    id :: replica_deletion:report_id()
+    version :: version_vector:version_vector()
 }).
 
 
--type task() :: #task{}.
--type deletion_task() :: #deletion_task{}.
+-type request() :: #request{}.
+-type request_type() :: deletion() | ?CANCEL | ?FINISHED.
+-type deletion() :: #deletion{}.
+-type job_key() :: {replica_deletion:job_id(), replica_deletion:job_type()}.
 
-%%TODO VFS-4625 handle too long queue of tasks and return error
+-type state() :: #state{}.
+
+-define(JOB_KEY(JobId, JobType), {JobId, JobType}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+-spec init_workers_pool() -> ok.
+init_workers_pool() ->
+    {ok, _} = worker_pool:start_sup_pool(?REPLICA_DELETION_WORKERS_POOL, [
+        {workers, ?REPLICA_DELETION_WORKERS_NUM},
+        {worker, {?REPLICA_DELETION_WORKER, []}}
+    ]),
+    ok.
+
+-spec stop_workers_pool() -> ok.
+stop_workers_pool() ->
+    ok = wpool:stop_sup_pool(?REPLICA_DELETION_WORKERS_POOL).
+
+-spec request_deletion(od_space:id(), deletion(), replica_deletion:job_id(), replica_deletion:job_type()) -> ok.
+request_deletion(SpaceId, DeletionRequest, JobId, JobType) ->
+    call(SpaceId, ?REQUEST(DeletionRequest, JobId, JobType)).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% @equiv enqueue_internal(FileUuid, ProviderId, Blocks, Version,
-%%        ReportId, Type, SpaceId).  on chosen node.
-%% @end
-%%-------------------------------------------------------------------
--spec enqueue_task(file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
-    version_vector:version_vector(), replica_deletion:report_id(),
-    replica_deletion:type(), od_space:id()) -> ok.
-enqueue_task(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, enqueue_task_internal,
-        [FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId]).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Casts task for sending new replica_deletion request.
-%% @end
-%%-------------------------------------------------------------------
--spec enqueue_task_internal(file_meta:uuid(), od_provider:id(),
-    fslogic_blocks:blocks(), version_vector:version_vector(),
-    replica_deletion:report_id(), replica_deletion:type(), od_space:id()) -> ok.
-enqueue_task_internal(FileUuid, ProviderId, Blocks, Version, ReportId, Type, SpaceId) ->
-    call(SpaceId, ?TASK(?DELETE(FileUuid, ProviderId,
-        Blocks, Version, Type), ReportId)).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% @equiv cancel_internal(ReportId, SpaceId) on chosen node.
-%% @end
-%%-------------------------------------------------------------------
--spec cancel(replica_deletion:report_id(), od_space:id()) -> ok.
-cancel(ReportId, SpaceId) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, cancel_internal, [ReportId, SpaceId]).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Adds given ReportId to list of ids to bo cancelled.
+%% Adds given JobId to list of ids to bo cancelled.
 %% All new arriving tasks and those popped from queue associated
-%% with given ReportId will be cancelled.
+%% with given JobId will be cancelled.
 %% NOTE!!! Queue is not searched for tasks to be cancelled.
 %%         They just won't be executed when they reach head of queue.
 %% @end
 %%-------------------------------------------------------------------
--spec cancel_internal(replica_deletion:report_id(), od_space:id()) -> ok.
-cancel_internal(ReportId, SpaceId) ->
-    call(SpaceId, ?CANCEL(ReportId)).
+-spec cancel_request(od_space:id(), replica_deletion:job_id(), replica_deletion:job_type()) -> ok.
+cancel_request(SpaceId, JobId, JobType) ->
+    call(SpaceId, ?REQUEST(?CANCEL, JobId, JobType)).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% @equiv cancelling_finished_internal(ReportId, SpaceId) on chosen node
-%% @end
-%%-------------------------------------------------------------------
--spec cancelling_finished(replica_deletion:report_id(), od_space:id()) -> ok.
-cancelling_finished(ReportId, SpaceId) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, cancelling_finished_internal, [ReportId, SpaceId]).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Removes given if from ids to be cancelled.
-%% @end
-%%-------------------------------------------------------------------
--spec cancelling_finished_internal(replica_deletion:report_id(), od_space:id()) -> ok.
-cancelling_finished_internal(ReportId, SpaceId) ->
-    call(SpaceId, ?CANCEL_DONE(ReportId)).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% @equiv notify_finished_task_internal(SpaceId) on chosen node.
-%% @end
-%%-------------------------------------------------------------------
--spec notify_finished_task(od_space:id()) -> ok.
-notify_finished_task(SpaceId) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, notify_finished_task_internal, [SpaceId]).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Sends message to server to notify about finished task.
-%% @end
-%%-------------------------------------------------------------------
--spec notify_finished_task_internal(od_space:id()) -> ok.
-notify_finished_task_internal(SpaceId) ->
-    call(SpaceId, ?FINISHED).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% @equiv notify_finished_task_async_internal(SpaceId) on chosen node.
-%% @end
-%%-------------------------------------------------------------------
--spec notify_finished_task_async(od_space:id()) -> ok.
-notify_finished_task_async(SpaceId) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, notify_finished_task_async_internal, [SpaceId]).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Sends asynchronous message to server to notify about finished task.
-%% @end
-%%-------------------------------------------------------------------
--spec notify_finished_task_async_internal(od_space:id()) -> ok.
-notify_finished_task_async_internal(SpaceId) ->
-    gen_server2:cast(?SERVER(SpaceId), ?FINISHED).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% @equiv check_internal(SpaceId)
-%% @end
-%%-------------------------------------------------------------------
--spec check(od_space:id()) -> ok.
-check(SpaceId) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, check_internal, [SpaceId]).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Function used to cast task for printing length of queue and number
-%% of active tasks.
-%% @end
-%%-------------------------------------------------------------------
--spec check_internal(od_space:id()) -> ok.
-check_internal(SpaceId) ->
-    call(SpaceId, check).
+-spec notify_handled_request(od_space:id(), replica_deletion:job_id(), replica_deletion:job_type()) -> ok.
+notify_handled_request(SpaceId, JobId, JobType) ->
+    call(SpaceId, ?REQUEST(?FINISHED, JobId, JobType)).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Delegates processing of deletion results to appropriate model
 %% @end
 %%-------------------------------------------------------------------
--spec process_result(replica_deletion:type(), od_space:id(), file_meta:uuid(),
-    replica_deletion:result(), replica_deletion:report_id()) -> ok.
-process_result(autocleaning, SpaceId, FileUuid, Result, ARId) ->
-    autocleaning_controller:process_replica_deletion_result(Result, SpaceId, FileUuid, ARId);
-process_result(eviction, _SpaceId, FileUuid, Result, TransferId) ->
-    replica_eviction_worker:process_replica_deletion_result(Result, FileUuid, TransferId).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%% @end
-%%--------------------------------------------------------------------
--spec(start_link(od_space:id()) ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(SpaceId) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, gen_server2, start_link, [?SERVER(SpaceId), ?MODULE, [SpaceId], []]).
+-spec process_result(od_space:id(), file_meta:uuid(), replica_deletion:result(), replica_deletion:job_id(),
+    replica_deletion:job_type()) -> ok.
+process_result(SpaceId, FileUuid, Result, JobId, JobType) ->
+    Module = job_type_to_module(JobType),
+    Module:process_replica_deletion_result(Result, SpaceId, FileUuid, JobId).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns setting for deletion tasks.
-%% Finds supporting provider and blocks it can support
+%% Finds supporting provider and blocks that it can support.
+%% Prepares deletion request if supporting provider was found.
 %% NOTE!!! currently it finds only providers who have whole file
 %%         replicated and chooses one of them.
 %% @end
 %%-------------------------------------------------------------------
--spec get_setting_for_deletion_task(file_ctx:ctx()) ->
-    {file_meta:uuid(), od_provider:id(), fslogic_blocks:blocks(),
-        version_vector:version_vector()} | undefined.
-get_setting_for_deletion_task(FileCtx) ->
-    case file_ctx:get_local_file_location_doc(FileCtx, false) of
+-spec find_supporter_and_prepare_deletion_request(file_ctx:ctx()) -> undefined | deletion().
+find_supporter_and_prepare_deletion_request(FileCtx) ->
+    case find_deletion_supporter(FileCtx) of
         {undefined, _} ->
             undefined;
-        {LocalLocation, FileCtx2} ->
+        {[{Provider, Blocks} | _], FileCtx2} ->
+            % todo VFS-4628 handle retries to other providers
+            FileUuid = file_ctx:get_uuid_const(FileCtx2),
+            {LocalLocation, _} = file_ctx:get_local_file_location_doc(FileCtx2, false),
             VV = file_location:get_version_vector(LocalLocation),
-            case replica_finder:get_duplicated_blocks(FileCtx2, VV) of
-                {[{Provider, Blocks} | _], FileCtx3} ->
-                    % todo VFS-4628 handle retries to other providers
-                    FileUuid = file_ctx:get_uuid_const(FileCtx3),
-                    {FileUuid, Provider, Blocks, VV};
-                {[], _} ->
-                    undefined;
-                {undefined, _} ->
-                    undefined
-            end
+            prepare_deletion_request(FileUuid, Provider, Blocks, VV)
     end.
 
+
+-spec prepare_deletion_request(file_meta:uuid(), oneprovider:id(), fslogic_blocks:blocks(),
+    version_vector:version_vector()) -> deletion().
+prepare_deletion_request(FileUuid, Provider, Blocks, VV) ->
+    ?DELETION(FileUuid, Provider, Blocks, VV).
+
+-spec job_type_to_module(replica_deletion:job_type()) -> module().
+job_type_to_module(?AUTOCLEANING_JOB) ->
+    autocleaning_run_controller;
+job_type_to_module(?EVICTION_JOB) ->
+    replica_eviction_worker.
 
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%% @end
-%%--------------------------------------------------------------------
--spec(init(Args :: term()) ->
-    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore).
+-spec(init([od_space:id()]) -> {ok, state()} |{stop, Reason :: term()} | ignore).
 init([SpaceId]) ->
-    {ok, #state{
-        space_id = SpaceId
-    }}.
+    {ok, #state{space_id = SpaceId}}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling call messages
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-    {stop, Reason :: term(), NewState :: #state{}}).
+
+-spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
+    {reply, Reply :: term(), state()} |
+    {reply, Reply :: term(), state(), timeout() | hibernate} |
+    {noreply, state()} |
+    {noreply, state(), timeout() | hibernate} |
+    {stop, Reason :: term(), Reply :: term(), state()} |
+    {stop, Reason :: term(), state()}).
+handle_call(Request = #request{type = #deletion{}}, From, State = #state{
+    active_requests_num = RequestsNum,
+    max_requests_num = MaxRequestsNum
+}) when RequestsNum < MaxRequestsNum ->
+    gen_server2:reply(From, ok),
+    State2 = State#state{active_requests_num = RequestsNum + 1},
+    handle_deletion_request(Request, State2),
+    {noreply, State2};
+handle_call(Request = #request{type = #deletion{}}, From, State = #state{
+    queue = Queue,
+    active_requests_num = MaxRequestsNum,
+    max_requests_num = MaxRequestsNum
+}) ->
+    % queue is full, don't reply so that the calling process is blocked
+    State2 = State#state{queue = queue:in({From, Request}, Queue)},
+    {noreply, State2};
 handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
     handle_cast(Request, State).
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_cast(Request :: term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}).
-handle_cast(check, State = #state{ids_queue = IdsQueue, active_tasks = Active}) ->
-    ?critical("~nQueue: ~p~nActive: ~p~n", [queue:len(IdsQueue), Active]),
-    {noreply, State, ?DIE_AFTER};
-handle_cast(Task = #task{id = ReportId}, State = #state{
-    active_tasks = ActiveTasks,
-    ids_to_cancel = IdsToCancel,
-    space_id = SpaceId,
-    max_active_tasks = MaxActiveTasks
-}) when ActiveTasks < MaxActiveTasks ->
-    % handle task
-    case gb_sets:is_element(ReportId, IdsToCancel) of
-        true ->
-            ok = cancel_task(Task, SpaceId);
-        false ->
-            ok = handle_task(Task, SpaceId)
-    end,
-    {noreply, State#state{active_tasks = ActiveTasks + 1}, ?DIE_AFTER};
-handle_cast(Task = #task{id = ReportId}, State = #state{
-    queues = Queues,
-    ids_queue = IdsQueue
+-spec(handle_cast(Request :: term(), state()) ->
+    {noreply, state()} |
+    {noreply, state(), timeout() | hibernate} |
+    {stop, Reason :: term(), state()}).
+handle_cast(#request{type = ?FINISHED}, State = #state{
+    active_requests_num = ActiveRequestsNum,
+    queue = Queue
 }) ->
-    % there are too many active requests, add this one to queue
-    QueuePerId = maps:get(ReportId, Queues, queue:new()),
-    QueuePerId2 = queue:in(Task, QueuePerId),
-    {noreply, State#state{
-        queues = Queues#{ReportId => QueuePerId2},
-        ids_queue = queue:in(ReportId, IdsQueue)
-    }, ?DIE_AFTER};
-handle_cast(?FINISHED, State = #state{
-    queues = Queues,
-    ids_queue = IdsQueue,
-    active_tasks = ActiveTasks
-}) ->
-    case queue:out(IdsQueue) of
-        {empty, IdsQueue} ->
-            State2 = State#state{
-                active_tasks = ActiveTasks - 1
-            },
-            {noreply, State2, ?DIE_AFTER};
-        {{value, ReportId}, IdsQueue2} ->
-            QueuePerId = maps:get(ReportId, Queues),
-            {{value, Task}, QueuePerId2} = queue:out(QueuePerId),
-            State2 = State#state{
-                ids_queue = IdsQueue2,
-                queues = Queues#{ReportId => QueuePerId2},
-                active_tasks = ActiveTasks - 1
-            },
-            handle_cast(Task, State2)
+    case queue:out(Queue) of
+        {empty, Queue} ->
+            State2 = State#state{active_requests_num = ActiveRequestsNum2 = ActiveRequestsNum - 1},
+            case ActiveRequestsNum2 =:= 0 of
+                true -> {stop, normal, State2};
+                false -> {noreply, State2}
+            end;
+        {{value, {From, Request}}, Queue2} ->
+            gen_server2:reply(From, ok),
+            State2 = State#state{queue = Queue2},
+            handle_deletion_request(Request, State2),
+            {noreply, State2}
     end;
-handle_cast(?CANCEL(ReportId), State = #state{ids_to_cancel = CancelledIds}) ->
-    {noreply, State#state{ids_to_cancel = gb_sets:add(ReportId, CancelledIds)}, ?DIE_AFTER};
-handle_cast(?CANCEL_DONE(ReportId), State = #state{ids_to_cancel = CancelledIds}) ->
-    {noreply, State#state{ids_to_cancel = gb_sets:delete_any(ReportId, CancelledIds)}, ?DIE_AFTER};
+handle_cast(?REQUEST(?CANCEL, JobId, JobType), State = #state{jobs_to_cancel = JobsToCancel}) ->
+    {noreply, State#state{jobs_to_cancel = gb_sets:add(?JOB_KEY(JobId, JobType), JobsToCancel)}};
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
-    {noreply, State, ?DIE_AFTER}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_info(Info :: timeout() | term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}).
-handle_info(_Info, State) ->
     {noreply, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%% @end
-%%--------------------------------------------------------------------
--spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #state{}) -> term()).
-terminate(_Reason, _State) ->
-    ok.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%% @end
-%%--------------------------------------------------------------------
--spec(code_change(OldVsn :: term() | {down, term()}, State :: #state{},
+-spec(handle_info(Info :: timeout() | term(), state()) ->
+    {noreply, state()} |
+    {noreply, state(), timeout() | hibernate} |
+    {stop, Reason :: term(), state()}).
+handle_info(Info, State) ->
+    ?log_bad_request(Info),
+    {noreply, State}.
+
+
+-spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
+    state()) -> term()).
+terminate(Reason, State) ->
+    ?log_terminate(Reason, State).
+
+
+-spec(code_change(OldVsn :: term() | {down, term()}, state(),
     Extra :: term()) ->
-    {ok, NewState :: #state{}} | {error, Reason :: term()}).
+    {ok, state()} | {error, Reason :: term()}).
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec(start(od_space:id()) -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
+start(SpaceId) ->
+    Node = datastore_key:responsible_node(SpaceId),
+    rpc:call(Node, gen_server2, start, [?SERVER(SpaceId), ?MODULE, [SpaceId], []]).
+
+-spec notify_handled_request_async(od_space:id(), replica_deletion:job_id(), replica_deletion:job_type()) -> ok.
+notify_handled_request_async(SpaceId, JobId, JobType) ->
+    gen_server2:cast(?SERVER(SpaceId), ?REQUEST(?FINISHED, JobId, JobType)).
+
 
 %%-------------------------------------------------------------------
 %% @private
@@ -432,88 +316,84 @@ code_change(_OldVsn, State, _Extra) ->
 %% call one more time.
 %% @end
 %%-------------------------------------------------------------------
--spec call(od_space:id(), term()) -> ok.
+-spec call(od_space:id(), request() | term()) -> ok.
 call(SpaceId, Request) ->
     try
-        gen_server2:call(?SERVER(SpaceId), Request)
+        gen_server2:call(?SERVER(SpaceId), Request, infinity)
     catch
         exit:{noproc, _} ->
-            start_link(SpaceId),
+            start(SpaceId),
             call(SpaceId, Request);
         exit:{normal, _} ->
-            start_link(SpaceId),
+            start(SpaceId),
             call(SpaceId, Request);
         exit:{{shutdown, timeout}, _} ->
-            start_link(SpaceId),
+            start(SpaceId),
             call(SpaceId, Request)
     end.
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles given task.
-%% @end
-%%-------------------------------------------------------------------
--spec handle_task(task(), od_space:id()) -> ok.
-handle_task(#task{
-    task = #deletion_task{
+-spec handle_deletion_request(request(), state()) -> ok.
+handle_deletion_request(Request = #request{type =#deletion{}, job_id = JobId, job_type = JobType}, #state{
+    active_requests_num = ActiveRequestsNum,
+    max_requests_num = MaxRequestsNum,
+    jobs_to_cancel = JobsToCancel,
+    space_id = SpaceId
+}) when ActiveRequestsNum =< MaxRequestsNum ->
+    case gb_sets:is_element(?JOB_KEY(JobId, JobType), JobsToCancel) of
+        true ->
+            cancel_request(Request, SpaceId);
+        false ->
+            maybe_send_request(Request, SpaceId)
+    end.
+
+-spec maybe_send_request(request(), od_space:id()) -> ok.
+maybe_send_request(Request = #request{
+    type = #deletion{
         uuid = FileUuid,
         supporting_provider = ProviderId,
         blocks = Blocks,
-        version = Version,
-        type = Type
+        version = Version
     },
-    id = ReportId
-} = Task, SpaceId) ->
+    job_id = JobId,
+    job_type = JobType
+}, SpaceId
+) ->
     {StorageId, _} = file_ctx:get_storage_id(file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))),
     case file_qos:is_replica_required_on_storage(FileUuid, StorageId) of
         false ->
-            {ok, _} = request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
-                Type, SpaceId),
+            {ok, _} = request_deletion_support(SpaceId, FileUuid, ProviderId, Blocks, Version, JobId, JobType),
             ok;
         true ->
-            cancel_task(Task, SpaceId)
+            % This is needed to avoid deadlock as cancel_task
+            % makes a synchronous call to this process.
+            cancel_request(Request, SpaceId)
     end.
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Requests deletion support
-%% @end
-%%-------------------------------------------------------------------
--spec request_deletion_support(file_meta:uuid(), od_provider:id(),
+
+-spec request_deletion_support(od_space:id(), file_meta:uuid(), od_provider:id(),
     fslogic_blocks:blocks(), version_vector:version_vector(),
-    replica_deletion:report_id(), replica_deletion:type(), od_space:id()) ->
+    replica_deletion:job_id(), replica_deletion:job_type()) ->
     {ok, replica_deletion:id()} | {error, term()}.
-request_deletion_support(FileUuid, ProviderId, Blocks, Version, ReportId,
-    Type, SpaceId
-) ->
-    replica_deletion:request(FileUuid, Blocks, Version, ProviderId, SpaceId,
-        Type, ReportId).
+request_deletion_support(SpaceId, FileUuid, ProviderId, Blocks, Version, JobId, JobType) ->
+    replica_deletion:request(FileUuid, Blocks, Version, ProviderId, SpaceId, JobType, JobId).
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Cancels task.
-%% Notification tasks are just ignored. Deletion tasks are handled
-%% by functions appropriate to deletion_task type.
-%% @end
-%%-------------------------------------------------------------------
--spec cancel_task(task(), od_space:id()) -> ok.
-cancel_task(#task{task = #deletion_task{type = Type}, id = ReportId}, SpaceId) ->
-    mark_processed_file(Type, ReportId, SpaceId),
-    notify_finished_task_async(SpaceId).
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Delegates increasing processed_files counter to appropriate module
-%% @end
-%%-------------------------------------------------------------------
--spec mark_processed_file(replica_deletion:type(), replica_deletion:report_id(),
-    od_space:id()) -> ok.
-mark_processed_file(autocleaning, ReportId, SpaceId) ->
-    autocleaning_controller:notify_processed_file(SpaceId, ReportId);
-mark_processed_file(eviction, TransferId, _) ->
-    {ok, _} = transfer:increment_files_processed_counter(TransferId),
-    ok.
+-spec cancel_request(request(), od_space:id()) -> ok.
+cancel_request(#request{type = #deletion{uuid = FileUuid}, job_type = JobType, job_id = JobId}, SpaceId) ->
+    process_result(SpaceId, FileUuid, {error, canceled}, JobId, JobType),
+    notify_handled_request_async(SpaceId, JobId, JobType).
+
+
+-spec find_deletion_supporter(file_ctx:ctx()) ->
+    {undefined | [{od_provider:id(), fslogic_blocks:blocks()}], file_ctx:ctx()}.
+find_deletion_supporter(FileCtx) ->
+    % duplicated block will be found only for public blocks
+    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx, skip_local_blocks),
+    case replica_finder:get_remote_duplicated_blocks(LocationDocs) of
+        undefined ->
+            {undefined, FileCtx2};
+        [] ->
+            {undefined, FileCtx2};
+        DuplicatedBlocks ->
+            {DuplicatedBlocks, FileCtx2}
+    end.

@@ -152,17 +152,15 @@ cache_consistency_test(Config) ->
     ?assertEqual({<<"omega">>, private, 99}, get_cached_user_1(Config)),
 
 
-    % Pushing an older revision should cause {error, stale_record}
+    % Pushing an older revision should not cause cache overwrite
     invalidate_user_1_cache(Config),
     simulate_user_1_push(Config, <<"alpha">>, shared, 10),
 
-    ?assertEqual({error, stale_record}, simulate_user_1_push(Config, <<"beta">>, shared, 9)),
-    ?assertEqual({error, stale_record}, simulate_user_1_push(Config, <<"beta">>, private, 3)),
-    ?assertEqual({error, stale_record}, simulate_user_1_push(Config, <<"beta">>, protected, 7)),
+    simulate_user_1_push(Config, <<"beta">>, shared, 9),
+    simulate_user_1_push(Config, <<"beta">>, private, 3),
+    simulate_user_1_push(Config, <<"beta">>, protected, 7),
 
-    ?assertEqual({<<"alpha">>, shared, 10}, get_cached_user_1(Config)),
-
-    ok.
+    ?assertEqual({<<"alpha">>, shared, 10}, get_cached_user_1(Config)).
 
 
 async_request_handling_test(Config) ->
@@ -266,20 +264,19 @@ end_per_suite(Config) ->
 
 % Simulates a push message from Onezone with new user data (for ?USER_1)
 simulate_user_1_push(Config, Username, Scope, Revision) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
     Data = case Scope of
         private -> ?USER_PRIVATE_DATA_VALUE(?USER_1);
         protected -> ?USER_PROTECTED_DATA_VALUE(?USER_1);
         shared -> ?USER_SHARED_DATA_VALUE(?USER_1)
     end,
-    rpc:call(Node, gs_client_worker, process_push_message, [#gs_push_graph{
+    logic_tests_common:simulate_push(Config, #gs_push_graph{
         gri = #gri{type = od_user, id = ?USER_1, aspect = instance, scope = Scope},
         change_type = updated,
         data = Data#{
             <<"username">> => Username,
             <<"revision">> => Revision
         }
-    }]).
+    }).
 
 
 get_cached_user_1(Config) ->

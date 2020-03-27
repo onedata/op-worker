@@ -17,7 +17,6 @@
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-
 %% API
 -export([generate_file_id/0, create_test_file/3, read_test_file/3,
     update_test_file/3, remove_test_file/4]).
@@ -103,7 +102,7 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
     Handle = helpers:get_helper_handle(Helper, UserCtx),
     case helpers:unlink(Handle, FileId, Size) of
         ok -> ok;
-        {error, enoent} -> ok;
+        {error, ?ENOENT} -> ok;
         {error, Reason} ->
             ?error("Storage test file removal failed: ~tp", [Reason]),
             throw(?ERROR_STORAGE_TEST_FAILED(remove))

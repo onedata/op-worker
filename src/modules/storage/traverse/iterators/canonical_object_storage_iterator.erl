@@ -19,27 +19,11 @@
 -include("modules/storage/traverse/storage_traverse.hrl").
 
 %% storage_iterator callbacks
--export([init/2, get_children_and_next_batch_job/1, is_dir/1]).
+-export([get_children_and_next_batch_job/1, is_dir/1]).
 
 %%%===================================================================
 %%% storage_iterator callbacks
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link storage_iterator} callback init/2.
-%% @end
-%%--------------------------------------------------------------------
--spec init(storage_traverse:master_job(), storage_traverse:run_opts()) -> storage_traverse:master_job().
-init(StorageTraverse = #storage_traverse_master{storage_file_ctx = StorageFileCtx}, Opts) ->
-    case maps:get(marker, Opts, undefined) of
-        undefined ->
-            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-            StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-            StorageTraverse#storage_traverse_master{marker = storage_file_id:space_dir_id(SpaceId, StorageId)};
-        Marker ->
-            StorageTraverse#storage_traverse_master{marker = Marker}
-    end.
 
 %%--------------------------------------------------------------------
 %% @doc

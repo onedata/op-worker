@@ -185,7 +185,7 @@ stale_upload_file_should_be_deleted(Config) ->
     % but after 1min (INACTIVITY_PERIOD) not finalized stale upload files should be deleted
     timer:sleep(timer:seconds(100)),
     ?assertMatch(false, rpc:call(WorkerP1, file_upload_manager, is_upload_registered, [UserId, Guid]), ?ATTEMPTS),
-    ?assertMatch({error, enoent}, lfm_proxy:stat(WorkerP1, SessionId, {guid, Guid}), ?ATTEMPTS).
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP1, SessionId, {guid, Guid}), ?ATTEMPTS).
 
 
 finished_upload_file_should_be_left_intact(Config) ->

@@ -113,6 +113,9 @@
 
     harvesters = [] :: [od_harvester:id()],
 
+    support_parameters = #{} :: space_support:parameters_per_provider(),
+    support_state = #{} :: space_support:support_state_per_provider(),
+
     cache_state = #{} :: cache_state()
 }).
 
@@ -262,7 +265,10 @@
     file_handle :: undefined | helpers:file_handle(),
     file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),
-    file_uuid :: file_meta:uuid(),
+    % file_uuid can be `undefined` if sfm_handle is not
+    % associated with any file in the system.
+    % It is associated only with file on storage.
+    file_uuid :: undefined | file_meta:uuid(),
     space_id :: undefined | od_space:id(),
     storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
@@ -460,7 +466,7 @@
     bytes_to_release = 0 :: non_neg_integer(),
     released_files = 0 :: non_neg_integer(),
 
-    index_token :: undefined | file_popularity_view:index_token()
+    view_traverse_token :: undefined | view_traverse:token()
 }).
 
 %% Model which stores information about auto-cleaning per given space.
@@ -482,8 +488,9 @@
     provider_id :: undefined | oneprovider:id(),
     storage_id :: undefined | storage:id(),
     file_id :: undefined | helpers:file_id(),
+    rename_src_file_id :: undefined | helpers:file_id(),
     blocks = [] :: fslogic_location_cache:stored_blocks(),
-    version_vector = #{},
+    version_vector = #{} :: version_vector:version_vector(),
     size = 0 :: non_neg_integer() | undefined,
     space_id :: undefined | od_space:id(),
     recent_changes = {[], []} :: {
@@ -565,7 +572,7 @@
 
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
-    seq = #{} :: #{od_provider:id() => couchbase_changes:seq()}
+    seq = #{} :: #{od_provider:id() => {couchbase_changes:seq(), datastore_doc:timestamp()}}
 }).
 
 %% Model that holds state entries for DBSync worker
@@ -609,8 +616,7 @@
 
 %% Model for holding current quota state for spaces
 -record(space_quota, {
-    current_size = 0 :: non_neg_integer(),
-    last_autocleaning_check = 0 :: non_neg_integer()
+    current_size = 0 :: non_neg_integer()
 }).
 
 %% Record that holds monitoring id
@@ -781,8 +787,8 @@
     version_vector = #{} :: version_vector:version_vector(),
     requester :: od_provider:id(),
     requestee :: od_provider:id(),
-    report_id :: replica_deletion:report_id(),
-    type :: replica_deletion:type()
+    job_id :: replica_deletion:job_id(),
+    job_type :: replica_deletion:job_type()
 }).
 
 %% Model used for setting read-write lock to synchronize replica deletion

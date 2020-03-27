@@ -148,7 +148,7 @@ request(Client, Req, Timeout) ->
 invalidate_cache(#gri{type = Type, id = Id, aspect = instance}) ->
     invalidate_cache(Type, Id);
 invalidate_cache(#gri{type = temporary_token_secret, id = Id, aspect = user}) ->
-    temporary_token_secret:invalidate_cache(Id).
+    ok = temporary_token_secret:invalidate_cache(Id).
 
 
 %%--------------------------------------------------------------------
@@ -158,8 +158,30 @@ invalidate_cache(#gri{type = temporary_token_secret, id = Id, aspect = user}) ->
 %%--------------------------------------------------------------------
 -spec invalidate_cache(gs_protocol:entity_type(), gs_protocol:entity_id()) -> ok.
 invalidate_cache(Type, Id) ->
-    Type:invalidate_cache(Id).
+    ok = Type:invalidate_cache(Id).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Handles a GraphSync push message from Onezone. The message is handled
+%% asynchronously so as not to block the gs_client_worker process (especially
+%% because the push handling logic can use GraphSync internally).
+%% In case of errors, the GS channel is terminated (a reconnect will be
+%% performed automatically).
+%% @end
+%%--------------------------------------------------------------------
+-spec process_push_message(gs_protocol:push()) -> pid().
+process_push_message(Message) ->
+    spawn(fun() ->
+        try
+            process_push_message_async(Message)
+        catch Type:Reason ->
+            ?error_stacktrace("Error processing GS push message from Onezone - ~w:~p", [
+                Type, Reason
+            ]),
+            force_terminate()
+        end
+    end).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -310,38 +332,6 @@ terminate(Reason, #state{} = State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-
--spec process_push_message(gs_protocol:push()) -> any().
-process_push_message(#gs_push_nosub{gri = GRI}) ->
-    ?debug("Subscription cancelled: ~s", [gri:serialize(GRI)]),
-    invalidate_cache(GRI);
-
-process_push_message(#gs_push_error{error = Error}) ->
-    ?error("Unexpected graph sync error: ~p", [Error]);
-
-process_push_message(#gs_push_graph{gri = GRI, change_type = deleted}) ->
-    ProviderId = oneprovider:get_id_or_undefined(),
-    case GRI of
-        #gri{type = od_provider, id = ProviderId, aspect = instance} ->
-            oneprovider:on_deregister();
-        #gri{type = od_space, id = SpaceId, aspect = instance} ->
-            main_harvesting_stream:space_removed(SpaceId);
-        #gri{type = od_token, id = TokenId, aspect = instance} ->
-            auth_cache:report_token_deletion(TokenId);
-        #gri{type = temporary_token_secret, id = UserId, aspect = user} ->
-            auth_cache:report_temporary_tokens_deletion(UserId);
-        _ ->
-            ok
-    end,
-
-    invalidate_cache(GRI),
-    ?debug("Entity deleted in OZ: ~s", [gri:serialize(GRI)]);
-
-process_push_message(#gs_push_graph{gri = GRI, data = Resource, change_type = updated}) ->
-    Revision = maps:get(<<"revision">>, Resource),
-    Doc = gs_client_translator:translate(GRI, Resource),
-    coalesce_cache(get_connection_pid(), GRI, Doc, Revision).
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -373,6 +363,39 @@ start_gs_connection() ->
             ]),
             {error, Reason}
     end.
+
+
+%% @private
+-spec process_push_message_async(gs_protocol:push()) -> ok.
+process_push_message_async(#gs_push_nosub{gri = GRI}) ->
+    ?debug("Subscription cancelled: ~s", [gri:serialize(GRI)]),
+    invalidate_cache(GRI);
+
+process_push_message_async(#gs_push_error{error = Error}) ->
+    ?error("Unexpected graph sync error: ~p", [Error]);
+
+process_push_message_async(#gs_push_graph{gri = GRI, change_type = deleted}) ->
+    ProviderId = oneprovider:get_id_or_undefined(),
+    case GRI of
+        #gri{type = od_provider, id = ProviderId, aspect = instance} ->
+            oneprovider:on_deregister();
+        #gri{type = od_space, id = SpaceId, aspect = instance} ->
+            main_harvesting_stream:space_removed(SpaceId);
+        #gri{type = od_token, id = TokenId, aspect = instance} ->
+            auth_cache:report_token_deletion(TokenId);
+        #gri{type = temporary_token_secret, id = UserId, aspect = user} ->
+            auth_cache:report_temporary_tokens_deletion(UserId);
+        _ ->
+            ok
+    end,
+    invalidate_cache(GRI),
+    ?debug("Entity deleted in OZ: ~s", [gri:serialize(GRI)]);
+
+process_push_message_async(#gs_push_graph{gri = GRI, data = Resource, change_type = updated}) ->
+    Revision = maps:get(<<"revision">>, Resource),
+    Doc = gs_client_translator:translate(GRI, Resource),
+    coalesce_cache(get_connection_pid(), GRI, Doc, Revision),
+    ok.
 
 
 %%--------------------------------------------------------------------

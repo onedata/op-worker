@@ -21,7 +21,7 @@
 -export([create/1, create/2, create_and_update_quota/2, save/1,
     save_and_update_quota/2, get/1, update/2,
     delete/1, delete_and_update_quota/1, get_owner_id/1,
-    set_last_replication_timestamp/2]).
+    set_last_replication_timestamp/2, get_last_replication_timestamp/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -268,6 +268,17 @@ get_version_vector(#file_location{version_vector = VV}) ->
 %% Sets last_replication_timestamp field in the doc.
 %% @end
 %%-------------------------------------------------------------------
+-spec get_last_replication_timestamp(doc() | record()) -> non_neg_integer() | undefined.
+get_last_replication_timestamp(#document{value = FL}) ->
+    get_last_replication_timestamp(FL);
+get_last_replication_timestamp(FL = #file_location{}) ->
+    FL#file_location.last_replication_timestamp.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Sets last_replication_timestamp field in the doc.
+%% @end
+%%-------------------------------------------------------------------
 -spec set_last_replication_timestamp(doc(), non_neg_integer()) -> doc().
 set_last_replication_timestamp(Doc = #document{value = FL}, Timestamp) ->
     Doc#document{
@@ -337,7 +348,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -402,6 +413,24 @@ get_record_struct(4) ->
         {last_rename, {{string, string}, integer}},
         {storage_file_created, boolean},
         {last_replication_timestamp, integer}
+    ]};
+get_record_struct(5) ->
+    {record, [
+        {uuid, string},
+        {provider_id, string},
+        {storage_id, string},
+        {file_id, string},
+        % added field rename_src_file_id which allows to determine
+        % that file on storage is being renamed at the moment
+        {rename_src_file_id, string},
+        {blocks, [term]},
+        {version_vector, #{term => integer}},
+        {size, integer},
+        {space_id, string},
+        {recent_changes, {[term], [term]}},
+        {last_rename, {{string, string}, integer}},
+        {storage_file_created, boolean},
+        {last_replication_timestamp, integer}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -428,4 +457,10 @@ upgrade_record(3, {?MODULE, Uuid, ProviderId, StorageId, FileId, Blocks,
     {4, {?MODULE,
         Uuid, ProviderId, StorageId, FileId, Blocks, VersionVector, Size,
         SpaceId, RecentChanges, LastRename, StorageFileCreated, undefined
+    }};
+upgrade_record(4, {?MODULE, Uuid, ProviderId, StorageId, FileId, Blocks,
+    VersionVector, Size, SpaceId, RecentChanges, LastRename, StorageFileCreated, LastReplicationTimestamp}) ->
+    {5, {?MODULE,
+        Uuid, ProviderId, StorageId, FileId, undefined, Blocks, VersionVector, Size,
+        SpaceId, RecentChanges, LastRename, StorageFileCreated, LastReplicationTimestamp
     }}.

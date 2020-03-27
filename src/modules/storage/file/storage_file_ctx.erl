@@ -137,8 +137,7 @@ get_handle_const(#storage_file_ctx{
     space_id = SpaceId,
     storage_id = StorageId
 }) ->
-    storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId,
-        StorageFileId, undefined).
+    storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId, StorageFileId).
 
 
 
@@ -191,7 +190,5 @@ get_xattr(StorageFileCtx = #storage_file_ctx{xattr = undefined}, XattrName) ->
         {error, 'Function not implemented'} ->
             throw(?ENOTSUP)
     end;
-get_xattr(StorageFileCtx = #storage_file_ctx{
-    xattr = Xattr
-}, _XattrName) ->
+get_xattr(StorageFileCtx = #storage_file_ctx{xattr = Xattr}, _XattrName) ->
     {Xattr, StorageFileCtx}.

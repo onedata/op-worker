@@ -23,7 +23,7 @@
 -export([create/1, get/1, delete/1, update/2]).
 -export([apply_size_change/2, available_size/1, assert_write/1, assert_write/2,
     get_disabled_spaces/0, apply_size_change_and_maybe_emit/2, current_size/1,
-    create_or_update/2, update_last_check_timestamp/2]).
+    create_or_update/2, get_space_id/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_posthooks/0, get_record_version/0,
@@ -36,9 +36,6 @@
 -export_type([id/0, record/0, doc/0]).
 
 -define(CTX, #{model => ?MODULE}).
-
--define(AUTOCLEANING_CHECK_INTERVAL,
-    application:get_env(?APP_NAME, autocleaning_check_interval, 1000)). % 1s
 
 %%%===================================================================
 %%% API
@@ -90,6 +87,10 @@ create_or_update(SpaceId, UpdateFun) ->
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
     datastore_model:delete(?CTX, Key).
+
+-spec get_space_id(doc()) -> id().
+get_space_id(#document{key = SpaceId, value = #space_quota{}}) ->
+    SpaceId.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -214,20 +215,14 @@ get_disabled_spaces() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec autocleaning_check_posthook(atom(), term(), term()) -> term().
-autocleaning_check_posthook(create, _, Result = {ok, #document{key = SpaceId, value = SQ}}) ->
-    autocleaning_api:maybe_check_and_start_autocleaning(SpaceId, SQ),
+autocleaning_check_posthook(create, _, Result = {ok, #document{key = SpaceId}}) ->
+    autocleaning_checker:check(SpaceId),
     Result;
-autocleaning_check_posthook(update, _, Result = {ok, #document{key = SpaceId, value = SQ}}) ->
-    autocleaning_api:maybe_check_and_start_autocleaning(SpaceId, SQ),
+autocleaning_check_posthook(update, _, Result = {ok, #document{key = SpaceId}}) ->
+    autocleaning_checker:check(SpaceId),
     Result;
 autocleaning_check_posthook(_, _, Result) ->
     Result.
-
--spec update_last_check_timestamp(id(), non_neg_integer()) -> ok | {error, term()}.
-update_last_check_timestamp(SpaceId, NewLastCheckTimestamp) ->
-    ok = ?extract_ok(update(SpaceId, fun(SQ) ->
-        {ok, SQ#space_quota{last_autocleaning_check = NewLastCheckTimestamp}}
-    end)).
 
 %%%===================================================================
 %%% Internal functions
@@ -265,7 +260,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    2.
+    3.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -282,6 +277,10 @@ get_record_struct(2) ->
     {record, [
         {current_size, integer},
         {last_autocleaning_check, integer}
+    ]};
+get_record_struct(3) ->
+    {record, [
+        {current_size, integer}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -292,7 +291,9 @@ get_record_struct(2) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, CurrentSize}) ->
-    {2, {?MODULE, CurrentSize, 0}}.
+    {2, {?MODULE, CurrentSize, 0}};
+upgrade_record(2, {?MODULE, CurrentSize, _LastAutocleaningCheck}) ->
+    {3, {?MODULE, CurrentSize}}.
 
 %%--------------------------------------------------------------------
 %% @doc
