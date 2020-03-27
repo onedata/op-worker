@@ -472,7 +472,10 @@ get_json_metadata_test(Config) ->
             method = get,
             path = http_utils:append_url_parameters(
                 <<"data/", FileId/binary, "/metadata/json">>,
-                maps:with([<<"inherited">>, <<"filter_type">>, <<"filter">>], Data)
+                maps:with(
+                    [<<"inherited">>, <<"filter_type">>, <<"filter">>],
+                    utils:ensure_defined(Data, undefined, #{})
+                )
             )
         }
     end end,
@@ -482,7 +485,10 @@ get_json_metadata_test(Config) ->
                 method = get,
                 path = http_utils:append_url_parameters(
                     <<"metadata/json/", FilePath/binary>>,
-                    maps:with([<<"inherited">>, <<"filter_type">>, <<"filter">>], Data)
+                    maps:with(
+                        [<<"inherited">>, <<"filter_type">>, <<"filter">>],
+                        utils:ensure_defined(Data, undefined, #{})
+                    )
                 )
             }
         end
@@ -493,7 +499,10 @@ get_json_metadata_test(Config) ->
                 method = get,
                 path = http_utils:append_url_parameters(
                     <<"metadata-id/json/", Fileid/binary>>,
-                    maps:with([<<"inherited">>, <<"filter_type">>, <<"filter">>], Data)
+                    maps:with(
+                        [<<"inherited">>, <<"filter_type">>, <<"filter">>],
+                        utils:ensure_defined(Data, undefined, #{})
+                    )
                 )
             }
         end
@@ -741,7 +750,71 @@ get_json_metadata_test(Config) ->
             RegularFileWithoutJsonMetadataPath, RegularFileWithoutJsonMetadataGuid,
             RegularFileWithJsonMetadataPath, RegularFileWithJsonMetadataGuid
         }
-    ]).
+    ]),
+
+    %% TEST GET RDF METADATA FOR FILE ON PROVIDER NOT SUPPORTING USER
+
+    ClientSpecForGetRdfInSpace1Scenarios = #client_spec{
+        correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        unauthorized = [?NOBODY],
+        forbidden = [?USER_IN_SPACE_2_AUTH],
+        supported_clients_per_node = SupportedClientsPerNode
+    },
+    ValidateRestGetRdfOnProvidersNotSupportingUserFun = fun
+        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
+            Node == Provider2,
+            Client == ?USER_IN_BOTH_SPACES_AUTH
+        ->
+            ?assertEqual(?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)), Response);
+        (_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
+            ?assertEqual(?DIR_LAYER_1_JSON_METADATA, Response)
+    end,
+    Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_1),
+    lfm_proxy:set_metadata(Provider1, ?ROOT_SESS_ID, {guid, Space1Guid}, json, ?DIR_LAYER_1_JSON_METADATA, []),
+    {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
+
+    ?assert(api_test_utils:run_scenarios(Config, [
+        #scenario_spec{
+            name = <<"Get json metadata from ", ?SPACE_1/binary, " with json set on provider not supporting user using /data/ rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpecForGetRdfInSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareRestArgsFun(Space1ObjectId),
+            validate_result_fun = ValidateRestGetRdfOnProvidersNotSupportingUserFun
+        },
+        #scenario_spec{
+            name = <<"Get json metadata from ", ?SPACE_1/binary, " with json set on provider not supporting user using /files/ rest endpoint">>,
+            type = rest_with_file_path,
+            target_nodes = Providers,
+            client_spec = ClientSpecForGetRdfInSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(<<"/", ?SPACE_1/binary>>),
+            validate_result_fun = ValidateRestGetRdfOnProvidersNotSupportingUserFun
+        },
+        #scenario_spec{
+            name = <<"Get json metadata from ", ?SPACE_1/binary, " with json set on provider not supporting user using /files-id/ rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpecForGetRdfInSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(Space1ObjectId),
+            validate_result_fun = ValidateRestGetRdfOnProvidersNotSupportingUserFun
+        },
+        #scenario_spec{
+            name = <<"Get json metadata from ", ?SPACE_1/binary, " with json set on provider not supporting user using gs api">>,
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ClientSpecForGetRdfInSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareGsArgsFun(Space1Guid, private),
+            validate_result_fun = fun
+                (#api_test_ctx{node = Node, client = Client}, Result) when
+                    Node == Provider2,
+                    Client == ?USER_IN_BOTH_SPACES_AUTH
+                ->
+                    ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
+                (_TestCaseCtx, {ok, Result}) ->
+                    ?assertEqual(#{<<"metadata">> => ?DIR_LAYER_1_JSON_METADATA}, Result)
+            end
+        }
+    ])).
 
 
 %%%===================================================================
