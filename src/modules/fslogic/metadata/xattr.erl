@@ -115,9 +115,17 @@ remove(UserCtx, FileCtx0, XattrName) ->
 ) ->
     {ok, [custom_metadata:name()]}.
 list_xattrs_insecure(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
-    {ok, Xattrs} = case IncludeInherited of
-        true -> list_ancestor_xattrs(UserCtx, FileCtx, []);
-        false -> list_direct_xattrs(FileCtx)
+    {ok, DirectXattrs} = list_direct_xattrs(FileCtx),
+    AllXattrs = case IncludeInherited of
+        true ->
+            {ok, AncestorsXattrs} = list_ancestor_xattrs(UserCtx, FileCtx, []),
+            % Filter out cdmi attributes - those are not inherited
+            InheritedXattrs = lists:filter(fun(Key) ->
+                not is_cdmi_xattr(Key)
+            end, AncestorsXattrs),
+            lists:usort(DirectXattrs ++ InheritedXattrs);
+        false ->
+            DirectXattrs
     end,
 
     FilteredXattrs = case ShowInternal of
@@ -129,12 +137,12 @@ list_xattrs_insecure(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
             % it is omitted.
             case file_ctx:get_active_perms_type(FileCtx, ignore_deleted) of
                 {acl, _} ->
-                    [?ACL_KEY | Xattrs];
+                    [?ACL_KEY | AllXattrs];
                 _ ->
-                    Xattrs
+                    AllXattrs
             end;
         false ->
-            lists:filter(fun(Key) -> not is_internal_xattr(Key) end, Xattrs)
+            lists:filter(fun(Key) -> not is_internal_xattr(Key) end, AllXattrs)
     end,
     {ok, FilteredXattrs}.
 
@@ -161,21 +169,20 @@ list_direct_xattrs(FileCtx) ->
 -spec list_ancestor_xattrs(user_ctx:ctx(), file_ctx:ctx(), [custom_metadata:name()]) ->
     {ok, [custom_metadata:name()]} | {error, term()}.
 list_ancestor_xattrs(UserCtx, FileCtx0, GatheredXattrNames) ->
-    AllXattrNames = case list_direct_xattrs(FileCtx0) of
-        {ok, []} ->
-            GatheredXattrNames;
-        {ok, XattrNames} ->
-            lists:usort(XattrNames ++ GatheredXattrNames)
-    end,
-
     FileGuid = file_ctx:get_guid_const(FileCtx0),
     {ParentCtx, _FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
 
     case file_ctx:get_guid_const(ParentCtx) of
         FileGuid ->
             % root dir/share root file -> there are no parents
-            {ok, AllXattrNames};
+            {ok, GatheredXattrNames};
         _ ->
+            AllXattrNames = case list_direct_xattrs(FileCtx0) of
+                {ok, []} ->
+                    GatheredXattrNames;
+                {ok, XattrNames} ->
+                    lists:usort(XattrNames ++ GatheredXattrNames)
+            end,
             list_ancestor_xattrs(UserCtx, ParentCtx, AllXattrNames)
     end.
 
@@ -198,3 +205,9 @@ is_internal_xattr(XattrName) ->
     lists:any(fun(InternalPrefix) ->
         str_utils:binary_starts_with(XattrName, InternalPrefix)
     end, ?METADATA_INTERNAL_PREFIXES).
+
+
+%% @private
+-spec is_cdmi_xattr(custom_metadata:name()) -> boolean().
+is_cdmi_xattr(XattrName) ->
+    str_utils:binary_starts_with(XattrName, ?CDMI_PREFIX).
