@@ -422,8 +422,8 @@ mock_graph_get(GRI = #gri{type = od_user, id = Id, aspect = instance}, AuthOverr
             true;
         {UserId, _, _} ->
             true;
-        {_, shared, ?THROUGH_SPACE(ThroughSpaceId)} ->
-            SpaceEffUsers = ?SPACE_EFF_USERS_VALUE(ThroughSpaceId),
+        {_, shared, ?THROUGH_SPACE(_ThroughSpaceId)} ->
+            SpaceEffUsers = ?SPACE_EFF_USERS_VALUE(_ThroughSpaceId),
             UserPrivileges = maps:get(ClientUserId, SpaceEffUsers, []),
             lists:member(atom_to_binary(?SPACE_VIEW, utf8), UserPrivileges) andalso
                 maps:is_key(UserId, SpaceEffUsers);
@@ -462,8 +462,8 @@ mock_graph_get(GRI = #gri{type = od_group, id = GroupId, aspect = instance}, Aut
             lists:member(atom_to_binary(?SPACE_VIEW, utf8), UserPrivileges) andalso
                 maps:is_key(GroupId, ?SPACE_EFF_GROUPS_VALUE(_ThroughSpId));
         {#auth_override{client_auth = ?USER_GS_TOKEN_AUTH(SerializedToken)}, shared, _} ->
-            UserId = token_to_user_id(SerializedToken),
-            lists:member(GroupId, ?USER_EFF_GROUPS(UserId));
+            _UserId = token_to_user_id(SerializedToken),
+            lists:member(GroupId, ?USER_EFF_GROUPS(_UserId));
         {#auth_override{client_auth = ?USER_GS_TOKEN_AUTH(_SerializedToken)}, _, _} ->
             false;
         % undefined AuthOverride means asking with provider's auth

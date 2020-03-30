@@ -20,20 +20,11 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% storage_iterator callbacks
--export([init/2, get_children_and_next_batch_job/1, is_dir/1]).
+-export([get_children_and_next_batch_job/1, is_dir/1]).
 
 %%%===================================================================
 %%% storage_iterator callbacks
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link storage_iterator} callback init/2.
-%% @end
-%%--------------------------------------------------------------------
--spec init(storage_traverse:master_job(), storage_traverse:run_opts()) -> storage_traverse:master_job().
-init(StorageTraverse = #storage_traverse_master{}, _Opts) ->
-    StorageTraverse.
 
 %%--------------------------------------------------------------------
 %% @doc

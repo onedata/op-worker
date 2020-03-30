@@ -1120,6 +1120,11 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceId)
     end),
 
+    test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(SpaceId) ->
+        {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
+        {ok, maps:keys(Providers)}
+    end),
+
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(Client, SpaceId) ->
         {ok, #document{value = #od_space{providers = Providers}}} = GetSpaceFun(Client, SpaceId),
         {ok, maps:keys(Providers)}

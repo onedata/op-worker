@@ -22,7 +22,8 @@
 -export([installed_cluster_generation/0]).
 -export([oldest_known_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
--export([listeners/0, modules_with_args/0]).
+-export([listeners/0]).
+-export([upgrade_essential_workers/0, custom_workers/0]).
 -export([before_init/1, after_init/1]).
 -export([upgrade_cluster/1]).
 -export([renamed_models/0]).
@@ -101,11 +102,23 @@ listeners() -> [
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:modules_with_args/0}.
+%% List of workers modules with configs that should be started before upgrade.
 %% @end
 %%--------------------------------------------------------------------
--spec modules_with_args() -> Models :: [{atom(), [any()]}].
-modules_with_args() -> filter_disabled_workers([
+-spec upgrade_essential_workers() -> [{module(), [any()]}].
+upgrade_essential_workers() -> filter_disabled_workers([
+    {gs_worker, [
+        {supervisor_flags, gs_worker:supervisor_flags()}
+    ]}
+]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:custom_workers/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec custom_workers() -> [{module(), [any()]}].
+custom_workers() -> filter_disabled_workers([
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
@@ -117,9 +130,6 @@ modules_with_args() -> filter_disabled_workers([
     {monitoring_worker, [
         {supervisor_flags, monitoring_worker:supervisor_flags()},
         {supervisor_children_spec, monitoring_worker:supervisor_children_spec()}
-    ]},
-    {gs_worker, [
-        {supervisor_flags, gs_worker:supervisor_flags()}
     ]},
     {rtransfer_worker, [
         {supervisor_flags, rtransfer_worker:supervisor_flags()},

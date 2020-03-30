@@ -14,6 +14,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -21,6 +22,9 @@
 
 %% API
 -export([handle/1]).
+
+% exported for test
+-export([handle_confirmation/1, can_support_deletion/1]).
 
 -define(run_if_is_self(ProviderId, F),
     case oneprovider:is_self(ProviderId) of
@@ -42,28 +46,28 @@
 %%-------------------------------------------------------------------
 -spec handle(replica_deletion:doc()) -> ok.
 handle(REDoc = #document{value = #replica_deletion{
-    action = request,
+    action = ?REQUEST_DELETION_SUPPORT,
     requestee = Requestee
 }}) ->
     ?run_if_is_self(Requestee, fun() ->
         handle_request(REDoc)
     end);
 handle(REDoc = #document{value = #replica_deletion{
-    action = confirm,
+    action = ?CONFIRM_DELETION_SUPPORT,
     requester = Requester
 }}) ->
     ?run_if_is_self(Requester, fun() ->
-        handle_confirmation(REDoc)
+        replica_deletion_changes:handle_confirmation(REDoc)
     end);
 handle(REDoc = #document{value = #replica_deletion{
-    action = refuse,
+    action = ?REFUSE_DELETION_SUPPORT,
     requester = Requester
 }}) ->
     ?run_if_is_self(Requester, fun() ->
         handle_refusal(REDoc)
     end);
 handle(REDoc = #document{value = #replica_deletion{
-    action = release_lock,
+    action = ?RELEASE_DELETION_LOCK,
     requestee = Requestee
 }}) ->
     ?run_if_is_self(Requestee, fun() ->
@@ -89,7 +93,7 @@ handle_request(#document{
 }}) ->
     case replica_deletion_lock:acquire_read_lock(FileUuid) of
         ok ->
-            case can_support_deletion(RD) of
+            case replica_deletion_changes:can_support_deletion(RD) of
                 {true, Blocks} ->
                     replica_deletion:confirm(RDId, Blocks);
                 false ->
@@ -114,11 +118,11 @@ handle_confirmation(#document{
         space_id = SpaceId,
         supported_blocks = Blocks,
         version_vector = VV,
-        type = Type,
-        report_id = ReportId
+        job_type = JobType,
+        job_id = JobId
     }}) ->
-    replica_deletion_master:notify_finished_task(SpaceId),
-    replica_deletion_worker:cast(FileUuid, SpaceId, Blocks, VV, RDId, Type, ReportId).
+    replica_deletion_master:notify_handled_request(SpaceId, JobId, JobType),
+    replica_deletion_worker:cast(FileUuid, SpaceId, Blocks, VV, RDId, JobType, JobId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -131,11 +135,11 @@ handle_refusal(#document{
     value = #replica_deletion{
         space_id = SpaceId,
         file_uuid = FileUuid,
-        report_id = ReportId,
-        type = Type
+        job_id = JobId,
+        job_type = JobType
 }}) ->
-    replica_deletion_master:notify_finished_task(SpaceId),
-    replica_deletion_master:process_result(Type, SpaceId, FileUuid, {error, replica_deletion_refused}, ReportId).
+    replica_deletion_master:notify_handled_request(SpaceId, JobId, JobType),
+    replica_deletion_master:process_result(SpaceId, FileUuid, {error, replica_deletion_refused}, JobId, JobType).
 
 %%-------------------------------------------------------------------
 %% @private
