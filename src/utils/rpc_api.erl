@@ -48,7 +48,8 @@
     autocleaning_list_reports/4,
     autocleaning_get_run_report/1,
     autocleaning_status/1,
-    autocleaning_force_start/1,
+    autocleaning_force_run/1,
+    autocleaning_cancel_run/1,
     get_provider_id/0,
     get_access_token/0,
     get_identity_token/0,
@@ -425,10 +426,15 @@ autocleaning_status(SpaceId) ->
     autocleaning_api:status(SpaceId).
 
 
--spec autocleaning_force_start(od_space:id()) ->
+-spec autocleaning_force_run(od_space:id()) ->
     {ok, autocleaning:run_id()} | {error, term()}.
-autocleaning_force_start(SpaceId) ->
-    autocleaning_api:force_start(SpaceId).
+autocleaning_force_run(SpaceId) ->
+    autocleaning_api:force_run(SpaceId).
+
+
+-spec autocleaning_cancel_run(od_space:id()) -> ok.
+autocleaning_cancel_run(SpaceId) ->
+    autocleaning_api:cancel_run(SpaceId).
 
 
 -spec force_oz_connection_start() -> boolean().

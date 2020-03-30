@@ -119,8 +119,8 @@ delete(SpaceId) ->
     case get_current_run(SpaceId) of
         undefined -> ok;
         ARId ->
-            autocleaning_controller:stop_cleaning(SpaceId),
-            autocleaning_run:delete(ARId, SpaceId)
+            % TODO VFS-6050 stop autocleaning gracefully when space is unsupported
+            autocleaning_api:cancel_run(SpaceId, ARId)
     end,
     datastore_model:delete(?CTX, SpaceId).
 

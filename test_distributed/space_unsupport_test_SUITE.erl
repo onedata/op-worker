@@ -141,6 +141,7 @@ cleanup_traverse_stage_test(Config) ->
     ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
     check_files_on_storage(Worker1, AllPaths, false),
+    assert_storage_cleaned_up(Worker1, StorageId),
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
     
@@ -228,35 +229,7 @@ delete_synced_documents_stage_test(Config) ->
     % wait for documents to expire 
     timer:sleep(timer:seconds(70)),
     
-    %% @TODO VFS-6135 Add model transferred_file when stopping dbsync is implemented
-    SyncedModels = [
-        file_meta, file_location, custom_metadata, times, space_transfer_stats, transfer,
-        replica_deletion, index, tree_traverse_job, qos_entry, qos_status
-    ], 
-    
-    lists:foreach(fun(Model) ->
-        #{
-            memory_driver_ctx := #{table := Table},
-            disc_driver_ctx := DiscDriverCtx
-        } = 
-            datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
-        Keys = lists:foldl(fun(Num, AccOut) ->
-            TableName = list_to_atom(atom_to_list(Table) ++ integer_to_list(Num)),
-            AccOut ++ rpc:call(Worker1, ets, foldl, [fun
-                ({Key, _Doc}, AccIn) -> [Key | AccIn]
-            end, [], TableName])
-        end, [], lists:seq(1,20)),
-    
-        Result = rpc:call(Worker1, couchbase_driver, get, [DiscDriverCtx, Keys]),
-        ?assert(lists:foldl(
-            fun (?ERROR_NOT_FOUND, Acc) -> Acc;
-                ({ok, _, #document{scope = <<>>}}, Acc) -> Acc;
-                ({ok, _, #document{deleted = true}}, Acc) -> Acc; 
-                ({ok, _, Doc}, _) ->
-                    ct:pal("Document not cleaned up in model ~p:~n ~p", [Model, Doc]),
-                    false
-            end, true, Result))
-    end, SyncedModels).
+    assert_synced_documents_cleaned_up(Worker1, ?SPACE_ID).
     
 
 delete_local_documents_stage_test(Config) ->
@@ -286,13 +259,7 @@ delete_local_documents_stage_test(Config) ->
     },
     ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
-    ?assertEqual({error, not_found}, rpc:call(Worker1, space_strategies, get, [?SPACE_ID])),
-    ?assertEqual({error, not_found}, rpc:call(Worker1, storage_sync_monitoring, get, [?SPACE_ID, StorageId])),
-    ?assertEqual(undefined, rpc:call(Worker1, autocleaning, get_config, [?SPACE_ID])),
-    ?assertEqual({error, not_found}, rpc:call(Worker1, autocleaning, get, [?SPACE_ID])),
-    ?assertEqual(false, rpc:call(Worker1, file_popularity_api, is_enabled, [?SPACE_ID])),
-    ?assertEqual({error, not_found}, rpc:call(Worker1, file_popularity_config, get, [?SPACE_ID])),
-    ?assertMatch({ok, [], _}, rpc:call(Worker1, traverse_task_list, list, [<<"unsupport_cleanup_traverse">>, ended])).
+    assert_local_documents_cleaned_up(Worker1, ?SPACE_ID, StorageId).
 
 
 overall_test(Config) ->
@@ -324,7 +291,13 @@ overall_test(Config) ->
         end,
         CallNum + 1
     end, 0, space_unsupport:get_all_stages()),
-    ok.
+    
+    % wait for documents to expire 
+    timer:sleep(timer:seconds(70)),
+
+    assert_storage_cleaned_up(Worker1, StorageId),
+    assert_synced_documents_cleaned_up(Worker1, ?SPACE_ID),
+    assert_local_documents_cleaned_up(Worker1, ?SPACE_ID, StorageId).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -336,7 +309,7 @@ init_per_suite(Config) ->
         application:start(ssl),
         initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), NewConfig)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils]} | Config].
 
 
 end_per_suite(Config) ->
@@ -384,6 +357,70 @@ end_per_testcase(overall_test, Config) ->
     end_per_testcase(default, Config);
 end_per_testcase(_, Config) ->
     lfm_proxy:teardown(Config).
+
+
+%%%===================================================================
+%%% Assertion helper functions
+%%%===================================================================
+
+assert_local_documents_cleaned_up(Worker, SpaceId, StorageId) ->
+    ?assertEqual({error, not_found}, rpc:call(Worker, space_strategies, get, [SpaceId])),
+    ?assertEqual({error, not_found}, rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId])),
+    ?assertEqual(undefined, rpc:call(Worker, autocleaning, get_config, [SpaceId])),
+    ?assertEqual({error, not_found}, rpc:call(Worker, autocleaning, get, [SpaceId])),
+    ?assertEqual(false, rpc:call(Worker, file_popularity_api, is_enabled, [SpaceId])),
+    ?assertEqual({error, not_found}, rpc:call(Worker, file_popularity_config, get, [SpaceId])),
+    ?assertMatch({ok, [], _}, rpc:call(Worker, traverse_task_list, list, [<<"unsupport_cleanup_traverse">>, ended])).
+
+
+assert_synced_documents_cleaned_up(Worker, SpaceId) ->
+    SyncedModels = lists:filter(fun(Model) ->
+        case lists:member({get_ctx, 0}, Model:module_info(exports)) of
+            false -> false;
+            true ->
+                case Model:get_ctx() of
+                    #{sync_enabled := true} -> true;
+                    _ -> false
+                end
+        end
+    end, datastore_config_plugin:get_models()),
+    %% @TODO VFS-6135 Add model transferred_file when stopping dbsync is implemented
+    SyncedModels1 = SyncedModels -- [transferred_file],
+    
+    {PoolActiveEntries, _} = pool_utils:get_pools_entries_and_sizes(Worker, memory),
+    ActiveMemoryKeys = lists:map(fun(Entry) ->
+        element(2, Entry)
+    end, lists:flatten(PoolActiveEntries)),
+    
+    lists:foreach(fun(Model) ->
+        #{
+            memory_driver_ctx := MemoryDriverContext,
+            disc_driver_ctx := DiscDriverCtx
+        } =
+            datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
+        Keys = lists:foldl(fun(#{table := Table}, AccOut) ->
+            AccOut ++ lists:map(fun
+                ({Key, _}) -> Key
+            end, rpc:call(Worker, ets, tab2list, [Table]))
+        end, [], datastore_multiplier:get_names(MemoryDriverContext)),
+        
+        Result = rpc:call(Worker, couchbase_driver, get, [DiscDriverCtx, Keys]),
+        ?assert(lists:foldl(
+            fun (?ERROR_NOT_FOUND, Acc) -> Acc;
+                ({ok, _, #document{scope = Scope}}, Acc) when Scope =/= SpaceId -> Acc;
+                ({ok, _, #document{deleted = true}}, Acc) -> Acc; 
+                ({ok, _, Doc}, _) ->
+                    ct:pal("Document not cleaned up in model ~p:~n ~p", [Model, Doc]),
+                    false
+            end, true, Result)),
+        ?assertEqual([], lists_utils:intersect(Keys, ActiveMemoryKeys))
+    end, SyncedModels1).
+
+
+assert_storage_cleaned_up(Worker, StorageId) ->
+    Path = storage_mount_point(Worker, StorageId),
+    {ok, FileList} = rpc:call(Worker, file, list_dir_all, [Path]),
+    ?assertEqual([], FileList).
 
 %%%===================================================================
 %%% Internal functions

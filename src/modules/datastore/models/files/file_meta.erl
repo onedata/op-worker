@@ -32,7 +32,7 @@
 -export([delete_child_link/4, foreach_child/3, add_child_link/4, delete_deletion_link/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
--export([get_parent/1, get_parent_uuid/1]).
+-export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_child/2, get_child_uuid/2,
     list_children/2, list_children/3, list_children/4,
@@ -87,7 +87,7 @@
 %% @formatter:on
 
 -export_type([
-    doc/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0, 
+    doc/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
     type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
     offset/0, non_neg_offset/0, limit/0, file_meta/0
 ]).
@@ -1001,6 +1001,12 @@ has_suffix(Name) ->
 -spec is_deleted(doc()) -> boolean().
 is_deleted(#document{value = #file_meta{deleted = Deleted1}, deleted = Deleted2}) ->
     Deleted1 orelse Deleted2.
+
+-spec get_provider_id(doc() | file_meta()) -> oneprovider:id().
+get_provider_id(#file_meta{provider_id = ProviderId}) ->
+    ProviderId;
+get_provider_id(#document{value = FileMeta}) ->
+    get_provider_id(FileMeta).
 
 %%%===================================================================
 %%% Internal functions
