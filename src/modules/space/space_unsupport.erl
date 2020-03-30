@@ -296,15 +296,13 @@ expire_docs(#document{value = Value} = Doc) ->
 
 %% @private
 -spec expire_links(datastore_model:model(), datastore:key(), datastore:doc()) -> ok.
-expire_links(Model, RoutingKey, Doc = #document{key = Key}) ->
+expire_links(Model, RoutingKey, Doc) ->
     Ctx = Model:get_ctx(),
     Ctx1 = Ctx#{
         expiry => ?DOCUMENT_EXPIRY_TIME,
         routing_key => RoutingKey
     },
-    Ctx3 = datastore_model_default:set_defaults(Ctx1),
-    Ctx4 = datastore_multiplier:extend_name(RoutingKey, Ctx3),
-    datastore_router:route(save, [Ctx4, Key, Doc]),
+    datastore_model:save_with_routing_key(Ctx1, Doc),
     ok.
 
 
