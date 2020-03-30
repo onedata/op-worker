@@ -124,9 +124,9 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(Job, MasterJobArgs) ->
-    #tree_traverse{traverse_info = TraverseInfo} = Job,
+do_master_job(#tree_traverse{traverse_info = TraverseInfo} = Job, MasterJobArgs) ->
     #{remove_storage_files := RemoveStorageFiles} = TraverseInfo,
+    
     MasterJobFinishedCallback = fun(TaskId, SlaveJobs, MasterJobs, _SpaceId, Uuid, _BatchLastFilename) ->
         ChildrenCount = length(SlaveJobs) + length(MasterJobs),
         cleanup_traverse_status:report_children_listed(TaskId, Uuid, ChildrenCount),
@@ -137,14 +137,14 @@ do_master_job(Job, MasterJobArgs) ->
     end,
     
     LastBatchFinishedCallback = fun(TaskId, Uuid, SpaceId) ->
-        case cleanup_traverse_status:report_last_batch(TaskId, Uuid) of
-            traversed -> 
-                FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
-                cleanup_dir(TaskId, FileCtx, RemoveStorageFiles);
-            not_traversed -> ok
-        end
+        FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
+        Status = cleanup_traverse_status:report_last_batch(TaskId, Uuid),
+        maybe_cleanup_dir(Status, TaskId, FileCtx, RemoveStorageFiles)
     end, 
-    tree_traverse:do_master_job(Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchFinishedCallback).
+    
+    {ok, #{master_jobs := MasterJobs, slave_jobs := SlaveJobs}} = 
+        tree_traverse:do_master_job(Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchFinishedCallback),
+    {ok, #{slave_jobs => SlaveJobs, async_master_jobs => MasterJobs}}.
 
 -spec do_slave_job(traverse:job(), id()) -> ok.
 do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, TaskId) ->
@@ -162,12 +162,7 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, TaskId)
     fslogic_location_cache:clear_blocks(FileCtx1, LocationId),
     fslogic_location_cache:delete_location(FileUuid, LocationId),
     
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
-    case cleanup_traverse_status:report_child_traversed(TaskId, ParentUuid) of
-        traversed -> cleanup_dir(TaskId, ParentFileCtx, RemoveStorageFiles);
-        not_traversed -> ok
-    end,
-    ok.
+    file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles).
 
 %%%===================================================================
 %%% Internal functions
@@ -202,9 +197,20 @@ cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
         true -> ok;
         false ->
             {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
-            ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
-            case cleanup_traverse_status:report_child_traversed(TaskId, ParentUuid) of
-                traversed -> cleanup_dir(TaskId, ParentFileCtx, RemoveStorageFiles);
-                not_traversed -> ok
-            end
+            file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles)
     end.
+
+
+%% @private
+-spec file_traverse_finished(id(), file_ctx:ctx(), boolean()) -> ok.
+file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles) ->
+    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    ParentStatus = cleanup_traverse_status:report_child_traversed(TaskId, ParentUuid),
+    maybe_cleanup_dir(ParentStatus, TaskId, ParentFileCtx, RemoveStorageFiles).
+
+
+%% @private
+-spec maybe_cleanup_dir(cleanup_traverse_status:status(), id(), file_ctx:ctx(), boolean()) -> ok.
+maybe_cleanup_dir(traversed, TaskId, FileCtx, RemoveStorageFiles) ->
+    cleanup_dir(TaskId, FileCtx, RemoveStorageFiles);
+maybe_cleanup_dir(not_traversed, _TaskId, _FileCtx, _RemoveStorageFiles) -> ok.

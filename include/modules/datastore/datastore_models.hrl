@@ -397,13 +397,17 @@
     % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id). 
     % It is persisted so when slave job is restarted no additional task is created.
     subtask_id = undefined :: space_unsupport:subtask_id() | undefined,
-    % Id of process waiting to be notified of task finish
+    % Id of process waiting to be notified of task finish.
     % NOTE: should be updated after provider restart
     slave_job_pid  = undefined :: pid() | undefined
 }).
 
+%% Model that holds information necessary to tell whether whole subtree 
+%% of a directory was traversed so this directory can be cleaned up.
 -record(cleanup_traverse_status, {
-    children_count = 0 :: integer(),
+    % number of children listed but not yet traversed
+    children_count = 0 :: non_neg_integer(),
+    % flag that informs whether all batches of children have been listed
     last_batch = false :: boolean()
 }).
 

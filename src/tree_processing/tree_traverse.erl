@@ -51,8 +51,7 @@
     batch_size => batch_size(),
     traverse_info => traverse_info(),
     % Provider which should execute task
-    target_provider_id => oneprovider:id(),
-    additional_data => traverse:additional_data()
+    target_provider_id => oneprovider:id()
 }.
 
 % This callback is executed when each master job is finished 

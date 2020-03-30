@@ -6,10 +6,16 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This model is responsible for holding information about cleanup traverse status.
-%%% It holds information about remaining children and whether all children have been listed.
-%%% Based on this information it can be determined, whether all children have been traversed 
-%%% (no children left and all batches have been evaluated).
+%%% This model holds information necessary to tell whether whole subtree 
+%%% of a directory was traversed so this directory can be cleaned up.
+%%% One `cleanup_traverse_status` document is created per directory.
+%%%
+%%% Traverse lists children in batches and model holds information about 
+%%% number of remaining (i.e not yet traversed) already listed children 
+%%% and whether all batches of have been listed. 
+%%% Based on this information it can be determined whether subtree of a 
+%%% directory was traversed (no children left and all batches have been 
+%%% evaluated).
 %%% @end
 %%%--------------------------------------------------------------------
 -module(cleanup_traverse_status).
@@ -37,6 +43,8 @@
 -type record() :: #cleanup_traverse_status{}.
 -type diff() :: datastore_doc:diff(record()).
 -type status() :: traversed | not_traversed.
+
+-export_type([status/0]).
 
 -define(CTX, #{
     model => ?MODULE
