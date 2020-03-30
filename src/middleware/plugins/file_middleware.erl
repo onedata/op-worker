@@ -369,7 +369,7 @@ data_spec_get(#gri{aspect = attrs}) -> #{
 
 data_spec_get(#gri{aspect = xattrs}) -> #{
     optional => #{
-        <<"attribute">> => {binary, any},
+        <<"attribute">> => {binary, non_empty},
         <<"inherited">> => {boolean, any},
         <<"show_internal">> => {boolean, any}
     }
