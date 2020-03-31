@@ -28,6 +28,9 @@
     % Rest scenario that results in ?ERROR_NOT_SUPPORTED regardless
     % of test case.
     rest_not_supported |
+    % Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
+    % of test case due to for example invalid aspect.
+    gs_not_supported |
     % Standard graph sync scenario
     gs.
 
@@ -91,7 +94,7 @@
     % desired effect on environment (e.g. check if resource deleted during
     % test was truly deleted).
     % First argument tells whether request made during testcase should succeed
-    verify_fun = fun(_, _) -> true end :: fun((ShouldSucceed :: boolean(), api_test_env()) -> ok),
+    verify_fun = fun(_, _) -> true end :: fun((ShouldSucceed :: boolean(), api_test_env()) -> boolean()),
 
     % Function called during testcase to prepare request arguments
     prepare_args_fun :: fun((api_test_ctx()) -> rest_args() | gs_args()),

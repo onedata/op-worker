@@ -33,14 +33,16 @@
 -export([
     get_rdf_metadata_test/1,
     get_json_metadata_test/1,
-    get_xattr_metadata_test/1
+    get_xattr_metadata_test/1,
+    set_rdf_metadata_test/1
 ]).
 
 all() ->
     ?ALL([
         get_rdf_metadata_test,
         get_json_metadata_test,
-        get_xattr_metadata_test
+        get_xattr_metadata_test,
+        set_rdf_metadata_test
     ]).
 
 
@@ -172,7 +174,7 @@ get_rdf_metadata_test(Config) ->
         ?config({session_id, {?USER_IN_BOTH_SPACES, ?GET_DOMAIN(Node)}}, Config)
     end,
 
-    UserSessId = ?config({session_id, {?USER_IN_BOTH_SPACES, ?GET_DOMAIN(Provider2)}}, Config),
+    UserSessId = GetSessionFun(Provider2),
 
     RootDirPath = filename:join(["/", ?SPACE_2, ?SCENARIO_NAME]),
     {ok, RootDirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, RootDirPath, 8#777),
@@ -634,15 +636,11 @@ get_metadata_test_base(
         supported_clients_per_node = SupportedClientsPerNode
     },
 
-    AllParameters = case DataSpec of
+    QsParameters = case DataSpec of
         undefined ->
             [];
-        #data_spec{
-            required = RequiredParams,
-            optional = OptionalParams,
-            at_least_one = AtLeastOneParams
-        } ->
-            RequiredParams ++ OptionalParams ++ AtLeastOneParams
+        #data_spec{optional = OptionalParams} ->
+            OptionalParams
     end,
 
     ConstructPrepareRestArgsFun = fun(FileId) -> fun(#api_test_ctx{data = Data}) ->
@@ -650,7 +648,7 @@ get_metadata_test_base(
             method = get,
             path = http_utils:append_url_parameters(
                 <<"data/", FileId/binary, "/metadata/", MetadataType/binary>>,
-                maps:with(AllParameters, utils:ensure_defined(Data, undefined, #{}))
+                maps:with(QsParameters, utils:ensure_defined(Data, undefined, #{}))
             )
         }
     end end,
@@ -660,7 +658,7 @@ get_metadata_test_base(
                 method = get,
                 path = http_utils:append_url_parameters(
                     <<"metadata/", MetadataType/binary, FilePath/binary>>,
-                    maps:with(AllParameters, utils:ensure_defined(Data, undefined, #{}))
+                    maps:with(QsParameters, utils:ensure_defined(Data, undefined, #{}))
                 )
             }
         end
@@ -671,7 +669,7 @@ get_metadata_test_base(
                 method = get,
                 path = http_utils:append_url_parameters(
                     <<"metadata-id/", MetadataType/binary, "/", Fileid/binary>>,
-                    maps:with(AllParameters, utils:ensure_defined(Data, undefined, #{}))
+                    maps:with(QsParameters, utils:ensure_defined(Data, undefined, #{}))
                 )
             }
         end
@@ -913,13 +911,334 @@ get_metadata_test_base(
                 (#api_test_ctx{node = Node, client = Client}, Result) when
                     Node == Provider2,
                     Client == ?USER_IN_BOTH_SPACES_AUTH
-                    ->
+                ->
                     ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
                 (_TestCaseCtx, {ok, Result}) ->
                     ?assertEqual(#{<<"metadata">> => ExpSpace1Metadata}, Result)
             end
         }
     ])).
+
+
+set_rdf_metadata_test(Config) ->
+    [Provider2, Provider1] = ?config(op_worker_nodes, Config),
+
+    GetSessionFun = fun(Node) ->
+        ?config({session_id, {?USER_IN_BOTH_SPACES, ?GET_DOMAIN(Node)}}, Config)
+    end,
+
+    UserSessId = GetSessionFun(Provider2),
+
+    RootDirPath = filename:join(["/", ?SPACE_2, ?SCENARIO_NAME]),
+    {ok, RootDirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, RootDirPath, 8#777),
+    {ok, ShareId} = lfm_proxy:create_share(Provider2, UserSessId, {guid, RootDirGuid}, <<"share">>),
+
+    DirPath = filename:join([RootDirPath, <<"dir">>]),
+    {ok, DirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, DirPath, 8#777),
+
+    RegularFilePath = filename:join([RootDirPath, <<"file">>]),
+    {ok, RegularFileGuid} = lfm_proxy:create(Provider2, UserSessId, RegularFilePath, 8#777),
+
+    % Wait for metadata sync between providers
+    ?assertMatch(
+        {ok, #file_attr{}},
+        lfm_proxy:stat(Provider1, GetSessionFun(Provider1), {guid, RegularFileGuid}),
+        ?ATTEMPTS
+    ),
+
+    GetMetadataFun = fun(Node, FileGuid) ->
+        SessId = GetSessionFun(Node),
+        lfm_proxy:get_metadata(Node, SessId, {guid, FileGuid}, rdf, [], false)
+    end,
+    RemoveMetadataFun = fun(Node, FileGuid) ->
+        SessId = GetSessionFun(Node),
+        lfm_proxy:remove_metadata(Node, SessId, {guid, FileGuid}, rdf)
+    end,
+
+    DataSpec = #data_spec{
+        required = [<<"metadata">>],
+        correct_values = #{
+            <<"metadata">> => [?RDF_METADATA_1, ?RDF_METADATA_2]
+        }
+    },
+
+    ConstructVerifyEnvForSuccessfulCallsFun = fun(FileGuid) -> fun
+        (false, #api_test_ctx{node = Node}) ->
+            ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS),
+            true;
+        (true, #api_test_ctx{node = Node, data = #{<<"metadata">> := Metadata}}) ->
+            ?assertMatch({ok, Metadata}, GetMetadataFun(Node, FileGuid)),
+
+            case Metadata of
+                ?RDF_METADATA_1 ->
+                    % Do nothing after setting ?RDF_METADATA_1 to test
+                    % overriding it by ?RDF_METADATA_2
+                    ok;
+                ?RDF_METADATA_2 ->
+                    % Remove ?RDF_METADATA_2 to test setting ?RDF_METADATA_1 on clean state
+                    ?assertMatch(ok, RemoveMetadataFun(Node, FileGuid)),
+                    ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS)
+            end,
+            true
+    end end,
+
+    set_metadata_test_base(
+        Config,
+        <<"rdf">>,
+
+        GetMetadataFun,
+        RemoveMetadataFun,
+        ConstructVerifyEnvForSuccessfulCallsFun,
+
+        DataSpec,
+        ShareId,
+        [
+            {<<"dir">>, DirPath, DirGuid},
+            {<<"file">>, RegularFilePath, RegularFileGuid}
+        ]
+    ).
+
+
+-spec set_metadata_test_base(
+    Config :: proplists:proplist(),
+    MetadataType :: binary(),  %% <<"json">> | <<"rdf">> | <<"xattrs">>
+
+    GetMetadataFun :: fun((node(), file_id:file_guid()) -> FileMetadata :: term()),
+    RemoveMetadataFun :: fun((node(), file_id:file_guid()) -> ok),
+    ConstructVerifyEnvForSuccessfulCallsFun :: fun((file_id:file_guid()) ->
+        fun((ShouldSucceed :: boolean(), api_test_env()) -> boolean())
+    ),
+
+    DataSpec :: data_spec(),
+    ShareId :: od_share:id(),
+    FilesList :: [{
+        FileType :: binary(), % <<"file">> | <<"dir">>
+        FilePath :: binary(),
+        FileGuid :: file_id:file_guid()
+    }]
+) ->
+    ok | no_return().
+set_metadata_test_base(
+    Config,
+    MetadataType,
+
+    GetMetadataFun,
+    RemoveMetadataFun,
+    ConstructVerifyEnvForSuccessfulCallsFun,
+
+    DataSpec,
+    ShareId,
+    FilesList
+) ->
+    [Provider2, Provider1] = Providers = ?config(op_worker_nodes, Config),
+
+    SupportedClientsPerNode = #{
+        Provider1 => [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        Provider2 => [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
+    },
+
+    ClientSpecForGetJsonInSpace2Scenarios = #client_spec{
+        correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        unauthorized = [?NOBODY],
+        forbidden = [?USER_IN_SPACE_1_AUTH],
+        supported_clients_per_node = SupportedClientsPerNode
+    },
+
+    % Special case -> any user can make requests for shares but if request is
+    % being made using credentials by user not supported on specific provider
+    % ?ERROR_USER_NOT_SUPPORTED will be returned
+    ClientSpecForShareScenarios = #client_spec{
+        correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        unauthorized = [],
+        forbidden = [],
+        supported_clients_per_node = SupportedClientsPerNode
+    },
+
+    QsParameters = case DataSpec of
+        undefined ->
+            [];
+        #data_spec{optional = OptionalParams} ->
+            OptionalParams
+    end,
+
+    ConstructPrepareRestArgsFun = fun(FileId) -> fun(#api_test_ctx{data = Data}) ->
+        #rest_args{
+            method = put,
+            headers = case MetadataType of
+                <<"rdf">> -> #{<<"content-type">> => <<"application/rdf+xml">>};
+                _ -> #{<<"content-type">> => <<"application/json">>}
+            end,
+            path = http_utils:append_url_parameters(
+                <<"data/", FileId/binary, "/metadata/", MetadataType/binary>>,
+                maps:with(QsParameters, utils:ensure_defined(Data, undefined, #{}))
+            ),
+            body = maps:get(<<"metadata">>, Data)
+        }
+    end end,
+    ConstructPrepareDeprecatedFilePathRestArgsFun = fun(FilePath) ->
+        fun(#api_test_ctx{data = Data}) ->
+            #rest_args{
+                method = put,
+                headers = case MetadataType of
+                    <<"rdf">> -> #{<<"content-type">> => <<"application/rdf+xml">>};
+                    _ -> #{<<"content-type">> => <<"application/json">>}
+                end,
+                path = http_utils:append_url_parameters(
+                    <<"metadata/", MetadataType/binary, FilePath/binary>>,
+                    maps:with(QsParameters, utils:ensure_defined(Data, undefined, #{}))
+                ),
+                body = maps:get(<<"metadata">>, Data)
+            }
+        end
+    end,
+    ConstructPrepareDeprecatedFileIdRestArgsFun = fun(Fileid) ->
+        fun(#api_test_ctx{data = Data}) ->
+            #rest_args{
+                method = put,
+                headers = case MetadataType of
+                    <<"rdf">> -> #{<<"content-type">> => <<"application/rdf+xml">>};
+                    _ -> #{<<"content-type">> => <<"application/json">>}
+                end,
+                path = http_utils:append_url_parameters(
+                    <<"metadata-id/", MetadataType/binary, "/", Fileid/binary>>,
+                    maps:with(QsParameters, utils:ensure_defined(Data, undefined, #{}))
+                ),
+                body = maps:get(<<"metadata">>, Data)
+            }
+        end
+    end,
+    ConstructPrepareGsArgsFun = fun(FileId, Scope) -> fun(#api_test_ctx{data = Data}) ->
+        Aspect = case MetadataType of
+            <<"json">> -> json_metadata;
+            <<"rdf">> -> rdf_metadata;
+            <<"xattrs">> -> xattrs
+        end,
+        #gs_args{
+            operation = create,
+            gri = #gri{type = op_file, id = FileId, aspect = Aspect, scope = Scope},
+            data = Data
+        }
+    end end,
+
+    ValidateRestSuccessfulCallFun = fun(_, {ok, ?HTTP_204_NO_CONTENT, Response}) ->
+        ?assertEqual(#{}, Response)
+    end,
+    ValidateRestOperationNotSupportedFun = fun(_, {ok, ?HTTP_400_BAD_REQUEST, Response}) ->
+        ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
+    end,
+
+    lists:foreach(fun({FileType, FilePath, FileGuid}) ->
+        {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+        ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+        {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
+
+        %% TEST SETTING METADATA FOR FILE IN NORMAL MODE
+
+        ?assert(api_test_utils:run_scenarios(Config, [
+
+            #scenario_spec{
+                name = <<"Set ", MetadataType/binary, " metadata from ", FileType/binary, "using /data/ rest endpoint">>,
+                type = rest,
+                target_nodes = Providers,
+                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareRestArgsFun(FileObjectId),
+                validate_result_fun = ValidateRestSuccessfulCallFun,
+                verify_fun = ConstructVerifyEnvForSuccessfulCallsFun(FileGuid),
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set ", MetadataType/binary, " metadata from ", FileType/binary, " using /files/ rest endpoint">>,
+                type = rest_with_file_path,
+                target_nodes = Providers,
+                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(FilePath),
+                validate_result_fun = ValidateRestSuccessfulCallFun,
+                verify_fun = ConstructVerifyEnvForSuccessfulCallsFun(FileGuid),
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set ", MetadataType/binary, " metadata from ", FileType/binary, " using /files-id/ rest endpoint">>,
+                type = rest,
+                target_nodes = Providers,
+                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(FileObjectId),
+                validate_result_fun = ValidateRestSuccessfulCallFun,
+                verify_fun = ConstructVerifyEnvForSuccessfulCallsFun(FileGuid),
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set ", MetadataType/binary, " metadata from ", FileType/binary, " using gs api">>,
+                type = gs,
+                target_nodes = Providers,
+                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareGsArgsFun(FileGuid, private),
+                validate_result_fun = fun(_, Result) ->
+                    ?assertEqual({ok, undefined}, Result)
+                end,
+                verify_fun = ConstructVerifyEnvForSuccessfulCallsFun(FileGuid),
+                data_spec = DataSpec
+            }
+        ])),
+
+        %% TEST SETTING METADATA FOR SHARED FILE SHOULD BE FORBIDDEN
+
+        % Remove metadata and assert that no below call sets it again
+        RemoveMetadataFun(Provider1, FileGuid),
+
+        VerifyEnvForShareCallsFun = fun(_, #api_test_ctx{node = Node}) ->
+            ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid)),
+            true
+        end,
+
+        ?assert(api_test_utils:run_scenarios(Config, [
+
+            #scenario_spec{
+                name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using /data/ rest endpoint">>,
+                type = rest_not_supported,
+                target_nodes = Providers,
+                client_spec = ClientSpecForShareScenarios,
+                prepare_args_fun = ConstructPrepareRestArgsFun(ShareObjectId),
+                validate_result_fun = ValidateRestOperationNotSupportedFun,
+                verify_fun = VerifyEnvForShareCallsFun,
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using /files-id/ rest endpoint">>,
+                type = rest_not_supported,
+                target_nodes = Providers,
+                client_spec = ClientSpecForShareScenarios,
+                prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(ShareObjectId),
+                validate_result_fun = ValidateRestOperationNotSupportedFun,
+                verify_fun = VerifyEnvForShareCallsFun,
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using gs public api">>,
+                type = gs_not_supported,
+                target_nodes = Providers,
+                client_spec = ClientSpecForShareScenarios,
+                prepare_args_fun = ConstructPrepareGsArgsFun(ShareGuid, public),
+                validate_result_fun = fun(_TestCaseCtx, Result) ->
+                    ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
+                end,
+                verify_fun = VerifyEnvForShareCallsFun,
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using private gs api">>,
+                type = gs,
+                target_nodes = Providers,
+                client_spec = ClientSpecForShareScenarios,
+                prepare_args_fun = ConstructPrepareGsArgsFun(ShareGuid, private),
+                validate_result_fun = fun(_, Result) ->
+                    ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                end,
+                verify_fun = VerifyEnvForShareCallsFun,
+                data_spec = DataSpec
+            }
+        ]))
+    end, FilesList).
 
 
 %%%===================================================================
@@ -932,9 +1251,9 @@ init_per_suite(Config) ->
         NewConfig1 = [{space_storage_mock, false} | NewConfig],
         NewConfig2 = initializer:setup_storage(NewConfig1),
         lists:foreach(fun(Worker) ->
-            test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
+            test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, 100),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, 100),
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, 100),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
             test_utils:set_env(Worker, ?APP_NAME, prefetching, off),

@@ -79,6 +79,8 @@ run_unauthorized_clients_test_cases(Config, #scenario_spec{
         case ScenarioType of
             rest_not_supported ->
                 ?ERROR_NOT_SUPPORTED;
+            gs_not_supported ->
+                ?ERROR_NOT_SUPPORTED;
             rest_with_file_path ->
                 ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
             _ ->
@@ -103,6 +105,8 @@ run_forbidden_clients_test_cases(Config, #scenario_spec{
         required_data_sets(DataSpec),
         case ScenarioType of
             rest_not_supported ->
+                ?ERROR_NOT_SUPPORTED;
+            gs_not_supported ->
                 ?ERROR_NOT_SUPPORTED;
             rest_with_file_path ->
                 ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
@@ -190,6 +194,7 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                     true ->
                         case ScenarioType of
                             rest_not_supported -> ?ERROR_NOT_SUPPORTED;
+                            gs_not_supported -> ?ERROR_NOT_SUPPORTED;
                             _ -> Error
                         end;
                     false ->
@@ -278,7 +283,10 @@ run_test_cases(ScenarioType, TargetNodes, Clients, DataSets, TestCaseFun) ->
     end, true, TargetNodes).
 
 
-filter_available_clients(gs, Clients) ->
+filter_available_clients(Type, Clients) when
+    Type == gs;
+    Type == gs_not_supported
+->
     % TODO VFS-6201 rm when connecting via gs as nobody becomes possible
     Clients -- [?NOBODY];
 filter_available_clients(_ScenarioType, Clients) ->
@@ -295,7 +303,10 @@ validate_error_result(Type, ExpError, {ok, RespCode, RespBody}) when
         {RespCode, RespBody}
     );
 
-validate_error_result(gs, ExpError, Result) ->
+validate_error_result(Type, ExpError, Result) when
+    Type == gs;
+    Type == gs_not_supported
+->
     ?assertEqual(ExpError, Result).
 
 
