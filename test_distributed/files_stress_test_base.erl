@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
+-include_lib("cluster_worker/include/modules/datastore/ha_datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -157,7 +158,7 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata,
     % Setup test
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(Worker) ->
-        ?assertEqual(ok, rpc:call(Worker, ha_management, change_config, [HA_Nodes, cast]))
+        ?assertEqual(ok, rpc:call(Worker, ha_datastore, change_config, [HA_Nodes, ?HA_CAST_PROPAGATION]))
     end, Workers),
 
     User = <<"user1">>,
