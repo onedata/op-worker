@@ -574,7 +574,7 @@ process_answer(Answers, Ans, ToAddV) ->
 ls(_Worker, _SessId, _Dir, _Token, true) ->
     ok;
 ls(Worker, SessId, Dir, Token, _) ->
-    {ok, _, Token2, IsLast} = lfm_proxy:ls(Worker, SessId, {path, Dir}, 0, 2000, Token),
+    {ok, _, Token2, IsLast} = lfm_proxy:get_children(Worker, SessId, {path, Dir}, 0, 2000, Token),
     ls(Worker, SessId, Dir, Token2, IsLast).
 
 get_param_value(ParamName, ParamsList) ->

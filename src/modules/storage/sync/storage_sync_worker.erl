@@ -179,13 +179,13 @@ maybe_start_update_scan(SpaceId, StorageId, SyncConfig) ->
                     ok;
                 not_started ->
                     ImportFinishTime = storage_sync_monitoring:get_import_finish_time(SSMDoc),
-                    case ImportFinishTime + ScanInterval < time_utils:cluster_time_seconds() of
+                    case ImportFinishTime + ScanInterval =< time_utils:cluster_time_seconds() of
                         true -> storage_sync_traverse:run_update(SpaceId, StorageId, UpdateConfig2);
                         false -> ok
                     end;
                 finished ->
                     LastUpdateFinishTime = storage_sync_monitoring:get_last_update_finish_time(SSMDoc),
-                    case LastUpdateFinishTime + ScanInterval < time_utils:cluster_time_seconds() of
+                    case LastUpdateFinishTime + ScanInterval =< time_utils:cluster_time_seconds() of
                         true -> storage_sync_traverse:run_update(SpaceId, StorageId, UpdateConfig2);
                         false -> ok
                     end

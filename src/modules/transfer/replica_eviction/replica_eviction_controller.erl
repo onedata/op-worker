@@ -213,7 +213,7 @@ handle_cast(replica_eviction_failed, State = #state{
     {stop, normal, State};
 
 handle_cast(Request, State = #state{status = Status}) ->
-    ?warning("~p:~p - bad request ~p while in status ~p", [
+    ?debug("~p:~p - bad request ~p while in status ~p", [
         ?MODULE, ?LINE, Request, Status
     ]),
     {noreply, State}.

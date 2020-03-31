@@ -15,7 +15,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/fslogic_sufix.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
@@ -31,19 +31,20 @@
     delete_without_link/1]).
 -export([delete_child_link/4, foreach_child/3, add_child_link/4, delete_deletion_link/3]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1]).
--export([add_share/2, remove_share/2]).
--export([get_parent/1, get_parent_uuid/1]).
+-export([add_share/2, remove_share/2, get_shares/1]).
+-export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_child/2, get_child_uuid/2,
     list_children/2, list_children/3, list_children/4,
     list_children/5, list_children/6,
     list_children_whitelisted/4
 ]).
+-export([get_name/1]).
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
-    get_locations_by_uuid/1, rename/4]).
--export([check_name/3, has_suffix/1]).
+    get_locations_by_uuid/1, rename/4, get_type/1]).
+-export([check_name/3, has_suffix/1, is_deleted/1]).
 % For tests
 -export([get_all_links/2]).
 
@@ -86,7 +87,7 @@
 %% @formatter:on
 
 -export_type([
-    doc/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0, 
+    doc/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
     type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
     offset/0, non_neg_offset/0, limit/0, file_meta/0
 ]).
@@ -291,8 +292,6 @@ delete(#document{
 }) ->
     ?run(begin
         ok = delete_child_link(ParentUuid, Scope, FileUuid, FileName),
-        LocalLocationId = file_location:local_id(FileUuid),
-        fslogic_location_cache:delete_location(FileUuid, LocalLocationId),
         datastore_model:delete(?CTX, FileUuid)
     end);
 delete({path, Path}) ->
@@ -319,11 +318,7 @@ delete_without_link(#document{
 }) ->
     delete_without_link(FileUuid);
 delete_without_link(FileUuid) ->
-    ?run(begin
-        LocalLocationId = file_location:local_id(FileUuid),
-        fslogic_location_cache:delete_location(FileUuid, LocalLocationId),
-        datastore_model:delete(?CTX, FileUuid)
-    end).
+    ?run(begin datastore_model:delete(?CTX, FileUuid) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -345,16 +340,18 @@ add_child_link(ParentUuid, Scope, Name, Uuid) ->
     FileUuid :: uuid(), FileName :: name()) -> ok.
 delete_child_link(ParentUuid, Scope, FileUuid, FileName) ->
     {ok, Links} = datastore_model:get_links(?CTX, ParentUuid, all, FileName),
-    [#link{tree_id = ProviderId, name = FileName, rev = Rev}] = lists:filter(fun
-        (#link{target = Uuid}) -> Uuid == FileUuid
-    end, Links),
-    Ctx = ?CTX#{scope => Scope},
-    Link = {FileName, Rev},
-    case oneprovider:is_self(ProviderId) of
-        true ->
-            ok = datastore_model:delete_links(Ctx, ParentUuid, ProviderId, Link);
-        false ->
-            ok = datastore_model:mark_links_deleted(Ctx, ParentUuid, ProviderId, Link)
+    case lists:filter(fun(#link{target = Uuid}) -> Uuid == FileUuid end, Links) of
+        [#link{tree_id = ProviderId, name = FileName, rev = Rev}] ->
+            Ctx = ?CTX#{scope => Scope},
+            Link = {FileName, Rev},
+            case oneprovider:is_self(ProviderId) of
+                true ->
+                    ok = datastore_model:delete_links(Ctx, ParentUuid, ProviderId, Link);
+                false ->
+                    ok = datastore_model:mark_links_deleted(Ctx, ParentUuid, ProviderId, Link)
+            end;
+        [] ->
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -690,6 +687,12 @@ get_scope_id(Entry) ->
         get_scope_id(Doc)
     end).
 
+-spec get_type(file_meta() | doc()) -> type().
+get_type(#file_meta{type = Type}) ->
+    Type;
+get_type(#document{value = FileMeta}) ->
+    get_type(FileMeta).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Initializes files metadata for onedata user.
@@ -774,6 +777,12 @@ remove_share(FileCtx, ShareId) ->
                 {error, not_found}
         end
     end).
+
+-spec get_shares(doc() | file_meta()) -> {ok, [od_share:id()]}.
+get_shares(#document{value = FileMeta}) ->
+    get_shares(FileMeta);
+get_shares(#file_meta{shares = Shares}) ->
+    {ok, Shares}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -889,6 +898,10 @@ is_child_of_hidden_dir(Path) ->
     {Parent, _} = fslogic_path:basename_and_parent(ParentPath),
     is_hidden(Parent).
 
+-spec get_name(doc()) -> binary().
+get_name(#document{value = #file_meta{name = Name}}) ->
+    Name.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file active permissions type, that is info which permissions
@@ -896,14 +909,16 @@ is_child_of_hidden_dir(Path) ->
 %% or posix otherwise).
 %% @end
 %%--------------------------------------------------------------------
--spec get_active_perms_type(file_meta:uuid()) ->
+-spec get_active_perms_type(file_meta:uuid() | doc()) ->
     {ok, file_meta:permissions_type()} | {error, term()}.
+get_active_perms_type(#document{value = #file_meta{acl = []}}) ->
+    {ok, posix};
+get_active_perms_type(#document{value = #file_meta{}}) ->
+    {ok, acl};
 get_active_perms_type(FileUuid) ->
     case file_meta:get({uuid, FileUuid}) of
-        {ok, #document{value = #file_meta{acl = []}}} ->
-            {ok, posix};
-        {ok, _} ->
-            {ok, acl};
+        {ok, FileDoc} ->
+            get_active_perms_type(FileDoc);
         {error, _} = Error ->
             Error
     end.
@@ -982,6 +997,16 @@ has_suffix(Name) ->
         [BaseName | _] -> {true, BaseName};
         _ -> false
     end.
+
+-spec is_deleted(doc()) -> boolean().
+is_deleted(#document{value = #file_meta{deleted = Deleted1}, deleted = Deleted2}) ->
+    Deleted1 orelse Deleted2.
+
+-spec get_provider_id(doc() | file_meta()) -> oneprovider:id().
+get_provider_id(#file_meta{provider_id = ProviderId}) ->
+    ProviderId;
+get_provider_id(#document{value = FileMeta}) ->
+    get_provider_id(FileMeta).
 
 %%%===================================================================
 %%% Internal functions
@@ -1168,7 +1193,11 @@ get_child_uuid(ParentUuid, TreeIds, Name) ->
 emit_space_dir_created(DirUuid, SpaceId) ->
     FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
     #fuse_response{fuse_response = FileAttr} =
-        attr_req:get_file_attr_light(user_ctx:new(?ROOT_USER_ID), FileCtx, false),
+        attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
+            allow_deleted_files => false,
+            include_size => false,
+            name_conflicts_resolution_policy => allow_name_conflicts
+        }),
     FileAttr2 = FileAttr#file_attr{size = 0},
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr2, []).
 

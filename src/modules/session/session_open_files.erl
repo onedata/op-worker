@@ -48,6 +48,8 @@ register(SessId, FileGuid) ->
 -spec deregister(session:id(), fslogic_worker:file_guid()) ->
     ok | {error, term()}.
 deregister(SessId, FileGuid) ->
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    replica_synchronizer:cancel_transfers_of_session(FileUuid, SessId),
     session:delete_local_links(SessId, ?OPEN_FILES_TREE_ID, FileGuid).
 
 %%--------------------------------------------------------------------
