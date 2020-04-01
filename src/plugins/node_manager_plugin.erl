@@ -213,7 +213,7 @@ upgrade_cluster(1) ->
 %% @end
 %%--------------------------------------------------------------------
 on_cluster_ready() ->
-    gs_worker:run_on_connect_if_connected().
+    gs_worker:on_cluster_ready().
 
 %%--------------------------------------------------------------------
 %% @doc

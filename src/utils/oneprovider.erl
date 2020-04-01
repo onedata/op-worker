@@ -298,14 +298,6 @@ on_connect_to_oz() ->
     set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
     ok = auth_cache:report_oz_connection_start(),
-    case node_manager:get_cluster_status() of
-        {error, cluster_not_ready} -> ok;
-        {ok, _} -> on_connect_to_oz_if_cluster_ready()
-    end.
-
-%% @private
--spec on_connect_to_oz_if_cluster_ready() -> ok.
-on_connect_to_oz_if_cluster_ready() ->
     ok = fslogic_worker:init_paths_caches(all),
     ok = main_harvesting_stream:revise_all_spaces(),
     ok = qos_bounded_cache:ensure_exists_for_all_spaces(),

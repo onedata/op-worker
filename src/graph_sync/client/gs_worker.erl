@@ -25,7 +25,7 @@
 %% API
 -export([is_connected/0, force_connection_start/0]).
 -export([terminate_connection/0, restart_connection/0]).
--export([run_on_connect_if_connected/0]).
+-export([on_cluster_ready/0]).
 -export([supervisor_flags/0]).
 
 -define(GS_WORKER_SUP, gs_worker_sup).
@@ -93,14 +93,16 @@ restart_connection() ->
     ok.
 
 
--spec run_on_connect_if_connected() -> ok.
-run_on_connect_if_connected() ->
+-spec on_cluster_ready() -> ok.
+on_cluster_ready() ->
+    % run `on_connect_to_oz` because it is not done when 
+    % connection was established and cluster was not ready
     case {node() == get_gs_client_node(), is_connected()} of
         {true, true} ->
             try
                 oneprovider:on_connect_to_oz()
             catch
-                % Connection was lost in meantime. Ignore it as on_connect 
+                % Connection was lost in meantime. Ignore it as `on_connect_to_oz`
                 % will be called when connection is established again.
                 _:{_, {error, ?ERROR_NO_CONNECTION_TO_ONEZONE}}  -> ok
             end;
@@ -249,8 +251,12 @@ start_gs_client_worker() ->
     case supervisor:start_child(?GS_WORKER_SUP, gs_client_worker_spec()) of
         {ok, _} ->
             try
-                ?info("Running on-connect procedures"),
-                oneprovider:on_connect_to_oz(),
+                case node_manager:get_cluster_status() of
+                    {error, cluster_not_ready} -> ok;
+                    {ok, _} ->
+                        ?info("Running on-connect procedures"),
+                        oneprovider:on_connect_to_oz()
+                end,
                 alive
             catch Type:Reason ->
                 ?error_stacktrace(
