@@ -850,10 +850,6 @@ get_metadata_test_base(
 
     Provider2DomainBin = ?GET_DOMAIN_BIN(Provider2),
 
-    SupportedClientsPerNode = #{
-        Provider1 => [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        Provider2 => [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
-    },
     ClientSpecForGetMetadataInSpace1Scenarios = #client_spec{
         correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
         unauthorized = [?NOBODY],
@@ -866,7 +862,7 @@ get_metadata_test_base(
         <<"rdf">> -> ?RDF_METADATA_1;
         <<"xattrs">> -> #{?XATTR_KEY => ?XATTR_1_VALUE}
     end,
-    ValidateRestGetRdfOnProvidersNotSupportingUserFun = fun
+    ValidateRestGetMetadataOnProvidersNotSupportingUserFun = fun
         (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
             Node == Provider2,
             Client == ?USER_IN_BOTH_SPACES_AUTH
@@ -886,7 +882,7 @@ get_metadata_test_base(
             target_nodes = Providers,
             client_spec = ClientSpecForGetMetadataInSpace1Scenarios,
             prepare_args_fun = ConstructPrepareRestArgsFun(Space1ObjectId),
-            validate_result_fun = ValidateRestGetRdfOnProvidersNotSupportingUserFun
+            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun
         },
         #scenario_spec{
             name = <<"Get ", MetadataType/binary, " metadata from ", ?SPACE_1/binary, " with ", MetadataType/binary, " set on provider not supporting user using /files/ rest endpoint">>,
@@ -894,7 +890,7 @@ get_metadata_test_base(
             target_nodes = Providers,
             client_spec = ClientSpecForGetMetadataInSpace1Scenarios,
             prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(<<"/", ?SPACE_1/binary>>),
-            validate_result_fun = ValidateRestGetRdfOnProvidersNotSupportingUserFun
+            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun
         },
         #scenario_spec{
             name = <<"Get ", MetadataType/binary, " metadata from ", ?SPACE_1/binary, " with ", MetadataType/binary, " set on provider not supporting user using /files-id/ rest endpoint">>,
@@ -902,7 +898,7 @@ get_metadata_test_base(
             target_nodes = Providers,
             client_spec = ClientSpecForGetMetadataInSpace1Scenarios,
             prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(Space1ObjectId),
-            validate_result_fun = ValidateRestGetRdfOnProvidersNotSupportingUserFun
+            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun
         },
         #scenario_spec{
             name = <<"Get ", MetadataType/binary, " metadata from ", ?SPACE_1/binary, " with ", MetadataType/binary, " set on provider not supporting user using gs api">>,
@@ -1241,7 +1237,100 @@ set_metadata_test_base(
                 data_spec = DataSpec
             }
         ]))
-    end, FilesList).
+    end, FilesList),
+
+    %% TEST SET METADATA FOR FILE ON PROVIDER NOT SUPPORTING USER
+
+    Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_1),
+    {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
+
+    % Remove metadata on space1 that may have been set by previous tests
+    lists:foreach(fun(Node) -> ?assertMatch(ok, RemoveMetadataFun(Node, Space1Guid)) end, Providers),
+
+    Provider2DomainBin = ?GET_DOMAIN_BIN(Provider2),
+
+    ClientSpecForSetMetadataInSpace1Scenarios = #client_spec{
+        correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        unauthorized = [?NOBODY],
+        forbidden = [?USER_IN_SPACE_2_AUTH],
+        supported_clients_per_node = SupportedClientsPerNode
+    },
+
+    ValidateRestSetMetadataOnProvidersNotSupportingUserFun = fun
+        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
+            Node == Provider2,
+            Client == ?USER_IN_BOTH_SPACES_AUTH
+        ->
+            ?assertEqual(?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)), Response);
+        (_TestCaseCtx, {ok, ?HTTP_204_NO_CONTENT, Response}) ->
+            ?assertEqual(#{}, Response)
+    end,
+    ConstructVerifyEnvFunForSetMetadataInSpace1Scenarios = fun(FileGuid) -> fun
+        (false, #api_test_ctx{node = Node}) ->
+            ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS),
+            true;
+        (true, #api_test_ctx{node = Node, client = Client, data = #{<<"metadata">> := Metadata}}) ->
+            case {Node, Client} of
+                {Provider2, ?USER_IN_BOTH_SPACES_AUTH} ->
+                    % Request from user not supported by provider should be rejected
+                    ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS);
+                _ ->
+                    ?assertMatch({ok, Metadata}, GetMetadataFun(Node, FileGuid)),
+                    ?assertMatch(ok, RemoveMetadataFun(Node, FileGuid))
+            end,
+            true
+    end end,
+
+    ?assert(api_test_utils:run_scenarios(Config, [
+        #scenario_spec{
+            name = <<"Set ", MetadataType/binary, " metadata for ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSetMetadataInSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareRestArgsFun(Space1ObjectId),
+            validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun,
+            verify_fun = ConstructVerifyEnvFunForSetMetadataInSpace1Scenarios(Space1Guid),
+            data_spec = DataSpec
+        },
+        #scenario_spec{
+            name = <<"Set ", MetadataType/binary, " metadata for ", ?SPACE_1/binary, " on provider not supporting user using /files/ rest endpoint">>,
+            type = rest_with_file_path,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSetMetadataInSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(<<"/", ?SPACE_1/binary>>),
+            validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun,
+            verify_fun = ConstructVerifyEnvFunForSetMetadataInSpace1Scenarios(Space1Guid),
+            data_spec = DataSpec
+        },
+        #scenario_spec{
+            name = <<"Set ", MetadataType/binary, " metadata for ", ?SPACE_1/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSetMetadataInSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(Space1ObjectId),
+            validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun,
+            verify_fun = ConstructVerifyEnvFunForSetMetadataInSpace1Scenarios(Space1Guid),
+            data_spec = DataSpec
+        },
+        #scenario_spec{
+            name = <<"Set ", MetadataType/binary, " metadata for ", ?SPACE_1/binary, " on provider not supporting user using gs api">>,
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSetMetadataInSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareGsArgsFun(Space1Guid, private),
+            validate_result_fun = fun
+                (#api_test_ctx{node = Node, client = Client}, Result) when
+                    Node == Provider2,
+                    Client == ?USER_IN_BOTH_SPACES_AUTH
+                ->
+                    ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
+                (_TestCaseCtx, Result) ->
+                    ?assertEqual({ok, undefined}, Result)
+            end,
+            verify_fun = ConstructVerifyEnvFunForSetMetadataInSpace1Scenarios(Space1Guid),
+            data_spec = DataSpec
+        }
+    ])).
 
 
 %%%===================================================================
