@@ -176,11 +176,7 @@ remove_xattr(FileUuid, Name) ->
                 {error, not_found}
         end
     end,
-    case datastore_model:update(?CTX, FileUuid, Diff) of
-        {ok, _} -> ok;
-        {error, not_found} -> ok;
-        {error, Reason} -> {error, Reason}
-    end.
+    ?ok_if_not_found(?extract_ok(datastore_model:update(?CTX, FileUuid, Diff))).
 
 
 %%%===================================================================

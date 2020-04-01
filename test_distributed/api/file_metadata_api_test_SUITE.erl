@@ -283,7 +283,10 @@ get_json_metadata_test(Config) ->
         correct_values = #{
             <<"inherited">> => [true, false],
             <<"filter_type">> => [<<"keypath">>],
-            <<"filter">> => [<<"attr3.attr32">>, <<"attr2.attr22.[2]">>]
+            <<"filter">> => [
+                <<"attr3.attr32">>, <<"attr3.[10]">>,
+                <<"attr2.attr22.[2]">>, <<"attr2.attr22.[10]">>
+            ]
         },
         bad_values = [
             {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},

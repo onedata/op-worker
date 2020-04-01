@@ -21,14 +21,6 @@
 -export([list_xattr/4, get_xattr/4, set_xattr/5, remove_xattr/3]).
 
 
--define(PROVIDER_OK_RESP(__RESPONSE), #provider_response{
-    status = #status{code = ?OK},
-    provider_response = __RESPONSE
-}).
--define(FUSE_OK_RESP(__RESPONSE), #fuse_response{
-    status = #status{code = ?OK},
-    fuse_response = __RESPONSE
-}).
 -define(XATTR(__NAME, __VALUE), #xattr{name = __NAME, value = __VALUE}).
 
 
@@ -45,7 +37,7 @@
 ) ->
     fslogic_worker:fuse_response().
 list_xattr(UserCtx, FileCtx0, IncludeInherited, ShowInternal) ->
-    {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0), % check if file exists
+    FileCtx1 = assert_file_exists(FileCtx0),
     {ok, Xattrs} = xattr:list(UserCtx, FileCtx1, IncludeInherited, ShowInternal),
     ?FUSE_OK_RESP(#xattr_list{names = Xattrs}).
 
@@ -115,7 +107,7 @@ get_xattr(_UserCtx, _FileCtx, <<?ONEDATA_PREFIX_STR, _/binary>>, _) ->
     throw(?EPERM);
 
 get_xattr(UserCtx, FileCtx0, XattrName, Inherited) ->
-    {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0), % check if file exists
+    FileCtx1 = assert_file_exists(FileCtx0),
     case xattr:get(UserCtx, FileCtx1, XattrName, Inherited) of
         {ok, XattrValue} ->
             #fuse_response{
@@ -172,8 +164,9 @@ set_xattr(_, _, ?XATTR(<<?ONEDATA_PREFIX_STR, _/binary>>, _), _Create, _Replace)
     throw(?EPERM);
 
 set_xattr(UserCtx, FileCtx0, ?XATTR(XattrName, XattrValue), Create, Replace) ->
-    {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0), % check if file exists
+    FileCtx1 = assert_file_exists(FileCtx0),
     {ok, _} = xattr:set(UserCtx, FileCtx1, XattrName, XattrValue, Create, Replace),
+
     fslogic_times:update_ctime(FileCtx1),
     #fuse_response{status = #status{code = ?OK}}.
 
@@ -204,6 +197,13 @@ remove_xattr(UserCtx, FileCtx, XattrName) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec assert_file_exists(file_ctx:ctx()) -> file_ctx:ctx().
+assert_file_exists(FileCtx0) ->
+    {#document{}, FileCtx1} = file_ctx:get_file_doc(FileCtx0),
+    FileCtx1.
 
 
 %% @private

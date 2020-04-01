@@ -205,4 +205,9 @@
     provider_response :: provider_response_type()
 }).
 
+-define(PROVIDER_OK_RESP(__RESPONSE), #provider_response{
+    status = #status{code = ?OK},
+    provider_response = __RESPONSE
+}).
+
 -endif.

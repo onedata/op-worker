@@ -298,4 +298,9 @@
     fuse_response :: fuse_response_type()
 }).
 
+-define(FUSE_OK_RESP(__RESPONSE), #fuse_response{
+    status = #status{code = ?OK},
+    fuse_response = __RESPONSE
+}).
+
 -endif.
