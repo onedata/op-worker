@@ -64,7 +64,7 @@ start(SpaceId, StorageId) ->
         batch_size => ?TRAVERSE_BATCH_SIZE,
         traverse_info => #{
             % do not remove storage files if storage sync was enabled
-            remove_storage_files => not is_storage_sync_enabled(SpaceId, StorageId)
+            remove_storage_files => not storage_sync:is_import_enabled(SpaceId, StorageId)
         },
         additional_data => #{
             <<"space_id">> => SpaceId,
@@ -172,19 +172,6 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, TaskId)
 -spec gen_id(od_space:id(), storage:id()) -> id().
 gen_id(SpaceId, StorageId) ->
     datastore_key:new_from_digest([SpaceId, StorageId]).
-
-
-%% @private
--spec is_storage_sync_enabled(od_space:id(), storage:id()) -> boolean().
-is_storage_sync_enabled(SpaceId, StorageId) ->
-    {ok, SyncConfigs} = space_strategies:get_sync_configs(SpaceId),
-    SyncConfig = maps:get(StorageId, SyncConfigs, undefined),
-    case SyncConfig of
-        undefined -> false;
-        _ ->
-            {ImportEnabled, _ImportConfig} = space_strategies:get_import_details(SyncConfig),
-            ImportEnabled
-    end.
 
 
 %% @private

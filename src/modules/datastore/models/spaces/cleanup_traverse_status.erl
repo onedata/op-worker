@@ -73,7 +73,7 @@ report_children_listed(TaskId, FileId, ChildrenCount) ->
     status() | {error, term()}.
 report_last_batch(TaskId, FileUuid) ->
     update_and_check(gen_id(TaskId, FileUuid), fun(#cleanup_traverse_status{} = Value) -> 
-        {ok, Value#cleanup_traverse_status{last_batch = true}}
+        {ok, Value#cleanup_traverse_status{all_batches_listed = true}}
     end).
 
 
@@ -86,15 +86,15 @@ report_last_batch(TaskId, FileUuid) ->
     status() | {error, term()}.
 add_children(TaskId, FileUuid, ChildrenCount) ->
     update_and_check(gen_id(TaskId, FileUuid), 
-        fun(#cleanup_traverse_status{children_count = PrevCount} = Value) ->
-            {ok, Value#cleanup_traverse_status{children_count = PrevCount + ChildrenCount}}
+        fun(#cleanup_traverse_status{pending_children_count = PrevCount} = Value) ->
+            {ok, Value#cleanup_traverse_status{pending_children_count = PrevCount + ChildrenCount}}
         end).
 
 %% @private
 -spec update_and_check(id(), diff()) -> status() | {error, term()}.
 update_and_check(Id, UpdateFun) ->
     case datastore_model:update(?CTX, Id, UpdateFun) of
-        {ok, #document{value = #cleanup_traverse_status{children_count = 0, last_batch = true}}} ->
+        {ok, #document{value = #cleanup_traverse_status{pending_children_count = 0, all_batches_listed = true}}} ->
             traversed;
         {ok, _} -> not_traversed;
         Error -> Error

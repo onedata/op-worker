@@ -406,9 +406,9 @@
 %% of a directory was traversed so this directory can be cleaned up.
 -record(cleanup_traverse_status, {
     % number of children listed but not yet traversed
-    children_count = 0 :: non_neg_integer(),
+    pending_children_count = 0 :: non_neg_integer(),
     % flag that informs whether all batches of children have been listed
-    last_batch = false :: boolean()
+    all_batches_listed = false :: boolean()
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.
