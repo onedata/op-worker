@@ -156,7 +156,7 @@ set_insecure(FileCtx, JsonToInsert, Names, Create, Replace) ->
             {false, _, true} ->
                 {error, ?ENODATA};
             _ ->
-                Json = maps:get(?JSON_METADATA_KEY, MetaValue, #{}),
+                Json = maps:get(?JSON_METADATA_KEY, MetaValue, undefined),
                 NewJson = insert(Json, JsonToInsert, Names),
                 {ok, Meta#custom_metadata{value = MetaValue#{?JSON_METADATA_KEY => NewJson}}}
         end
