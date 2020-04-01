@@ -102,11 +102,12 @@ all() ->
 -define(CDMI_COMPLETION_STATUS_1, <<"Completed">>).
 -define(CDMI_COMPLETION_STATUS_2, <<"Processing">>).
 
--define(XATTR_KEY, <<"custom_xattr">>).
+-define(XATTR_1_KEY, <<"custom_xattr1">>).
 -define(XATTR_1_VALUE, <<"value1">>).
--define(XATTR_1, #xattr{name = ?XATTR_KEY, value = ?XATTR_1_VALUE}).
+-define(XATTR_1, #xattr{name = ?XATTR_1_KEY, value = ?XATTR_1_VALUE}).
+-define(XATTR_2_KEY, <<"custom_xattr2">>).
 -define(XATTR_2_VALUE, <<"value2">>).
--define(XATTR_2, #xattr{name = ?XATTR_KEY, value = ?XATTR_2_VALUE}).
+-define(XATTR_2, #xattr{name = ?XATTR_2_KEY, value = ?XATTR_2_VALUE}).
 
 -define(ACL_1, [#{
     <<"acetype">> => <<"0x", (integer_to_binary(?allow_mask, 16))/binary>>,
@@ -141,7 +142,8 @@ all() ->
     ?CDMI_COMPLETION_STATUS_KEY,
     ?JSON_METADATA_KEY,
     ?RDF_METADATA_KEY,
-    ?XATTR_KEY
+    ?XATTR_1_KEY,
+    ?XATTR_2_KEY
 ]).
 
 -define(ALL_METADATA_SET_1, #{
@@ -151,7 +153,7 @@ all() ->
     ?CDMI_COMPLETION_STATUS_KEY => ?CDMI_COMPLETION_STATUS_1,
     ?JSON_METADATA_KEY => ?JSON_METADATA_4,
     ?RDF_METADATA_KEY => ?RDF_METADATA_1,
-    ?XATTR_KEY => ?XATTR_1_VALUE
+    ?XATTR_1_KEY => ?XATTR_1_VALUE
 }).
 -define(ALL_METADATA_SET_2, #{
     ?ACL_KEY => ?ACL_2,
@@ -160,7 +162,7 @@ all() ->
     ?CDMI_COMPLETION_STATUS_KEY => ?CDMI_COMPLETION_STATUS_2,
     ?JSON_METADATA_KEY => ?JSON_METADATA_5,
     ?RDF_METADATA_KEY => ?RDF_METADATA_2,
-    ?XATTR_KEY => ?XATTR_2_VALUE
+    ?XATTR_2_KEY => ?XATTR_2_VALUE
 }).
 
 
@@ -468,19 +470,28 @@ get_xattr_metadata_test(Config) ->
             XattrsToGet = case Attribute of
                 undefined ->
                     case {DirectMetadataSet, IncludeInherited, ShareId, ShowInternal} of
-                        {true, _, _, true} ->
+                        {true, true, undefined, true} ->
                             ?ALL_XATTRS_KEYS;
-                        {true, _, _, false} ->
-                            [?XATTR_KEY];
-                        {false, false, _, _} ->
-                            [];
+                        {true, true, undefined, false} ->
+                            % Only custom xattrs are shown
+                            [?XATTR_1_KEY, ?XATTR_2_KEY];
+                        {true, true, _ShareId, true} ->
+                            % Xattr1 cannot be fetched as it is above share root
+                            ?ALL_XATTRS_KEYS -- [?XATTR_1_KEY];
+                        {true, true, _ShareId, false} ->
+                            [?XATTR_2_KEY];
+                        {true, false, _, true} ->
+                            ?ALL_XATTRS_KEYS -- [?XATTR_1_KEY];
+                        {true, false, _, false} ->
+                            [?XATTR_2_KEY];
                         {false, true, undefined, true} ->
-                            % Exclude cdmi attrs as those are not inherited
-                            ?ALL_XATTRS_KEYS -- ?CDMI_XATTRS_KEY;
+                            % Exclude cdmi attrs as those are not inherited and xattr2 as it is not set
+                            (?ALL_XATTRS_KEYS -- [?XATTR_2_KEY]) -- ?CDMI_XATTRS_KEY;
                         {false, true, undefined, false} ->
-                            [?XATTR_KEY];
-                        {false, true, _, _} ->
-                            % No xattr could be inherited due to share root blocking further traverse
+                            [?XATTR_1_KEY];
+                        {false, _, _, _} ->
+                            % No xattr could be inherited due to either not specified
+                            % 'inherited' flag or share root blocking further traverse
                             []
                     end;
                 _ ->
@@ -510,12 +521,14 @@ get_xattr_metadata_test(Config) ->
                     case ShareId of
                         undefined when Client == ?USER_IN_SPACE_2_AUTH ->
                             % User belonging to the same space as owner of files
-                            % shouldn't be able to get inherited json metadata or not set xattr
+                            % shouldn't be able to get inherited json metadata, not set xattr
+                            % or metadata set only on ancestor directories
                             % due to insufficient perms on Dir1. But can get all other xattrs
                             % as the first found value is returned and ancestors aren't
                             % traversed further (json metadata is exceptional since it
                             % collects all ancestors jsons and merges them)
-                            case lists:member(?JSON_METADATA_KEY, XattrsToGet) orelse lists:member(NotSetXattrKey, XattrsToGet) of
+                            ForbiddenKeysForUserInSpace2 = [?JSON_METADATA_KEY, ?XATTR_1_KEY, NotSetXattrKey],
+                            case lists:any(fun(Key) -> lists:member(Key, XattrsToGet) end, ForbiddenKeysForUserInSpace2) of
                                 true ->
                                     throw(?ERROR_POSIX(?EACCES));
                                 false ->
@@ -529,7 +542,8 @@ get_xattr_metadata_test(Config) ->
                                 ?JSON_METADATA_KEY => json_metadata:merge([
                                     ?JSON_METADATA_4,
                                     ?JSON_METADATA_5
-                                ])
+                                ]),
+                                ?XATTR_1_KEY => ?XATTR_1_VALUE
                             };
                         _ ->
                             % In share mode only metadata directly set on file is available
@@ -557,7 +571,7 @@ get_xattr_metadata_test(Config) ->
                             #{
                                 ?JSON_METADATA_KEY => ?JSON_METADATA_4,
                                 ?RDF_METADATA_KEY => ?RDF_METADATA_1,
-                                ?XATTR_KEY => ?XATTR_1_VALUE
+                                ?XATTR_1_KEY => ?XATTR_1_VALUE
                             };
                         _ ->
                             #{}
@@ -868,7 +882,7 @@ get_metadata_test_base(
     ExpSpace1Metadata = case MetadataType of
         <<"json">> -> ?JSON_METADATA_4;
         <<"rdf">> -> ?RDF_METADATA_1;
-        <<"xattrs">> -> #{?XATTR_KEY => ?XATTR_1_VALUE}
+        <<"xattrs">> -> #{?XATTR_1_KEY => ?XATTR_1_VALUE}
     end,
     ValidateRestGetMetadataOnProvidersNotSupportingUserFun = fun
         (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
