@@ -30,14 +30,14 @@
 %% @equiv add_qos/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:raw(),
+-spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:rpn(),
     qos_entry:replicas_num()) -> fslogic_worker:provider_response().
-add_qos_entry(UserCtx, FileCtx0, Expression, ReplicasNum) ->
+add_qos_entry(UserCtx, FileCtx0, ExpressionInRpn, ReplicasNum) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),
-    add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum).
+    add_qos_entry_insecure(FileCtx1, ExpressionInRpn, ReplicasNum).
 
 
 %%--------------------------------------------------------------------
@@ -111,27 +111,22 @@ check_fulfillment(UserCtx, FileCtx0, QosEntryId) ->
 %% traverse should be run.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:raw(), qos_entry:replicas_num()) ->
+-spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num()) ->
     fslogic_worker:provider_response().
-add_qos_entry_insecure(FileCtx, QosExpression, ReplicasNum) ->
-    case qos_expression:raw_to_rpn(QosExpression) of
-        {ok, QosExpressionInRPN} ->
-            % TODO: VFS-5567 for now target storage for dir is selected here and
-            % does not change in qos traverse task. Have to figure out how to
-            % choose different storages for subdirs and/or file if multiple storage
-            % fulfilling qos are available.
-            CalculatedStorages = qos_expression:calculate_assigned_storages(
-                FileCtx, QosExpressionInRPN, ReplicasNum
-            ),
+add_qos_entry_insecure(FileCtx, QosExpressionInRpn, ReplicasNum) ->
+    % TODO: VFS-5567 for now target storage for dir is selected here and
+    % does not change in qos traverse task. Have to figure out how to
+    % choose different storages for subdirs and/or file if multiple storage
+    % fulfilling qos are available.
+    CalculatedStorages = qos_expression:calculate_assigned_storages(
+        FileCtx, QosExpressionInRpn, ReplicasNum
+    ),
 
-            case CalculatedStorages of
-                {true, Storages} ->
-                    add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, Storages);
-                false ->
-                    add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum);
-                ?ERROR_INVALID_QOS_EXPRESSION ->
-                    #provider_response{status = #status{code = ?EINVAL}}
-            end;
+    case CalculatedStorages of
+        {true, Storages} ->
+            add_possible_qos(FileCtx, QosExpressionInRpn, ReplicasNum, Storages);
+        false ->
+            add_impossible_qos(FileCtx, QosExpressionInRpn, ReplicasNum);
         ?ERROR_INVALID_QOS_EXPRESSION ->
             #provider_response{status = #status{code = ?EINVAL}}
     end.

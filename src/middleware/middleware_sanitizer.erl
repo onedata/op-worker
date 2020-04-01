@@ -251,6 +251,13 @@ check_type(page_token, _Param, PageToken) when is_binary(PageToken) ->
 check_type(page_token, Param, _) ->
     throw(?ERROR_BAD_DATA(Param));
 
+check_type(qos_expression, _Param, Expression) when is_binary(Expression) ->
+    Expression;
+check_type(qos_expression, _Param, Expression) when is_list(Expression) ->
+    Expression;
+check_type(qos_expression, _Param, _Expression) ->
+    throw(?ERROR_INVALID_QOS_EXPRESSION);
+
 check_type(json, _Param, JSON) when is_map(JSON) ->
     JSON;
 check_type(json, Param, _) ->
@@ -280,6 +287,10 @@ check_value(_, any, _Param, _) ->
 check_value(binary, non_empty, Param, <<"">>) ->
     throw(?ERROR_BAD_VALUE_EMPTY(Param));
 check_value(json, non_empty, Param, Map) when map_size(Map) == 0 ->
+    throw(?ERROR_BAD_VALUE_EMPTY(Param));
+check_value(qos_expression, non_empty, Param, <<>>) ->
+    throw(?ERROR_BAD_VALUE_EMPTY(Param));
+check_value(qos_expression, non_empty, Param, []) ->
     throw(?ERROR_BAD_VALUE_EMPTY(Param));
 check_value(_, non_empty, _Param, _) ->
     ok;

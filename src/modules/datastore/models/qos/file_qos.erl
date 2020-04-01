@@ -58,7 +58,7 @@
 
 -type key() :: file_meta:uuid().
 -type record() :: #file_qos{}.
--type doc() :: datastore_model:doc(record()).
+-type doc() :: datastore_doc:doc(record()).
 -type effective_file_qos() :: #effective_file_qos{}.
 -type assigned_entries() :: #{storage:id() => [qos_entry:id()]}.
 

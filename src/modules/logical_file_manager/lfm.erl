@@ -805,10 +805,10 @@ check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 %% Adds new qos_entry for file or directory.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
+-spec add_qos_entry(session:id(), file_key(), qos_expression:rpn(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | error_reply().
-add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
-    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum) end).
+add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum) ->
+    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum) end).
 
 %%--------------------------------------------------------------------
 %% @doc

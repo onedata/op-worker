@@ -33,14 +33,14 @@
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{aspect = instance, scope = private}, QosDetails) ->
     #{
-        <<"expression">> := Expression,
+        <<"expressionRpn">> := ExpressionRpn,
         <<"replicasNum">> := ReplicasNum,
         <<"fileId">> := QosRootFileObjectId,
         <<"fulfilled">> := Fulfilled
     } = QosDetails,
     {ok, FileGuid} = file_id:objectid_to_guid(QosRootFileObjectId),
     #{
-        <<"expression">> => Expression,
+        <<"expressionRpn">> => ExpressionRpn,
         <<"replicasNum">> => ReplicasNum,
         <<"file">> => gri:serialize(#gri{
             type = op_file,

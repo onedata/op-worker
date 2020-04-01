@@ -44,6 +44,6 @@ create_response(#gri{aspect = instance}, _, resource, {#gri{id = QosEntryId}, _}
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(_, QosData) ->
-    #{<<"expression">> := RPNExpression} = QosData,
-    {ok, InfixExpression} = qos_expression:rpn_to_infix(RPNExpression),
-    ?OK_REPLY(QosData#{<<"expression">> => InfixExpression}).
+    {ExpressionRpn, QosData1} = maps:take(<<"expressionRpn">>, QosData),
+    {ok, InfixExpression} = qos_expression:rpn_to_infix(ExpressionRpn),
+    ?OK_REPLY(QosData1#{<<"expression">> => InfixExpression}).

@@ -18,9 +18,7 @@
 
 
 qos_expression_test() ->
-    % test empty
-    ?assertEqual({ok, []}, qos_expression:raw_to_rpn(<<"">>)),
-
+    
     % test simple equality
     Expr0 = <<"country=PL">>,
     {ok, RPN0} = qos_expression:raw_to_rpn(Expr0),
@@ -58,35 +56,46 @@ qos_expression_test() ->
          <<"type=disk">>, <<"country=FR">>, <<"&">>, <<"|">>], RPN4),
     ?assertEqual({ok, Expr4}, qos_expression:rpn_to_infix(RPN4)),
 
-    % test invalid
+    % test invalid expression
     Expr5 = <<"country">>,
-    ?assertEqual(
+    ?assertThrow(
         ?ERROR_INVALID_QOS_EXPRESSION,
         qos_expression:raw_to_rpn(Expr5)
     ),
 
     Expr6 = <<"country|type">>,
-    ?assertEqual(
+    ?assertThrow(
         ?ERROR_INVALID_QOS_EXPRESSION,
         qos_expression:raw_to_rpn(Expr6)
     ),
 
-%% TODO: VFS-5569 improve handling invalid QoS expressions
-%%    Expr7 = <<"(country=PL">>,
-%%    ?assertMatch(
-%%        ?ERROR_INVALID_QOS_EXPRESSION,
-%%        qos_expression:transform_to_rpn(Expr7)
-%%    ),
+    Expr7 = <<"(country=PL">>,
+    ?assertThrow(
+        ?ERROR_INVALID_QOS_EXPRESSION,
+        qos_expression:raw_to_rpn(Expr7)
+    ),
 
     Expr8 = <<"type=disk)">>,
-    ?assertEqual(
+    ?assertThrow(
         ?ERROR_INVALID_QOS_EXPRESSION,
         qos_expression:raw_to_rpn(Expr8)
     ),
 
     Expr9 = <<")(country=PL">>,
-    ?assertEqual(
+    ?assertThrow(
         ?ERROR_INVALID_QOS_EXPRESSION,
         qos_expression:raw_to_rpn(Expr9)
+    ),
+    
+    Expr10 = <<"country=PL&-type-disk">>,
+    ?assertThrow(
+        ?ERROR_INVALID_QOS_EXPRESSION,
+        qos_expression:raw_to_rpn(Expr10)
+    ),
+    
+    Expr11 = <<"(type=disk|tier=t2&(country=PL)">>,
+    ?assertThrow(
+        ?ERROR_INVALID_QOS_EXPRESSION,
+        qos_expression:raw_to_rpn(Expr11)
     ).
 

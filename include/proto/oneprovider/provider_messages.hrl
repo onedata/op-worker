@@ -114,7 +114,7 @@
 
 % messages for adding, getting and removing QoS entry
 -record(add_qos_entry, {
-    expression :: qos_expression:raw(),
+    expression :: qos_expression:rpn(),
     replicas_num :: qos_entry:replicas_num()
 }).
 

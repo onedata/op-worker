@@ -44,20 +44,16 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Transforms QoS expression from infix notation to reverse polish notation.
+%% Throws on error.
 %% @end
 %%--------------------------------------------------------------------
--spec raw_to_rpn(raw()) -> {ok, rpn()} | ?ERROR_INVALID_QOS_EXPRESSION.
+-spec raw_to_rpn(raw()) -> {ok, rpn()}.
 raw_to_rpn(Expression) ->
     OperatorsBin = <<?UNION/binary, ?INTERSECTION/binary, ?COMPLEMENT/binary>>,
     ParensBin = <<?L_PAREN/binary, ?R_PAREN/binary>>,
     NormalizedExpression = re:replace(Expression, "\s", "", [global, {return, binary}]),
     Tokens = re:split(NormalizedExpression, <<"([", ParensBin/binary, OperatorsBin/binary, "])">>),
-    try
-        {ok, raw_to_rpn_internal(Tokens, [], [])}
-    catch
-        throw:?ERROR_INVALID_QOS_EXPRESSION ->
-            ?ERROR_INVALID_QOS_EXPRESSION
-    end.
+    {ok, raw_to_rpn_internal(Tokens, [], [])}.
 
 
 -spec rpn_to_infix(rpn()) -> {ok, raw()}.
@@ -73,7 +69,7 @@ rpn_to_infix(RPNExpression) ->
 %%--------------------------------------------------------------------
 -spec calculate_assigned_storages(file_ctx:ctx(), rpn(), qos_entry:replicas_num()) ->
     {true, [storage:id()]} | false | {error, term()}.
-calculate_assigned_storages(FileCtx, Expression, ReplicasNum) ->
+calculate_assigned_storages(FileCtx, ExpressionInRpn, ReplicasNum) ->
     % TODO: VFS-5574 add check if storage has enough free space
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, SpaceStorages} = space_logic:get_all_storage_ids(SpaceId),
@@ -83,7 +79,7 @@ calculate_assigned_storages(FileCtx, Expression, ReplicasNum) ->
     end, #{}, SpaceStorages),
 
     try
-        EligibleStorages = filter_storages(AllStoragesWithParams, Expression),
+        EligibleStorages = filter_storages(AllStoragesWithParams, ExpressionInRpn),
         choose_storages(EligibleStorages, ReplicasNum)
     catch
         throw:?ERROR_INVALID_QOS_EXPRESSION ->
@@ -102,7 +98,10 @@ raw_to_rpn_internal([<<>>], [], []) ->
 raw_to_rpn_internal([<<>> | Expression], Stack, RPNExpression) ->
     raw_to_rpn_internal(Expression, Stack, RPNExpression);
 raw_to_rpn_internal([], Stack, RPNExpression) ->
-    RPNExpression ++ Stack;
+    case lists:member(<<"(">>, Stack) of
+        true -> throw(?ERROR_INVALID_QOS_EXPRESSION);
+        false -> RPNExpression ++ Stack
+    end;
 raw_to_rpn_internal([Operator | Expression], Stack, RPNExpression) when
     Operator =:= ?INTERSECTION orelse
         Operator =:= ?UNION orelse
@@ -110,7 +109,7 @@ raw_to_rpn_internal([Operator | Expression], Stack, RPNExpression) when
     {Stack2, RPNExpression2} = handle_operator(Operator, Stack, RPNExpression),
     raw_to_rpn_internal(Expression, Stack2, RPNExpression2);
 raw_to_rpn_internal([?L_PAREN | Expression], Stack, RPNExpression) ->
-    raw_to_rpn_internal(Expression, [?L_PAREN|Stack], RPNExpression);
+    raw_to_rpn_internal(Expression, [?L_PAREN | Stack], RPNExpression);
 raw_to_rpn_internal([?R_PAREN | Expression], Stack, RPNExpression) ->
     {Stack2, RPNExpression2} = handle_right_paren(Stack, RPNExpression),
     raw_to_rpn_internal(Expression, Stack2, RPNExpression2);

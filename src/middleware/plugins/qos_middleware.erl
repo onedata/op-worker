@@ -60,7 +60,7 @@ operation_supported(_, _, _) -> false.
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
-        <<"expression">> => {binary, non_empty},
+        <<"expression">> => {qos_expression, non_empty},
         <<"fileId">> => {binary, fun(ObjectId) ->
             case catch file_id:objectid_to_guid(ObjectId) of
                 {ok, Guid} ->
@@ -170,12 +170,17 @@ validate(#op_req{operation = delete, gri = #gri{
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     SessionId = Auth#auth.session_id,
-    ExpressionInRPN = maps:get(<<"expression">>, Req#op_req.data),
+    Expression = maps:get(<<"expression">>, Req#op_req.data),
     ReplicasNum = maps:get(<<"replicasNum">>, Req#op_req.data, 1),
     FileGuid = maps:get(<<"fileId">>, Req#op_req.data),
     SpaceId = file_id:guid_to_space_id(FileGuid),
+    
+    {ok, ExpressionInRpn} = case is_binary(Expression) of
+        true -> qos_expression:raw_to_rpn(Expression);
+        false -> {ok, Expression}
+    end, 
 
-    case lfm:add_qos_entry(SessionId, {guid, FileGuid}, ExpressionInRPN, ReplicasNum) of
+    case lfm:add_qos_entry(SessionId, {guid, FileGuid}, ExpressionInRpn, ReplicasNum) of
         {ok, QosEntryId} ->
             {ok, QosEntry} = ?check(lfm:get_qos_entry(SessionId, QosEntryId)),
             {ok, resource, {GRI#gri{id = QosEntryId}, entry_to_details(QosEntry, false, SpaceId)}};
@@ -243,7 +248,7 @@ entry_to_details(QosEntry, Status, SpaceId) ->
     QosRootFileGuid = file_id:pack_guid(QosRootFileUuid, SpaceId),
     {ok, QosRootFileObjectId} = file_id:guid_to_objectid(QosRootFileGuid),
     #{
-        <<"expression">> => ExpressionInRPN,
+        <<"expressionRpn">> => ExpressionInRPN,
         <<"replicasNum">> => ReplicasNum,
         <<"fileId">> => QosRootFileObjectId,
         <<"fulfilled">> => Status
