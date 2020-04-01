@@ -190,36 +190,63 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                 % malformed data
                 true;
             (TargetNode, Client, {DataSet, _BadKey, Error}) ->
-                ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
-                    true ->
-                        case ScenarioType of
-                            rest_not_supported -> ?ERROR_NOT_SUPPORTED;
-                            gs_not_supported -> ?ERROR_NOT_SUPPORTED;
-                            _ -> Error
-                        end;
+                case is_error_applicable_to_scenario(Error, ScenarioType) of
                     false ->
-                        ?ERROR_USER_NOT_SUPPORTED
-                end,
-                TestCaseCtx = #api_test_ctx{
-                    node = TargetNode,
-                    client = Client,
-                    env = Env,
-                    data = DataSet
-                },
-                Args = PrepareArgsFun(TestCaseCtx),
-                Result = make_request(Config, TargetNode, Client, Args),
-                try
-                    validate_error_result(ScenarioType, ExpError, Result),
-                    EnvVerifyFun(false, TestCaseCtx)
-                catch _:_ ->
-                    log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result),
-                    false
+                        true;
+                    true ->
+                        ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
+                            false ->
+                                ?ERROR_USER_NOT_SUPPORTED;
+                            true ->
+                                get_expected_malformed_data_error(Error, ScenarioType)
+                        end,
+                        TestCaseCtx = #api_test_ctx{
+                            node = TargetNode,
+                            client = Client,
+                            env = Env,
+                            data = DataSet
+                        },
+                        Args = PrepareArgsFun(TestCaseCtx),
+                        Result = make_request(Config, TargetNode, Client, Args),
+                        try
+                            validate_error_result(ScenarioType, ExpError, Result),
+                            EnvVerifyFun(false, TestCaseCtx)
+                        catch _:_ ->
+                            log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result),
+                            false
+                        end
                 end
         end
     ),
 
     EnvTeardownFun(Env),
     Result.
+
+
+is_error_applicable_to_scenario({error, _}, _)                          -> true;
+is_error_applicable_to_scenario({rest_handler, _}, rest)                -> true;
+is_error_applicable_to_scenario({rest_handler, _}, rest_with_file_path) -> true;
+is_error_applicable_to_scenario({rest_handler, _}, rest_not_supported)  -> true;
+is_error_applicable_to_scenario({rest, _}, rest)                        -> true;
+is_error_applicable_to_scenario({rest, _}, rest_with_file_path)         -> true;
+is_error_applicable_to_scenario({rest, _}, rest_not_supported)          -> true;
+is_error_applicable_to_scenario({gs, _}, gs)                            -> true;
+is_error_applicable_to_scenario({gs, _}, gs_not_supported)              -> true;
+is_error_applicable_to_scenario(_, _)                                   -> false.
+
+
+get_expected_malformed_data_error({rest_handler, RestHandlerSpecificError}, _) ->
+    % Rest handler errors takes precedence other anything else as it is
+    % thrown before request is even passed to middleware
+    RestHandlerSpecificError;
+get_expected_malformed_data_error(_, rest_not_supported) ->
+    ?ERROR_NOT_SUPPORTED;
+get_expected_malformed_data_error(_, gs_not_supported) ->
+    ?ERROR_NOT_SUPPORTED;
+get_expected_malformed_data_error({error, _} = Error, _) ->
+    Error;
+get_expected_malformed_data_error({_Type, TypeSpecificError}, _) ->
+    TypeSpecificError.
 
 
 run_expected_success_test_cases(Config, #scenario_spec{
