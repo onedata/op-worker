@@ -17,6 +17,7 @@
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -24,6 +25,7 @@
 %% API
 -export([is_connected/0, force_connection_start/0]).
 -export([terminate_connection/0, restart_connection/0]).
+-export([run_on_connect_if_connected/0]).
 -export([supervisor_flags/0]).
 
 -define(GS_WORKER_SUP, gs_worker_sup).
@@ -89,6 +91,21 @@ restart_connection() ->
     terminate_connection(),
     force_connection_start(),
     ok.
+
+
+-spec run_on_connect_if_connected() -> ok.
+run_on_connect_if_connected() ->
+    case {node() == get_gs_client_node(), is_connected()} of
+        {true, true} ->
+            try
+                oneprovider:on_connect_to_oz()
+            catch
+                % Connection was lost in meantime. Ignore it as on_connect 
+                % will be called when connection is established again.
+                _:{_, {error, ?ERROR_NO_CONNECTION_TO_ONEZONE}}  -> ok
+            end;
+        _ -> ok
+    end.
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks

@@ -26,6 +26,7 @@
 -export([upgrade_essential_workers/0, custom_workers/0]).
 -export([before_init/1]).
 -export([upgrade_cluster/1]).
+-export([on_cluster_ready/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
 
@@ -204,6 +205,15 @@ before_init([]) ->
 upgrade_cluster(1) ->
     storage:migrate_to_zone(),
     {ok, 2}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:on_cluster_ready/1}.
+%% This callback is executed on all cluster nodes.
+%% @end
+%%--------------------------------------------------------------------
+on_cluster_ready() ->
+    gs_worker:run_on_connect_if_connected().
 
 %%--------------------------------------------------------------------
 %% @doc
