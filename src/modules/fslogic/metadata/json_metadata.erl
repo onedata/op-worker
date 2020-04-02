@@ -156,9 +156,13 @@ set_insecure(FileCtx, JsonToInsert, Names, Create, Replace) ->
             {false, _, true} ->
                 {error, ?ENODATA};
             _ ->
-                Json = maps:get(?JSON_METADATA_KEY, MetaValue, undefined),
-                NewJson = insert(Json, JsonToInsert, Names),
-                {ok, Meta#custom_metadata{value = MetaValue#{?JSON_METADATA_KEY => NewJson}}}
+                PrevJson = maps:get(?JSON_METADATA_KEY, MetaValue, undefined),
+                try
+                    NewJson = insert(PrevJson, JsonToInsert, Names),
+                    {ok, Meta#custom_metadata{value = MetaValue#{?JSON_METADATA_KEY => NewJson}}}
+                catch throw:{error, ?ENOATTR} = Error ->
+                    Error
+                end
         end
     end,
     case Replace of
@@ -178,6 +182,7 @@ set_insecure(FileCtx, JsonToInsert, Names, Create, Replace) ->
 %% @private
 %% @doc
 %% Find sub-json in json tree
+%% TODO VFS-6253
 %% @end
 %%--------------------------------------------------------------------
 -spec find(json_utils:json_term(), custom_metadata:filter()) ->
@@ -212,6 +217,7 @@ find(Json, [Name | Rest]) ->
 %% @private
 %% @doc
 %% Insert sub-json to json tree
+%% TODO VFS-6253
 %% @end
 %%--------------------------------------------------------------------
 -spec insert(Json :: map() | undefined, JsonToInsert :: map(), [binary()]) -> map() | no_return().
@@ -236,7 +242,7 @@ insert(Json, JsonToInsert, [Name | Rest]) ->
                 true ->
                     Json ++ [null || _ <- lists:seq(Length + 1, Index - 1)] ++ [insert(undefined, JsonToInsert, Rest)];
                 false ->
-                    setnth(Index, Json, insert(undefined, JsonToInsert, Rest))
+                    setnth(Index, Json, insert(lists:nth(Index, Json), JsonToInsert, Rest))
             end;
         _ when is_map(Json) ->
             SubJson = maps:get(Name, Json, undefined),
@@ -246,6 +252,7 @@ insert(Json, JsonToInsert, [Name | Rest]) ->
     end.
 
 
+%% TODO VFS-6253
 %% @private
 -spec merge([json_utils:json_term()]) -> json_utils:json_term().
 merge(Jsons) ->

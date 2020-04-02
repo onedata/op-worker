@@ -1064,7 +1064,12 @@ set_json_metadata_test(Config) ->
         correct_values = #{
             <<"metadata">> => [ExampleJson],
             <<"filter_type">> => [<<"keypath">>],
-            <<"filter">> => [<<"attr1.[5]">>, <<"attr2.[2]">>]
+            <<"filter">> => [
+                <<"attr1.[1]">>,        % Test setting attr in existing array
+                <<"attr1.[2].attr22">>, % Test error when trying to set subjson to binary (<<"val">> in ExampleJson)
+                <<"attr1.[5]">>,        % Test setting attr beyond existing array
+                <<"attr2.[2]">>         % Test setting attr in nonexistent array
+            ]
         },
         bad_values = [
             % invalid json error can be returned only for rest (invalid json is send as
@@ -1094,7 +1099,12 @@ set_json_metadata_test(Config) ->
             {<<"keypath">>, undefined} ->
                 ?ERROR_MISSING_REQUIRED_VALUE(<<"filter">>);
             {<<"keypath">>, _} ->
-                {ok, binary:split(Filter, <<".">>, [global])}
+                case binary:split(Filter, <<".">>, [global]) of
+                    [<<"attr1">>, <<"[2]">>, <<"attr22">>] ->
+                        ?ERROR_POSIX(?ENODATA);
+                    ExistingPath ->
+                        {ok, ExistingPath}
+                end
         end
     end,
     ConstructVerifyEnvForSuccessfulCallsFun = fun(FileGuid) -> fun
@@ -1108,23 +1118,28 @@ set_json_metadata_test(Config) ->
                 % First only required params will be tested, then with only one optional params,
                 % next with 2 and so on. If optional param has multiple values then those later
                 % will be also tested later.
-                case ExpResult of
+                ExpJson = case ExpResult of
                     {ok, []} ->
-                        ?assertMatch({ok, ExampleJson}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS);
-                    {ok, [<<"attr1">>, <<"[5]">>]} ->
-                        ExpMetadata = #{<<"attr1">> => [0, 1, <<"val">>, null, null, ExampleJson]},
-                        ?assertMatch({ok, ExpMetadata}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS);
-                    {ok, [<<"attr2">>, <<"[2]">>]} ->
-                        ExpMetadata = #{
-                            <<"attr1">> => [0, 1, <<"val">>, null, null, ExampleJson],
-                            <<"attr2">> => [null, null, ExampleJson]
-                        },
-                        ?assertMatch({ok, ExpMetadata}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS);
-                    {error, _} ->
+                        ExampleJson;
+                    ?ERROR_MISSING_REQUIRED_VALUE(_) ->
                         % Test failed to override previously set json because of specifying
                         % filter_type without specifying filter
-                        ?assertMatch({ok, ExampleJson}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS)
-                end
+                        ExampleJson;
+                    {ok, [<<"attr1">>, <<"[1]">>]} ->
+                        #{<<"attr1">> => [0, ExampleJson, <<"val">>]};
+                    ?ERROR_POSIX(?ENODATA) ->
+                        % Operation failed and nothing should be changed -
+                        % it should match the same json as above
+                        #{<<"attr1">> => [0, ExampleJson, <<"val">>]};
+                    {ok, [<<"attr1">>, <<"[5]">>]} ->
+                        #{<<"attr1">> => [0, ExampleJson, <<"val">>, null, null, ExampleJson]};
+                    {ok, [<<"attr2">>, <<"[2]">>]} ->
+                        #{
+                            <<"attr1">> => [0, ExampleJson, <<"val">>, null, null, ExampleJson],
+                            <<"attr2">> => [null, null, ExampleJson]
+                        }
+                end,
+                ?assertMatch({ok, ExpJson}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS)
             end, Providers),
 
             case ExpResult of
