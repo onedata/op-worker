@@ -100,7 +100,7 @@ on_cluster_ready() ->
     case {node() == get_gs_client_node(), is_connected()} of
         {true, true} ->
             try
-                oneprovider:on_connect_to_oz()
+                run_on_connect_to_oz_procedures()
             catch
                 % Connection was lost in meantime. Ignore it as `on_connect_to_oz`
                 % will be called when connection is established again.
@@ -246,16 +246,17 @@ get_gs_client_node() ->
     consistent_hashing:get_assigned_node(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 
+%% @private
 -spec start_gs_client_worker() -> alive | error.
 start_gs_client_worker() ->
     case supervisor:start_child(?GS_WORKER_SUP, gs_client_worker_spec()) of
         {ok, _} ->
             try
                 case node_manager:get_cluster_status() of
-                    {error, cluster_not_ready} -> ok;
+                    {error, cluster_not_ready} ->
+                        ?info("Deferring on-connect-to-oz procedures as the cluster is not ready yet");
                     {ok, _} ->
-                        ?info("Running on-connect procedures"),
-                        oneprovider:on_connect_to_oz()
+                        run_on_connect_to_oz_procedures()
                 end,
                 alive
             catch Type:Reason ->
@@ -273,6 +274,15 @@ start_gs_client_worker() ->
     end.
 
 
+%% @private
+-spec run_on_connect_to_oz_procedures() -> ok.
+run_on_connect_to_oz_procedures() ->
+    ?info("Executing on-connect-to-oz procedures..."),
+    oneprovider:on_connect_to_oz(),
+    ?info("Successfully executed on-connect-to-oz procedures").
+
+
+%% @private
 -spec gs_client_worker_spec() -> supervisor:child_spec().
 gs_client_worker_spec() -> #{
     id => ?GS_CLIENT_WORKER_GLOBAL_NAME,
