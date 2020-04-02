@@ -110,7 +110,7 @@ subscribe_test(Config) ->
         <<"name">> => <<"changedName">>
     },
     PushMessage = #gs_push_graph{gri = HService1PrivateGRI, data = ChangedData, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage]),
+    logic_tests_common:simulate_push(Config, PushMessage),
     ?assertMatch(
         {ok, #document{key = ?HANDLE_SERVICE_1, value = #od_handle_service{
             name = <<"changedName">>,
@@ -122,7 +122,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage2 = #gs_push_graph{gri = HService1PrivateGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
+    logic_tests_common:simulate_push(Config, PushMessage2),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_handle_service, get_from_cache, [?HANDLE_SERVICE_1])
@@ -137,7 +137,7 @@ subscribe_test(Config) ->
     ),
 
     PushMessage3 = #gs_push_nosub{gri = HService1PrivateGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage3]),
+    logic_tests_common:simulate_push(Config, PushMessage3),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_handle_service, get_from_cache, [?HANDLE_SERVICE_1])

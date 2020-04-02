@@ -13,16 +13,18 @@
 -author("Bartosz Walkowicz").
 
 -behaviour(gen_transfer_worker).
+-behaviour(replica_deletion_behaviour).
 
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("modules/replica_deletion/replica_deletion.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
     enqueue_data_transfer/2,
-    process_replica_deletion_result/3
+    process_replica_deletion_result/4
 ]).
 
 %% gen_transfer_worker callbacks
@@ -53,17 +55,26 @@ enqueue_data_transfer(FileCtx, TransferParams) ->
 %% replica.
 %% @end
 %%-------------------------------------------------------------------
--spec process_replica_deletion_result(replica_deletion:result(), file_meta:uuid(),
+-spec process_replica_deletion_result(replica_deletion:result(), od_space:id(), file_meta:uuid(),
     transfer:id()) -> ok.
-process_replica_deletion_result({ok, ReleasedBytes}, FileUuid, TransferId) ->
-    ?debug("Replica eviction of file ~p in transfer ~p released ~p bytes.", [
-        FileUuid, TransferId, ReleasedBytes
+process_replica_deletion_result({ok, ReleasedBytes}, SpaceId, FileUuid, TransferId) ->
+    ?debug("Replica eviction of file ~p in transfer ~p in space ~p released ~p bytes.", [
+        FileUuid, TransferId, SpaceId, ReleasedBytes
     ]),
     {ok, _} = transfer:increment_files_evicted_and_processed_counters(TransferId),
     ok;
-process_replica_deletion_result(Error, FileUuid, TransferId) ->
-    ?error("Error ~p occurred during replica eviction of file ~p in procedure ~p", [
-        Error, FileUuid, TransferId
+process_replica_deletion_result({error, canceled}, SpaceId, FileUuid, TransferId) ->
+    ?debug("Replica eviction of file ~p in transfer ~p in space ~p was canceled.", [FileUuid, TransferId, SpaceId]),
+    {ok, _} = transfer:increment_files_processed_counter(TransferId),
+    ok;
+process_replica_deletion_result({error, file_opened}, SpaceId, FileUuid, TransferId) ->
+    ?debug("Replica eviction of file ~p in transfer ~p in space ~p skipped because the file is opened.",
+        [FileUuid, TransferId, SpaceId]),
+    {ok, _} = transfer:increment_files_processed_counter(TransferId),
+    ok;
+process_replica_deletion_result(Error, SpaceId, FileUuid, TransferId) ->
+    ?error("Error ~p occurred during replica eviction of file ~p in transfer ~p in space ~p", [
+        Error, FileUuid, TransferId, SpaceId
     ]),
     {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId),
     ok.
@@ -126,13 +137,11 @@ enqueue_data_transfer(FileCtx, TransferParams, RetriesLeft, NextRetry) ->
 transfer_regular_file(FileCtx, Params = #transfer_params{supporting_provider = undefined}) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     TransferId = Params#transfer_params.transfer_id,
-    case replica_deletion_master:get_setting_for_deletion_task(FileCtx) of
+    case replica_deletion_master:find_supporter_and_prepare_deletion_request(FileCtx) of
         undefined ->
             transfer:increment_files_processed_counter(TransferId);
-        {FileUuid, ProviderId, Blocks, VV} ->
-            schedule_replica_deletion_task(
-                FileUuid, ProviderId, Blocks, VV, TransferId, SpaceId
-            )
+        DeletionRequest ->
+            replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB)
     end,
     ok;
 transfer_regular_file(FileCtx, #transfer_params{
@@ -145,25 +154,5 @@ transfer_regular_file(FileCtx, #transfer_params{
     {Size, _FileCtx3} = file_ctx:get_file_size(FileCtx2),
     VV = file_location:get_version_vector(LocalFileLocationDoc),
     Blocks = [#file_block{offset = 0, size = Size}],
-    schedule_replica_deletion_task(
-        FileUuid, SupportingProvider, Blocks, VV, TransferId, SpaceId
-    ),
-    ok.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Adds task of replica deletion to replica_deletion_master queue.
-%% @end
-%%-------------------------------------------------------------------
--spec schedule_replica_deletion_task(file_meta:uuid(), od_provider:id(),
-    fslogic_blocks:blocks(), version_vector:version_vector(), transfer:id(),
-    od_space:id()) -> ok.
-schedule_replica_deletion_task(FileUuid, Provider, Blocks, VV, TransferId, SpaceId) ->
-    replica_deletion_master:enqueue_task(
-        FileUuid, Provider, Blocks, VV, TransferId, eviction, SpaceId
-    ).
+    DeletionRequest = replica_deletion_master:prepare_deletion_request(FileUuid, SupportingProvider, Blocks, VV),
+    replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB).

@@ -137,7 +137,7 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
         async_children_master_jobs = maps:get(async_children_master_jobs, RunOpts, ?DEFAULT_ASYNC_CHILDREN_MASTER_JOBS),
         offset = maps:get(offset, RunOpts, 0),
         batch_size = maps:get(batch_size, RunOpts, ?DEFAULT_BATCH_SIZE),
-        marker = maps:get(marker, RunOpts, undefined),
+        marker = maps:get(marker, RunOpts, ?DEFAULT_MARKER),
         max_depth = maps:get(max_depth, RunOpts, ?DEFAULT_MAX_DEPTH),
         next_batch_job_prehook = maps:get(next_batch_job_prehook, RunOpts, ?DEFAULT_NEXT_BATCH_JOB_PREHOOK),
         children_master_job_prehook = ChildrenMasterJobPrehook,
@@ -146,9 +146,8 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
         callback_module = binary_to_atom(Pool, utf8),
         info = TraverseInfo
     },
-    StorageTraverse2 = Iterator:init(StorageTraverse, RunOpts),
-    ChildrenMasterJobPrehook(StorageTraverse2),
-    traverse:run(Pool, DefinedTaskId, StorageTraverse2).
+    ChildrenMasterJobPrehook(StorageTraverse),
+    traverse:run(Pool, DefinedTaskId, StorageTraverse).
 
 %%%===================================================================
 %%% Pool callbacks

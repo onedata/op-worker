@@ -28,6 +28,8 @@
 -define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
 -define(STREAMS_HEALTHCHECK_INTERVAL, application:get_env(?APP_NAME,
     dbsync_streams_healthcheck_interval, timer:seconds(5))).
+-define(DBSYNC_STATE_REPORT_INTERVAL, timer:seconds(application:get_env(?APP_NAME,
+    dbsync_state_report_interval_sec, 15))).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -43,9 +45,8 @@
 init(_Args) ->
     couchbase_changes:enable([dbsync_utils:get_bucket()]),
     start_streams(),
-    erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(),
-        {sync_timer, streams_healthcheck}
-    ),
+    erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(), {sync_timer, streams_healthcheck}),
+    erlang:send_after(?DBSYNC_STATE_REPORT_INTERVAL, self(), {sync_timer, dbsync_state_report}),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -62,12 +63,19 @@ handle(streams_healthcheck) ->
     try
         start_streams()
     catch
-        _:Reason ->
-            ?error_stacktrace("Failed to start streams due to: ~p", [Reason])
+        Type:Reason ->
+            ?error_stacktrace("Failed to start streams due to ~p:~p", [Type, Reason])
     end,
-    erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(),
-        {sync_timer, streams_healthcheck}
-    ),
+    erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(), {sync_timer, streams_healthcheck}),
+    ok;
+handle(dbsync_state_report) ->
+    try
+        report_dbsync_state()
+    catch
+        Type:Reason ->
+            ?error_stacktrace("Failed to report DBSync state to Onezone due to ~p:~p", [Type, Reason])
+    end,
+    erlang:send_after(?DBSYNC_STATE_REPORT_INTERVAL, self(), {sync_timer, dbsync_state_report}),
     ok;
 handle({dbsync_message, _SessId, Msg = #tree_broadcast2{}}) ->
     handle_tree_broadcast(Msg);
@@ -150,8 +158,7 @@ start_streams() ->
         lists:foreach(fun(SpaceId) ->
             Name = {Module, SpaceId},
             Pid = global:whereis_name(Name),
-            Node = datastore_key:responsible_node(SpaceId),
-            case {Pid, Node =:= node(), Module} of
+            case {Pid, is_this_responsible_node(SpaceId), Module} of
                 {undefined, true, dbsync_in_stream} ->
                     start_in_stream(SpaceId);
                 {undefined, true, dbsync_out_stream} ->
@@ -188,12 +195,12 @@ start_out_stream(SpaceId) ->
             false
     end,
     Handler = fun
-        (Since, Until, Docs) when Since =:= Until ->
-            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Docs);
-        (Since, Until, Docs) ->
+        (Since, Until, Timestamp, Docs) when Since =:= Until ->
+            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs);
+        (Since, Until, Timestamp, Docs) ->
             ProviderId = oneprovider:get_id(),
-            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Docs),
-            dbsync_state:set_seq(SpaceId, ProviderId, Until)
+            dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs),
+            dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp)
     end,
     Spec = dbsync_out_stream_spec(SpaceId, SpaceId, [
         {register, true},
@@ -212,17 +219,18 @@ start_out_stream(SpaceId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_changes_batch(od_provider:id(), undefined |
-    dbsync_communicator:msg_id(), dbsync_communicator:changes_batch()) -> ok.
+dbsync_communicator:msg_id(), dbsync_communicator:changes_batch()) -> ok.
 handle_changes_batch(ProviderId, MsgId, #changes_batch{
     space_id = SpaceId,
     since = Since,
     until = Until,
+    timestamp = Timestamp,
     compressed_docs = CompressedDocs
 }) ->
     Name = {dbsync_in_stream, SpaceId},
     Docs = dbsync_utils:uncompress(CompressedDocs),
     gen_server:cast(
-        {global, Name}, {changes_batch, MsgId, ProviderId, Since, Until, Docs}
+        {global, Name}, {changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}
     ).
 
 %%--------------------------------------------------------------------
@@ -239,13 +247,13 @@ handle_changes_request(ProviderId, #changes_request2{
     until = Until
 }) ->
     Handler = fun
-        (BatchSince, end_of_stream, Docs) ->
+        (BatchSince, end_of_stream, Timestamp, Docs) ->
             dbsync_communicator:send_changes(
-                ProviderId, SpaceId, BatchSince, Until, Docs
+                ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs
             );
-        (BatchSince, BatchUntil, Docs) ->
+        (BatchSince, BatchUntil, Timestamp, Docs) ->
             dbsync_communicator:send_changes(
-                ProviderId, SpaceId, BatchSince, BatchUntil, Docs
+                ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )
     end,
     ReqId = dbsync_utils:gen_request_id(),
@@ -275,3 +283,25 @@ handle_tree_broadcast(BroadcastMsg = #tree_broadcast2{
 }) ->
     handle_changes_batch(SrcProviderId, MsgId, Msg),
     dbsync_communicator:forward(BroadcastMsg).
+
+%% @private
+-spec report_dbsync_state() -> ok.
+report_dbsync_state() ->
+    Spaces = dbsync_utils:get_spaces(),
+    lists:foreach(fun(SpaceId) ->
+        is_this_responsible_node(SpaceId) andalso report_dbsync_state(SpaceId)
+    end, Spaces).
+
+%% @private
+-spec report_dbsync_state(od_space:id()) -> ok.
+report_dbsync_state(SpaceId) ->
+    {ok, Providers} = space_logic:get_provider_ids(SpaceId),
+    SeqPerProvider = lists:foldl(fun(ProviderId, Acc) ->
+        Acc#{ProviderId => dbsync_state:get_seq(SpaceId, ProviderId)}
+    end, #{}, Providers),
+    space_logic:report_dbsync_state(SpaceId, SeqPerProvider).
+
+%% @private
+-spec is_this_responsible_node(od_space:id()) -> boolean().
+is_this_responsible_node(SpaceId) ->
+    node() == datastore_key:responsible_node(SpaceId).

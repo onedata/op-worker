@@ -292,8 +292,7 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
 
 
 get_sd_handle(Worker, SpaceId, SessionId, Uuid, StorageId, FilePath) ->
-    rpc:call(Worker, storage_driver, new_handle,
-        [SessionId, SpaceId, Uuid, StorageId, FilePath, undefined]).
+    rpc:call(Worker, storage_driver, new_handle, [SessionId, SpaceId, Uuid, StorageId, FilePath]).
 
 setxattr(Worker, SDHandle, Key, Value) ->
     rpc:call(Worker, storage_driver, setxattr, [SDHandle, Key, Value, true, true]).

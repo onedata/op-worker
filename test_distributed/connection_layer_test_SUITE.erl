@@ -555,14 +555,14 @@ init_per_testcase(heartbeats_test, Config) ->
     end),
 
     test_utils:mock_new(Workers, attr_req),
-    test_utils:mock_expect(Workers, attr_req, get_file_attr_light, fun
-        (UserCtx, FileCtx, IncludeSize) ->
+    test_utils:mock_expect(Workers, attr_req, get_file_attr_insecure, fun
+        (UserCtx, FileCtx, Opts) ->
             case get_cp_settings(CP_Pid) of
                 attr_delay ->
                     timer:sleep(timer:seconds(70)),
-                    meck:passthrough([UserCtx, FileCtx, IncludeSize]);
+                    meck:passthrough([UserCtx, FileCtx, Opts]);
                 _ ->
-                    meck:passthrough([UserCtx, FileCtx, IncludeSize])
+                    meck:passthrough([UserCtx, FileCtx, Opts])
             end
     end),
 

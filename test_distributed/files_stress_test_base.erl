@@ -15,6 +15,7 @@
 
 -include("global_definitions.hrl").
 -include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
+-include_lib("cluster_worker/include/modules/datastore/ha_datastore.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -23,7 +24,7 @@
 %% export for ct
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 -export([many_files_creation_tree_test_base/2, many_files_creation_tree_test_base/3,
-    many_files_creation_tree_test_base/4, single_dir_creation_test_base/2]).
+    many_files_creation_tree_test_base/4, many_files_creation_tree_test_base/5, single_dir_creation_test_base/2]).
 -export([create_single_call/4, get_final_ans_tree/9, get_param_value/2]).
 
 -define(TIMEOUT, timer:minutes(30)).
@@ -144,6 +145,9 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS) ->
     many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, false).
 
 many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata) ->
+    many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata, 1).
+
+many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata, HA_Nodes) ->
     % Get test and environment description
     SpawnBegLevel = ?config(spawn_beg_level, Config),
     SpawnEndLevel = ?config(spawn_end_level, Config),
@@ -153,6 +157,10 @@ many_files_creation_tree_test_base(Config, WriteToFile, CacheGUIDS, SetMetadata)
 
     % Setup test
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(Worker) ->
+        ?assertEqual(ok, rpc:call(Worker, ha_datastore, change_config, [HA_Nodes, ?HA_CAST_PROPAGATION]))
+    end, Workers),
+
     User = <<"user1">>,
 
     [SessId | _] = SessIds =
@@ -567,7 +575,7 @@ process_answer(Answers, Ans, ToAddV) ->
 ls(_Worker, _SessId, _Dir, _Token, true) ->
     ok;
 ls(Worker, SessId, Dir, Token, _) ->
-    {ok, _, Token2, IsLast} = lfm_proxy:ls(Worker, SessId, {path, Dir}, 0, 2000, Token),
+    {ok, _, Token2, IsLast} = lfm_proxy:get_children(Worker, SessId, {path, Dir}, 0, 2000, Token),
     ls(Worker, SessId, Dir, Token2, IsLast).
 
 get_param_value(ParamName, ParamsList) ->

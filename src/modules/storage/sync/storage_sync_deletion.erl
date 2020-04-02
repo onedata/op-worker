@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 % API
--export([do_master_job/2, do_slave_job/2, get_master_job/1, get_master_job/2]).
+-export([do_master_job/2, do_slave_job/2, get_master_job/1, delete_file_and_update_counters/3]).
 
 -type master_job() :: storage_sync_traverse:master_job().
 -type slave_job() :: storage_sync_traverse:slave_job().
@@ -37,19 +37,14 @@
 %%%===================================================================
 
 -spec get_master_job(master_job()) -> master_job().
-get_master_job(Job) ->
-    get_master_job(Job, true).
-
--spec get_master_job(master_job(), boolean()) -> master_job().
-get_master_job(Job = #storage_traverse_master{info = Info}, UpdateSyncCounters) ->
+get_master_job(Job = #storage_traverse_master{info = Info}) ->
     Job#storage_traverse_master{
         info = Info#{
             detect_deletions => true,
             sync_links_token => #link_token{},
             sync_links_children => [],
             file_meta_token => #link_token{},
-            file_meta_children => [],
-            update_sync_counters => UpdateSyncCounters
+            file_meta_children => []
         }
     }.
 
@@ -82,10 +77,11 @@ do_master_job(Job = #storage_traverse_master{
         sync_links_children := SLChildren,
         file_meta_token := FMToken,
         file_meta_children := FMChildren,
-        update_sync_counters := UpdateSyncCounters
+        storage_type := StorageType
 }}, _Args) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     Result = try
         case refill_file_meta_children(FMChildren, FileCtx, FMToken) of
             {error, not_found} ->
@@ -97,9 +93,8 @@ do_master_job(Job = #storage_traverse_master{
                     {error, not_found} ->
                         {ok, #{}};
                     {SLChildren2, SLToken2} ->
-                        StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                         {MasterJobs, SlaveJobs} = generate_deletion_jobs(Job, SLChildren2, SLToken2, FMChildren2, FMToken2),
-                        maybe_increase_to_process_counter(SpaceId, StorageId, length(SlaveJobs) + length(MasterJobs), UpdateSyncCounters),
+                        storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, length(SlaveJobs) + length(MasterJobs)),
                         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId, length(MasterJobs)),
                         {ok, #{
@@ -113,7 +108,16 @@ do_master_job(Job = #storage_traverse_master{
         throw:?ENOENT ->
             {ok, #{}}
     end,
-    maybe_mark_processed_file(SpaceId, StorageId, UpdateSyncCounters),
+    case StorageType of
+        ?OBJECT_STORAGE ->
+            % on object storage, whole tree structure is processed recursively,
+            % therefore we cannot delete whole tree now (see storage_sync_links.erl for more details)
+            ok;
+        ?BLOCK_STORAGE ->
+            % each directory on block storage is processed separately so we can safely delete its links tree
+            storage_sync_links:delete_recursive(StorageFileId, StorageId)
+    end,
+    storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
     Result.
 
 %%--------------------------------------------------------------------
@@ -123,14 +127,9 @@ do_master_job(Job = #storage_traverse_master{
 %% @end
 %%--------------------------------------------------------------------
 -spec do_slave_job(slave_job(), traverse:id()) -> ok.
-do_slave_job(#storage_traverse_slave{
-    info = #{
-        file_ctx := FileCtx,
-        storage_id := StorageId,
-        update_sync_counters := UpdateSyncCounters
-}}, _Task) ->
+do_slave_job(#storage_traverse_slave{info = #{file_ctx := FileCtx, storage_id := StorageId}}, _Task) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters).
+    maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId).
 
 %%===================================================================
 %% Internal functions
@@ -272,18 +271,14 @@ generate_deletion_jobs(Job, [{SLName, _} | RestSLChildren], SLToken,
 
 
 -spec new_slave_job(master_job(), file_meta:uuid()) -> slave_job().
-new_slave_job(#storage_traverse_master{
-    storage_file_ctx = StorageFileCtx,
-    info  = #{update_sync_counters := UpdateSyncCounters}
-}, ChildUuid) ->
+new_slave_job(#storage_traverse_master{storage_file_ctx = StorageFileCtx}, ChildUuid) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     #storage_traverse_slave{
         info = #{
             detect_deletions => true,
             file_ctx => file_ctx:new_by_guid(file_id:pack_guid(ChildUuid, SpaceId)),
-            storage_id => StorageId,
-            update_sync_counters => UpdateSyncCounters
+            storage_id => StorageId
         }}.
 
 -spec next_batch_master_job(master_job(), sync_links_children(), datastore_links_iter:token(),
@@ -300,10 +295,8 @@ next_batch_master_job(Job = #storage_traverse_master{info = Info}, SLChildrenToP
 -spec new_child_master_job(master_job(), file_meta:name(), file_meta:uuid()) -> master_job().
 new_child_master_job(Job = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
-    info = #{
-        storage_type := StorageType,
-        update_sync_counters := UpdateSyncCounters
-}}, ChildName, ChildUuid) ->
+    info = #{storage_type := StorageType}
+}, ChildName, ChildUuid) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     ChildMasterJob = Job#storage_traverse_master{
         storage_file_ctx = storage_file_ctx:get_child_ctx_const(StorageFileCtx, ChildName),
@@ -311,7 +304,7 @@ new_child_master_job(Job = #storage_traverse_master{
             storage_type => StorageType,
             file_ctx => file_ctx:new_by_guid(file_id:pack_guid(ChildUuid, SpaceId))}
     },
-    get_master_job(ChildMasterJob, UpdateSyncCounters).
+    get_master_job(ChildMasterJob).
 
 
 %%-------------------------------------------------------------------
@@ -321,80 +314,78 @@ new_child_master_job(Job = #storage_traverse_master{
 %% suitable functions.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_delete_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(),
-    boolean()) -> ok.
-maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
+-spec maybe_delete_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
+maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     try
-        {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
-        case IsDir of
+        {SDHandle, FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx),
+        {IsStorageFileCreated, FileCtx3} = file_ctx:is_storage_file_created(FileCtx2),
+        case IsStorageFileCreated and not storage_driver:exists(SDHandle) of
             true ->
-                maybe_delete_dir_and_update_counters(
-                    FileCtx2, SpaceId, StorageId, UpdateSyncCounters);
+                % file is still missing on storage we can delete it from db
+               delete_file_and_update_counters(FileCtx3, SpaceId, StorageId);
             false ->
-                maybe_delete_regular_file_and_update_counters(
-                    FileCtx2, SpaceId, StorageId, UpdateSyncCounters)
+                storage_sync_monitoring:mark_processed_file(SpaceId, StorageId)
         end
     catch
+        throw:?ENOENT ->
+            storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
+            ok;
         Error:Reason ->
             ?error_stacktrace("~p:maybe_delete_file_and_update_counters failed due to ~p",
                 [?MODULE, {Error, Reason}]),
-            maybe_mark_failed_file(SpaceId, StorageId, UpdateSyncCounters)
+            storage_sync_monitoring:mark_failed_file(SpaceId, StorageId)
+    end.
+
+-spec delete_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
+delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
+    case file_ctx:is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            delete_dir_recursive_and_update_counters(FileCtx2, SpaceId, StorageId);
+        {false, FileCtx2} ->
+            delete_regular_file_and_update_counters(FileCtx2, SpaceId, StorageId)
     end.
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Checks whether given directory can be deleted by sync.
-%% If true, this function deletes it and updates sync counters.
+%% This function deletes directory recursively it and updates sync counters.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_delete_dir_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(), boolean()) -> ok.
-maybe_delete_dir_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
-    {DirLocation, FileCtx2} = file_ctx:get_dir_location_doc(FileCtx),
-    case dir_location:is_storage_file_created(DirLocation) of
-        true ->
-            delete_dir(FileCtx2, SpaceId, StorageId, UpdateSyncCounters),
-            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx2),
-            storage_sync_logger:log_deletion(StorageFileId, SpaceId),
-            maybe_mark_deleted_file(SpaceId, StorageId, UpdateSyncCounters);
-        false ->
-            maybe_mark_processed_file(SpaceId, StorageId, UpdateSyncCounters)
-    end.
-
+-spec delete_dir_recursive_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
+delete_dir_recursive_and_update_counters(FileCtx, SpaceId, StorageId) ->
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    delete_dir_recursive(FileCtx3, SpaceId, StorageId),
+    storage_sync_logger:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Checks whether given regular file can be deleted by sync.
-%% If true, this function deletes it and updates sync counters.
+%% This function deletes regular file and updates sync counters.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_delete_regular_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id(),
-    boolean()) -> ok.
-maybe_delete_regular_file_and_update_counters(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
-    {FileLocation, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx, false),
-    case file_location:is_storage_file_created(FileLocation) of
-        true ->
-            {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx2),
-            delete_file(FileCtx2),
-            storage_sync_logger:log_deletion(StorageFileId, SpaceId),
-            maybe_mark_deleted_file(SpaceId, StorageId, UpdateSyncCounters),
-            ok;
-        false ->
-            maybe_mark_processed_file(SpaceId, StorageId, UpdateSyncCounters)
-    end.
+-spec delete_regular_file_and_update_counters(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
+delete_regular_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
+    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {CanonicalPath, FileCtx3} = file_ctx:get_canonical_path(FileCtx2),
+    FileUuid = file_ctx:get_uuid_const(FileCtx3),
+    delete_file(FileCtx3),
+    storage_sync_logger:log_deletion(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId).
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
 %% Deletes directory that has been deleted on storage from the system.
-%% It deleted directory recursively.
+%% It deletes directory recursively.
 %% @end
 %%-------------------------------------------------------------------
--spec delete_dir(file_ctx:ctx(), od_space:id(), storage:id(), boolean()) -> ok.
-delete_dir(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
+-spec delete_dir_recursive(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
+delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     {ok, ChunkSize} = application:get_env(?APP_NAME, ls_chunk_size),
-    {ok, FileCtx2} = delete_children(FileCtx, RootUserCtx, 0, ChunkSize, SpaceId, StorageId, UpdateSyncCounters),
+    {ok, FileCtx2} = delete_children(FileCtx, RootUserCtx, 0, ChunkSize, SpaceId, StorageId),
     delete_file(FileCtx2).
 
 %%-------------------------------------------------------------------
@@ -404,19 +395,19 @@ delete_dir(FileCtx, SpaceId, StorageId, UpdateSyncCounters) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec delete_children(file_ctx:ctx(), user_ctx:ctx(), non_neg_integer(), non_neg_integer(),
-    od_space:id(), storage:id(), boolean()) -> {ok, file_ctx:ctx()}.
-delete_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId, UpdateSyncCounters) ->
+    od_space:id(), storage:id()) -> {ok, file_ctx:ctx()}.
+delete_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId) ->
     try
         {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, ChunkSize),
-        maybe_increase_to_process_counter(SpaceId, StorageId, length(ChildrenCtxs), UpdateSyncCounters),
+        storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, length(ChildrenCtxs)),
         lists:foreach(fun(ChildCtx) ->
-            maybe_delete_file_and_update_counters(ChildCtx, SpaceId, StorageId, UpdateSyncCounters)
+            delete_file_and_update_counters(ChildCtx, SpaceId, StorageId)
         end, ChildrenCtxs),
         case length(ChildrenCtxs) < ChunkSize of
             true ->
                 {ok, FileCtx2};
             false ->
-                delete_children(FileCtx2, UserCtx, Offset + ChunkSize, ChunkSize, SpaceId, StorageId, UpdateSyncCounters)
+                delete_children(FileCtx2, UserCtx, Offset + ChunkSize, ChunkSize, SpaceId, StorageId)
         end
     catch
         throw:?ENOENT ->
@@ -435,38 +426,13 @@ delete_children(FileCtx, UserCtx, Offset, ChunkSize, SpaceId, StorageId, UpdateS
 %%-------------------------------------------------------------------
 -spec delete_file(file_ctx:ctx()) -> ok.
 delete_file(FileCtx) ->
-    RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        delete_req:delete(RootUserCtx, FileCtx, false, false)
+        fslogic_delete:handle_file_deleted_on_synced_storage(FileCtx)
     catch
         throw:?ENOENT ->
             ok
     end.
 
-
--spec maybe_mark_failed_file(od_space:id(), storage:id(), boolean()) -> ok.
-maybe_mark_failed_file(SpaceId, StorageId, true) ->
-    storage_sync_monitoring:mark_failed_file(SpaceId, StorageId);
-maybe_mark_failed_file(_SpaceId, _StorageId, false) ->
-    ok.
-
--spec maybe_mark_processed_file(od_space:id(), storage:id(), boolean()) -> ok.
-maybe_mark_processed_file(SpaceId, StorageId, true) ->
-    storage_sync_monitoring:mark_processed_file(SpaceId, StorageId);
-maybe_mark_processed_file(_SpaceId, _StorageId, false) ->
-    ok.
-
--spec maybe_mark_deleted_file(od_space:id(), storage:id(), boolean()) -> ok.
-maybe_mark_deleted_file(SpaceId, StorageId, true) ->
-    storage_sync_monitoring:mark_deleted_file(SpaceId, StorageId);
-maybe_mark_deleted_file(_SpaceId, _StorageId, false) ->
-    ok.
-
--spec maybe_increase_to_process_counter(od_space:id(), storage:id(), non_neg_integer(), boolean()) -> ok.
-maybe_increase_to_process_counter(SpaceId, StorageId, ToProcessNum, true) ->
-    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, ToProcessNum);
-maybe_increase_to_process_counter(_SpaceId, _StorageId, _ToProcessNum, false) ->
-    ok.
 
 -spec finish_callback(storage_file_ctx:ctx()) -> function().
 finish_callback(StorageFileCtx) ->
