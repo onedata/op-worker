@@ -52,8 +52,7 @@
     delete_share/1,
     list_transfers/1,
     track_transferred_files/1,
-    xattr_put/1,
-    primitive_json_metadata_test/1
+    xattr_put/1
 ]).
 
 %utils
@@ -81,8 +80,7 @@ all() ->
         delete_share,
         list_transfers,
         track_transferred_files,
-        xattr_put,
-        primitive_json_metadata_test
+        xattr_put
     ]).
 
 -define(ATTEMPTS, 100).
@@ -768,21 +766,6 @@ delete_share(Config) ->
         {ok, _},
         lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)
     ).
-
-primitive_json_metadata_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-
-    Primitives = [<<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>,
-        <<"null">>, <<"\"string\"">>],
-
-    lists:foreach(fun(Primitive) ->
-        ?assertMatch({ok, 204, _, _},
-            rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, put,
-                ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), Primitive)),
-        ?assertMatch({ok, 200, _, Primitive},
-            rest_test_utils:request(WorkerP1, <<"metadata/json/space2">>, get,
-                ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]), []))
-    end, Primitives).
 
 list_transfers(Config) ->
     ct:timetrap({hours, 1}),

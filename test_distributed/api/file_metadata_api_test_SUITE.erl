@@ -1062,7 +1062,11 @@ set_json_metadata_test(Config) ->
         required = [<<"metadata">>],
         optional = [<<"filter_type">>, <<"filter">>],
         correct_values = #{
-            <<"metadata">> => [ExampleJson],
+            <<"metadata">> => [
+                ExampleJson,
+                % Primitive json values
+                <<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>, <<"null">>, <<"\"string\"">>
+            ],
             <<"filter_type">> => [<<"keypath">>],
             <<"filter">> => [
                 <<"attr1.[1]">>,        % Test setting attr in existing array
@@ -1111,7 +1115,7 @@ set_json_metadata_test(Config) ->
         (false, #api_test_ctx{node = Node}) ->
             ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS),
             true;
-        (true, #api_test_ctx{node = TestNode} = TestCtx) ->
+        (true, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Meta}} = TestCtx) when Meta == ExampleJson ->
             ExpResult = GetExpectedResultFun(TestCtx),
             lists:foreach(fun(Node) ->
                 % Below expected metadata depends on the tested parameters combination order.
@@ -1160,6 +1164,13 @@ set_json_metadata_test(Config) ->
                 _ ->
                     ok
             end,
+            true;
+        (true, #api_test_ctx{data = #{<<"metadata">> := Metadata}}) ->
+            % Primitive jsons are set without optional params so should match exactly to itself
+            lists:foreach(fun(Node) ->
+                ExpMetadata = json_utils:decode(Metadata),
+                ?assertMatch({ok, ExpMetadata}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS)
+            end, Providers),
             true
     end end,
 
@@ -1296,16 +1307,27 @@ set_metadata_test_base(
             }
         end
     end,
-    ConstructPrepareGsArgsFun = fun(FileId, Scope) -> fun(#api_test_ctx{data = Data}) ->
-        Aspect = case MetadataType of
-            <<"json">> -> json_metadata;
-            <<"rdf">> -> rdf_metadata;
-            <<"xattrs">> -> xattrs
+    ConstructPrepareGsArgsFun = fun(FileId, Scope) -> fun(#api_test_ctx{data = Data0}) ->
+        {Aspect, Data1} = case MetadataType of
+            <<"json">> ->
+                % Primitive metadata were specified as binaries to be send via REST,
+                % but gs needs them decoded first to be able to send them properly
+                Meta0 = maps:get(<<"metadata">>, Data0),
+                Meta1 = try
+                    json_utils:decode(Meta0)
+                catch _:_ ->
+                    Meta0
+                end,
+                {json_metadata, Data0#{<<"metadata">> => Meta1}};
+            <<"rdf">> ->
+                {rdf_metadata, Data0};
+            <<"xattrs">> ->
+                {xattrs, Data0}
         end,
         #gs_args{
             operation = create,
             gri = #gri{type = op_file, id = FileId, aspect = Aspect, scope = Scope},
-            data = Data
+            data = Data1
         }
     end end,
 
@@ -1384,7 +1406,9 @@ set_metadata_test_base(
         %% TEST SETTING METADATA FOR SHARED FILE SHOULD BE FORBIDDEN
 
         % Remove metadata and assert that no below call sets it again
-        RemoveMetadataFun(Provider1, FileGuid),
+        lists:foreach(fun(Node) ->
+            ?assertMatch(ok, RemoveMetadataFun(Node, FileGuid))
+        end, Providers),
 
         VerifyEnvForShareCallsFun = fun(_, #api_test_ctx{node = Node}) ->
             ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid)),
