@@ -28,6 +28,7 @@
 
 %% API
 -export([
+    set_default_onezone_domain/1,
     create_access_token/1, create_access_token/2, create_access_token/3,
     create_identity_token/1,
     setup_session/3, teardown_session/2,
@@ -123,6 +124,7 @@
 
 -define(TOKENS_SECRET, <<"secret">>).
 -define(TEMPORARY_TOKENS_GENERATION, 1).
+-define(DEFAULT_ONEZONE_DOMAIN, <<"onezone.test">>).
 
 %%%===================================================================
 %%% API
@@ -136,6 +138,11 @@
 -spec domain_to_provider_id(Domain :: atom()) -> binary().
 domain_to_provider_id(Domain) ->
     atom_to_binary(Domain, utf8).
+
+-spec set_default_onezone_domain(Config :: proplists:proplist()) -> ok.
+set_default_onezone_domain(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ok = test_utils:set_env(Workers, op_worker, oz_domain, ?DEFAULT_ONEZONE_DOMAIN).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -370,6 +377,7 @@ setup_storage(Config) ->
 %%--------------------------------------------------------------------
 -spec setup_storage([node()], Config :: list()) -> list().
 setup_storage([], Config) ->
+    set_default_onezone_domain(Config),
     Config;
 setup_storage([Worker | Rest], Config) ->
     TmpDir = generator:gen_storage_dir(),
@@ -669,6 +677,7 @@ get_supporting_storage_id(Worker, SpaceId) ->
 -spec create_test_users_and_spaces([Worker :: node()], ConfigPath :: string(), Config :: list()) -> list().
 create_test_users_and_spaces(AllWorkers, ConfigPath, Config) ->
     try
+        set_default_onezone_domain(Config),
         create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config)
     catch Type:Message ->
         ct:print("initializer:create_test_users_and_spaces crashed: ~p:~p~n~p", [

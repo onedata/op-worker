@@ -177,8 +177,11 @@ trusted_ca_certs() ->
 %%--------------------------------------------------------------------
 -spec get_oz_domain() -> binary().
 get_oz_domain() ->
-    {ok, Hostname} = application:get_env(?APP_NAME, oz_domain),
-    str_utils:to_binary(Hostname).
+    case application:get_env(?APP_NAME, oz_domain) of
+        {ok, Domain} when is_binary(Domain) -> Domain;
+        {ok, Domain} when is_list(Domain) -> str_utils:to_binary(Domain);
+        _ -> error({missing_env_variable, oz_domain})
+    end.
 
 
 %%--------------------------------------------------------------------
