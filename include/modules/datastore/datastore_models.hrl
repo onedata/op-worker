@@ -522,6 +522,9 @@
 %% Model that stores file handles
 -record(file_handles, {
     is_removed = false :: boolean(),
+    % this field informs whether file deletion was
+    % performed locally or in remote provider
+    is_local_removal = true :: boolean(),
     descriptors = #{} :: file_descriptors(),
     creation_handle :: file_handles:creation_handle()
 }).

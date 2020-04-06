@@ -19,7 +19,7 @@
 
 %% API
 -export([delete/1, exists/1, list/0]).
--export([register_open/4, register_release/3, mark_to_remove/1,
+-export([register_open/4, register_release/3, mark_to_remove/2, is_removed/1,
     invalidate_session_entry/2, is_used_by_session/2, get_creation_handle/1]).
 
 %% datastore_model callbacks
@@ -86,6 +86,12 @@ list() ->
         _ ->
             {error, {bad_nodes, BadNodes}}
     end.
+
+-spec is_removed(record() | doc()) -> boolean().
+is_removed(#document{value = FileHandles}) ->
+    is_removed(FileHandles);
+is_removed(#file_handles{is_removed = IsRemoved}) ->
+    IsRemoved.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -167,7 +173,7 @@ register_release(FileCtx, SessId, Count) ->
             true ->
                 Fds2 = maps:remove(SessId, Fds),
                 case {Removed, maps:size(Fds2)} of
-                    {true, 0} -> {error, removed};
+                    {true, 0} -> {error, {removed, Handle#file_handles.is_local_removal}};
                     _ -> {ok, Handle#file_handles{descriptors = Fds2}}
                 end;
             false ->
@@ -192,9 +198,9 @@ register_release(FileCtx, SessId, Count) ->
                 {error, {not_satisfied, _}} -> ok;
                 {error, Reason} -> {error, Reason}
             end;
-        {error, removed} ->
+        {error, {removed, IsLocalRemoval}} ->
             session_open_files:deregister(SessId, FileGuid),
-            fslogic_delete:handle_release_of_deleted_file(FileCtx),
+            fslogic_delete:handle_release_of_deleted_file(FileCtx, IsLocalRemoval),
             datastore_model:delete(?CTX, FileUuid);
         {error, not_found} ->
             ok;
@@ -207,10 +213,10 @@ register_release(FileCtx, SessId, Count) ->
 %% Marks files as removed.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_to_remove(file_ctx:ctx()) -> ok | {error, term()}.
-mark_to_remove(FileCtx) ->
+-spec mark_to_remove(file_ctx:ctx(), boolean()) -> ok | {error, term()}.
+mark_to_remove(FileCtx, IsLocalRemoval) ->
     Diff = fun(Handle = #file_handles{}) ->
-        {ok, Handle#file_handles{is_removed = true}}
+        {ok, Handle#file_handles{is_removed = true, is_local_removal = IsLocalRemoval}}
     end,
     case datastore_model:update(?CTX, file_ctx:get_uuid_const(FileCtx), Diff) of
         {ok, _} -> ok;
@@ -279,7 +285,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -303,6 +309,14 @@ get_record_struct(3) ->
         {is_removed, boolean},
         {descriptors, #{string => integer}},
         {creation_handle, binary}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {is_removed, boolean},
+        % added field
+        {is_local_removal, boolean},
+        {descriptors, #{string => integer}},
+        {creation_handle, binary}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -315,4 +329,6 @@ get_record_struct(3) ->
 upgrade_record(1, {?MODULE, IsRemoved, Descriptors}) ->
     {2, {?MODULE, IsRemoved, Descriptors}};
 upgrade_record(2, {?MODULE, IsRemoved, Descriptors}) ->
-    {3, {?MODULE, IsRemoved, Descriptors, undefined}}.
+    {3, {?MODULE, IsRemoved, Descriptors, undefined}};
+upgrade_record(3, {?MODULE, IsRemoved, Descriptors, CreationHandle}) ->
+    {4, {?MODULE, IsRemoved, true, Descriptors, CreationHandle}}.

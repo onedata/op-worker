@@ -159,10 +159,7 @@ maybe_delete_file_and_update_counters(ChildName, ChildUuid, ParentCtx, SpaceId, 
 -spec delete_file(file_ctx:ctx()) -> ok.
 delete_file(FileCtx) ->
     try
-        ok = fslogic_delete:handle_file_deleted_on_synced_storage(FileCtx),
-        fslogic_event_emitter:emit_file_removed(FileCtx, []),
-        ok = fslogic_delete:remove_file_handles(FileCtx),
-        fslogic_delete:remove_auxiliary_documents(FileCtx)
+        ok = fslogic_delete:handle_file_deleted_on_synced_storage(FileCtx)
     catch
         throw:?ENOENT ->
             ok
