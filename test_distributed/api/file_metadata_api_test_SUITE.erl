@@ -942,7 +942,7 @@ get_metadata_test_base(
 
 
 set_rdf_metadata_test(Config) ->
-    [Provider2, Provider1] = ?config(op_worker_nodes, Config),
+    [Provider2, Provider1] = Providers = ?config(op_worker_nodes, Config),
 
     GetSessionFun = fun(Node) ->
         ?config({session_id, {?USER_IN_BOTH_SPACES, ?GET_DOMAIN(Node)}}, Config)
@@ -984,11 +984,13 @@ set_rdf_metadata_test(Config) ->
     },
 
     ConstructVerifyEnvForSuccessfulCallsFun = fun(FileGuid) -> fun
-        (false, #api_test_ctx{node = Node}) ->
-            ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS),
+        (false, #api_test_ctx{node = TestNode}) ->
+            ?assertMatch({error, ?ENODATA}, GetMetadataFun(TestNode, FileGuid), ?ATTEMPTS),
             true;
-        (true, #api_test_ctx{node = Node, data = #{<<"metadata">> := Metadata}}) ->
-            ?assertMatch({ok, Metadata}, GetMetadataFun(Node, FileGuid)),
+        (true, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Metadata}}) ->
+            lists:foreach(fun(Node) ->
+                ?assertMatch({ok, Metadata}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS)
+            end, Providers),
 
             case Metadata of
                 ?RDF_METADATA_1 ->
@@ -997,8 +999,11 @@ set_rdf_metadata_test(Config) ->
                     ok;
                 ?RDF_METADATA_2 ->
                     % Remove ?RDF_METADATA_2 to test setting ?RDF_METADATA_1 on clean state
-                    ?assertMatch(ok, RemoveMetadataFun(Node, FileGuid)),
-                    ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS)
+                    ?assertMatch(ok, RemoveMetadataFun(TestNode, FileGuid)),
+                    % Wait for removal to be synced between providers.
+                    lists:foreach(fun(Node) ->
+                        ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS)
+                    end, Providers)
             end,
             true
     end end,
@@ -1009,6 +1014,7 @@ set_rdf_metadata_test(Config) ->
 
         GetMetadataFun,
         RemoveMetadataFun,
+        % Setting rdf metadata with correct values should always succeed
         fun(_) -> ok end,
         ConstructVerifyEnvForSuccessfulCallsFun,
 
@@ -1062,11 +1068,7 @@ set_json_metadata_test(Config) ->
         required = [<<"metadata">>],
         optional = [<<"filter_type">>, <<"filter">>],
         correct_values = #{
-            <<"metadata">> => [
-                ExampleJson,
-                % Primitive json values
-                <<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>, <<"null">>, <<"\"string\"">>
-            ],
+            <<"metadata">> => [ExampleJson],
             <<"filter_type">> => [<<"keypath">>],
             <<"filter">> => [
                 <<"attr1.[1]">>,        % Test setting attr in existing array
@@ -1093,7 +1095,7 @@ set_json_metadata_test(Config) ->
         ]
     },
 
-    GetExpectedResultFun = fun(#api_test_ctx{data = Data}) ->
+    GetExpectedResultAndFiltersFun = fun(#api_test_ctx{data = Data}) ->
         FilterType = maps:get(<<"filter_type">>, Data, undefined),
         Filter = maps:get(<<"filter">>, Data, undefined),
 
@@ -1115,8 +1117,8 @@ set_json_metadata_test(Config) ->
         (false, #api_test_ctx{node = Node}) ->
             ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS),
             true;
-        (true, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Meta}} = TestCtx) when Meta == ExampleJson ->
-            ExpResult = GetExpectedResultFun(TestCtx),
+        (true, #api_test_ctx{node = TestNode} = TestCtx) ->
+            ExpResult = GetExpectedResultAndFiltersFun(TestCtx),
             lists:foreach(fun(Node) ->
                 % Below expected metadata depends on the tested parameters combination order.
                 % First only required params will be tested, then with only one optional params,
@@ -1164,13 +1166,6 @@ set_json_metadata_test(Config) ->
                 _ ->
                     ok
             end,
-            true;
-        (true, #api_test_ctx{data = #{<<"metadata">> := Metadata}}) ->
-            % Primitive jsons are set without optional params so should match exactly to itself
-            lists:foreach(fun(Node) ->
-                ExpMetadata = json_utils:decode(Metadata),
-                ?assertMatch({ok, ExpMetadata}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS)
-            end, Providers),
             true
     end end,
 
@@ -1181,14 +1176,71 @@ set_json_metadata_test(Config) ->
         GetMetadataFun,
         RemoveMetadataFun,
         fun(TestCtx) ->
-            case GetExpectedResultFun(TestCtx) of
-                {ok, _} -> ok;
-                {error, _} = Error -> Error
+            case GetExpectedResultAndFiltersFun(TestCtx) of
+                {ok, _} ->
+                    % Filters are not needed in 'set_metadata_test_base' - what
+                    % is needed is only information whether call should succeed
+                    % or fail with specific error
+                    ok;
+                {error, _} = Error ->
+                    Error
             end
         end,
         ConstructVerifyEnvForSuccessfulCallsFun,
 
         DataSpec,
+        ShareId,
+        [
+            {<<"dir">>, DirPath, DirGuid},
+            {<<"file">>, RegularFilePath, RegularFileGuid}
+        ]
+    ),
+
+    % Test setting primitive json values
+
+    SetPrimitiveJsonDataSpec = #data_spec{
+        required = [<<"metadata">>],
+        correct_values = #{<<"metadata">> => [
+            <<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>,
+            <<"null">>, <<"\"string\"">>
+        ]}
+    },
+
+    ConstructSetPrimitiveJsonVerifyEnvForSuccessfulCallsFun = fun(FileGuid) -> fun
+        (false, #api_test_ctx{node = TestNode}) ->
+            ?assertMatch({error, ?ENODATA}, GetMetadataFun(TestNode, FileGuid), ?ATTEMPTS),
+            true;
+        (true, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Metadata}}) ->
+            % Primitive jsons are set without optional params so should match exactly to itself
+            ExpMetadata = json_utils:decode(Metadata),
+            lists:foreach(fun(Node) ->
+                ?assertMatch({ok, ExpMetadata}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS)
+            end, Providers),
+
+            case Metadata of
+                <<"\"string\"">> ->
+                    % Remove metadata after last successful parameters combination tested so that
+                    % next tests can start from setting rather then updating metadata
+                    ?assertMatch(ok, RemoveMetadataFun(TestNode, FileGuid)),
+                    lists:foreach(fun(Node) ->
+                        ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS)
+                    end, Providers);
+                _ ->
+                    ok
+            end,
+            true
+    end end,
+
+    set_metadata_test_base(
+        Config,
+        <<"json">>,
+
+        GetMetadataFun,
+        RemoveMetadataFun,
+        fun(_) -> ok end,
+        ConstructSetPrimitiveJsonVerifyEnvForSuccessfulCallsFun,
+
+        SetPrimitiveJsonDataSpec,
         ShareId,
         [
             {<<"dir">>, DirPath, DirGuid},
@@ -1312,13 +1364,8 @@ set_metadata_test_base(
             <<"json">> ->
                 % Primitive metadata were specified as binaries to be send via REST,
                 % but gs needs them decoded first to be able to send them properly
-                Meta0 = maps:get(<<"metadata">>, Data0),
-                Meta1 = try
-                    json_utils:decode(Meta0)
-                catch _:_ ->
-                    Meta0
-                end,
-                {json_metadata, Data0#{<<"metadata">> => Meta1}};
+                Meta = maps:get(<<"metadata">>, Data0),
+                {json_metadata, Data0#{<<"metadata">> => maybe_decode_json(Meta)}};
             <<"rdf">> ->
                 {rdf_metadata, Data0};
             <<"xattrs">> ->
@@ -1505,7 +1552,11 @@ set_metadata_test_base(
                     % Request from user not supported by provider should be rejected
                     ?assertMatch({error, ?ENODATA}, GetMetadataFun(Node, FileGuid), ?ATTEMPTS);
                 _ ->
-                    ?assertMatch({ok, Metadata}, GetMetadataFun(Node, FileGuid)),
+                    ExpMetadata = case MetadataType of
+                        <<"json">> -> maybe_decode_json(Metadata);
+                        _ -> Metadata
+                    end,
+                    ?assertMatch({ok, ExpMetadata}, GetMetadataFun(Node, FileGuid)),
                     ?assertMatch(ok, RemoveMetadataFun(Node, FileGuid))
             end,
             true
@@ -1606,7 +1657,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_Case, Config) ->
     initializer:mock_share_logic(Config),
-    ct:timetrap({minutes, 30}),
+    ct:timetrap({minutes, 40}),
     lfm_proxy:init(Config).
 
 
@@ -1624,6 +1675,14 @@ encode_metadata(Metadata) when is_binary(Metadata) ->
     Metadata;
 encode_metadata(Metadata) when is_map(Metadata) ->
     json_utils:encode(Metadata).
+
+
+maybe_decode_json(MaybeEncodedJson) ->
+    try
+        json_utils:decode(MaybeEncodedJson)
+    catch _:_ ->
+        MaybeEncodedJson
+    end.
 
 
 set_all_metadata_types(Node, SessionId, Guid, set_1) ->
