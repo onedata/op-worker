@@ -61,14 +61,8 @@ operation_supported(_, _, _) -> false.
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
         <<"expression">> => {qos_expression, non_empty},
-        <<"fileId">> => {binary, fun(ObjectId) ->
-            case catch file_id:objectid_to_guid(ObjectId) of
-                {ok, Guid} ->
-                    {true, Guid};
-                _Error ->
-                    throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>))
-            end
-        end}
+        <<"fileId">> => {binary, 
+            fun(ObjectId) -> middleware_utils:check_object_id(ObjectId, <<"fileId">>) end}
     },
     optional => #{<<"replicasNum">> => {integer, {not_lower_than, 1}}}
 };

@@ -120,9 +120,6 @@ translate_file_details(#file_details{
     end,
     PublicFields = #{
         <<"hasMetadata">> => HasMetadata,
-        <<"hasDirectQos">> => HasDirectQos,
-        <<"hasEffQos">> => HasEffQos,
-        <<"activePermissionsType">> => ActivePermissionsType,
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
         <<"index">> => StartId,
@@ -139,6 +136,9 @@ translate_file_details(#file_details{
         private ->
             PublicFields#{
                 <<"providerId">> => ProviderId,
-                <<"ownerId">> => OwnerId
+                <<"ownerId">> => OwnerId,
+                <<"hasDirectQos">> => HasDirectQos,
+                <<"hasEffQos">> => HasEffQos,
+                <<"activePermissionsType">> => ActivePermissionsType
             }
     end.

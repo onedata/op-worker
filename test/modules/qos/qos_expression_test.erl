@@ -32,7 +32,12 @@ qos_expression_test() ->
         fun({Op1, Op2}) ->
             Expr = <<"country=PL", Op1/binary, "type=disk", Op2/binary, "country=FR">>,
             {ok, RPN} = qos_expression:raw_to_rpn(Expr),
-            ?assertEqual([<<"country=PL">>, <<"type=disk">>, Op1, <<"country=FR">>, Op2], RPN)
+            ?assertEqual([<<"country=PL">>, <<"type=disk">>, Op1, <<"country=FR">>, Op2], RPN),
+            % Because expression without brackets and expression with brackets are converted to 
+            % the same RPN form it is impossible to distinguish them when converting back. 
+            % As infix expression with brackets is unambiguous it is returned by `rpn_to_infix`.
+            ExprWithBrackets = <<"(country=PL", Op1/binary, "type=disk)", Op2/binary, "country=FR">>,
+            ?assertEqual({ok, ExprWithBrackets}, qos_expression:rpn_to_infix(RPN))
         end, OperatorPairs),
 
     Expr1 = <<"country=PL&type=disk|country=FR">>,
