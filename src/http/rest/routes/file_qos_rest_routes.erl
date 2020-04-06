@@ -30,14 +30,14 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Get QoS summary
-    {<<"/data/:id/qos_entries">>, rest_handler, #rest_req{
+    %% Get file QoS summary
+    {<<"/data/:id/qos_summary">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
-            aspect = eff_qos, 
+            aspect = file_qos_summary, 
             scope = private
         }
     }}

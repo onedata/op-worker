@@ -72,7 +72,7 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
             })
         end, ShareIds)
     };
-translate_resource(#gri{aspect = eff_qos, scope = private}, EffQosResponse) ->
+translate_resource(#gri{aspect = file_qos_summary, scope = private}, EffQosResponse) ->
     EffQosResponse.
 
 

@@ -128,7 +128,7 @@ add_qos(Config, #qos_to_add{
 add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) ->
     FileGuid = qos_tests_utils:get_guid(Worker, ?SESS_ID(Config, Worker), FilePath),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    URL = <<"qos-entry">>,
+    URL = <<"qos_entry">>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID), {<<"Content-type">>, <<"application/json">>}],
     ReqBody = #{
         <<"expression">> => QosExpression,
@@ -391,7 +391,7 @@ assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, Repl
 
 
 get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId) ->
-    URL = <<"qos-entry/", QosEntryId/binary>>,
+    URL = <<"qos_entry/", QosEntryId/binary>>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
     case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
         {ok, RespBody} ->
@@ -526,15 +526,15 @@ assert_effective_qos(Config, Worker,  FilePath, QosEntries, AssignedEntries, Fil
 
 get_effective_qos_by_rest(Config, Worker, FileGuid) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    URL = <<"data/", FileObjectId/binary, "/qos_entries">>,
+    URL = <<"data/", FileObjectId/binary, "/qos_summary">>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
     SpaceId = file_id:guid_to_space_id(FileGuid),
     case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
         {ok, RespBody} ->
             DecodedBody = json_utils:decode(RespBody),
             #{
-                <<"assignedEntries">> := AssignedEntries,
-                <<"qosEntries">> := QosEntriesWithStatus
+                <<"entries">> := QosEntriesWithStatus,
+                <<"assignedEntries">> := AssignedEntries
             } = DecodedBody,
             {ok, #effective_file_qos{
                 assigned_entries = AssignedEntries,
