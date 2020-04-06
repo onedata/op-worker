@@ -579,15 +579,15 @@ handle_provider_request(UserCtx, #set_mimetype{value = Value}, FileCtx) ->
     cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Value, false, false);
 handle_provider_request(UserCtx, #get_metadata{
     type = Type,
-    names = Names,
+    filter = Filter,
     inherited = Inherited
 }, FileCtx) ->
-    metadata_req:get_metadata(UserCtx, FileCtx, Type, Names, Inherited);
+    metadata_req:get_metadata(UserCtx, FileCtx, Type, Filter, Inherited);
 handle_provider_request(UserCtx, #set_metadata{
     metadata = #metadata{type = Type, value = Value},
-    names = Names
+    filter = Filter
 }, FileCtx) ->
-    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Names, false, false);
+    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Filter, false, false);
 handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
     metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->

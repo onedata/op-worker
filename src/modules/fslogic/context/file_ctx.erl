@@ -75,7 +75,7 @@
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
-    get_file_doc_including_deleted/1, get_parent/2,
+    get_file_doc_including_deleted/1, get_parent/2, get_and_check_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
     get_posix_storage_user_context/2, get_times/1,
@@ -462,6 +462,27 @@ get_parent(FileCtx = #file_ctx{guid = Guid, parent = undefined}, UserCtx) ->
     {Parent, FileCtx2#file_ctx{parent = Parent}};
 get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
     {Parent, FileCtx}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns 'undefined' if file is root file (either userRootDir or share root)
+%% or proper ParentCtx otherwise.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_and_check_parent(ctx(), user_ctx:ctx() | undefined) ->
+    {ParentFileCtx :: undefined | ctx(), NewFileCtx :: ctx()}.
+get_and_check_parent(FileCtx0, UserCtx) ->
+    FileGuid = file_ctx:get_guid_const(FileCtx0),
+    {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+
+    case file_ctx:get_guid_const(ParentCtx) of
+        FileGuid ->
+            % root dir/share root file -> there are no parents
+            {undefined, FileCtx1};
+        _ ->
+            {ParentCtx, FileCtx1}
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

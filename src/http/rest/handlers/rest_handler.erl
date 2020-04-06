@@ -380,7 +380,7 @@ get_data(Req, {as_is, KeyName}, Consumes) ->
             try
                 json_utils:decode(Body)
             catch _:_ ->
-                throw(?ERROR_BAD_VALUE_JSON(<<"request body">>))
+                throw(?ERROR_BAD_VALUE_JSON(KeyName))
             end;
         _ ->
             Body

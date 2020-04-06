@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains tests concerning data basic API (REST + gs).
+%%% This file contains tests concerning file data basic API (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_data_api_test_SUITE).
@@ -201,7 +201,7 @@ get_children_test(Config) ->
             Node == Provider2,
             Client == UserInBothSpacesClient
         ->
-            ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Response);
+            ?assertEqual(?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)), Response);
         (_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
             ?assertEqual(ExpSuccessResult, Response)
     end end,
@@ -484,6 +484,7 @@ init_per_suite(Config) ->
         NewConfig1 = [{space_storage_mock, false} | NewConfig],
         NewConfig2 = initializer:setup_storage(NewConfig1),
         lists:foreach(fun(Worker) ->
+            % TODO VFS-6251
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1)),
