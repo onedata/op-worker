@@ -6,7 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% API for files' json metadata.
+%%% API for files' json metadata. This api differs from one offered for
+%%% other xattrs in following aspects:
+%%% - 'inherited' flag causes all ancestors json metadata to be gathered
+%%% and merged before returning rather than getting the first ancestor
+%%% metadata with defined xattr undef specified key (as it happens for
+%%% other xattrs)
+%%% - Filters, that is path under/from which json metadata should be
+%%% set/fetched.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(json_metadata).
@@ -94,22 +101,18 @@ remove(UserCtx, FileCtx) ->
     [custom_metadata:value()]
 ) ->
     {ok, custom_metadata:value()} | {error, term()}.
-gather_ancestors_json_metadata(UserCtx, FileCtx, GatheredMetadata) ->
-    AllMetadata = case get_direct_json_metadata(UserCtx, FileCtx) of
+gather_ancestors_json_metadata(UserCtx, FileCtx0, GatheredMetadata) ->
+    AllMetadata = case get_direct_json_metadata(UserCtx, FileCtx0) of
         {ok, Metadata} ->
             [Metadata | GatheredMetadata];
         ?ERROR_NOT_FOUND ->
             GatheredMetadata
     end,
 
-    FileGuid = file_ctx:get_guid_const(FileCtx),
-    {ParentCtx, _FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
-
-    case file_ctx:get_guid_const(ParentCtx) of
-        FileGuid ->
-            % root dir/share root file -> there are no parents
+    case file_ctx:get_and_check_parent(FileCtx0, UserCtx) of
+        {undefined, _FileCtx1} ->
             {ok, AllMetadata};
-        _ ->
+        {ParentCtx, _FileCtx1} ->
             gather_ancestors_json_metadata(UserCtx, ParentCtx, AllMetadata)
     end.
 
@@ -287,6 +290,7 @@ merge(Jsons) ->
 %%--------------------------------------------------------------------
 -spec get_index_size(Name :: binary()) -> integer().
 get_index_size(Name) ->
+    % Sub number of bytes allocated to opening and closing parentheses
     byte_size(Name) - 2.
 
 

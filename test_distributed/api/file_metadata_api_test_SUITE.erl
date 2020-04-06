@@ -48,7 +48,7 @@ all() ->
     ]).
 
 
--define(ATTEMPTS, 90).
+-define(ATTEMPTS, 30).
 -define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
 
 

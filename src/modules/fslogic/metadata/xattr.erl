@@ -51,19 +51,15 @@ list(UserCtx, FileCtx0, IncludeInherited, ShowInternal) ->
     {ok, custom_metadata:value()} | {error, term()}.
 get(UserCtx, FileCtx, XattrName, false) ->
     get_xattr(UserCtx, FileCtx, XattrName);
-get(UserCtx, FileCtx, XattrName, true = Inherited) ->
-    case get_xattr(UserCtx, FileCtx, XattrName) of
+get(UserCtx, FileCtx0, XattrName, true = Inherited) ->
+    case get_xattr(UserCtx, FileCtx0, XattrName) of
         {ok, _} = Result ->
             Result;
         ?ERROR_NOT_FOUND ->
-            FileGuid = file_ctx:get_guid_const(FileCtx),
-            {ParentCtx, _FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
-
-            case file_ctx:get_guid_const(ParentCtx) of
-                FileGuid ->
-                    % root dir/share root file -> there are no parents
+            case file_ctx:get_and_check_parent(FileCtx0, UserCtx) of
+                {undefined, _FileCtx1} ->
                     ?ERROR_NOT_FOUND;
-                _ ->
+                {ParentCtx, _FileCtx1} ->
                     get(UserCtx, ParentCtx, XattrName, Inherited)
             end
     end.
@@ -169,14 +165,10 @@ list_direct_xattrs(FileCtx) ->
 -spec list_ancestor_xattrs(user_ctx:ctx(), file_ctx:ctx(), [custom_metadata:name()]) ->
     {ok, [custom_metadata:name()]} | {error, term()}.
 list_ancestor_xattrs(UserCtx, FileCtx0, GatheredXattrNames) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx0),
-    {ParentCtx, _FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
-
-    case file_ctx:get_guid_const(ParentCtx) of
-        FileGuid ->
-            % root dir/share root file -> there are no parents
+    case file_ctx:get_and_check_parent(FileCtx0, UserCtx) of
+        {undefined, _FileCtx1} ->
             {ok, GatheredXattrNames};
-        _ ->
+        {ParentCtx, _FileCtx1} ->
             AllXattrNames = case list_direct_xattrs(FileCtx0) of
                 {ok, []} ->
                     GatheredXattrNames;
