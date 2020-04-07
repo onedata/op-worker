@@ -760,7 +760,7 @@ backoff_should_be_used_on_space_level_error(Config) ->
         ?HARVESTER_ID(2) => [?INDEX_ID(1), ?INDEX_ID(2)]
     },
         RelevantSeqs1 ++ RelevantSeqs2, MainStreamPid
-    ),
+    , 120),
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes3),
     ?assertHarvestMetadataCalled(SpaceId, #{
@@ -768,7 +768,7 @@ backoff_should_be_used_on_space_level_error(Config) ->
         ?HARVESTER_ID(2) => [?INDEX_ID(1), ?INDEX_ID(2)]
     },
         RelevantSeqs3, MainStreamPid
-    ).
+    , 120).
 
 error_mix_test(Config) ->
     [N | _] = Nodes = ?config(op_worker_nodes, Config),
