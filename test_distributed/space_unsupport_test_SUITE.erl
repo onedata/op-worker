@@ -28,8 +28,9 @@
 -export([
     replicate_stage_test/1,
     replicate_stage_persistence_test/1,
-    cleanup_traverse_stage_persistence_test/1,
     cleanup_traverse_stage_test/1,
+    cleanup_traverse_stage_with_import_test/1,
+    cleanup_traverse_stage_persistence_test/1,
     delete_synced_documents_stage_test/1,
     delete_local_documents_stage_test/1,
     overall_test/1
@@ -38,8 +39,9 @@
 all() -> [
     replicate_stage_test,
     replicate_stage_persistence_test,
-    cleanup_traverse_stage_persistence_test,
     cleanup_traverse_stage_test,
+    cleanup_traverse_stage_with_import_test,
+    cleanup_traverse_stage_persistence_test,
     delete_synced_documents_stage_test,
     delete_local_documents_stage_test,
     overall_test
@@ -60,7 +62,7 @@ replicate_stage_test(Config) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
-    {_Dir, {G1, _}, {G2, _}} = create_files_and_dirs(Worker1, SessId),
+    {{DirGuid, _}, {G1, _}, {G2, _}} = create_files_and_dirs(Worker1, SessId),
     StageJob = #space_unsupport_job{
         stage = replicate,
         space_id = ?SPACE_ID,
@@ -83,7 +85,11 @@ replicate_stage_test(Config) ->
     
     Size = size(?TEST_DATA),
     check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G1),
-    check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G2).
+    check_distribution(Workers, SessId, [{Worker1, Size}, {Worker2, Size}], G2),
+    
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}).
 
 
 replicate_stage_persistence_test(Config) ->
@@ -91,8 +97,6 @@ replicate_stage_persistence_test(Config) ->
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
-    
-    create_files_and_dirs(Worker1, SessId),
     
     % Create new QoS entry representing entry created before provider restart.
     % Running stage again with existing entry should not create new one, 
@@ -117,6 +121,66 @@ replicate_stage_persistence_test(Config) ->
     ?assertMatch(?ERROR_NOT_FOUND, lfm_proxy:get_qos_entry(Worker1, SessId(Worker1), QosEntryId)).
 
 
+cleanup_traverse_stage_test(Config) ->
+    [Worker1, _Worker2] = Workers = ?config(op_worker_nodes, Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
+    
+    {{DirGuid, DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Worker1, SessId),
+    
+    % Relative paths to space dir. Empty binary represents space dir.
+    AllPaths = [<<"">>, DirPath, F1Path, F2Path],
+    check_files_on_storage(Worker1, AllPaths, true),
+    
+    StageJob = #space_unsupport_job{
+        stage = cleanup_traverse,
+        space_id = ?SPACE_ID,
+        storage_id = StorageId
+    },
+    
+    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
+    
+    check_files_on_storage(Worker1, AllPaths, false),
+    assert_storage_cleaned_up(Worker1, StorageId),
+    check_distribution(Workers, SessId, [], G1),
+    check_distribution(Workers, SessId, [], G2),
+    
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}),
+    rpc:call(Worker1, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]).
+
+
+cleanup_traverse_stage_with_import_test(Config) ->
+    [Worker1, _Worker2] = Workers = ?config(op_worker_nodes, Config),
+    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
+    
+    {{DirGuid, DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Worker1, SessId),
+    ok = rpc:call(Worker1, storage_sync, configure_import, [?SPACE_ID, true, #{max_depth => 5, sync_acl => true}]),
+    
+    % Relative paths to space dir. Empty binary represents space dir.
+    AllPaths = [<<"">>, DirPath, F1Path, F2Path],
+    check_files_on_storage(Worker1, AllPaths, true),
+    
+    StageJob = #space_unsupport_job{
+        stage = cleanup_traverse,
+        space_id = ?SPACE_ID,
+        storage_id = StorageId
+    },
+    
+    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
+    
+    check_files_on_storage(Worker1, AllPaths, true),
+    check_distribution(Workers, SessId, [], G1),
+    check_distribution(Workers, SessId, [], G2),
+    
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G1}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, G2}),
+    lfm_proxy:unlink(Worker1, SessId(Worker1), {guid, DirGuid}),
+    rpc:call(Worker1, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]).
+
+
 cleanup_traverse_stage_persistence_test(Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
@@ -135,43 +199,7 @@ cleanup_traverse_stage_persistence_test(Config) ->
     
     ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     % check that no additional traverse was started
-    test_utils:mock_assert_num_calls(Worker1, unsupport_cleanup_traverse, start, 1, 0, 1),
-    
-    rpc:call(Worker1, unsupport_cleanup_traverse, delete_ended, [?SPACE_ID, StorageId]).
-    
-
-cleanup_traverse_stage_test(Config) ->
-    [Worker1, _Worker2] = Workers = ?config(op_worker_nodes, Config),
-    SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
-    
-    {{_,DirPath}, {G1, F1Path}, {G2, F2Path}} = create_files_and_dirs(Worker1, SessId),
-    
-    % Relative paths to space dir. Empty binary represents space dir.
-    AllPaths = [<<"">>, DirPath, F1Path, F2Path], 
-    lists:foreach(fun(FileRelativePath) -> 
-        StoragePath = storage_file_path(Worker1, ?SPACE_ID, FileRelativePath),
-        ?assertEqual(true, check_exists_on_storage(Worker1, StoragePath))
-    end, AllPaths),
-    
-    StageJob = #space_unsupport_job{
-        stage = cleanup_traverse,
-        space_id = ?SPACE_ID,
-        storage_id = StorageId
-    },
-    
-    ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
-    
-%%    @TODO Uncomment after resolving VFS-6165
-%%    lists:foreach(fun(FileRelativePath) ->
-%%        StoragePath = storage_file_path(Worker1, ?SPACE_ID, FileRelativePath),
-%%        ?assertEqual(false, check_exists_on_storage(Worker1, StoragePath))
-%%    end, AllPaths),
-    
-%%    assert_storage_cleaned_up(Worker1, StorageId),
-    
-    check_distribution(Workers, SessId, [], G1),
-    check_distribution(Workers, SessId, [], G2).
+    test_utils:mock_assert_num_calls(Worker1, unsupport_cleanup_traverse, start, 1, 0, 1).
 
 
 delete_synced_documents_stage_test(Config) ->
@@ -222,7 +250,7 @@ delete_local_documents_stage_test(Config) ->
     ?assertMatch({ok, _}, rpc:call(Worker1, autocleaning, get, [?SPACE_ID])),
     ?assertMatch({ok, _}, rpc:call(Worker1, file_popularity_config, get, [?SPACE_ID])),
     ?assertMatch(true, rpc:call(Worker1, file_popularity_api, is_enabled, [?SPACE_ID])),
-    ?assertMatch({ok, [_], _}, rpc:call(Worker1, traverse_task_list, list, [<<"unsupport_cleanup_traverse">>, ended]), 10),
+    ?assertMatch({ok, [_], _}, rpc:call(Worker1, traverse_task_list, list, [<<"unsupport_cleanup_traverse">>, ended])),
     
     StageJob = #space_unsupport_job{
         stage = delete_local_documents,
@@ -267,8 +295,7 @@ overall_test(Config) ->
     % wait for documents to expire 
     timer:sleep(timer:seconds(70)),
 
-%%    @TODO Uncomment after resolving VFS-6165
-%%    assert_storage_cleaned_up(Worker1, StorageId),
+    assert_storage_cleaned_up(Worker1, StorageId),
     assert_synced_documents_cleaned_up(Worker1, ?SPACE_ID),
     assert_local_documents_cleaned_up(Worker1, ?SPACE_ID, StorageId).
 
@@ -381,6 +408,7 @@ assert_synced_documents_cleaned_up(Worker, SpaceId) ->
         ?assert(lists:foldl(
             fun (?ERROR_NOT_FOUND, Acc) -> Acc;
                 ({ok, _, #document{scope = Scope}}, Acc) when Scope =/= SpaceId -> Acc;
+                ({ok, _, #document{deleted = true}}, Acc) -> Acc; 
                 ({ok, _, Doc}, _) ->
                     ct:pal("Document not cleaned up in model ~p:~n ~p", [Model, Doc]),
                     false
@@ -458,6 +486,12 @@ check_distribution(Workers, SessId, Desc, Guid) ->
             lfm_proxy:get_file_distribution(Worker, SessId(Worker), {guid, Guid}), ?ATTEMPTS
         )
     end, Workers).
+
+check_files_on_storage(Worker, FilesList, ShouldExist) ->
+    lists:foreach(fun(FileRelativePath) ->
+        StoragePath = storage_file_path(Worker, ?SPACE_ID, FileRelativePath),
+        ?assertEqual(ShouldExist, check_exists_on_storage(Worker, StoragePath))
+    end, FilesList).
 
 check_exists_on_storage(Worker, StorageFilePath) ->
     rpc:call(Worker, filelib, is_file, [StorageFilePath]).

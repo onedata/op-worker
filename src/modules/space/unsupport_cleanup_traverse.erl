@@ -8,9 +8,13 @@
 %%% @doc
 %%% This module is responsible for traversing files tree in order to 
 %%% perform necessary clean up after space was unsupported, i.e foreach file: 
-%%%     * deletes it on storage, 
+%%%     * deletes it on storage (when storage sync is not enabled), 
 %%%     * deletes file_qos document
 %%%     * deletes local file_location or dir_location document
+%%% 
+%%% Clean up for directory is started after all its children have been traversed. 
+%%% This is determined using using cleanup_traverse_status document, 
+%%% which is created for each directory.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(unsupport_cleanup_traverse).
@@ -20,6 +24,8 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("tree_traverse.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
@@ -50,17 +56,22 @@
 
 -spec start(od_space:id(), storage:id()) -> {ok, id()}.
 start(SpaceId, StorageId) ->
+    TaskId = gen_id(SpaceId, StorageId),
+    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     Options = #{
-        task_id => gen_id(SpaceId, StorageId),
+        task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
-        %% @TODO VFS-6165 execute on dir after subtree
-        execute_slave_on_dir => true,
+        traverse_info => #{
+            % do not remove storage files if storage sync was enabled
+            remove_storage_files => not storage_sync:is_import_enabled(SpaceId, StorageId)
+        },
         additional_data => #{
             <<"space_id">> => SpaceId,
             <<"storage_id">> => StorageId
         }
     },
-    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    cleanup_traverse_status:create(TaskId, SpaceDirUuid),
     {ok, _} = tree_traverse:run(?POOL_NAME, file_ctx:new_by_guid(SpaceDirGuid), Options).
 
 
@@ -98,7 +109,7 @@ task_finished(TaskId, Pool) ->
         <<"space_id">> := SpaceId,
         <<"storage_id">> := StorageId
     }} = traverse_task:get_additional_data(Pool, TaskId),
-    space_unsupport:report_traverse_finished(SpaceId, StorageId).
+    space_unsupport:report_cleanup_traverse_finished(SpaceId, StorageId).
 
 -spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
     {ok, tree_traverse:master_job(), traverse:pool(), id()}  | {error, term()}.
@@ -113,29 +124,44 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(Job, MasterJobArgs) ->
-    tree_traverse:do_master_job(Job, MasterJobArgs).
+do_master_job(#tree_traverse{traverse_info = TraverseInfo} = Job, MasterJobArgs) ->
+    #{remove_storage_files := RemoveStorageFiles} = TraverseInfo,
+    
+    MasterJobFinishedCallback = fun(TaskId, SlaveJobs, MasterJobs, _SpaceId, Uuid, _BatchLastFilename) ->
+        ChildrenCount = length(SlaveJobs) + length(MasterJobs),
+        cleanup_traverse_status:report_children_listed(TaskId, Uuid, ChildrenCount),
+    
+        lists:foreach(fun(#tree_traverse{doc = #document{key = ChildDirUuid}}) ->
+            cleanup_traverse_status:create(TaskId, ChildDirUuid)
+        end, MasterJobs)
+    end,
+    
+    LastBatchFinishedCallback = fun(TaskId, Uuid, SpaceId) ->
+        FileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
+        Status = cleanup_traverse_status:report_last_batch(TaskId, Uuid),
+        maybe_cleanup_dir(Status, TaskId, FileCtx, RemoveStorageFiles)
+    end, 
+    
+    tree_traverse:do_master_job(
+        Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchFinishedCallback, async).
 
 -spec do_slave_job(traverse:job(), id()) -> ok.
-do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskId) ->
+do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, TaskId) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {FileLocation, FileCtx1} = file_ctx:get_local_file_location_doc(FileCtx, false),
+    #{remove_storage_files := RemoveStorageFiles} = TraverseInfo,
+    
     ok = file_qos:delete(FileUuid),
-    case file_ctx:is_dir(FileCtx1) of
-        {true, FC} ->
-            sd_utils:delete_storage_dir(FC, UserCtx); % this function also deletes dir_location
-        {false, FC} ->
-            case file_location:is_storage_file_created(FileLocation) of
-                false -> ok;
-                true -> sd_utils:delete_storage_file(FC, UserCtx)
-            end,
-            LocationId = file_location:local_id(FileUuid),
-            fslogic_location_cache:clear_blocks(FC, LocationId),
-            fslogic_location_cache:delete_location(FileUuid, LocationId)
-    end,
-    ok.
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    LocationId = file_location:local_id(FileUuid),
+    
+    {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
+    
+    RemoveStorageFiles andalso sd_utils:delete_storage_file(FileCtx1, UserCtx),
+    fslogic_location_cache:clear_blocks(FileCtx1, LocationId),
+    fslogic_location_cache:delete_location(FileUuid, LocationId),
+    
+    file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles).
 
 %%%===================================================================
 %%% Internal functions
@@ -145,3 +171,32 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, _TraverseInfo}, _TaskI
 -spec gen_id(od_space:id(), storage:id()) -> id().
 gen_id(SpaceId, StorageId) ->
     datastore_key:new_from_digest([SpaceId, StorageId]).
+
+
+%% @private
+-spec cleanup_dir(id(), file_ctx:ctx(), boolean()) -> ok.
+cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    RemoveStorageFiles andalso sd_utils:delete_storage_dir(FileCtx, UserCtx),
+    dir_location:delete(file_ctx:get_uuid_const(FileCtx)),
+    case file_ctx:is_space_dir_const(FileCtx) of
+        true -> ok;
+        false ->
+            {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
+            file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles)
+    end.
+
+
+%% @private
+-spec file_traverse_finished(id(), file_ctx:ctx(), boolean()) -> ok.
+file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles) ->
+    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    ParentStatus = cleanup_traverse_status:report_child_traversed(TaskId, ParentUuid),
+    maybe_cleanup_dir(ParentStatus, TaskId, ParentFileCtx, RemoveStorageFiles).
+
+
+%% @private
+-spec maybe_cleanup_dir(cleanup_traverse_status:status(), id(), file_ctx:ctx(), boolean()) -> ok.
+maybe_cleanup_dir(traversed, TaskId, FileCtx, RemoveStorageFiles) ->
+    cleanup_dir(TaskId, FileCtx, RemoveStorageFiles);
+maybe_cleanup_dir(not_traversed, _TaskId, _FileCtx, _RemoveStorageFiles) -> ok.
