@@ -26,9 +26,6 @@
 %% API
 -export([get/4, set/6, remove/2]).
 
-%% Private API - Export for unit and ct testing
--export([find/2, insert/3, merge/1]).
-
 
 %%%===================================================================
 %%% API
@@ -49,14 +46,17 @@ get(UserCtx, FileCtx, Filter, Inherited) ->
                 {ok, []} ->
                     ?ERROR_NOT_FOUND;
                 {ok, GatheredJsons} ->
-                    {ok, merge(GatheredJsons)}
+                    {ok, json_utils:merge(GatheredJsons)}
             end;
         false ->
             get_direct_json_metadata(UserCtx, FileCtx)
     end,
     case Result of
         {ok, Json} ->
-            {ok, find(Json, Filter)};
+            case json_utils:query(Json, Filter) of
+                {ok, _} = Ans -> Ans;
+                error -> ?ERROR_NOT_FOUND
+            end;
         {error, _} = Error ->
             Error
     end.
@@ -147,7 +147,10 @@ set_insecure(FileCtx, JsonToInsert, Names, Create, Replace) ->
             space_id = file_ctx:get_space_id_const(FileCtx),
             file_objectid = FileObjectId,
             value = #{
-                ?JSON_METADATA_KEY => insert(undefined, JsonToInsert, Names)
+                ?JSON_METADATA_KEY => case json_utils:insert(undefined, JsonToInsert, Names) of
+                    {ok, Json} -> Json;
+                    error -> throw({error, ?ENOATTR})
+                end
             }
         },
         scope = file_ctx:get_space_id_const(FileCtx)
@@ -160,11 +163,13 @@ set_insecure(FileCtx, JsonToInsert, Names, Create, Replace) ->
                 {error, ?ENODATA};
             _ ->
                 PrevJson = maps:get(?JSON_METADATA_KEY, MetaValue, undefined),
-                try
-                    NewJson = insert(PrevJson, JsonToInsert, Names),
-                    {ok, Meta#custom_metadata{value = MetaValue#{?JSON_METADATA_KEY => NewJson}}}
-                catch throw:{error, ?ENOATTR} = Error ->
-                    Error
+                case json_utils:insert(PrevJson, JsonToInsert, Names) of
+                    {ok, NewJson} ->
+                        {ok, Meta#custom_metadata{
+                            value = MetaValue#{?JSON_METADATA_KEY => NewJson}
+                        }};
+                    error ->
+                        {error, ?ENOATTR}
                 end
         end
     end,
@@ -179,127 +184,3 @@ set_insecure(FileCtx, JsonToInsert, Names, Create, Replace) ->
         false ->
             custom_metadata:create_or_update(ToCreate, Diff)
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Find sub-json in json tree
-%% TODO VFS-6253
-%% @end
-%%--------------------------------------------------------------------
--spec find(json_utils:json_term(), custom_metadata:filter()) ->
-    json_utils:json_term() | no_return().
-find(Json, []) ->
-    Json;
-find(Json, [Name | Rest]) ->
-    IndexSize = get_index_size(Name),
-    case Name of
-        <<"[", Element:IndexSize/binary, "]">> when is_list(Json) ->
-            Index = binary_to_integer(Element) + 1,
-            case length(Json) < Index of
-                true ->
-                    throw({error, ?ENOATTR});
-                false ->
-                    SubJson = lists:nth(Index, Json),
-                    find(SubJson, Rest)
-            end;
-        Name when is_map(Json) ->
-            case maps:find(Name, Json) of
-                error ->
-                    throw({error, ?ENOATTR});
-                {ok, SubJson} ->
-                    find(SubJson, Rest)
-            end;
-        _ ->
-            throw({error, ?ENOATTR})
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Insert sub-json to json tree
-%% TODO VFS-6253
-%% @end
-%%--------------------------------------------------------------------
--spec insert(Json :: map() | undefined, JsonToInsert :: map(), [binary()]) -> map() | no_return().
-insert(_Json, JsonToInsert, []) ->
-    JsonToInsert;
-insert(undefined, JsonToInsert, [Name | Rest]) ->
-    IndexSize = get_index_size(Name),
-    case Name of
-        <<"[", Element:IndexSize/binary, "]">> ->
-            Index = binary_to_integer(Element) + 1,
-            [null || _ <- lists:seq(1, Index - 1)] ++ [insert(undefined, JsonToInsert, Rest)];
-        _ ->
-            maps:put(Name, insert(undefined, JsonToInsert, Rest), #{})
-    end;
-insert(Json, JsonToInsert, [Name | Rest]) ->
-    IndexSize = get_index_size(Name),
-    case Name of
-        <<"[", Element:IndexSize/binary, "]">> when is_list(Json) ->
-            Index = binary_to_integer(Element) + 1,
-            Length = length(Json),
-            case Length < Index of
-                true ->
-                    Json ++ [null || _ <- lists:seq(Length + 1, Index - 1)] ++ [insert(undefined, JsonToInsert, Rest)];
-                false ->
-                    setnth(Index, Json, insert(lists:nth(Index, Json), JsonToInsert, Rest))
-            end;
-        _ when is_map(Json) ->
-            SubJson = maps:get(Name, Json, undefined),
-            maps:put(Name, insert(SubJson, JsonToInsert, Rest), Json);
-        _ ->
-            throw({error, ?ENOATTR})
-    end.
-
-
-%% TODO VFS-6253
-%% @private
--spec merge([json_utils:json_term()]) -> json_utils:json_term().
-merge(Jsons) ->
-    lists:foldl(fun
-        (Json, ParentJson) when is_map(Json) andalso is_map(ParentJson) ->
-            ChildKeys = maps:keys(Json),
-            ParentKeys = maps:keys(ParentJson),
-            ChildOnlyKey = ChildKeys -- ParentKeys,
-            CommonKeys = ChildKeys -- ChildOnlyKey,
-
-            ResultingJson = maps:merge(
-                ParentJson,
-                maps:with(ChildOnlyKey, Json)
-            ),
-
-            lists:foldl(fun(Key, Acc) ->
-                ChildValue = maps:get(Key, Json),
-                ParentValue = maps:get(Key, ParentJson),
-                Acc#{Key => merge([ParentValue, ChildValue])}
-            end, ResultingJson, CommonKeys);
-
-        (Json, _ParentJson) ->
-            Json
-    end, #{}, Jsons).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Get byte size of json array index stored in binary: e. g. "[12]" -> 2
-%% @end
-%%--------------------------------------------------------------------
--spec get_index_size(Name :: binary()) -> integer().
-get_index_size(Name) ->
-    % Sub number of bytes allocated to opening and closing parentheses
-    byte_size(Name) - 2.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Set nth element of list
-%% @end
-%%--------------------------------------------------------------------
--spec setnth(non_neg_integer(), list(), term()) -> list().
-setnth(1, [_ | Rest], New) -> [New | Rest];
-setnth(I, [E | Rest], New) -> [E | setnth(I - 1, Rest, New)].

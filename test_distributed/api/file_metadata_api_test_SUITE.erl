@@ -329,7 +329,7 @@ get_json_metadata_test(Config) ->
                             % insufficient perms on DirLayer2
                             throw(?ERROR_POSIX(?EACCES));
                         undefined ->
-                            json_metadata:merge([
+                            json_utils:merge([
                                 ?JSON_METADATA_1,
                                 ?JSON_METADATA_2,
                                 ?JSON_METADATA_3,
@@ -337,7 +337,7 @@ get_json_metadata_test(Config) ->
                                 ?JSON_METADATA_5
                             ]);
                         _ ->
-                            json_metadata:merge([
+                            json_utils:merge([
                                 ?JSON_METADATA_4,
                                 ?JSON_METADATA_5
                             ])
@@ -352,7 +352,7 @@ get_json_metadata_test(Config) ->
                             % insufficient perms on DirLayer2
                             throw(?ERROR_POSIX(?EACCES));
                         undefined ->
-                            json_metadata:merge([
+                            json_utils:merge([
                                 ?JSON_METADATA_1,
                                 ?JSON_METADATA_2,
                                 ?JSON_METADATA_3,
@@ -365,10 +365,11 @@ get_json_metadata_test(Config) ->
                     throw(?ERROR_POSIX(?ENODATA))
             end,
 
-            try
-                {ok, json_metadata:find(ExpJsonMetadata, FilterList)}
-            catch throw:{error, ?ENOATTR} ->
-                ?ERROR_POSIX(?ENODATA)
+            case json_utils:query(ExpJsonMetadata, FilterList) of
+                {ok, _} = Result ->
+                    Result;
+                error ->
+                    ?ERROR_POSIX(?ENODATA)
             end
         catch throw:Error ->
             Error
@@ -539,7 +540,7 @@ get_xattr_metadata_test(Config) ->
                             % are merged but for rest the first value found (which in
                             % this case is value directly set on file) is returned
                             ?ALL_METADATA_SET_2#{
-                                ?JSON_METADATA_KEY => json_metadata:merge([
+                                ?JSON_METADATA_KEY => json_utils:merge([
                                     ?JSON_METADATA_4,
                                     ?JSON_METADATA_5
                                 ]),

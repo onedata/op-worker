@@ -32,7 +32,7 @@
 -type type() :: json | rdf.
 -type rdf() :: binary().
 -type metadata() :: #metadata{}.
--type filter() :: [binary()].
+-type filter() :: json_utils:query().
 
 % Cdmi metadata/attributes
 -type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
