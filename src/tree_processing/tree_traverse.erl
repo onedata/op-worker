@@ -33,7 +33,7 @@
 % Getters API
 -export([get_traverse_info/1, set_traverse_info/2, get_doc/1, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
--export([do_master_job/2, do_master_job/4, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
+-export([do_master_job/2, do_master_job/5, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
 
 -type master_job() :: #tree_traverse{}.
 -type slave_job() :: file_meta:doc().
@@ -192,13 +192,13 @@ get_sync_info() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv do_master_job(Job, MasterJobArgs, fun(_,_,_,_,_,_) -> ok end, fun(_,_,_) -> ok end).
+%% @equiv do_master_job(Job, MasterJobArgs, fun(_,_,_,_,_,_) -> ok end, fun(_,_,_) -> ok end, sync).
 %% @end
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job(), traverse:master_job_extended_args()) -> 
     {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
-    do_master_job(Job, MasterJobArgs, fun(_,_,_,_,_,_) -> ok end, fun(_,_,_) -> ok end).
+    do_master_job(Job, MasterJobArgs, fun(_,_,_,_,_,_) -> ok end, fun(_,_,_) -> ok end, sync).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -207,56 +207,16 @@ do_master_job(Job, MasterJobArgs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job(), traverse:master_job_extended_args(), master_job_finished_callback(), 
-    last_batch_finished_callback()) -> {ok, traverse:master_job_map()}.
-do_master_job(#tree_traverse{
-    doc = #document{key = Uuid, scope = SpaceId, value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
-    token = Token,
-    last_name = LN,
-    last_tree = LT,
-    execute_slave_on_dir = OnDir,
-    batch_size = BatchSize,
-    traverse_info = TraverseInfo
-} = TT, #{task_id := TaskId} = _MasterJobArgs, MasterJobFinishedCallback, LastBatchCallback) ->
-    {ok, Children, ExtendedInfo} = case {Token, LN} of
-        {undefined, <<>>} ->
-            file_meta:list_children(Doc, BatchSize);
-        _ ->
-            file_meta:list_children(Doc, 0, BatchSize, Token, LN, LT)
-    end,
-    #{token := Token2, last_name := LN2, last_tree := LT2} = maps:merge(#{token => undefined}, ExtendedInfo),
-
-    {SlaveJobs, MasterJobs} = lists:foldl(fun(#child_link_uuid{
-        uuid = UUID}, {Slaves, Masters} = Acc) ->
-        case {file_meta:get({uuid, UUID}), OnDir} of
-            {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, true} ->
-                {[{ChildDoc, TraverseInfo} | Slaves], [get_child_job(TT, ChildDoc) | Masters]};
-            {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, _} ->
-                {Slaves, [get_child_job(TT, ChildDoc) | Masters]};
-            {{ok, ChildDoc}, _} ->
-                {[{ChildDoc, TraverseInfo} | Slaves], Masters};
-            {{error, not_found}, _} ->
-                Acc
-        end
-    end, {[], []}, Children),
+    last_batch_finished_callback(), sync | async) -> {ok, traverse:master_job_map()}.
+do_master_job(Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchCallback, sync) ->
+    {SlaveJobs, MasterJobs} = 
+        do_master_job_internal(Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchCallback),
+    {ok, #{slave_jobs => SlaveJobs, master_jobs => MasterJobs}};
+do_master_job(Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchCallback, async) ->
+    {SlaveJobs, MasterJobs} =
+        do_master_job_internal(Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchCallback),
+    {ok, #{slave_jobs => SlaveJobs, async_master_jobs => MasterJobs}}.
     
-    ok = MasterJobFinishedCallback(TaskId, SlaveJobs, MasterJobs, SpaceId, Uuid, LN2),
-
-    FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of
-        true -> 
-            ok = LastBatchCallback(TaskId, Uuid, SpaceId),
-            lists:reverse(MasterJobs);
-        false -> [TT#tree_traverse{
-            token = Token2,
-            last_name = LN2,
-            last_tree = LT2
-        } | lists:reverse(MasterJobs)]
-    end,
-    {ok, #{slave_jobs => lists:reverse(SlaveJobs), master_jobs => FinalMasterJobs}};
-do_master_job(#tree_traverse{
-    doc = Doc,
-    traverse_info = TraverseInfo
-}, _MasterJobArgs, _, _) ->
-    {ok, #{slave_jobs => [{Doc, TraverseInfo}], master_jobs => []}}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -301,6 +261,60 @@ get_timestamp() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+-spec do_master_job_internal(master_job(), traverse:master_job_extended_args(), master_job_finished_callback(),
+    last_batch_finished_callback()) -> {[{slave_job(), traverse_info()}], [master_job()]}.
+do_master_job_internal(#tree_traverse{
+    doc = #document{key = Uuid, scope = SpaceId, value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc,
+    token = Token,
+    last_name = LN,
+    last_tree = LT,
+    execute_slave_on_dir = OnDir,
+    batch_size = BatchSize,
+    traverse_info = TraverseInfo
+} = TT, #{task_id := TaskId} = _MasterJobArgs, MasterJobFinishedCallback, LastBatchCallback) ->
+    {ok, Children, ExtendedInfo} = case {Token, LN} of
+        {undefined, <<>>} ->
+            file_meta:list_children(Doc, BatchSize);
+        _ ->
+            file_meta:list_children(Doc, 0, BatchSize, Token, LN, LT)
+    end,
+    #{token := Token2, last_name := LN2, last_tree := LT2} = maps:merge(#{token => undefined}, ExtendedInfo),
+    
+    {SlaveJobs, MasterJobs} = lists:foldl(fun(#child_link_uuid{
+        uuid = UUID}, {Slaves, Masters} = Acc) ->
+        case {file_meta:get({uuid, UUID}), OnDir} of
+            {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, true} ->
+                {[{ChildDoc, TraverseInfo} | Slaves], [get_child_job(TT, ChildDoc) | Masters]};
+            {{ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = ChildDoc}, _} ->
+                {Slaves, [get_child_job(TT, ChildDoc) | Masters]};
+            {{ok, ChildDoc}, _} ->
+                {[{ChildDoc, TraverseInfo} | Slaves], Masters};
+            {{error, not_found}, _} ->
+                Acc
+        end
+    end, {[], []}, Children),
+    
+    ok = MasterJobFinishedCallback(TaskId, SlaveJobs, MasterJobs, SpaceId, Uuid, LN2),
+    
+    FinalMasterJobs = case (Token2 =/= undefined andalso Token2#link_token.is_last) or (Children =:= []) of
+        true ->
+            ok = LastBatchCallback(TaskId, Uuid, SpaceId),
+            lists:reverse(MasterJobs);
+        false -> [TT#tree_traverse{
+            token = Token2,
+            last_name = LN2,
+            last_tree = LT2
+        } | lists:reverse(MasterJobs)]
+    end,
+    {lists:reverse(SlaveJobs), FinalMasterJobs};
+do_master_job_internal(#tree_traverse{
+    doc = Doc,
+    traverse_info = TraverseInfo
+}, _MasterJobArgs, _, _) ->
+    {[{Doc, TraverseInfo}], []}.
+
 
 -spec get_child_job(master_job(), file_meta:doc()) -> master_job().
 get_child_job(#tree_traverse{

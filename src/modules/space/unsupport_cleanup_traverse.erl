@@ -142,9 +142,8 @@ do_master_job(#tree_traverse{traverse_info = TraverseInfo} = Job, MasterJobArgs)
         maybe_cleanup_dir(Status, TaskId, FileCtx, RemoveStorageFiles)
     end, 
     
-    {ok, #{master_jobs := MasterJobs, slave_jobs := SlaveJobs}} = 
-        tree_traverse:do_master_job(Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchFinishedCallback),
-    {ok, #{slave_jobs => SlaveJobs, async_master_jobs => MasterJobs}}.
+    tree_traverse:do_master_job(
+        Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchFinishedCallback, async).
 
 -spec do_slave_job(traverse:job(), id()) -> ok.
 do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, TaskId) ->
