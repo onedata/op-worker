@@ -491,22 +491,28 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
 %%--------------------------------------------------------------------
 -spec stream_loop(cowboy_req:req(), map()) -> ok.
 stream_loop(Req, State = #{
+    changes_stream := Stream,
     timeout := Timeout,
     ref := Ref
 }) ->
     receive
         {Ref, stream_ended} ->
             ok;
-        {Ref, #document{} = ChangedDoc} ->
-            try
-                send_change(Req, ChangedDoc, State)
-            catch
-                _:E ->
+        {Ref, ChangedDocs} when is_list(ChangedDocs) ->
+            Stream ! {Ref, ok},
+            lists:foreach(fun(ChangedDoc) ->
+                try
+                    send_change(Req, ChangedDoc, State)
+                catch Type:Reason ->
                     % Can appear when document connected with deleted file_meta appears
-                    ?debug_stacktrace("Cannot stream change of ~p due to: ~p", [
-                        ChangedDoc, E
+                    ?debug_stacktrace("Cannot stream change of ~p due to ~p:~p", [
+                        ChangedDoc, Type, Reason
                     ])
-            end,
+                end
+            end, ChangedDocs),
+            stream_loop(Req, State);
+        Msg ->
+            ?log_bad_request(Msg),
             stream_loop(Req, State)
     after
         Timeout ->
@@ -789,22 +795,25 @@ get_record_changes(Changed, FieldsNamesAndIndices, _Exists, #document{
 -spec notify(pid(), reference(),
     {ok, [datastore:doc()] | datastore:doc() | end_of_stream} |
     {error, couchbase_changes:since(), term()}) -> ok.
+notify(Pid, Ref, {ok, #document{} = Doc}) ->
+    case is_file_related_doc(Doc) of
+        true ->
+            call_changes_stream_handler(Pid, Ref, [Doc]);
+        false ->
+            ok
+    end,
+    ok;
+notify(Pid, Ref, {ok, Docs}) when is_list(Docs) ->
+    case lists:filter(fun(Doc) -> is_file_related_doc(Doc) end, Docs) of
+        [] ->
+            ok;
+        RelevantDocs ->
+            call_changes_stream_handler(Pid, Ref, RelevantDocs)
+    end,
+    ok;
 notify(Pid, Ref, {ok, end_of_stream}) ->
     Pid ! {Ref, stream_ended},
     ok;
-notify(Pid, Ref, {ok, Doc = #document{value = Value}}) when
-    is_record(Value, file_meta);
-    is_record(Value, custom_metadata);
-    is_record(Value, times);
-    is_record(Value, file_location) ->
-    Pid ! {Ref, Doc},
-    ok;
-notify(_Pid, _Ref, {ok, #document{}}) ->
-    ok;
-notify(Pid, Ref, {ok, Docs}) when is_list(Docs) ->
-    lists:foreach(fun(Doc) ->
-        notify(Pid, Ref, {ok, Doc})
-    end, Docs);
 notify(Pid, Ref, {error, _Seq, shutdown = Reason}) ->
     ?debug("Changes stream terminated due to: ~p", [Reason]),
     Pid ! {Ref, stream_ended},
@@ -813,3 +822,28 @@ notify(Pid, Ref, {error, _Seq, Reason}) ->
     ?error("Changes stream terminated abnormally due to: ~p", [Reason]),
     Pid ! {Ref, stream_ended},
     ok.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Send synchronous message to changes_stream_handler and await confirmation
+%% that msg was received.
+%% @end
+%%--------------------------------------------------------------------
+call_changes_stream_handler(Pid, Ref, Msg) ->
+    Pid ! {Ref, Msg},
+    receive
+        {Ref, ok} ->
+            ok
+    end,
+    ok.
+
+
+%% @private
+-spec is_file_related_doc(datastore:doc()) -> boolean().
+is_file_related_doc(#document{value = #file_meta{}})       -> true;
+is_file_related_doc(#document{value = #custom_metadata{}}) -> true;
+is_file_related_doc(#document{value = #times{}})           -> true;
+is_file_related_doc(#document{value = #file_location{}})   -> true;
+is_file_related_doc(_)                                     -> false.

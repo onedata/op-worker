@@ -292,7 +292,7 @@ unpack_batch_id(BatchId) ->
 -spec get_node_and_start(od_space:id(), autocleaning:run_id(), autocleaning_run:record(), autocleaning:config()) ->
     {ok, pid()} | {error, term()}.
 get_node_and_start(SpaceId, AutocleaningRunId, AutocleaningRun, AutocleaningConfig) ->
-    Node = consistent_hashing:get_node(SpaceId),
+    Node = consistent_hashing:get_assigned_node(SpaceId),
     rpc:call(Node, autocleaning_run_controller, start_internal, [SpaceId, AutocleaningRunId, AutocleaningRun, AutocleaningConfig]).
 
 -spec start_internal(od_space:id(), autocleaning:run_id(), autocleaning_run:record(), autocleaning:config()) ->

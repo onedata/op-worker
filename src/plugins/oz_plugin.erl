@@ -35,8 +35,8 @@
 %%--------------------------------------------------------------------
 -spec get_oz_url() -> string().
 get_oz_url() ->
-    {ok, Hostname} = application:get_env(?APP_NAME, oz_domain),
-    "https://" ++ str_utils:to_list(Hostname).
+    Domain = oneprovider:get_oz_domain(),
+    "https://" ++ unicode:characters_to_list(Domain).
 
 %%--------------------------------------------------------------------
 %% @doc
