@@ -94,7 +94,7 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_xattr(SessId :: session:id(), FileKey :: lfm:file_key(),
-    XattrName :: xattr:name(), boolean()) ->
+    XattrName :: custom_metadata:name(), boolean()) ->
     {ok, #xattr{}} | lfm:error_reply().
 get_xattr(SessId, FileKey, XattrName, Inherited) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
@@ -125,7 +125,7 @@ set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_xattr(SessId :: session:id(), FileKey :: lfm:file_key(),
-    XattrName :: xattr:name()) ->
+    XattrName :: custom_metadata:name()) ->
     ok | lfm:error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
@@ -140,7 +140,7 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %%--------------------------------------------------------------------
 -spec list_xattr(session:id(), FileUuid :: lfm:file_key(),
     boolean(), boolean()) ->
-    {ok, [xattr:name()]} | lfm:error_reply().
+    {ok, [custom_metadata:name()]} | lfm:error_reply().
 list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
@@ -155,7 +155,7 @@ list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(session:id(), lfm:file_key()) ->
-    {ok, xattr:transfer_encoding()} | lfm:error_reply().
+    {ok, custom_metadata:transfer_encoding()} | lfm:error_reply().
 get_transfer_encoding(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -168,7 +168,7 @@ get_transfer_encoding(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding(session:id(), lfm:file_key(),
-    xattr:transfer_encoding()) ->
+    custom_metadata:transfer_encoding()) ->
     ok | lfm:error_reply().
 set_transfer_encoding(SessId, FileKey, Encoding) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
@@ -183,7 +183,7 @@ set_transfer_encoding(SessId, FileKey, Encoding) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi_completion_status(session:id(), lfm:file_key()) ->
-    {ok, xattr:cdmi_completion_status()} | lfm:error_reply().
+    {ok, custom_metadata:cdmi_completion_status()} | lfm:error_reply().
 get_cdmi_completion_status(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -197,7 +197,7 @@ get_cdmi_completion_status(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_cdmi_completion_status(session:id(), lfm:file_key(),
-    xattr:cdmi_completion_status()) ->
+    custom_metadata:cdmi_completion_status()) ->
     ok | lfm:error_reply().
 set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
@@ -211,7 +211,7 @@ set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_mimetype(session:id(), lfm:file_key()) ->
-    {ok, xattr:mimetype()} | lfm:error_reply().
+    {ok, custom_metadata:mimetype()} | lfm:error_reply().
 get_mimetype(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -223,7 +223,7 @@ get_mimetype(SessId, FileKey) ->
 %% Sets mimetype of file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_mimetype(session:id(), lfm:file_key(), xattr:mimetype()) ->
+-spec set_mimetype(session:id(), lfm:file_key(), custom_metadata:mimetype()) ->
     ok | lfm:error_reply().
 set_mimetype(SessId, FileKey, Mimetype) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
@@ -238,10 +238,10 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %%--------------------------------------------------------------------
 -spec get_metadata(session:id(), lfm:file_key(), custom_metadata:type(), custom_metadata:filter(), boolean()) ->
     {ok, custom_metadata:value()} | lfm:error_reply().
-get_metadata(SessId, FileKey, Type, Names, Inherited) ->
+get_metadata(SessId, FileKey, Type, Filter, Inherited) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #get_metadata{type = Type, names = Names, inherited = Inherited},
+        #get_metadata{type = Type, filter = Filter, inherited = Inherited},
         fun(#metadata{value = Value}) -> {ok, Value} end).
 
 %%--------------------------------------------------------------------
@@ -251,10 +251,10 @@ get_metadata(SessId, FileKey, Type, Names, Inherited) ->
 %%--------------------------------------------------------------------
 -spec set_metadata(session:id(), lfm:file_key(), custom_metadata:type(), custom_metadata:value(), custom_metadata:filter()) ->
     ok | lfm:error_reply().
-set_metadata(SessId, FileKey, Type, Value, Names) ->
+set_metadata(SessId, FileKey, Type, Value, Filter) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #set_metadata{names = Names, metadata = #metadata{type = Type, value = Value}},
+        #set_metadata{filter = Filter, metadata = #metadata{type = Type, value = Value}},
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------

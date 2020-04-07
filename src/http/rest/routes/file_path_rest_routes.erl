@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of oneprovider REST methods.
+%%% This module contains definitions of file_path REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(oneprovider_rest_routes).
+-module(file_path_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,31 +25,20 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of oneprovider REST paths.
+%% Definitions of file_path REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Get public information
-    {<<"/configuration">>, rest_handler, #rest_req{
-        method = 'GET',
+    %% Lookup file id
+    {<<"/lookup-file-id/[...]">>, rest_handler, #rest_req{
+        method = 'POST',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_provider, 
-            id = undefined, 
-            aspect = configuration, 
-            scope = public
-        }
-    }},
-    %% Get test image
-    {<<"/test_image">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"image/png">>],
-        b_gri = #b_gri{
-            type = op_provider, 
-            id = undefined, 
-            aspect = test_image, 
-            scope = public
+            type = op_file, 
+            id = ?PATH_BINDING, 
+            aspect = object_id, 
+            scope = private
         }
     }}
 ].

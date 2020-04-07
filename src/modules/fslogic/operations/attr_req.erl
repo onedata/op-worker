@@ -397,23 +397,11 @@ filter_visible_shares(ShareId, Shares) ->
 -spec has_metadata(file_ctx:ctx()) -> boolean().
 has_metadata(FileCtx) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    case xattr_req:list_xattr_insecure(RootUserCtx, FileCtx, false, true) of
-        #fuse_response{
-            status = #status{code = ?OK},
-            fuse_response = #xattr_list{names = XattrList}
-        } ->
-            lists:any(fun
-                (?JSON_METADATA_KEY) ->
-                    true;
-                (?RDF_METADATA_KEY) ->
-                    true;
-                (<<?CDMI_PREFIX_STR, _/binary>>) ->
-                    false;
-                (<<?ONEDATA_PREFIX_STR, _/binary>>) ->
-                    false;
-                (_) ->
-                    true
-            end, XattrList);
-        _ ->
-            false
-    end.
+    {ok, XattrList} = xattr:list_xattrs_insecure(RootUserCtx, FileCtx, false, true),
+    lists:any(fun
+        (<<?CDMI_PREFIX_STR, _/binary>>) -> false;
+        (?JSON_METADATA_KEY) -> true;
+        (?RDF_METADATA_KEY) -> true;
+        (<<?ONEDATA_PREFIX_STR, _/binary>>) -> false;
+        (_) -> true
+    end, XattrList).

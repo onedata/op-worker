@@ -38,9 +38,11 @@
 -define(DEFAULT_LIST_ENTRIES, 1000).
 
 -define(ALL_BASIC_ATTRIBUTES, [
-    <<"mode">>, <<"size">>, <<"atime">>, <<"ctime">>,
-    <<"mtime">>, <<"storage_group_id">>, <<"storage_user_id">>, <<"name">>,
-    <<"owner_id">>, <<"shares">>, <<"type">>, <<"file_id">>
+    <<"file_id">>, <<"name">>, <<"mode">>,
+    <<"storage_user_id">>, <<"storage_group_id">>,
+    <<"atime">>, <<"mtime">>, <<"ctime">>,
+    <<"type">>, <<"size">>, <<"shares">>,
+    <<"provider_id">>, <<"owner_id">>
 ]).
 
 
@@ -343,10 +345,8 @@ data_spec_get(#gri{aspect = As}) when
     As =:= children;
     As =:= children_details
 -> #{
-    required => #{
-        <<"limit">> => {integer, {not_lower_than, 1}}
-    },
     optional => #{
+        <<"limit">> => {integer, {between, 1, 1000}},
         <<"index">> => {any, fun
             (null) ->
                 {true, undefined};
@@ -369,7 +369,7 @@ data_spec_get(#gri{aspect = attrs}) -> #{
 
 data_spec_get(#gri{aspect = xattrs}) -> #{
     optional => #{
-        <<"attribute">> => {binary, any},
+        <<"attribute">> => {binary, non_empty},
         <<"inherited">> => {boolean, any},
         <<"show_internal">> => {boolean, any}
     }
@@ -377,7 +377,7 @@ data_spec_get(#gri{aspect = xattrs}) -> #{
 
 data_spec_get(#gri{aspect = json_metadata}) -> #{
     optional => #{
-        <<"filter_type">> => {binary, any},
+        <<"filter_type">> => {binary, [<<"keypath">>]},
         <<"filter">> => {binary, any},
         <<"inherited">> => {boolean, any}
     }
@@ -483,9 +483,9 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = list}},
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
-    Limit = maps:get(<<"limit">>, Data),
+    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
     StartId = maps:get(<<"index">>, Data, undefined),
-    Offset = maps:get(<<"offset">>, Data, 0),
+    Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
     case lfm:get_children(SessionId, {guid, FileGuid}, Offset, Limit, undefined, StartId) of
         {ok, Children, _, _} ->
@@ -496,9 +496,9 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
     SessionId = Auth#auth.session_id,
-    Limit = maps:get(<<"limit">>, Data),
+    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
     StartId = maps:get(<<"index">>, Data, undefined),
-    Offset = maps:get(<<"offset">>, Data, 0),
+    Offset = maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
 
     case lfm:get_children_details(SessionId, {guid, FileGuid}, Offset, Limit, StartId) of
         {ok, ChildrenDetails, _} ->
@@ -870,6 +870,7 @@ get_attr(<<"atime">>, #file_attr{atime = ATime}) -> ATime;
 get_attr(<<"ctime">>, #file_attr{ctime = CTime}) -> CTime;
 get_attr(<<"mtime">>, #file_attr{mtime = MTime}) -> MTime;
 get_attr(<<"owner_id">>, #file_attr{owner_id = OwnerId}) -> OwnerId;
+get_attr(<<"provider_id">>, #file_attr{provider_id = ProviderId}) -> ProviderId;
 get_attr(<<"type">>, #file_attr{type = ?REGULAR_FILE_TYPE}) -> <<"reg">>;
 get_attr(<<"type">>, #file_attr{type = ?DIRECTORY_TYPE}) -> <<"dir">>;
 get_attr(<<"type">>, #file_attr{type = ?SYMLINK_TYPE}) -> <<"lnk">>;

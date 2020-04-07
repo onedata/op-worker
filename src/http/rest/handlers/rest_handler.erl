@@ -285,7 +285,25 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
         {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
-    #gri{type = Tp, id = IdBinding, aspect = AspectBinding, scope = Sc}.
+    ScopeBinding = case Tp of
+        op_file ->
+            % REST endpoints requiring $FILE_ID in URL accepts both normal
+            % guids and share guids. In case of share ones scope must be
+            % changed to 'public'.
+            case file_id:is_share_guid(IdBinding) of
+                true -> public;
+                false -> Sc
+            end;
+        _ ->
+            Sc
+    end,
+
+    #gri{
+        type = Tp,
+        id = IdBinding,
+        aspect = AspectBinding,
+        scope = ScopeBinding
+    }.
 
 
 %%--------------------------------------------------------------------
@@ -312,7 +330,7 @@ resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
         {guid, Guid} ->
             Guid;
         _Error ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(Path))
+            throw(?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>))
     end;
 resolve_bindings(SessionId, {Atom, PossibleBinding}, Req) when is_atom(Atom) ->
     {Atom, resolve_bindings(SessionId, PossibleBinding, Req)};
@@ -362,7 +380,7 @@ get_data(Req, {as_is, KeyName}, Consumes) ->
             try
                 json_utils:decode(Body)
             catch _:_ ->
-                throw(?ERROR_BAD_VALUE_JSON(<<"request body">>))
+                throw(?ERROR_BAD_VALUE_JSON(KeyName))
             end;
         _ ->
             Body
