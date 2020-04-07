@@ -190,7 +190,7 @@
 }).
 
 -record(eff_qos_response, {
-    entries_with_status = #{} :: #{qos_entry:id() => qos_status:status()},
+    entries_with_status = #{} :: #{qos_entry:id() => qos_status:fulfilled()},
     assigned_entries = #{} :: file_qos:assigned_entries()
 }).
 

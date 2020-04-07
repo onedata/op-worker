@@ -63,7 +63,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
         <<"name">> => {binary, non_empty},
         <<"fileId">> => {binary,
-            fun(ObjectId) -> middleware_utils:check_object_id(ObjectId, <<"fileId">>) end}
+            fun(ObjectId) -> middleware_utils:decode_object_id(ObjectId, <<"fileId">>) end}
     }
 };
 

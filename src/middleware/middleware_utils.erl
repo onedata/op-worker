@@ -19,7 +19,7 @@
     is_eff_space_member/2,
     assert_space_supported_locally/1, assert_space_supported_by/2,
     assert_file_exists/2,
-    check_object_id/2
+    decode_object_id/2
 ]).
 
 
@@ -62,9 +62,9 @@ assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
     end.
 
 
--spec check_object_id(file_id:objectid(), binary()) -> 
+-spec decode_object_id(file_id:objectid(), binary()) -> 
     {true, file_id:file_guid()} | no_return().
-check_object_id(ObjectId, Key) ->
+decode_object_id(ObjectId, Key) ->
     case catch file_id:objectid_to_guid(ObjectId) of
         {ok, Guid} ->
             {true, Guid};

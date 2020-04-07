@@ -61,9 +61,9 @@ operation_supported(_, _, _) -> false.
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
         <<"expression">> => {any, 
-            fun(Expression) -> qos_expression:ensure_rpn(Expression) end},
+            fun(Expression) -> {true, qos_expression:ensure_rpn(Expression)} end},
         <<"fileId">> => {binary, 
-            fun(ObjectId) -> middleware_utils:check_object_id(ObjectId, <<"fileId">>) end}
+            fun(ObjectId) -> middleware_utils:decode_object_id(ObjectId, <<"fileId">>) end}
     },
     optional => #{<<"replicasNum">> => {integer, {not_lower_than, 1}}}
 };
@@ -230,15 +230,15 @@ fetch_qos_entry(?USER(_UserId, SessionId), QosEntryId) ->
     end.
 
 %% @private
--spec entry_to_details(qos_entry:record(), qos_status:status(), od_space:id()) -> map().
+-spec entry_to_details(qos_entry:record(), qos_status:fulfilled(), od_space:id()) -> map().
 entry_to_details(QosEntry, Status, SpaceId) ->
-    {ok, ExpressionInRPN} = qos_entry:get_expression(QosEntry),
+    {ok, ExpressionInRpn} = qos_entry:get_expression(QosEntry),
     {ok, ReplicasNum} = qos_entry:get_replicas_num(QosEntry),
     {ok, QosRootFileUuid} = qos_entry:get_file_uuid(QosEntry),
     QosRootFileGuid = file_id:pack_guid(QosRootFileUuid, SpaceId),
     {ok, QosRootFileObjectId} = file_id:guid_to_objectid(QosRootFileGuid),
     #{
-        <<"expressionRpn">> => ExpressionInRPN,
+        <<"expressionRpn">> => ExpressionInRpn,
         <<"replicasNum">> => ReplicasNum,
         <<"fileId">> => QosRootFileObjectId,
         <<"fulfilled">> => Status

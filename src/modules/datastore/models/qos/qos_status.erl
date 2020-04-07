@@ -88,8 +88,8 @@
 % Describes whether link should be added upon successful function execution
 -type link_strategy() :: add_link | no_link.
 
--type status() :: boolean().
--export_type([status/0]).
+-type fulfilled() :: boolean().
+-export_type([fulfilled/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -111,7 +111,7 @@
 %%% API
 %%%===================================================================
 
--spec check_fulfillment(file_ctx:ctx(), qos_entry:id()) -> status().
+-spec check_fulfillment(file_ctx:ctx(), qos_entry:id()) -> fulfilled().
 check_fulfillment(FileCtx, QosEntryId) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
