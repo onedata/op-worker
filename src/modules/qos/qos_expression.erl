@@ -19,7 +19,9 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([raw_to_rpn/1, rpn_to_infix/1, calculate_assigned_storages/3]).
+-export([raw_to_rpn/1, rpn_to_infix/1]).
+-export([ensure_rpn/1]).
+-export([calculate_assigned_storages/3]).
 
 
 % The raw type stores expression as single binary. It is used to store input
@@ -60,6 +62,18 @@ raw_to_rpn(Expression) ->
 rpn_to_infix(RPNExpression) ->
     rpn_to_infix(RPNExpression, []).
 
+
+-spec ensure_rpn(raw() | rpn() | any()) -> {true, rpn()} | no_return().
+ensure_rpn(Expression) when is_binary(Expression) ->
+    {ok, ExpressionInRpn} = raw_to_rpn(Expression),
+    {true, ExpressionInRpn};
+ensure_rpn(ExpressionList) when is_list(ExpressionList) ->
+    case lists:all(fun(Token) -> is_binary(Token) end, ExpressionList) of
+        true -> {true, ExpressionList};
+        false -> throw(?ERROR_INVALID_QOS_EXPRESSION)
+    end;
+ensure_rpn(_) ->
+    throw(?ERROR_INVALID_QOS_EXPRESSION).
 
 %%--------------------------------------------------------------------
 %% @doc

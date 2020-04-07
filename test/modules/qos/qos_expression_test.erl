@@ -63,7 +63,7 @@ qos_expression_test() ->
 
     % test invalid expression
     Expr5 = <<"country">>,
-    ?assertThrow(
+    ?_assertThrow(
         ?ERROR_INVALID_QOS_EXPRESSION,
         qos_expression:raw_to_rpn(Expr5)
     ),
