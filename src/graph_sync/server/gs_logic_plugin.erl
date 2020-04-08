@@ -142,7 +142,7 @@ handle_graph_request(Auth, AuthHint, GRI, Operation, Data, VersionedEntity) ->
         auth = Auth,
         operation = Operation,
         gri = GRI,
-        data = Data,
+        data = utils:ensure_defined(Data, undefined, #{}),
         auth_hint = AuthHint,
         return_revision = true
     },

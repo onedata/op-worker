@@ -146,6 +146,8 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Offset) ->
         {ok, []} ->
             {ok, []};
         {ok, Children} ->
+            % TODO VFS-6265 fix usage of file names from lfm:get_children as they contain
+            % collision suffix which normally shouldn't be there
             ChildEntries = lists:foldl(fun({ChildGuid, ChildName}, ChildrenEntries) ->
                 {ok, NewChildGuid, NewChildrenEntries} =
                     copy(SessId, ChildGuid, TargetParentGuid, ChildName),

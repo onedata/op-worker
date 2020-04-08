@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of share REST methods.
+%%% This module contains definitions of file_data REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(share_rest_routes).
+-module(file_data_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,54 +25,42 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of share REST paths.
+%% Definitions of file_data REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Create share
-    {<<"/shares">>, rest_handler, #rest_req{
-        method = 'POST',
-        parse_body = as_json_params,
-        consumes = [<<"application/json">>],
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_share, 
-            id = undefined, 
-            aspect = instance, 
-            scope = private
-        }
-    }},
-    %% Remove a specific share
-    {<<"/shares/:shid">>, rest_handler, #rest_req{
-        method = 'DELETE',
-        b_gri = #b_gri{
-            type = op_share, 
-            id = ?BINDING(shid), 
-            aspect = instance, 
-            scope = private
-        }
-    }},
-    %% Get share info
-    {<<"/shares/:shid">>, rest_handler, #rest_req{
+    %% Get file attributes
+    {<<"/data/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_share, 
-            id = ?BINDING(shid), 
-            aspect = instance, 
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = attrs, 
             scope = private
         }
     }},
-    %% Rename share
-    {<<"/shares/:shid">>, rest_handler, #rest_req{
-        method = 'PATCH',
+    %% Set file attribute
+    {<<"/data/:id">>, rest_handler, #rest_req{
+        method = 'PUT',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_share, 
-            id = ?BINDING(shid), 
-            aspect = instance, 
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = attrs, 
+            scope = private
+        }
+    }},
+    %% List directory files and subdirectories
+    {<<"/data/:id/children">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = children, 
             scope = private
         }
     }}

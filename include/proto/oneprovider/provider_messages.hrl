@@ -87,13 +87,13 @@
 
 -record(get_metadata, {
     type :: custom_metadata:type(),
-    names = [] :: custom_metadata:names(),
+    filter = [] :: custom_metadata:filter(),
     inherited = false :: boolean()
 }).
 
 -record(set_metadata, {
     metadata :: custom_metadata:metadata(),
-    names = [] :: custom_metadata:names()
+    filter = [] :: custom_metadata:filter()
 }).
 
 -record(remove_metadata, {
@@ -208,6 +208,11 @@
 -record(provider_response, {
     status :: undefined | #status{},
     provider_response :: provider_response_type()
+}).
+
+-define(PROVIDER_OK_RESP(__RESPONSE), #provider_response{
+    status = #status{code = ?OK},
+    provider_response = __RESPONSE
 }).
 
 -endif.
