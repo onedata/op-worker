@@ -167,9 +167,8 @@ data_spec_create(#gri{aspect = attrs}) -> #{
         fun(Mode) ->
             try
                 {true, binary_to_integer(Mode, 8)}
-            catch
-                _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
+            catch _:_ ->
+                throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
             end
         end
     }}

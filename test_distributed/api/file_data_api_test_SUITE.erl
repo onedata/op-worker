@@ -30,13 +30,15 @@
 
 -export([
     get_children_test/1,
-    get_attrs_test/1
+    get_attrs_test/1,
+    set_mode_test/1
 ]).
 
 all() ->
     ?ALL([
         get_children_test,
-        get_attrs_test
+        get_attrs_test,
+        set_mode_test
     ]).
 
 
@@ -723,6 +725,361 @@ get_attrs_test(Config) ->
         {<<"dir">>, DirPath, DirGuid},
         {<<"file">>, RegularFilePath, RegularFileGuid}
     ]).
+
+
+set_mode_test(Config) ->
+    [Provider2, Provider1] = Providers = ?config(op_worker_nodes, Config),
+
+    GetSessionFun = fun(Node) ->
+        ?config({session_id, {?USER_IN_BOTH_SPACES, ?GET_DOMAIN(Node)}}, Config)
+    end,
+
+    UserSessId = GetSessionFun(Provider2),
+
+    RootDirPath = filename:join(["/", ?SPACE_2, ?SCENARIO_NAME]),
+    {ok, RootDirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, RootDirPath, 8#777),
+    {ok, ShareId} = lfm_proxy:create_share(Provider2, UserSessId, {guid, RootDirGuid}, <<"share">>),
+
+    DirPath = filename:join([RootDirPath, <<"dir">>]),
+    {ok, DirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, DirPath, 8#777),
+
+    RegularFilePath = filename:join([RootDirPath, <<"file">>]),
+    {ok, RegularFileGuid} = lfm_proxy:create(Provider2, UserSessId, RegularFilePath, 8#777),
+
+    % Wait for metadata sync between providers
+    ?assertMatch(
+        {ok, _},
+        lfm_proxy:stat(Provider1, GetSessionFun(Provider1), {guid, RegularFileGuid}),
+        ?ATTEMPTS
+    ),
+
+    SupportedClientsPerNode = #{
+        Provider1 => [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        Provider2 => [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
+    },
+
+    ClientSpecForSpace2Scenarios = #client_spec{
+        correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        unauthorized = [?NOBODY],
+        forbidden = [?USER_IN_SPACE_1_AUTH],
+        supported_clients_per_node = SupportedClientsPerNode
+    },
+
+    % Special case -> any user can make requests for shares but if request is
+    % being made using credentials by user not supported on specific provider
+    % ?ERROR_USER_NOT_SUPPORTED will be returned
+    ClientSpecForShareScenarios = #client_spec{
+        correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        unauthorized = [],
+        forbidden = [],
+        supported_clients_per_node = SupportedClientsPerNode
+    },
+
+    DataSpec = #data_spec{
+        required = [<<"mode">>],
+        correct_values = #{<<"mode">> => [<<"0000">>, <<"0111">>, <<"0777">>]},
+        bad_values = [
+            {<<"mode">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
+            {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)}
+        ]
+    },
+
+    ConstructPrepareRestArgsFun = fun(FileId) ->
+        fun(#api_test_ctx{data = Data}) ->
+            #rest_args{
+                method = put,
+                path = <<"data/", FileId/binary>>,
+                headers = #{<<"content-type">> => <<"application/json">>},
+                body = json_utils:encode(Data)
+            }
+        end
+    end,
+    ConstructPrepareDeprecatedFilePathRestArgsFun = fun(FilePath) ->
+        fun(#api_test_ctx{data = Data}) ->
+            #rest_args{
+                method = put,
+                path = <<"metadata/attrs", FilePath/binary>>,
+                headers = #{<<"content-type">> => <<"application/json">>},
+                body = json_utils:encode(Data)
+            }
+        end
+    end,
+    ConstructPrepareDeprecatedFileIdRestArgsFun = fun(Fileid) ->
+        fun(#api_test_ctx{data = Data}) ->
+            #rest_args{
+                method = put,
+                path = <<"metadata-id/attrs/", Fileid/binary>>,
+                headers = #{<<"content-type">> => <<"application/json">>},
+                body = json_utils:encode(Data)
+            }
+        end
+    end,
+    ConstructPrepareGsArgsFun = fun(FileId, Scope) ->
+        fun(#api_test_ctx{data = Data}) ->
+            #gs_args{
+                operation = create,
+                gri = #gri{type = op_file, id = FileId, aspect = attrs, scope = Scope},
+                data = Data
+            }
+        end
+    end,
+
+    SetMode = fun(Node, FileGuid, NewMode) ->
+        ?assertMatch(ok, lfm_proxy:set_perms(Node, GetSessionFun(Node), {guid, FileGuid}, NewMode))
+    end,
+    GetMode = fun(Node, FileGuid) ->
+        {ok, #file_attr{mode = Mode}} = ?assertMatch(
+            {ok, _},
+            lfm_proxy:stat(Node, GetSessionFun(Node), {guid, FileGuid})
+        ),
+        Mode
+    end,
+
+    GetExpectedResultFun = fun
+        (#api_test_ctx{client = ?USER_IN_BOTH_SPACES_AUTH}) -> ok;
+        (_) -> ?ERROR_POSIX(?EACCES)
+    end,
+    ValidateRestSuccessfulCallFun =  fun(TestCtx, {ok, RespCode, RespBody}) ->
+        {ExpCode, ExpBody} = case GetExpectedResultFun(TestCtx) of
+            ok ->
+                {?HTTP_204_NO_CONTENT, #{}};
+            {error, _} = ExpError ->
+                {errors:to_http_code(ExpError), ?REST_ERROR(ExpError)}
+        end,
+        ?assertEqual({ExpCode, ExpBody}, {RespCode, RespBody})
+    end,
+    ValidateRestOperationNotSupportedFun = fun(_, {ok, ?HTTP_400_BAD_REQUEST, Response}) ->
+        ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
+    end,
+
+    ConstructVerifyEnvForSuccessfulCallsFun = fun(FileGuid) -> fun
+        (false, #api_test_ctx{node = TestNode}) ->
+            ?assertMatch(8#777, GetMode(TestNode, FileGuid), ?ATTEMPTS),
+            true;
+        (true, #api_test_ctx{client = ?USER_IN_SPACE_2_AUTH, node = TestNode}) ->
+            ?assertMatch(8#777, GetMode(TestNode, FileGuid), ?ATTEMPTS),
+            true;
+        (true, #api_test_ctx{client = ?USER_IN_BOTH_SPACES_AUTH, data = #{<<"mode">> := ModeBin}}) ->
+            Mode = binary_to_integer(ModeBin, 8),
+            lists:foreach(fun(Node) -> ?assertMatch(Mode, GetMode(Node, FileGuid), ?ATTEMPTS) end, Providers),
+            true
+    end end,
+
+    lists:foreach(fun({FileType, FilePath, FileGuid}) ->
+        {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+        ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+        {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
+
+        ?assert(api_test_utils:run_scenarios(Config, [
+
+            %% TEST SET MODE FOR FILE IN NORMAL MODE
+
+            #scenario_spec{
+                name = <<"Set mode for ", FileType/binary, " using /data/ rest endpoint">>,
+                type = rest,
+                target_nodes = Providers,
+                client_spec = ClientSpecForSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareRestArgsFun(FileObjectId),
+                validate_result_fun = ValidateRestSuccessfulCallFun,
+                verify_fun = ConstructVerifyEnvForSuccessfulCallsFun(FileGuid),
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set mode for ", FileType/binary, " using /files/ rest endpoint">>,
+                type = rest_with_file_path,
+                target_nodes = Providers,
+                client_spec = ClientSpecForSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(FilePath),
+                validate_result_fun = ValidateRestSuccessfulCallFun,
+                verify_fun = ConstructVerifyEnvForSuccessfulCallsFun(FileGuid),
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set mode for ", FileType/binary, " using /files-id/ rest endpoint">>,
+                type = rest,
+                target_nodes = Providers,
+                client_spec = ClientSpecForSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(FileObjectId),
+                validate_result_fun = ValidateRestSuccessfulCallFun,
+                verify_fun = ConstructVerifyEnvForSuccessfulCallsFun(FileGuid),
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set mode for ", FileType/binary, " using gs api">>,
+                type = gs,
+                target_nodes = Providers,
+                client_spec = ClientSpecForSpace2Scenarios,
+                prepare_args_fun = ConstructPrepareGsArgsFun(FileGuid, private),
+                validate_result_fun = fun(TestCtx, Result) ->
+                    case GetExpectedResultFun(TestCtx) of
+                        ok ->
+                            ?assertEqual({ok, undefined}, Result);
+                        {error, _} = ExpError ->
+                            ?assertEqual(ExpError, Result)
+                    end
+                end,
+                verify_fun = ConstructVerifyEnvForSuccessfulCallsFun(FileGuid),
+                data_spec = DataSpec
+            }
+        ])),
+
+        %% TEST SET MODE FOR SHARED FILE SHOULD FAIL
+
+        % Reset mode for file
+        lists:foreach(fun(Node) -> SetMode(Node, FileGuid, 8#777) end, Providers),
+
+        VerifyEnvForShareCallsFun = fun(_, #api_test_ctx{node = Node}) ->
+            ?assertMatch(8#777, GetMode(Node, FileGuid)),
+            true
+        end,
+
+        ?assert(api_test_utils:run_scenarios(Config, [
+
+            #scenario_spec{
+                name = <<"Set mode for shared ", FileType/binary, " using /data/ rest endpoint">>,
+                type = rest_not_supported,
+                target_nodes = Providers,
+                client_spec = ClientSpecForShareScenarios,
+                prepare_args_fun = ConstructPrepareRestArgsFun(ShareObjectId),
+                validate_result_fun = ValidateRestOperationNotSupportedFun,
+                verify_fun = VerifyEnvForShareCallsFun,
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set mode for shared ", FileType/binary, " using /files-id/ rest endpoint">>,
+                type = rest_not_supported,
+                target_nodes = Providers,
+                client_spec = ClientSpecForShareScenarios,
+                prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(ShareObjectId),
+                validate_result_fun = ValidateRestOperationNotSupportedFun,
+                verify_fun = VerifyEnvForShareCallsFun,
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set mode for shared ", FileType/binary, " using gs public api">>,
+                type = gs_not_supported,
+                target_nodes = Providers,
+                client_spec = ClientSpecForShareScenarios,
+                prepare_args_fun = ConstructPrepareGsArgsFun(ShareGuid, public),
+                validate_result_fun = fun(_TestCaseCtx, Result) ->
+                    ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
+                end,
+                verify_fun = VerifyEnvForShareCallsFun,
+                data_spec = DataSpec
+            },
+            #scenario_spec{
+                name = <<"Set mode for shared ", FileType/binary, " using private gs api">>,
+                type = gs,
+                target_nodes = Providers,
+                client_spec = ClientSpecForShareScenarios,
+                prepare_args_fun = ConstructPrepareGsArgsFun(ShareGuid, private),
+                validate_result_fun = fun(_, Result) ->
+                    ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                end,
+                verify_fun = VerifyEnvForShareCallsFun,
+                data_spec = DataSpec
+            }
+        ]))
+    end, [
+        {<<"dir">>, DirPath, DirGuid},
+        {<<"file">>, RegularFilePath, RegularFileGuid}
+    ]),
+
+    %% TEST SET MODE FOR FILE ON PROVIDER NOT SUPPORTING USER
+
+    Space1RootDirPath = filename:join(["/", ?SPACE_1, ?SCENARIO_NAME]),
+    {ok, Space1RootDirGuid} = lfm_proxy:mkdir(Provider1, GetSessionFun(Provider1), Space1RootDirPath, 8#777),
+    {ok, Space1RootObjectId} = file_id:guid_to_objectid(Space1RootDirGuid),
+
+    ClientSpecForSpace1Scenarios = #client_spec{
+        correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        unauthorized = [?NOBODY],
+        forbidden = [?USER_IN_SPACE_2_AUTH],
+        supported_clients_per_node = SupportedClientsPerNode
+    },
+    Provider2DomainBin = ?GET_DOMAIN_BIN(Provider2),
+
+    ValidateRestSetMetadataOnProvidersNotSupportingUserFun = fun
+        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
+            Node == Provider2,
+            Client == ?USER_IN_BOTH_SPACES_AUTH
+        ->
+            ?assertEqual(?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)), Response);
+        (TestCaseCtx, Result) ->
+            ValidateRestSuccessfulCallFun(TestCaseCtx, Result)
+    end,
+    VerifyEnvFunForSetModeInSpace1Scenarios = fun
+        (false, #api_test_ctx{node = Node}) ->
+            ?assertMatch(8#777, GetMode(Node, Space1RootDirGuid), ?ATTEMPTS),
+            true;
+        (true, #api_test_ctx{node = TestNode, client = Client, data = #{<<"mode">> := ModeBin}}) ->
+            case {TestNode, Client} of
+                {Provider1, ?USER_IN_BOTH_SPACES_AUTH} ->
+                    % Request from user not supported by provider should be rejected
+                    Mode = binary_to_integer(ModeBin, 8),
+                    lists:foreach(fun(Node) -> ?assertMatch(Mode, GetMode(Node, Space1RootDirGuid), ?ATTEMPTS) end, Providers);
+                _ ->
+                    ?assertMatch(8#777, GetMode(TestNode, Space1RootDirGuid), ?ATTEMPTS)
+            end,
+            true
+    end,
+
+    ?assert(api_test_utils:run_scenarios(Config, [
+        #scenario_spec{
+            name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareRestArgsFun(Space1RootObjectId),
+            validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun,
+            verify_fun = VerifyEnvFunForSetModeInSpace1Scenarios,
+            data_spec = DataSpec
+        },
+        #scenario_spec{
+            name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using /files/ rest endpoint">>,
+            type = rest_with_file_path,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(Space1RootDirPath),
+            validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun,
+            verify_fun = VerifyEnvFunForSetModeInSpace1Scenarios,
+            data_spec = DataSpec
+        },
+        #scenario_spec{
+            name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(Space1RootObjectId),
+            validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun,
+            verify_fun = VerifyEnvFunForSetModeInSpace1Scenarios,
+            data_spec = DataSpec
+        },
+        #scenario_spec{
+            name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using gs api">>,
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareGsArgsFun(Space1RootDirGuid, private),
+            validate_result_fun = fun
+                (#api_test_ctx{node = Node, client = Client}, Result) when
+                    Node == Provider2,
+                    Client == ?USER_IN_BOTH_SPACES_AUTH
+                ->
+                    ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
+                (TestCtx, Result) ->
+                    case GetExpectedResultFun(TestCtx) of
+                        ok ->
+                            ?assertEqual({ok, undefined}, Result);
+                        {error, _} = ExpError ->
+                            ?assertEqual(ExpError, Result)
+                    end
+            end,
+            verify_fun = VerifyEnvFunForSetModeInSpace1Scenarios,
+            data_spec = DataSpec
+        }
+    ])).
 
 
 %%%===================================================================
