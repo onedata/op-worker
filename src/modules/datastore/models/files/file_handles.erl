@@ -32,8 +32,11 @@
 % Handle created during file creation.
 % Read/write with this handle should be allowed even if file permissions forbid them.
 -type creation_handle() :: file_req:handle_id().
+% ?NOT_DELETED status is used only internally by this module when file is not deleted
+% ?LOCAL_DELETE and ?REMOTE_DELETE belong to fslogic_delete:deletion_mode() type
+-type removal_status() :: ?NOT_DELETED | ?LOCAL_DELETE | ?REMOTE_DELETE.
 
--export_type([creation_handle/0]).
+-export_type([creation_handle/0, removal_status/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -90,8 +93,8 @@ list() ->
 -spec is_removed(record() | doc()) -> boolean().
 is_removed(#document{value = FileHandles}) ->
     is_removed(FileHandles);
-is_removed(#file_handles{is_removed = IsRemoved}) ->
-    IsRemoved.
+is_removed(#file_handles{removal_status = RemovalStatus}) ->
+    RemovalStatus =/= ?NOT_DELETED.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -105,7 +108,7 @@ register_open(FileCtx, SessId, Count, CreateHandleID) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Diff = fun
-        (#file_handles{is_removed = true}) ->
+        (#file_handles{removal_status = RemovalStatus}) when RemovalStatus =/= ?NOT_DELETED ->
             {error, removed};
         (Handle = #file_handles{descriptors = Fds}) ->
             FdCount = maps:get(SessId, Fds, 0),
@@ -167,13 +170,13 @@ register_open(FileCtx, SessId, Count, CreateHandleID) ->
 register_release(FileCtx, SessId, Count) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Diff = fun(Handle = #file_handles{is_removed = Removed, descriptors = Fds}) ->
+    Diff = fun(Handle = #file_handles{removal_status = RemovalStatus, descriptors = Fds}) ->
         FdCount = maps:get(SessId, Fds, 0),
         case Count =:= infinity orelse FdCount =< Count of
             true ->
                 Fds2 = maps:remove(SessId, Fds),
-                case {Removed, maps:size(Fds2)} of
-                    {true, 0} -> {error, {removed, Handle#file_handles.is_local_removal}};
+                case {RemovalStatus =/= ?NOT_DELETED, maps:size(Fds2)} of
+                    {true, 0} -> {error, {removed, RemovalStatus}};
                     _ -> {ok, Handle#file_handles{descriptors = Fds2}}
                 end;
             false ->
@@ -198,9 +201,9 @@ register_release(FileCtx, SessId, Count) ->
                 {error, {not_satisfied, _}} -> ok;
                 {error, Reason} -> {error, Reason}
             end;
-        {error, {removed, IsLocalRemoval}} ->
+        {error, {removed, RemovalStatus}} ->
             session_open_files:deregister(SessId, FileGuid),
-            fslogic_delete:handle_release_of_deleted_file(FileCtx, IsLocalRemoval),
+            fslogic_delete:handle_release_of_deleted_file(FileCtx, RemovalStatus),
             datastore_model:delete(?CTX, FileUuid);
         {error, not_found} ->
             ok;
@@ -213,10 +216,10 @@ register_release(FileCtx, SessId, Count) ->
 %% Marks files as removed.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_to_remove(file_ctx:ctx(), boolean()) -> ok | {error, term()}.
-mark_to_remove(FileCtx, IsLocalRemoval) ->
+-spec mark_to_remove(file_ctx:ctx(), removal_status()) -> ok | {error, term()}.
+mark_to_remove(FileCtx, RemovalStatus) ->
     Diff = fun(Handle = #file_handles{}) ->
-        {ok, Handle#file_handles{is_removed = true, is_local_removal = IsLocalRemoval}}
+        {ok, Handle#file_handles{removal_status = RemovalStatus}}
     end,
     case datastore_model:update(?CTX, file_ctx:get_uuid_const(FileCtx), Diff) of
         {ok, _} -> ok;
@@ -312,9 +315,9 @@ get_record_struct(3) ->
     ]};
 get_record_struct(4) ->
     {record, [
-        {is_removed, boolean},
-        % added field
-        {is_local_removal, boolean},
+        % Field is_removed was replaced by removal_status
+        % Its type was changed from boolean to atom.
+        {removal_status, atom},
         {descriptors, #{string => integer}},
         {creation_handle, binary}
     ]}.
@@ -331,4 +334,8 @@ upgrade_record(1, {?MODULE, IsRemoved, Descriptors}) ->
 upgrade_record(2, {?MODULE, IsRemoved, Descriptors}) ->
     {3, {?MODULE, IsRemoved, Descriptors, undefined}};
 upgrade_record(3, {?MODULE, IsRemoved, Descriptors, CreationHandle}) ->
-    {4, {?MODULE, IsRemoved, true, Descriptors, CreationHandle}}.
+    RemovalStatus = case IsRemoved of
+        false -> ?NOT_DELETED;
+        true -> ?LOCAL_DELETE
+    end,
+    {4, {?MODULE, RemovalStatus, Descriptors, CreationHandle}}.
