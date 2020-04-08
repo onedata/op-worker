@@ -488,13 +488,6 @@ get_attrs_test(Config) ->
         Provider2 => [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
     },
 
-    ClientSpecForSpace1Sceanrios = #client_spec{
-        correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [?NOBODY],
-        forbidden = [?USER_IN_SPACE_2_AUTH],
-        supported_clients_per_node = SupportedClientsPerNode
-    },
-
     ClientSpecForSpace2Scenarios = #client_spec{
         correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
         unauthorized = [?NOBODY],
@@ -724,7 +717,82 @@ get_attrs_test(Config) ->
     end, [
         {<<"dir">>, DirPath, DirGuid},
         {<<"file">>, RegularFilePath, RegularFileGuid}
-    ]).
+    ]),
+
+    %% TEST GET ATTRS FOR FILE ON PROVIDER NOT SUPPORTING USER
+
+    Provider2DomainBin = ?GET_DOMAIN_BIN(Provider2),
+
+    ClientSpecForSpace1Scenarios = #client_spec{
+        correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+        unauthorized = [?NOBODY],
+        forbidden = [?USER_IN_SPACE_2_AUTH],
+        supported_clients_per_node = SupportedClientsPerNode
+    },
+
+    Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_1),
+    {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
+    {ok, Space1Attrs} = lfm_proxy:stat(Provider1, GetSessionFun(Provider1), {guid, Space1Guid}),
+    Space1JsonAttrs = attrs_to_json(Space1Attrs),
+
+    ValidateRestGetMetadataOnProvidersNotSupportingUserFun = fun
+        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
+            Node == Provider2,
+            Client == ?USER_IN_BOTH_SPACES_AUTH
+        ->
+            ?assertEqual(?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)), Response);
+        (TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
+            {ok, ExpAttrs} = GetExpectedResultFun(TestCaseCtx, undefined, Space1JsonAttrs),
+            ?assertEqual(ExpAttrs, Response)
+    end,
+
+    ?assert(api_test_utils:run_scenarios(Config, [
+        #scenario_spec{
+            name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareRestArgsFun(Space1ObjectId),
+            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun,
+            data_spec = PrivateDataSpec
+        },
+        #scenario_spec{
+            name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /files/ rest endpoint">>,
+            type = rest_with_file_path,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(<<"/", ?SPACE_1/binary>>),
+            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun,
+            data_spec = PrivateDataSpec
+        },
+        #scenario_spec{
+            name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(Space1ObjectId),
+            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun,
+            data_spec = PrivateDataSpec
+        },
+        #scenario_spec{
+            name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using gs api">>,
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ClientSpecForSpace1Scenarios,
+            prepare_args_fun = ConstructPrepareGsArgsFun(Space1Guid, private),
+            validate_result_fun = fun
+                (#api_test_ctx{node = Node, client = Client}, Result) when
+                    Node == Provider2,
+                    Client == ?USER_IN_BOTH_SPACES_AUTH
+                ->
+                    ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
+                (TestCaseCtx, {ok, Result}) ->
+                    {ok, ExpAttrs} = GetExpectedResultFun(TestCaseCtx, undefined, Space1JsonAttrs),
+                    ?assertEqual(#{<<"attributes">> => ExpAttrs}, Result)
+            end,
+            data_spec = PrivateDataSpec
+        }
+    ])).
 
 
 set_mode_test(Config) ->
