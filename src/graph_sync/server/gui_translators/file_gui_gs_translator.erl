@@ -71,7 +71,9 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
                 scope = private
             })
         end, ShareIds)
-    }.
+    };
+translate_resource(#gri{aspect = file_qos_summary, scope = private}, EffQosResponse) ->
+    EffQosResponse.
 
 
 %%%===================================================================
@@ -83,6 +85,8 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
 -spec translate_file_details(#file_details{}, gri:scope()) -> map().
 translate_file_details(#file_details{
     has_metadata = HasMetadata,
+    has_direct_qos = HasDirectQos,
+    has_eff_qos = HasEffQos,
     active_permissions_type = ActivePermissionsType,
     index_startid = StartId,
     file_attr = #file_attr{
@@ -116,7 +120,6 @@ translate_file_details(#file_details{
     end,
     PublicFields = #{
         <<"hasMetadata">> => HasMetadata,
-        <<"activePermissionsType">> => ActivePermissionsType,
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
         <<"index">> => StartId,
@@ -133,6 +136,9 @@ translate_file_details(#file_details{
         private ->
             PublicFields#{
                 <<"providerId">> => ProviderId,
-                <<"ownerId">> => OwnerId
+                <<"ownerId">> => OwnerId,
+                <<"hasDirectQos">> => HasDirectQos,
+                <<"hasEffQos">> => HasEffQos,
+                <<"activePermissionsType">> => ActivePermissionsType
             }
     end.

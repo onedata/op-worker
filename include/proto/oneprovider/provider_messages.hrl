@@ -114,7 +114,7 @@
 
 % messages for adding, getting and removing QoS entry
 -record(add_qos_entry, {
-    expression :: qos_expression:raw(),
+    expression :: qos_expression:rpn(),
     replicas_num :: qos_entry:replicas_num()
 }).
 
@@ -189,10 +189,15 @@
     fulfilled :: boolean()
 }).
 
+-record(eff_qos_response, {
+    entries_with_status = #{} :: #{qos_entry:id() => qos_status:fulfilled()},
+    assigned_entries = #{} :: file_qos:assigned_entries()
+}).
+
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
-    #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #effective_file_qos{} |
+    #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} |
     #qos_fulfillment{} | undefined.
 
 -record(provider_request, {

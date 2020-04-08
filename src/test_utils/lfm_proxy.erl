@@ -720,15 +720,15 @@ get_file_distribution(Worker, SessId, FileKey) ->
 
 
 -spec get_effective_file_qos(node(), session:id(), lfm:file_key()) ->
-    {ok, {[qos_entry:id()], file_qos:assigned_entries()}} | lfm:error_reply().
+    {ok, {#{qos_entry:id() => qos_status:fulfilled()}, file_qos:assigned_entries()}} | lfm:error_reply().
 get_effective_file_qos(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_effective_file_qos(SessId, FileKey)).
 
 
--spec add_qos_entry(node(), session:id(), lfm:file_key(), qos_expression:raw(),
+-spec add_qos_entry(node(), session:id(), lfm:file_key(), qos_expression:rpn(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | lfm:error_reply().
-add_qos_entry(Worker, SessId, FileKey, Expression, ReplicasNum) ->
-    ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, Expression, ReplicasNum)).
+add_qos_entry(Worker, SessId, FileKey, ExpressionInRpn, ReplicasNum) ->
+    ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum)).
 
 
 -spec get_qos_entry(node(), session:id(), qos_entry:id()) ->
