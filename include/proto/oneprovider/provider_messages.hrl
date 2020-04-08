@@ -87,13 +87,13 @@
 
 -record(get_metadata, {
     type :: custom_metadata:type(),
-    filter = [] :: custom_metadata:filter(),
+    query = [] :: custom_metadata:query(),
     inherited = false :: boolean()
 }).
 
 -record(set_metadata, {
     metadata :: custom_metadata:metadata(),
-    filter = [] :: custom_metadata:filter()
+    query = [] :: custom_metadata:query()
 }).
 
 -record(remove_metadata, {

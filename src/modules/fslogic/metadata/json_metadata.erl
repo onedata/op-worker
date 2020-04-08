@@ -35,11 +35,11 @@
 -spec get(
     user_ctx:ctx(),
     file_ctx:ctx(),
-    custom_metadata:filter(),
+    custom_metadata:query(),
     Inherited :: boolean()
 ) ->
     {ok, custom_metadata:value()} | {error, term()}.
-get(UserCtx, FileCtx, Filter, Inherited) ->
+get(UserCtx, FileCtx, Query, Inherited) ->
     Result = case Inherited of
         true ->
             case gather_ancestors_json_metadata(UserCtx, FileCtx, []) of
@@ -53,7 +53,7 @@ get(UserCtx, FileCtx, Filter, Inherited) ->
     end,
     case Result of
         {ok, Json} ->
-            case json_utils:query(Json, Filter) of
+            case json_utils:query(Json, Query) of
                 {ok, _} = Ans -> Ans;
                 error -> ?ERROR_NOT_FOUND
             end;
@@ -66,17 +66,17 @@ get(UserCtx, FileCtx, Filter, Inherited) ->
     user_ctx:ctx(),
     file_ctx:ctx(),
     json_utils:json_term(),
-    custom_metadata:filter(),
+    custom_metadata:query(),
     Create :: boolean(),
     Replace :: boolean()
 ) ->
     {ok, file_meta:uuid()} | {error, term()}.
-set(UserCtx, FileCtx0, Json, Names, Create, Replace) ->
+set(UserCtx, FileCtx0, Json, Query, Create, Replace) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_metadata]
     ),
-    set_insecure(FileCtx1, Json, Names, Create, Replace).
+    set_insecure(FileCtx1, Json, Query, Create, Replace).
 
 
 -spec remove(user_ctx:ctx(), file_ctx:ctx()) -> ok | {error, term()}.
@@ -133,12 +133,12 @@ get_direct_json_metadata(UserCtx, FileCtx0) ->
 -spec set_insecure(
     file_ctx:ctx(),
     json_utils:json_term(),
-    custom_metadata:filter(),
+    custom_metadata:query(),
     Create :: boolean(),
     Replace :: boolean()
 ) ->
     {ok, file_meta:uuid()} | {error, term()}.
-set_insecure(FileCtx, JsonToInsert, Names, Create, Replace) ->
+set_insecure(FileCtx, JsonToInsert, Query, Create, Replace) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {ok, FileObjectId} = file_id:guid_to_objectid(file_ctx:get_guid_const(FileCtx)),
     ToCreate = #document{
@@ -147,7 +147,7 @@ set_insecure(FileCtx, JsonToInsert, Names, Create, Replace) ->
             space_id = file_ctx:get_space_id_const(FileCtx),
             file_objectid = FileObjectId,
             value = #{
-                ?JSON_METADATA_KEY => case json_utils:insert(undefined, JsonToInsert, Names) of
+                ?JSON_METADATA_KEY => case json_utils:insert(undefined, JsonToInsert, Query) of
                     {ok, Json} -> Json;
                     error -> throw({error, ?ENOATTR})
                 end
@@ -163,7 +163,7 @@ set_insecure(FileCtx, JsonToInsert, Names, Create, Replace) ->
                 {error, ?ENODATA};
             _ ->
                 PrevJson = maps:get(?JSON_METADATA_KEY, MetaValue, undefined),
-                case json_utils:insert(PrevJson, JsonToInsert, Names) of
+                case json_utils:insert(PrevJson, JsonToInsert, Query) of
                     {ok, NewJson} ->
                         {ok, Meta#custom_metadata{
                             value = MetaValue#{?JSON_METADATA_KEY => NewJson}

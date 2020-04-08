@@ -29,13 +29,13 @@
     user_ctx:ctx(),
     file_ctx:ctx(),
     custom_metadata:type(),
-    custom_metadata:filter(),
+    custom_metadata:query(),
     Inherited :: boolean()
 ) ->
     fslogic_worker:provider_response().
-get_metadata(UserCtx, FileCtx, Type, Filter, Inherited) ->
+get_metadata(UserCtx, FileCtx, Type, Query, Inherited) ->
     Result = case Type of
-        json -> json_metadata:get(UserCtx, FileCtx, Filter, Inherited);
+        json -> json_metadata:get(UserCtx, FileCtx, Query, Inherited);
         rdf -> xattr:get(UserCtx, FileCtx, ?RDF_METADATA_KEY, Inherited)
     end,
     case Result of
@@ -54,13 +54,13 @@ get_metadata(UserCtx, FileCtx, Type, Filter, Inherited) ->
     file_ctx:ctx(),
     custom_metadata:type(),
     custom_metadata:value(),
-    custom_metadata:filter(),
+    custom_metadata:query(),
     Create :: boolean(),
     Replace :: boolean()
 ) ->
     fslogic_worker:provider_response().
-set_metadata(UserCtx, FileCtx, json, Value, Filter, Create, Replace) ->
-    {ok, _} = json_metadata:set(UserCtx, FileCtx, Value, Filter, Create, Replace),
+set_metadata(UserCtx, FileCtx, json, Value, Query, Create, Replace) ->
+    {ok, _} = json_metadata:set(UserCtx, FileCtx, Value, Query, Create, Replace),
     #provider_response{status = #status{code = ?OK}};
 set_metadata(UserCtx, FileCtx, rdf, Value, _, Create, Replace) ->
     {ok, _} = xattr:set(UserCtx, FileCtx, ?RDF_METADATA_KEY, Value, Create, Replace),

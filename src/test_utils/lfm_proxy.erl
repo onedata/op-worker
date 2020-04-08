@@ -612,19 +612,19 @@ has_custom_metadata(Worker, SessId, FileKey) ->
 
 
 -spec get_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type(), custom_metadata:filter(), boolean()
+    custom_metadata:type(), custom_metadata:query(), boolean()
 ) ->
     {ok, custom_metadata:value()}.
-get_metadata(Worker, SessId, FileKey, Type, Filter, Inherited) ->
-    ?EXEC(Worker, lfm:get_metadata(SessId, FileKey, Type, Filter, Inherited)).
+get_metadata(Worker, SessId, FileKey, Type, Query, Inherited) ->
+    ?EXEC(Worker, lfm:get_metadata(SessId, FileKey, Type, Query, Inherited)).
 
 
 -spec set_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type(), custom_metadata:value(), custom_metadata:filter()
+    custom_metadata:type(), custom_metadata:value(), custom_metadata:query()
 ) ->
     ok.
-set_metadata(Worker, SessId, FileKey, Type, Value, Filter) ->
-    ?EXEC(Worker, lfm:set_metadata(SessId, FileKey, Type, Value, Filter)).
+set_metadata(Worker, SessId, FileKey, Type, Value, Query) ->
+    ?EXEC(Worker, lfm:set_metadata(SessId, FileKey, Type, Value, Query)).
 
 
 -spec remove_metadata(node(), session:id(), lfm:file_key(),
