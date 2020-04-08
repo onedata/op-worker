@@ -37,6 +37,8 @@ translate_value(#gri{aspect = children_details, scope = Scope}, ChildrenDetails)
     #{<<"children">> => lists:map(fun(ChildDetails) ->
         translate_file_details(ChildDetails, Scope)
     end, ChildrenDetails)};
+translate_value(#gri{aspect = attrs}, Attrs) ->
+    #{<<"attributes">> => Attrs};
 translate_value(#gri{aspect = As}, Metadata) when
     As =:= xattrs;
     As =:= json_metadata;
