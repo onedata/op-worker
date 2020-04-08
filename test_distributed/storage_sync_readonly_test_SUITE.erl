@@ -274,6 +274,7 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
     end),
     storage_sync_test_base:enable_storage_update(Config),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
+    storage_sync_test_base:disable_storage_update(Config),
     test_utils:mock_unload(W1, simple_scan),
 
     ?assertMonitoring(W1, #{
@@ -302,6 +303,10 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
     ?assertNotMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH})),
+
+    storage_sync_test_base:enable_storage_update(Config),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, 3),
+    storage_sync_test_base:disable_storage_update(Config),
 
     %next scan should import file
     ?assertMonitoring(W1, #{
@@ -1294,7 +1299,7 @@ update_timestamps_file_import_test(Config) ->
     NewTimestamp = 9999999999,
     storage_sync_test_base:change_time(StorageTestFilePath, NewTimestamp, NewTimestamp),
     storage_sync_test_base:enable_storage_update(Config),
-    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -1364,7 +1369,7 @@ should_not_detect_timestamp_update_test(Config) ->
     NewTimestamp = 9999999999,
     storage_sync_test_base:change_time(StorageTestFilePath, NewTimestamp, NewTimestamp),
     storage_sync_test_base:enable_storage_update(Config),
-    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
 
     %% Check if timestamps hasn't changed
     ?assertNotMatch({ok, #file_attr{atime = NewTimestamp, mtime = NewTimestamp}},
@@ -1462,7 +1467,7 @@ update_nfs_acl_test(Config) ->
             {ok, EncACL}
     end),
     storage_sync_test_base:enable_storage_update(Config),
-    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+    storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
 
     %% User1 should not be allowed to read acl
     ?assertMatch({error, ?EACCES},
