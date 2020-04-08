@@ -752,10 +752,10 @@ remove_share(SessId, ShareID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_metadata(session:id(), file_key(), custom_metadata:type(),
-    custom_metadata:filter(), boolean()) ->
+    custom_metadata:query(), boolean()) ->
     {ok, custom_metadata:value()} | error_reply().
-get_metadata(SessId, FileKey, Type, Filter, Inherited) ->
-    ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Filter, Inherited) end).
+get_metadata(SessId, FileKey, Type, Query, Inherited) ->
+    ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Query, Inherited) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -763,9 +763,9 @@ get_metadata(SessId, FileKey, Type, Filter, Inherited) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_metadata(session:id(), file_key(), custom_metadata:type(),
-    custom_metadata:value(), custom_metadata:filter()) -> ok | error_reply().
-set_metadata(SessId, FileKey, Type, Value, Filter) ->
-    ?run(fun() -> lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Filter) end).
+    custom_metadata:value(), custom_metadata:query()) -> ok | error_reply().
+set_metadata(SessId, FileKey, Type, Value, Query) ->
+    ?run(fun() -> lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Query) end).
 
 %%--------------------------------------------------------------------
 %% @doc

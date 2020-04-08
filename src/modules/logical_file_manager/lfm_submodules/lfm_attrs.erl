@@ -236,12 +236,12 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %% Gets metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(session:id(), lfm:file_key(), custom_metadata:type(), custom_metadata:filter(), boolean()) ->
+-spec get_metadata(session:id(), lfm:file_key(), custom_metadata:type(), custom_metadata:query(), boolean()) ->
     {ok, custom_metadata:value()} | lfm:error_reply().
-get_metadata(SessId, FileKey, Type, Filter, Inherited) ->
+get_metadata(SessId, FileKey, Type, Query, Inherited) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #get_metadata{type = Type, filter = Filter, inherited = Inherited},
+        #get_metadata{type = Type, query = Query, inherited = Inherited},
         fun(#metadata{value = Value}) -> {ok, Value} end).
 
 %%--------------------------------------------------------------------
@@ -249,12 +249,12 @@ get_metadata(SessId, FileKey, Type, Filter, Inherited) ->
 %% Sets metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(session:id(), lfm:file_key(), custom_metadata:type(), custom_metadata:value(), custom_metadata:filter()) ->
+-spec set_metadata(session:id(), lfm:file_key(), custom_metadata:type(), custom_metadata:value(), custom_metadata:query()) ->
     ok | lfm:error_reply().
-set_metadata(SessId, FileKey, Type, Value, Filter) ->
+set_metadata(SessId, FileKey, Type, Value, Query) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #set_metadata{filter = Filter, metadata = #metadata{type = Type, value = Value}},
+        #set_metadata{query = Query, metadata = #metadata{type = Type, value = Value}},
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------

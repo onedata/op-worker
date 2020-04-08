@@ -865,7 +865,6 @@ translate_from_protobuf(#'ScheduleReplicaInvalidation'{
     target_provider_id = TargetProviderId,
     index_name = ViewName,
     query_params = QueryParams
-
 }) ->
     #schedule_replica_invalidation{
         source_provider_id = SourceProviderId,
@@ -875,21 +874,21 @@ translate_from_protobuf(#'ScheduleReplicaInvalidation'{
     };
 translate_from_protobuf(#'ReadMetadata'{
     type = Type,
-    names = Filter,
+    query = Query,
     inherited = Inherited
 }) ->
     #get_metadata{
         type = binary_to_existing_atom(Type, utf8),
-        filter = Filter,
+        query = Query,
         inherited = Inherited
     };
 translate_from_protobuf(#'WriteMetadata'{
     metadata = Metadata,
-    names = Filter
+    query = Query
 }) ->
     #set_metadata{
         metadata = translate_from_protobuf(Metadata),
-        filter = Filter
+        query = Query
     };
 translate_from_protobuf(#'RemoveMetadata'{type = Type}) ->
     #remove_metadata{
@@ -1892,22 +1891,22 @@ translate_to_protobuf(#query_view_params{params = Params}) ->
     }};
 translate_to_protobuf(#get_metadata{
     type = Type,
-    filter = Filter,
+    query = Query,
     inherited = Inherited
 }) ->
     {read_metadata, #'ReadMetadata'{
         type = atom_to_binary(Type, utf8),
-        names = Filter,
+        query = Query,
         inherited = Inherited
     }};
 translate_to_protobuf(#set_metadata{
     metadata = Metadata,
-    filter = Filter
+    query = Query
 }) ->
     {_, MetadataProto} = translate_to_protobuf(Metadata),
     {write_metadata, #'WriteMetadata'{
         metadata = MetadataProto,
-        names = Filter
+        query = Query
     }};
 translate_to_protobuf(#remove_metadata{type = Type}) ->
     {remove_metadata, #'RemoveMetadata'{
