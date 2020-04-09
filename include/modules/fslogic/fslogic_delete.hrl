@@ -13,11 +13,10 @@
 -ifndef(FSLOGIC_DELETE_HRL).
 -define(FSLOGIC_DELETE_HRL, 1).
 
-%% Macros defining modes of file deletions
--define(NOT_DELETED, not_deleted).
--define(LOCAL_DELETE, local_delete).
--define(REMOTE_DELETE, remote_delete).
--define(OPENED_FILE_DELETE, opened_file_delete).
--define(RELEASED_FILE_DELETE(LocalOrRemote), {released_file_delete, LocalOrRemote}).
+%% Macros defining removal_status used in file_handles document.
+-define(NOT_REMOVED, not_removed).
+-define(LOCAL_REMOVE, local_remove).
+-define(REMOTE_REMOVE, remote_remove).
+
 
 -endif.

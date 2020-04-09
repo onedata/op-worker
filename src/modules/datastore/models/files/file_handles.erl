@@ -32,9 +32,7 @@
 % Handle created during file creation.
 % Read/write with this handle should be allowed even if file permissions forbid them.
 -type creation_handle() :: file_req:handle_id().
-% ?NOT_DELETED status is used only internally by this module when file is not deleted
-% ?LOCAL_DELETE and ?REMOTE_DELETE belong to fslogic_delete:deletion_mode() type
--type removal_status() :: ?NOT_DELETED | ?LOCAL_DELETE | ?REMOTE_DELETE.
+-type removal_status() :: ?NOT_REMOVED | ?LOCAL_REMOVE | ?REMOTE_REMOVE.
 
 -export_type([creation_handle/0, removal_status/0]).
 
@@ -94,7 +92,7 @@ list() ->
 is_removed(#document{value = FileHandles}) ->
     is_removed(FileHandles);
 is_removed(#file_handles{removal_status = RemovalStatus}) ->
-    RemovalStatus =/= ?NOT_DELETED.
+    RemovalStatus =/= ?NOT_REMOVED.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -108,7 +106,7 @@ register_open(FileCtx, SessId, Count, CreateHandleID) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Diff = fun
-        (#file_handles{removal_status = RemovalStatus}) when RemovalStatus =/= ?NOT_DELETED ->
+        (#file_handles{removal_status = RemovalStatus}) when RemovalStatus =/= ?NOT_REMOVED ->
             {error, removed};
         (Handle = #file_handles{descriptors = Fds}) ->
             FdCount = maps:get(SessId, Fds, 0),
@@ -175,7 +173,7 @@ register_release(FileCtx, SessId, Count) ->
         case Count =:= infinity orelse FdCount =< Count of
             true ->
                 Fds2 = maps:remove(SessId, Fds),
-                case {RemovalStatus =/= ?NOT_DELETED, maps:size(Fds2)} of
+                case {RemovalStatus =/= ?NOT_REMOVED, maps:size(Fds2)} of
                     {true, 0} -> {error, {removed, RemovalStatus}};
                     _ -> {ok, Handle#file_handles{descriptors = Fds2}}
                 end;
@@ -203,7 +201,7 @@ register_release(FileCtx, SessId, Count) ->
             end;
         {error, {removed, RemovalStatus}} ->
             session_open_files:deregister(SessId, FileGuid),
-            fslogic_delete:handle_release_of_deleted_file(FileCtx, RemovalStatus),
+            fslogic_delete:handle_release_of_deleted_file(FileCtx, RemovalStatus =:= ?LOCAL_REMOVE),
             datastore_model:delete(?CTX, FileUuid);
         {error, not_found} ->
             ok;
@@ -335,7 +333,7 @@ upgrade_record(2, {?MODULE, IsRemoved, Descriptors}) ->
     {3, {?MODULE, IsRemoved, Descriptors, undefined}};
 upgrade_record(3, {?MODULE, IsRemoved, Descriptors, CreationHandle}) ->
     RemovalStatus = case IsRemoved of
-        false -> ?NOT_DELETED;
-        true -> ?LOCAL_DELETE
+        false -> ?NOT_REMOVED;
+        true -> ?LOCAL_REMOVE
     end,
     {4, {?MODULE, RemovalStatus, Descriptors, CreationHandle}}.

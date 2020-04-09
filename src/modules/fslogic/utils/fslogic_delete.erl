@@ -31,9 +31,14 @@
 
 -type opened_file_handling_method() :: ?RENAME_HANDLING_METHOD | ?LINK_HANDLING_METHOD.
 
+%% Macros defining modes of file deletions
+-define(LOCAL_DELETE, local_delete).
+-define(REMOTE_DELETE, remote_delete).
+-define(OPENED_FILE_DELETE, opened_file_delete).
+-define(RELEASED_FILE_DELETE(IsLocalDeletion), {released_file_delete, IsLocalDeletion}).
+
 %% @formatter:off
--type delete_mode() :: ?LOCAL_DELETE | ?REMOTE_DELETE | ?OPENED_FILE_DELETE |
-                       ?RELEASED_FILE_DELETE(?LOCAL_DELETE) | ?RELEASED_FILE_DELETE(?REMOTE_DELETE).
+-type delete_mode() :: ?LOCAL_DELETE | ?REMOTE_DELETE | ?OPENED_FILE_DELETE | ?RELEASED_FILE_DELETE(boolean()).
 %% @formatter:on
 
 %%%===================================================================
@@ -49,10 +54,10 @@ handle_remotely_deleted_file(FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     check_if_opened_and_remove(UserCtx, FileCtx, false, ?REMOTE_DELETE).
 
--spec handle_release_of_deleted_file(file_ctx:ctx(), file_handles:removal_status()) -> ok.
-handle_release_of_deleted_file(FileCtx, RemovalStatus) ->
+-spec handle_release_of_deleted_file(file_ctx:ctx(), boolean()) -> ok.
+handle_release_of_deleted_file(FileCtx, IsLocalDeletion) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    ok = remove_file(FileCtx, UserCtx, true, ?RELEASED_FILE_DELETE(RemovalStatus)).
+    ok = remove_file(FileCtx, UserCtx, true, ?RELEASED_FILE_DELETE(IsLocalDeletion)).
 
     -spec handle_file_deleted_on_synced_storage(file_ctx:ctx()) -> ok.
 handle_file_deleted_on_synced_storage(FileCtx) ->
@@ -78,7 +83,7 @@ cleanup_opened_files() ->
                 try
                     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
-                    ok = remove_file(FileCtx, UserCtx, true, ?RELEASED_FILE_DELETE(?LOCAL_DELETE))
+                    ok = remove_file(FileCtx, UserCtx, true, ?RELEASED_FILE_DELETE(true))
                 catch
                     E1:E2 ->
                         ?warning_stacktrace("Cannot remove old opened file ~p: ~p:~p", [Doc, E1, E2])
@@ -124,12 +129,16 @@ handle_opened_file(FileCtx, UserCtx, DeleteMode) ->
     ok = remove_file(FileCtx, UserCtx, false, ?OPENED_FILE_DELETE),
     {HandlingMethod, FileCtx2} = fslogic_delete:get_open_file_handling_method(FileCtx),
     FileCtx3 = custom_handle_opened_file(FileCtx2, UserCtx, DeleteMode, HandlingMethod),
-    ok = file_handles:mark_to_remove(FileCtx3, DeleteMode),
+    RemovalStatus = case DeleteMode of
+        ?LOCAL_DELETE -> ?LOCAL_REMOVE;
+        ?REMOTE_DELETE -> ?REMOTE_REMOVE
+    end,
+    ok = file_handles:mark_to_remove(FileCtx3, RemovalStatus),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     % Check once more to prevent race with last handle being closed
     case file_handles:exists(FileUuid) of
         true -> ok;
-        false -> handle_release_of_deleted_file(FileCtx3, DeleteMode)
+        false -> handle_release_of_deleted_file(FileCtx3, DeleteMode =:= ?LOCAL_DELETE)
     end.
 
 %%--------------------------------------------------------------------
@@ -181,14 +190,14 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 FileCtx5 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
                 delete_storage_sync_info(FileCtx5),
                 ok;
-            ?RELEASED_FILE_DELETE(RemovalStatus) ->
+            ?RELEASED_FILE_DELETE(IsLocalDeletion) ->
                 {FileDoc, FileCtx4} = file_ctx:get_file_doc_including_deleted(FileCtx3),
                 FileUuid = file_ctx:get_uuid_const(FileCtx4),
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
                 file_meta:delete_without_link(FileDoc), % do not match, document may not exist
-                case RemovalStatus of
-                    ?LOCAL_DELETE -> remove_auxiliary_documents(FileCtx4);
-                    ?REMOTE_DELETE -> remove_local_auxiliary_documents(FileCtx4)
+                case IsLocalDeletion of
+                    true -> remove_auxiliary_documents(FileCtx4);
+                    false-> remove_local_auxiliary_documents(FileCtx4)
                 end,
                 % remove deletion_link even if open_file_handling method is rename
                 % as deletion_link may have been created when error occurred on deleting file on storage

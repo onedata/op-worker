@@ -524,7 +524,7 @@
 -record(file_handles, {
     % this field informs whether file was deleted and
     % whether removal was performed locally or in remote provider
-    removal_status = ?NOT_DELETED :: file_handles:removal_status(),
+    removal_status = ?NOT_REMOVED :: file_handles:removal_status(),
     descriptors = #{} :: file_descriptors(),
     creation_handle :: file_handles:creation_handle()
 }).
