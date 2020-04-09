@@ -308,7 +308,7 @@ on_connect_to_oz() ->
 %%--------------------------------------------------------------------
 -spec on_deregister() -> ok.
 on_deregister() ->
-    ?info("Provider has been deregistered"),
+    ?notice("Provider has been deregistered - clearing existing credentials"),
     provider_auth:delete(),
     % kill the connection to prevent 'unauthorized' errors due
     % to older authorization when immediately registering anew
