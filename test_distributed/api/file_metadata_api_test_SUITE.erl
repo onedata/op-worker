@@ -36,8 +36,10 @@
     get_dir_rdf_metadata_with_rdf_set_test/1,
     get_file_rdf_metadata_without_rdf_set_test/1,
     get_dir_rdf_metadata_without_rdf_set_test/1,
-%%    get_shared_file_rdf_metadata_with_rdf_set_test/1,
-%%    get_shared_dir_rdf_metadata_with_rdf_set_test/1,
+    get_shared_file_rdf_metadata_with_rdf_set_test/1,
+    get_shared_dir_rdf_metadata_with_rdf_set_test/1,
+    get_shared_file_rdf_metadata_without_rdf_set_test/1,
+    get_shared_dir_rdf_metadata_without_rdf_set_test/1,
     get_file_rdf_metadata_on_provider_not_supporting_space_test/1,
     get_dir_rdf_metadata_on_provider_not_supporting_space_test/1,
 
@@ -60,23 +62,25 @@
 
 all() ->
     ?ALL([
-%%        get_file_rdf_metadata_with_rdf_set_test,
-%%        get_dir_rdf_metadata_with_rdf_set_test,
-%%        get_file_rdf_metadata_without_rdf_set_test,
-%%        get_dir_rdf_metadata_without_rdf_set_test,
-%%        get_shared_file_rdf_metadata_with_rdf_set_test,
-%%        get_shared_dir_rdf_metadata_with_rdf_set_test,
-%%        get_file_rdf_metadata_on_provider_not_supporting_space_test,
-%%        get_dir_rdf_metadata_on_provider_not_supporting_space_test,
+        get_file_rdf_metadata_with_rdf_set_test,
+        get_dir_rdf_metadata_with_rdf_set_test,
+        get_file_rdf_metadata_without_rdf_set_test,
+        get_dir_rdf_metadata_without_rdf_set_test,
+        get_shared_file_rdf_metadata_with_rdf_set_test,
+        get_shared_dir_rdf_metadata_with_rdf_set_test,
+        get_shared_file_rdf_metadata_without_rdf_set_test,
+        get_shared_dir_rdf_metadata_without_rdf_set_test,
+        get_file_rdf_metadata_on_provider_not_supporting_space_test,
+        get_dir_rdf_metadata_on_provider_not_supporting_space_test
 
-        get_file_json_metadata_with_json_set_test,
-        get_dir_json_metadata_with_json_set_test,
-        get_file_json_metadata_without_json_set_test,
-        get_dir_json_metadata_without_json_set_test,
-        get_shared_file_json_metadata_with_json_set_test,
-        get_shared_dir_json_metadata_with_json_set_test,
-        get_shared_file_json_metadata_without_json_set_test,
-        get_shared_dir_json_metadata_without_json_set_test
+%%        get_file_json_metadata_with_json_set_test,
+%%        get_dir_json_metadata_with_json_set_test,
+%%        get_file_json_metadata_without_json_set_test,
+%%        get_dir_json_metadata_without_json_set_test,
+%%        get_shared_file_json_metadata_with_json_set_test,
+%%        get_shared_dir_json_metadata_with_json_set_test,
+%%        get_shared_file_json_metadata_without_json_set_test,
+%%        get_shared_dir_json_metadata_without_json_set_test
 
 %%        get_json_metadata_test,
 %%        get_xattr_metadata_test,
@@ -297,71 +301,80 @@ end)()).
 
 
 %%%===================================================================
-%%% Test functions
+%%% Get Rdf metadata test functions
 %%%===================================================================
 
 
 get_file_rdf_metadata_with_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"file">>, _SetRdf = true, Config).
+    get_rdf_metadata_test_base(<<"file">>, _SetRdf = true, _TestShareMode = false, Config).
 
 
 get_dir_rdf_metadata_with_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"dir">>, _SetRdf = true, Config).
+    get_rdf_metadata_test_base(<<"dir">>, _SetRdf = true, _TestShareMode = false, Config).
 
 
 get_file_rdf_metadata_without_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"file">>, _SetRdf = false, Config).
+    get_rdf_metadata_test_base(<<"file">>, _SetRdf = false, _TestShareMode = false, Config).
 
 
 get_dir_rdf_metadata_without_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"dir">>, _SetRdf = false, Config).
+    get_rdf_metadata_test_base(<<"dir">>, _SetRdf = false, _TestShareMode = false, Config).
+
+
+get_shared_file_rdf_metadata_with_rdf_set_test(Config) ->
+    get_rdf_metadata_test_base(<<"file">>, _SetRdf = true, _TestShareMode = true, Config).
+
+
+get_shared_dir_rdf_metadata_with_rdf_set_test(Config) ->
+    get_rdf_metadata_test_base(<<"dir">>, _SetRdf = true, _TestShareMode = true, Config).
+
+
+get_shared_file_rdf_metadata_without_rdf_set_test(Config) ->
+    get_rdf_metadata_test_base(<<"file">>, _SetRdf = false, _TestShareMode = true, Config).
+
+
+get_shared_dir_rdf_metadata_without_rdf_set_test(Config) ->
+    get_rdf_metadata_test_base(<<"dir">>, _SetRdf = false, _TestShareMode = true, Config).
 
 
 %% @private
-get_rdf_metadata_test_base(FileType, SetRdf, Config) ->
-    {FilePath, FileGuid, _ShareId} = create_get_rdf_metadata_test_env(
-        FileType, SetRdf, Config
-    ),
+get_rdf_metadata_test_base(FileType, SetRdf, TestShareMode, Config) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME]),
+    {ok, FileGuid} = create_file(FileType, P1, SessIdP1, FilePath),
+
     GetExpCallResultFun = case SetRdf of
-        true -> fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end;
-        false -> fun(_TestCtx) -> ?ERROR_POSIX(?ENODATA) end
+        true ->
+            lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
+            fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end;
+        false ->
+            fun(_TestCtx) -> ?ERROR_POSIX(?ENODATA) end
+    end,
+    {ShareId, ClientSpec} = case TestShareMode of
+        true ->
+            {ok, Id} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
+            {Id, ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config)};
+        false ->
+            {undefined, ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config)}
     end,
 
-    get_metadata_in_normal_mode_test_base(
+    % Wait for metadata sync between providers
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileGuid}), ?ATTEMPTS),
+
+    get_metadata_test_base(
         <<"rdf">>,
-        FileType, FilePath, FileGuid,
+        FileType, FilePath, FileGuid, ShareId,
         create_validate_get_metadata_rest_call_fun(GetExpCallResultFun),
         create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
-        ?config(op_worker_nodes, Config),
-        ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config), undefined, [],
+        _Providers = ?config(op_worker_nodes, Config),
+        ClientSpec,
+        _DataSpec = undefined,
+        _QsParams = [],
         Config
     ).
-
-%%
-%%get_shared_file_rdf_metadata_with_rdf_set_test(Config) ->
-%%    get_rdf_metadata_for_shared_file_test_base(<<"file">>, Config).
-%%
-%%
-%%get_shared_dir_rdf_metadata_with_rdf_set_test(Config) ->
-%%    get_rdf_metadata_for_shared_file_test_base(<<"dir">>, Config).
-%%
-%%
-%%%% @private
-%%get_rdf_metadata_for_shared_file_test_base(FileType, Config) ->
-%%    {_FilePath, FileGuid, ShareId} = create_get_rdf_metadata_test_env(
-%%        FileType, _SetRdf = true, Config
-%%    ),
-%%    GetExpCallResultFun = fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end,
-%%
-%%    get_metadata_in_share_mode_test_base(
-%%        <<"rdf">>,
-%%        FileType, file_id:guid_to_share_guid(FileGuid, ShareId),
-%%        create_validate_get_metadata_rest_call_fun(GetExpCallResultFun),
-%%        create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
-%%        ?config(op_worker_nodes, Config),
-%%        undefined, [],
-%%        Config
-%%    ).
 
 
 get_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
@@ -383,40 +396,17 @@ get_rdf_metadata_on_provider_not_supporting_space_test_base(FileType, Config) ->
 
     GetExpCallResultFun = fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end,
 
-    get_metadata_in_normal_mode_test_base(
+    get_metadata_test_base(
         <<"rdf">>,
-        FileType, FilePath, FileGuid,
+        FileType, FilePath, FileGuid, undefined,
         create_validate_get_metadata_rest_call_fun(GetExpCallResultFun, P2),
         create_validate_get_metadata_gs_call_fun(GetExpCallResultFun, P2),
-        Providers, ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config), undefined, [],
+        Providers,
+        ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
+        _DataSpec = undefined,
+        _QsParams = [],
         Config
     ).
-
-
-%% @private
-create_get_rdf_metadata_test_env(FileType, SetRdf, Config) ->
-    [P2, P1] = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
-
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME]),
-    {ok, FileGuid} = create_file(FileType, P1, SessIdP1, FilePath),
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
-
-    case SetRdf of
-        true ->
-            lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []);
-        false ->
-            ok
-    end,
-
-    % Wait for metadata sync between providers
-    ?assertMatch(
-        {ok, #file_attr{shares = [ShareId]}},
-        lfm_proxy:stat(P2, SessIdP2, {guid, FileGuid}),
-        ?ATTEMPTS
-    ),
-    {FilePath, FileGuid, ShareId}.
 
 
 %%%===================================================================
@@ -458,7 +448,6 @@ get_shared_dir_json_metadata_without_json_set_test(Config) ->
 
 %% @private
 get_json_metadata_test_base(FileType, SetDirectJson, TestShareMode, Config) ->
-    Providers = ?config(op_worker_nodes, Config),
     {FileLayer5Path, FileLayer5Guid, ShareId} = create_get_json_metadata_tests_env(
         FileType, SetDirectJson, TestShareMode, Config
     ),
@@ -496,7 +485,7 @@ get_json_metadata_test_base(FileType, SetDirectJson, TestShareMode, Config) ->
         FileType, FileLayer5Path, FileLayer5Guid, ShareId,
         create_validate_get_metadata_rest_call_fun(GetExpCallResultFun),
         create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
-        Providers,
+        _Providers = ?config(op_worker_nodes, Config),
         ClientSpec,
         DataSpec,
         _QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
@@ -699,54 +688,6 @@ create_validate_get_metadata_gs_call_fun(GetExpResultFun, ProviderNotSupportingS
                     ?assertEqual(ExpError, Result)
             end
     end.
-
-
-%% @private
-get_metadata_in_normal_mode_test_base(
-    MetadataType, FileType, FilePath, FileGuid,
-    ValidateRestCallResultFun, ValidateGsCallResultFun,
-    Providers, ClientSpec, DataSpec, QsParameters, Config
-) ->
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-
-    ?assert(api_test_utils:run_scenarios(Config, [
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_REST_ARGS_FUN(MetadataType, FileObjectId, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using deprecated path rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_DEPRECATED_PATH_REST_ARGS_FUN(MetadataType, FilePath, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using deprecated id rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_DEPRECATED_ID_REST_ARGS_FUN(MetadataType, FileObjectId, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using gs api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_GS_ARGS_FUN(MetadataType, FileGuid, private),
-            validate_result_fun = ValidateGsCallResultFun,
-            data_spec = DataSpec
-        }
-    ])).
 
 
 %% @private
