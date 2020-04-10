@@ -31,7 +31,7 @@
 ]).
 
 -export([
-    % Get rdf test cases
+    % Get rdf metadata test cases
     get_file_rdf_metadata_with_rdf_set_test/1,
     get_dir_rdf_metadata_with_rdf_set_test/1,
     get_file_rdf_metadata_without_rdf_set_test/1,
@@ -43,7 +43,7 @@
     get_file_rdf_metadata_on_provider_not_supporting_space_test/1,
     get_dir_rdf_metadata_on_provider_not_supporting_space_test/1,
 
-    % Get json test cases
+    % Get json metadata test cases
     get_file_json_metadata_with_json_set_test/1,
     get_dir_json_metadata_with_json_set_test/1,
     get_file_json_metadata_without_json_set_test/1,
@@ -52,9 +52,10 @@
     get_shared_dir_json_metadata_with_json_set_test/1,
     get_shared_file_json_metadata_without_json_set_test/1,
     get_shared_dir_json_metadata_without_json_set_test/1,
+    get_file_json_metadata_on_provider_not_supporting_space_test/1,
+    get_dir_json_metadata_on_provider_not_supporting_space_test/1,
 
 
-    get_json_metadata_test/1,
     get_xattr_metadata_test/1,
     set_rdf_metadata_test/1,
     set_json_metadata_test/1
@@ -71,18 +72,20 @@ all() ->
         get_shared_file_rdf_metadata_without_rdf_set_test,
         get_shared_dir_rdf_metadata_without_rdf_set_test,
         get_file_rdf_metadata_on_provider_not_supporting_space_test,
-        get_dir_rdf_metadata_on_provider_not_supporting_space_test
+        get_dir_rdf_metadata_on_provider_not_supporting_space_test,
 
-%%        get_file_json_metadata_with_json_set_test,
-%%        get_dir_json_metadata_with_json_set_test,
-%%        get_file_json_metadata_without_json_set_test,
-%%        get_dir_json_metadata_without_json_set_test,
-%%        get_shared_file_json_metadata_with_json_set_test,
-%%        get_shared_dir_json_metadata_with_json_set_test,
-%%        get_shared_file_json_metadata_without_json_set_test,
-%%        get_shared_dir_json_metadata_without_json_set_test
+        get_file_json_metadata_with_json_set_test,
+        get_dir_json_metadata_with_json_set_test,
+        get_file_json_metadata_without_json_set_test,
+        get_dir_json_metadata_without_json_set_test,
+        get_shared_file_json_metadata_with_json_set_test,
+        get_shared_dir_json_metadata_with_json_set_test,
+        get_shared_file_json_metadata_without_json_set_test,
+        get_shared_dir_json_metadata_without_json_set_test,
+        get_file_json_metadata_on_provider_not_supporting_space_test,
+        get_dir_json_metadata_on_provider_not_supporting_space_test
 
-%%        get_json_metadata_test,
+
 %%        get_xattr_metadata_test,
 %%        set_rdf_metadata_test,
 %%        set_json_metadata_test
@@ -633,16 +636,41 @@ create_get_json_call_exp_result_fun(ShareId, DirectMetadataSet) ->
     end.
 
 
-%% @private
-create_file(FileType, Node, SessId, Path) ->
-    create_file(FileType, Node, SessId, Path, 8#777).
+get_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
+    get_json_metadata_on_provider_not_supporting_space_test_base(<<"file">>, Config).
+
+
+get_dir_json_metadata_on_provider_not_supporting_space_test(Config) ->
+    get_json_metadata_on_provider_not_supporting_space_test_base(<<"dir">>, Config).
 
 
 %% @private
-create_file(<<"file">>, Node, SessId, Path, Mode) ->
-    lfm_proxy:create(Node, SessId, Path, Mode);
-create_file(<<"dir">>, Node, SessId, Path, Mode) ->
-    lfm_proxy:mkdir(Node, SessId, Path, Mode).
+get_json_metadata_on_provider_not_supporting_space_test_base(FileType, Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+
+    FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME]),
+    {ok, FileGuid} = create_file(FileType, P1, SessIdP1, FilePath),
+    lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, json, ?JSON_METADATA_2, []),
+
+    GetExpCallResultFun = fun(_TestCtx) -> {ok, ?JSON_METADATA_2} end,
+
+    get_metadata_test_base(
+        <<"json">>,
+        FileType, FilePath, FileGuid, undefined,
+        create_validate_get_metadata_rest_call_fun(GetExpCallResultFun, P2),
+        create_validate_get_metadata_gs_call_fun(GetExpCallResultFun, P2),
+        Providers,
+        ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
+        _DataSpec = undefined,
+        _QsParams = [],
+        Config
+    ).
+
+
+%%%===================================================================
+%%% Get metadata generic functions
+%%%===================================================================
 
 
 %% @private
@@ -691,6 +719,21 @@ create_validate_get_metadata_gs_call_fun(GetExpResultFun, ProviderNotSupportingS
 
 
 %% @private
+-spec get_metadata_test_base(
+    MetadataType :: binary(),  %% <<"json">> | <<"rdf">> | <<"xattrs">>
+    FileType :: binary(),      %% <<"dir">> | <<"file">>
+    FilePath :: file_meta:path(),
+    FileGuid :: file_id:file_guid(),
+    ShareId :: undefined | od_share:id(),
+    ValidateRestCallResultFun :: fun((api_test_ctx(), {ok, RespCode :: pos_integer(), RespBody :: term()}) -> ok),
+    ValidateGsCallResultFun :: fun((api_test_ctx(), Result :: term()) -> ok),
+    Providers :: [node()],
+    client_spec(),
+    data_spec(),
+    QsParameters :: [binary()],
+    Config :: proplists:proplist()
+) ->
+    ok.
 get_metadata_test_base(
     MetadataType, FileType, FilePath, FileGuid, _ShareId = undefined,
     ValidateRestCallResultFun, ValidateGsCallResultFun,
@@ -794,168 +837,6 @@ get_metadata_test_base(
             data_spec = DataSpec
         }
     ])).
-
-
-get_json_metadata_test(Config) ->
-    [Provider2, Provider1] = ?config(op_worker_nodes, Config),
-
-    GetSessionFun = fun(Node) ->
-        ?config({session_id, {?USER_IN_BOTH_SPACES, ?GET_DOMAIN(Node)}}, Config)
-    end,
-
-    UserSessId = GetSessionFun(Provider2),
-
-    RootDirPath = filename:join(["/", ?SPACE_2, ?SCENARIO_NAME]),
-    {ok, RootDirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, RootDirPath, 8#777),
-    lfm_proxy:set_metadata(Provider2, UserSessId, {guid, RootDirGuid}, json, ?JSON_METADATA_1, []),
-
-    DirLayer2Path = filename:join([RootDirPath, <<"dir_layer_2">>]),
-    {ok, DirLayer2Guid} = lfm_proxy:mkdir(Provider2, UserSessId, DirLayer2Path, 8#717),
-    lfm_proxy:set_metadata(Provider2, UserSessId, {guid, DirLayer2Guid}, json, ?JSON_METADATA_2, []),
-
-    DirLayer3Path = filename:join([DirLayer2Path, <<"dir_layer_3">>]),
-    {ok, DirLayer3Guid} = lfm_proxy:mkdir(Provider2, UserSessId, DirLayer3Path, 8#777),
-    lfm_proxy:set_metadata(Provider2, UserSessId, {guid, DirLayer3Guid}, json, ?JSON_METADATA_3, []),
-
-    DirLayer4Path = filename:join([DirLayer3Path, <<"dir_layer_4">>]),
-    {ok, DirLayer4Guid} = lfm_proxy:mkdir(Provider2, UserSessId, DirLayer4Path, 8#777),
-    lfm_proxy:set_metadata(Provider2, UserSessId, {guid, DirLayer4Guid}, json, ?JSON_METADATA_4, []),
-    {ok, ShareId} = lfm_proxy:create_share(Provider2, UserSessId, {guid, DirLayer4Guid}, <<"share">>),
-
-    DirWithoutJsonMetadataPath = filename:join([DirLayer4Path, <<"dir_without_json_metadata">>]),
-    {ok, DirWithoutJsonMetadataGuid} = lfm_proxy:mkdir(Provider2, UserSessId, DirWithoutJsonMetadataPath, 8#777),
-
-    DirWithJsonMetadataPath = filename:join([DirLayer4Path, <<"dir_with_json_metadata">>]),
-    {ok, DirWithJsonMetadataGuid} = lfm_proxy:mkdir(Provider2, UserSessId, DirWithJsonMetadataPath, 8#777),
-    lfm_proxy:set_metadata(Provider2, UserSessId, {guid, DirWithJsonMetadataGuid}, json, ?JSON_METADATA_5, []),
-
-    RegularFileWithoutJsonMetadataPath = filename:join([DirLayer4Path, <<"file_without_json_metadata">>]),
-    {ok, RegularFileWithoutJsonMetadataGuid} = lfm_proxy:create(Provider2, UserSessId, RegularFileWithoutJsonMetadataPath, 8#777),
-
-    RegularFileWithJsonMetadataPath = filename:join([DirLayer4Path, <<"file_with_json_metadata">>]),
-    {ok, RegularFileWithJsonMetadataGuid} = lfm_proxy:create(Provider2, UserSessId, RegularFileWithJsonMetadataPath, 8#777),
-    lfm_proxy:set_metadata(Provider2, UserSessId, {guid, RegularFileWithJsonMetadataGuid}, json, ?JSON_METADATA_5, []),
-
-    % Wait for metadata sync between providers
-    ?assertMatch(
-        {ok, #file_attr{}},
-        lfm_proxy:stat(Provider1, GetSessionFun(Provider1), {guid, RegularFileWithJsonMetadataGuid}),
-        ?ATTEMPTS
-    ),
-
-    DataSpec = #data_spec{
-        optional = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
-        correct_values = #{
-            <<"inherited">> => [true, false],
-            <<"filter_type">> => [<<"keypath">>],
-            <<"filter">> => [
-                <<"attr3.attr32">>, <<"attr3.[10]">>,
-                <<"attr2.attr22.[2]">>, <<"attr2.attr22.[10]">>
-            ]
-        },
-        bad_values = [
-            {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-            {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-            {<<"filter_type">>, <<"dummy">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
-
-            % Below differences between error returned by rest and gs are results of sending
-            % parameters via qs in REST, so they lost their original type and are cast to binary
-            {<<"filter_type">>, 100, {rest, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
-            {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
-            {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
-        ]
-    },
-
-    GetExpectedResultFun = fun(#api_test_ctx{client = Client, data = Data}, ShareId, DirectMetadataSet) ->
-        try
-            IncludeInherited = maps:get(<<"inherited">>, Data, false),
-            FilterType = maps:get(<<"filter_type">>, Data, undefined),
-            Filter = maps:get(<<"filter">>, Data, undefined),
-
-            FilterList = case {FilterType, Filter} of
-                {undefined, _} ->
-                    [];
-                {<<"keypath">>, undefined} ->
-                    throw(?ERROR_MISSING_REQUIRED_VALUE(<<"filter">>));
-                {<<"keypath">>, _} ->
-                    binary:split(Filter, <<".">>, [global])
-            end,
-
-            ExpJsonMetadata = case {DirectMetadataSet, IncludeInherited} of
-                {true, true} ->
-                    case ShareId of
-                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
-                            % User belonging to the same space as owner of files
-                            % shouldn't be able to get inherited metadata due to
-                            % insufficient perms on DirLayer2
-                            throw(?ERROR_POSIX(?EACCES));
-                        undefined ->
-                            json_utils:merge([
-                                ?JSON_METADATA_1,
-                                ?JSON_METADATA_2,
-                                ?JSON_METADATA_3,
-                                ?JSON_METADATA_4,
-                                ?JSON_METADATA_5
-                            ]);
-                        _ ->
-                            json_utils:merge([
-                                ?JSON_METADATA_4,
-                                ?JSON_METADATA_5
-                            ])
-                    end;
-                {true, false} ->
-                    ?JSON_METADATA_5;
-                {false, true} ->
-                    case ShareId of
-                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
-                            % User belonging to the same space as owner of files
-                            % shouldn't be able to get inherited metadata due to
-                            % insufficient perms on DirLayer2
-                            throw(?ERROR_POSIX(?EACCES));
-                        undefined ->
-                            json_utils:merge([
-                                ?JSON_METADATA_1,
-                                ?JSON_METADATA_2,
-                                ?JSON_METADATA_3,
-                                ?JSON_METADATA_4
-                            ]);
-                        _ ->
-                            ?JSON_METADATA_4
-                    end;
-                {false, false} ->
-                    throw(?ERROR_POSIX(?ENODATA))
-            end,
-
-            case json_utils:query(ExpJsonMetadata, FilterList) of
-                {ok, _} = Result ->
-                    Result;
-                error ->
-                    ?ERROR_POSIX(?ENODATA)
-            end
-        catch throw:Error ->
-            Error
-        end
-    end,
-
-    get_metadata_test_base(
-        Config,
-        <<"json">>,
-        GetExpectedResultFun,
-        DataSpec,
-        ShareId,
-        [
-            {
-                <<"dir">>,
-                DirWithoutJsonMetadataPath, DirWithoutJsonMetadataGuid,
-                DirWithJsonMetadataPath, DirWithJsonMetadataGuid
-            },
-            {
-                <<"file">>,
-                RegularFileWithoutJsonMetadataPath, RegularFileWithoutJsonMetadataGuid,
-                RegularFileWithJsonMetadataPath, RegularFileWithJsonMetadataGuid
-            }
-        ]
-    ).
 
 
 get_xattr_metadata_test(Config) ->
@@ -2187,12 +2068,26 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 
 
+%% @private
+create_file(FileType, Node, SessId, Path) ->
+    create_file(FileType, Node, SessId, Path, 8#777).
+
+
+%% @private
+create_file(<<"file">>, Node, SessId, Path, Mode) ->
+    lfm_proxy:create(Node, SessId, Path, Mode);
+create_file(<<"dir">>, Node, SessId, Path, Mode) ->
+    lfm_proxy:mkdir(Node, SessId, Path, Mode).
+
+
+%% @private
 encode_metadata(Metadata) when is_binary(Metadata) ->
     Metadata;
 encode_metadata(Metadata) when is_map(Metadata) ->
     json_utils:encode(Metadata).
 
 
+%% @private
 maybe_decode_json(MaybeEncodedJson) ->
     try
         json_utils:decode(MaybeEncodedJson)
@@ -2201,6 +2096,7 @@ maybe_decode_json(MaybeEncodedJson) ->
     end.
 
 
+%% @private
 set_all_metadata_types(Node, SessionId, Guid, set_1) ->
     ?assertMatch(ok, lfm_proxy:set_metadata(Node, SessionId, {guid, Guid}, json, ?JSON_METADATA_4, [])),
     ?assertMatch(ok, lfm_proxy:set_metadata(Node, SessionId, {guid, Guid}, rdf, ?RDF_METADATA_1, [])),
