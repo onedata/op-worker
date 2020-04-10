@@ -55,8 +55,19 @@
     get_file_json_metadata_on_provider_not_supporting_space_test/1,
     get_dir_json_metadata_on_provider_not_supporting_space_test/1,
 
+    % Get xattrs test cases
+    get_file_xattrs_with_json_set_test/1,
+    get_dir_xattrs_with_json_set_test/1,
+    get_file_xattrs_without_json_set_test/1,
+    get_dir_xattrs_without_json_set_test/1,
+    get_shared_file_xattrs_with_json_set_test/1,
+    get_shared_dir_xattrs_with_json_set_test/1,
+    get_shared_file_xattrs_without_json_set_test/1,
+    get_shared_dir_xattrs_without_json_set_test/1,
+    get_file_xattrs_on_provider_not_supporting_space_test/1,
+    get_dir_xattrs_on_provider_not_supporting_space_test/1,
 
-    get_xattr_metadata_test/1,
+
     set_rdf_metadata_test/1,
     set_json_metadata_test/1
 ]).
@@ -83,10 +94,20 @@ all() ->
         get_shared_file_json_metadata_without_json_set_test,
         get_shared_dir_json_metadata_without_json_set_test,
         get_file_json_metadata_on_provider_not_supporting_space_test,
-        get_dir_json_metadata_on_provider_not_supporting_space_test
+        get_dir_json_metadata_on_provider_not_supporting_space_test,
+
+        get_file_xattrs_with_json_set_test,
+        get_dir_xattrs_with_json_set_test,
+        get_file_xattrs_without_json_set_test,
+        get_dir_xattrs_without_json_set_test,
+        get_shared_file_xattrs_with_json_set_test,
+        get_shared_dir_xattrs_with_json_set_test,
+        get_shared_file_xattrs_without_json_set_test,
+        get_shared_dir_xattrs_without_json_set_test,
+        get_file_xattrs_on_provider_not_supporting_space_test,
+        get_dir_xattrs_on_provider_not_supporting_space_test
 
 
-%%        get_xattr_metadata_test,
 %%        set_rdf_metadata_test,
 %%        set_json_metadata_test
     ]).
@@ -461,7 +482,7 @@ get_json_metadata_test_base(FileType, SetDirectJson, TestShareMode, Config) ->
         false -> ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config)
     end,
     DataSpec = #data_spec{
-        optional = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
+        optional = QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
         correct_values = #{
             <<"inherited">> => [true, false],
             <<"filter_type">> => [<<"keypath">>],
@@ -491,7 +512,7 @@ get_json_metadata_test_base(FileType, SetDirectJson, TestShareMode, Config) ->
         _Providers = ?config(op_worker_nodes, Config),
         ClientSpec,
         DataSpec,
-        _QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
+        QsParams,
         Config
     ).
 
@@ -657,6 +678,311 @@ get_json_metadata_on_provider_not_supporting_space_test_base(FileType, Config) -
 
     get_metadata_test_base(
         <<"json">>,
+        FileType, FilePath, FileGuid, undefined,
+        create_validate_get_metadata_rest_call_fun(GetExpCallResultFun, P2),
+        create_validate_get_metadata_gs_call_fun(GetExpCallResultFun, P2),
+        Providers,
+        ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
+        _DataSpec = undefined,
+        _QsParams = [],
+        Config
+    ).
+
+
+%%%===================================================================
+%%% Get xattrs functions
+%%%===================================================================
+
+
+
+get_file_xattrs_with_json_set_test(Config) ->
+    get_xattrs_test_base(<<"file">>, _SetDirectXattrs = true, _TestShareMode = false, Config).
+
+
+get_dir_xattrs_with_json_set_test(Config) ->
+    get_xattrs_test_base(<<"dir">>, _SetDirectXattrs = true, _TestShareMode = false, Config).
+
+
+get_file_xattrs_without_json_set_test(Config) ->
+    get_xattrs_test_base(<<"file">>, _SetDirectXattrs = false, _TestShareMode = false, Config).
+
+
+get_dir_xattrs_without_json_set_test(Config) ->
+    get_xattrs_test_base(<<"dir">>, _SetDirectXattrs = false, _TestShareMode = false, Config).
+
+
+get_shared_file_xattrs_with_json_set_test(Config) ->
+    get_xattrs_test_base(<<"file">>, _SetDirectXattrs = true, _TestShareMode = true, Config).
+
+
+get_shared_dir_xattrs_with_json_set_test(Config) ->
+    get_xattrs_test_base(<<"dir">>, _SetDirectXattrs = true, _TestShareMode = true, Config).
+
+
+get_shared_file_xattrs_without_json_set_test(Config) ->
+    get_xattrs_test_base(<<"file">>, _SetDirectXattrs = false, _TestShareMode = true, Config).
+
+
+get_shared_dir_xattrs_without_json_set_test(Config) ->
+    get_xattrs_test_base(<<"dir">>, _SetDirectXattrs = false, _TestShareMode = true, Config).
+
+
+%% @private
+get_xattrs_test_base(FileType, SetDirectXattrs, TestShareMode, Config) ->
+    {FileLayer3Path, FileLayer3Guid, ShareId} = create_get_xattrs_tests_env(
+        FileType, SetDirectXattrs, TestShareMode, Config
+    ),
+    NotSetXattrKey = <<"not_set_xattr">>,
+    GetExpCallResultFun = create_get_xattrs_call_exp_result_fun(ShareId, SetDirectXattrs, NotSetXattrKey),
+
+    ClientSpec = case TestShareMode of
+        true -> ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config);
+        false -> ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config)
+    end,
+
+    DataSpec = #data_spec{
+        optional = QsParams = [<<"attribute">>, <<"inherited">>, <<"show_internal">>],
+        correct_values = #{
+            <<"attribute">> => [
+                % Xattr name with prefixes 'cdmi_' and 'onedata_' should be forbidden
+                % with exception of those listed in ?ALL_XATTRS_KEYS. Nonetheless that is
+                % checked not in middleware but in lfm and depends on whether request will
+                % arrive there. That is why, depending where request was rejected, different
+                % error than ?EPERM may be returned
+                <<"cdmi_attr">>, <<"onedata_attr">>,
+                NotSetXattrKey
+                | ?ALL_XATTRS_KEYS
+            ],
+            <<"inherited">> => [true, false],
+            <<"show_internal">> => [true, false]
+        },
+        bad_values = [
+            {<<"attribute">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"attribute">>)},
+            {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+            {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+            {<<"show_internal">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)},
+            {<<"show_internal">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)}
+        ]
+    },
+
+    get_metadata_test_base(
+        <<"xattrs">>,
+        FileType, FileLayer3Path, FileLayer3Guid, ShareId,
+        create_validate_get_metadata_rest_call_fun(GetExpCallResultFun),
+        create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
+        _Providers = ?config(op_worker_nodes, Config),
+        ClientSpec,
+        DataSpec,
+        QsParams,
+        Config
+    ).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates following directory structure:
+%%
+%%   TopDir (posix: 777) - ?ALL_METADATA_SET_1
+%%     |
+%%     |-- DirLayer2 (posix: 717, maybe shared) - no xattrs
+%%            |
+%%            |-- FileLayer3 (posix: 777) - ?ALL_METADATA_SET_2
+%% @end
+%%--------------------------------------------------------------------
+create_get_xattrs_tests_env(FileType, SetXattrs, CreateShare, Config) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME]),
+    {ok, TopDirGuid} = lfm_proxy:mkdir(P1, SessIdP1, TopDirPath, 8#777),
+    set_all_metadata_types(P1, SessIdP1, TopDirGuid, set_1),
+
+    DirLayer2Path = filename:join([TopDirPath, <<"dir_layer_2">>]),
+    {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1, SessIdP1, DirLayer2Path, 8#717),
+    ShareId = case CreateShare of
+        true ->
+            {ok, Id} = lfm_proxy:create_share(P1, SessIdP1, {guid, DirLayer2Guid}, <<"share">>),
+            Id;
+        false ->
+            undefined
+    end,
+
+    FileLayer3Path = filename:join([DirLayer2Path, ?RANDOM_FILE_NAME]),
+    {ok, FileLayer3Guid} = create_file(FileType, P1, SessIdP1, FileLayer3Path),
+    case SetXattrs of
+        true ->
+            set_all_metadata_types(P1, SessIdP1, FileLayer3Guid, set_2);
+        false ->
+            ok
+    end,
+
+    % Wait for metadata sync between providers
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileLayer3Guid}), ?ATTEMPTS),
+
+    {FileLayer3Path, FileLayer3Guid, ShareId}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates function returning expected result from get xattrs
+%% rest/gs call taking into account env created by
+%% create_get_xattrs_tests_env/4.
+%% @end
+%%--------------------------------------------------------------------
+create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSet, NotSetXattrKey) ->
+    fun(#api_test_ctx{client = Client, data = Data}) ->
+        try
+            Attribute = maps:get(<<"attribute">>, Data, undefined),
+            IncludeInherited = maps:get(<<"inherited">>, Data, false),
+            ShowInternal = maps:get(<<"show_internal">>, Data, false),
+
+            XattrsToGet = case Attribute of
+                undefined ->
+                    case {DirectMetadataSet, IncludeInherited, ShareId, ShowInternal} of
+                        {true, true, undefined, true} ->
+                            ?ALL_XATTRS_KEYS;
+                        {true, true, undefined, false} ->
+                            % Only custom xattrs are shown
+                            [?XATTR_1_KEY, ?XATTR_2_KEY];
+                        {true, true, _ShareId, true} ->
+                            % Xattr1 cannot be fetched as it is above share root
+                            ?ALL_XATTRS_KEYS -- [?XATTR_1_KEY];
+                        {true, true, _ShareId, false} ->
+                            [?XATTR_2_KEY];
+                        {true, false, _, true} ->
+                            ?ALL_XATTRS_KEYS -- [?XATTR_1_KEY];
+                        {true, false, _, false} ->
+                            [?XATTR_2_KEY];
+                        {false, true, undefined, true} ->
+                            % Exclude cdmi attrs as those are not inherited and xattr2 as it is not set
+                            (?ALL_XATTRS_KEYS -- [?XATTR_2_KEY]) -- ?CDMI_XATTRS_KEY;
+                        {false, true, undefined, false} ->
+                            [?XATTR_1_KEY];
+                        {false, _, _, _} ->
+                            % No xattr could be inherited due to either not specified
+                            % 'inherited' flag or share root blocking further traverse
+                            []
+                    end;
+                _ ->
+                    IsInternal = lists:any(fun(InternalPrefix) ->
+                        str_utils:binary_starts_with(Attribute, InternalPrefix)
+                    end, ?METADATA_INTERNAL_PREFIXES),
+
+                    case IsInternal of
+                        true ->
+                            case lists:member(Attribute, ?ALL_XATTRS_KEYS) of
+                                true ->
+                                    [Attribute];
+                                false ->
+                                    % It is not possible for user to get internal
+                                    % key other than allowed ones
+                                    throw(?ERROR_POSIX(?EPERM))
+                            end;
+                        false ->
+                            [Attribute]
+                    end
+            end,
+
+            AvailableXattrsMap = case {DirectMetadataSet, IncludeInherited} of
+                {true, false} ->
+                    ?ALL_METADATA_SET_2;
+                {true, true} ->
+                    case ShareId of
+                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
+                            % User belonging to the same space as owner of files
+                            % shouldn't be able to get inherited json metadata, not set xattr
+                            % or metadata set only on ancestor directories
+                            % due to insufficient perms on Dir1. But can get all other xattrs
+                            % as the first found value is returned and ancestors aren't
+                            % traversed further (json metadata is exceptional since it
+                            % collects all ancestors jsons and merges them)
+                            ForbiddenKeysForUserInSpace2 = [?JSON_METADATA_KEY, ?XATTR_1_KEY, NotSetXattrKey],
+                            case lists:any(fun(Key) -> lists:member(Key, XattrsToGet) end, ForbiddenKeysForUserInSpace2) of
+                                true ->
+                                    throw(?ERROR_POSIX(?EACCES));
+                                false ->
+                                    ?ALL_METADATA_SET_2
+                            end;
+                        undefined ->
+                            % When 'inherited' flag is set all ancestors json metadata
+                            % are merged but for rest the first value found (which in
+                            % this case is value directly set on file) is returned
+                            ?ALL_METADATA_SET_2#{
+                                ?JSON_METADATA_KEY => json_utils:merge([
+                                    ?JSON_METADATA_4,
+                                    ?JSON_METADATA_5
+                                ]),
+                                ?XATTR_1_KEY => ?XATTR_1_VALUE
+                            };
+                        _ ->
+                            % In share mode only metadata directly set on file is available
+                            ?ALL_METADATA_SET_2
+                    end;
+                {false, false} ->
+                    #{};
+                {false, true} ->
+                    case ShareId of
+                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
+                            case lists:any(fun(Xattr) -> lists:member(Xattr, ?CDMI_XATTRS_KEY) end, XattrsToGet) of
+                                true ->
+                                    % Cdmi attrs cannot be inherited, so trying to get them when
+                                    % they are not directly set result in ?ENODATA no matter the
+                                    % value of 'inherited' flag
+                                    throw(?ERROR_POSIX(?ENODATA));
+                                false ->
+                                    % User belonging to the same space as owner of files
+                                    % shouldn't be able to get any inherited metadata due to
+                                    % insufficient perms on Dir1
+                                    throw(?ERROR_POSIX(?EACCES))
+                            end;
+                        undefined ->
+                            % User should fetch all metadata set on ancestor dirs
+                            #{
+                                ?JSON_METADATA_KEY => ?JSON_METADATA_4,
+                                ?RDF_METADATA_KEY => ?RDF_METADATA_1,
+                                ?XATTR_1_KEY => ?XATTR_1_VALUE
+                            };
+                        _ ->
+                            #{}
+                    end
+            end,
+
+            case XattrsToGet -- maps:keys(AvailableXattrsMap) of
+                [] ->
+                    {ok, maps:with(XattrsToGet, AvailableXattrsMap)};
+                _ ->
+                    ?ERROR_POSIX(?ENODATA)
+            end
+        catch throw:Error ->
+            Error
+        end
+    end.
+
+
+get_file_xattrs_on_provider_not_supporting_space_test(Config) ->
+    get_xattrs_on_provider_not_supporting_space_test_base(<<"file">>, Config).
+
+
+get_dir_xattrs_on_provider_not_supporting_space_test(Config) ->
+    get_xattrs_on_provider_not_supporting_space_test_base(<<"dir">>, Config).
+
+
+%% @private
+get_xattrs_on_provider_not_supporting_space_test_base(FileType, Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+
+    FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME]),
+    {ok, FileGuid} = create_file(FileType, P1, SessIdP1, FilePath),
+    ?assertMatch(ok, lfm_proxy:set_xattr(P1, SessIdP1, {guid, FileGuid}, ?XATTR_1)),
+
+    GetExpCallResultFun = fun(_TestCtx) -> {ok, #{?XATTR_1_KEY => ?XATTR_1_VALUE}} end,
+
+    get_metadata_test_base(
+        <<"xattrs">>,
         FileType, FilePath, FileGuid, undefined,
         create_validate_get_metadata_rest_call_fun(GetExpCallResultFun, P2),
         create_validate_get_metadata_gs_call_fun(GetExpCallResultFun, P2),
@@ -835,507 +1161,6 @@ get_metadata_test_base(
                 ?assertEqual(?ERROR_UNAUTHORIZED, Result)
             end,
             data_spec = DataSpec
-        }
-    ])).
-
-
-get_xattr_metadata_test(Config) ->
-    [Provider2, Provider1] = ?config(op_worker_nodes, Config),
-
-    GetSessionFun = fun(Node) ->
-        ?config({session_id, {?USER_IN_BOTH_SPACES, ?GET_DOMAIN(Node)}}, Config)
-    end,
-
-    UserSessId = GetSessionFun(Provider2),
-
-    Dir1Path = filename:join(["/", ?SPACE_2, ?SCENARIO_NAME]),
-    {ok, Dir1Guid} = lfm_proxy:mkdir(Provider2, UserSessId, Dir1Path, 8#777),
-    set_all_metadata_types(Provider2, UserSessId, Dir1Guid, set_1),
-
-    Dir2Path = filename:join([Dir1Path, <<"dir_layer_4">>]),
-    {ok, Dir2Guid} = lfm_proxy:mkdir(Provider2, UserSessId, Dir2Path, 8#717),
-    {ok, ShareId} = lfm_proxy:create_share(Provider2, UserSessId, {guid, Dir2Guid}, <<"share">>),
-
-    DirWithoutMetadataPath = filename:join([Dir2Path, <<"dir_without_metadata">>]),
-    {ok, DirWithoutMetadataGuid} = lfm_proxy:mkdir(Provider2, UserSessId, DirWithoutMetadataPath, 8#777),
-
-    DirWithMetadataPath = filename:join([Dir2Path, <<"dir_with_metadata">>]),
-    {ok, DirWithMetadataGuid} = lfm_proxy:mkdir(Provider2, UserSessId, DirWithMetadataPath, 8#777),
-    set_all_metadata_types(Provider2, UserSessId, DirWithMetadataGuid, set_2),
-
-    RegularFileWithoutMetadataPath = filename:join([Dir2Path, <<"file_without_metadata">>]),
-    {ok, RegularFileWithoutMetadataGuid} = lfm_proxy:create(Provider2, UserSessId, RegularFileWithoutMetadataPath, 8#777),
-
-    RegularFileWithMetadataPath = filename:join([Dir2Path, <<"file_with_metadata">>]),
-    {ok, RegularFileWithMetadataGuid} = lfm_proxy:create(Provider2, UserSessId, RegularFileWithMetadataPath, 8#777),
-    set_all_metadata_types(Provider2, UserSessId, RegularFileWithMetadataGuid, set_2),
-
-    % Wait for metadata sync between providers
-    ?assertMatch(
-        {ok, #file_attr{}},
-        lfm_proxy:stat(Provider1, GetSessionFun(Provider1), {guid, RegularFileWithMetadataGuid}),
-        ?ATTEMPTS
-    ),
-
-    NotSetXattrKey = <<"not_set_xattr">>,
-
-    DataSpec = #data_spec{
-        optional = [<<"attribute">>, <<"inherited">>, <<"show_internal">>],
-        correct_values = #{
-            <<"attribute">> => [
-                % Xattr name with prefixes 'cdmi_' and 'onedata_' should be forbidden
-                % with exception of those listed in ?ALL_XATTRS_KEYS. Nonetheless that is
-                % checked not in middleware but in lfm and depends on whether request will
-                % arrive there. That is why, depending where request was rejected, different
-                % error than ?EPERM may be returned
-                <<"cdmi_attr">>, <<"onedata_attr">>,
-                NotSetXattrKey
-                | ?ALL_XATTRS_KEYS
-            ],
-            <<"inherited">> => [true, false],
-            <<"show_internal">> => [true, false]
-        },
-        bad_values = [
-            {<<"attribute">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"attribute">>)},
-            {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-            {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-            {<<"show_internal">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)},
-            {<<"show_internal">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)}
-        ]
-    },
-
-    GetExpectedResultFun = fun(#api_test_ctx{client = Client, data = Data}, ShareId, DirectMetadataSet) ->
-        try
-            Attribute = maps:get(<<"attribute">>, Data, undefined),
-            IncludeInherited = maps:get(<<"inherited">>, Data, false),
-            ShowInternal = maps:get(<<"show_internal">>, Data, false),
-
-            XattrsToGet = case Attribute of
-                undefined ->
-                    case {DirectMetadataSet, IncludeInherited, ShareId, ShowInternal} of
-                        {true, true, undefined, true} ->
-                            ?ALL_XATTRS_KEYS;
-                        {true, true, undefined, false} ->
-                            % Only custom xattrs are shown
-                            [?XATTR_1_KEY, ?XATTR_2_KEY];
-                        {true, true, _ShareId, true} ->
-                            % Xattr1 cannot be fetched as it is above share root
-                            ?ALL_XATTRS_KEYS -- [?XATTR_1_KEY];
-                        {true, true, _ShareId, false} ->
-                            [?XATTR_2_KEY];
-                        {true, false, _, true} ->
-                            ?ALL_XATTRS_KEYS -- [?XATTR_1_KEY];
-                        {true, false, _, false} ->
-                            [?XATTR_2_KEY];
-                        {false, true, undefined, true} ->
-                            % Exclude cdmi attrs as those are not inherited and xattr2 as it is not set
-                            (?ALL_XATTRS_KEYS -- [?XATTR_2_KEY]) -- ?CDMI_XATTRS_KEY;
-                        {false, true, undefined, false} ->
-                            [?XATTR_1_KEY];
-                        {false, _, _, _} ->
-                            % No xattr could be inherited due to either not specified
-                            % 'inherited' flag or share root blocking further traverse
-                            []
-                    end;
-                _ ->
-                    IsInternal = lists:any(fun(InternalPrefix) ->
-                        str_utils:binary_starts_with(Attribute, InternalPrefix)
-                    end, ?METADATA_INTERNAL_PREFIXES),
-
-                    case IsInternal of
-                        true ->
-                            case lists:member(Attribute, ?ALL_XATTRS_KEYS) of
-                                true ->
-                                    [Attribute];
-                                false ->
-                                    % It is not possible for user to get internal
-                                    % key other than allowed ones
-                                    throw(?ERROR_POSIX(?EPERM))
-                            end;
-                        false ->
-                            [Attribute]
-                    end
-            end,
-
-            AvailableXattrsMap = case {DirectMetadataSet, IncludeInherited} of
-                {true, false} ->
-                    ?ALL_METADATA_SET_2;
-                {true, true} ->
-                    case ShareId of
-                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
-                            % User belonging to the same space as owner of files
-                            % shouldn't be able to get inherited json metadata, not set xattr
-                            % or metadata set only on ancestor directories
-                            % due to insufficient perms on Dir1. But can get all other xattrs
-                            % as the first found value is returned and ancestors aren't
-                            % traversed further (json metadata is exceptional since it
-                            % collects all ancestors jsons and merges them)
-                            ForbiddenKeysForUserInSpace2 = [?JSON_METADATA_KEY, ?XATTR_1_KEY, NotSetXattrKey],
-                            case lists:any(fun(Key) -> lists:member(Key, XattrsToGet) end, ForbiddenKeysForUserInSpace2) of
-                                true ->
-                                    throw(?ERROR_POSIX(?EACCES));
-                                false ->
-                                    ?ALL_METADATA_SET_2
-                            end;
-                        undefined ->
-                            % When 'inherited' flag is set all ancestors json metadata
-                            % are merged but for rest the first value found (which in
-                            % this case is value directly set on file) is returned
-                            ?ALL_METADATA_SET_2#{
-                                ?JSON_METADATA_KEY => json_utils:merge([
-                                    ?JSON_METADATA_4,
-                                    ?JSON_METADATA_5
-                                ]),
-                                ?XATTR_1_KEY => ?XATTR_1_VALUE
-                            };
-                        _ ->
-                            % In share mode only metadata directly set on file is available
-                            ?ALL_METADATA_SET_2
-                    end;
-                {false, false} ->
-                    #{};
-                {false, true} ->
-                    case ShareId of
-                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
-                            case lists:any(fun(Xattr) -> lists:member(Xattr, ?CDMI_XATTRS_KEY) end, XattrsToGet) of
-                                true ->
-                                    % Cdmi attrs cannot be inherited, so trying to get them when
-                                    % they are not directly set result in ?ENODATA no matter the
-                                    % value of 'inherited' flag
-                                    throw(?ERROR_POSIX(?ENODATA));
-                                false ->
-                                    % User belonging to the same space as owner of files
-                                    % shouldn't be able to get any inherited metadata due to
-                                    % insufficient perms on Dir1
-                                    throw(?ERROR_POSIX(?EACCES))
-                            end;
-                        undefined ->
-                            % User should fetch all metadata set on ancestor dirs
-                            #{
-                                ?JSON_METADATA_KEY => ?JSON_METADATA_4,
-                                ?RDF_METADATA_KEY => ?RDF_METADATA_1,
-                                ?XATTR_1_KEY => ?XATTR_1_VALUE
-                            };
-                        _ ->
-                            #{}
-                    end
-            end,
-
-            case XattrsToGet -- maps:keys(AvailableXattrsMap) of
-                [] ->
-                    {ok, maps:with(XattrsToGet, AvailableXattrsMap)};
-                _ ->
-                    ?ERROR_POSIX(?ENODATA)
-            end
-        catch throw:Error ->
-            Error
-        end
-    end,
-
-    get_metadata_test_base(
-        Config,
-        <<"xattrs">>,
-        GetExpectedResultFun,
-        DataSpec,
-        ShareId,
-        [
-            {
-                <<"dir">>,
-                DirWithoutMetadataPath, DirWithoutMetadataGuid,
-                DirWithMetadataPath, DirWithMetadataGuid
-            },
-            {
-                <<"file">>,
-                RegularFileWithoutMetadataPath, RegularFileWithoutMetadataGuid,
-                RegularFileWithMetadataPath, RegularFileWithMetadataGuid
-            }
-        ]
-    ).
-
-
--spec get_metadata_test_base(
-    Config :: proplists:proplist(),
-    MetadataType :: binary(),  %% <<"json">> | <<"rdf">> | <<"xattrs">>
-
-    GetExpectedResultFun :: fun((api_test_ctx(), undefined | od_share:id(), DirectMetadataSet :: boolean()) -> ExpResult :: term()),
-
-    DataSpec :: data_spec(),
-    ShareId :: od_share:id(),
-    FilesInSpace2List :: [{
-        FileType :: binary(), % <<"file">> | <<"dir">>
-        FileWithoutMetadataPath :: binary(),
-        FileWithoutMetadataGuid :: file_id:file_guid(),
-        FileWithMetadataPath :: binary(),
-        FileWithMetadataGuid :: file_id:file_guid()
-    }]
-) ->
-    ok | no_return().
-get_metadata_test_base(
-    Config,
-    MetadataType,
-
-    GetExpectedResultFun,
-
-    DataSpec,
-    ShareId,
-    FilesInSpace2List
-) ->
-    [Provider2, Provider1] = Providers = ?config(op_worker_nodes, Config),
-
-    SupportedClientsPerNode = #{
-        Provider1 => [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        Provider2 => [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
-    },
-
-    ClientSpecForGetJsonInSpace2Scenarios = #client_spec{
-        correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [?NOBODY],
-        forbidden = [?USER_IN_SPACE_1_AUTH],
-        supported_clients_per_node = SupportedClientsPerNode
-    },
-
-    % Special case -> any user can make requests for shares but if request is
-    % being made using credentials by user not supported on specific provider
-    % ?ERROR_USER_NOT_SUPPORTED will be returned
-    ClientSpecForShareScenarios = #client_spec{
-        correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [],
-        forbidden = [],
-        supported_clients_per_node = SupportedClientsPerNode
-    },
-
-    QsParameters = case DataSpec of
-        undefined ->
-            [];
-        #data_spec{optional = OptionalParams} ->
-            OptionalParams
-    end,
-
-    ConstructValidateSuccessfulRestResultFun = fun(ShareId, DirectMetadataSet) ->
-        fun(TestCtx, {ok, RespCode, RespBody}) ->
-            {ExpCode, ExpBody} = case GetExpectedResultFun(TestCtx, ShareId, DirectMetadataSet) of
-                {ok, ExpResult} ->
-                    {?HTTP_200_OK, ExpResult};
-                {error, _} = ExpError ->
-                    {errors:to_http_code(ExpError), ?REST_ERROR(ExpError)}
-            end,
-            ?assertEqual({ExpCode, ExpBody}, {RespCode, RespBody})
-        end
-    end,
-    ConstructValidateSuccessfulGsResultFun = fun(ShareId, DirectMetadataSet) ->
-        fun(TestCtx, Result) ->
-            case GetExpectedResultFun(TestCtx, ShareId, DirectMetadataSet) of
-                {ok, ExpResult} ->
-                    ?assertEqual({ok, #{<<"metadata">> => ExpResult}}, Result);
-                {error, _} = ExpError ->
-                    ?assertEqual(ExpError, Result)
-            end
-        end
-    end,
-
-    lists:foreach(fun({
-        FileType,
-        FileWithoutJsonMetadataPath, FileWithoutJsonMetadataGuid,
-        FileWithJsonMetadataPath, FileWithJsonMetadataGuid
-    }) ->
-        {ok, FileWithoutJsonMetadataObjectId} = file_id:guid_to_objectid(FileWithoutJsonMetadataGuid),
-        {ok, FileWithJsonMetadataObjectId} = file_id:guid_to_objectid(FileWithJsonMetadataGuid),
-
-        ShareGuid = file_id:guid_to_share_guid(FileWithJsonMetadataGuid, ShareId),
-        {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
-
-        ?assert(api_test_utils:run_scenarios(Config, [
-
-            %% TEST METADATA FOR FILE WITH METADATA SET
-
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " with ", MetadataType/binary, " set using /data/ rest endpoint">>,
-                type = rest,
-                target_nodes = Providers,
-                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
-                prepare_args_fun = ?GET_METADATA_REST_ARGS_FUN(MetadataType, FileWithJsonMetadataObjectId, QsParameters),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, true),
-                data_spec = DataSpec
-            },
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " with ", MetadataType/binary, " set using /files/ rest endpoint">>,
-                type = rest_with_file_path,
-                target_nodes = Providers,
-                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
-                prepare_args_fun = ?GET_METADATA_DEPRECATED_PATH_REST_ARGS_FUN(MetadataType, FileWithJsonMetadataPath, QsParameters),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, true),
-                data_spec = DataSpec
-            },
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " with ", MetadataType/binary, " set using /files-id/ rest endpoint">>,
-                type = rest,
-                target_nodes = Providers,
-                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
-                prepare_args_fun = ?GET_METADATA_DEPRECATED_ID_REST_ARGS_FUN(MetadataType, FileWithJsonMetadataObjectId, QsParameters),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, true),
-                data_spec = DataSpec
-            },
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " with ", MetadataType/binary, " set using gs api">>,
-                type = gs,
-                target_nodes = Providers,
-                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
-                prepare_args_fun = ?GET_METADATA_GS_ARGS_FUN(MetadataType, FileWithJsonMetadataGuid, private),
-                validate_result_fun = ConstructValidateSuccessfulGsResultFun(undefined, true),
-                data_spec = DataSpec
-            },
-
-            %% TEST GET METADATA FOR SHARED FILE WITH METADATA SET
-
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " with ", MetadataType/binary, " set using /data/ rest endpoint">>,
-                type = rest,
-                target_nodes = Providers,
-                client_spec = ClientSpecForShareScenarios,
-                prepare_args_fun = ?GET_METADATA_REST_ARGS_FUN(MetadataType, ShareObjectId, QsParameters),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId, true),
-                data_spec = DataSpec
-            },
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " with ", MetadataType/binary, " set using /files-id/ rest endpoint">>,
-                type = rest,
-                target_nodes = Providers,
-                client_spec = ClientSpecForShareScenarios,
-                prepare_args_fun = ?GET_METADATA_DEPRECATED_ID_REST_ARGS_FUN(MetadataType, ShareObjectId, QsParameters),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId, true),
-                data_spec = DataSpec
-            },
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " with ", MetadataType/binary, " set using gs public api">>,
-                type = gs,
-                target_nodes = Providers,
-                client_spec = ClientSpecForShareScenarios,
-                prepare_args_fun = ?GET_METADATA_GS_ARGS_FUN(MetadataType, ShareGuid, public),
-                validate_result_fun = ConstructValidateSuccessfulGsResultFun(ShareId, true),
-                data_spec = DataSpec
-            },
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " with ", MetadataType/binary, " set using private gs api">>,
-                type = gs,
-                target_nodes = Providers,
-                client_spec = ClientSpecForShareScenarios,
-                prepare_args_fun = ?GET_METADATA_GS_ARGS_FUN(MetadataType, ShareGuid, private),
-                validate_result_fun = fun(_, Result) ->
-                    ?assertEqual(?ERROR_UNAUTHORIZED, Result)
-                end,
-                data_spec = DataSpec
-            },
-
-            %% TEST GET METADATA FOR FILE WITHOUT METADATA SET
-
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " without ", MetadataType/binary, " set using /data/ rest endpoint">>,
-                type = rest,
-                target_nodes = Providers,
-                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
-                prepare_args_fun = ?GET_METADATA_REST_ARGS_FUN(MetadataType, FileWithoutJsonMetadataObjectId, QsParameters),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, false),
-                data_spec = DataSpec
-            },
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " without ", MetadataType/binary, " set using /files/ rest endpoint">>,
-                type = rest_with_file_path,
-                target_nodes = Providers,
-                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
-                prepare_args_fun = ?GET_METADATA_DEPRECATED_PATH_REST_ARGS_FUN(MetadataType, FileWithoutJsonMetadataPath, QsParameters),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, false),
-                data_spec = DataSpec
-            },
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " without ", MetadataType/binary, " set using /files-id/ rest endpoint">>,
-                type = rest,
-                target_nodes = Providers,
-                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
-                prepare_args_fun = ?GET_METADATA_DEPRECATED_ID_REST_ARGS_FUN(MetadataType, FileWithoutJsonMetadataObjectId, QsParameters),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, false),
-                data_spec = DataSpec
-            },
-            #scenario_spec{
-                name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " without ", MetadataType/binary, " set using gs api">>,
-                type = gs,
-                target_nodes = Providers,
-                client_spec = ClientSpecForGetJsonInSpace2Scenarios,
-                prepare_args_fun = ?GET_METADATA_GS_ARGS_FUN(MetadataType, FileWithoutJsonMetadataGuid, private),
-                validate_result_fun = ConstructValidateSuccessfulGsResultFun(undefined, false),
-                data_spec = DataSpec
-            }
-        ]))
-    end, FilesInSpace2List),
-
-    %% TEST GET METADATA FOR FILE ON PROVIDER NOT SUPPORTING USER
-
-    Provider2DomainBin = ?GET_DOMAIN_BIN(Provider2),
-
-    ClientSpecForGetMetadataInSpace1Scenarios = #client_spec{
-        correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [?NOBODY],
-        forbidden = [?USER_IN_SPACE_2_AUTH],
-        supported_clients_per_node = SupportedClientsPerNode
-    },
-
-    ExpSpace1Metadata = case MetadataType of
-        <<"json">> -> ?JSON_METADATA_4;
-        <<"rdf">> -> ?RDF_METADATA_1;
-        <<"xattrs">> -> #{?XATTR_1_KEY => ?XATTR_1_VALUE}
-    end,
-    ValidateRestGetMetadataOnProvidersNotSupportingUserFun = fun
-        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
-            Node == Provider2,
-            Client == ?USER_IN_BOTH_SPACES_AUTH
-        ->
-            ?assertEqual(?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)), Response);
-        (_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
-            ?assertEqual(ExpSpace1Metadata, Response)
-    end,
-    Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_1),
-    set_all_metadata_types(Provider1, ?ROOT_SESS_ID, Space1Guid, set_1),
-    {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
-
-    ?assert(api_test_utils:run_scenarios(Config, [
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", ?SPACE_1/binary, " with ", MetadataType/binary, " set on provider not supporting user using /data/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForGetMetadataInSpace1Scenarios,
-            prepare_args_fun = ?GET_METADATA_REST_ARGS_FUN(MetadataType, Space1ObjectId, QsParameters),
-            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", ?SPACE_1/binary, " with ", MetadataType/binary, " set on provider not supporting user using /files/ rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = Providers,
-            client_spec = ClientSpecForGetMetadataInSpace1Scenarios,
-            prepare_args_fun = ?GET_METADATA_DEPRECATED_PATH_REST_ARGS_FUN(MetadataType, <<"/", ?SPACE_1/binary>>, QsParameters),
-            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", ?SPACE_1/binary, " with ", MetadataType/binary, " set on provider not supporting user using /files-id/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForGetMetadataInSpace1Scenarios,
-            prepare_args_fun = ?GET_METADATA_DEPRECATED_ID_REST_ARGS_FUN(MetadataType, Space1ObjectId, QsParameters),
-            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", ?SPACE_1/binary, " with ", MetadataType/binary, " set on provider not supporting user using gs api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpecForGetMetadataInSpace1Scenarios,
-            prepare_args_fun = ?GET_METADATA_GS_ARGS_FUN(MetadataType, Space1Guid, private),
-            validate_result_fun = fun
-                (#api_test_ctx{node = Node, client = Client}, Result) when
-                    Node == Provider2,
-                    Client == ?USER_IN_BOTH_SPACES_AUTH
-                ->
-                    ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
-                (_TestCaseCtx, {ok, Result}) ->
-                    ?assertEqual(#{<<"metadata">> => ExpSpace1Metadata}, Result)
-            end
         }
     ])).
 
