@@ -36,10 +36,20 @@
     get_dir_rdf_metadata_with_rdf_set_test/1,
     get_file_rdf_metadata_without_rdf_set_test/1,
     get_dir_rdf_metadata_without_rdf_set_test/1,
+%%    get_shared_file_rdf_metadata_with_rdf_set_test/1,
+%%    get_shared_dir_rdf_metadata_with_rdf_set_test/1,
     get_file_rdf_metadata_on_provider_not_supporting_space_test/1,
     get_dir_rdf_metadata_on_provider_not_supporting_space_test/1,
-    get_shared_file_rdf_metadata_with_rdf_set_test/1,
-    get_shared_dir_rdf_metadata_with_rdf_set_test/1,
+
+    % Get json test cases
+    get_file_json_metadata_with_json_set_test/1,
+    get_dir_json_metadata_with_json_set_test/1,
+    get_file_json_metadata_without_json_set_test/1,
+    get_dir_json_metadata_without_json_set_test/1,
+    get_shared_file_json_metadata_with_json_set_test/1,
+    get_shared_dir_json_metadata_with_json_set_test/1,
+    get_shared_file_json_metadata_without_json_set_test/1,
+    get_shared_dir_json_metadata_without_json_set_test/1,
 
 
     get_json_metadata_test/1,
@@ -50,15 +60,23 @@
 
 all() ->
     ?ALL([
-        get_file_rdf_metadata_with_rdf_set_test,
-        get_dir_rdf_metadata_with_rdf_set_test,
-        get_file_rdf_metadata_without_rdf_set_test,
-        get_dir_rdf_metadata_without_rdf_set_test,
-        get_file_rdf_metadata_on_provider_not_supporting_space_test,
-        get_dir_rdf_metadata_on_provider_not_supporting_space_test,
-        get_shared_file_rdf_metadata_with_rdf_set_test,
-        get_shared_dir_rdf_metadata_with_rdf_set_test
+%%        get_file_rdf_metadata_with_rdf_set_test,
+%%        get_dir_rdf_metadata_with_rdf_set_test,
+%%        get_file_rdf_metadata_without_rdf_set_test,
+%%        get_dir_rdf_metadata_without_rdf_set_test,
+%%        get_shared_file_rdf_metadata_with_rdf_set_test,
+%%        get_shared_dir_rdf_metadata_with_rdf_set_test,
+%%        get_file_rdf_metadata_on_provider_not_supporting_space_test,
+%%        get_dir_rdf_metadata_on_provider_not_supporting_space_test,
 
+        get_file_json_metadata_with_json_set_test,
+        get_dir_json_metadata_with_json_set_test,
+        get_file_json_metadata_without_json_set_test,
+        get_dir_json_metadata_without_json_set_test,
+        get_shared_file_json_metadata_with_json_set_test,
+        get_shared_dir_json_metadata_with_json_set_test,
+        get_shared_file_json_metadata_without_json_set_test,
+        get_shared_dir_json_metadata_without_json_set_test
 
 %%        get_json_metadata_test,
 %%        get_xattr_metadata_test,
@@ -254,6 +272,16 @@ end)()).
     forbidden = [?USER_IN_SPACE_1_AUTH],
     supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
 }).
+% Special case -> any user can make requests for shares but if request is
+% being made using credentials by user not supported on specific provider
+% ?ERROR_USER_NOT_SUPPORTED should be returned
+-define(CLIENT_SPEC_FOR_SHARE_SCENARIOS(__CONFIG), #client_spec{
+    correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+    unauthorized = [],
+    forbidden = [],
+    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
+}).
+
 
 -define(SESS_ID(__USER, __NODE, __CONFIG),
     ?config({session_id, {__USER, ?GET_DOMAIN(__NODE)}}, __CONFIG)
@@ -291,32 +319,49 @@ get_dir_rdf_metadata_without_rdf_set_test(Config) ->
 
 %% @private
 get_rdf_metadata_test_base(FileType, SetRdf, Config) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
-
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME]),
-    {ok, FileGuid} = create_file(FileType, P1, SessIdP1, FilePath),
-
+    {FilePath, FileGuid, _ShareId} = create_get_rdf_metadata_test_env(
+        FileType, SetRdf, Config
+    ),
     GetExpCallResultFun = case SetRdf of
-        true ->
-            lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
-            fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end;
-        false ->
-            fun(_TestCtx) -> ?ERROR_POSIX(?ENODATA) end
+        true -> fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end;
+        false -> fun(_TestCtx) -> ?ERROR_POSIX(?ENODATA) end
     end,
-
-    % Wait for metadata sync between providers
-    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileGuid}), ?ATTEMPTS),
 
     get_metadata_in_normal_mode_test_base(
         <<"rdf">>,
         FileType, FilePath, FileGuid,
         create_validate_get_metadata_rest_call_fun(GetExpCallResultFun),
         create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
-        Providers, ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config), undefined, [],
+        ?config(op_worker_nodes, Config),
+        ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config), undefined, [],
         Config
     ).
+
+%%
+%%get_shared_file_rdf_metadata_with_rdf_set_test(Config) ->
+%%    get_rdf_metadata_for_shared_file_test_base(<<"file">>, Config).
+%%
+%%
+%%get_shared_dir_rdf_metadata_with_rdf_set_test(Config) ->
+%%    get_rdf_metadata_for_shared_file_test_base(<<"dir">>, Config).
+%%
+%%
+%%%% @private
+%%get_rdf_metadata_for_shared_file_test_base(FileType, Config) ->
+%%    {_FilePath, FileGuid, ShareId} = create_get_rdf_metadata_test_env(
+%%        FileType, _SetRdf = true, Config
+%%    ),
+%%    GetExpCallResultFun = fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end,
+%%
+%%    get_metadata_in_share_mode_test_base(
+%%        <<"rdf">>,
+%%        FileType, file_id:guid_to_share_guid(FileGuid, ShareId),
+%%        create_validate_get_metadata_rest_call_fun(GetExpCallResultFun),
+%%        create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
+%%        ?config(op_worker_nodes, Config),
+%%        undefined, [],
+%%        Config
+%%    ).
 
 
 get_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
@@ -348,38 +393,255 @@ get_rdf_metadata_on_provider_not_supporting_space_test_base(FileType, Config) ->
     ).
 
 
-get_shared_file_rdf_metadata_with_rdf_set_test(Config) ->
-    get_rdf_metadata_for_shared_file_test_base(<<"file">>, Config).
-
-
-get_shared_dir_rdf_metadata_with_rdf_set_test(Config) ->
-    get_rdf_metadata_for_shared_file_test_base(<<"dir">>, Config).
-
-
 %% @private
-get_rdf_metadata_for_shared_file_test_base(FileType, Config) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+create_get_rdf_metadata_test_env(FileType, SetRdf, Config) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME]),
     {ok, FileGuid} = create_file(FileType, P1, SessIdP1, FilePath),
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
-    lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
+
+    case SetRdf of
+        true ->
+            lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []);
+        false ->
+            ok
+    end,
 
     % Wait for metadata sync between providers
-    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileGuid}), ?ATTEMPTS),
+    ?assertMatch(
+        {ok, #file_attr{shares = [ShareId]}},
+        lfm_proxy:stat(P2, SessIdP2, {guid, FileGuid}),
+        ?ATTEMPTS
+    ),
+    {FilePath, FileGuid, ShareId}.
 
-    GetExpCallResultFun = fun(_TestCtx) -> {ok, ?RDF_METADATA_1} end,
 
-    get_metadata_in_share_mode_test_base(
-        <<"rdf">>,
-        FileType, file_id:guid_to_share_guid(FileGuid, ShareId),
+%%%===================================================================
+%%% Get Json metadata test functions
+%%%===================================================================
+
+
+get_file_json_metadata_with_json_set_test(Config) ->
+    get_json_metadata_test_base(<<"file">>, _SetDirectJson = true, _TestShareMode = false, Config).
+
+
+get_dir_json_metadata_with_json_set_test(Config) ->
+    get_json_metadata_test_base(<<"dir">>, _SetDirectJson = true, _TestShareMode = false, Config).
+
+
+get_file_json_metadata_without_json_set_test(Config) ->
+    get_json_metadata_test_base(<<"file">>, _SetDirectJson = false, _TestShareMode = false, Config).
+
+
+get_dir_json_metadata_without_json_set_test(Config) ->
+    get_json_metadata_test_base(<<"dir">>, _SetDirectJson = false, _TestShareMode = false, Config).
+
+
+get_shared_file_json_metadata_with_json_set_test(Config) ->
+    get_json_metadata_test_base(<<"file">>, _SetDirectJson = true, _TestShareMode = true, Config).
+
+
+get_shared_dir_json_metadata_with_json_set_test(Config) ->
+    get_json_metadata_test_base(<<"dir">>, _SetDirectJson = true, _TestShareMode = true, Config).
+
+
+get_shared_file_json_metadata_without_json_set_test(Config) ->
+    get_json_metadata_test_base(<<"file">>, _SetDirectJson = false, _TestShareMode = true, Config).
+
+
+get_shared_dir_json_metadata_without_json_set_test(Config) ->
+    get_json_metadata_test_base(<<"dir">>, _SetDirectJson = false, _TestShareMode = true, Config).
+
+
+%% @private
+get_json_metadata_test_base(FileType, SetDirectJson, TestShareMode, Config) ->
+    Providers = ?config(op_worker_nodes, Config),
+    {FileLayer5Path, FileLayer5Guid, ShareId} = create_get_json_metadata_tests_env(
+        FileType, SetDirectJson, TestShareMode, Config
+    ),
+    GetExpCallResultFun = create_get_json_call_exp_result_fun(ShareId, SetDirectJson),
+
+    ClientSpec = case TestShareMode of
+        true -> ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config);
+        false -> ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config)
+    end,
+    DataSpec = #data_spec{
+        optional = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
+        correct_values = #{
+            <<"inherited">> => [true, false],
+            <<"filter_type">> => [<<"keypath">>],
+            <<"filter">> => [
+                <<"attr3.attr32">>, <<"attr3.[10]">>,
+                <<"attr2.attr22.[2]">>, <<"attr2.attr22.[10]">>
+            ]
+        },
+        bad_values = [
+            {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+            {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+            {<<"filter_type">>, <<"dummy">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
+
+            % Below differences between error returned by rest and gs are results of sending
+            % parameters via qs in REST, so they lost their original type and are cast to binary
+            {<<"filter_type">>, 100, {rest, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
+            {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
+            {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
+        ]
+    },
+
+    get_metadata_test_base(
+        <<"json">>,
+        FileType, FileLayer5Path, FileLayer5Guid, ShareId,
         create_validate_get_metadata_rest_call_fun(GetExpCallResultFun),
         create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
-        Providers, undefined, [],
+        Providers,
+        ClientSpec,
+        DataSpec,
+        _QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
         Config
     ).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates following directory structure:
+%%
+%%   TopDir (posix: 777) - ?JSON_METADATA_1
+%%     |
+%%     |-- DirLayer2 (posix: 717) - ?JSON_METADATA_2
+%%            |
+%%            |-- DirLayer3 (posix: 777) - ?JSON_METADATA_3
+%%                   |
+%%                   |-- DirLayer4 (posix: 777, maybe shared) - ?JSON_METADATA_4
+%%                          |
+%%                          |-- FileLayer5 (posix: 777) - ?JSON_METADATA_5
+%% @end
+%%--------------------------------------------------------------------
+create_get_json_metadata_tests_env(FileType, SetJson, CreateShare, Config) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    TopDirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME]),
+    {ok, TopDirGuid} = lfm_proxy:mkdir(P1, SessIdP1, TopDirPath, 8#777),
+    lfm_proxy:set_metadata(P1, SessIdP1, {guid, TopDirGuid}, json, ?JSON_METADATA_1, []),
+
+    DirLayer2Path = filename:join([TopDirPath, <<"dir_layer_2">>]),
+    {ok, DirLayer2Guid} = lfm_proxy:mkdir(P1, SessIdP1, DirLayer2Path, 8#717),
+    lfm_proxy:set_metadata(P1, SessIdP1, {guid, DirLayer2Guid}, json, ?JSON_METADATA_2, []),
+
+    DirLayer3Path = filename:join([DirLayer2Path, <<"dir_layer_3">>]),
+    {ok, DirLayer3Guid} = lfm_proxy:mkdir(P1, SessIdP1, DirLayer3Path, 8#777),
+    lfm_proxy:set_metadata(P1, SessIdP1, {guid, DirLayer3Guid}, json, ?JSON_METADATA_3, []),
+
+    DirLayer4Path = filename:join([DirLayer3Path, <<"dir_layer_4">>]),
+    {ok, DirLayer4Guid} = lfm_proxy:mkdir(P1, SessIdP1, DirLayer4Path, 8#777),
+    lfm_proxy:set_metadata(P1, SessIdP1, {guid, DirLayer4Guid}, json, ?JSON_METADATA_4, []),
+    ShareId = case CreateShare of
+        true ->
+            {ok, Id} = lfm_proxy:create_share(P1, SessIdP1, {guid, DirLayer4Guid}, <<"share">>),
+            Id;
+        false ->
+            undefined
+    end,
+
+    FileLayer5Path = filename:join([DirLayer4Path, ?RANDOM_FILE_NAME]),
+    {ok, FileLayer5Guid} = create_file(FileType, P1, SessIdP1, FileLayer5Path),
+    case SetJson of
+        true ->
+            lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileLayer5Guid}, json, ?JSON_METADATA_5, []);
+        false ->
+            ok
+    end,
+
+    % Wait for metadata sync between providers
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileLayer5Guid}), ?ATTEMPTS),
+
+    {FileLayer5Path, FileLayer5Guid, ShareId}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates function returning expected result from get json metadata
+%% rest/gs call taking into account env created by
+%% create_get_json_metadata_tests_env/4.
+%% @end
+%%--------------------------------------------------------------------
+create_get_json_call_exp_result_fun(ShareId, DirectMetadataSet) ->
+    fun(#api_test_ctx{client = Client, data = Data}) ->
+        try
+            IncludeInherited = maps:get(<<"inherited">>, Data, false),
+            FilterType = maps:get(<<"filter_type">>, Data, undefined),
+            Filter = maps:get(<<"filter">>, Data, undefined),
+
+            FilterList = case {FilterType, Filter} of
+                {undefined, _} ->
+                    [];
+                {<<"keypath">>, undefined} ->
+                    throw(?ERROR_MISSING_REQUIRED_VALUE(<<"filter">>));
+                {<<"keypath">>, _} ->
+                    binary:split(Filter, <<".">>, [global])
+            end,
+
+            ExpJsonMetadata = case {DirectMetadataSet, IncludeInherited} of
+                {true, true} ->
+                    case ShareId of
+                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
+                            % User belonging to the same space as owner of files
+                            % shouldn't be able to get inherited metadata due to
+                            % insufficient perms on DirLayer2
+                            throw(?ERROR_POSIX(?EACCES));
+                        undefined ->
+                            json_utils:merge([
+                                ?JSON_METADATA_1,
+                                ?JSON_METADATA_2,
+                                ?JSON_METADATA_3,
+                                ?JSON_METADATA_4,
+                                ?JSON_METADATA_5
+                            ]);
+                        _ ->
+                            json_utils:merge([
+                                ?JSON_METADATA_4,
+                                ?JSON_METADATA_5
+                            ])
+                    end;
+                {true, false} ->
+                    ?JSON_METADATA_5;
+                {false, true} ->
+                    case ShareId of
+                        undefined when Client == ?USER_IN_SPACE_2_AUTH ->
+                            % User belonging to the same space as owner of files
+                            % shouldn't be able to get inherited metadata due to
+                            % insufficient perms on DirLayer2
+                            throw(?ERROR_POSIX(?EACCES));
+                        undefined ->
+                            json_utils:merge([
+                                ?JSON_METADATA_1,
+                                ?JSON_METADATA_2,
+                                ?JSON_METADATA_3,
+                                ?JSON_METADATA_4
+                            ]);
+                        _ ->
+                            ?JSON_METADATA_4
+                    end;
+                {false, false} ->
+                    throw(?ERROR_POSIX(?ENODATA))
+            end,
+
+            case json_utils:query(ExpJsonMetadata, FilterList) of
+                {ok, _} = Result ->
+                    Result;
+                error ->
+                    ?ERROR_POSIX(?ENODATA)
+            end
+        catch throw:Error ->
+            Error
+        end
+    end.
 
 
 %% @private
@@ -488,11 +750,57 @@ get_metadata_in_normal_mode_test_base(
 
 
 %% @private
-get_metadata_in_share_mode_test_base(
-    MetadataType, FileType, FileShareGuid,
+get_metadata_test_base(
+    MetadataType, FileType, FilePath, FileGuid, _ShareId = undefined,
     ValidateRestCallResultFun, ValidateGsCallResultFun,
-    Providers, DataSpec, QsParameters, Config
+    Providers, ClientSpec, DataSpec, QsParameters, Config
 ) ->
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    ?assert(api_test_utils:run_scenarios(Config, [
+        #scenario_spec{
+            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpec,
+            prepare_args_fun = ?GET_METADATA_REST_ARGS_FUN(MetadataType, FileObjectId, QsParameters),
+            validate_result_fun = ValidateRestCallResultFun,
+            data_spec = DataSpec
+        },
+        #scenario_spec{
+            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using deprecated path rest endpoint">>,
+            type = rest_with_file_path,
+            target_nodes = Providers,
+            client_spec = ClientSpec,
+            prepare_args_fun = ?GET_METADATA_DEPRECATED_PATH_REST_ARGS_FUN(MetadataType, FilePath, QsParameters),
+            validate_result_fun = ValidateRestCallResultFun,
+            data_spec = DataSpec
+        },
+        #scenario_spec{
+            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using deprecated id rest endpoint">>,
+            type = rest,
+            target_nodes = Providers,
+            client_spec = ClientSpec,
+            prepare_args_fun = ?GET_METADATA_DEPRECATED_ID_REST_ARGS_FUN(MetadataType, FileObjectId, QsParameters),
+            validate_result_fun = ValidateRestCallResultFun,
+            data_spec = DataSpec
+        },
+        #scenario_spec{
+            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using gs api">>,
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ClientSpec,
+            prepare_args_fun = ?GET_METADATA_GS_ARGS_FUN(MetadataType, FileGuid, private),
+            validate_result_fun = ValidateGsCallResultFun,
+            data_spec = DataSpec
+        }
+    ]));
+get_metadata_test_base(
+    MetadataType, FileType, _FilePath, FileGuid, ShareId,
+    ValidateRestCallResultFun, ValidateGsCallResultFun,
+    Providers, _ClientSpec, DataSpec, QsParameters, Config
+) ->
+    FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, FileShareObjectId} = file_id:guid_to_objectid(FileShareGuid),
 
     % Special case -> any user can make requests for shares but if request is
