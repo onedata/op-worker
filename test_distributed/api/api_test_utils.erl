@@ -20,7 +20,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
--export([run_scenarios/2]).
+-export([run_tests/2]).
 
 -type config() :: proplists:proplist().
 
@@ -33,19 +33,14 @@
 %%%===================================================================
 
 
-run_scenarios(Config, ScenariosSpecs) ->
-    lists:foldl(fun(ScenarioSpec, AllScenariosPassed) ->
-        AllScenariosPassed and try
-            run_scenario(Config, ScenarioSpec)
-        catch
-            throw:fail ->
-                false;
-            Type:Reason ->
-                ct:pal("Unexpected error while running test scenarios ~p:~p ~p", [
-                    Type, Reason, erlang:get_stacktrace()
-                ]),
-                false
-        end
+-spec run_tests(config(), [scenario_spec() | suite_spec()]) ->
+    boolean().
+run_tests(Config, ScenariosSpecs) ->
+    lists:foldl(fun
+        (#scenario_spec{} = ScenarioSpec, AllTestsPassed) ->
+            AllTestsPassed and run_scenario(Config, ScenarioSpec);
+        (#suite_spec{} = SuiteSpec, AllTestsPassed) ->
+            AllTestsPassed and run_suite(Config, SuiteSpec)
     end, true, ScenariosSpecs).
 
 
@@ -54,12 +49,54 @@ run_scenarios(Config, ScenariosSpecs) ->
 %%%===================================================================
 
 
+run_suite(Config, #suite_spec{
+    target_nodes = TargetNodes,
+    client_spec = ClientSpec,
+
+    setup_fun = EnvSetupFun,
+    teardown_fun = EnvTeardownFun,
+    verify_fun = EnvVerifyFun,
+
+    scenario_schemes = ScenarioSchemes,
+    data_spec = DataSpec
+}) ->
+    lists:foldl(fun(#scenario_scheme{
+        name = Name,
+        type = Type,
+        prepare_args_fun = PrepareArgsFun,
+        validate_result_fun = ValidateCallResultFun
+    }, AllScenariosPassed) ->
+        AllScenariosPassed and run_scenario(Config, #scenario_spec{
+            name = Name,
+            type = Type,
+            target_nodes = TargetNodes,
+            client_spec = ClientSpec,
+            setup_fun = EnvSetupFun,
+            teardown_fun = EnvTeardownFun,
+            verify_fun = EnvVerifyFun,
+            prepare_args_fun = PrepareArgsFun,
+            validate_result_fun = ValidateCallResultFun,
+            data_spec = DataSpec
+        })
+    end, true, ScenarioSchemes).
+
+
 run_scenario(Config, ScenarioSpec) ->
-    true
-    and run_unauthorized_clients_test_cases(Config, ScenarioSpec)
-    and run_forbidden_clients_test_cases(Config, ScenarioSpec)
-    and run_malformed_data_test_cases(Config, ScenarioSpec)
-    and run_expected_success_test_cases(Config, ScenarioSpec).
+    try
+        true
+        and run_unauthorized_clients_test_cases(Config, ScenarioSpec)
+        and run_forbidden_clients_test_cases(Config, ScenarioSpec)
+        and run_malformed_data_test_cases(Config, ScenarioSpec)
+        and run_expected_success_test_cases(Config, ScenarioSpec)
+    catch
+        throw:fail ->
+            false;
+        Type:Reason ->
+            ct:pal("Unexpected error while running test scenario ~p:~p ~p", [
+                Type, Reason, erlang:get_stacktrace()
+            ]),
+            false
+    end.
 
 
 run_unauthorized_clients_test_cases(Config, #scenario_spec{

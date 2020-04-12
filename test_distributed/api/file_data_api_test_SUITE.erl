@@ -206,7 +206,7 @@ get_children_test(Config) ->
             ?assertEqual(ExpSuccessResult, Response)
     end end,
 
-    ?assert(api_test_utils:run_scenarios(Config, [
+    ?assert(api_test_utils:run_tests(Config, [
 
         %% TEST LISTING NORMAL DIR
 

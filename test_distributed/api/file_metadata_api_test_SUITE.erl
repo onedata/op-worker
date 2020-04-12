@@ -16,7 +16,6 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -79,38 +78,38 @@
 
 all() ->
     ?ALL([
-%%        get_file_rdf_metadata_with_rdf_set_test,
-%%        get_dir_rdf_metadata_with_rdf_set_test,
-%%        get_file_rdf_metadata_without_rdf_set_test,
-%%        get_dir_rdf_metadata_without_rdf_set_test,
-%%        get_shared_file_rdf_metadata_with_rdf_set_test,
-%%        get_shared_dir_rdf_metadata_with_rdf_set_test,
-%%        get_shared_file_rdf_metadata_without_rdf_set_test,
-%%        get_shared_dir_rdf_metadata_without_rdf_set_test,
-%%        get_file_rdf_metadata_on_provider_not_supporting_space_test,
-%%        get_dir_rdf_metadata_on_provider_not_supporting_space_test,
-%%
-%%        get_file_json_metadata_with_json_set_test,
-%%        get_dir_json_metadata_with_json_set_test,
-%%        get_file_json_metadata_without_json_set_test,
-%%        get_dir_json_metadata_without_json_set_test,
-%%        get_shared_file_json_metadata_with_json_set_test,
-%%        get_shared_dir_json_metadata_with_json_set_test,
-%%        get_shared_file_json_metadata_without_json_set_test,
-%%        get_shared_dir_json_metadata_without_json_set_test,
-%%        get_file_json_metadata_on_provider_not_supporting_space_test,
-%%        get_dir_json_metadata_on_provider_not_supporting_space_test,
-%%
-%%        get_file_xattrs_with_json_set_test,
-%%        get_dir_xattrs_with_json_set_test,
-%%        get_file_xattrs_without_json_set_test,
-%%        get_dir_xattrs_without_json_set_test,
-%%        get_shared_file_xattrs_with_json_set_test,
-%%        get_shared_dir_xattrs_with_json_set_test,
-%%        get_shared_file_xattrs_without_json_set_test,
-%%        get_shared_dir_xattrs_without_json_set_test,
-%%        get_file_xattrs_on_provider_not_supporting_space_test,
-%%        get_dir_xattrs_on_provider_not_supporting_space_test,
+        get_file_rdf_metadata_with_rdf_set_test,
+        get_dir_rdf_metadata_with_rdf_set_test,
+        get_file_rdf_metadata_without_rdf_set_test,
+        get_dir_rdf_metadata_without_rdf_set_test,
+        get_shared_file_rdf_metadata_with_rdf_set_test,
+        get_shared_dir_rdf_metadata_with_rdf_set_test,
+        get_shared_file_rdf_metadata_without_rdf_set_test,
+        get_shared_dir_rdf_metadata_without_rdf_set_test,
+        get_file_rdf_metadata_on_provider_not_supporting_space_test,
+        get_dir_rdf_metadata_on_provider_not_supporting_space_test,
+
+        get_file_json_metadata_with_json_set_test,
+        get_dir_json_metadata_with_json_set_test,
+        get_file_json_metadata_without_json_set_test,
+        get_dir_json_metadata_without_json_set_test,
+        get_shared_file_json_metadata_with_json_set_test,
+        get_shared_dir_json_metadata_with_json_set_test,
+        get_shared_file_json_metadata_without_json_set_test,
+        get_shared_dir_json_metadata_without_json_set_test,
+        get_file_json_metadata_on_provider_not_supporting_space_test,
+        get_dir_json_metadata_on_provider_not_supporting_space_test,
+
+        get_file_xattrs_with_json_set_test,
+        get_dir_xattrs_with_json_set_test,
+        get_file_xattrs_without_json_set_test,
+        get_dir_xattrs_without_json_set_test,
+        get_shared_file_xattrs_with_json_set_test,
+        get_shared_dir_xattrs_with_json_set_test,
+        get_shared_file_xattrs_without_json_set_test,
+        get_shared_dir_xattrs_without_json_set_test,
+        get_file_xattrs_on_provider_not_supporting_space_test,
+        get_dir_xattrs_on_provider_not_supporting_space_test,
 
         set_file_rdf_metadata_test,
         set_dir_rdf_metadata_test,
@@ -122,21 +121,15 @@ all() ->
     ]).
 
 
--define(ATTEMPTS, 30).
--define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
-
-
--define(SPACE_1, <<"space1">>).
--define(SPACE_2, <<"space2">>).
-
--define(USER_IN_SPACE_1, <<"user1">>).
--define(USER_IN_SPACE_1_AUTH, ?USER(?USER_IN_SPACE_1)).
-
--define(USER_IN_SPACE_2, <<"user3">>).
--define(USER_IN_SPACE_2_AUTH, ?USER(?USER_IN_SPACE_2)).
-
--define(USER_IN_BOTH_SPACES, <<"user2">>).
--define(USER_IN_BOTH_SPACES_AUTH, ?USER(?USER_IN_BOTH_SPACES)).
+-define(NEW_ID_METADATA_REST_PATH(__FILE_OBJECT_ID, __METADATA_TYPE),
+    <<"data/", __FILE_OBJECT_ID/binary, "/metadata/", __METADATA_TYPE/binary>>
+).
+-define(DEPRECATED_ID_METADATA_REST_PATH(__FILE_OBJECT_ID, __METADATA_TYPE),
+    <<"metadata-id/", __METADATA_TYPE/binary, "/", __FILE_OBJECT_ID/binary>>
+).
+-define(DEPRECATED_PATH_METADATA_REST_PATH(__FILE_PATH, __METADATA_TYPE),
+    <<"metadata/", __METADATA_TYPE/binary, __FILE_PATH/binary>>
+).
 
 -define(JSON_METADATA_1, #{
     <<"attr1">> => 1,
@@ -238,99 +231,6 @@ all() ->
     ?RDF_METADATA_KEY => ?RDF_METADATA_2,
     ?XATTR_2_KEY => ?XATTR_2_VALUE
 }).
-
-
--define(GET_METADATA_REST_ARGS_FUN(__METADATA_TYPE, __OBJECT_ID, __QS_PARAMS),
-    fun(#api_test_ctx{data = Data}) ->
-        #rest_args{
-            method = get,
-            path = http_utils:append_url_parameters(
-                <<"data/", __OBJECT_ID/binary, "/metadata/", __METADATA_TYPE/binary>>,
-                maps:with(__QS_PARAMS, utils:ensure_defined(Data, undefined, #{}))
-            )
-        }
-    end
-).
--define(GET_METADATA_DEPRECATED_PATH_REST_ARGS_FUN(__METADATA_TYPE, __FILE_PATH, __QS_PARAMS),
-    fun(#api_test_ctx{data = Data}) ->
-        #rest_args{
-            method = get,
-            path = http_utils:append_url_parameters(
-                <<"metadata/", __METADATA_TYPE/binary, __FILE_PATH/binary>>,
-                maps:with(__QS_PARAMS, utils:ensure_defined(Data, undefined, #{}))
-            )
-        }
-    end
-).
--define(GET_METADATA_DEPRECATED_ID_REST_ARGS_FUN(__METADATA_TYPE, __OBJECT_ID, __QS_PARAMS),
-    fun(#api_test_ctx{data = Data}) ->
-        #rest_args{
-            method = get,
-            path = http_utils:append_url_parameters(
-                <<"metadata-id/", __METADATA_TYPE/binary, "/", __OBJECT_ID/binary>>,
-                maps:with(__QS_PARAMS, utils:ensure_defined(Data, undefined, #{}))
-            )
-        }
-    end
-).
--define(GET_METADATA_GS_ARGS_FUN(__METADATA_TYPE, __GUID, __SCOPE),
-    fun(#api_test_ctx{data = Data}) ->
-        Aspect = case __METADATA_TYPE of
-            <<"json">> -> json_metadata;
-            <<"rdf">> -> rdf_metadata;
-            <<"xattrs">> -> xattrs
-        end,
-        #gs_args{
-            operation = get,
-            gri = #gri{type = op_file, id = __GUID, aspect = Aspect, scope = __SCOPE},
-            data = Data
-        }
-    end
-).
-
-
--define(SUPPORTED_CLIENTS_PER_NODE(__CONFIG), (fun() ->
-    [Provider2, Provider1] = ?config(op_worker_nodes, __CONFIG),
-    #{
-        Provider1 => [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        Provider2 => [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
-    }
-end)()).
-
--define(CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(__CONFIG), #client_spec{
-    correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-    unauthorized = [?NOBODY],
-    forbidden = [?USER_IN_SPACE_2_AUTH],
-    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
-}).
--define(CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(__CONFIG), #client_spec{
-    correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-    unauthorized = [?NOBODY],
-    forbidden = [?USER_IN_SPACE_1_AUTH],
-    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
-}).
-% Special case -> any user can make requests for shares but if request is
-% being made using credentials by user not supported on specific provider
-% ?ERROR_USER_NOT_SUPPORTED should be returned
--define(CLIENT_SPEC_FOR_SHARE_SCENARIOS(__CONFIG), #client_spec{
-    correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-    unauthorized = [],
-    forbidden = [],
-    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
-}).
-
-
--define(SESS_ID(__USER, __NODE, __CONFIG),
-    ?config({session_id, {__USER, ?GET_DOMAIN(__NODE)}}, __CONFIG)
-).
--define(USER_IN_BOTH_SPACES_SESS_ID(__NODE, __CONFIG),
-    ?SESS_ID(?USER_IN_BOTH_SPACES, __NODE, __CONFIG)
-).
-
--define(RANDOM_FILE_NAME, <<
-    "name_",
-    (integer_to_binary(erlang:unique_integer([positive])))/binary
->>).
 
 
 %%%===================================================================
@@ -1075,41 +975,36 @@ get_metadata_test_base(
 ) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ?assert(api_test_utils:run_scenarios(Config, [
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using rest endpoint">>,
-            type = rest,
+    ?assert(api_test_utils:run_tests(Config, [
+        #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_REST_ARGS_FUN(MetadataType, FileObjectId, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using deprecated path rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_DEPRECATED_PATH_REST_ARGS_FUN(MetadataType, FilePath, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using deprecated id rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_DEPRECATED_ID_REST_ARGS_FUN(MetadataType, FileObjectId, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using gs api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_GS_ARGS_FUN(MetadataType, FileGuid, private),
-            validate_result_fun = ValidateGsCallResultFun,
+            scenario_schemes = [
+                #scenario_scheme{
+                    name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_new_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParameters),
+                    validate_result_fun = ValidateRestCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using deprecated path rest endpoint">>,
+                    type = rest_with_file_path,
+                    prepare_args_fun = create_prepare_deprecated_path_get_metadata_rest_args_fun(MetadataType, FilePath, QsParameters),
+                    validate_result_fun = ValidateRestCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using deprecated id rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_deprecated_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParameters),
+                    validate_result_fun = ValidateRestCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using gs api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_metadata_gs_args_fun(MetadataType, FileGuid, private),
+                    validate_result_fun = ValidateGsCallResultFun
+                }
+            ],
             data_spec = DataSpec
         }
     ]));
@@ -1121,46 +1016,94 @@ get_metadata_test_base(
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, FileShareObjectId} = file_id:guid_to_objectid(FileShareGuid),
 
-    ?assert(api_test_utils:run_scenarios(Config, [
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using rest endpoint">>,
-            type = rest,
+    ?assert(api_test_utils:run_tests(Config, [
+        #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_REST_ARGS_FUN(MetadataType, FileShareObjectId, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using deprecated id rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_DEPRECATED_ID_REST_ARGS_FUN(MetadataType, FileShareObjectId, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using gs public api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_GS_ARGS_FUN(MetadataType, FileShareGuid, public),
-            validate_result_fun = ValidateGsCallResultFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using private gs api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = ?GET_METADATA_GS_ARGS_FUN(MetadataType, FileShareGuid, private),
-            validate_result_fun = fun(_, Result) ->
-                ?assertEqual(?ERROR_UNAUTHORIZED, Result)
-            end,
+            scenario_schemes = [
+                #scenario_scheme{
+                    name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_new_id_get_metadata_rest_args_fun(MetadataType, FileShareObjectId, QsParameters),
+                    validate_result_fun = ValidateRestCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using deprecated id rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_deprecated_id_get_metadata_rest_args_fun(MetadataType, FileShareObjectId, QsParameters),
+                    validate_result_fun = ValidateRestCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using gs public api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_metadata_gs_args_fun(MetadataType, FileShareGuid, public),
+                    validate_result_fun = ValidateGsCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using gs private api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_metadata_gs_args_fun(MetadataType, FileShareGuid, private),
+                    validate_result_fun = fun(_, Result) ->
+                        ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                    end
+                }
+            ],
             data_spec = DataSpec
         }
     ])).
+
+
+%% @private
+create_prepare_new_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
+    create_prepare_get_metadata_rest_args_fun(
+        ?NEW_ID_METADATA_REST_PATH(FileObjectId, MetadataType),
+        QsParams
+    ).
+
+
+%% @private
+create_prepare_deprecated_path_get_metadata_rest_args_fun(MetadataType, FilePath, QsParams) ->
+    create_prepare_get_metadata_rest_args_fun(
+        ?DEPRECATED_PATH_METADATA_REST_PATH(FilePath, MetadataType),
+        QsParams
+    ).
+
+
+%% @private
+create_prepare_deprecated_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
+    create_prepare_get_metadata_rest_args_fun(
+        ?DEPRECATED_ID_METADATA_REST_PATH(FileObjectId, MetadataType),
+        QsParams
+    ).
+
+
+%% @private
+create_prepare_get_metadata_rest_args_fun(RestPath, QsParams) ->
+    fun(#api_test_ctx{data = Data}) ->
+        #rest_args{
+            method = get,
+            path = http_utils:append_url_parameters(
+                RestPath,
+                maps:with(QsParams, utils:ensure_defined(Data, undefined, #{}))
+            )
+        }
+    end.
+
+
+%% @private
+create_prepare_get_metadata_gs_args_fun(MetadataType, FileGuid, Scope) ->
+    fun(#api_test_ctx{data = Data}) ->
+        Aspect = case MetadataType of
+            <<"json">> -> json_metadata;
+            <<"rdf">> -> rdf_metadata;
+            <<"xattrs">> -> xattrs
+        end,
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = FileGuid, aspect = Aspect, scope = Scope},
+            data = Data
+        }
+    end.
 
 
 %%%===================================================================
@@ -1269,6 +1212,11 @@ set_rdf_metadata_test_base(FileType, TestShareMode, Config) ->
     ).
 
 
+%%%===================================================================
+%%% Set metadata generic functions
+%%%===================================================================
+
+
 %% @private
 create_validate_set_metadata_rest_call_fun(GetExpResultFun) ->
     create_validate_set_metadata_rest_call_fun(GetExpResultFun, undefined).
@@ -1338,113 +1286,115 @@ set_metadata_test_base(
 ) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ?assert(api_test_utils:run_scenarios(Config, [
-        #scenario_spec{
-            name = <<"Set ", MetadataType/binary, " metadata for ", FileType/binary, " using rest endpoint">>,
-            type = rest,
+    ?assert(api_test_utils:run_tests(Config, [
+        #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
-            prepare_args_fun = create_prepare_set_metadata_rest_args_fun(MetadataType, FileObjectId, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
             verify_fun = VerifyEnvFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Set ", MetadataType/binary, " metadata for ", FileType/binary, " using deprecated path rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = create_prepare_deprecated_path_set_metadata_rest_args_fun(MetadataType, FilePath, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
-            verify_fun = VerifyEnvFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Set ", MetadataType/binary, " metadata for ", FileType/binary, " using deprecated id rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = create_prepare_deprecated_id_set_metadata_rest_args_fun(MetadataType, FileObjectId, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
-            verify_fun = VerifyEnvFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Set ", MetadataType/binary, " metadata for ", FileType/binary, " using gs api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = create_prepare_set_metadata_gs_args_fun(MetadataType, FileGuid, private),
-            validate_result_fun = ValidateGsCallResultFun,
-            verify_fun = VerifyEnvFun,
+            scenario_schemes = [
+                #scenario_scheme{
+                    name = <<"Set ", MetadataType/binary, " metadata for ", FileType/binary, " using rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_new_id_set_metadata_rest_args_fun(MetadataType, FileObjectId, QsParameters),
+                    validate_result_fun = ValidateRestCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Set ", MetadataType/binary, " metadata for ", FileType/binary, " using deprecated path rest endpoint">>,
+                    type = rest_with_file_path,
+                    prepare_args_fun = create_prepare_deprecated_path_set_metadata_rest_args_fun(MetadataType, FilePath, QsParameters),
+                    validate_result_fun = ValidateRestCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Set ", MetadataType/binary, " metadata for ", FileType/binary, " using deprecated id rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_deprecated_id_set_metadata_rest_args_fun(MetadataType, FileObjectId, QsParameters),
+                    validate_result_fun = ValidateRestCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Set ", MetadataType/binary, " metadata for ", FileType/binary, " using gs endpoint">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_set_metadata_gs_args_fun(MetadataType, FileGuid, private),
+                    validate_result_fun = ValidateGsCallResultFun
+                }
+            ],
             data_spec = DataSpec
         }
     ]));
 set_metadata_test_base(
     MetadataType, FileType, _FilePath, FileGuid, ShareId,
     ValidateRestCallResultFun, ValidateGsCallResultFun, VerifyEnvFun,
-    Providers, _ClientSpec, DataSpec, QsParameters, Config
+    Providers, ClientSpec, DataSpec, QsParameters, Config
 ) ->
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, FileShareObjectId} = file_id:guid_to_objectid(FileShareGuid),
 
-    % Special case -> any user can make requests for shares but if request is
-    % being made using credentials by user not supported on specific provider
-    % ?ERROR_USER_NOT_SUPPORTED will be returned
-    ClientSpec = #client_spec{
-        correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [],
-        forbidden = [],
-        supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(Config)
-    },
-
-    ?assert(api_test_utils:run_scenarios(Config, [
-        #scenario_spec{
-            name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using /data/ rest endpoint">>,
-            type = rest_not_supported,
+    ?assert(api_test_utils:run_tests(Config, [
+        #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
-            prepare_args_fun = create_prepare_set_metadata_rest_args_fun(MetadataType, FileShareObjectId, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
             verify_fun = VerifyEnvFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using /files-id/ rest endpoint">>,
-            type = rest_not_supported,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = create_prepare_deprecated_id_set_metadata_rest_args_fun(MetadataType, FileShareObjectId, QsParameters),
-            validate_result_fun = ValidateRestCallResultFun,
-            verify_fun = VerifyEnvFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using gs public api">>,
-            type = gs_not_supported,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = create_prepare_set_metadata_gs_args_fun(MetadataType, FileShareGuid, public),
-            validate_result_fun = ValidateGsCallResultFun,
-            verify_fun = VerifyEnvFun,
-            data_spec = DataSpec
-        },
-        #scenario_spec{
-            name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using private gs api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpec,
-            prepare_args_fun = create_prepare_set_metadata_gs_args_fun(MetadataType, FileShareGuid, private),
-            validate_result_fun = fun(_, Result) ->
-                ?assertEqual(?ERROR_UNAUTHORIZED, Result)
-            end,
-            verify_fun = VerifyEnvFun,
+            scenario_schemes = [
+                #scenario_scheme{
+                    name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using /data/ rest endpoint">>,
+                    type = rest_not_supported,
+                    prepare_args_fun = create_prepare_new_id_set_metadata_rest_args_fun(MetadataType, FileShareObjectId, QsParameters),
+                    validate_result_fun = ValidateRestCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using /files-id/ rest endpoint">>,
+                    type = rest_not_supported,
+                    prepare_args_fun = create_prepare_deprecated_id_set_metadata_rest_args_fun(MetadataType, FileShareObjectId, QsParameters),
+                    validate_result_fun = ValidateRestCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using gs public api">>,
+                    type = gs_not_supported,
+                    prepare_args_fun = create_prepare_set_metadata_gs_args_fun(MetadataType, FileShareGuid, public),
+                    validate_result_fun = ValidateGsCallResultFun
+                },
+                #scenario_scheme{
+                    name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using gs private api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_set_metadata_gs_args_fun(MetadataType, FileShareGuid, private),
+                    validate_result_fun = fun(_, Result) ->
+                        ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                    end
+                }
+            ],
             data_spec = DataSpec
         }
     ])).
 
 
-create_prepare_set_metadata_rest_args_fun(MetadataType, FileObjectId, QsParameters) ->
+%% @private
+create_prepare_new_id_set_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
+    create_prepare_set_metadata_rest_args_fun(
+        MetadataType,
+        ?NEW_ID_METADATA_REST_PATH(FileObjectId, MetadataType),
+        QsParams
+    ).
+
+
+%% @private
+create_prepare_deprecated_path_set_metadata_rest_args_fun(MetadataType, FilePath, QsParams) ->
+    create_prepare_set_metadata_rest_args_fun(
+        MetadataType,
+        ?DEPRECATED_PATH_METADATA_REST_PATH(FilePath, MetadataType),
+        QsParams
+    ).
+
+
+%% @private
+create_prepare_deprecated_id_set_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
+    create_prepare_set_metadata_rest_args_fun(
+        MetadataType,
+        ?DEPRECATED_ID_METADATA_REST_PATH(FileObjectId, MetadataType),
+        QsParams
+    ).
+
+
+%% @private
+create_prepare_set_metadata_rest_args_fun(MetadataType, RestPath, QsParams) ->
     fun(#api_test_ctx{data = Data}) ->
         #rest_args{
             method = put,
@@ -1453,48 +1403,18 @@ create_prepare_set_metadata_rest_args_fun(MetadataType, FileObjectId, QsParamete
                 _ -> #{<<"content-type">> => <<"application/json">>}
             end,
             path = http_utils:append_url_parameters(
-                <<"data/", FileObjectId/binary, "/metadata/", MetadataType/binary>>,
-                maps:with(QsParameters, utils:ensure_defined(Data, undefined, #{}))
+                RestPath,
+                maps:with(QsParams, utils:ensure_defined(Data, undefined, #{}))
             ),
-            body = encode_metadata(maps:get(<<"metadata">>, Data))
+            body = case maps:get(<<"metadata">>, Data) of
+                Metadata when is_binary(Metadata) -> Metadata;
+                Metadata when is_map(Metadata) -> json_utils:encode(Metadata)
+            end
         }
     end.
 
 
-create_prepare_deprecated_path_set_metadata_rest_args_fun(MetadataType, FilePath, QsParameters) ->
-    fun(#api_test_ctx{data = Data}) ->
-        #rest_args{
-            method = put,
-            headers = case MetadataType of
-                <<"rdf">> -> #{<<"content-type">> => <<"application/rdf+xml">>};
-                _ -> #{<<"content-type">> => <<"application/json">>}
-            end,
-            path = http_utils:append_url_parameters(
-                <<"metadata/", MetadataType/binary, FilePath/binary>>,
-                maps:with(QsParameters, utils:ensure_defined(Data, undefined, #{}))
-            ),
-            body = encode_metadata(maps:get(<<"metadata">>, Data))
-        }
-    end.
-
-
-create_prepare_deprecated_id_set_metadata_rest_args_fun(MetadataType, FileObjectId, QsParameters) ->
-    fun(#api_test_ctx{data = Data}) ->
-        #rest_args{
-            method = put,
-            headers = case MetadataType of
-                <<"rdf">> -> #{<<"content-type">> => <<"application/rdf+xml">>};
-                _ -> #{<<"content-type">> => <<"application/json">>}
-            end,
-            path = http_utils:append_url_parameters(
-                <<"metadata-id/", MetadataType/binary, "/", FileObjectId/binary>>,
-                maps:with(QsParameters, utils:ensure_defined(Data, undefined, #{}))
-            ),
-            body = encode_metadata(maps:get(<<"metadata">>, Data))
-        }
-    end.
-
-
+%% @private
 create_prepare_set_metadata_gs_args_fun(MetadataType, FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
         {Aspect, Data1} = case MetadataType of
@@ -1888,7 +1808,7 @@ set_metadata_test_base(
 
         %% TEST SETTING METADATA FOR FILE IN NORMAL MODE
 
-        ?assert(api_test_utils:run_scenarios(Config, [
+        ?assert(api_test_utils:run_tests(Config, [
 
             #scenario_spec{
                 name = <<"Set ", MetadataType/binary, " metadata for ", FileType/binary, " using /data/ rest endpoint">>,
@@ -1951,7 +1871,7 @@ set_metadata_test_base(
             true
         end,
 
-        ?assert(api_test_utils:run_scenarios(Config, [
+        ?assert(api_test_utils:run_tests(Config, [
 
             #scenario_spec{
                 name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using /data/ rest endpoint">>,
@@ -2051,7 +1971,7 @@ set_metadata_test_base(
             true
     end end,
 
-    ?assert(api_test_utils:run_scenarios(Config, [
+    ?assert(api_test_utils:run_tests(Config, [
         #scenario_spec{
             name = <<"Set ", MetadataType/binary, " metadata for ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
             type = rest,
