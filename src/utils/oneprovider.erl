@@ -325,7 +325,7 @@ on_disconnect_from_oz() ->
 %%--------------------------------------------------------------------
 -spec on_deregister() -> ok.
 on_deregister() ->
-    ?info("Provider has been deregistered"),
+    ?notice("Provider has been deregistered - clearing existing credentials"),
     provider_auth:delete(),
     storage:clear_storages(),
     % kill the connection to prevent 'unauthorized' errors due
