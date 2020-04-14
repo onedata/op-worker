@@ -16,7 +16,6 @@
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -47,22 +46,6 @@ all() ->
         set_json_metadata_test
     ]).
 
-
--define(ATTEMPTS, 30).
--define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
-
-
--define(SPACE_1, <<"space1">>).
--define(SPACE_2, <<"space2">>).
-
--define(USER_IN_SPACE_1, <<"user1">>).
--define(USER_IN_SPACE_1_AUTH, ?USER(?USER_IN_SPACE_1)).
-
--define(USER_IN_SPACE_2, <<"user3">>).
--define(USER_IN_SPACE_2_AUTH, ?USER(?USER_IN_SPACE_2)).
-
--define(USER_IN_BOTH_SPACES, <<"user2">>).
--define(USER_IN_BOTH_SPACES_AUTH, ?USER(?USER_IN_BOTH_SPACES)).
 
 -define(JSON_METADATA_1, #{
     <<"attr1">> => 1,

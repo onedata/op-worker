@@ -14,6 +14,7 @@
 -ifndef(API_TEST_UTILS_HRL).
 -define(API_TEST_UTILS_HRL, 1).
 
+-include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 -type scenario_type() ::
@@ -104,5 +105,20 @@
 }).
 
 -define(REST_ERROR(__ERROR), #{<<"error">> => errors:to_json(__ERROR)}).
+
+-define(ATTEMPTS, 30).
+-define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
+
+-define(SPACE_1, <<"space1">>).
+-define(SPACE_2, <<"space2">>).
+
+-define(USER_IN_SPACE_1, <<"user1">>).
+-define(USER_IN_SPACE_1_AUTH, ?USER(?USER_IN_SPACE_1)).
+
+-define(USER_IN_SPACE_2, <<"user3">>).
+-define(USER_IN_SPACE_2_AUTH, ?USER(?USER_IN_SPACE_2)).
+
+-define(USER_IN_BOTH_SPACES, <<"user2">>).
+-define(USER_IN_BOTH_SPACES_AUTH, ?USER(?USER_IN_BOTH_SPACES)).
 
 -endif.

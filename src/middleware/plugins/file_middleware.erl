@@ -37,14 +37,6 @@
 -define(DEFAULT_LIST_OFFSET, 0).
 -define(DEFAULT_LIST_ENTRIES, 1000).
 
--define(ALL_BASIC_ATTRIBUTES, [
-    <<"file_id">>, <<"name">>, <<"mode">>,
-    <<"storage_user_id">>, <<"storage_group_id">>,
-    <<"atime">>, <<"mtime">>, <<"ctime">>,
-    <<"type">>, <<"size">>, <<"shares">>,
-    <<"provider_id">>, <<"owner_id">>
-]).
-
 
 %%%===================================================================
 %%% API
@@ -175,9 +167,8 @@ data_spec_create(#gri{aspect = attrs}) -> #{
         fun(Mode) ->
             try
                 {true, binary_to_integer(Mode, 8)}
-            catch
-                _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
+            catch _:_ ->
+                throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
             end
         end
     }}
@@ -315,6 +306,7 @@ get_operation_supported(children, public) -> true;
 get_operation_supported(children_details, private) -> true;
 get_operation_supported(children_details, public) -> true;
 get_operation_supported(attrs, private) -> true;
+get_operation_supported(attrs, public) -> true;
 get_operation_supported(xattrs, private) -> true;
 get_operation_supported(xattrs, public) -> true;
 get_operation_supported(json_metadata, private) -> true;
@@ -364,8 +356,11 @@ data_spec_get(#gri{aspect = As}) when
     }
 };
 
-data_spec_get(#gri{aspect = attrs}) -> #{
-    optional => #{<<"attribute">> => {binary, ?ALL_BASIC_ATTRIBUTES}}
+data_spec_get(#gri{aspect = attrs, scope = private}) -> #{
+    optional => #{<<"attribute">> => {binary, ?PRIVATE_BASIC_ATTRIBUTES}}
+};
+data_spec_get(#gri{aspect = attrs, scope = public}) -> #{
+    optional => #{<<"attribute">> => {binary, ?PUBLIC_BASIC_ATTRIBUTES}}
 };
 
 data_spec_get(#gri{aspect = xattrs}) -> #{
@@ -410,6 +405,7 @@ authorize_get(#op_req{gri = #gri{aspect = As, scope = public}}, _) when
     As =:= instance;
     As =:= children;
     As =:= children_details;
+    As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
@@ -516,14 +512,19 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
             ?ERROR_POSIX(Errno)
     end;
 
-get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}, _) ->
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, scope = Sc}}, _) ->
     RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of
-        undefined -> ?ALL_BASIC_ATTRIBUTES;
-        Attr -> [Attr]
+        undefined ->
+            case Sc of
+                private -> ?PRIVATE_BASIC_ATTRIBUTES;
+                public -> ?PUBLIC_BASIC_ATTRIBUTES
+            end;
+        Attr ->
+            [Attr]
     end,
     {ok, FileAttrs} = ?check(lfm:stat(Auth#auth.session_id, {guid, FileGuid})),
 
-    {ok, lists:foldl(fun(RequestedAttr, Acc) ->
+    {ok, value, lists:foldl(fun(RequestedAttr, Acc) ->
         Acc#{RequestedAttr => get_attr(RequestedAttr, FileAttrs)}
     end, #{}, RequestedAttributes)};
 
