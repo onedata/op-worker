@@ -82,59 +82,70 @@
     set_shared_file_json_metadata_test/1,
     set_shared_dir_json_metadata_test/1,
     set_file_json_metadata_on_provider_not_supporting_space_test/1,
-    set_dir_json_metadata_on_provider_not_supporting_space_test/1
+    set_dir_json_metadata_on_provider_not_supporting_space_test/1,
+
+    % Set xattrs test cases
+    set_file_xattrs_test/1,
+    set_dir_xattrs_test/1,
+    set_shared_file_xattrs_test/1,
+    set_shared_dir_xattrs_test/1
 ]).
 
 all() ->
     ?ALL([
-        get_file_rdf_metadata_with_rdf_set_test,
-        get_dir_rdf_metadata_with_rdf_set_test,
-        get_file_rdf_metadata_without_rdf_set_test,
-        get_dir_rdf_metadata_without_rdf_set_test,
-        get_shared_file_rdf_metadata_with_rdf_set_test,
-        get_shared_dir_rdf_metadata_with_rdf_set_test,
-        get_shared_file_rdf_metadata_without_rdf_set_test,
-        get_shared_dir_rdf_metadata_without_rdf_set_test,
-        get_file_rdf_metadata_on_provider_not_supporting_space_test,
-        get_dir_rdf_metadata_on_provider_not_supporting_space_test,
+%%        get_file_rdf_metadata_with_rdf_set_test,
+%%        get_dir_rdf_metadata_with_rdf_set_test,
+%%        get_file_rdf_metadata_without_rdf_set_test,
+%%        get_dir_rdf_metadata_without_rdf_set_test,
+%%        get_shared_file_rdf_metadata_with_rdf_set_test,
+%%        get_shared_dir_rdf_metadata_with_rdf_set_test,
+%%        get_shared_file_rdf_metadata_without_rdf_set_test,
+%%        get_shared_dir_rdf_metadata_without_rdf_set_test,
+%%        get_file_rdf_metadata_on_provider_not_supporting_space_test,
+%%        get_dir_rdf_metadata_on_provider_not_supporting_space_test,
+%%
+%%        get_file_json_metadata_with_json_set_test,
+%%        get_dir_json_metadata_with_json_set_test,
+%%        get_file_json_metadata_without_json_set_test,
+%%        get_dir_json_metadata_without_json_set_test,
+%%        get_shared_file_json_metadata_with_json_set_test,
+%%        get_shared_dir_json_metadata_with_json_set_test,
+%%        get_shared_file_json_metadata_without_json_set_test,
+%%        get_shared_dir_json_metadata_without_json_set_test,
+%%        get_file_json_metadata_on_provider_not_supporting_space_test,
+%%        get_dir_json_metadata_on_provider_not_supporting_space_test,
+%%
+%%        get_file_xattrs_with_json_set_test,
+%%        get_dir_xattrs_with_json_set_test,
+%%        get_file_xattrs_without_json_set_test,
+%%        get_dir_xattrs_without_json_set_test,
+%%        get_shared_file_xattrs_with_json_set_test,
+%%        get_shared_dir_xattrs_with_json_set_test,
+%%        get_shared_file_xattrs_without_json_set_test,
+%%        get_shared_dir_xattrs_without_json_set_test,
+%%        get_file_xattrs_on_provider_not_supporting_space_test,
+%%        get_dir_xattrs_on_provider_not_supporting_space_test,
+%%
+%%        set_file_rdf_metadata_test,
+%%        set_dir_rdf_metadata_test,
+%%        set_shared_file_rdf_metadata_test,
+%%        set_shared_dir_rdf_metadata_test,
+%%        set_file_rdf_metadata_on_provider_not_supporting_space_test,
+%%        set_dir_rdf_metadata_on_provider_not_supporting_space_test,
+%%
+%%        set_file_json_metadata_test,
+%%        set_dir_json_metadata_test,
+%%        set_file_primitive_json_metadata_test,
+%%        set_dir_primitive_json_metadata_test,
+%%        set_shared_file_json_metadata_test,
+%%        set_shared_dir_json_metadata_test,
+%%        set_file_json_metadata_on_provider_not_supporting_space_test,
+%%        set_dir_json_metadata_on_provider_not_supporting_space_test,
 
-        get_file_json_metadata_with_json_set_test,
-        get_dir_json_metadata_with_json_set_test,
-        get_file_json_metadata_without_json_set_test,
-        get_dir_json_metadata_without_json_set_test,
-        get_shared_file_json_metadata_with_json_set_test,
-        get_shared_dir_json_metadata_with_json_set_test,
-        get_shared_file_json_metadata_without_json_set_test,
-        get_shared_dir_json_metadata_without_json_set_test,
-        get_file_json_metadata_on_provider_not_supporting_space_test,
-        get_dir_json_metadata_on_provider_not_supporting_space_test,
-
-        get_file_xattrs_with_json_set_test,
-        get_dir_xattrs_with_json_set_test,
-        get_file_xattrs_without_json_set_test,
-        get_dir_xattrs_without_json_set_test,
-        get_shared_file_xattrs_with_json_set_test,
-        get_shared_dir_xattrs_with_json_set_test,
-        get_shared_file_xattrs_without_json_set_test,
-        get_shared_dir_xattrs_without_json_set_test,
-        get_file_xattrs_on_provider_not_supporting_space_test,
-        get_dir_xattrs_on_provider_not_supporting_space_test,
-
-        set_file_rdf_metadata_test,
-        set_dir_rdf_metadata_test,
-        set_shared_file_rdf_metadata_test,
-        set_shared_dir_rdf_metadata_test,
-        set_file_rdf_metadata_on_provider_not_supporting_space_test,
-        set_dir_rdf_metadata_on_provider_not_supporting_space_test,
-
-        set_file_json_metadata_test,
-        set_dir_json_metadata_test,
-        set_file_primitive_json_metadata_test,
-        set_dir_primitive_json_metadata_test,
-        set_shared_file_json_metadata_test,
-        set_shared_dir_json_metadata_test,
-        set_file_json_metadata_on_provider_not_supporting_space_test,
-        set_dir_json_metadata_on_provider_not_supporting_space_test
+        set_file_xattrs_test,
+        set_dir_xattrs_test,
+        set_shared_file_xattrs_test,
+        set_shared_dir_xattrs_test
     ]).
 
 
@@ -197,7 +208,11 @@ all() ->
     <<"acetype">> => <<"0x", (integer_to_binary(?allow_mask, 16))/binary>>,
     <<"identifier">> => ?everyone,
     <<"aceflags">> => <<"0x", (integer_to_binary(?no_flags_mask, 16))/binary>>,
-    <<"acemask">> => <<"0x", (integer_to_binary(?all_container_perms_mask, 16))/binary>>
+    <<"acemask">> => <<"0x", (integer_to_binary(
+        ?read_metadata_mask bor ?read_attributes_mask bor ?read_acl_mask bor
+        ?write_metadata_mask bor ?write_attributes_mask bor ?delete_mask bor ?write_acl_mask,
+        16
+    ))/binary>>
 }]).
 -define(ACL_2, [#{
     <<"acetype">> => <<"0x", (integer_to_binary(?allow_mask, 16))/binary>>,
@@ -1615,6 +1630,159 @@ get_json(Node, FileGuid, Config) ->
 remove_json(Node, FileGuid, Config) ->
     SessId = ?USER_IN_BOTH_SPACES_SESS_ID(Node, Config),
     lfm_proxy:remove_metadata(Node, SessId, {guid, FileGuid}, json).
+
+
+%%%===================================================================
+%%% Set xattrs functions
+%%%===================================================================
+
+
+set_file_xattrs_test(Config) ->
+    set_xattrs_test_base(<<"file">>, _TestShareMode = false, Config).
+
+
+set_dir_xattrs_test(Config) ->
+    set_xattrs_test_base(<<"dir">>, _TestShareMode = false, Config).
+
+
+set_shared_file_xattrs_test(Config) ->
+    set_xattrs_test_base(<<"file">>, _TestShareMode = true, Config).
+
+
+set_shared_dir_xattrs_test(Config) ->
+    set_xattrs_test_base(<<"dir">>, _TestShareMode = true, Config).
+
+
+%% @private
+set_xattrs_test_base(FileType, TestShareMode, Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME]),
+    {ok, FileGuid} = create_file(FileType, P1, SessIdP1, FilePath),
+
+    {ShareId, ClientSpec, GetExpCallResultFun, VerifyEnvFun} = case TestShareMode of
+        true ->
+            {ok, Id} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
+            {
+                Id,
+                ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
+                fun(_TestCtx) -> ?ERROR_NOT_SUPPORTED end,
+                fun(_, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Xattrs}}) ->
+                    assert_no_xattrs_set(TestNode, FileGuid, Xattrs, Config),
+                    true
+                end
+            };
+        false ->
+            {
+                undefined,
+                ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+                fun(#api_test_ctx{client = Client, data = #{<<"metadata">> := Xattrs}}) ->
+                    case {Client, maps:is_key(?ACL_KEY, Xattrs)} of
+                        {?USER_IN_SPACE_2_AUTH, true} ->
+                            % Only owner can set acl in posix mode
+                            ?ERROR_POSIX(?EACCES);
+                        _ ->
+                            ok
+                    end
+                end,
+                create_verify_env_fun_for_set_xattrs_test(FileGuid, Providers, undefined, Config)
+            }
+    end,
+
+    % Wait for metadata sync between providers
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileGuid}), ?ATTEMPTS),
+
+    DataSpec = #data_spec{
+        required = [<<"metadata">>],
+        correct_values = #{<<"metadata">> => [
+            % Tests setting multiple xattrs at once
+            #{?XATTR_1_KEY => ?XATTR_1_VALUE, ?XATTR_2_KEY => ?XATTR_2_VALUE}
+            % Tests setting all types of xattr keys
+            | lists:map(fun({Key, Val}) -> #{Key => Val} end, maps:to_list(?ALL_METADATA_SET_1))
+        ]}
+    },
+
+    set_metadata_test_base(
+        <<"xattrs">>,
+        FileType, FilePath, FileGuid, ShareId,
+        create_validate_set_metadata_rest_call_fun(GetExpCallResultFun),
+        create_validate_set_metadata_gs_call_fun(GetExpCallResultFun),
+        VerifyEnvFun,
+        Providers,
+        ClientSpec,
+        DataSpec,
+        _QsParams = [],
+        Config
+    ).
+
+
+%% @private
+create_verify_env_fun_for_set_xattrs_test(FileGuid, Providers, ProviderNotSupportingSpace, Config) ->
+    fun
+        (false, #api_test_ctx{node = TestNode}) ->
+            ?assertMatch({error, ?ENODATA}, get_json(TestNode, FileGuid, Config), ?ATTEMPTS),
+            true;
+        (true, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Xattrs}}) when TestNode == ProviderNotSupportingSpace ->
+            assert_no_xattrs_set(TestNode, FileGuid, Xattrs, Config),
+            true;
+        (true, #api_test_ctx{node = TestNode, client = Client, data = #{<<"metadata">> := Xattrs}}) ->
+            case {Client, maps:is_key(?ACL_KEY, Xattrs)} of
+                {?USER_IN_SPACE_2_AUTH, true} ->
+                    assert_no_xattrs_set(TestNode, FileGuid, Xattrs, Config);
+                _ ->
+                    assert_xattrs_set(Providers, FileGuid, Xattrs, Config),
+                    remove_xattrs(TestNode, Providers, FileGuid, Xattrs, Config)
+            end,
+            true
+    end.
+
+
+%% @private
+assert_xattrs_set(Nodes, FileGuid, Xattrs, Config) ->
+    lists:foreach(fun(Node) ->
+        lists:foreach(fun({Key, Value}) ->
+            ?assertMatch(
+                {ok, #xattr{name = Key, value = Value}},
+                get_xattr(Node, FileGuid, Key, Config),
+                ?ATTEMPTS
+            )
+        end, maps:to_list(Xattrs))
+    end, Nodes).
+
+
+%% @private
+assert_no_xattrs_set(Node, FileGuid, Xattrs, Config) ->
+    lists:foreach(fun({Key, _}) ->
+        ?assertMatch({error, ?ENODATA}, get_xattr(Node, FileGuid, Key, Config), ?ATTEMPTS)
+    end, maps:to_list(Xattrs)).
+
+
+%% @private
+remove_xattrs(TestNode, Nodes, FileGuid, Xattrs, Config) ->
+    {FileUuid, _SpaceId, _} = file_id:unpack_share_guid(FileGuid),
+
+    lists:foreach(fun({Key, _}) ->
+        case Key of
+            ?ACL_KEY ->
+                ?assertMatch(ok, lfm_proxy:remove_acl(TestNode, ?USER_IN_BOTH_SPACES_SESS_ID(TestNode, Config), {guid, FileGuid}));
+            <<?CDMI_PREFIX_STR, _/binary>> ->
+                % Because cdmi attributes don't have api to remove them removal must be carried by
+                % calling custom_metadata directly
+                ?assertMatch(ok, rpc:call(TestNode, custom_metadata, remove_xattr, [FileUuid, Key]));
+            _ ->
+                ?assertMatch(ok, lfm_proxy:remove_xattr(TestNode, ?USER_IN_BOTH_SPACES_SESS_ID(TestNode, Config), {guid, FileGuid}, Key))
+        end,
+        lists:foreach(fun(Node) ->
+            ?assertMatch({error, ?ENODATA}, get_xattr(Node, FileGuid, Key, Config), ?ATTEMPTS)
+        end, Nodes)
+    end, maps:to_list(Xattrs)).
+
+
+%% @private
+get_xattr(Node, FileGuid, XattrKey, Config) ->
+    lfm_proxy:get_xattr(Node, ?USER_IN_BOTH_SPACES_SESS_ID(Node, Config), {guid, FileGuid}, XattrKey).
 
 
 %%%===================================================================
