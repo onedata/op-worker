@@ -212,11 +212,7 @@ all() ->
     <<"acetype">> => <<"0x", (integer_to_binary(?allow_mask, 16))/binary>>,
     <<"identifier">> => ?everyone,
     <<"aceflags">> => <<"0x", (integer_to_binary(?no_flags_mask, 16))/binary>>,
-    <<"acemask">> => <<"0x", (integer_to_binary(
-        ?read_metadata_mask bor ?read_attributes_mask bor ?read_acl_mask bor
-        ?write_metadata_mask bor ?write_attributes_mask bor ?delete_mask bor ?write_acl_mask,
-        16
-    ))/binary>>
+    <<"acemask">> => <<"0x", (integer_to_binary(?all_container_perms_mask, 16))/binary>>
 }]).
 -define(ACL_2, [#{
     <<"acetype">> => <<"0x", (integer_to_binary(?allow_mask, 16))/binary>>,
@@ -224,6 +220,16 @@ all() ->
     <<"aceflags">> => <<"0x", (integer_to_binary(?no_flags_mask, 16))/binary>>,
     <<"acemask">> => <<"0x", (integer_to_binary(
         ?read_attributes_mask bor ?read_metadata_mask bor ?read_acl_mask,
+        16
+    ))/binary>>
+}]).
+-define(ACL_3, [#{
+    <<"acetype">> => <<"0x", (integer_to_binary(?allow_mask, 16))/binary>>,
+    <<"identifier">> => ?everyone,
+    <<"aceflags">> => <<"0x", (integer_to_binary(?no_flags_mask, 16))/binary>>,
+    <<"acemask">> => <<"0x", (integer_to_binary(
+        ?read_metadata_mask bor ?read_attributes_mask bor ?read_acl_mask bor
+            ?write_metadata_mask bor ?write_attributes_mask bor ?delete_mask bor ?write_acl_mask,
         16
     ))/binary>>
 }]).
@@ -830,9 +836,19 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSet, NotSetXattrKey
                     end
             end,
 
+            AllDirectMetadata = #{
+                ?ACL_KEY => ?ACL_2,
+                ?MIMETYPE_KEY => ?MIMETYPE_2,
+                ?TRANSFER_ENCODING_KEY => ?TRANSFER_ENCODING_2,
+                ?CDMI_COMPLETION_STATUS_KEY => ?CDMI_COMPLETION_STATUS_2,
+                ?JSON_METADATA_KEY => ?JSON_METADATA_5,
+                ?RDF_METADATA_KEY => ?RDF_METADATA_2,
+                ?XATTR_2_KEY => ?XATTR_2_VALUE
+            },
+
             AvailableXattrsMap = case {DirectMetadataSet, IncludeInherited} of
                 {true, false} ->
-                    ?ALL_METADATA_SET_2;
+                    AllDirectMetadata;
                 {true, true} ->
                     case ShareId of
                         undefined when Client == ?USER_IN_SPACE_2_AUTH ->
@@ -848,13 +864,13 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSet, NotSetXattrKey
                                 true ->
                                     throw(?ERROR_POSIX(?EACCES));
                                 false ->
-                                    ?ALL_METADATA_SET_2
+                                    AllDirectMetadata
                             end;
                         undefined ->
                             % When 'inherited' flag is set all ancestors json metadata
                             % are merged but for rest the first value found (which in
                             % this case is value directly set on file) is returned
-                            ?ALL_METADATA_SET_2#{
+                            AllDirectMetadata#{
                                 ?JSON_METADATA_KEY => json_utils:merge([
                                     ?JSON_METADATA_4,
                                     ?JSON_METADATA_5
@@ -863,7 +879,7 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSet, NotSetXattrKey
                             };
                         _ ->
                             % In share mode only metadata directly set on file is available
-                            ?ALL_METADATA_SET_2
+                            AllDirectMetadata
                     end;
                 {false, false} ->
                     #{};
@@ -1702,9 +1718,14 @@ set_xattrs_test_base(FileType, TestShareMode, Config) ->
         required = [<<"metadata">>],
         correct_values = #{<<"metadata">> => [
             % Tests setting multiple xattrs at once
-            #{?XATTR_1_KEY => ?XATTR_1_VALUE, ?XATTR_2_KEY => ?XATTR_2_VALUE}
-            % Tests setting all types of xattr keys
-            | lists:map(fun({Key, Val}) -> #{Key => Val} end, maps:to_list(?ALL_METADATA_SET_1))
+            #{?XATTR_1_KEY => ?XATTR_1_VALUE, ?XATTR_2_KEY => ?XATTR_2_VALUE},
+            % Tests setting xattr internal types
+            #{?ACL_KEY => ?ACL_3},
+            #{?MIMETYPE_KEY => ?MIMETYPE_1},
+            #{?TRANSFER_ENCODING_KEY => ?TRANSFER_ENCODING_1},
+            #{?CDMI_COMPLETION_STATUS_KEY => ?CDMI_COMPLETION_STATUS_1},
+            #{?JSON_METADATA_KEY => ?JSON_METADATA_4},
+            #{?RDF_METADATA_KEY => ?RDF_METADATA_1}
         ]}
     },
 
