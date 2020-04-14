@@ -406,7 +406,7 @@
 
 %% Model for storing file's blocks
 -record(file_local_blocks, {
-    last :: boolean(),
+    last = true :: boolean(),
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
