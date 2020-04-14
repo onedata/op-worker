@@ -88,7 +88,9 @@
     set_file_xattrs_test/1,
     set_dir_xattrs_test/1,
     set_shared_file_xattrs_test/1,
-    set_shared_dir_xattrs_test/1
+    set_shared_dir_xattrs_test/1,
+    set_file_xattrs_on_provider_not_supporting_space_test/1,
+    set_dir_xattrs_on_provider_not_supporting_space_test/1
 ]).
 
 all() ->
@@ -145,7 +147,9 @@ all() ->
         set_file_xattrs_test,
         set_dir_xattrs_test,
         set_shared_file_xattrs_test,
-        set_shared_dir_xattrs_test
+        set_shared_dir_xattrs_test,
+        set_file_xattrs_on_provider_not_supporting_space_test,
+        set_dir_xattrs_on_provider_not_supporting_space_test
     ]).
 
 
@@ -1718,6 +1722,43 @@ set_xattrs_test_base(FileType, TestShareMode, Config) ->
     ).
 
 
+set_file_xattrs_on_provider_not_supporting_space_test(Config) ->
+    set_xattrs_on_provider_not_supporting_space_test_base(<<"file">>, Config).
+
+
+set_dir_xattrs_on_provider_not_supporting_space_test(Config) ->
+    set_xattrs_on_provider_not_supporting_space_test_base(<<"dir">>, Config).
+
+
+%% @private
+set_xattrs_on_provider_not_supporting_space_test_base(FileType, Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+
+    FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME]),
+    {ok, FileGuid} = create_file(FileType, P1, SessIdP1, FilePath),
+
+    GetExpCallResultFun = fun(_TestCtx) -> ok end,
+
+    DataSpec = #data_spec{
+        required = [<<"metadata">>],
+        correct_values = #{<<"metadata">> => [#{?XATTR_1_KEY => ?XATTR_1_VALUE}]}
+    },
+
+    set_metadata_test_base(
+        <<"xattrs">>,
+        FileType, FilePath, FileGuid, undefined,
+        create_validate_set_metadata_rest_call_fun(GetExpCallResultFun, P2),
+        create_validate_set_metadata_gs_call_fun(GetExpCallResultFun, P2),
+        create_verify_env_fun_for_set_xattrs_test(FileGuid, [P1], P2, Config),
+        Providers,
+        ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
+        DataSpec,
+        _QsParams = [],
+        Config
+    ).
+
+
 %% @private
 create_verify_env_fun_for_set_xattrs_test(FileGuid, Providers, ProviderNotSupportingSpace, Config) ->
     fun
@@ -1730,6 +1771,7 @@ create_verify_env_fun_for_set_xattrs_test(FileGuid, Providers, ProviderNotSuppor
         (true, #api_test_ctx{node = TestNode, client = Client, data = #{<<"metadata">> := Xattrs}}) ->
             case {Client, maps:is_key(?ACL_KEY, Xattrs)} of
                 {?USER_IN_SPACE_2_AUTH, true} ->
+                    % Only owner (?USER_IN_BOTH_SPACES) can set acl in posix mode
                     assert_no_xattrs_set(TestNode, FileGuid, Xattrs, Config);
                 _ ->
                     assert_xattrs_set(Providers, FileGuid, Xattrs, Config),
@@ -2050,7 +2092,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_Case, Config) ->
     initializer:mock_share_logic(Config),
-    ct:timetrap({minutes, 15}),
+    ct:timetrap({minutes, 30}),
     lfm_proxy:init(Config).
 
 
