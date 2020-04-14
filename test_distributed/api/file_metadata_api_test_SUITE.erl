@@ -71,8 +71,10 @@
     set_dir_rdf_metadata_test/1,
     set_shared_file_rdf_metadata_test/1,
     set_shared_dir_rdf_metadata_test/1,
+    set_file_rdf_metadata_on_provider_not_supporting_space_test/1,
+    set_dir_rdf_metadata_on_provider_not_supporting_space_test/1,
 
-
+    % Set json metadata test cases
     set_json_metadata_test/1
 ]).
 
@@ -114,7 +116,9 @@ all() ->
         set_file_rdf_metadata_test,
         set_dir_rdf_metadata_test,
         set_shared_file_rdf_metadata_test,
-        set_shared_dir_rdf_metadata_test
+        set_shared_dir_rdf_metadata_test,
+        set_file_rdf_metadata_on_provider_not_supporting_space_test,
+        set_dir_rdf_metadata_on_provider_not_supporting_space_test
 
 
 %%        set_json_metadata_test
@@ -1112,23 +1116,15 @@ create_prepare_get_metadata_gs_args_fun(MetadataType, FileGuid, Scope) ->
 
 
 set_file_rdf_metadata_test(Config) ->
-    set_rdf_metadata_test_base(<<"file">>, _TestShareMode = false, Config).
+    set_rdf_metadata_test_base(<<"file">>, Config).
 
 
 set_dir_rdf_metadata_test(Config) ->
-    set_rdf_metadata_test_base(<<"dir">>, _TestShareMode = false, Config).
-
-
-set_shared_file_rdf_metadata_test(Config) ->
-    set_rdf_metadata_test_base(<<"file">>, _TestShareMode = true, Config).
-
-
-set_shared_dir_rdf_metadata_test(Config) ->
-    set_rdf_metadata_test_base(<<"dir">>, _TestShareMode = true, Config).
+    set_rdf_metadata_test_base(<<"dir">>, Config).
 
 
 %% @private
-set_rdf_metadata_test_base(FileType, TestShareMode, Config) ->
+set_rdf_metadata_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
@@ -1136,67 +1132,60 @@ set_rdf_metadata_test_base(FileType, TestShareMode, Config) ->
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME]),
     {ok, FileGuid} = create_file(FileType, P1, SessIdP1, FilePath),
 
-    GetRdfFun = fun(Node, FileGuid) ->
-        SessId = ?USER_IN_BOTH_SPACES_SESS_ID(Node, Config),
-        lfm_proxy:get_metadata(Node, SessId, {guid, FileGuid}, rdf, [], false)
-    end,
-    RemoveRdfFun = fun(Node, FileGuid) ->
-        SessId = ?USER_IN_BOTH_SPACES_SESS_ID(Node, Config),
-        lfm_proxy:remove_metadata(Node, SessId, {guid, FileGuid}, rdf)
-    end,
+    % Wait for metadata sync between providers
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileGuid}), ?ATTEMPTS),
 
-    {ShareId, ClientSpec, VerifyEnvFun, GetExpCallResultFun} = case TestShareMode of
-        true ->
-            {ok, Id} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
-            {
-                Id,
-                ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
-                fun(_, #api_test_ctx{node = TestNode}) ->
-                    ?assertMatch({error, ?ENODATA}, GetRdfFun(TestNode, FileGuid), ?ATTEMPTS),
-                    true
-                end,
-                fun(_TestCtx) -> ?ERROR_NOT_SUPPORTED end
-            };
-        false ->
-            {
-                undefined,
-                ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
-                fun
-                    (false, #api_test_ctx{node = TestNode}) ->
-                        ?assertMatch({error, ?ENODATA}, GetRdfFun(TestNode, FileGuid), ?ATTEMPTS),
-                        true;
-                    (true, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Metadata}}) ->
-                        lists:foreach(fun(Node) ->
-                            ?assertMatch({ok, Metadata}, GetRdfFun(Node, FileGuid), ?ATTEMPTS)
-                        end, Providers),
+    GetExpCallResultFun = fun(_TestCtx) -> ok end,
 
-                        case Metadata of
-                            ?RDF_METADATA_1 ->
-                                % Do nothing after setting ?RDF_METADATA_1 to test
-                                % overriding it by ?RDF_METADATA_2
-                                ok;
-                            ?RDF_METADATA_2 ->
-                                % Remove ?RDF_METADATA_2 to test setting ?RDF_METADATA_1 on clean state
-                                ?assertMatch(ok, RemoveRdfFun(TestNode, FileGuid)),
-                                % Wait for removal to be synced between providers.
-                                lists:foreach(fun(Node) ->
-                                    ?assertMatch({error, ?ENODATA}, GetRdfFun(Node, FileGuid), ?ATTEMPTS)
-                                end, Providers)
-                        end,
-                        true
-                end,
-                fun(_TestCtx) -> ok end
-            }
+    DataSpec = #data_spec{
+        required = [<<"metadata">>],
+        correct_values = #{<<"metadata">> => [?RDF_METADATA_1, ?RDF_METADATA_2]}
+    },
+
+    set_metadata_test_base(
+        <<"rdf">>,
+        FileType, FilePath, FileGuid, undefined,
+        create_validate_set_metadata_rest_call_fun(GetExpCallResultFun),
+        create_validate_set_metadata_gs_call_fun(GetExpCallResultFun),
+        create_verify_env_fun_for_set_rdf_test(FileGuid, Providers, undefined, Config),
+        Providers,
+        ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+        DataSpec,
+        _QsParams = [],
+        Config
+    ).
+
+
+set_shared_file_rdf_metadata_test(Config) ->
+    set_rdf_metadata_for_shared_file_test_base(<<"file">>, Config).
+
+
+set_shared_dir_rdf_metadata_test(Config) ->
+    set_rdf_metadata_for_shared_file_test_base(<<"dir">>, Config).
+
+
+%% @private
+set_rdf_metadata_for_shared_file_test_base(FileType, Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME]),
+    {ok, FileGuid} = create_file(FileType, P1, SessIdP1, FilePath),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
+
+    % Wait for metadata sync between providers
+    ?assertMatch({ok, #file_attr{shares = [ShareId]}}, lfm_proxy:stat(P2, SessIdP2, {guid, FileGuid}), ?ATTEMPTS),
+
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_NOT_SUPPORTED end,
+    VerifyEnvFun = fun(_, #api_test_ctx{node = TestNode}) ->
+        ?assertMatch({error, ?ENODATA}, get_rdf(TestNode, FileGuid, Config), ?ATTEMPTS),
+        true
     end,
     DataSpec = #data_spec{
         required = [<<"metadata">>],
-        correct_values = #{
-            <<"metadata">> => [?RDF_METADATA_1, ?RDF_METADATA_2]
-        }
+        correct_values = #{<<"metadata">> => [?RDF_METADATA_1]}
     },
-
-    % Wait for metadata sync between providers
-    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileGuid}), ?ATTEMPTS),
 
     set_metadata_test_base(
         <<"rdf">>,
@@ -1205,11 +1194,88 @@ set_rdf_metadata_test_base(FileType, TestShareMode, Config) ->
         create_validate_set_metadata_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun,
         Providers,
-        ClientSpec,
+        ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
         DataSpec,
         _QsParams = [],
         Config
     ).
+
+
+set_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
+    set_rdf_metadata_on_provider_not_supporting_space_test_base(<<"file">>, Config).
+
+
+set_dir_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
+    set_rdf_metadata_on_provider_not_supporting_space_test_base(<<"dir">>, Config).
+
+
+set_rdf_metadata_on_provider_not_supporting_space_test_base(FileType, Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+
+    FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME]),
+    {ok, FileGuid} = create_file(FileType, P1, SessIdP1, FilePath),
+
+    GetExpCallResultFun = fun(_TestCtx) -> ok end,
+
+    DataSpec = #data_spec{
+        required = [<<"metadata">>],
+        correct_values = #{<<"metadata">> => [?RDF_METADATA_1, ?RDF_METADATA_2]}
+    },
+
+    set_metadata_test_base(
+        <<"rdf">>,
+        FileType, FilePath, FileGuid, undefined,
+        create_validate_set_metadata_rest_call_fun(GetExpCallResultFun, P2),
+        create_validate_set_metadata_gs_call_fun(GetExpCallResultFun, P2),
+        create_verify_env_fun_for_set_rdf_test(FileGuid, [P1], P2, Config),
+        Providers,
+        ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
+        DataSpec,
+        _QsParams = [],
+        Config
+    ).
+
+
+%% @private
+create_verify_env_fun_for_set_rdf_test(FileGuid, Providers, ProviderNotSupportingSpace, Config) ->
+    fun
+        (false, #api_test_ctx{node = TestNode}) ->
+            ?assertMatch({error, ?ENODATA}, get_rdf(TestNode, FileGuid, Config), ?ATTEMPTS),
+            true;
+        (true, #api_test_ctx{node = TestNode}) when TestNode == ProviderNotSupportingSpace ->
+            ?assertMatch({error, ?ENODATA}, get_rdf(TestNode, FileGuid, Config), ?ATTEMPTS),
+            true;
+        (true, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Metadata}}) ->
+            lists:foreach(fun(Node) ->
+                ?assertMatch({ok, Metadata}, get_rdf(Node, FileGuid, Config), ?ATTEMPTS)
+            end, Providers),
+
+            case Metadata == ?RDF_METADATA_2 of
+                true ->
+                    % Remove ?RDF_METADATA_2 to test setting ?RDF_METADATA_1 in other scenario on clean state
+                    ?assertMatch(ok, remove_rdf(TestNode, FileGuid, Config)),
+                    % Wait for removal to be synced between providers.
+                    lists:foreach(fun(Node) ->
+                        ?assertMatch({error, ?ENODATA}, get_rdf(Node, FileGuid, Config), ?ATTEMPTS)
+                    end, Providers);
+                false ->
+                    ok
+            end,
+            true
+    end.
+
+
+%% @private
+get_rdf(Node, FileGuid, Config) ->
+    SessId = ?USER_IN_BOTH_SPACES_SESS_ID(Node, Config),
+    lfm_proxy:get_metadata(Node, SessId, {guid, FileGuid}, rdf, [], false).
+
+
+%% @private
+remove_rdf(Node, FileGuid, Config) ->
+    SessId = ?USER_IN_BOTH_SPACES_SESS_ID(Node, Config),
+    lfm_proxy:remove_metadata(Node, SessId, {guid, FileGuid}, rdf).
 
 
 %%%===================================================================
