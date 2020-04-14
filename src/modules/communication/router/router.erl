@@ -241,13 +241,12 @@ answer_or_delegate(#client_message{
     message_id = MsgId,
     message_body = #get_rtransfer_nodes_ips{}
 }, _) ->
-    {ok, Nodes} = node_manager:get_cluster_nodes(),
     IpsAndPorts = lists:map(fun(Node) ->
         {{_,_,_,_} = IP, Port} = rpc:call(
             Node, rtransfer_config, get_local_ip_and_port, []
         ),
         #ip_and_port{ip = IP, port = Port}
-    end, Nodes),
+    end, consistent_hashing:get_all_nodes()),
 
     {ok, #server_message{
         message_id = MsgId,

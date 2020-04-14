@@ -484,10 +484,9 @@ on_space_unsupported(SpaceId, StorageId) ->
 %% @private
 -spec on_helper_changed(StorageId :: id()) -> ok.
 on_helper_changed(StorageId) ->
-    {ok, Nodes} = node_manager:get_cluster_nodes(),
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
     rtransfer_config:add_storage(StorageId),
-    rpc:multicall(Nodes, rtransfer_config, restart_link, []),
+    rpc:multicall(consistent_hashing:get_all_nodes(), rtransfer_config, restart_link, []),
     helpers_reload:refresh_helpers_by_storage(StorageId).
 
 
