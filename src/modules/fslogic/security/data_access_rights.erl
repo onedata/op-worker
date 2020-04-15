@@ -203,14 +203,10 @@ check_access(UserCtx, FileCtx0, share) ->
     end;
 
 check_access(UserCtx, FileCtx0, traverse_ancestors) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx0),
-    {ParentCtx0, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
-
-    case file_ctx:get_guid_const(ParentCtx0) of
-        FileGuid ->
-            % root dir/share root file -> there are no parents
+    case file_ctx:get_and_check_parent(FileCtx0, UserCtx) of
+        {undefined, FileCtx1} ->
             {ok, FileCtx1};
-        _ ->
+        {ParentCtx0, FileCtx1} ->
             ParentCtx1 = check_and_cache_result(
                 UserCtx, ParentCtx0, ?traverse_container
             ),

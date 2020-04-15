@@ -2,16 +2,16 @@
 %%% This file has been automatically generated from Swagger
 %%% specification - DO NOT EDIT!
 %%%
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of file REST methods.
+%%% This module contains definitions of deprecated_file REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_rest_routes).
+-module(deprecated_file_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,23 +25,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of file REST paths.
+%% Definitions of deprecated_file REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Lookup file id
-    {<<"/lookup-file-id/[...]">>, rest_handler, #rest_req{
-        method = 'POST',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_file, 
-            id = ?PATH_BINDING, 
-            aspect = object_id, 
-            scope = private
-        }
-    }},
-    %% List files and directories
+    %% List files and directories (deprecated)
     {<<"/files/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -52,7 +41,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% List files and directories by Id
+    %% List files and directories by Id (deprecated)
     {<<"/files-id/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -63,7 +52,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% List file shares by path
+    %% List file shares by path (deprecated)
     {<<"/file-shares/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -74,7 +63,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% List file shares by Id
+    %% List file shares by Id (deprecated)
     {<<"/file-id-shares/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -85,7 +74,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file attributes
+    %% Get file attributes (deprecated)
     {<<"/metadata/attrs/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -96,7 +85,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Set file attribute
+    %% Set file attribute (deprecated)
     {<<"/metadata/attrs/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = as_json_params,
@@ -108,7 +97,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file extended attributes
+    %% Get file extended attributes (deprecated)
     {<<"/metadata/xattrs/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -119,7 +108,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Set file extended attribute
+    %% Set file extended attribute (deprecated)
     {<<"/metadata/xattrs/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = {as_is, <<"metadata">>},
@@ -131,7 +120,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file json metadata
+    %% Get file json metadata (deprecated)
     {<<"/metadata/json/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -142,7 +131,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Set file json metadata
+    %% Set file json metadata (deprecated)
     {<<"/metadata/json/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = {as_is, <<"metadata">>},
@@ -154,7 +143,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file rdf metadata
+    %% Get file rdf metadata (deprecated)
     {<<"/metadata/rdf/[...]">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/rdf+xml">>],
@@ -165,7 +154,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Set file rdf metadata
+    %% Set file rdf metadata (deprecated)
     {<<"/metadata/rdf/[...]">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = {as_is, <<"metadata">>},
@@ -177,7 +166,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file attributes by Id
+    %% Get file attributes by Id (deprecated)
     {<<"/metadata-id/attrs/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -188,7 +177,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Set file attribute by Id
+    %% Set file attribute by Id (deprecated)
     {<<"/metadata-id/attrs/:id">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = as_json_params,
@@ -200,7 +189,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file extended attributes by Id
+    %% Get file extended attributes by Id (deprecated)
     {<<"/metadata-id/xattrs/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -211,7 +200,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Set file extended attribute by Id
+    %% Set file extended attribute by Id (deprecated)
     {<<"/metadata-id/xattrs/:id">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = {as_is, <<"metadata">>},
@@ -223,7 +212,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file json metadata by Id
+    %% Get file json metadata by Id (deprecated)
     {<<"/metadata-id/json/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
@@ -234,7 +223,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Set file json metadata by Id
+    %% Set file json metadata by Id (deprecated)
     {<<"/metadata-id/json/:id">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = {as_is, <<"metadata">>},
@@ -246,7 +235,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file rdf metadata by Id
+    %% Get file rdf metadata by Id (deprecated)
     {<<"/metadata-id/rdf/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/rdf+xml">>],
@@ -257,7 +246,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Set file rdf metadata by Id
+    %% Set file rdf metadata by Id (deprecated)
     {<<"/metadata-id/rdf/:id">>, rest_handler, #rest_req{
         method = 'PUT',
         parse_body = {as_is, <<"metadata">>},

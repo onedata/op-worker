@@ -2,7 +2,7 @@
 %%% This file has been automatically generated from Swagger
 %%% specification - DO NOT EDIT!
 %%%
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -100,7 +100,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Evict existing replicas by index
+    %% Evict existing replicas by index (deprecated)
     {<<"/replicas-index/:index_name">>, rest_handler, #rest_req{
         method = 'DELETE',
         produces = [<<"application/json">>],
@@ -111,7 +111,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Replicate files by index
+    %% Replicate files by index (deprecated)
     {<<"/replicas-index/:index_name">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,

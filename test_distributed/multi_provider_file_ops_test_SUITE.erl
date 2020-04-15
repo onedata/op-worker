@@ -61,7 +61,8 @@
     rtransfer_cancel_for_session_test/1,
     remove_file_during_transfers_test/1,
     remove_file_on_remote_provider_ceph/1,
-    evict_on_ceph/1
+    evict_on_ceph/1,
+    read_dir_collisions_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -89,7 +90,8 @@
     rtransfer_cancel_for_session_test,
     remove_file_during_transfers_test,
     remove_file_on_remote_provider_ceph,
-    evict_on_ceph
+    evict_on_ceph,
+    read_dir_collisions_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -700,6 +702,118 @@ evict_on_ceph(Config0) ->
     ContainerId = proplists:get_value(container_id, Ceph),
     ?assertMatch([], utils:cmd(["docker exec", atom_to_list(ContainerId), "rados -p onedata ls -"])).
 
+read_dir_collisions_test(Config0) ->
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, <<"user2">>, {0, 0, 0, 0}, 0),
+    User = <<"user2">>,
+    SessionId = fun(Node) -> ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config) end,
+
+    [Worker1 | _] = ?config(workers1, Config),
+    Domain1 = ?GET_DOMAIN_BIN(Worker1),
+
+    [Worker2 | _] = ?config(workers_not1, Config),
+    Domain2 = ?GET_DOMAIN_BIN(Worker2),
+
+    SpaceName = <<"space7">>,
+    RootDirPath = <<"/", SpaceName/binary, "/read_dir_collisions_test">>,
+    {ok, RootDirGuid} = ?assertMatch({ok, _} , lfm_proxy:mkdir(Worker1, SessionId(Worker1), RootDirPath, 8#755)),
+    ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), {guid, RootDirGuid}), ?ATTEMPTS),
+
+    GetNamesFromGetChildrenFun = fun(Node, Offset, Limit) ->
+        {ok, Children} = ?assertMatch(
+            {ok, _},
+            lfm_proxy:get_children(Node, SessionId(Node), {guid, RootDirGuid}, Offset, Limit)
+        ),
+        lists:map(fun({_Guid, Name}) -> Name end, Children)
+    end,
+    GetNamesFromGetChildrenAttrsFun = fun(Node, Offset, Limit) ->
+        {ok, ChildrenAttrs} = ?assertMatch(
+            {ok, _},
+            lfm_proxy:get_children_attrs(Node, SessionId(Node), {guid, RootDirGuid}, Offset, Limit)
+        ),
+        lists:map(fun(#file_attr{name = Name}) -> Name end, ChildrenAttrs)
+    end,
+    GetNamesFromGetChildrenDetailsFun = fun(Node, Offset, Limit) ->
+        {ok, ChildrenDetails, _} = ?assertMatch(
+            {ok, _, _},
+            lfm_proxy:get_children_details(Node, SessionId(Node), {guid, RootDirGuid}, Offset, Limit, undefined)
+        ),
+        lists:map(fun(#file_details{file_attr = #file_attr{name = Name}}) ->
+            Name
+        end, ChildrenDetails)
+    end,
+
+    FileNames = lists:map(fun(Num) ->
+        FileName = <<"file_", (integer_to_binary(Num))/binary>>,
+        FilePath = <<RootDirPath/binary, "/", FileName/binary>>,
+        {ok, Guid1} = ?assertMatch({ok, _} , lfm_proxy:create(Worker1, SessionId(Worker1), FilePath, 8#755)),
+        {ok, Guid2} = ?assertMatch({ok, _} , lfm_proxy:create(Worker2, SessionId(Worker2), FilePath, 8#755)),
+
+        % Wait for providers to synchronize state
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker1, SessionId(Worker1), {guid, Guid2}), ?ATTEMPTS),
+        ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(Worker2, SessionId(Worker2), {guid, Guid1}), ?ATTEMPTS),
+
+        FileName
+    end, lists:seq(0, 9)),
+
+    FilesSeenOnWorker1 = lists:flatmap(fun(Name) ->
+        [Name, <<Name/binary, "@", Domain2/binary>>]
+    end, FileNames),
+    FilesSeenOnWorker2 = lists:flatmap(fun(Name) ->
+        [<<Name/binary, "@", Domain1/binary>>, Name]
+    end, FileNames),
+
+    % Assert proper listing when only one file from all conflicted is listed in batch
+    % (it should still has suffix)
+    lists:foreach(fun({Offset, Limit}) ->
+        ExpBatchOnWorker1 = lists:sublist(FilesSeenOnWorker1, Offset+1, Limit),
+        ?assertMatch(ExpBatchOnWorker1, GetNamesFromGetChildrenFun(Worker1, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker1, GetNamesFromGetChildrenAttrsFun(Worker1, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker1, GetNamesFromGetChildrenDetailsFun(Worker1, Offset, Limit)),
+
+        ExpBatchOnWorker2 = lists:sublist(FilesSeenOnWorker2, Offset+1, Limit),
+        ?assertMatch(ExpBatchOnWorker2, GetNamesFromGetChildrenFun(Worker2, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker2, GetNamesFromGetChildrenAttrsFun(Worker2, Offset, Limit)),
+        ?assertMatch(ExpBatchOnWorker2, GetNamesFromGetChildrenDetailsFun(Worker2, Offset, Limit))
+    end, [
+        % Check listing all files
+        {0, 100},
+
+        % Check listing on batches containing only one of two conflicting files
+        % (it should be suffixed nonetheless)
+        {0, 3}, {1, 3},
+        {2, 3}, {3, 3},
+        {4, 3}, {5, 3},
+        {6, 3}, {7, 3},
+        {8, 3}, {9, 3},
+        {10, 3}, {11, 3},
+        {12, 3}, {13, 3},
+        {14, 3}, {15, 3},
+        {16, 3}, {17, 3},
+
+        {0, 5}, {1, 5},
+        {4, 5}, {5, 5},
+        {8, 5}, {9, 5},
+        {12, 5}, {13, 5},
+        {16, 5}, {17, 5},
+
+        {0, 7}, {1, 7},
+        {6, 7}, {7, 7},
+        {12, 7}, {13, 7},
+
+        {0, 9}, {1, 9},
+        {8, 9}, {9, 9},
+        {16, 9}, {17, 9},
+
+        {0, 11}, {1, 11},
+        {10, 11}, {11, 11},
+
+        {0, 13}, {1, 13},
+        {12, 13}, {13, 13},
+
+        {0, 15}, {1, 15},
+        {14, 15}, {15, 15}
+    ]).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -863,7 +977,10 @@ init_per_testcase(rtransfer_fetch_test, Config) ->
     ]),
 
     [{default_min_hole_size, HoleSize} | Config2];
-init_per_testcase(evict_on_ceph, Config) ->
+init_per_testcase(TestCase, Config) when
+    TestCase == evict_on_ceph;
+    TestCase == read_dir_collisions_test
+->
     init_per_testcase(all, [{?SPACE_ID_KEY, <<"space7">>} | Config]);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),

@@ -17,6 +17,7 @@
 
 -include("graph_sync/provider_graph_sync.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -24,6 +25,7 @@
 %% API
 -export([is_connected/0, force_connection_start/0]).
 -export([terminate_connection/0, restart_connection/0]).
+-export([on_cluster_ready/0]).
 -export([supervisor_flags/0]).
 
 -define(GS_WORKER_SUP, gs_worker_sup).
@@ -89,6 +91,23 @@ restart_connection() ->
     terminate_connection(),
     force_connection_start(),
     ok.
+
+
+-spec on_cluster_ready() -> ok.
+on_cluster_ready() ->
+    % run `on_connect_to_oz` because it is not done when 
+    % connection was established and cluster was not ready
+    case {node() == get_gs_client_node(), is_connected()} of
+        {true, true} ->
+            try
+                run_on_connect_to_oz_procedures()
+            catch
+                % Connection was lost in meantime. Ignore it as `on_connect_to_oz`
+                % will be called when connection is established again.
+                _:{_, {error, ?ERROR_NO_CONNECTION_TO_ONEZONE}}  -> ok
+            end;
+        _ -> ok
+    end.
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -224,16 +243,21 @@ get_connection_status() ->
 %% @end
 %%--------------------------------------------------------------------
 get_gs_client_node() ->
-    consistent_hashing:get_node(?GS_CLIENT_WORKER_GLOBAL_NAME).
+    consistent_hashing:get_assigned_node(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 
+%% @private
 -spec start_gs_client_worker() -> alive | error.
 start_gs_client_worker() ->
     case supervisor:start_child(?GS_WORKER_SUP, gs_client_worker_spec()) of
         {ok, _} ->
             try
-                ?info("Running on-connect procedures"),
-                oneprovider:on_connect_to_oz(),
+                case node_manager:get_cluster_status() of
+                    {error, cluster_not_ready} ->
+                        ?info("Deferring on-connect-to-oz procedures as the cluster is not ready yet");
+                    {ok, _} ->
+                        run_on_connect_to_oz_procedures()
+                end,
                 alive
             catch Type:Reason ->
                 ?error_stacktrace(
@@ -250,6 +274,15 @@ start_gs_client_worker() ->
     end.
 
 
+%% @private
+-spec run_on_connect_to_oz_procedures() -> ok.
+run_on_connect_to_oz_procedures() ->
+    ?info("Executing on-connect-to-oz procedures..."),
+    oneprovider:on_connect_to_oz(),
+    ?info("Successfully executed on-connect-to-oz procedures").
+
+
+%% @private
 -spec gs_client_worker_spec() -> supervisor:child_spec().
 gs_client_worker_spec() -> #{
     id => ?GS_CLIENT_WORKER_GLOBAL_NAME,

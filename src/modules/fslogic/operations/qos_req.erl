@@ -35,14 +35,14 @@
 %% @equiv add_qos_entry_insecure/4 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:raw(),
+-spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:rpn(),
     qos_entry:replicas_num(), qos_entry:type()) -> fslogic_worker:provider_response().
-add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
+add_qos_entry(UserCtx, FileCtx, ExpressionInRpn, ReplicasNum, EntryType) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx,
         [traverse_ancestors, ?write_metadata]
     ),
-    add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum, EntryType).
+    add_qos_entry_insecure(FileCtx1, ExpressionInRpn, ReplicasNum, EntryType).
 
 
 %%--------------------------------------------------------------------
@@ -109,34 +109,29 @@ check_fulfillment(UserCtx, FileCtx0, QosEntryId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates new qos_entry document. Transforms expression to RPN form.
+%% Creates new qos_entry document.
 %% Delegates traverse jobs responsible for data management for given QoS entry
 %% to appropriate providers. This is done by creating qos_traverse_req for
 %% given QoS entry that holds information for which file and on which storage
 %% traverse should be run.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:raw(), qos_entry:replicas_num(), 
+-spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:rpn(), qos_entry:replicas_num(), 
     qos_entry:type()) -> fslogic_worker:provider_response().
-    add_qos_entry_insecure(FileCtx, QosExpression, ReplicasNum, EntryType) ->
-    case qos_expression:raw_to_rpn(QosExpression) of
-        {ok, QosExpressionInRPN} ->
-            % TODO: VFS-5567 for now target storage for dir is selected here and
-            % does not change in qos traverse task. Have to figure out how to
-            % choose different storages for subdirs and/or file if multiple storage
-            % fulfilling qos are available.
-            CalculatedStorages = qos_expression:calculate_assigned_storages(
-                FileCtx, QosExpressionInRPN, ReplicasNum
-            ),
+    add_qos_entry_insecure(FileCtx, QosExpressionInRpn, ReplicasNum, EntryType) ->
+    % TODO: VFS-5567 for now target storage for dir is selected here and
+    % does not change in qos traverse task. Have to figure out how to
+    % choose different storages for subdirs and/or file if multiple storage
+    % fulfilling qos are available.
+    CalculatedStorages = qos_expression:calculate_assigned_storages(
+        FileCtx, QosExpressionInRpn, ReplicasNum
+    ),
 
-            case CalculatedStorages of
-                {true, Storages} ->
-                    add_possible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, EntryType, Storages);
-                false ->
-                    add_impossible_qos(FileCtx, QosExpressionInRPN, ReplicasNum, EntryType);
-                ?ERROR_INVALID_QOS_EXPRESSION ->
-                    #provider_response{status = #status{code = ?EINVAL}}
-            end;
+    case CalculatedStorages of
+        {true, Storages} ->
+            add_possible_qos(FileCtx, QosExpressionInRpn, ReplicasNum, EntryType, Storages);
+        false ->
+            add_impossible_qos(FileCtx, QosExpressionInRpn, ReplicasNum, EntryType);
         ?ERROR_INVALID_QOS_EXPRESSION ->
             #provider_response{status = #status{code = ?EINVAL}}
     end.
@@ -154,17 +149,22 @@ get_effective_file_qos_insecure(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     case file_qos:get_effective(FileUuid) of
         {ok, EffQos} ->
+            QosEntriesList = file_qos:get_qos_entries(EffQos),
+            EntriesWithStatus = lists:foldl(fun(QosEntryId, Acc) ->
+                Status = qos_status:check_fulfillment(FileCtx, QosEntryId),
+                Acc#{QosEntryId => Status}
+            end, #{}, QosEntriesList),
             #provider_response{
                 status = #status{code = ?OK},
-                provider_response = #effective_file_qos{
-                    qos_entries = file_qos:get_qos_entries(EffQos),
+                provider_response = #eff_qos_response{
+                    entries_with_status = EntriesWithStatus,
                     assigned_entries = file_qos:get_assigned_entries(EffQos)
                 }
             };
         undefined ->
             #provider_response{
                 status = #status{code = ?OK},
-                provider_response = #effective_file_qos{}
+                provider_response = #eff_qos_response{}
             };
         {error, _} ->
             #provider_response{status = #status{code = ?EAGAIN}}

@@ -16,4 +16,17 @@
 
 -define(check(__FunctionCall), lfm:check_result(__FunctionCall)).
 
+-define(PRIVATE_BASIC_ATTRIBUTES, [
+    <<"file_id">>, <<"name">>, <<"mode">>,
+    <<"storage_user_id">>, <<"storage_group_id">>,
+    <<"atime">>, <<"mtime">>, <<"ctime">>,
+    <<"type">>, <<"size">>, <<"shares">>,
+    <<"provider_id">>, <<"owner_id">>
+]).
+-define(PUBLIC_BASIC_ATTRIBUTES, [
+    <<"file_id">>, <<"name">>, <<"mode">>,
+    <<"atime">>, <<"mtime">>, <<"ctime">>,
+    <<"type">>, <<"size">>, <<"shares">>
+]).
+
 -endif.

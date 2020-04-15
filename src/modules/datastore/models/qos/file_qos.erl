@@ -45,7 +45,7 @@
     get_effective/1, 
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
     is_replica_required_on_storage/2, is_effective_qos_of_file/2,
-    clean_up/1
+    has_any_qos_entry/2, clean_up/1
 ]).
 
 %% higher-level functions operating on effective_file_qos record.
@@ -58,6 +58,7 @@
 
 -type key() :: file_meta:uuid().
 -type record() :: #file_qos{}.
+-type doc() :: datastore_doc:doc(record()).
 -type pred() :: datastore_doc:pred(record()).
 -type effective_file_qos() :: #effective_file_qos{}.
 -type assigned_entries() :: #{storage:id() => [qos_entry:id()]}.
@@ -68,10 +69,16 @@
     model => ?MODULE
 }).
 
+-compile({no_auto_import, [get/1]}).
+
 
 %%%===================================================================
 %%% Functions operating on file_qos document using datastore_model API
 %%%===================================================================
+
+-spec get(key()) -> {ok, doc()}.
+get(Key) ->
+    datastore_model:get(?CTX, Key).
 
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
@@ -240,6 +247,21 @@ is_effective_qos_of_file(FileUuidOrDoc, QosEntryId) ->
         {error, _} = Error -> Error
     end.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks whether given file has any QoS entry (effective or direct).
+%% @end
+%%--------------------------------------------------------------------
+-spec has_any_qos_entry(file_meta:uuid() | file_meta:doc(), direct | effective) -> boolean().
+has_any_qos_entry(#document{key = Uuid}, direct) ->
+    has_any_qos_entry(Uuid, direct);
+has_any_qos_entry(Key, direct) ->
+    has_any_qos_entry(get(Key));
+has_any_qos_entry(UuidOrDoc, effective) ->
+    has_any_qos_entry(file_qos:get_effective(UuidOrDoc)).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Deletes all QoS documents related to given file.
@@ -317,6 +339,7 @@ merge_file_qos(ParentQos, ChildQos) ->
     }.
 
 
+%% @private
 -spec merge_assigned_entries(assigned_entries(), assigned_entries()) -> assigned_entries().
 merge_assigned_entries(ParentAssignedEntries, ChildAssignedEntries) ->
     maps:fold(fun(StorageId, StorageQosEntries, Acc) ->
@@ -324,6 +347,14 @@ merge_assigned_entries(ParentAssignedEntries, ChildAssignedEntries) ->
             ParentStorageQosEntries ++ StorageQosEntries
         end, StorageQosEntries, Acc)
     end, ParentAssignedEntries, ChildAssignedEntries).
+
+
+%% @private
+-spec has_any_qos_entry({ok, doc()} | {ok, effective_file_qos()} | undefined | {error, term()}) ->
+    boolean().
+has_any_qos_entry({ok, #document{value = #file_qos{qos_entries = [_ | _]}}}) -> true;
+has_any_qos_entry({ok, #effective_file_qos{qos_entries = [_|_]}}) -> true;
+has_any_qos_entry(_) -> false.
 
 
 %%%===================================================================

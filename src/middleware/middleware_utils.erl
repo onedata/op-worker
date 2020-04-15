@@ -18,8 +18,8 @@
 -export([
     is_eff_space_member/2,
     assert_space_supported_locally/1, assert_space_supported_by/2,
-
-    assert_file_exists/2
+    assert_file_exists/2,
+    decode_object_id/2
 ]).
 
 
@@ -59,4 +59,15 @@ assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
             ok;
         {error, Errno} ->
             throw(?ERROR_POSIX(Errno))
+    end.
+
+
+-spec decode_object_id(file_id:objectid(), binary()) -> 
+    {true, file_id:file_guid()} | no_return().
+decode_object_id(ObjectId, Key) ->
+    case catch file_id:objectid_to_guid(ObjectId) of
+        {ok, Guid} ->
+            {true, Guid};
+        _Error ->
+            throw(?ERROR_BAD_VALUE_IDENTIFIER(Key))
     end.

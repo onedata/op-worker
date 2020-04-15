@@ -1829,7 +1829,7 @@ add_qos_entry_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:add_qos_entry(W, SessId, FileKey, <<"country=FR">>, 1)
+            lfm_proxy:add_qos_entry(W, SessId, FileKey, [<<"country=FR">>], 1)
         end
     }, Config).
 
@@ -1845,7 +1845,7 @@ get_qos_entry_test(Config) ->
             perms = [?read_metadata],
             on_create = fun(OwnerSessId, Guid) ->
                 {ok, QosEntryId} = lfm_proxy:add_qos_entry(
-                    W, OwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                    W, OwnerSessId, {guid, Guid}, [<<"country=FR">>], 1
                 ),
                 QosEntryId
             end 
@@ -1873,7 +1873,7 @@ remove_qos_entry_test(Config) ->
             perms = [?write_metadata],
             on_create = fun(OwnerSessId, Guid) ->
                 {ok, QosEntryId} = lfm_proxy:add_qos_entry(
-                    W, OwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                    W, OwnerSessId, {guid, Guid}, [<<"country=FR">>], 1
                 ),
                 QosEntryId
             end
@@ -1901,7 +1901,7 @@ get_effective_file_qos_test(Config) ->
             perms = [?read_metadata],
             on_create = fun(OwnerSessId, Guid) ->
                 {ok, _QosEntryId} = lfm_proxy:add_qos_entry(
-                    W, OwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                    W, OwnerSessId, {guid, Guid}, [<<"country=FR">>], 1
                 ),
                 {guid, Guid}
             end
@@ -1929,7 +1929,7 @@ check_qos_fulfillment_test(Config) ->
             perms = [?read_metadata],
             on_create = fun(OwnerSessId, Guid) ->
                 {ok, QosEntryId} = lfm_proxy:add_qos_entry(
-                    W, OwnerSessId, {guid, Guid}, <<"country=FR">>, 1
+                    W, OwnerSessId, {guid, Guid}, [<<"country=FR">>], 1
                 ),
                 QosEntryId
             end

@@ -87,13 +87,13 @@
 
 -record(get_metadata, {
     type :: custom_metadata:type(),
-    names = [] :: custom_metadata:names(),
+    query = [] :: custom_metadata:query(),
     inherited = false :: boolean()
 }).
 
 -record(set_metadata, {
     metadata :: custom_metadata:metadata(),
-    names = [] :: custom_metadata:names()
+    query = [] :: custom_metadata:query()
 }).
 
 -record(remove_metadata, {
@@ -114,7 +114,7 @@
 
 % messages for QoS management
 -record(add_qos_entry, {
-    expression :: qos_expression:raw(),
+    expression :: qos_expression:rpn(),
     replicas_num :: qos_entry:replicas_num(),
     entry_type = user_defined :: qos_entry:type()
 }).
@@ -190,10 +190,15 @@
     fulfilled :: boolean()
 }).
 
+-record(eff_qos_response, {
+    entries_with_status = #{} :: #{qos_entry:id() => qos_status:fulfilled()},
+    assigned_entries = #{} :: file_qos:assigned_entries()
+}).
+
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
-    #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #effective_file_qos{} |
+    #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} |
     #qos_fulfillment{} | undefined.
 
 -record(provider_request, {
@@ -204,6 +209,11 @@
 -record(provider_response, {
     status :: undefined | #status{},
     provider_response :: provider_response_type()
+}).
+
+-define(PROVIDER_OK_RESP(__RESPONSE), #provider_response{
+    status = #status{code = ?OK},
+    provider_response = __RESPONSE
 }).
 
 -endif.

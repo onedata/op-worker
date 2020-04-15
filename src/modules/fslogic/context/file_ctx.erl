@@ -75,7 +75,7 @@
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
-    get_file_doc_including_deleted/1, get_parent/2,
+    get_file_doc_including_deleted/1, get_parent/2, get_and_check_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
     get_posix_storage_user_context/2, get_times/1,
@@ -465,6 +465,27 @@ get_parent(FileCtx = #file_ctx{parent = Parent}, _UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns 'undefined' if file is root file (either userRootDir or share root)
+%% or proper ParentCtx otherwise.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_and_check_parent(ctx(), user_ctx:ctx() | undefined) ->
+    {ParentFileCtx :: undefined | ctx(), NewFileCtx :: ctx()}.
+get_and_check_parent(FileCtx0, UserCtx) ->
+    FileGuid = file_ctx:get_guid_const(FileCtx0),
+    {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx0, UserCtx),
+
+    case file_ctx:get_guid_const(ParentCtx) of
+        FileGuid ->
+            % root dir/share root file -> there are no parents
+            {undefined, FileCtx1};
+        _ ->
+            {ParentCtx, FileCtx1}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Returns GUID of parent or undefined when the file is a root/share root dir.
 %% @end
 %%--------------------------------------------------------------------
@@ -733,18 +754,26 @@ get_file_children(FileCtx, UserCtx, Offset, Limit, Token, StartId) ->
         true ->
             {list_user_spaces(UserCtx, Offset, Limit, undefined), FileCtx};
         false ->
-            {FileDoc = #document{}, FileCtx2} = get_file_doc(FileCtx),
+            {FileDoc = #document{value = #file_meta{
+                type = FileType
+            }}, FileCtx2} = get_file_doc(FileCtx),
             SpaceId = get_space_id_const(FileCtx2),
             ShareId = get_share_id_const(FileCtx2),
-            MapFun = fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
-                new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
-            end,
+            case FileType of
+                ?DIRECTORY_TYPE ->
+                    MapFun = fun(#child_link_uuid{name = Name, uuid = Uuid}) ->
+                        new_child_by_uuid(Uuid, Name, SpaceId, ShareId)
+                    end,
 
-            case file_meta:list_children(FileDoc, Offset, Limit, Token, StartId) of
-                {ok, ChildrenLinks, #{token := Token2}} ->
-                    {lists:map(MapFun, ChildrenLinks), Token2, FileCtx2};
-                {ok, ChildrenLinks, _} ->
-                    {lists:map(MapFun, ChildrenLinks), FileCtx2}
+                    case file_meta:list_children(FileDoc, Offset, Limit, Token, StartId) of
+                        {ok, ChildrenLinks, #{token := Token2}} ->
+                            {lists:map(MapFun, ChildrenLinks), Token2, FileCtx2};
+                        {ok, ChildrenLinks, _} ->
+                            {lists:map(MapFun, ChildrenLinks), FileCtx2}
+                    end;
+                _ ->
+                    % In case of listing regular file - return it
+                    {[FileCtx2], FileCtx2}
             end
     end.
 

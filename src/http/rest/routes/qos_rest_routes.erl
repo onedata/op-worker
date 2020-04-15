@@ -2,7 +2,7 @@
 %%% This file has been automatically generated from Swagger
 %%% specification - DO NOT EDIT!
 %%%
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -30,56 +30,21 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Get QoS summary (by path)
-    {<<"/qos/[...]">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_qos, 
-            id = ?PATH_BINDING, 
-            aspect = effective_qos, 
-            scope = private
-        }
-    }},
-    %% Add QoS entry (by path)
-    {<<"/qos/[...]">>, rest_handler, #rest_req{
+    %% Add QoS entry
+    {<<"/qos_entry">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_qos, 
-            id = ?PATH_BINDING, 
-            aspect = instance, 
-            scope = private
-        }
-    }},
-    %% Get QoS summary (by id)
-    {<<"/qos-id/:id">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_qos, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = effective_qos, 
-            scope = private
-        }
-    }},
-    %% Add QoS entry (by id)
-    {<<"/qos-id/:id">>, rest_handler, #rest_req{
-        method = 'POST',
-        parse_body = as_json_params,
-        consumes = [<<"application/json">>],
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_qos, 
-            id = ?OBJECTID_BINDING(id), 
+            id = undefined, 
             aspect = instance, 
             scope = private
         }
     }},
     %% Remove QoS entry
-    {<<"/qos-entry/:qid">>, rest_handler, #rest_req{
+    {<<"/qos_entry/:qid">>, rest_handler, #rest_req{
         method = 'DELETE',
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
@@ -90,13 +55,24 @@ routes() -> [
         }
     }},
     %% Get QoS entry
-    {<<"/qos-entry/:qid">>, rest_handler, #rest_req{
+    {<<"/qos_entry/:qid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_qos, 
             id = ?BINDING(qid), 
             aspect = instance, 
+            scope = private
+        }
+    }},
+    %% Get file QoS summary
+    {<<"/data/:id/qos_summary">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = file_qos_summary, 
             scope = private
         }
     }}

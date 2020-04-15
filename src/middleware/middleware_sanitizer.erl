@@ -21,7 +21,7 @@
 
 -type type_constraint() ::
     any | boolean | integer | binary | list_of_binaries |
-    json | gri | page_token.
+    json | gri | page_token | qos_expression.
 -type value_constraint() ::
     any |
     non_empty |

@@ -47,6 +47,14 @@ get_response(#gri{aspect = As}, Result) when
     As =:= list
 ->
     ?OK_REPLY(Result);
+get_response(#gri{aspect = children}, Children) ->
+    ?OK_REPLY(#{<<"children">> => lists:map(fun({Guid, Name}) ->
+        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+        #{
+            <<"id">> => ObjectId,
+            <<"name">> => Name
+        }
+    end, Children)});
 get_response(#gri{aspect = shares}, ShareIds) ->
     ?OK_REPLY(#{<<"shares">> => ShareIds});
 get_response(#gri{aspect = As}, Metadata) when
@@ -56,4 +64,7 @@ get_response(#gri{aspect = As}, Metadata) when
 ->
     ?OK_REPLY(Metadata);
 get_response(#gri{aspect = rdf_metadata}, RdfMetadata) ->
-    ?OK_REPLY({binary, RdfMetadata}).
+    ?OK_REPLY({binary, RdfMetadata});
+
+get_response(#gri{aspect = file_qos_summary}, EffQosResp) ->
+    ?OK_REPLY(EffQosResp).

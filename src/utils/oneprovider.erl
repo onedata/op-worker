@@ -177,8 +177,11 @@ trusted_ca_certs() ->
 %%--------------------------------------------------------------------
 -spec get_oz_domain() -> binary().
 get_oz_domain() ->
-    {ok, Hostname} = application:get_env(?APP_NAME, oz_domain),
-    str_utils:to_binary(Hostname).
+    case application:get_env(?APP_NAME, oz_domain) of
+        {ok, Domain} when is_binary(Domain) -> Domain;
+        {ok, Domain} when is_list(Domain) -> str_utils:to_binary(Domain);
+        _ -> error({missing_env_variable, oz_domain})
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -297,10 +300,10 @@ restart_oz_connection() ->
 on_connect_to_oz() ->
     set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
+    ok = auth_cache:report_oz_connection_start(),
+    ok = fslogic_worker:init_paths_caches(all),
     ok = main_harvesting_stream:revise_all_spaces(),
     ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
-    ok = fslogic_worker:init_paths_caches(all),
-    ok = auth_cache:report_oz_connection_start(),
     ok = rtransfer_config:add_storages(),
     storage_sync_worker:notify_connection_to_oz().
 
@@ -322,7 +325,7 @@ on_disconnect_from_oz() ->
 %%--------------------------------------------------------------------
 -spec on_deregister() -> ok.
 on_deregister() ->
-    ?info("Provider has been deregistered"),
+    ?notice("Provider has been deregistered - clearing existing credentials"),
     provider_auth:delete(),
     storage:clear_storages(),
     % kill the connection to prevent 'unauthorized' errors due
