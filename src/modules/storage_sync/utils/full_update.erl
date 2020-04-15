@@ -266,14 +266,14 @@ iterate_and_remove(StKey, StorageTable, DBKey, DBTable, FileCtx, SpaceId, Storag
 -spec save_db_children_names(ets:tab(), file_ctx:ctx()) -> file_ctx:ctx().
 save_db_children_names(TableName, FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    FileCtx2 = save_db_children_names(TableName, FileCtx, UserCtx, 0, ?DIR_BATCH),
+    FileCtx2 = save_db_children_names(TableName, FileCtx, UserCtx, 0, ?DIR_BATCH, #link_token{}),
     First = ets:first(TableName),
     filter_children_in_db(First, FileCtx2, UserCtx, TableName).
 
 -spec save_db_children_names(ets:tab(), file_ctx:ctx(), user_ctx:ctx(),
-    non_neg_integer(), non_neg_integer()) -> file_ctx:ctx().
-save_db_children_names(TableName, FileCtx, UserCtx, Offset, Batch) ->
-    {ChildrenCtxs, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Batch),
+    non_neg_integer(), non_neg_integer(), datastore_links_iter:token()) -> file_ctx:ctx().
+save_db_children_names(TableName, FileCtx, UserCtx, Offset, Batch, Token) ->
+    {ChildrenCtxs, NextToken, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, Offset, Batch, Token),
     lists:foreach(fun(ChildCtx) ->
         {FileName, _} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
         FileUuid = file_ctx:get_uuid_const(ChildCtx),
@@ -282,11 +282,9 @@ save_db_children_names(TableName, FileCtx, UserCtx, Offset, Batch) ->
         ets:insert(TableName, {FileName, FileUuid})
     end, ChildrenCtxs),
 
-    case length(ChildrenCtxs) < Batch of
-        true ->
-            FileCtx2;
-        false ->
-            save_db_children_names(TableName, FileCtx2, UserCtx, Offset + Batch, Batch)
+    case NextToken#link_token.is_last of
+        true -> FileCtx2;
+        false -> save_db_children_names(TableName, FileCtx2, UserCtx, Offset + Batch, Batch, NextToken)
     end.
 
 %%-------------------------------------------------------------------

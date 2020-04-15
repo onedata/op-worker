@@ -297,7 +297,6 @@ create_list_race_test(Config, MountSpaceInRoot) ->
     % touch space dir to ensure that sync will try to detect deletions
     {ok, #file_info{mtime = StMtime}} = file:read_file_info(StorageSpaceDirPath, [{time, posix}]),
     ok = change_time(StorageSpaceDirPath, StMtime + 1),
-
     storage_sync_test_base:enable_storage_update(Config),
 
     ListedFiles = [FileToDeleteOnStorage, FileToDeleteByLFM] = receive
