@@ -109,5 +109,7 @@ transfer_regular_file(FileCtx, #transfer_params{
         UserCtx, FileCtx, Block, false, TransferId, ?DEFAULT_REPLICATION_PRIORITY
     ),
     transfer:increment_files_processed_counter(TransferId),
-    ok = file_popularity:increment_open(FileCtx),
-    ok.
+    case file_popularity:increment_open(FileCtx) of
+        ok -> ok;
+        {error, not_found} -> ok
+    end.

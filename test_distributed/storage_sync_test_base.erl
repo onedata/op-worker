@@ -297,7 +297,6 @@ create_list_race_test(Config, MountSpaceInRoot) ->
     % touch space dir to ensure that sync will try to detect deletions
     {ok, #file_info{mtime = StMtime}} = file:read_file_info(StorageSpaceDirPath, [{time, posix}]),
     ok = change_time(StorageSpaceDirPath, StMtime + 1),
-
     storage_sync_test_base:enable_storage_update(Config),
 
     ListedFiles = [FileToDeleteOnStorage, FileToDeleteByLFM] = receive
@@ -352,6 +351,8 @@ create_list_race_test(Config, MountSpaceInRoot) ->
 
     ok = test_utils:mock_unload(W1, full_update),
     enable_storage_update(Config),
+    assertUpdateTimes(W1, ?SPACE_ID, 3),
+    disable_storage_update(Config),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 3,
@@ -682,6 +683,7 @@ update_syncs_files_after_previous_update_failed_test(Config, MountSpaceInRoot) -
     end),
     enable_storage_update(Config),
     assertUpdateTimes(W1, ?SPACE_ID),
+    disable_storage_update(Config),
     test_utils:mock_unload(W1, simple_scan),
 
     ?assertMonitoring(W1, #{
@@ -710,6 +712,10 @@ update_syncs_files_after_previous_update_failed_test(Config, MountSpaceInRoot) -
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
     ?assertNotMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH})),
+
+    enable_storage_update(Config),
+    assertUpdateTimes(W1, ?SPACE_ID, 3),
+    disable_storage_update(Config),
 
     %next scan should import file
     ?assertMonitoring(W1, #{
@@ -1947,7 +1953,7 @@ sync_works_properly_after_delete_test(Config, MountSpaceInRoot) ->
     lfm_proxy:close(W1, Handle5),
 
     assertImportTimes(W1, ?SPACE_ID, ?ATTEMPTS),
-    storage_sync_test_base:enable_storage_update(Config),
+    enable_storage_update(Config),
 
     %% Delete dir on storage
     recursive_rm(StorageTestDirPath),
@@ -1957,6 +1963,8 @@ sync_works_properly_after_delete_test(Config, MountSpaceInRoot) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
     assertUpdateTimes(W1, ?SPACE_ID),
+    disable_storage_update(Config),
+
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
         <<"toProcess">> => 3,
@@ -1984,6 +1992,10 @@ sync_works_properly_after_delete_test(Config, MountSpaceInRoot) ->
     ok = file:make_dir(StorageTestDirPath2),
     ok = file:write_file(StorageTestFileinDirPath2, ?TEST_DATA),
     SpaceTestFileInDirPath = ?SPACE_TEST_FILE_IN_DIR_PATH(?TEST_DIR2, ?TEST_FILE2),
+
+    enable_storage_update(Config),
+    assertUpdateTimes(W1, ?SPACE_ID, 3),
+    disable_storage_update(Config),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 3,
@@ -2015,8 +2027,7 @@ sync_works_properly_after_delete_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W1, SessId, {path, SpaceTestFileInDirPath}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W1, Handle6, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle6),
-    assertUpdateTimes(W1, ?SPACE_ID).
+    lfm_proxy:close(W1, Handle6).
 
 delete_and_update_files_simultaneously_update_test(Config, MountSpaceInRoot) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -3690,7 +3701,7 @@ update_timestamps_file_import_test(Config, MountSpaceInRoot) ->
     NewTimestamp = 9999999999,
     change_time(StorageTestFilePath, NewTimestamp, NewTimestamp),
     storage_sync_test_base:enable_storage_update(Config),
-    assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+    assertUpdateTimes(W1, ?SPACE_ID),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -3752,7 +3763,7 @@ should_not_detect_timestamp_update_test(Config, MountSpaceInRoot) ->
     %% Change file permissions
     change_time(StorageTestFilePath, 1, 1),
     storage_sync_test_base:enable_storage_update(Config),
-    assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+    assertUpdateTimes(W1, ?SPACE_ID),
 
     %% Check if timestamps hasn't changed
     ?assertNotMatch({ok, #file_attr{atime = 1, mtime = 1}},
@@ -3897,7 +3908,7 @@ update_nfs_acl_test(Config, MountSpaceInRoot) ->
             {ok, EncACL}
     end),
     storage_sync_test_base:enable_storage_update(Config),
-    assertUpdateTimes(W1, ?SPACE_ID, ?ATTEMPTS),
+    assertUpdateTimes(W1, ?SPACE_ID),
 
     %% User1 should not be allowed to read acl
     ?assertMatch({error, ?EACCES},
@@ -4601,18 +4612,26 @@ assertImportTimes(Worker, SpaceId, Attempts) ->
     end, Attempts).
 
 assertUpdateTimes(Worker, SpaceId) ->
-    assertUpdateTimes(Worker, SpaceId, ?ATTEMPTS).
+    assertUpdateTimes(Worker, SpaceId, 2).
 
-assertUpdateTimes(Worker, SpaceId, Attempts) ->
+assertUpdateTimes(Worker, SpaceId, ScanNo) ->
+    assertUpdateTimes(Worker, SpaceId, ScanNo, ?ATTEMPTS).
+
+assertUpdateTimes(Worker, SpaceId, ScanNo, Attempts) ->
     {ok, #document{value = #space_storage{storage_ids = [StorageId]}}}
         = rpc:call(Worker, space_storage, get, [SpaceId]),
-    ?assertEqual(true, begin
+    ?assertEqual(true, try
         {ok, #document{
             value = #storage_sync_monitoring{
+                scans = FinishedScansNum,
                 last_update_start_time = StartTime,
                 last_update_finish_time = FinishTime
-            }}} = rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId]),
-        (StartTime =/= undefined) and (FinishTime =/= undefined) and (StartTime =< FinishTime)
+        }}} = rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId]),
+        (StartTime =/= undefined) and (FinishTime =/= undefined) and
+            (StartTime =< FinishTime) and (FinishedScansNum =:= ScanNo)
+    catch
+        _:_ ->
+            false
     end, Attempts).
 
 assertNoImportInProgress(Worker, SpaceId, Attempts) ->

@@ -124,10 +124,10 @@ all() -> ?ALL([
                 ?HARVEST_METADATA_CALLED(
                     __SpaceId,
                     __Destination,
-                    __ReceivedChanges,
+                    __ReceivedBatch,
                     __HarvestingStreamPid
                 ) ->
-                    __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedChanges],
+                    __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedBatch],
                     AssertFun(__SpaceId, __Destination, sequential_subtract(__Seqs, __ReceivedSeqs),
                         __HarvestingStreamPid, __Timeout)
             after
@@ -147,25 +147,28 @@ all() -> ?ALL([
 -define(assertHarvestMetadataNotCalled(ExpSpaceId, ExpDestination, ExpSeqs,
     ExpHarvestingStreamPid, Timeout
 ), (
-    (fun(__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout) ->
+    (fun AssertFun(__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout) ->
+        Start = time_utils:system_time_seconds(),
         __TimeoutInMillis = timer:seconds(__Timeout),
         receive
-            ?HARVEST_METADATA_CALLED(
+            __HM = ?HARVEST_METADATA_CALLED(
                 __SpaceId,
                 __Destination,
-                __ReceivedChanges,
+                __ReceivedBatch,
                 __HarvestingStreamPid
             ) ->
-                __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedChanges],
+                ElapsedTime = time_utils:system_time_seconds() - Start,
+                __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedBatch],
                 case sequential_subtract(__Seqs, __ReceivedSeqs) of
-                    __Seqs -> ok;
+                    __Seqs ->
+                        AssertFun(__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, max(__Timeout - ElapsedTime, 0));
                     _ ->
                         __Args = [
                             {module, ?MODULE},
-                            {line, ?LINE},
-                            {expected, {__SpaceId, __Destination, __ReceivedSeqs, __HarvestingStreamPid, __Timeout}},
-                            {value, timeout}],
-                        ct:print("assertHarvestMetadataNotCalled_failed: ~lp~n", [__Args]),
+                            {line, ?LINE}
+                        ],
+                        ct:print("assertHarvestMetadataNotCalled_failed: ~lp~n"
+                            "Unexpectedly received: ~p~n", [__Args, __HM]),
                         erlang:error({assertHarvestMetadataNotCalled_failed, __Args})
                 end
         after
@@ -757,7 +760,7 @@ backoff_should_be_used_on_space_level_error(Config) ->
         ?HARVESTER_ID(2) => [?INDEX_ID(1), ?INDEX_ID(2)]
     },
         RelevantSeqs1 ++ RelevantSeqs2, MainStreamPid
-    ),
+    , 120),
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes3),
     ?assertHarvestMetadataCalled(SpaceId, #{
@@ -765,7 +768,7 @@ backoff_should_be_used_on_space_level_error(Config) ->
         ?HARVESTER_ID(2) => [?INDEX_ID(1), ?INDEX_ID(2)]
     },
         RelevantSeqs3, MainStreamPid
-    ).
+    , 120).
 
 error_mix_test(Config) ->
     [N | _] = Nodes = ?config(op_worker_nodes, Config),
@@ -894,7 +897,10 @@ error_mix_test2(Config) ->
     RelevantSeqs3 = relevant_seqs(Changes3, false),
 
     % choose random seq on which harvesting will fail
-    FailedSeq = random_custom_metadata_seq(Changes),
+    % ensure that it is not first custom_metadata seq in the batch as it is handled
+    % another way and it is checked in another test
+    [_ | RestRelevantChanges] = relevant_changes(Changes, true),
+    FailedSeq = random_custom_metadata_seq(RestRelevantChanges),
     RetriedSeqsMain = get_seqs(strip_after(RelevantChanges1, FailedSeq)),
     RetriedSeqsAux = get_seqs(strip_before(RelevantChanges1, FailedSeq)),
 
@@ -1011,17 +1017,16 @@ error_mix_test3(Config) ->
         ?HARVESTER_ID(2) => [?INDEX_ID(1)]
     }, RelevantSeqs1, MainStreamPid),
 
-    % aux_streams should be started to catch up with main stream
-    % main_stream will wait for aux_streams
+    % aux_streams should not be started
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
-    % stream next changes to main stream, so that aux stream won't catch up with previously set Until
+    % stream next changes to main stream
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes2),
 
     %"fix" aux_stream
     mock_harvest_metadata_success(Nodes),
 
-    % main_stream should takeover responsibility of harvesting
+    % aux_streams should not be started
     ?assertMatch(1, count_active_children(Nodes, harvesting_stream_sup), ?ATTEMPTS),
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes3),
@@ -1087,7 +1092,7 @@ error_mix_test4(Config) ->
 
     ?assertHarvestMetadataCalled(SpaceId,
         #{?HARVESTER_ID(2) => [?INDEX_ID(1)]},
-        get_seqs(RetriedSeqsMain), MainStreamPid
+        RetriedSeqsMain, MainStreamPid
     ),
 
     mock_harvest_metadata(Nodes, fun(_SpaceId, Destination, _Batch, _MaxStreamSeq, _MaxSeq) ->
@@ -1241,10 +1246,12 @@ main_stream_test_base(Config, HarvestersConfig, SpacesConfig) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer, couchbase_changes_stream_mock,
+    Posthook = fun(NewConfig) -> initializer:setup_storage(NewConfig) end,
+    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, couchbase_changes_stream_mock,
         couchbase_changes_stream_mock_registry]} | Config].
 
 init_per_testcase(harvesting_stream_batch_test, Config) ->
+    ct:timetrap({minutes, 10}),
     Nodes = ?config(op_worker_nodes, Config),
     ok = test_utils:set_env(Nodes, op_worker, harvesting_flush_timeout_seconds, 3600),
     init_per_testcase(default, Config);
@@ -1525,8 +1532,11 @@ relevant_changes(Changes, __IgnoreDeleted = true) ->
     CustomMetadataChanges = filter_custom_metadata_changes(Changes),
     filter_deleted_changes_before_first_not_deleted(CustomMetadataChanges).
 
+get_seq(#document{seq = Seq}) ->
+    Seq.
+
 get_seqs(Changes) ->
-    [Seq || #document{seq = Seq} <- Changes].
+    [get_seq(Change) || Change <- Changes].
 
 filter_custom_metadata_changes(Changes) ->
     lists:filter(fun

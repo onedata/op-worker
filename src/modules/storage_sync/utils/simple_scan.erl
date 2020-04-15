@@ -793,6 +793,8 @@ get_attr_including_deleted(FileCtx) ->
 %% Updates file's size if it has changed since last import.
 %% @end
 %%--------------------------------------------------------------------
+-spec maybe_update_file_location(#statbuf{}, file_ctx:ctx(), file_meta:type(), storage_file_ctx:ctx()) ->
+    updated | not_updated.
 maybe_update_file_location(#statbuf{}, _FileCtx, ?DIRECTORY_TYPE, _StorageFileCtx) ->
     not_updated;
 maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
@@ -817,7 +819,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
         %todo VFS-4847 refactor this case, use when wherever possible
         {false, undefined, _} ->
             % remote file created on storage by open and not yet replicated
-            false;
+            not_updated;
 
         {true, undefined, undefined} when MTime < StMtime ->
             % file created locally and modified on storage
@@ -1158,7 +1160,7 @@ maybe_update_nfs4_acl(StorageFileCtx, FileCtx, true) ->
                 throw:?ENOENT ->
                     not_updated;
                 throw:?ENODATA ->
-                    ok
+                    not_updated
             end
     end.
 

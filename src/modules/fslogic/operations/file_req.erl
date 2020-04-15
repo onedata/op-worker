@@ -164,7 +164,10 @@ release(UserCtx, FileCtx, HandleId) ->
         true ->
             ok;
         false ->
-            ok = file_popularity:increment_open(FileCtx)
+            case file_popularity:increment_open(FileCtx) of
+                ok -> ok;
+                {error, not_found} -> ok % file might have been deleted
+            end
     end,
     #fuse_response{status = #status{code = ?OK}}.
 
