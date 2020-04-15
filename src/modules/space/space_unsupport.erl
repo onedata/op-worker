@@ -149,7 +149,7 @@ get_next_jobs_base(delete_local_documents) -> [].
 
 %% @private
 -spec execute_stage(space_unsupport_job:record()) -> ok.
-execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId}) ->
+execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId, storage_id = StorageId}) ->
     main_harvesting_stream:space_unsupported(SpaceId),
     %% @TODO VFS-6133 Stop all incoming transfers
     %% @TODO VFS-6134 Close all open file handles

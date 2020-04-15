@@ -29,7 +29,8 @@
     create/2, 
     report_child_traversed/2, 
     report_children_listed/3, 
-    report_last_batch/2
+    report_last_batch/2,
+    delete/2
 ]).
 
 %% datastore_model callbacks
@@ -76,6 +77,9 @@ report_last_batch(TaskId, FileUuid) ->
         {ok, Value#cleanup_traverse_status{all_batches_listed = true}}
     end).
 
+-spec delete(unsupport_cleanup_traverse:id(), file_meta:uuid()) -> ok | {error, term()}.
+delete(TaskId, FileUuid) ->
+    ?extract_ok(datastore_model:delete(?CTX, gen_id(TaskId, FileUuid))).
 
 %%%===================================================================
 %%% Internal functions

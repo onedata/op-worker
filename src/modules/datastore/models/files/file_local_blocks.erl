@@ -64,12 +64,12 @@ get(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Deletes doc with blocks.
+%% @equiv delete(Key, 0).
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
-   datastore_model:delete(?CTX, Key).
+    delete(Key, 0).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -228,6 +228,25 @@ get(Key, Num) ->
             {ok, []};
         Other ->
             Other
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Deletes doc with blocks.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(id(), non_neg_integer()) -> ok | {error, term()}.
+delete(Key, Num) ->
+    DocKey = get_doc_key(Key, Num),
+    case datastore_model:get(?CTX, DocKey) of
+        {ok, #document{value = #file_local_blocks{last = false}}} ->
+            datastore_model:delete(?CTX, DocKey),
+            delete(Key, Num + 1);
+        {ok, #document{value = #file_local_blocks{last = true}}} ->
+            datastore_model:delete(?CTX, DocKey);
+        {error, not_found} -> ok;
+        Error -> Error
     end.
 
 -spec get_doc_key(id(), non_neg_integer()) -> id().

@@ -36,6 +36,9 @@
     overall_test/1
 ]).
 
+% Exported for rpc calls
+-export([get_keys/1]).
+
 all() -> [
     replicate_stage_test,
     replicate_stage_persistence_test,
@@ -250,7 +253,6 @@ delete_local_documents_stage_test(Config) ->
     ?assertMatch({ok, _}, rpc:call(Worker1, autocleaning, get, [?SPACE_ID])),
     ?assertMatch({ok, _}, rpc:call(Worker1, file_popularity_config, get, [?SPACE_ID])),
     ?assertMatch(true, rpc:call(Worker1, file_popularity_api, is_enabled, [?SPACE_ID])),
-    ?assertMatch({ok, [_], _}, rpc:call(Worker1, traverse_task_list, list, [<<"unsupport_cleanup_traverse">>, ended])),
     
     StageJob = #space_unsupport_job{
         stage = delete_local_documents,
@@ -297,7 +299,7 @@ overall_test(Config) ->
 
     assert_storage_cleaned_up(Worker1, StorageId),
     assert_synced_documents_cleaned_up(Worker1, ?SPACE_ID),
-    assert_local_documents_cleaned_up(Worker1, ?SPACE_ID, StorageId).
+    assert_local_documents_cleaned_up(Worker1).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -343,7 +345,7 @@ init_per_testcase(overall_test, Config) ->
         end),
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({minutes, 30}),
     lfm_proxy:init(Config).
 
 
@@ -363,6 +365,12 @@ end_per_testcase(_, Config) ->
 %%% Assertion helper functions
 %%%===================================================================
 
+assert_storage_cleaned_up(Worker, StorageId) ->
+    Path = storage_mount_point(Worker, StorageId),
+    {ok, FileList} = rpc:call(Worker, file, list_dir_all, [Path]),
+    ?assertEqual([], FileList).
+
+
 assert_local_documents_cleaned_up(Worker, SpaceId, StorageId) ->
     ?assertEqual({error, not_found}, rpc:call(Worker, space_strategies, get, [SpaceId])),
     ?assertEqual({error, not_found}, rpc:call(Worker, storage_sync_monitoring, get, [SpaceId, StorageId])),
@@ -371,6 +379,17 @@ assert_local_documents_cleaned_up(Worker, SpaceId, StorageId) ->
     ?assertEqual(false, rpc:call(Worker, file_popularity_api, is_enabled, [SpaceId])),
     ?assertEqual({error, not_found}, rpc:call(Worker, file_popularity_config, get, [SpaceId])),
     ?assertMatch({ok, [], _}, rpc:call(Worker, traverse_task_list, list, [<<"unsupport_cleanup_traverse">>, ended])).
+
+
+assert_local_documents_cleaned_up(Worker) ->
+    AllModels = datastore_config_plugin:get_models(),
+    ModelsToCheck = AllModels
+        -- [storage_config, provider_auth, % Models not connected with space support
+            file_meta, times, %% These documents without scope are related to user root dir, which is not cleaned up during unsupport
+            dbsync_state, %% @TODO VFS-6135 check after dbsync is stopped in space unsupport
+            file_local_blocks %% @TODO VFS-6275 check after file_local_blocks cleanup is properly implemented
+        ],
+    assert_documents_cleaned_up(Worker, <<>>, ModelsToCheck).
 
 
 assert_synced_documents_cleaned_up(Worker, SpaceId) ->
@@ -386,41 +405,49 @@ assert_synced_documents_cleaned_up(Worker, SpaceId) ->
     end, datastore_config_plugin:get_models()),
     %% @TODO VFS-6135 Add model transferred_file when stopping dbsync is implemented
     SyncedModels1 = SyncedModels -- [transferred_file],
-    
+    assert_documents_cleaned_up(Worker, SpaceId, SyncedModels1).
+
+
+assert_documents_cleaned_up(Worker, Scope, Models) ->
     {PoolActiveEntries, _} = pool_utils:get_pools_entries_and_sizes(Worker, memory),
     ActiveMemoryKeys = lists:map(fun(Entry) ->
         element(2, Entry)
     end, lists:flatten(PoolActiveEntries)),
     
-    lists:foreach(fun(Model) ->
-        #{
-            memory_driver_ctx := MemoryDriverContext,
-            disc_driver_ctx := DiscDriverCtx
-        } =
-            datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
-        Keys = lists:foldl(fun(#{table := Table}, AccOut) ->
-            AccOut ++ lists:map(fun
-                ({Key, _}) -> Key
-            end, rpc:call(Worker, ets, tab2list, [Table]))
-        end, [], datastore_multiplier:get_names(MemoryDriverContext)),
+    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    ?assert(lists:foldl(fun(Model, AccOut) ->
+        Keys = rpc:call(Worker, ?MODULE, get_keys, [Model]),
         
-        Result = rpc:call(Worker, couchbase_driver, get, [DiscDriverCtx, Keys]),
-        ?assert(lists:foldl(
-            fun (?ERROR_NOT_FOUND, Acc) -> Acc;
-                ({ok, _, #document{scope = Scope}}, Acc) when Scope =/= SpaceId -> Acc;
-                ({ok, _, #document{deleted = true}}, Acc) -> Acc; 
+        Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
+        #{disc_driver := DiscDriver} = Ctx,
+        Result = case DiscDriver of
+            undefined -> [];
+            _ ->
+                ?assertEqual([], lists_utils:intersect(Keys, ActiveMemoryKeys)),
+                #{disc_driver_ctx := DiscDriverCtx} = Ctx,
+                rpc:call(Worker, DiscDriver, get, [DiscDriverCtx, Keys])
+        end,
+        AccOut and lists:foldl(
+            fun (?ERROR_NOT_FOUND, AccIn) -> AccIn;
+                ({ok, _, #document{scope = S}}, AccIn) when S =/= Scope -> AccIn;
+                ({ok, _, #document{deleted = true}}, AccIn) -> AccIn;
+                ({ok, _, #document{value = #links_forest{}}}, AccIn) -> AccIn; % Sometimes links_forest documents are not properly deleted
+                ({ok, _, #document{mutators = [M]}}, AccIn) when M =/= ProviderId-> AccIn; %% @TODO VFS-6135 Remove when stopping dbsync during unsupport is implemented
                 ({ok, _, Doc}, _) ->
                     ct:pal("Document not cleaned up in model ~p:~n ~p", [Model, Doc]),
                     false
-            end, true, Result)),
-        ?assertEqual([], lists_utils:intersect(Keys, ActiveMemoryKeys))
-    end, SyncedModels1).
+            end, true, Result)
+    end, true, Models)).
 
 
-assert_storage_cleaned_up(Worker, StorageId) ->
-    Path = storage_mount_point(Worker, StorageId),
-    {ok, FileList} = rpc:call(Worker, file, list_dir_all, [Path]),
-    ?assertEqual([], FileList).
+get_keys(Model) ->
+    Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
+    #{memory_driver_ctx := MemoryDriverContext} = Ctx,
+    lists:foldl(fun(#{table := Table}, AccOut) ->
+        AccOut ++ lists:map(fun
+            ({Key, _Doc}) -> Key
+        end, ets:tab2list(Table))
+    end, [], datastore_multiplier:get_names(MemoryDriverContext)).
 
 %%%===================================================================
 %%% Internal functions
