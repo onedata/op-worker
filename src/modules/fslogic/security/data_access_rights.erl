@@ -182,7 +182,7 @@ check_access(UserCtx, FileCtx0, owner_if_parent_sticky) ->
 check_access(UserCtx, FileCtx0, share) ->
     case file_ctx:is_root_dir_const(FileCtx0) of
         true ->
-            throw(?EACCES);
+            throw(?ENOENT);
         false ->
             {#document{value = #file_meta{
                 shares = Shares

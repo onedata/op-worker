@@ -1567,7 +1567,7 @@ share_permission_denied(Config) ->
     DirPath = <<"/space_name1/share_dir8">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
 
-    ?assertEqual({error, ?EACCES}, lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, Guid})).
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, Guid})).
 
 storage_file_creation_should_be_delayed_until_open(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
