@@ -184,7 +184,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 ok = file_meta:delete(FileDoc),
                 remove_auxiliary_documents(FileCtx6),
                 FileCtx7 = maybe_remove_deletion_link(FileCtx6, UserCtx, RemoveStorageFileResult),
-                maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult);
+                maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult, true);
             ?OPENED_FILE_DELETE ->
                 % TODO VFS-6114 maybe delete file_meta and auxiliary documents here?
                 FileCtx5 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
@@ -202,13 +202,13 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 % remove deletion_link even if open_file_handling method is rename
                 % as deletion_link may have been created when error occurred on deleting file on storage
                 FileCtx5 = maybe_remove_deletion_link(FileCtx4, UserCtx, RemoveStorageFileResult),
-                maybe_try_to_delete_parent(FileCtx5, UserCtx, RemoveStorageFileResult);
+                maybe_try_to_delete_parent(FileCtx5, UserCtx, RemoveStorageFileResult, IsLocalDeletion);
             ?REMOTE_DELETE ->
                 FileCtx4 = delete_storage_sync_info(FileCtx3),
                 FileUuid = file_ctx:get_uuid_const(FileCtx4),
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
                 remove_local_auxiliary_documents(FileCtx4),
-                maybe_try_to_delete_parent(FileCtx4, UserCtx, RemoveStorageFileResult)
+                maybe_try_to_delete_parent(FileCtx4, UserCtx, RemoveStorageFileResult, false)
         end
     end).
 
@@ -236,20 +236,21 @@ custom_handle_opened_file(FileCtx, UserCtx, _DeleteMode, ?LINK_HANDLING_METHOD) 
     delete_parent_link(FileCtx2, UserCtx).
 
 
--spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), RemoveStorageFileResult :: ok | ignored | {error, term()}) -> ok.
-maybe_try_to_delete_parent(FileCtx, UserCtx, ok) ->
+-spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(),
+    RemoveStorageFileResult :: ok | ignored | {error, term()}, boolean()) -> ok.
+maybe_try_to_delete_parent(FileCtx, UserCtx, ok, IsLocalDeletion) ->
     {ParentCtx, _FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
     try
         {ParentDoc, ParentCtx2} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             case file_meta:is_deleted(ParentDoc) of
-                true -> remove_file(ParentCtx2, UserCtx, true, ?LOCAL_DELETE);
+                true -> remove_file(ParentCtx2, UserCtx, true, ?RELEASED_FILE_DELETE(IsLocalDeletion));
                 false -> ok
             end
     catch
         error:{badmatch, {error, not_found}} ->
             ok
     end;
-maybe_try_to_delete_parent(_FileCtx, _UserCtx, _) ->
+maybe_try_to_delete_parent(_FileCtx, _UserCtx, _, _) ->
     ok.
 
 
