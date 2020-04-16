@@ -161,12 +161,6 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, TaskId)
     fslogic_location_cache:force_flush(FileUuid),
     fslogic_location_cache:clear_blocks(FileCtx1, LocationId),
     fslogic_location_cache:delete_location(FileUuid, LocationId),
-    {ok, Providers} = space_logic:get_provider_ids(SpaceId),
-    lists:foreach(fun(ProviderId) ->
-        %% @TODO VFS-6275 possible race between delete and actual save on disk from cache
-        %% @TODO VFS-6275 file_local_blocks related to this provider should be deleted on remote providers
-        file_local_blocks:delete(file_location:id(FileUuid, ProviderId))
-    end, Providers),
     
     file_traverse_finished(TaskId, ParentFileCtx, RemoveStorageFiles).
 

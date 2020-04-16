@@ -24,7 +24,7 @@
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
 -export([listeners/0]).
 -export([upgrade_essential_workers/0, custom_workers/0]).
--export([before_init/1, after_init/1]).
+-export([before_init/1]).
 -export([upgrade_cluster/1]).
 -export([on_cluster_ready/0]).
 -export([renamed_models/0]).
@@ -196,16 +196,6 @@ before_init([]) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:after_init/1}.
-%% This callback is executed on all cluster nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec after_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
-after_init([]) ->
-    space_unsupport:init_pools().
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Overrides {@link node_manager_plugin_default:upgrade_cluster/1}.
 %% This callback is executed only on one cluster node.
 %% @end
@@ -223,6 +213,7 @@ upgrade_cluster(1) ->
 %% @end
 %%--------------------------------------------------------------------
 on_cluster_ready() ->
+    space_unsupport:init_pools(),
     gs_worker:on_cluster_ready().
 
 %%--------------------------------------------------------------------

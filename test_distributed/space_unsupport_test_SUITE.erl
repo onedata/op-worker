@@ -74,9 +74,10 @@ replicate_stage_test(Config) ->
     
     Promise = rpc:async_call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
-    {ok, {[QosEntryId], _}} = ?assertMatch({ok, {[_], _}}, 
+    {ok, {EntriesMap, _}} = ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0, 
         lfm_proxy:get_effective_file_qos(Worker1, SessId(Worker1), {guid, SpaceGuid}), 
         ?ATTEMPTS),
+    [QosEntryId] = maps:keys(EntriesMap),
     
     % check that space unsupport QoS entry cannot be deleted
     ?assertEqual({error, ?EACCES}, lfm_proxy:remove_qos_entry(Worker1, SessId(Worker1), QosEntryId)),
@@ -386,8 +387,8 @@ assert_local_documents_cleaned_up(Worker) ->
     ModelsToCheck = AllModels
         -- [storage_config, provider_auth, % Models not connected with space support
             file_meta, times, %% These documents without scope are related to user root dir, which is not cleaned up during unsupport
-            dbsync_state, %% @TODO VFS-6135 check after dbsync is stopped in space unsupport
-            file_local_blocks %% @TODO VFS-6275 check after file_local_blocks cleanup is properly implemented
+            dbsync_state %% @TODO VFS-6135 check after dbsync is stopped in space unsupport
+            ,file_local_blocks %% @TODO VFS-6275 check after file_local_blocks cleanup is properly implemented
         ],
     assert_documents_cleaned_up(Worker, <<>>, ModelsToCheck).
 
@@ -431,7 +432,7 @@ assert_documents_cleaned_up(Worker, Scope, Models) ->
             fun (?ERROR_NOT_FOUND, AccIn) -> AccIn;
                 ({ok, _, #document{scope = S}}, AccIn) when S =/= Scope -> AccIn;
                 ({ok, _, #document{deleted = true}}, AccIn) -> AccIn;
-                ({ok, _, #document{value = #links_forest{}}}, AccIn) -> AccIn; % Sometimes links_forest documents are not properly deleted
+                ({ok, _, #document{value = #links_forest{}}}, AccIn) -> AccIn; %% @TODO VFS-6278 Sometimes links_forest documents are not properly deleted
                 ({ok, _, #document{mutators = [M]}}, AccIn) when M =/= ProviderId-> AccIn; %% @TODO VFS-6135 Remove when stopping dbsync during unsupport is implemented
                 ({ok, _, Doc}, _) ->
                     ct:pal("Document not cleaned up in model ~p:~n ~p", [Model, Doc]),
@@ -442,12 +443,22 @@ assert_documents_cleaned_up(Worker, Scope, Models) ->
 
 get_keys(Model) ->
     Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
-    #{memory_driver_ctx := MemoryDriverContext} = Ctx,
+    #{memory_driver := MemoryDriver, memory_driver_ctx := MemoryDriverCtx} = Ctx,
+    get_keys(MemoryDriver, MemoryDriverCtx).
+
+
+get_keys(ets_driver, MemoryDriverCtx) ->
     lists:foldl(fun(#{table := Table}, AccOut) ->
         AccOut ++ lists:map(fun
             ({Key, _Doc}) -> Key
         end, ets:tab2list(Table))
-    end, [], datastore_multiplier:get_names(MemoryDriverContext)).
+    end, [], datastore_multiplier:get_names(MemoryDriverCtx));
+get_keys(mnesia_driver, MemoryDriverCtx) ->
+    lists:foldl(fun(#{table := Table}, AccOut) ->
+        AccOut ++ mnesia:async_dirty(fun() ->
+            mnesia:foldl(fun({entry, Key, _Doc}, Acc) -> [Key | Acc] end, [], Table)
+        end)
+    end, [], datastore_multiplier:get_names(MemoryDriverCtx)).
 
 %%%===================================================================
 %%% Internal functions

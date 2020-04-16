@@ -811,7 +811,7 @@ check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum) ->
     add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, user_defined).
 
--spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
+-spec add_qos_entry(session:id(), file_key(), qos_expression:rpn(),
     qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | error_reply().
 add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) ->
     ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) end).
