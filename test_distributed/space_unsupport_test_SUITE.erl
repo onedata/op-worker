@@ -387,8 +387,8 @@ assert_local_documents_cleaned_up(Worker) ->
     ModelsToCheck = AllModels
         -- [storage_config, provider_auth, % Models not connected with space support
             file_meta, times, %% These documents without scope are related to user root dir, which is not cleaned up during unsupport
-            dbsync_state %% @TODO VFS-6135 check after dbsync is stopped in space unsupport
-            ,file_local_blocks %% @TODO VFS-6275 check after file_local_blocks cleanup is properly implemented
+            dbsync_state, %% @TODO VFS-6135 check after dbsync is stopped in space unsupport
+            file_local_blocks %% @TODO VFS-6275 check after file_local_blocks cleanup is properly implemented
         ],
     assert_documents_cleaned_up(Worker, <<>>, ModelsToCheck).
 
@@ -422,7 +422,10 @@ assert_documents_cleaned_up(Worker, Scope, Models) ->
         Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
         #{disc_driver := DiscDriver} = Ctx,
         Result = case DiscDriver of
-            undefined -> [];
+            undefined -> 
+                % ignore memory only models because there are no od_* models in tests as zone is mocked 
+                % and other models are not related to space support
+                [];
             _ ->
                 ?assertEqual([], lists_utils:intersect(Keys, ActiveMemoryKeys)),
                 #{disc_driver_ctx := DiscDriverCtx} = Ctx,
