@@ -34,11 +34,11 @@
 %% Macros defining modes of file deletions
 -define(LOCAL_DELETE, local_delete).
 -define(REMOTE_DELETE, remote_delete).
--define(OPENED_FILE_DELETE, opened_file_delete).
--define(RELEASED_FILE_DELETE(IsLocalDeletion), {released_file_delete, IsLocalDeletion}).
+-define(INIT_DELETE, init_delete).
+-define(FINALIZE_DELETE(IsLocalDeletion), {finalize_delete, IsLocalDeletion}).
 
 %% @formatter:off
--type delete_mode() :: ?LOCAL_DELETE | ?REMOTE_DELETE | ?OPENED_FILE_DELETE | ?RELEASED_FILE_DELETE(boolean()).
+-type delete_mode() :: ?LOCAL_DELETE | ?REMOTE_DELETE | ?INIT_DELETE | ?FINALIZE_DELETE(boolean()).
 %% @formatter:on
 
 %%%===================================================================
@@ -57,7 +57,7 @@ handle_remotely_deleted_file(FileCtx) ->
 -spec handle_release_of_deleted_file(file_ctx:ctx(), boolean()) -> ok.
 handle_release_of_deleted_file(FileCtx, IsLocalDeletion) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    ok = remove_file(FileCtx, UserCtx, true, ?RELEASED_FILE_DELETE(IsLocalDeletion)).
+    ok = remove_file(FileCtx, UserCtx, true, ?FINALIZE_DELETE(IsLocalDeletion)).
 
     -spec handle_file_deleted_on_synced_storage(file_ctx:ctx()) -> ok.
 handle_file_deleted_on_synced_storage(FileCtx) ->
@@ -83,7 +83,7 @@ cleanup_opened_files() ->
                 try
                     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
-                    ok = remove_file(FileCtx, UserCtx, true, ?RELEASED_FILE_DELETE(true))
+                    ok = remove_file(FileCtx, UserCtx, true, ?FINALIZE_DELETE(true))
                 catch
                     E1:E2 ->
                         ?warning_stacktrace("Cannot remove old opened file ~p: ~p:~p", [Doc, E1, E2])
@@ -126,7 +126,7 @@ check_if_opened_and_remove(UserCtx, FileCtx, Silent, DeleteMode) ->
 
 -spec handle_opened_file(file_ctx:ctx(), user_ctx:ctx(), delete_mode()) -> ok.
 handle_opened_file(FileCtx, UserCtx, DeleteMode) ->
-    ok = remove_file(FileCtx, UserCtx, false, ?OPENED_FILE_DELETE),
+    ok = remove_file(FileCtx, UserCtx, false, ?INIT_DELETE),
     {HandlingMethod, FileCtx2} = fslogic_delete:get_open_file_handling_method(FileCtx),
     FileCtx3 = custom_handle_opened_file(FileCtx2, UserCtx, DeleteMode, HandlingMethod),
     RemovalStatus = case DeleteMode of
@@ -185,12 +185,12 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 remove_auxiliary_documents(FileCtx6),
                 FileCtx7 = maybe_remove_deletion_link(FileCtx6, UserCtx, RemoveStorageFileResult),
                 maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult, true);
-            ?OPENED_FILE_DELETE ->
+            ?INIT_DELETE ->
                 % TODO VFS-6114 maybe delete file_meta and auxiliary documents here?
                 FileCtx5 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
                 delete_storage_sync_info(FileCtx5),
                 ok;
-            ?RELEASED_FILE_DELETE(IsLocalDeletion) ->
+            ?FINALIZE_DELETE(IsLocalDeletion) ->
                 {FileDoc, FileCtx4} = file_ctx:get_file_doc_including_deleted(FileCtx3),
                 FileUuid = file_ctx:get_uuid_const(FileCtx4),
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
@@ -243,8 +243,11 @@ maybe_try_to_delete_parent(FileCtx, UserCtx, ok, IsLocalDeletion) ->
     try
         {ParentDoc, ParentCtx2} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             case file_meta:is_deleted(ParentDoc) of
-                true -> remove_file(ParentCtx2, UserCtx, true, ?RELEASED_FILE_DELETE(IsLocalDeletion));
-                false -> ok
+                true ->
+                    % use ?FINALIZE_DELETE mode because it handles case when file_meta is already deleted
+                    remove_file(ParentCtx2, UserCtx, true, ?FINALIZE_DELETE(IsLocalDeletion));
+                false ->
+                    ok
             end
     catch
         error:{badmatch, {error, not_found}} ->
