@@ -486,8 +486,8 @@ remove_file_handles(FileCtx) ->
     ok = file_handles:delete(FileUuid).
 
 -spec removal_status_to_docs_deletion_scope(file_handles:removal_status()) -> docs_deletion_scope().
-removal_status_to_docs_deletion_scope(?LOCAL_REMOVE) -> ?LOCAL_DOCS;
-removal_status_to_docs_deletion_scope(?REMOTE_REMOVE) -> ?ALL_DOCS.
+removal_status_to_docs_deletion_scope(?LOCAL_REMOVE) -> ?ALL_DOCS;
+removal_status_to_docs_deletion_scope(?REMOTE_REMOVE) -> ?LOCAL_DOCS.
 
 -spec docs_deletion_scope_to_removal_status(docs_deletion_scope()) -> file_handles:removal_status().
 docs_deletion_scope_to_removal_status(?LOCAL_DOCS) -> ?REMOTE_REMOVE;
