@@ -596,8 +596,10 @@ handle_provider_request(UserCtx, #create_share{name = Name}, FileCtx) ->
     share_req:create_share(UserCtx, FileCtx, Name);
 handle_provider_request(UserCtx, #remove_share{share_id = ShareId}, FileCtx) ->
     share_req:remove_share(UserCtx, FileCtx, ShareId);
-handle_provider_request(UserCtx, #add_qos_entry{expression = ExpressionInRpn, replicas_num = ReplicasNum}, FileCtx) ->
-    qos_req:add_qos_entry(UserCtx, FileCtx, ExpressionInRpn, ReplicasNum);
+handle_provider_request(UserCtx, #add_qos_entry{
+    expression = ExpressionInRpn, replicas_num = ReplicasNum, entry_type = EntryType
+}, FileCtx) ->
+    qos_req:add_qos_entry(UserCtx, FileCtx, ExpressionInRpn, ReplicasNum, EntryType);
 handle_provider_request(UserCtx, #get_effective_file_qos{}, FileCtx) ->
     qos_req:get_effective_file_qos(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->

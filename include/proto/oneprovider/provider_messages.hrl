@@ -112,10 +112,11 @@
     share_id :: od_share:id()
 }).
 
-% messages for adding, getting and removing QoS entry
+% messages for QoS management
 -record(add_qos_entry, {
     expression :: qos_expression:rpn(),
-    replicas_num :: qos_entry:replicas_num()
+    replicas_num :: qos_entry:replicas_num(),
+    entry_type = user_defined :: qos_entry:type()
 }).
 
 -record(get_qos_entry, {
