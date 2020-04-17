@@ -25,20 +25,24 @@
 %% Test API
 -export([delete_parent_link/2, get_open_file_handling_method/1]).
 
-% macros defining methods of handling opened files
+% Macros defining methods of handling opened files
 -define(RENAME_HANDLING_METHOD, rename).
 -define(LINK_HANDLING_METHOD, deletion_link).
-
 -type opened_file_handling_method() :: ?RENAME_HANDLING_METHOD | ?LINK_HANDLING_METHOD.
 
-%% Macros defining modes of file deletions
--define(LOCAL_DELETE, local_delete).
--define(REMOTE_DELETE, remote_delete).
--define(INIT_DELETE, init_delete).
--define(FINALIZE_DELETE(IsLocalDeletion), {finalize_delete, IsLocalDeletion}).
+%% Macros defining scopes of deleting docs associated with file.
+-define(LOCAL_DOCS, local_docs).
+-define(ALL_DOCS, all_docs).
+-type docs_deletion_scope() :: ?LOCAL_DOCS | ?ALL_DOCS.
+
+%% Macros defining modes of deleting docs associated with file.
+-define(SINGLE_STEP_DEL(DocsDeletionScope), {single_step_deletion, DocsDeletionScope}).
+-define(TWO_STEP_DEL_INIT, two_step_deletion_init).
+-define(TWO_STEP_DEL_FIN(DocsDeletionScope), {two_step_deletion_fin, DocsDeletionScope}).
 
 %% @formatter:off
--type delete_mode() :: ?LOCAL_DELETE | ?REMOTE_DELETE | ?INIT_DELETE | ?FINALIZE_DELETE(boolean()).
+-type docs_deletion_mode() :: ?SINGLE_STEP_DEL(docs_deletion_scope()) | ?TWO_STEP_DEL_INIT |
+                              ?TWO_STEP_DEL_FIN(docs_deletion_scope()).
 %% @formatter:on
 
 %%%===================================================================
@@ -47,22 +51,23 @@
 
 -spec delete_file_locally(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> ok.
 delete_file_locally(UserCtx, FileCtx, Silent) ->
-    check_if_opened_and_remove(UserCtx, FileCtx, Silent, ?LOCAL_DELETE).
+    check_if_opened_and_remove(UserCtx, FileCtx, Silent, ?ALL_DOCS).
 
 -spec handle_remotely_deleted_file(file_ctx:ctx()) -> ok.
 handle_remotely_deleted_file(FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    check_if_opened_and_remove(UserCtx, FileCtx, false, ?REMOTE_DELETE).
+    check_if_opened_and_remove(UserCtx, FileCtx, false, ?LOCAL_DOCS).
 
--spec handle_release_of_deleted_file(file_ctx:ctx(), boolean()) -> ok.
-handle_release_of_deleted_file(FileCtx, IsLocalDeletion) ->
+-spec handle_release_of_deleted_file(file_ctx:ctx(), file_handles:removal_status()) -> ok.
+handle_release_of_deleted_file(FileCtx, RemovalStatus) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    ok = remove_file(FileCtx, UserCtx, true, ?FINALIZE_DELETE(IsLocalDeletion)).
+    DocsDeletionScope = removal_status_to_docs_deletion_scope(RemovalStatus),
+    ok = remove_file(FileCtx, UserCtx, true, ?TWO_STEP_DEL_FIN(DocsDeletionScope)).
 
     -spec handle_file_deleted_on_synced_storage(file_ctx:ctx()) -> ok.
 handle_file_deleted_on_synced_storage(FileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    ok = remove_file(FileCtx, UserCtx, false, ?LOCAL_DELETE),
+    ok = remove_file(FileCtx, UserCtx, false, ?SINGLE_STEP_DEL(?ALL_DOCS)),
     fslogic_event_emitter:emit_file_removed(FileCtx, []),
     remove_file_handles(FileCtx).
 
@@ -83,7 +88,7 @@ cleanup_opened_files() ->
                 try
                     FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
-                    ok = remove_file(FileCtx, UserCtx, true, ?FINALIZE_DELETE(true))
+                    ok = remove_file(FileCtx, UserCtx, true, ?TWO_STEP_DEL_FIN(?ALL_DOCS))
                 catch
                     E1:E2 ->
                         ?warning_stacktrace("Cannot remove old opened file ~p: ~p:~p", [Doc, E1, E2])
@@ -107,16 +112,16 @@ cleanup_opened_files() ->
 %% Checks if file is opened and deletes it or marks to be deleted.
 %% @end
 %%--------------------------------------------------------------------
--spec check_if_opened_and_remove(user_ctx:ctx(), file_ctx:ctx(), boolean(), delete_mode()) -> ok.
+-spec check_if_opened_and_remove(user_ctx:ctx(), file_ctx:ctx(), boolean(), docs_deletion_scope()) -> ok.
 % TODO VFS-5268 - prevent reimport connected with remote delete
-check_if_opened_and_remove(UserCtx, FileCtx, Silent, DeleteMode) ->
+check_if_opened_and_remove(UserCtx, FileCtx, Silent, DocsDeletionScope) ->
     try
         FileUuid = file_ctx:get_uuid_const(FileCtx),
         case file_handles:exists(FileUuid) of
             true ->
-                handle_opened_file(FileCtx, UserCtx, DeleteMode);
+                handle_opened_file(FileCtx, UserCtx, DocsDeletionScope);
             _ ->
-                ok = remove_file(FileCtx, UserCtx, true, DeleteMode)
+                ok = remove_file(FileCtx, UserCtx, true, ?SINGLE_STEP_DEL(DocsDeletionScope))
         end,
         maybe_emit_event(FileCtx, UserCtx, Silent)
     catch
@@ -124,21 +129,18 @@ check_if_opened_and_remove(UserCtx, FileCtx, Silent, DeleteMode) ->
             ok
     end.
 
--spec handle_opened_file(file_ctx:ctx(), user_ctx:ctx(), delete_mode()) -> ok.
-handle_opened_file(FileCtx, UserCtx, DeleteMode) ->
-    ok = remove_file(FileCtx, UserCtx, false, ?INIT_DELETE),
+-spec handle_opened_file(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope()) -> ok.
+handle_opened_file(FileCtx, UserCtx, DocsDeletionScope) ->
+    ok = remove_file(FileCtx, UserCtx, false, ?TWO_STEP_DEL_INIT),
     {HandlingMethod, FileCtx2} = fslogic_delete:get_open_file_handling_method(FileCtx),
-    FileCtx3 = custom_handle_opened_file(FileCtx2, UserCtx, DeleteMode, HandlingMethod),
-    RemovalStatus = case DeleteMode of
-        ?LOCAL_DELETE -> ?LOCAL_REMOVE;
-        ?REMOTE_DELETE -> ?REMOTE_REMOVE
-    end,
+    FileCtx3 = custom_handle_opened_file(FileCtx2, UserCtx, DocsDeletionScope, HandlingMethod),
+    RemovalStatus = docs_deletion_scope_to_removal_status(DocsDeletionScope),
     ok = file_handles:mark_to_remove(FileCtx3, RemovalStatus),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     % Check once more to prevent race with last handle being closed
     case file_handles:exists(FileUuid) of
         true -> ok;
-        false -> handle_release_of_deleted_file(FileCtx3, DeleteMode =:= ?LOCAL_DELETE)
+        false -> handle_release_of_deleted_file(FileCtx3, RemovalStatus)
     end.
 
 %%--------------------------------------------------------------------
@@ -150,7 +152,7 @@ handle_opened_file(FileCtx, UserCtx, DeleteMode) ->
 %% Parameter DeleteMode verifies which metadata is deleted with file.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(), delete_mode()) -> ok.
+-spec remove_file(file_ctx:ctx(), user_ctx:ctx(), boolean(), docs_deletion_mode()) -> ok.
 remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
     % TODO VFS-5270
     replica_synchronizer:apply(FileCtx, fun() ->
@@ -174,7 +176,7 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
         end,
 
         case DeleteMode of
-            ?LOCAL_DELETE ->
+            ?SINGLE_STEP_DEL(?ALL_DOCS) ->
                 FileCtx4 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
                 {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
                 FileCtx6 = delete_storage_sync_info(FileCtx5),
@@ -184,31 +186,31 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 ok = file_meta:delete(FileDoc),
                 remove_auxiliary_documents(FileCtx6),
                 FileCtx7 = maybe_remove_deletion_link(FileCtx6, UserCtx, RemoveStorageFileResult),
-                maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult, true);
-            ?INIT_DELETE ->
+                maybe_try_to_delete_parent(FileCtx7, UserCtx, RemoveStorageFileResult, ?ALL_DOCS);
+            ?TWO_STEP_DEL_INIT ->
                 % TODO VFS-6114 maybe delete file_meta and auxiliary documents here?
                 FileCtx5 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
                 delete_storage_sync_info(FileCtx5),
                 ok;
-            ?FINALIZE_DELETE(IsLocalDeletion) ->
+            ?TWO_STEP_DEL_FIN(DocsDeletionScope) ->
                 {FileDoc, FileCtx4} = file_ctx:get_file_doc_including_deleted(FileCtx3),
                 FileUuid = file_ctx:get_uuid_const(FileCtx4),
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
                 file_meta:delete_without_link(FileDoc), % do not match, document may not exist
-                case IsLocalDeletion of
-                    true -> remove_auxiliary_documents(FileCtx4);
-                    false-> remove_local_auxiliary_documents(FileCtx4)
+                case DocsDeletionScope of
+                    ?ALL_DOCS -> remove_auxiliary_documents(FileCtx4);
+                    ?LOCAL_DOCS-> remove_local_auxiliary_documents(FileCtx4)
                 end,
                 % remove deletion_link even if open_file_handling method is rename
                 % as deletion_link may have been created when error occurred on deleting file on storage
                 FileCtx5 = maybe_remove_deletion_link(FileCtx4, UserCtx, RemoveStorageFileResult),
-                maybe_try_to_delete_parent(FileCtx5, UserCtx, RemoveStorageFileResult, IsLocalDeletion);
-            ?REMOTE_DELETE ->
+                maybe_try_to_delete_parent(FileCtx5, UserCtx, RemoveStorageFileResult, DocsDeletionScope);
+            ?SINGLE_STEP_DEL(?LOCAL_DOCS) ->
                 FileCtx4 = delete_storage_sync_info(FileCtx3),
                 FileUuid = file_ctx:get_uuid_const(FileCtx4),
                 ok = fslogic_location_cache:delete_local_location(FileUuid),
                 remove_local_auxiliary_documents(FileCtx4),
-                maybe_try_to_delete_parent(FileCtx4, UserCtx, RemoveStorageFileResult, false)
+                maybe_try_to_delete_parent(FileCtx4, UserCtx, RemoveStorageFileResult, ?LOCAL_DOCS)
         end
     end).
 
@@ -220,32 +222,32 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
 %% in returned FileCtx.
 %% @end
 %%--------------------------------------------------------------------
--spec custom_handle_opened_file(file_ctx:ctx(), user_ctx:ctx(), delete_mode(), opened_file_handling_method()) ->
+-spec custom_handle_opened_file(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope(), opened_file_handling_method()) ->
     file_ctx:ctx().
-custom_handle_opened_file(FileCtx, UserCtx, DeleteMode, ?RENAME_HANDLING_METHOD) ->
+custom_handle_opened_file(FileCtx, UserCtx, DocsDeletionScope, ?RENAME_HANDLING_METHOD) ->
     FileCtx3 = case maybe_rename_storage_file(FileCtx) of
         {ok, FileCtx2} -> FileCtx2;
         {error, _} -> FileCtx
     end,
     % TODO VFS-6114 maybe we should call maybe_try_to_delete_parent/3 here?
-    maybe_delete_parent_link(FileCtx3, UserCtx, DeleteMode == ?REMOTE_DELETE);
-custom_handle_opened_file(FileCtx, UserCtx, ?REMOTE_DELETE, ?LINK_HANDLING_METHOD) ->
+    maybe_delete_parent_link(FileCtx3, UserCtx, DocsDeletionScope == ?LOCAL_DOCS);
+custom_handle_opened_file(FileCtx, UserCtx, ?LOCAL_DOCS, ?LINK_HANDLING_METHOD) ->
     maybe_add_deletion_link(FileCtx, UserCtx);
-custom_handle_opened_file(FileCtx, UserCtx, _DeleteMode, ?LINK_HANDLING_METHOD) ->
+custom_handle_opened_file(FileCtx, UserCtx, _DocsDeletionScope, ?LINK_HANDLING_METHOD) ->
     FileCtx2 = maybe_add_deletion_link(FileCtx, UserCtx),
     delete_parent_link(FileCtx2, UserCtx).
 
 
 -spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(),
-    RemoveStorageFileResult :: ok | ignored | {error, term()}, boolean()) -> ok.
-maybe_try_to_delete_parent(FileCtx, UserCtx, ok, IsLocalDeletion) ->
+    RemoveStorageFileResult :: ok | ignored | {error, term()}, docs_deletion_scope()) -> ok.
+maybe_try_to_delete_parent(FileCtx, UserCtx, ok, DocsDeletionScope) ->
     {ParentCtx, _FileCtx2} = file_ctx:get_parent(FileCtx, UserCtx),
     try
         {ParentDoc, ParentCtx2} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             case file_meta:is_deleted(ParentDoc) of
                 true ->
-                    % use ?FINALIZE_DELETE mode because it handles case when file_meta is already deleted
-                    remove_file(ParentCtx2, UserCtx, true, ?FINALIZE_DELETE(IsLocalDeletion));
+                    % use ?TWO_STEP_DEL_FIN mode because it handles case when file_meta is already deleted
+                    remove_file(ParentCtx2, UserCtx, true, ?TWO_STEP_DEL_FIN(DocsDeletionScope));
                 false ->
                     ok
             end
@@ -482,3 +484,11 @@ remove_local_auxiliary_documents(FileCtx) ->
 remove_file_handles(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     ok = file_handles:delete(FileUuid).
+
+-spec removal_status_to_docs_deletion_scope(file_handles:removal_status()) -> docs_deletion_scope().
+removal_status_to_docs_deletion_scope(?LOCAL_REMOVE) -> ?LOCAL_DOCS;
+removal_status_to_docs_deletion_scope(?REMOTE_REMOVE) -> ?ALL_DOCS.
+
+-spec docs_deletion_scope_to_removal_status(docs_deletion_scope()) -> file_handles:removal_status().
+docs_deletion_scope_to_removal_status(?LOCAL_DOCS) -> ?REMOTE_REMOVE;
+docs_deletion_scope_to_removal_status(?ALL_DOCS) -> ?LOCAL_REMOVE.
