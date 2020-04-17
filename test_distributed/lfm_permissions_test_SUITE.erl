@@ -86,14 +86,15 @@
     list_xattr_test/1,
     set_xattr_test/1,
     remove_xattr_test/1,
-    
+
     add_qos_entry_test/1,
     get_qos_entry_test/1,
     remove_qos_entry_test/1,
     get_effective_file_qos_test/1,
     check_qos_fulfillment_test/1,
-    
+
     permission_cache_test/1,
+    multi_provider_permission_cache_test/1,
     expired_session_test/1
 ]).
 
@@ -163,6 +164,7 @@ all() ->
         check_qos_fulfillment_test,
 
         permission_cache_test,
+        multi_provider_permission_cache_test,
         expired_session_test
     ]).
 
@@ -170,6 +172,27 @@ all() ->
 -define(rpcCache(W, Function, Args), rpc:call(W, permissions_cache, Function, Args)).
 
 -define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
+
+-define(log_on_match_error(__AssertMatch, __Scenario, __Node, __AllowedPerms, __TestedPerm),
+    try
+        __AssertMatch
+    catch _:__Reason ->
+        ct:pal(
+            "PERMISSIONS TESTS FAILURE~n"
+            "   Scenario: ~p~n"
+            "   Node: ~p~n"
+            "   Allowed perms: ~p~n"
+            "   Tested perm: ~p~n"
+            "   Reason: ~p~n",
+            [
+                __Scenario, __Node, __AllowedPerms, __TestedPerm, __Reason
+            ]
+        ),
+        erlang:error(perms_test_failed)
+    end
+).
+
+-define(ATTEMPTS, 35).
 
 
 %%%===================================================================
@@ -2004,6 +2027,104 @@ permission_cache_test(Config) ->
     ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p3])).
 
 
+multi_provider_permission_cache_test(Config) ->
+    [P2, P1W2, P1W1] = ?config(op_worker_nodes, Config),
+    Nodes = [P1W2, P1W1, P2],
+
+    User = <<"user1">>,
+
+    Path = <<"/space1/multi_provider_permission_cache_test">>,
+    P1W2SessId = ?config({session_id, {User, ?GET_DOMAIN(P1W2)}}, Config),
+
+    {Guid, AllPerms} = case rand:uniform(2) of
+        1 ->
+            {_, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(P1W2, P1W2SessId, Path, 8#777)),
+            {FileGuid, ?ALL_FILE_PERMS};
+        2 ->
+            {_, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(P1W2, P1W2SessId, Path, 8#777)),
+            {DirGuid, ?ALL_DIR_PERMS}
+    end,
+
+    % Set random posix permissions for file/dir and assert they are properly propagated to other
+    % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
+    lists:foreach(fun(_IterationNum) ->
+        PosixPerms = lists_utils:random_sublist(?ALL_POSIX_PERMS),
+        Mode = lists:foldl(fun(Perm, Acc) ->
+            Acc bor lfm_permissions_test_utils:posix_perm_to_mode(Perm, owner)
+        end, 0, PosixPerms),
+        lfm_permissions_test_utils:set_modes(P1W2, #{Guid => Mode}),
+
+        {AllowedPerms, DeniedPerms} = lists:foldl(fun(Perm, {AllowedPermsAcc, DeniedPermsAcc}) ->
+            case lfm_permissions_test_utils:perm_to_posix_perms(Perm) -- [owner, owner_if_parent_sticky | PosixPerms] of
+                [] -> {[Perm | AllowedPermsAcc], DeniedPermsAcc};
+                _ -> {AllowedPermsAcc, [Perm | DeniedPermsAcc]}
+            end
+        end, {[], []}, AllPerms),
+
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, PosixPerms, DeniedPerms,
+            ?EACCES, <<"denied posix perm">>, Config
+        ),
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, PosixPerms, AllowedPerms,
+            ok, <<"allowed posix perm">>, Config
+        )
+    end, lists:seq(1, 5)),
+
+    % Set random acl permissions for file/dir and assert they are properly propagated to other
+    % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
+    lists:foreach(fun(_IterationNum) ->
+        SetPerms = lists_utils:random_sublist(AllPerms),
+        lfm_permissions_test_utils:set_acls(P1W2, #{Guid => SetPerms}, #{}, ?everyone, ?no_flags_mask),
+
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, SetPerms, lfm_permissions_test_utils:complementary_perms(P1W2, Guid, SetPerms),
+            ?EACCES, <<"denied acl perm">>, Config
+        ),
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, SetPerms, SetPerms,
+            ok, <<"allowed acl perm">>, Config
+        )
+    end, lists:seq(1, 10)).
+
+
+run_multi_provider_perm_test(Nodes, User, Guid, PermsSet, TestedPerms, ExpResult, Scenario, Config) ->
+    lists:foreach(fun(TestedPerm) ->
+        lists:foreach(fun(Node) ->
+            try
+                case ExpResult of
+                    ok ->
+                        % file_ctx record is not exported so it is impossible to match to it as a record
+                        ?assertMatch(
+                            FileCtx when is_tuple(FileCtx),
+                            check_perms(Node, User, Guid, [TestedPerm], Config),
+                            ?ATTEMPTS
+                        );
+                    ?EACCES ->
+                        ?assertMatch(
+                            ?EACCES,
+                            check_perms(Node, User, Guid, [TestedPerm], Config),
+                            ?ATTEMPTS
+                        )
+                end
+            catch _:Reason ->
+                ct:pal(
+                    "PERMISSIONS TESTS FAILURE~n"
+                    "   Scenario: multi_provider_permission_cache_test ~p~n"
+                    "   Node: ~p~n"
+                    "   Perms set: ~p~n"
+                    "   Tested perm: ~p~n"
+                    "   Reason: ~p~n",
+                    [
+                        Scenario, Node, PermsSet, TestedPerm, Reason
+                    ]
+                ),
+                erlang:error(perms_test_failed)
+            end
+        end, Nodes)
+    end, TestedPerms).
+
+
 expired_session_test(Config) ->
     % Setup
     [W | _] = ?config(op_worker_nodes, Config),
@@ -2046,6 +2167,10 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 
+init_per_testcase(multi_provider_permission_cache_test, Config) ->
+    ct:timetrap({minutes, 15}),
+    init_per_testcase(default, Config);
+
 init_per_testcase(_Case, Config) ->
     initializer:mock_share_logic(Config),
     lfm_proxy:init(Config).
@@ -2059,6 +2184,15 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+check_perms(Node, User, Guid, Perms, Config) ->
+    SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
+    UserCtx = rpc:call(Node, user_ctx, new, [SessId]),
+
+    rpc:call(Node, fslogic_authz, ensure_authorized, [
+        UserCtx, file_ctx:new_by_guid(Guid), Perms
+    ]).
 
 
 -spec for(pos_integer(), term()) -> term().

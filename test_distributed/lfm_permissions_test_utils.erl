@@ -23,7 +23,7 @@
 
     all_perms/2, complementary_perms/3,
     perms_to_bitmask/1, perm_to_bitmask/1,
-    perm_to_posix_perms/1,
+    perm_to_posix_perms/1, posix_perm_to_mode/2,
 
     set_modes/2,
     set_acls/5
@@ -114,6 +114,20 @@ perm_to_posix_perms(?write_attributes) -> [write];
 perm_to_posix_perms(?delete) -> [owner_if_parent_sticky];
 perm_to_posix_perms(?read_acl) -> [];
 perm_to_posix_perms(?write_acl) -> [owner].
+
+
+-spec posix_perm_to_mode(PosixPerm :: atom(), Type :: owner | group) ->
+    non_neg_integer().
+posix_perm_to_mode(read, owner)  -> 8#4 bsl 6;
+posix_perm_to_mode(write, owner) -> 8#2 bsl 6;
+posix_perm_to_mode(exec, owner)  -> 8#1 bsl 6;
+posix_perm_to_mode(read, group)  -> 8#4 bsl 3;
+posix_perm_to_mode(write, group) -> 8#2 bsl 3;
+posix_perm_to_mode(exec, group)  -> 8#1 bsl 3;
+posix_perm_to_mode(read, other)  -> 8#4;
+posix_perm_to_mode(write, other) -> 8#2;
+posix_perm_to_mode(exec, other)  -> 8#1;
+posix_perm_to_mode(_, _)         -> 8#0.
 
 
 -spec set_modes(node(), #{file_id:file_guid() => file_meta:mode()}) ->

@@ -669,11 +669,11 @@ run_standard_posix_tests(
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, Type
 ) ->
     AllRequiredModes = lists:map(fun({Guid, PosixPerm}) ->
-        {Guid, posix_permission_to_mode(PosixPerm, Type)}
+        {Guid, lfm_permissions_test_utils:posix_perm_to_mode(PosixPerm, Type)}
     end, AllRequiredPerms),
     ComplementaryModesPerFile = maps:map(fun(_, Perms) ->
         lists:foldl(fun(Perm, Acc) ->
-            Acc bor posix_permission_to_mode(Perm, Type)
+            Acc bor lfm_permissions_test_utils:posix_perm_to_mode(Perm, Type)
         end, 0, Perms)
     end, ComplementaryPermsPerFile),
 
@@ -723,20 +723,6 @@ get_complementary_posix_perms(PosixPermsPerFile)->
             [{FileGuid, Perm} || Perm <- FileRequiredPerms] ++ RequiredPermsAcc
         }
     end, {#{}, []}, PosixPermsPerFile).
-
-
--spec posix_permission_to_mode(PosixPerm :: atom(), Type :: owner | group) ->
-    non_neg_integer().
-posix_permission_to_mode(read, owner)  -> 8#4 bsl 6;
-posix_permission_to_mode(write, owner) -> 8#2 bsl 6;
-posix_permission_to_mode(exec, owner)  -> 8#1 bsl 6;
-posix_permission_to_mode(read, group)  -> 8#4 bsl 3;
-posix_permission_to_mode(write, group) -> 8#2 bsl 3;
-posix_permission_to_mode(exec, group)  -> 8#1 bsl 3;
-posix_permission_to_mode(read, other)  -> 8#4;
-posix_permission_to_mode(write, other) -> 8#2;
-posix_permission_to_mode(exec, other)  -> 8#1;
-posix_permission_to_mode(_, _)         -> 8#0.
 
 
 %%%===================================================================
