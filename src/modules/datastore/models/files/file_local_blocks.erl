@@ -5,7 +5,9 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc Model for holding files' blocks.
+%%% @doc
+%%% Model for holding files' blocks.
+%%% TODO VFS-6273 internal implementation (doc or links) should be hidden inside this module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_local_blocks).
@@ -24,7 +26,7 @@
 -export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1]).
 
--type id() :: datastore:key().
+-type id() :: file_location:id().
 -type record() :: #file_local_blocks{}.
 -type doc() :: datastore_doc:doc(record()).
 -type one_or_many(Type) :: Type | [Type].
@@ -184,17 +186,16 @@ update(Key, Blocks, Num) ->
         true -> {lists:split(MaxSize, Blocks), false};
         _ -> {{Blocks, []}, true}
     end,
-
     DocKey = get_doc_key(Key, Num),
-    Diff = fun
-        (_) ->
-            {ok, #file_local_blocks{
-                blocks = Blocks1, last = Last
-            }}
+    Diff = fun(_) ->
+        {ok, #file_local_blocks{blocks = Blocks1, last = Last}}
     end,
-    Default = #document{key = DocKey, value = #file_local_blocks{
-        blocks = Blocks1, last = Last
-    }},
+    Default = #document{
+        key = DocKey,
+        value = #file_local_blocks{
+            blocks = Blocks1,
+            last = Last
+        }},
 
     case {datastore_model:update(?CTX, DocKey, Diff, Default), Last} of
         {{ok, _}, true} -> ok;
@@ -211,29 +212,28 @@ update(Key, Blocks, Num) ->
 -spec get(id(), non_neg_integer()) ->
     {ok, fslogic_blocks:blocks()} | {error, term()}.
 get(Key, Num) ->
+    get(Key, Num, []).
+
+-spec get(id(), non_neg_integer(), fslogic_blocks:blocks()) ->
+    {ok, fslogic_blocks:blocks()} | {error, term()}.
+get(Key, Num, Acc) ->
     case datastore_model:get(?CTX, get_doc_key(Key, Num)) of
         {ok, #document{value = #file_local_blocks{
             blocks = Blocks, last = Last
         }}} ->
             case Last of
-                true ->
-                    {ok, Blocks};
-                _ ->
-                    case get(Key, Num + 1) of
-                        {ok, Blocks2} -> {ok, Blocks ++ Blocks2};
-                        Error -> Error
-                    end
+                true -> {ok, Acc ++ Blocks};
+                false -> get(Key, Num + 1, Acc ++ Blocks)
             end;
         {error, not_found} ->
-            {ok, []};
+            {ok, Acc};
         Other ->
             Other
     end.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
-%% Deletes docs with blocks.
+%% Deletes doc with blocks.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(id(), non_neg_integer()) -> ok | {error, term()}.
@@ -249,6 +249,7 @@ delete(Key, Num) ->
         {error, not_found} ->
             ok
     end.
+
 
 -spec get_doc_key(id(), non_neg_integer()) -> id().
 get_doc_key(Key, Num) ->

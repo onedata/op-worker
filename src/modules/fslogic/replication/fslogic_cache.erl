@@ -372,6 +372,8 @@ delete_doc(Key) ->
     
     delete_local_blocks(Key),
 
+    delete_local_blocks(Key),
+
     erase({?DOCS, Key}),
     erase({?FLUSHED_DOCS, Key}),
     erase({?BLOCKS, Key}),
