@@ -619,19 +619,19 @@ has_custom_metadata(Worker, SessId, FileKey) ->
 
 
 -spec get_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type(), custom_metadata:filter(), boolean()
+    custom_metadata:type(), custom_metadata:query(), boolean()
 ) ->
     {ok, custom_metadata:value()}.
-get_metadata(Worker, SessId, FileKey, Type, Filter, Inherited) ->
-    ?EXEC(Worker, lfm:get_metadata(SessId, FileKey, Type, Filter, Inherited)).
+get_metadata(Worker, SessId, FileKey, Type, Query, Inherited) ->
+    ?EXEC(Worker, lfm:get_metadata(SessId, FileKey, Type, Query, Inherited)).
 
 
 -spec set_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type(), custom_metadata:value(), custom_metadata:filter()
+    custom_metadata:type(), custom_metadata:value(), custom_metadata:query()
 ) ->
     ok.
-set_metadata(Worker, SessId, FileKey, Type, Value, Filter) ->
-    ?EXEC(Worker, lfm:set_metadata(SessId, FileKey, Type, Value, Filter)).
+set_metadata(Worker, SessId, FileKey, Type, Value, Query) ->
+    ?EXEC(Worker, lfm:set_metadata(SessId, FileKey, Type, Value, Query)).
 
 
 -spec remove_metadata(node(), session:id(), lfm:file_key(),
@@ -727,15 +727,15 @@ get_file_distribution(Worker, SessId, FileKey) ->
 
 
 -spec get_effective_file_qos(node(), session:id(), lfm:file_key()) ->
-    {ok, {[qos_entry:id()], file_qos:assigned_entries()}} | lfm:error_reply().
+    {ok, {#{qos_entry:id() => qos_status:fulfilled()}, file_qos:assigned_entries()}} | lfm:error_reply().
 get_effective_file_qos(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_effective_file_qos(SessId, FileKey)).
 
 
--spec add_qos_entry(node(), session:id(), lfm:file_key(), qos_expression:raw(),
+-spec add_qos_entry(node(), session:id(), lfm:file_key(), qos_expression:rpn(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | lfm:error_reply().
-add_qos_entry(Worker, SessId, FileKey, Expression, ReplicasNum) ->
-    ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, Expression, ReplicasNum)).
+add_qos_entry(Worker, SessId, FileKey, ExpressionInRpn, ReplicasNum) ->
+    ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum)).
 
 
 -spec get_qos_entry(node(), session:id(), qos_entry:id()) ->

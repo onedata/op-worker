@@ -36,7 +36,7 @@
 -type req() :: #op_req{}.
 -type operation() :: gs_protocol:operation().
 % The resource the request operates on (creates, gets, updates or deletes).
--type entity() :: undefined | #od_share{} | #transfer{} | #od_user{} | #od_group{}.
+-type entity() :: undefined | #od_share{} | #transfer{} | #od_user{} | #od_group{} | #qos_entry{}.
 -type revision() :: gs_protocol:revision().
 -type versioned_entity() :: gs_protocol:versioned_entity().
 -type scope() :: gs_protocol:scope().

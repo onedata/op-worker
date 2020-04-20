@@ -78,8 +78,8 @@
 %% Utility functions
 -export([check_result/1]).
 %% Functions concerning qos
--export([add_qos_entry/4, get_qos_entry/2, remove_qos_entry/2, get_effective_file_qos/2,
-    check_qos_fulfilled/2, check_qos_fulfilled/3]).
+-export([add_qos_entry/4, add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2,
+    get_effective_file_qos/2, check_qos_fulfilled/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
 %%% API
@@ -752,10 +752,10 @@ remove_share(SessId, ShareID) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_metadata(session:id(), file_key(), custom_metadata:type(),
-    custom_metadata:filter(), boolean()) ->
+    custom_metadata:query(), boolean()) ->
     {ok, custom_metadata:value()} | error_reply().
-get_metadata(SessId, FileKey, Type, Filter, Inherited) ->
-    ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Filter, Inherited) end).
+get_metadata(SessId, FileKey, Type, Query, Inherited) ->
+    ?run(fun() -> lfm_attrs:get_metadata(SessId, FileKey, Type, Query, Inherited) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -763,9 +763,9 @@ get_metadata(SessId, FileKey, Type, Filter, Inherited) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_metadata(session:id(), file_key(), custom_metadata:type(),
-    custom_metadata:value(), custom_metadata:filter()) -> ok | error_reply().
-set_metadata(SessId, FileKey, Type, Value, Filter) ->
-    ?run(fun() -> lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Filter) end).
+    custom_metadata:value(), custom_metadata:query()) -> ok | error_reply().
+set_metadata(SessId, FileKey, Type, Value, Query) ->
+    ?run(fun() -> lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Query) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -806,10 +806,15 @@ check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 %% Adds new qos_entry for file or directory.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry(session:id(), file_key(), qos_expression:raw(),
+-spec add_qos_entry(session:id(), file_key(), qos_expression:rpn(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | error_reply().
-add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
-    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, Expression, ReplicasNum) end).
+add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum) ->
+    add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, user_defined).
+
+-spec add_qos_entry(session:id(), file_key(), qos_expression:rpn(),
+    qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | error_reply().
+add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) ->
+    ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -817,7 +822,7 @@ add_qos_entry(SessId, FileKey, Expression, ReplicasNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos(session:id(), file_key()) ->
-    {ok, {[qos_entry:id()], file_qos:assigned_entries()}} | error_reply().
+    {ok, {#{qos_entry:id() => qos_status:fulfilled()}, file_qos:assigned_entries()}} | error_reply().
 get_effective_file_qos(SessId, FileKey) ->
     ?run(fun() -> lfm_qos:get_effective_file_qos(SessId, FileKey) end).
 

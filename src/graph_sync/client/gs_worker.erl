@@ -104,7 +104,7 @@ on_cluster_ready() ->
             catch
                 % Connection was lost in meantime. Ignore it as `on_connect_to_oz`
                 % will be called when connection is established again.
-                _:{_, {error, ?ERROR_NO_CONNECTION_TO_ONEZONE}}  -> ok
+                _:{_, ?ERROR_NO_CONNECTION_TO_ONEZONE}  -> ok
             end;
         _ -> ok
     end.

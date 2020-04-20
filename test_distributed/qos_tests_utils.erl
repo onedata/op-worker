@@ -126,11 +126,14 @@ add_qos(Config, #qos_to_add{
 
 
 add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) ->
-    URL = <<"qos", FilePath/binary>>,
+    FileGuid = qos_tests_utils:get_guid(Worker, ?SESS_ID(Config, Worker), FilePath),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    URL = <<"qos_entry">>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID), {<<"Content-type">>, <<"application/json">>}],
     ReqBody = #{
         <<"expression">> => QosExpression,
-        <<"replicasNum">> => ReplicasNum
+        <<"replicasNum">> => ReplicasNum,
+        <<"fileId">> => FileObjectId
     },
     SpaceId = ?GET_SPACE_ID(Worker, ?SESS_ID(Config, Worker), FilePath),
     make_rest_request(Config, Worker, URL, post, Headers, ReqBody, SpaceId, [?SPACE_MANAGE_QOS]).
@@ -374,7 +377,7 @@ assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, Repl
     GetQosEntryFun = fun() ->
         ?assertMatch({ok, _Doc}, rpc:call(Worker, qos_entry, get, [QosEntryId]), Attempts),
         {ok, #document{value = QosEntry, scope = SpaceId}} = rpc:call(Worker, qos_entry, get, [QosEntryId]),
-        {ok, {Expression, ReplicasNum}} = get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId),
+        ?assertEqual({ReplicasNum, FileUuid}, get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId)),
         % do not assert traverse reqs
         QosEntryWithoutTraverseReqs = QosEntry#qos_entry{traverse_reqs = #{}},
         ErrMsg = str_utils:format(
@@ -388,17 +391,18 @@ assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, Repl
 
 
 get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId) ->
-    URL = <<"qos-entry/", QosEntryId/binary>>,
+    URL = <<"qos_entry/", QosEntryId/binary>>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
     case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
         {ok, RespBody} ->
             DecodedBody = json_utils:decode(RespBody),
             #{
-                <<"qosEntryId">> := QosEntryId,
-                <<"expression">> := Expression,
+                <<"fileId">> := FileObjectId,
                 <<"replicasNum">> := ReplicasNum
             } = DecodedBody,
-            {ok, {Expression, ReplicasNum}};
+            {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
+            FileUuid = file_id:guid_to_uuid(FileGuid),
+            {ReplicasNum, FileUuid};
         {error, _} = Error -> Error
     end.
 
@@ -505,7 +509,8 @@ assert_effective_qos(Config, Worker,  FilePath, QosEntries, AssignedEntries, Fil
     ExpectedEffectiveQosSorted = sort_effective_qos(ExpectedEffectiveQos),
 
     GetSortedEffectiveQos = fun() ->
-        {ok, EffQos} = get_effective_qos_by_rest(Config, Worker, FilePath),
+        FileGuid = qos_tests_utils:get_guid(Worker, ?SESS_ID(Config, Worker), FilePath),
+        {ok, EffQos} = get_effective_qos_by_rest(Config, Worker, FileGuid),
         EffQosSorted = sort_effective_qos(EffQos),
         ErrMsg = str_utils:format(
             "Worker: ~p~n"
@@ -519,20 +524,21 @@ assert_effective_qos(Config, Worker,  FilePath, QosEntries, AssignedEntries, Fil
     assert_match_with_err_msg(GetSortedEffectiveQos, ExpectedEffectiveQosSorted, Attempts, 500).
 
 
-get_effective_qos_by_rest(Config, Worker, FilePath) ->
-    URL = <<"qos", FilePath/binary>>,
+get_effective_qos_by_rest(Config, Worker, FileGuid) ->
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    URL = <<"data/", FileObjectId/binary, "/qos_summary">>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
-    SpaceId = ?GET_SPACE_ID(Worker, ?SESS_ID(Config, Worker), FilePath),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
         {ok, RespBody} ->
             DecodedBody = json_utils:decode(RespBody),
             #{
-                <<"assignedEntries">> := AssignedEntries,
-                <<"qosEntries">> := QosList
+                <<"entries">> := QosEntriesWithStatus,
+                <<"assignedEntries">> := AssignedEntries
             } = DecodedBody,
             {ok, #effective_file_qos{
                 assigned_entries = AssignedEntries,
-                qos_entries = QosList
+                qos_entries = maps:keys(QosEntriesWithStatus)
             }};
         {error, _} = Error -> Error
     end.
@@ -671,23 +677,21 @@ assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts, _Sleep) 
                 error(Error)
         end
     catch
-        Error2 ->
-            ct:pal(Error2)
+        Error2:Type->
+            ct:pal("~p:~p", [Error2, Type])
     end;
 
 assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected , Attempts, Sleep) ->
     try
         {ActualVal, _ErrMsg} = GetActualValAndErrMsgFun(),
         case ActualVal of
-            Expected ->
-                ?assertMatch(Expected, ActualVal),
-                ok;
+            Expected -> ok;
             _ ->
                 timer:sleep(Sleep),
                 assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts - 1, Sleep)
         end
     catch
-        _ ->
+        _:_ ->
             timer:sleep(Sleep),
             assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts - 1, Sleep)
     end.

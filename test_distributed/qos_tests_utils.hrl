@@ -35,7 +35,7 @@
     worker :: node(), % worker on which QoS will be added
     qos_name :: qos_name(), % name of QoS - used only in tests to identify different QoS
     path :: file_meta:path(), % path to file / directory for which QoS should be added
-    expression :: qos_expression:raw(), % QoS expression in infix notation
+    expression :: qos_expression:infix(), % QoS expression in infix notation
     replicas_num = 1 :: qos_entry:replics_num() % number of required replicas
 }).
 

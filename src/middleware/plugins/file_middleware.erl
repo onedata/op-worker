@@ -37,14 +37,6 @@
 -define(DEFAULT_LIST_OFFSET, 0).
 -define(DEFAULT_LIST_ENTRIES, 1000).
 
--define(ALL_BASIC_ATTRIBUTES, [
-    <<"file_id">>, <<"name">>, <<"mode">>,
-    <<"storage_user_id">>, <<"storage_group_id">>,
-    <<"atime">>, <<"mtime">>, <<"ctime">>,
-    <<"type">>, <<"size">>, <<"shares">>,
-    <<"provider_id">>, <<"owner_id">>
-]).
-
 
 %%%===================================================================
 %%% API
@@ -175,9 +167,8 @@ data_spec_create(#gri{aspect = attrs}) -> #{
         fun(Mode) ->
             try
                 {true, binary_to_integer(Mode, 8)}
-            catch
-                _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
+            catch _:_ ->
+                throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
             end
         end
     }}
@@ -315,6 +306,7 @@ get_operation_supported(children, public) -> true;
 get_operation_supported(children_details, private) -> true;
 get_operation_supported(children_details, public) -> true;
 get_operation_supported(attrs, private) -> true;
+get_operation_supported(attrs, public) -> true;
 get_operation_supported(xattrs, private) -> true;
 get_operation_supported(xattrs, public) -> true;
 get_operation_supported(json_metadata, private) -> true;
@@ -324,6 +316,7 @@ get_operation_supported(rdf_metadata, public) -> true;
 get_operation_supported(acl, private) -> true;
 get_operation_supported(shares, private) -> true;
 get_operation_supported(transfers, private) -> true;
+get_operation_supported(file_qos_summary, private) -> true;
 get_operation_supported(download_url, private) -> true;
 get_operation_supported(download_url, public) -> true;
 get_operation_supported(_, _) -> false.
@@ -363,8 +356,11 @@ data_spec_get(#gri{aspect = As}) when
     }
 };
 
-data_spec_get(#gri{aspect = attrs}) -> #{
-    optional => #{<<"attribute">> => {binary, ?ALL_BASIC_ATTRIBUTES}}
+data_spec_get(#gri{aspect = attrs, scope = private}) -> #{
+    optional => #{<<"attribute">> => {binary, ?PRIVATE_BASIC_ATTRIBUTES}}
+};
+data_spec_get(#gri{aspect = attrs, scope = public}) -> #{
+    optional => #{<<"attribute">> => {binary, ?PUBLIC_BASIC_ATTRIBUTES}}
 };
 
 data_spec_get(#gri{aspect = xattrs}) -> #{
@@ -396,6 +392,9 @@ data_spec_get(#gri{aspect = transfers}) -> #{
     optional => #{<<"include_ended_ids">> => {boolean, any}}
 };
 
+data_spec_get(#gri{aspect = file_qos_summary}) ->
+    undefined;
+
 data_spec_get(#gri{aspect = download_url}) ->
     undefined.
 
@@ -406,6 +405,7 @@ authorize_get(#op_req{gri = #gri{aspect = As, scope = public}}, _) when
     As =:= instance;
     As =:= children;
     As =:= children_details;
+    As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
@@ -430,7 +430,11 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
 
 authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = transfers}}, _) ->
     SpaceId = file_id:guid_to_space_id(Guid),
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
+
+authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = file_qos_summary}}, _) ->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS).
 
 
 %% @private
@@ -447,6 +451,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= acl;
     As =:= shares;
     As =:= transfers;
+    As =:= file_qos_summary;
     As =:= download_url
 ->
     assert_file_managed_locally(Guid).
@@ -507,14 +512,19 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
             ?ERROR_POSIX(Errno)
     end;
 
-get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs}}, _) ->
+get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, scope = Sc}}, _) ->
     RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of
-        undefined -> ?ALL_BASIC_ATTRIBUTES;
-        Attr -> [Attr]
+        undefined ->
+            case Sc of
+                private -> ?PRIVATE_BASIC_ATTRIBUTES;
+                public -> ?PUBLIC_BASIC_ATTRIBUTES
+            end;
+        Attr ->
+            [Attr]
     end,
     {ok, FileAttrs} = ?check(lfm:stat(Auth#auth.session_id, {guid, FileGuid})),
 
-    {ok, lists:foldl(fun(RequestedAttr, Acc) ->
+    {ok, value, lists:foldl(fun(RequestedAttr, Acc) ->
         Acc#{RequestedAttr => get_attr(RequestedAttr, FileAttrs)}
     end, #{}, RequestedAttributes)};
 
@@ -599,6 +609,21 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
             {ok, value, Transfers#{<<"endedIds">> => Ended}};
         false ->
             {ok, value, Transfers}
+    end;
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, _) ->
+    SessionId = Auth#auth.session_id,
+    case lfm:get_effective_file_qos(SessionId, {guid, FileGuid}) of
+        {ok, {QosEntriesWithStatus, AssignedEntries}} ->
+            {ok, #{
+                <<"entries">> => QosEntriesWithStatus,
+                <<"assignedEntries">> => AssignedEntries,
+                <<"fulfilled">> => lists:all(fun(Status) -> Status end, maps:values(QosEntriesWithStatus))
+            }};
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND;
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
     end;
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = download_url}}, _) ->

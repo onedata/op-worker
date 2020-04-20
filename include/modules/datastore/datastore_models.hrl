@@ -14,6 +14,7 @@
 
 -include("modules/datastore/qos.hrl").
 -include("modules/events/subscriptions.hrl").
+-include("modules/fslogic/fslogic_delete.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
@@ -323,6 +324,7 @@
 % document even if expressions are exactly the same. For each file / directory
 % multiple qos_entry can be defined.
 -record(qos_entry, {
+    type = user_defined :: qos_entry:type(),
     file_uuid :: file_meta:uuid(),
     expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.
     replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
@@ -382,9 +384,32 @@
 }).
 
 %% Model that maps space to storage
+%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
 -record(space_storage, {
     storage_ids = [] :: [storage:id()],
     mounted_in_root = [] :: [storage:id()]
+}).
+
+-record(space_unsupport_job, {
+    stage = init :: space_unsupport:stage(),
+    task_id :: traverse:id(),
+    space_id :: od_space:id(),
+    storage_id :: storage:id(),
+    % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id). 
+    % It is persisted so when slave job is restarted no additional task is created.
+    subtask_id = undefined :: space_unsupport:subtask_id() | undefined,
+    % Id of process waiting to be notified of task finish.
+    % NOTE: should be updated after provider restart
+    slave_job_pid  = undefined :: pid() | undefined
+}).
+
+%% Model that holds information necessary to tell whether whole subtree 
+%% of a directory was traversed so this directory can be cleaned up.
+-record(cleanup_traverse_status, {
+    % number of children listed but not yet traversed
+    pending_children_count = 0 :: non_neg_integer(),
+    % flag that informs whether all batches of children have been listed
+    all_batches_listed = false :: boolean()
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.
@@ -504,7 +529,7 @@
 
 %% Model for storing file's blocks
 -record(file_local_blocks, {
-    last :: boolean(),
+    last = true :: boolean(),
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
@@ -639,7 +664,9 @@
 
 %% Model that stores file handles
 -record(file_handles, {
-    is_removed = false :: boolean(),
+    % this field informs whether file was deleted and
+    % whether removal was performed locally or in remote provider
+    removal_status = ?NOT_REMOVED :: file_handles:removal_status(),
     descriptors = #{} :: file_descriptors(),
     creation_handle :: file_handles:creation_handle()
 }).

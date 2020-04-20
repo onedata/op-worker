@@ -101,7 +101,7 @@ all() -> [
     qos_restoration_file_test,
     qos_restoration_dir_test,
     reconcile_qos_using_file_meta_posthooks_test,
-    
+
     qos_status_during_traverse_test,
     qos_status_during_traverse_with_file_deletion_test,
     qos_status_during_traverse_with_dir_deletion_test,
@@ -897,7 +897,7 @@ reevaluate_impossible_qos_conflict_test(Config) ->
             assigned_entries = #{initializer:get_storage_id(Worker1) => [?QOS1]}
         }
     ],
-    qos_tests_utils:assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, true, 10).
+    qos_tests_utils:assert_file_qos_documents(Config, ExpectedFileQos, QosNameIdMapping, true, 40).
 
 
 %%%===================================================================
