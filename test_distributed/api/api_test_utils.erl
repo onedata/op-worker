@@ -35,13 +35,13 @@
 
 -spec run_tests(config(), [scenario_spec() | suite_spec()]) ->
     boolean().
-run_tests(Config, ScenariosSpecs) ->
+run_tests(Config, Specs) ->
     lists:foldl(fun
         (#scenario_spec{} = ScenarioSpec, AllTestsPassed) ->
             AllTestsPassed and run_scenario(Config, ScenarioSpec);
         (#suite_spec{} = SuiteSpec, AllTestsPassed) ->
             AllTestsPassed and run_suite(Config, SuiteSpec)
-    end, true, ScenariosSpecs).
+    end, true, Specs).
 
 
 %%%===================================================================
@@ -57,10 +57,10 @@ run_suite(Config, #suite_spec{
     teardown_fun = EnvTeardownFun,
     verify_fun = EnvVerifyFun,
 
-    scenario_schemes = ScenarioSchemes,
+    scenario_templates = ScenarioSchemes,
     data_spec = DataSpec
 }) ->
-    lists:foldl(fun(#scenario_scheme{
+    lists:foldl(fun(#scenario_template{
         name = Name,
         type = Type,
         prepare_args_fun = PrepareArgsFun,
@@ -186,7 +186,7 @@ run_invalid_clients_test_cases(Config, SupportedClientsPerNode, #scenario_spec{
             Result = make_request(Config, TargetNode, Client, Args),
             try
                 validate_error_result(ScenarioType, ExpError, Result),
-                EnvVerifyFun(false, TestCaseCtx)
+                EnvVerifyFun(expected_failure, TestCaseCtx)
             catch _:_ ->
                 log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result),
                 false
@@ -247,7 +247,7 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                         Result = make_request(Config, TargetNode, Client, Args),
                         try
                             validate_error_result(ScenarioType, ExpError, Result),
-                            EnvVerifyFun(false, TestCaseCtx)
+                            EnvVerifyFun(expected_failure, TestCaseCtx)
                         catch _:_ ->
                             log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result),
                             false
@@ -322,10 +322,10 @@ run_expected_success_test_cases(Config, #scenario_spec{
                 case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
                     true ->
                         ValidateResultFun(TestCaseCtx, Result),
-                        EnvVerifyFun(true, TestCaseCtx);
+                        EnvVerifyFun(expected_success, TestCaseCtx);
                     false ->
                         validate_error_result(ScenarioType, ?ERROR_USER_NOT_SUPPORTED, Result),
-                        EnvVerifyFun(false, TestCaseCtx)
+                        EnvVerifyFun(expected_failure, TestCaseCtx)
                 end
             catch _:_ ->
                 log_failure(ScenarioName, TargetNode, Client, Args, succes, Result),

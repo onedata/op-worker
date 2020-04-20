@@ -90,7 +90,10 @@
 % desired effect on environment (e.g. check if resource deleted during
 % test was truly deleted).
 % First argument tells whether request made during testcase should succeed
--type env_verify_fun() :: fun((ShouldSucceed :: boolean(), api_test_env()) -> boolean()).
+-type env_verify_fun() :: fun(
+    (RequestResultExpectation :: expected_success | expected_failure, api_test_env()) ->
+        boolean()
+).
 
 % Function called during testcase to prepare call/request arguments
 -type prepare_args_fun() :: fun((api_test_ctx()) -> rest_args() | gs_args()).
@@ -114,16 +117,20 @@
 }).
 -type scenario_spec() :: #scenario_spec{}.
 
--record(scenario_scheme, {
+% Template used to crate scenario_spec(). It contains scenario specific data
+% while args/params repeated for all scenarios of some type/group can be
+% extracted and kept in e.g. suite_spec().
+-record(scenario_template, {
     name :: binary(),
     type :: scenario_type(),
     prepare_args_fun :: prepare_args_fun(),
     validate_result_fun :: validate_call_result_fun()
 }).
--type scenario_scheme() :: #scenario_scheme{}.
+-type scenario_template() :: #scenario_template{}.
 
-% Record used to group scenarios having common target nodes, client spec
-% and check functions. It will be translated to list of scenario_spec()
+% Record used to group scenarios having common parameters like target nodes, client spec
+% or check functions. List of scenario_spec() will be crated from that common params as
+% well as scenario specific data contained in each scenario_template().
 -record(suite_spec, {
     target_nodes :: [node()],
     client_spec :: client_spec(),
@@ -132,7 +139,7 @@
     teardown_fun = fun(_) -> ok end :: env_teardown_fun(),
     verify_fun = fun(_, _) -> true end :: env_verify_fun(),
 
-    scenario_schemes = [] :: [scenario_scheme()],
+    scenario_templates = [] :: [scenario_template()],
 
     data_spec = undefined :: undefined | data_spec()
 }).
@@ -192,9 +199,6 @@ end)()).
 
 -define(REST_ERROR(__ERROR), #{<<"error">> => errors:to_json(__ERROR)}).
 
--define(RANDOM_FILE_NAME, <<
-    "name_",
-    (integer_to_binary(erlang:unique_integer([positive])))/binary
->>).
+-define(RANDOM_FILE_NAME(), generator:gen_name()).
 
 -endif.

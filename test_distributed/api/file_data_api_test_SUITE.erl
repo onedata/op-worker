@@ -921,13 +921,13 @@ set_mode_test(Config) ->
     end,
 
     ConstructVerifyEnvForSuccessfulCallsFun = fun(FileGuid) -> fun
-        (false, #api_test_ctx{node = TestNode}) ->
+        (expected_failure, #api_test_ctx{node = TestNode}) ->
             ?assertMatch(8#777, GetMode(TestNode, FileGuid), ?ATTEMPTS),
             true;
-        (true, #api_test_ctx{client = ?USER_IN_SPACE_2_AUTH, node = TestNode}) ->
+        (expected_success, #api_test_ctx{client = ?USER_IN_SPACE_2_AUTH, node = TestNode}) ->
             ?assertMatch(8#777, GetMode(TestNode, FileGuid), ?ATTEMPTS),
             true;
-        (true, #api_test_ctx{client = ?USER_IN_BOTH_SPACES_AUTH, data = #{<<"mode">> := ModeBin}}) ->
+        (expected_success, #api_test_ctx{client = ?USER_IN_BOTH_SPACES_AUTH, data = #{<<"mode">> := ModeBin}}) ->
             Mode = binary_to_integer(ModeBin, 8),
             lists:foreach(fun(Node) -> ?assertMatch(Mode, GetMode(Node, FileGuid), ?ATTEMPTS) end, Providers),
             true
@@ -1078,10 +1078,10 @@ set_mode_test(Config) ->
             ValidateRestSuccessfulCallFun(TestCaseCtx, Result)
     end,
     VerifyEnvFunForSetModeInSpace1Scenarios = fun
-        (false, #api_test_ctx{node = Node}) ->
+        (expected_failure, #api_test_ctx{node = Node}) ->
             ?assertMatch(8#777, GetMode(Node, Space1RootDirGuid), ?ATTEMPTS),
             true;
-        (true, #api_test_ctx{node = TestNode, client = Client, data = #{<<"mode">> := ModeBin}}) ->
+        (expected_success, #api_test_ctx{node = TestNode, client = Client, data = #{<<"mode">> := ModeBin}}) ->
             case {TestNode, Client} of
                 {Provider1, ?USER_IN_BOTH_SPACES_AUTH} ->
                     % Request from user not supported by provider should be rejected
