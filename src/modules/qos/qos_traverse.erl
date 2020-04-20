@@ -171,7 +171,8 @@ do_master_job(Job, MasterJobArgs) ->
         ok = qos_status:report_traverse_finished_for_dir(SpaceId, TaskId, Uuid)
     end, 
     
-    tree_traverse:do_master_job(Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchFinishedCallback).
+    tree_traverse:do_master_job(
+        Job, MasterJobArgs, MasterJobFinishedCallback, LastBatchFinishedCallback, sync).
 
 
 %%--------------------------------------------------------------------

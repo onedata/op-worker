@@ -18,7 +18,7 @@
 -include_lib("common_test/include/ct.hrl").
 
 %% API
--export([add_qos_entry/4, get_qos_entry/2, remove_qos_entry/2, get_effective_file_qos/2,
+-export([add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2, get_effective_file_qos/2,
     check_qos_fulfilled/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
@@ -31,11 +31,15 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec add_qos_entry(session:id(), lfm:file_key(), qos_expression:rpn(),
-    qos_entry:replicas_num()) -> {ok, qos_entry:id()} | lfm:error_reply().
-add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum) ->
+    qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | lfm:error_reply().
+add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
-        #add_qos_entry{expression = ExpressionInRpn, replicas_num = ReplicasNum},
+        #add_qos_entry{
+            expression = ExpressionInRpn, 
+            replicas_num = ReplicasNum, 
+            entry_type = EntryType
+        },
         fun(#qos_entry_id{id = QosEntryId}) ->
             {ok, QosEntryId}
         end).
@@ -80,7 +84,8 @@ get_qos_entry(SessId, QosEntryId) ->
 remove_qos_entry(SessId, QosEntryId) ->
     case qos_entry:get_file_guid(QosEntryId) of
         {ok, FileGuid} ->
-            remote_utils:call_fslogic(SessId, provider_request, FileGuid, #remove_qos_entry{id = QosEntryId},
+            remote_utils:call_fslogic(SessId, provider_request, FileGuid, 
+                #remove_qos_entry{id = QosEntryId},
                 fun(_) -> ok end);
         {error, _} = Error ->
             Error
