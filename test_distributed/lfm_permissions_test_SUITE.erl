@@ -97,6 +97,8 @@
     multi_provider_permission_cache_test/1,
     expired_session_test/1
 ]).
+% Export for use in rpc
+-export([check_perms/3]).
 
 all() ->
     ?ALL([
@@ -2044,7 +2046,7 @@ multi_provider_permission_cache_test(Config) ->
 
         run_multi_provider_perm_test(
             Nodes, User, Guid, PosixPerms, DeniedPerms,
-            ?EACCES, <<"denied posix perm">>, Config
+            {error, ?EACCES}, <<"denied posix perm">>, Config
         ),
         run_multi_provider_perm_test(
             Nodes, User, Guid, PosixPerms, AllowedPerms,
@@ -2060,7 +2062,7 @@ multi_provider_permission_cache_test(Config) ->
 
         run_multi_provider_perm_test(
             Nodes, User, Guid, SetPerms, lfm_permissions_test_utils:complementary_perms(P1W2, Guid, SetPerms),
-            ?EACCES, <<"denied acl perm">>, Config
+            {error, ?EACCES}, <<"denied acl perm">>, Config
         ),
         run_multi_provider_perm_test(
             Nodes, User, Guid, SetPerms, SetPerms,
@@ -2073,21 +2075,11 @@ run_multi_provider_perm_test(Nodes, User, Guid, PermsSet, TestedPerms, ExpResult
     lists:foreach(fun(TestedPerm) ->
         lists:foreach(fun(Node) ->
             try
-                case ExpResult of
-                    ok ->
-                        % file_ctx record is not exported so it is impossible to match to it as a record
-                        ?assertMatch(
-                            FileCtx when is_tuple(FileCtx),
-                            check_perms(Node, User, Guid, [TestedPerm], Config),
-                            ?ATTEMPTS
-                        );
-                    ?EACCES ->
-                        ?assertMatch(
-                            ?EACCES,
-                            check_perms(Node, User, Guid, [TestedPerm], Config),
-                            ?ATTEMPTS
-                        )
-                end
+                ?assertMatch(
+                    ExpResult,
+                    check_perms(Node, User, Guid, [TestedPerm], Config),
+                    ?ATTEMPTS
+                )
             catch _:Reason ->
                 ct:pal(
                     "PERMISSIONS TESTS FAILURE~n"
@@ -2171,9 +2163,18 @@ check_perms(Node, User, Guid, Perms, Config) ->
     SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
     UserCtx = rpc:call(Node, user_ctx, new, [SessId]),
 
-    rpc:call(Node, fslogic_authz, ensure_authorized, [
+    rpc:call(Node, ?MODULE, check_perms, [
         UserCtx, file_ctx:new_by_guid(Guid), Perms
     ]).
+
+
+check_perms(UserCtx, FileCtx, Perms) ->
+    try
+        fslogic_authz:ensure_authorized(UserCtx, FileCtx, Perms),
+        ok
+    catch _Type:Reason ->
+        {error, Reason}
+    end.
 
 
 -spec for(pos_integer(), term()) -> term().
