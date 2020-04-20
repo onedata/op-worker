@@ -173,25 +173,6 @@ all() ->
 
 -define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
 
--define(log_on_match_error(__AssertMatch, __Scenario, __Node, __AllowedPerms, __TestedPerm),
-    try
-        __AssertMatch
-    catch _:__Reason ->
-        ct:pal(
-            "PERMISSIONS TESTS FAILURE~n"
-            "   Scenario: ~p~n"
-            "   Node: ~p~n"
-            "   Allowed perms: ~p~n"
-            "   Tested perm: ~p~n"
-            "   Reason: ~p~n",
-            [
-                __Scenario, __Node, __AllowedPerms, __TestedPerm, __Reason
-            ]
-        ),
-        erlang:error(perms_test_failed)
-    end
-).
-
 -define(ATTEMPTS, 35).
 
 
