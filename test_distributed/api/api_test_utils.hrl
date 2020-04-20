@@ -117,7 +117,7 @@
 }).
 -type scenario_spec() :: #scenario_spec{}.
 
-% Template used to crate scenario_spec(). It contains scenario specific data
+% Template used to create scenario_spec(). It contains scenario specific data
 % while args/params repeated for all scenarios of some type/group can be
 % extracted and kept in e.g. suite_spec().
 -record(scenario_template, {
@@ -129,7 +129,7 @@
 -type scenario_template() :: #scenario_template{}.
 
 % Record used to group scenarios having common parameters like target nodes, client spec
-% or check functions. List of scenario_spec() will be crated from that common params as
+% or check functions. List of scenario_spec() will be created from that common params as
 % well as scenario specific data contained in each scenario_template().
 -record(suite_spec, {
     target_nodes :: [node()],
