@@ -48,6 +48,11 @@
 
 -export_type([name_conflicts_resolution_policy/0, compute_file_attr_opts/0]).
 
+% Special values masking file real uid/gid in share mode
+-define(SHARE_UID, 2147483647-1).
+-define(SHARE_GID, ?SHARE_UID).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -308,23 +313,20 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     {FileUuid, _SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
 
-    {#document{
-        key = FileUuid,
-        value = #file_meta{
-            type = Type,
-            mode = Mode,
-            provider_id = ProviderId,
-            owner = OwnerId,
-            shares = Shares
-        }
-    } = FileDoc, FileCtx2} = case maps:get(allow_deleted_files, Opts, false) of
+    {#document{key = FileUuid, value = #file_meta{
+        type = Type
+    }} = FileDoc, FileCtx2} = case maps:get(allow_deleted_files, Opts, false) of
         true ->
             file_ctx:get_file_doc_including_deleted(FileCtx);
         false ->
             file_ctx:get_file_doc(FileCtx)
     end,
 
-    {{Uid, Gid}, FileCtx3} = file_ctx:get_posix_storage_user_context(FileCtx2, UserCtx),
+    {
+        Mode, Uid, Gid,
+        OwnerId, ProviderId, Shares,
+        FileCtx3
+    } = get_private_attrs(ShareId, UserCtx, FileCtx2, FileDoc),
 
     {Size, FileCtx4} = case maps:get(include_size, Opts, true) of
         true -> file_ctx:get_file_size(FileCtx3);
@@ -357,16 +359,16 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         name = FinalName,
         mode = Mode,
         parent_uuid = ParentGuid,
-        uid = Uid,                     % TODO VFS-6095
-        gid = Gid,                     % TODO VFS-6095
+        uid = Uid,
+        gid = Gid,
         atime = ATime,
         mtime = MTime,
         ctime = CTime,
         type = Type,
         size = Size,
-        shares = filter_visible_shares(ShareId, Shares),
+        shares = Shares,
         provider_id = ProviderId,
-        owner_id = OwnerId             % TODO VFS-6095
+        owner_id = OwnerId
     },
     {FileAttr, FileDoc, ConflictingFiles, FileCtx7}.
 
@@ -374,9 +376,9 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Filters shares list as to not show other shares ids when accessing
-%% file via share guid (using specific ShareId).
-%% When accessing file in normal mode all shares are returned.
+%% Returns masked private attrs values when accessing file via share guid (e.g.
+%% in share mode only last 3 bits of mode - 'other' bits - should be visible).
+%% When accessing file in normal mode real values are returned.
 %%
 %% NOTE !!!
 %% ShareId is added to file_meta.shares only for directly shared
@@ -384,15 +386,28 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
 %% accessed via share guid will have ShareId in `file_attrs.shares`
 %% @end
 %%--------------------------------------------------------------------
--spec filter_visible_shares(undefined | od_share:id(), [od_share:id()]) ->
-    [od_share:id()].
-filter_visible_shares(undefined, Shares) ->
-    Shares;
-filter_visible_shares(ShareId, Shares) ->
-    case lists:member(ShareId, Shares) of
+get_private_attrs(undefined, UserCtx, FileCtx0, #document{
+    value = #file_meta{
+        mode = Mode,
+        provider_id = ProviderId,
+        owner = OwnerId,
+        shares = Shares
+    }
+}) ->
+    {{Uid, Gid}, FileCtx1} = file_ctx:get_posix_storage_user_context(FileCtx0, UserCtx),
+    {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx1};
+get_private_attrs(ShareId, _UserCtx, FileCtx, #document{
+    value = #file_meta{
+        mode = RealMode,
+        shares = AllShares
+    }
+}) ->
+    Mode = RealMode band 2#111,
+    Shares = case lists:member(ShareId, AllShares) of
         true -> [ShareId];
         false -> []
-    end.
+    end,
+    {Mode, ?SHARE_UID, ?SHARE_GID, <<"unknown">>, <<"unknown">>, Shares, FileCtx}.
 
 
 %% @private
