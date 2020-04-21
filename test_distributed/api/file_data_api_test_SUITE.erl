@@ -14,6 +14,7 @@
 
 -include("api_test_utils.hrl").
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -525,7 +526,7 @@ get_attrs_test(Config) ->
         ]
     },
 
-    GetExpectedResultFun = fun(#api_test_ctx{data = Data}, ShareId, JsonAttrsInNormalMode) ->
+    GetExpectedResultFun = fun(#api_test_ctx{data = Data}, ShareId, JsonAttrs) ->
         RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of
             undefined ->
                 case ShareId of
@@ -534,20 +535,6 @@ get_attrs_test(Config) ->
                 end;
             Attr ->
                 [Attr]
-        end,
-        JsonAttrs = case ShareId of
-            undefined ->
-                JsonAttrsInNormalMode;
-            _ ->
-                ObjectId = maps:get(<<"file_id">>, JsonAttrsInNormalMode),
-                {ok, Guid} = file_id:objectid_to_guid(ObjectId),
-                ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
-                {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
-
-                JsonAttrsInNormalMode#{
-                    <<"file_id">> => ShareObjectId,
-                    <<"shares">> => [ShareId]
-                }
         end,
         {ok, maps:with(RequestedAttributes, JsonAttrs)}
     end,
@@ -630,7 +617,8 @@ get_attrs_test(Config) ->
             lfm_proxy:stat(Provider1, GetSessionFun(Provider1), {guid, FileGuid}),
             ?ATTEMPTS
         ),
-        JsonAttrsInNormalMode = attrs_to_json(FileAttrs),
+        JsonAttrsInNormalMode = attrs_to_json(undefined, FileAttrs),
+        JsonAttrsInShareMode = attrs_to_json(ShareId1, FileAttrs),
 
         ?assert(api_test_utils:run_scenarios(Config, [
 
@@ -681,7 +669,7 @@ get_attrs_test(Config) ->
                 target_nodes = Providers,
                 client_spec = ClientSpecForShareScenarios,
                 prepare_args_fun = ConstructPrepareRestArgsFun(ShareObjectId),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId1, JsonAttrsInNormalMode),
+                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId1, JsonAttrsInShareMode),
                 data_spec = PublicDataSpec
             },
             #scenario_spec{
@@ -690,7 +678,7 @@ get_attrs_test(Config) ->
                 target_nodes = Providers,
                 client_spec = ClientSpecForShareScenarios,
                 prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(ShareObjectId),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId1, JsonAttrsInNormalMode),
+                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId1, JsonAttrsInShareMode),
                 data_spec = PublicDataSpec
             },
             #scenario_spec{
@@ -699,7 +687,7 @@ get_attrs_test(Config) ->
                 target_nodes = Providers,
                 client_spec = ClientSpecForShareScenarios,
                 prepare_args_fun = ConstructPrepareGsArgsFun(ShareGuid, public),
-                validate_result_fun = ConstructValidateSuccessfulGsResultFun(ShareId1, JsonAttrsInNormalMode),
+                validate_result_fun = ConstructValidateSuccessfulGsResultFun(ShareId1, JsonAttrsInShareMode),
                 data_spec = PublicDataSpec
             },
             #scenario_spec{
@@ -733,7 +721,7 @@ get_attrs_test(Config) ->
     Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_1),
     {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
     {ok, Space1Attrs} = lfm_proxy:stat(Provider1, GetSessionFun(Provider1), {guid, Space1Guid}),
-    Space1JsonAttrs = attrs_to_json(Space1Attrs),
+    Space1JsonAttrs = attrs_to_json(undefined, Space1Attrs),
 
     ValidateRestGetMetadataOnProvidersNotSupportingUserFun = fun
         (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
@@ -1258,8 +1246,8 @@ validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
 
 
 %% @private
--spec attrs_to_json(#file_attr{}) -> map().
-attrs_to_json(#file_attr{
+-spec attrs_to_json(od_share:id(), #file_attr{}) -> map().
+attrs_to_json(ShareId, #file_attr{
     guid = Guid,
     name = Name,
     mode = Mode,
@@ -1274,14 +1262,8 @@ attrs_to_json(#file_attr{
     provider_id = ProviderId,
     owner_id = OwnerId
 }) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-
-    #{
-        <<"file_id">> => ObjectId,
+    PublicAttrs = #{
         <<"name">> => Name,
-        <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
-        <<"storage_user_id">> => Uid,
-        <<"storage_group_id">> => Gid,
         <<"atime">> => ATime,
         <<"mtime">> => MTime,
         <<"ctime">> => CTime,
@@ -1290,8 +1272,36 @@ attrs_to_json(#file_attr{
             ?DIRECTORY_TYPE -> <<"dir">>;
             ?SYMLINK_TYPE -> <<"lnk">>
         end,
-        <<"size">> => Size,
-        <<"shares">> => Shares,
-        <<"provider_id">> => ProviderId,
-        <<"owner_id">> => OwnerId
-    }.
+        <<"size">> => Size
+    },
+
+    case ShareId of
+        undefined ->
+            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+
+            PublicAttrs#{
+                <<"file_id">> => ObjectId,
+                <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
+                <<"storage_user_id">> => Uid,
+                <<"storage_group_id">> => Gid,
+                <<"shares">> => Shares,
+                <<"provider_id">> => ProviderId,
+                <<"owner_id">> => OwnerId
+            };
+        _ ->
+            ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
+            {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
+
+            PublicAttrs#{
+                <<"file_id">> => ShareObjectId,
+                <<"mode">> => <<"0", (integer_to_binary(2#111 band Mode, 8))/binary>>,
+                <<"storage_user_id">> => ?SHARE_UID,
+                <<"storage_group_id">> => ?SHARE_GID,
+                <<"shares">> => case lists:member(ShareId, Shares) of
+                    true -> [ShareId];
+                    false -> []
+                end,
+                <<"provider_id">> => <<"unknown">>,
+                <<"owner_id">> => <<"unknown">>
+            }
+    end.

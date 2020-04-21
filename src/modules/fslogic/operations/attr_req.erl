@@ -48,10 +48,6 @@
 
 -export_type([name_conflicts_resolution_policy/0, compute_file_attr_opts/0]).
 
-% Special values masking file real uid/gid in share mode
--define(SHARE_UID, 2147483647-1).
--define(SHARE_GID, ?SHARE_UID).
-
 
 %%%===================================================================
 %%% API

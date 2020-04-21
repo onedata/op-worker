@@ -65,4 +65,8 @@
 -define(FILE_DELETED, deleted).
 -define(FILE_NEVER_EXISTED, never_existed).
 
+% Special values masking file real uid/gid in share mode
+-define(SHARE_UID, 2147483647-1).
+-define(SHARE_GID, ?SHARE_UID).
+
 -endif.
