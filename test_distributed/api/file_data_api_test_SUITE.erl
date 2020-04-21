@@ -197,7 +197,7 @@ get_children_test(Config) ->
             ?assertEqual(ExpSuccessResult, Response)
     end end,
 
-    ?assert(api_test_utils:run_scenarios(Config, [
+    ?assert(api_test_utils:run_tests(Config, [
 
         %% TEST LISTING NORMAL DIR
 
@@ -632,7 +632,7 @@ get_attrs_test(Config) ->
         ),
         JsonAttrsInNormalMode = attrs_to_json(FileAttrs),
 
-        ?assert(api_test_utils:run_scenarios(Config, [
+        ?assert(api_test_utils:run_tests(Config, [
 
             %% TEST GET ATTRS FOR FILE IN NORMAL MODE
 
@@ -746,7 +746,7 @@ get_attrs_test(Config) ->
             ?assertEqual(ExpAttrs, Response)
     end,
 
-    ?assert(api_test_utils:run_scenarios(Config, [
+    ?assert(api_test_utils:run_tests(Config, [
         #scenario_spec{
             name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
             type = rest,
@@ -921,13 +921,13 @@ set_mode_test(Config) ->
     end,
 
     ConstructVerifyEnvForSuccessfulCallsFun = fun(FileGuid) -> fun
-        (false, #api_test_ctx{node = TestNode}) ->
+        (expected_failure, #api_test_ctx{node = TestNode}) ->
             ?assertMatch(8#777, GetMode(TestNode, FileGuid), ?ATTEMPTS),
             true;
-        (true, #api_test_ctx{client = ?USER_IN_SPACE_2_AUTH, node = TestNode}) ->
+        (expected_success, #api_test_ctx{client = ?USER_IN_SPACE_2_AUTH, node = TestNode}) ->
             ?assertMatch(8#777, GetMode(TestNode, FileGuid), ?ATTEMPTS),
             true;
-        (true, #api_test_ctx{client = ?USER_IN_BOTH_SPACES_AUTH, data = #{<<"mode">> := ModeBin}}) ->
+        (expected_success, #api_test_ctx{client = ?USER_IN_BOTH_SPACES_AUTH, data = #{<<"mode">> := ModeBin}}) ->
             Mode = binary_to_integer(ModeBin, 8),
             lists:foreach(fun(Node) -> ?assertMatch(Mode, GetMode(Node, FileGuid), ?ATTEMPTS) end, Providers),
             true
@@ -939,7 +939,7 @@ set_mode_test(Config) ->
         ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
         {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
 
-        ?assert(api_test_utils:run_scenarios(Config, [
+        ?assert(api_test_utils:run_tests(Config, [
 
             %% TEST SET MODE FOR FILE IN NORMAL MODE
 
@@ -1002,7 +1002,7 @@ set_mode_test(Config) ->
             true
         end,
 
-        ?assert(api_test_utils:run_scenarios(Config, [
+        ?assert(api_test_utils:run_tests(Config, [
 
             #scenario_spec{
                 name = <<"Set mode for shared ", FileType/binary, " using /data/ rest endpoint">>,
@@ -1078,10 +1078,10 @@ set_mode_test(Config) ->
             ValidateRestSuccessfulCallFun(TestCaseCtx, Result)
     end,
     VerifyEnvFunForSetModeInSpace1Scenarios = fun
-        (false, #api_test_ctx{node = Node}) ->
+        (expected_failure, #api_test_ctx{node = Node}) ->
             ?assertMatch(8#777, GetMode(Node, Space1RootDirGuid), ?ATTEMPTS),
             true;
-        (true, #api_test_ctx{node = TestNode, client = Client, data = #{<<"mode">> := ModeBin}}) ->
+        (expected_success, #api_test_ctx{node = TestNode, client = Client, data = #{<<"mode">> := ModeBin}}) ->
             case {TestNode, Client} of
                 {Provider1, ?USER_IN_BOTH_SPACES_AUTH} ->
                     % Request from user not supported by provider should be rejected
@@ -1093,7 +1093,7 @@ set_mode_test(Config) ->
             true
     end,
 
-    ?assert(api_test_utils:run_scenarios(Config, [
+    ?assert(api_test_utils:run_tests(Config, [
         #scenario_spec{
             name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
             type = rest,
