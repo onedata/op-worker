@@ -25,6 +25,9 @@
 %% API
 -export([supervisor_flags/0]).
 
+%% Services API
+-export([start_in_stream/1, start_out_stream/1]).
+
 -define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
 -define(STREAMS_HEALTHCHECK_INTERVAL, application:get_env(?APP_NAME,
     dbsync_streams_healthcheck_interval, timer:seconds(5))).
@@ -64,7 +67,7 @@ handle(streams_healthcheck) ->
         start_streams()
     catch
         Type:Reason ->
-            ?error_stacktrace("Failed to start streams due to ~p:~p", [Type, Reason])
+            ?warning_stacktrace("Failed to start streams due to ~p:~p", [Type, Reason]) % TODO - przywrocic error
     end,
     erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(), {sync_timer, streams_healthcheck}),
     ok;
@@ -142,51 +145,26 @@ dbsync_out_stream_spec(ReqId, SpaceId, Opts) ->
     }.
 
 %%%===================================================================
-%%% Internal functions
+%%% Permanent services API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts incoming and outgoing DBSync streams for all supported spaces.
-%% Ignores spaces for which given stream is already present.
-%% @end
-%%--------------------------------------------------------------------
--spec start_streams() -> ok.
-start_streams() ->
-    lists:foreach(fun(Module) ->
-        lists:foreach(fun(SpaceId) ->
-            Name = {Module, SpaceId},
-            Pid = global:whereis_name(Name),
-            case {Pid, is_this_responsible_node(SpaceId), Module} of
-                {undefined, true, dbsync_in_stream} ->
-                    start_in_stream(SpaceId);
-                {undefined, true, dbsync_out_stream} ->
-                    start_out_stream(SpaceId);
-                _ ->
-                    ok
-            end
-        end, dbsync_utils:get_spaces())
-    end, [dbsync_in_stream, dbsync_out_stream]).
-
-%%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Starts incoming DBSync stream for a given space.
 %% @end
 %%--------------------------------------------------------------------
--spec start_in_stream(od_space:id()) -> supervisor:startchild_ret().
+-spec start_in_stream(od_space:id()) -> ok.
 start_in_stream(SpaceId) ->
     Spec = dbsync_in_stream_spec(SpaceId),
-    supervisor:start_child(?DBSYNC_WORKER_SUP, Spec).
+    {ok, _} = supervisor:start_child(?DBSYNC_WORKER_SUP, Spec),
+    ok.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Starts outgoing DBSync stream for a given space.
 %% @end
 %%--------------------------------------------------------------------
--spec start_out_stream(od_space:id()) -> supervisor:startchild_ret().
+-spec start_out_stream(od_space:id()) -> ok.
 start_out_stream(SpaceId) ->
     Filter = fun
         (#document{mutators = [Mutator | _]}) ->
@@ -210,7 +188,43 @@ start_out_stream(SpaceId) ->
             ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(5)
         )}
     ]),
-    supervisor:start_child(?DBSYNC_WORKER_SUP, Spec).
+    {ok, _} = supervisor:start_child(?DBSYNC_WORKER_SUP, Spec),
+    ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts incoming and outgoing DBSync streams for all supported spaces.
+%% Ignores spaces for which given stream is already present.
+%% @end
+%%--------------------------------------------------------------------
+-spec start_streams() -> ok.
+start_streams() ->
+    % TODO - funkcja zatrzymujaca stream
+    % TODO - niezadziala restart jak padnie
+    lists:foreach(fun(SpaceId) ->
+        internal_services_manager:start_service(?MODULE, start_in_stream, undefined, [SpaceId], SpaceId),
+        internal_services_manager:start_service(?MODULE, start_out_stream, undefined, [SpaceId], SpaceId)
+    end, dbsync_utils:get_spaces()).
+%%    lists:foreach(fun(Module) ->
+%%        lists:foreach(fun(SpaceId) ->
+%%            internal_services_manager:start_service(?MODULE, start_in_stream, undefined, [SpaceId], SpaceId)
+%%            Name = {Module, SpaceId},
+%%            Pid = global:whereis_name(Name),
+%%            case {Pid, is_this_responsible_node(SpaceId), Module} of
+%%                {undefined, true, dbsync_in_stream} ->
+%%                    start_in_stream(SpaceId);
+%%                {undefined, true, dbsync_out_stream} ->
+%%                    start_out_stream(SpaceId);
+%%                _ ->
+%%                    ok
+%%            end
+%%        end, dbsync_utils:get_spaces())
+%%    end, [dbsync_in_stream, dbsync_out_stream]).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -305,5 +319,9 @@ report_dbsync_state(SpaceId) ->
 %% @private
 -spec is_this_responsible_node(od_space:id()) -> boolean().
 is_this_responsible_node(SpaceId) ->
-    % MW_CHECK - serwis
-    node() == datastore_key:responsible_node(SpaceId).
+    try
+        % MW_CHECK - serwis
+        node() == datastore_key:responsible_node(SpaceId)
+    catch
+        _:_ -> false % TODO - handle
+    end.

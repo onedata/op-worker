@@ -190,7 +190,7 @@ lfm_create_and_open_failure(Config) ->
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(
         W, SessId1, {path, <<"/space_name1/test_read">>})
     ),
-    ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])),
+    ?assertEqual({ok, []}, rpc:call(W, file_handles, list_local, [])),
     {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
         CacheEntriesBefore, CacheEntriesAfter).
@@ -213,7 +213,7 @@ lfm_open_and_create_open_failure(Config) ->
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(
         W, SessId1, {path, <<"/space_name1/test_read">>})
     ),
-    ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])),
+    ?assertEqual({ok, []}, rpc:call(W, file_handles, list_local, [])),
 
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>, 8#755),
     ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr)),
@@ -344,7 +344,7 @@ lfm_copy_failure(Config) ->
     ?assertEqual({error, ?EAGAIN}, lfm_proxy:mv(
         W, SessId1, {guid, FileGuid}, <<"/space_name2/test_read2">>)
     ),
-    ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])),
+    ?assertEqual({ok, []}, rpc:call(W, file_handles, list_local, [])),
     {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
         CacheEntriesBefore, CacheEntriesAfter).
@@ -374,7 +374,7 @@ lfm_copy_failure_multiple_users(Config) ->
         W, SessId2, {guid, FileGuid}, <<"/space_name3/test_read2">>)
     ),
     ?assertEqual(0, get_session_file_handles_num(W, FileGuid, SessId2)),
-    {ok, Docs} = rpc:call(W, file_handles, list, []),
+    {ok, Docs} = rpc:call(W, file_handles, list_local, []),
     ?assertEqual(1, length(Docs)),
 
     % unload mock for open so that operations will succeed again
@@ -1793,7 +1793,7 @@ get_mem_and_disc_entries(Worker) ->
 get_session_file_handles_num(W, FileGuid, SessionId) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, [#document{key = FileUuid, value = FileHandlesRec} | _]} = rpc:call(
-        W, file_handles, list, []
+        W, file_handles, list_local, []
     ),
     Descriptors = FileHandlesRec#file_handles.descriptors,
     case maps:find(SessionId, Descriptors) of
