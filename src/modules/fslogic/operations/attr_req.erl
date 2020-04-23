@@ -49,6 +49,17 @@
 -export_type([name_conflicts_resolution_policy/0, compute_file_attr_opts/0]).
 
 
+-type file_private_attrs_and_ctx() :: {
+    Mode :: non_neg_integer(),
+    Uid :: luma:uid(),
+    Gid :: luma:gid(),
+    OwnerId :: od_user:id(),
+    ProviderId :: od_provider:id(),
+    Shares :: [od_share:id()],
+    FileCtx :: file_ctx:ctx()
+}.
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -318,41 +329,25 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
             file_ctx:get_file_doc(FileCtx)
     end,
 
-    {
-        Mode, Uid, Gid,
-        OwnerId, ProviderId, Shares,
-        FileCtx3
-    } = get_private_attrs(ShareId, UserCtx, FileCtx2, FileDoc),
+    {{ATime, CTime, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
+    {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
 
-    {Size, FileCtx4} = case maps:get(include_size, Opts, true) of
-        true -> file_ctx:get_file_size(FileCtx3);
-        _ -> {undefined, FileCtx3}
+    {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx5} = case ShareId of
+        undefined -> get_private_attrs(UserCtx, FileCtx4, FileDoc);
+        _ -> get_masked_private_attrs(ShareId, FileCtx4, FileDoc)
     end,
-
-    {{ATime, CTime, MTime}, FileCtx5} = file_ctx:get_times(FileCtx4),
-    {ParentGuid, FileCtx6} = file_ctx:get_parent_guid(FileCtx5, UserCtx),
-
-    ResolveNameConflicts = case maps:get(name_conflicts_resolution_policy, Opts, resolve_name_conflicts) of
-        resolve_name_conflicts -> true;
-        allow_name_conflicts -> false
+    {Size, FileCtx6} = case maps:get(include_size, Opts, true) of
+        true -> file_ctx:get_file_size(FileCtx5);
+        _ -> {undefined, FileCtx5}
     end,
-
-    {FileName, FileCtx7} = file_ctx:get_aliased_name(FileCtx6, UserCtx),
-    {FinalName, ConflictingFiles} = case ResolveNameConflicts andalso ParentGuid =/= undefined of
-        true ->
-            case file_meta:check_name(file_id:guid_to_uuid(ParentGuid), FileName, FileDoc) of
-                {conflicting, ExtendedName, Others} ->
-                    {ExtendedName, Others};
-                _ ->
-                    {FileName, []}
-            end;
-        _ ->
-            {FileName, []}
-    end,
+    {FileName, ConflictingFiles, FileCtx7} = resolve_file_name(
+        UserCtx, FileDoc, FileCtx6, ParentGuid,
+        maps:get(name_conflicts_resolution_policy, Opts, resolve_name_conflicts)
+    ),
 
     FileAttr = #file_attr{
         guid = FileGuid,
-        name = FinalName,
+        name = FileName,
         mode = Mode,
         parent_uuid = ParentGuid,
         uid = Uid,
@@ -369,20 +364,10 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
     {FileAttr, FileDoc, ConflictingFiles, FileCtx7}.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Returns masked private attrs values when accessing file via share guid (e.g.
-%% in share mode only last 3 bits of mode - 'other' bits - should be visible).
-%% When accessing file in normal mode real values are returned.
-%%
-%% NOTE !!!
-%% ShareId is added to file_meta.shares only for directly shared
-%% files/directories and not their children, so not every file
-%% accessed via share guid will have ShareId in `file_attrs.shares`
-%% @end
-%%--------------------------------------------------------------------
-get_private_attrs(undefined, UserCtx, FileCtx0, #document{
+-spec get_private_attrs(user_ctx:ctx(), file_ctx:ctx(), file_meta:doc()) ->
+    file_private_attrs_and_ctx().
+get_private_attrs(UserCtx, FileCtx0, #document{
     value = #file_meta{
         mode = Mode,
         provider_id = ProviderId,
@@ -391,8 +376,24 @@ get_private_attrs(undefined, UserCtx, FileCtx0, #document{
     }
 }) ->
     {{Uid, Gid}, FileCtx1} = file_ctx:get_posix_storage_user_context(FileCtx0, UserCtx),
-    {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx1};
-get_private_attrs(ShareId, _UserCtx, FileCtx, #document{
+    {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx1}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns masked private attrs values when accessing file via share guid (e.g.
+%% in share mode only last 3 bits of mode - 'other' bits - should be visible).
+%%
+%% NOTE !!!
+%% ShareId is added to file_meta.shares only for directly shared
+%% files/directories and not their children, so not every file
+%% accessed via share guid will have ShareId in `file_attrs.shares`
+%% @end
+%%--------------------------------------------------------------------
+-spec get_masked_private_attrs(od_share:id(), file_ctx:ctx(), file_meta:doc()) ->
+    file_private_attrs_and_ctx().
+get_masked_private_attrs(ShareId, FileCtx, #document{
     value = #file_meta{
         mode = RealMode,
         shares = AllShares
@@ -404,6 +405,34 @@ get_private_attrs(ShareId, _UserCtx, FileCtx, #document{
         false -> []
     end,
     {Mode, ?SHARE_UID, ?SHARE_GID, <<"unknown">>, <<"unknown">>, Shares, FileCtx}.
+
+
+%% @private
+-spec resolve_file_name(
+    user_ctx:ctx(),
+    file_meta:doc(),
+    file_ctx:ctx(),
+    ParentGuid :: undefined | file_id:file_guid(),
+    name_conflicts_resolution_policy()
+) ->
+    {
+        file_meta:name(),
+        ConflictingFiles :: [{file_meta:uuid(), file_meta:name()}],
+        file_ctx:ctx()
+    }.
+resolve_file_name(UserCtx, FileDoc, FileCtx0, <<_/binary>> = ParentGuid, resolve_name_conflicts) ->
+    ParentUuid = file_id:guid_to_uuid(ParentGuid),
+    {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
+
+    case file_meta:check_name(ParentUuid, FileName, FileDoc) of
+        {conflicting, ExtendedName, ConflictingFiles} ->
+            {ExtendedName, ConflictingFiles, FileCtx1};
+        _ ->
+            {FileName, [], FileCtx1}
+    end;
+resolve_file_name(UserCtx, _FileDoc, FileCtx0, _ParentGuid, _NameConflictResolutionPolicy) ->
+    {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
+    {FileName, [], FileCtx1}.
 
 
 %% @private
