@@ -148,11 +148,13 @@ ct_command = ['ct_run',
               '-dir', '.',
               '-logdir', './logs/',
               '-ct_hooks', 'cth_surefire', '[{path, "surefire.xml"}]',
-              'and', 'cth_logger', 'and', 'cth_onenv_up', 
-#               'and', 'cth_mock', fixme
+              'and', 'cth_logger', 
+              'and', 'cth_onenv_up', 
+              'and', 'cth_mock',
               'and', 'cth_posthook',
               '-noshell',
               '-name', 'testmaster@testmaster.{0}.test'.format(uid),
+              '-hidden',
               '-include', '../include', '../_build/default/lib']
 
 code_paths = ['-pa']
@@ -266,14 +268,12 @@ config_dirs = ['.docker', '.kube', '.minikube', '.one-env']
 command = '''
 import os, shutil, subprocess, sys, stat
 
-os.environ['HOME'] = '/root'
+home = '{user_home}'
+os.environ['HOME'] = home
 
-home = '/root'
 if {shed_privileges}:
 
     os.environ['PATH'] = os.environ['PATH'].replace('sbin', 'bin')
-    os.environ['HOME'] = '{user_home}'
-    home = '{user_home}'
     os.chown(home, {gid}, {gid})
     docker_gid = os.stat('/var/run/docker.sock').st_gid
     os.chmod('/etc/hosts', 0o666)
@@ -323,10 +323,6 @@ for dirname in config_dirs:
 
 remove_dockers_and_volumes()
 
-# container = docker.ps(all=True, quiet=True, filters=[('name', 'one-env')])
-# if container:
-#     docker.remove(container, force=True)
-
 ret = docker.run(tty=True,
                  rm=True,
                  interactive=True,
@@ -341,9 +337,6 @@ ret = docker.run(tty=True,
                  name='testmaster_{0}'.format(uid),
                  hostname='testmaster.{0}.test'.format(uid),
                  image=args.image,
-                 # setting HOME allows to use k8s and minikube configs
-                 # from host
-                 envs={'HOME': os.path.expanduser('~')},
                  command=['python', '-c', command])
 
 os.remove(new_cover)
