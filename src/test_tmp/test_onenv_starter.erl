@@ -25,7 +25,7 @@ prepare_test_environment(Config, Suite) ->
     ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
         Token /= "test_distributed"
     end, filename:split(DataDir))),
-    
+
     OnenvDir = filename:join([ProjectRoot, "one-env"]),
     OnenvScript = filename:join([OnenvDir, "onenv"]),
     OnenvConfig = filename:join([OnenvDir, "test_env_config.yaml"]),
@@ -37,15 +37,16 @@ prepare_test_environment(Config, Suite) ->
     Status = utils:cmd([OnenvScript, "status"]),
     [StatusProplist] = yamerl:decode(Status),
     ct:pal("~s", [Status]),
-    
+
     PodsProplist = proplists:get_value("pods", StatusProplist),
     NodesConfig = prepare_nodes_config(PodsProplist),
 
     [{PodName, _} | _] = PodsProplist,
     set_up_dns(OnenvScript, PodName),
-    
+    add_entries_to_etc_hosts(StatusProplist),
+
     ping_nodes(NodesConfig),
-    
+
     A = prepare_base_config(NodesConfig),
     A ++ [{onenv_script, OnenvScript}].
 
@@ -96,7 +97,39 @@ set_up_dns(OnenvScript, PodName) ->
     ResolvConfEntry = utils:cmd([OnenvScript, "exec2", PodName, "head", "-n", "1", "/etc/resolv.conf"]),
     [] = os:cmd("echo \"" ++ ResolvConfEntry ++ "\" > /etc/resolv.conf"),
     ok.
-    
+
+
+add_entries_to_etc_hosts(OnenvStatus) ->
+    PodsConfig = proplists:get_value("pods", OnenvStatus),
+
+    HostsEntries = lists:foldl(fun({_ServiceName, ServiceConfig}, Acc0) ->
+        ServiceType = proplists:get_value("service-type", ServiceConfig),
+        case lists:member(ServiceType, ["onezone", "oneprovider"]) of
+            true ->
+                Ip = proplists:get_value("ip", ServiceConfig),
+
+                Acc1 = case proplists:get_value("domain", ServiceConfig, undefined) of
+                    undefined -> Acc0;
+                    Domain -> [{Domain, Ip} | Acc0]
+                end,
+                case proplists:get_value("hostname", ServiceConfig, undefined) of
+                    undefined -> Acc1;
+                    Hostname -> [{Hostname, Ip} | Acc1]
+                end;
+            false ->
+                Acc0
+        end
+    end, [], PodsConfig),
+
+    {ok, File} = file:open("/etc/hosts", [append]),
+
+    lists:foreach(fun({DomainOrHostname, Ip}) ->
+        io:fwrite(File, "~s ~s~n", [Ip, DomainOrHostname])
+    end, HostsEntries),
+
+    file:close(File).
+
+
 prepare_base_config(NodesConfig) ->
     ProvidersNodes = lists:foldl(fun(Node, Acc) -> 
         ProviderId = rpc:call(Node, oneprovider, get_id, []),
@@ -105,7 +138,7 @@ prepare_base_config(NodesConfig) ->
     end, #{}, proplists:get_value(op_worker_nodes, NodesConfig, [])),
     
     ProvidersList = maps:keys(ProvidersNodes),
-    
+
     ProviderSpaces = lists:foldl(fun(ProviderId, Acc) ->
         [Node | _] = maps:get(ProviderId, ProvidersNodes),
         {ok, Spaces} = rpc:call(Node, provider_logic, get_spaces, []),

@@ -276,6 +276,7 @@ if {shed_privileges}:
     home = '{user_home}'
     os.chown(home, {gid}, {gid})
     docker_gid = os.stat('/var/run/docker.sock').st_gid
+    os.chmod('/etc/hosts', 0o666)
     os.chmod('/etc/resolv.conf', 0o666)
     os.setgroups([docker_gid])
     os.setregid({gid}, {gid})
