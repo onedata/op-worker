@@ -29,6 +29,7 @@
 -export([on_cluster_ready/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
+-export([node_down/2, node_recovery/2]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
@@ -233,8 +234,22 @@ modules_with_exometer() ->
 -spec exometer_reporters() -> list().
 exometer_reporters() -> [].
 
-node_down_callback(Node, IsMaster) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback used to customize behavior in case of other node failure. Second argument
+%% informs if failed node is master (see ha_datastore.hrl in cluster_worker) for current node.
+%% @end
+%%--------------------------------------------------------------------
+-spec node_down(node(), boolean()) -> ok.
+node_down(_FailedNode, _IsFailedNodeMaster) ->
     ok.
 
-node_recovery_callback(Node, IsMaster) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback used to customize behavior when other node recovers after failure. Second argument
+%% informs if recovered node is master (see ha_datastore.hrl in cluster_worker) for current node.
+%% @end
+%%--------------------------------------------------------------------
+-spec node_recovery(node(), boolean()) -> ok.
+node_recovery(_RecoveredNode, _IsRecoveredNodeMaster) ->
     provider_auth:backup_to_file().

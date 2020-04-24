@@ -88,6 +88,7 @@ run_after(Doc = #document{key = SpaceId}) ->
     ok = fslogic_worker:init_paths_caches(SpaceId),
     emit_monitoring_event(Doc),
     maybe_revise_space_harvesters(Doc),
+    ok = dbsync_worker:start_streams([SpaceId]),
     {ok, Doc}.
 
 %%%===================================================================

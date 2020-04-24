@@ -50,7 +50,7 @@ register(SessId, FileGuid) ->
 deregister(SessId, FileGuid) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     replica_synchronizer:cancel_transfers_of_session(FileUuid, SessId),
-    session:delete_local_links(SessId, ?OPEN_FILES_TREE_ID, FileGuid, false).
+    session:delete_local_links(SessId, ?OPEN_FILES_TREE_ID, FileGuid, #{ha_disabled => false}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -82,7 +82,7 @@ invalidate_local_entries(SessId) ->
 %% Removes all entries connected with session open files.
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_node_entries(session:id(), node()) -> ok.
+-spec invalidate_node_entries(session:id(), node(), #{atom() => term()}) -> ok.
 invalidate_node_entries(SessId, Node, CtxExtension) ->
     {ok, Links} = session:fold_local_links(SessId, ?OPEN_FILES_TREE_ID,
         fun(Link = #link{}, Acc) -> {ok, [Link | Acc]} end, Node

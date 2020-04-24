@@ -305,7 +305,8 @@ on_connect_to_oz() ->
     ok = main_harvesting_stream:revise_all_spaces(),
     ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
     ok = rtransfer_config:add_storages(),
-    storage_sync_worker:notify_connection_to_oz().
+    ok = storage_sync_worker:notify_connection_to_oz(),
+    ok = dbsync_worker:start_streams().
 
 
 %%--------------------------------------------------------------------
