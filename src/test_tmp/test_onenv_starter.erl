@@ -89,7 +89,7 @@ ping_nodes(Config) ->
     lists:foreach(fun(NodeType) ->
         Nodes = proplists:get_value(NodeType, Config, []),
         lists:foreach(fun(Node) ->
-            true == net_kernel:connect_node(Node)
+            true = net_kernel:connect_node(Node)
         end, Nodes)
     end, NodesTypes).
 

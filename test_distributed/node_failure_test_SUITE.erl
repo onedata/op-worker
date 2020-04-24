@@ -70,20 +70,35 @@ failure_test(Config) ->
         FileGuid
     end, lists:seq(1, 1)),
     
+    % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
+    lists:foreach(fun(PanelNode) ->
+        Ctx = rpc:call(PanelNode, service, get_ctx, [op_worker]),
+        ok = rpc:call(PanelNode, service, deregister_healthcheck, [op_worker, Ctx])
+    end, ?config(op_panel_nodes, Config)),
+    
+    
     WorkerToKillP1Pod = kv_utils:get([pods, WorkerToKillP1], Config),
     WorkerToKillP2Pod = kv_utils:get([pods, WorkerToKillP2], Config),
     OnenvScript = kv_utils:get(onenv_script, Config),
     
-    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP1Pod, "killall", "run_erl"]),
-    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP2Pod, "killall", "run_erl"]),
+    GetOpWorkerPidCommand = ["ps", "-e", "|", "grep", "pts/2", "|", "cut", "-d", "' '", "-f" , "2"],
+    PidWorkerToKillP1 = ?assertMatch([_ | _], string:trim(
+        utils:cmd([OnenvScript, "exec2", WorkerToKillP1Pod] ++ GetOpWorkerPidCommand))),
+    PidWorkerToKillP2 = ?assertMatch([_ | _], string:trim(
+        utils:cmd([OnenvScript, "exec2", WorkerToKillP2Pod] ++ GetOpWorkerPidCommand))),
     
-    timer:sleep(timer:seconds(3)),
+    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP1Pod, "kill", "-s", "SIGKILL", PidWorkerToKillP1]),
+    ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP1, oneprovider, get_id, []), 10),
+    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP2Pod, "kill", "-s", "SIGKILL", PidWorkerToKillP2]),
+    ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, oneprovider, get_id, []), 10),
+    ct:pal("Killed nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
     
-    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP1Pod, "op_panel", "start"]),
-    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP2Pod, "op_panel", "start"]),
+    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP1Pod, "op_worker", "start"]),
+    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP2Pod, "op_worker", "start"]),
+    ?assertNotEqual({badrpc, nodedown}, rpc:call(WorkerToKillP1, oneprovider, get_id, []), 60),
+    ?assertNotEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, oneprovider, get_id, []), 60),
+    ct:pal("Started nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
     
-    timer:sleep(timer:minutes(2)), % wait for nodes to restart
-
     lists:foreach(fun(Dir) ->
         ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
             rpc:call(WorkerToCheckP2, lfm, stat, [SessId(P2), {guid, Dir}]), Attempts)
