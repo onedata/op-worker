@@ -96,5 +96,6 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 
 -spec start(od_space:id()) -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start(SpaceId) ->
+    % MW_CHECK - serwis
     Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, gen_server2, start, [?SERVER(SpaceId), ?MODULE, [SpaceId], []]).

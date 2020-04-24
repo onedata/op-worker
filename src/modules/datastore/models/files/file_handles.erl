@@ -72,6 +72,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [doc()]} | {error, term()}.
 list() ->
+    % MW_CHECK - listowanie musi ogarnac blad master'a i lostowac na slave'ie
     {AnsList, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(), datastore_model, fold,
         [?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []]),
     case BadNodes of

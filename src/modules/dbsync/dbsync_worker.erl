@@ -266,6 +266,7 @@ handle_changes_request(ProviderId, #changes_request2{
             ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
         )}
     ]),
+    % MW_CHECK - serwis
     Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]).
 
@@ -304,4 +305,5 @@ report_dbsync_state(SpaceId) ->
 %% @private
 -spec is_this_responsible_node(od_space:id()) -> boolean().
 is_this_responsible_node(SpaceId) ->
+    % MW_CHECK - serwis
     node() == datastore_key:responsible_node(SpaceId).

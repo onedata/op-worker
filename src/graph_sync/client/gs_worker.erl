@@ -243,6 +243,7 @@ get_connection_status() ->
 %% @end
 %%--------------------------------------------------------------------
 get_gs_client_node() ->
+    % MW_CHECK - spytac Wojtek/Lukasz
     consistent_hashing:get_assigned_node(?GS_CLIENT_WORKER_GLOBAL_NAME).
 
 

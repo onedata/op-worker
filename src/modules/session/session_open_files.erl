@@ -18,7 +18,7 @@
 %% API
 -export([register/2, deregister/2, invalidate_entries/1]).
 %% For RPC
--export([invalidate_local_entries/1]).
+-export([invalidate_local_entries/1, invalidate_node_entries/3]).
 
 -define(OPEN_FILES_TREE_ID, <<"open_files">>).
 
@@ -34,7 +34,7 @@
 -spec register(session:id(), fslogic_worker:file_guid()) ->
     ok | {error, term()}.
 register(SessId, FileGuid) ->
-    case session:add_local_links(SessId, ?OPEN_FILES_TREE_ID, FileGuid, <<>>) of
+    case session:add_local_links(SessId, ?OPEN_FILES_TREE_ID, FileGuid, <<>>, false) of
         ok -> ok;
         {error, already_exists} -> ok;
         Error -> Error
@@ -50,7 +50,7 @@ register(SessId, FileGuid) ->
 deregister(SessId, FileGuid) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     replica_synchronizer:cancel_transfers_of_session(FileUuid, SessId),
-    session:delete_local_links(SessId, ?OPEN_FILES_TREE_ID, FileGuid).
+    session:delete_local_links(SessId, ?OPEN_FILES_TREE_ID, FileGuid, false).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -59,23 +59,38 @@ deregister(SessId, FileGuid) ->
 %%--------------------------------------------------------------------
 -spec invalidate_entries(session:id()) -> ok.
 invalidate_entries(SessId) ->
-    {AnsList, []} = rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, invalidate_local_entries, [SessId]),
-    lists:foreach(fun(Ans) -> ok = Ans end, AnsList).
+    {AnsList, BadNodes} =
+        rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, invalidate_local_entries, [SessId]),
+    lists:foreach(fun(Ans) -> ok = Ans end, AnsList),
+    lists:foreach(fun(FailedNode) ->
+        [Node | _] = ha_datastore:get_backup_nodes(FailedNode),
+        ok = rpc:call(Node, ?MODULE, invalidate_node_entries,
+            [SessId, FailedNode, #{failed_nodes => [Node], failed_master => true}])
+    end, BadNodes).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv invalidate_node_entries(SessId, node()).
+%% @end
+%%--------------------------------------------------------------------
+-spec invalidate_local_entries(session:id()) -> ok.
+invalidate_local_entries(SessId) ->
+    invalidate_node_entries(SessId, node(), #{}).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes all entries connected with session open files.
 %% @end
 %%--------------------------------------------------------------------
--spec invalidate_local_entries(session:id()) -> ok.
-invalidate_local_entries(SessId) ->
+-spec invalidate_node_entries(session:id(), node()) -> ok.
+invalidate_node_entries(SessId, Node, CtxExtension) ->
     {ok, Links} = session:fold_local_links(SessId, ?OPEN_FILES_TREE_ID,
-        fun(Link = #link{}, Acc) -> {ok, [Link | Acc]} end
+        fun(Link = #link{}, Acc) -> {ok, [Link | Acc]} end, Node
     ),
     Names = lists:map(fun(#link{name = FileGuid}) ->
         FileCtx = file_ctx:new_by_guid(FileGuid),
         file_handles:invalidate_session_entry(FileCtx, SessId),
         FileGuid
     end, Links),
-    session:delete_local_links(SessId, ?OPEN_FILES_TREE_ID, Names),
+    session:delete_local_links(SessId, ?OPEN_FILES_TREE_ID, Names, CtxExtension#{ha_disabled => false}),
     ok.

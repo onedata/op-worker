@@ -313,6 +313,7 @@ apply_or_run_locally(Uuid, InCacheFun, ApplyOnCacheFun, FallbackFun) ->
 -spec apply_if_alive_no_check(file_meta:uuid(), term()) ->
     term().
 apply_if_alive_no_check(Uuid, FunOrMsg) ->
+    % MW_CHECK - musi umrzec jak master wraca
     Node = datastore_key:responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_if_alive_internal, [Uuid, FunOrMsg]).
 
@@ -326,6 +327,7 @@ apply_if_alive_no_check(Uuid, FunOrMsg) ->
     term().
 apply_no_check(FileCtx, FunOrMsg) ->
     Uuid = file_ctx:get_uuid_const(FileCtx),
+    % MW_CHECK - musi umrzec jak master wraca
     Node = datastore_key:responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_internal, [FileCtx, FunOrMsg]).
 
@@ -338,6 +340,7 @@ apply_no_check(FileCtx, FunOrMsg) ->
 -spec apply_or_run_locally_no_check(file_meta:uuid(), fun(() -> term()), fun(() -> term())) ->
     term().
 apply_or_run_locally_no_check(Uuid, Fun, FallbackFun) ->
+    % MW_CHECK - musi umrzec jak master wraca
     Node = datastore_key:responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_or_run_locally_internal, [Uuid, Fun, FallbackFun]).
 

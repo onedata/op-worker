@@ -232,3 +232,9 @@ modules_with_exometer() ->
 %%--------------------------------------------------------------------
 -spec exometer_reporters() -> list().
 exometer_reporters() -> [].
+
+node_down_callback(Node, IsMaster) ->
+    ok.
+
+node_recovery_callback(Node, IsMaster) ->
+    provider_auth:backup_to_file().

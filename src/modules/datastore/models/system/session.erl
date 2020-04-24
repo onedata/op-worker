@@ -24,8 +24,9 @@
 %% API - basic model function
 -export([create/1, save/1, get/1, exists/1, list/0, update/2, delete/1]).
 %% API - link functions
--export([add_local_links/4, get_local_link/3, fold_local_links/3,
-    delete_local_links/3]).
+-export([add_local_links/4, add_local_links/5,
+    get_local_link/3, fold_local_links/3, fold_local_links/4,
+    delete_local_links/3, delete_local_links/4]).
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
@@ -158,50 +159,50 @@ delete(SessId) ->
 %%% API - link functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Adds local link to a tree.
-%% @end
-%%--------------------------------------------------------------------
 -spec add_local_links(id(), datastore:tree_id(), datastore:link_name(),
     datastore:link_target()) -> ok | {error, term()}.
 add_local_links(SessId, TreeID, LinkName, LinkValue) ->
-    ?extract_ok(datastore_model:add_links(?CTX#{routing => local}, SessId,
+    add_local_links(SessId, TreeID, LinkName, LinkValue, true).
+
+-spec add_local_links(id(), datastore:tree_id(), datastore:link_name(),
+    datastore:link_target(), boolean()) -> ok | {error, term()}.
+add_local_links(SessId, TreeID, LinkName, LinkValue, DisableHA) ->
+    ?extract_ok(datastore_model:add_links(?CTX#{routing => local, ha_disabled => DisableHA}, SessId,
         TreeID, {LinkName, LinkValue}
     )).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets local link from a tree.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec get_local_link(id(), datastore:tree_id(), datastore:link_name()) ->
     {ok, [datastore:link()]} | {error, term()}.
 get_local_link(SessId, TreeID, LinkName) ->
     datastore_model:get_links(?CTX#{routing => local}, SessId, TreeID, LinkName).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Iterates over local tree and executes Fun on each link.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec fold_local_links(id(), datastore:tree_id(),
     datastore:fold_fun(datastore:link())) ->
     {ok, datastore:fold_acc()} | {error, term()}.
 fold_local_links(SessId, TreeID, Fun) ->
-    datastore_model:fold_links(?CTX#{routing => local},
+    fold_local_links(SessId, TreeID, Fun, node()).
+
+-spec fold_local_links(id(), datastore:tree_id(),
+    datastore:fold_fun(datastore:link()), node()) ->
+    {ok, datastore:fold_acc()} | {error, term()}.
+fold_local_links(SessId, TreeID, Fun, FoldNode) ->
+    datastore_model:fold_links(?CTX#{routing => local, fold_node => FoldNode},
         SessId, TreeID, Fun, [], #{}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes local link from a tree.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec delete_local_links
     (id(), datastore:tree_id(), datastore:link_name()) -> ok | {error, term()};
     (id(), datastore:tree_id(), [datastore:link_name()]) -> [ok | {error, term()}].
 delete_local_links(SessId, TreeID, LinkName) ->
-    datastore_model:delete_links(?CTX#{routing => local},
+    delete_local_links(SessId, TreeID, LinkName, #{}).
+
+-spec delete_local_links
+    (id(), datastore:tree_id(), datastore:link_name(), #{atom() => term()}) -> ok | {error, term()};
+    (id(), datastore:tree_id(), [datastore:link_name()], #{atom() => term()}) -> [ok | {error, term()}].
+delete_local_links(SessId, TreeID, LinkName, CtxExtension) ->
+    datastore_model:delete_links(maps:merge(?CTX#{routing => local}, CtxExtension),
         SessId, TreeID, LinkName).
 
 %%%===================================================================

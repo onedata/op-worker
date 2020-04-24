@@ -88,7 +88,7 @@ get(SessId, HandleId) ->
 %%--------------------------------------------------------------------
 -spec remove_handles(SessId :: session:id()) -> ok.
 remove_handles(SessId) ->
-    {AnsList, []} = rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, remove_local_handles, [SessId]),
+    {AnsList, _} = rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, remove_local_handles, [SessId]),
     lists:foreach(fun(Ans) -> ok = Ans end, AnsList).
 
 

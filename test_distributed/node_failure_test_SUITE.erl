@@ -29,6 +29,16 @@
 all() ->
     ?ALL([failure_test]).
 
+% Szukamy:
+% consistent_hashing:get_all_nodes()
+% datastore_key:responsible_node
+% consistent_hashing:get_assigned_node
+% worker_proxy:
+
+% responsible node powinien zwracac slave jesli master jest walniety
+% Trzeba ogranac co robic z lokalnymi kopiami
+% MW_CHECK
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -74,30 +84,30 @@ failure_test(InitialConfig) ->
     ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP1, erlang, halt, [])),
     ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, erlang, halt, [])),
 
-%%    lists:foreach(fun(Dir) ->
-%%        ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-%%            lfm_proxy:stat(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, Dir}), Attempts)
-%%    end, Dirs),
-%%
-%%    lists:foreach(fun(Dir) ->
-%%        ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-%%            lfm_proxy:stat(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, Dir}), Attempts)
-%%    end, Dirs),
-%%
-%%    lists:foreach(fun(File) ->
-%%        ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
-%%            lfm_proxy:stat(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, File}), Attempts),
-%%
-%%        ?assertMatch({ok, FileData},
-%%            begin
-%%                {ok, Handle} = lfm_proxy:open(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, File}, rdwr),
-%%                try
-%%                    lfm_proxy:read(WorkerToCheckP2, Handle, 0, 1000)
-%%                after
-%%                    lfm_proxy:close(WorkerToCheckP2, Handle)
-%%                end
-%%            end, Attempts)
-%%    end, Files),
+    lists:foreach(fun(Dir) ->
+        ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
+            lfm_proxy:stat(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, Dir}), Attempts)
+    end, Dirs),
+
+    lists:foreach(fun(Dir) ->
+        ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
+            lfm_proxy:stat(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, Dir}), Attempts)
+    end, Dirs),
+
+    lists:foreach(fun(File) ->
+        ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
+            lfm_proxy:stat(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, File}), Attempts),
+
+        ?assertMatch({ok, FileData},
+            begin
+                {ok, Handle} = lfm_proxy:open(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, File}, rdwr),
+                try
+                    lfm_proxy:read(WorkerToCheckP2, Handle, 0, 1000)
+                after
+                    lfm_proxy:close(WorkerToCheckP2, Handle)
+                end
+            end, Attempts)
+    end, Files),
 
     ok.
 

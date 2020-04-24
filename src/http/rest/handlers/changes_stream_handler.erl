@@ -475,6 +475,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     Pid = self(),
 
     % TODO VFS-5570
+    % MW_CHECK - serwis? - spytac BW czy jak padnie node to ma pasc handler?
     Node = datastore_key:responsible_node(SpaceId),
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
         [<<"onedata">>, SpaceId, fun(Feed) ->

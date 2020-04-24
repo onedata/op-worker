@@ -31,6 +31,7 @@
 -export([clear_provider_id_cache/0]).
 -export([get_access_token/0, get_identity_token/0, get_identity_token_for_consumer/1]).
 -export([get_root_token_file_path/0]).
+-export([backup_to_file/0]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -75,15 +76,16 @@
 -spec save(ProviderId :: od_provider:id(), tokens:serialized()) ->
     ok.
 save(ProviderId, RootToken) ->
-    {ok, _} = datastore_model:save(?CTX, #document{
-        key = ?PROVIDER_AUTH_KEY,
-        value = #provider_auth{
-            provider_id = ProviderId,
-            root_token = RootToken
-        }
-    }),
-    simple_cache:put(?PROVIDER_ID_CACHE_KEY, ProviderId),
-    write_to_file(ProviderId, RootToken).
+    critical_section(fun() ->
+        {ok, _} = datastore_model:save(?CTX, #document{
+            key = ?PROVIDER_AUTH_KEY,
+            value = #provider_auth{
+                provider_id = ProviderId,
+                root_token = RootToken
+            }
+        }),
+        write_to_file(ProviderId, RootToken, consistent_hashing:get_all_nodes())
+    end).
 
 
 %%--------------------------------------------------------------------
@@ -182,6 +184,22 @@ delete() ->
     rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, clear_provider_id_cache, []),
     ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Backups provider identity in a file this node.
+%% @end
+%%--------------------------------------------------------------------
+-spec backup_to_file() -> ok.
+backup_to_file() ->
+    critical_section(fun() ->
+        case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
+            {ok, #document{value = #provider_auth{provider_id = ProviderId, root_token = RootToken}}} ->
+                write_to_file(ProviderId, RootToken, [node()]);
+            {error, _} ->
+                ok
+        end
+    end).
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -241,13 +259,13 @@ upgrade_record(1, ProviderAuth) ->
     % Versions 1 and 2 are the same, but upgrade is triggered to force overwrite
     % of the root token file, which has changed.
     {provider_auth, ProviderId, RootToken, _, _} = ProviderAuth,
-    write_to_file(ProviderId, RootToken),
+    write_to_file(ProviderId, RootToken, consistent_hashing:get_all_nodes()),
     {2, ProviderAuth};
 upgrade_record(2, ProviderAuth) ->
     % rename the occurrences of macaroon -> token
     {provider_auth, ProviderId, RootToken, _, _} = ProviderAuth,
     % file format is also changed to use 'token' rather than 'macaroon'
-    write_to_file(ProviderId, RootToken),
+    write_to_file(ProviderId, RootToken, consistent_hashing:get_all_nodes()),
     {3, #provider_auth{provider_id = ProviderId, root_token = RootToken}}.
 
 
@@ -261,14 +279,15 @@ upgrade_record(2, ProviderAuth) ->
 %% Stores provider identity in a file on all nodes.
 %% @end
 %%--------------------------------------------------------------------
--spec write_to_file(od_provider:id(), tokens:serialized()) -> ok.
-write_to_file(ProviderId, RootToken) ->
+-spec write_to_file(od_provider:id(), tokens:serialized(), [node()]) -> ok.
+write_to_file(ProviderId, RootToken, Nodes) ->
     ProviderRootTokenFile = get_root_token_file_path(),
     Map = #{<<"_comment">> => ?FILE_COMMENT,
         <<"provider_id">> => ProviderId, <<"root_token">> => RootToken},
     Formatted = json_utils:encode(Map, [pretty]),
 
-    {Results, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(), file, write_file,
+    % MW_CHECK - spytac LO
+    {Results, BadNodes} = rpc:multicall(Nodes, file, write_file,
         [ProviderRootTokenFile, Formatted]),
     case lists:filter(fun(Result) -> Result /= ok end, Results ++ BadNodes) of
         [] -> ok;
@@ -276,7 +295,6 @@ write_to_file(ProviderId, RootToken) ->
             ?alert("Errors when writing provider root token to file: ~p", [Errors]),
             ok
     end.
-
 
 %% @private
 -spec get_token(access | identity) -> {ok, tokens:serialized()} | {error, term()}.
@@ -337,3 +355,7 @@ caveats_for_token(access) -> [
 ];
 caveats_for_token(identity) -> [
 ].
+
+-spec critical_section(fun (() -> Result :: term())) -> Result :: term().
+critical_section(Fun) ->
+    critical_section:run([?MODULE], Fun).

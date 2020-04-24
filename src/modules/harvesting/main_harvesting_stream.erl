@@ -75,11 +75,13 @@ revise_space_harvesters(SpaceId, Harvesters) ->
 
 -spec space_removed(od_space:id()) -> ok.
 space_removed(SpaceId) ->
+    % MW_CHECK - serwis
     Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, ?MODULE, space_removed_internal, [SpaceId]).
 
 -spec space_unsupported(od_space:id()) -> ok.
 space_unsupported(SpaceId) ->
+    % MW_CHECK - serwis
     Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, ?MODULE, space_unsupported_internal, [SpaceId]).
 
@@ -332,12 +334,14 @@ on_harvesting_doc_not_found(State) ->
 
 -spec multicall_internal(od_space:id(), term()) -> ok.
 multicall_internal(SpaceId, Request) ->
+    % MW_CHECK - serwis?
     Nodes = consistent_hashing:get_all_nodes(),
     rpc:multicall(Nodes, ?MODULE, call_internal, [SpaceId, Request]),
     ok.
 
 -spec call_internal(od_space:id(), term()) -> term().
 call_internal(SpaceId, Request) ->
+    % MW_CHECK - serwis
     case datastore_key:responsible_node(SpaceId) =:= node() of
         true ->
             Name = ?MAIN_HARVESTING_STREAM(SpaceId),
