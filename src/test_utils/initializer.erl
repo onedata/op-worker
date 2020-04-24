@@ -872,7 +872,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1))
     end, AllWorkers),
-    rpc:multicall(AllWorkers, worker_proxy, call, [dbsync_worker, streams_healthcheck]),
+    rpc:multicall(AllWorkers, dbsync_worker, start_streams, []),
 
     lists:foreach(
         fun({_, #user_config{id = UserId, spaces = UserSpaces}}) ->

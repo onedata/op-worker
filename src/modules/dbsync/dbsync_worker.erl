@@ -29,8 +29,6 @@
 -export([start_in_stream/1, stop_in_stream/1, start_out_stream/1, stop_out_stream/1]).
 
 -define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
--define(STREAMS_HEALTHCHECK_INTERVAL, application:get_env(?APP_NAME,
-    dbsync_streams_healthcheck_interval, timer:seconds(5))).
 -define(DBSYNC_STATE_REPORT_INTERVAL, timer:seconds(application:get_env(?APP_NAME,
     dbsync_state_report_interval_sec, 15))).
 
@@ -51,7 +49,6 @@
 init(_Args) ->
     couchbase_changes:enable([dbsync_utils:get_bucket()]),
     start_streams(),
-    erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(), {sync_timer, streams_healthcheck}),
     erlang:send_after(?DBSYNC_STATE_REPORT_INTERVAL, self(), {sync_timer, dbsync_state_report}),
     {ok, #{}}.
 
@@ -64,15 +61,6 @@ init(_Args) ->
 handle(ping) ->
     pong;
 handle(healthcheck) ->
-    ok;
-handle(streams_healthcheck) ->
-    try
-        start_streams()
-    catch
-        Type:Reason ->
-            ?error_stacktrace("Failed to start streams due to ~p:~p", [Type, Reason])
-    end,
-    erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(), {sync_timer, streams_healthcheck}),
     ok;
 handle(dbsync_state_report) ->
     try
@@ -153,6 +141,7 @@ start_streams() ->
 
 -spec start_streams([od_space:id()]) -> ok.
 start_streams(Spaces) ->
+    ?info("xxxxxx ~p", [{Spaces, erlang:process_info(self(), current_stacktrace)}]),
     lists:foreach(fun(SpaceId) ->
         internal_services_manager:start_service(?MODULE, <<"dbsync_in_stream", SpaceId/binary>>,
             start_in_stream, stop_in_stream, [SpaceId], SpaceId),
