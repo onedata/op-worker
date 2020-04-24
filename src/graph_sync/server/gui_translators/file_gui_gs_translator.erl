@@ -104,6 +104,7 @@ translate_file_details(#file_details{
         owner_id = OwnerId
     }
 }, Scope) ->
+    PosixPerms = list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
     {Type, Size} = case TypeAttr of
         ?DIRECTORY_TYPE ->
             {<<"dir">>, null};
@@ -125,7 +126,7 @@ translate_file_details(#file_details{
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
         <<"index">> => StartId,
-        <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
+        <<"posixPermissions">> => PosixPerms,
         <<"parentId">> => ParentId,
         <<"mtime">> => MTime,
         <<"type">> => Type,
