@@ -32,8 +32,8 @@
 -define(DBSYNC_STATE_REPORT_INTERVAL, timer:seconds(application:get_env(?APP_NAME,
     dbsync_state_report_interval_sec, 15))).
 
--define(IN_STREAM_ID(SpaceId), {dbsync_in_stream, SpaceId}).
--define(OUT_STREAM_ID(SpaceId), {dbsync_out_stream, ReqId}).
+-define(IN_STREAM_ID(ID), {dbsync_in_stream, ID}).
+-define(OUT_STREAM_ID(ID), {dbsync_out_stream, ID}).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -100,7 +100,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec supervisor_flags() -> supervisor:sup_flags().
 supervisor_flags() ->
-    #{strategy => one_for_one, intensity => 0, period => 1}.
+    #{strategy => one_for_one, intensity => 1000, period => 3600}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -141,11 +141,10 @@ start_streams() ->
 
 -spec start_streams([od_space:id()]) -> ok.
 start_streams(Spaces) ->
-    ?info("xxxxxx ~p", [{Spaces, erlang:process_info(self(), current_stacktrace)}]),
     lists:foreach(fun(SpaceId) ->
-        internal_services_manager:start_service(?MODULE, <<"dbsync_in_stream", SpaceId/binary>>,
+        ok = internal_services_manager:start_service(?MODULE, <<"dbsync_in_stream", SpaceId/binary>>,
             start_in_stream, stop_in_stream, [SpaceId], SpaceId),
-        internal_services_manager:start_service(?MODULE, <<"dbsync_out_stream", SpaceId/binary>>,
+        ok = internal_services_manager:start_service(?MODULE, <<"dbsync_out_stream", SpaceId/binary>>,
             start_out_stream, stop_out_stream, [SpaceId], SpaceId)
     end, Spaces).
 
@@ -166,7 +165,8 @@ start_in_stream(SpaceId) ->
 
 -spec stop_in_stream(od_space:id()) -> ok | {error, term()}.
 stop_in_stream(SpaceId) ->
-    supervisor:terminate_child(?DBSYNC_WORKER_SUP, ?IN_STREAM_ID(SpaceId)).
+    ok = supervisor:terminate_child(?DBSYNC_WORKER_SUP, ?IN_STREAM_ID(SpaceId)),
+    ok = supervisor:delete_child(?DBSYNC_WORKER_SUP, ?IN_STREAM_ID(SpaceId)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -202,7 +202,8 @@ start_out_stream(SpaceId) ->
 
 -spec stop_out_stream(od_space:id()) -> ok | {error, term()}.
 stop_out_stream(SpaceId) ->
-    supervisor:terminate_child(?DBSYNC_WORKER_SUP, ?IN_STREAM_ID(SpaceId)).
+    ok = supervisor:terminate_child(?DBSYNC_WORKER_SUP, ?OUT_STREAM_ID(SpaceId)),
+    ok = supervisor:delete_child(?DBSYNC_WORKER_SUP, ?OUT_STREAM_ID(SpaceId)).
 
 %%%===================================================================
 %%% Internal functions

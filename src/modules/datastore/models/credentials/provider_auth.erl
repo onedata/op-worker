@@ -286,7 +286,6 @@ write_to_file(ProviderId, RootToken, Nodes) ->
         <<"provider_id">> => ProviderId, <<"root_token">> => RootToken},
     Formatted = json_utils:encode(Map, [pretty]),
 
-    % MW_CHECK - spytac LO
     {Results, BadNodes} = rpc:multicall(Nodes, file, write_file,
         [ProviderRootTokenFile, Formatted]),
     case lists:filter(fun(Result) -> Result /= ok end, Results ++ BadNodes) of

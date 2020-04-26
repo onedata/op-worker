@@ -313,7 +313,11 @@ apply_or_run_locally(Uuid, InCacheFun, ApplyOnCacheFun, FallbackFun) ->
 -spec apply_if_alive_no_check(file_meta:uuid(), term()) ->
     term().
 apply_if_alive_no_check(Uuid, FunOrMsg) ->
-    % MW_CHECK - musi umrzec jak master wraca
+    % MW_CHECK - musi umrzec jak master wraca - moze przeiterowac po wszystkich i wymusic terminate (wiemy ktory ma byc na innym node)
+    % tylko co jakk pojawi sie nowy request? a mmoze jakos mu zaznaczac ze jest zapasowym (wiemy to na starcie) - tylko co dalej?
+    % idealnie byloby zeby one dzialaly tak jak procesy datastore'a
+    % Rozwiazanie - przy wstawaniu zaznaczamy liste uuid'ow na slave node i wysylamy na slave node'a nastepne calle az tam sie nie zabije
+    % Przy wstawaniu musi byc tryb ktory mowi zeby sprawdzac na innym node (az uzupelnimy liste)
     Node = datastore_key:responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_if_alive_internal, [Uuid, FunOrMsg]).
 
