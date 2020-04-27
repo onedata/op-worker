@@ -163,7 +163,7 @@ start_in_stream(SpaceId) ->
     {ok, _} = supervisor:start_child(?DBSYNC_WORKER_SUP, Spec),
     ok.
 
--spec stop_in_stream(od_space:id()) -> ok | {error, term()}.
+-spec stop_in_stream(od_space:id()) -> ok | no_return().
 stop_in_stream(SpaceId) ->
     ok = supervisor:terminate_child(?DBSYNC_WORKER_SUP, ?IN_STREAM_ID(SpaceId)),
     ok = supervisor:delete_child(?DBSYNC_WORKER_SUP, ?IN_STREAM_ID(SpaceId)).
@@ -200,7 +200,7 @@ start_out_stream(SpaceId) ->
     {ok, _} = supervisor:start_child(?DBSYNC_WORKER_SUP, Spec),
     ok.
 
--spec stop_out_stream(od_space:id()) -> ok | {error, term()}.
+-spec stop_out_stream(od_space:id()) -> ok | no_return().
 stop_out_stream(SpaceId) ->
     ok = supervisor:terminate_child(?DBSYNC_WORKER_SUP, ?OUT_STREAM_ID(SpaceId)),
     ok = supervisor:delete_child(?DBSYNC_WORKER_SUP, ?OUT_STREAM_ID(SpaceId)).
