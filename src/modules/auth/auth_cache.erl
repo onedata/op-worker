@@ -474,7 +474,6 @@ code_change(_OldVsn, State, _Extra) ->
 %% @private
 -spec broadcast(Msg :: term()) -> ok.
 broadcast(Msg) ->
-    % MW_CHECK - spytac BW - trzeba wywolac procedure ktore rozesle do cache'ow prosbe o wygasniecie jak padnie node z polaczeniem
     gen_server:abcast(consistent_hashing:get_all_nodes(), ?SERVER, Msg),
     ok.
 

@@ -28,7 +28,7 @@
 -export([on_cluster_ready/0]).
 -export([supervisor_flags/0]).
 %% Services API
--export([start_gs_client_worker/0, stop_gs_client_worker/0, connection_healthcheck/1]).
+-export([start_gs_client_worker/0, stop_gs_client_worker/0, takeover_gs_client_worker/0, connection_healthcheck/1]).
 
 -define(GS_WORKER_SUP, gs_worker_sup).
 
@@ -146,6 +146,11 @@ stop_gs_client_worker() ->
     ok = supervisor:terminate_child(?GS_WORKER_SUP, ?GS_CLIENT_WORKER_GLOBAL_NAME),
     ok = supervisor:delete_child(?GS_WORKER_SUP, ?GS_CLIENT_WORKER_GLOBAL_NAME).
 
+-spec takeover_gs_client_worker() -> ok | no_return().
+takeover_gs_client_worker() ->
+    oneprovider:on_disconnect_from_oz(),
+    start_gs_client_worker().
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Checks if gs_client_worker instance is up and running and in case it's not, starts the worker.
@@ -185,6 +190,7 @@ init(_Args) ->
     ServiceOptions = #{
         start_function => start_gs_client_worker,
         stop_function => stop_gs_client_worker,
+        takeover_function => takeover_gs_client_worker,
         healthcheck_fun => connection_healthcheck
     },
     ok = internal_services_manager:start_service(?MODULE, ?GS_CLIENT_WORKER_GLOBAL_NAME_BIN,
