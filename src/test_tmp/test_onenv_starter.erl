@@ -191,19 +191,33 @@ prepare_base_config(NodesConfig) ->
         [{provider_spaces, maps:to_list(ProviderSpaces)}].
 
 
+% fixme temporary solution - fix onenv sources after restart
 overwrite_sources(Config, Node, ProjectRoot) ->
     Pod = kv_utils:get([pods, Node], Config),
     
     VersionBin = rpc:call(Node, oneprovider, get_version, []),
     
     lists:foreach(fun(Name) ->
-        TargetDir = filename:join(["/", "usr", "lib", Name, "lib", Name ++ "-" ++ binary_to_list(VersionBin)]),
-        SourceDir = filename:join([ProjectRoot, "_build", "default", "lib", Name, "*"]),
+        TargetPrefix = filename:join(["/", "usr", "lib", Name, "lib"]),
+        SourcePrefix = filename:join([ProjectRoot, "_build", "default", "lib"]),
+        TargetDir = filename:join([TargetPrefix, Name ++ "-" ++ binary_to_list(VersionBin)]),
+        SourceDir = filename:join([SourcePrefix, Name, "*"]),
+        Deps = [{"cluster_worker", "3.0.0-beta3"}, {"ctool", "3.0.0-beta3"}, {"bp_tree", "1.0.0"}],
         
 %%        ct:print("~p~n~p", [TargetDir, SourceDir]),
         OnenvScript = kv_utils:get(onenv_script, Config),
         utils:cmd([OnenvScript, "exec2", Pod, "rm", "-rf", TargetDir]),
         utils:cmd([OnenvScript, "exec2", Pod, "mkdir", TargetDir]),
-        utils:cmd([OnenvScript, "exec2", Pod, "cp", "-Lrf", SourceDir, TargetDir])
-    end, ["op_worker", "cluster_manager"]),
+        utils:cmd([OnenvScript, "exec2", Pod, "cp", "-Lrf", SourceDir, TargetDir]),
+    
+        lists:foreach(fun({Dep, Version}) ->
+            T = filename:join([TargetPrefix, Dep ++ "-" ++ Version]),
+            S = filename:join([SourcePrefix, Dep, "*"]),
+%%            ct:print("~p~n~p", [S,T]),
+            utils:cmd([OnenvScript, "exec2", Pod, "rm", "-rf", T]),
+            utils:cmd([OnenvScript, "exec2", Pod, "mkdir", T]),
+            utils:cmd([OnenvScript, "exec2", Pod, "cp", "-Lrf", S, T])
+        end, Deps)
+    
+        end, ["op_worker", "cluster_manager"]),
     ok.
