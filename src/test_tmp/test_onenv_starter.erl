@@ -46,8 +46,13 @@ prepare_test_environment(Config, _Suite) ->
 
     ping_nodes(NodesConfig),
 
+    
     A = prepare_base_config(NodesConfig),
-    A ++ [{onenv_script, OnenvScript}].
+    B = A ++ [{onenv_script, OnenvScript}],
+    lists:foreach(fun(Node) ->
+        overwrite_sources(B, Node, ProjectRoot)
+    end, ?config(op_worker_nodes, B)),
+    B.
 
 clean_environment(Config) ->
     OnenvScript = ?config(onenv_script, Config),
@@ -184,4 +189,21 @@ prepare_base_config(NodesConfig) ->
         [{users, maps:to_list(ProviderUsers)}] ++ 
         [{sess_id, maps:to_list(Sessions)}] ++
         [{provider_spaces, maps:to_list(ProviderSpaces)}].
+
+
+overwrite_sources(Config, Node, ProjectRoot) ->
+    Pod = kv_utils:get([pods, Node], Config),
     
+    VersionBin = rpc:call(Node, oneprovider, get_version, []),
+    
+    lists:foreach(fun(Name) ->
+        TargetDir = filename:join(["/", "usr", "lib", Name, "lib", Name ++ "-" ++ binary_to_list(VersionBin)]),
+        SourceDir = filename:join([ProjectRoot, "_build", "default", "lib", Name, "*"]),
+        
+%%        ct:print("~p~n~p", [TargetDir, SourceDir]),
+        OnenvScript = kv_utils:get(onenv_script, Config),
+        utils:cmd([OnenvScript, "exec2", Pod, "rm", "-rf", TargetDir]),
+        utils:cmd([OnenvScript, "exec2", Pod, "mkdir", TargetDir]),
+        utils:cmd([OnenvScript, "exec2", Pod, "cp", "-Lrf", SourceDir, TargetDir])
+    end, ["op_worker", "cluster_manager"]),
+    ok.
