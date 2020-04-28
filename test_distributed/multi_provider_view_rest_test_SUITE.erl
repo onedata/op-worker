@@ -45,9 +45,10 @@
     getting_view_of_not_supported_space_should_fail/1,
     list_views/1,
     query_view/1,
-    quering_view_with_invalid_params_should_fail/1,
-    create_geospatial_view/1,
-    query_geospatial_view/1,
+    querying_view_with_invalid_params_should_fail/1,
+    create_spatial_view/1,
+    query_spatial_view/1,
+    querying_spatial_view_with_wrong_function_should_fail/1,
     query_file_popularity_view/1,
     spatial_flag_test/1,
     file_removal_test/1,
@@ -64,9 +65,10 @@ all() ->
         getting_view_of_not_supported_space_should_fail,
         list_views,
         query_view,
-        quering_view_with_invalid_params_should_fail,
-        create_geospatial_view,
-        query_geospatial_view,
+        querying_view_with_invalid_params_should_fail,
+        create_spatial_view,
+        query_spatial_view,
+        querying_spatial_view_with_wrong_function_should_fail,
         query_file_popularity_view,
         spatial_flag_test,
         file_removal_test,
@@ -82,7 +84,7 @@ all() ->
 -define(USER_1_AUTH_HEADERS(Config, OtherHeaders),
     ?USER_AUTH_HEADERS(Config, <<"user1">>, OtherHeaders)).
 
--define(FILE_POPULARITY_VIEW(__FunctionName), begin
+-define(VIEW_NAME(__FunctionName), begin
     FunctionNameBin = str_utils:to_binary(__FunctionName),
     RandomIntBin = integer_to_binary(erlang:unique_integer([positive])),
     <<"view_", FunctionNameBin/binary, RandomIntBin/binary>>
@@ -114,10 +116,19 @@ end).
         return null;
     }">>
 ).
--define(GEOSPATIAL_MAP_FUNCTION,
+-define(SPATIAL_MAP_FUNCTION,
     <<"function (id, type, meta, ctx) {
         if(type == 'custom_metadata' && meta['onedata_json'] && meta['onedata_json']['loc']) {
             return [meta['onedata_json']['loc'], id];
+        }
+        return null;
+    }">>
+).
+
+-define(WRONG_SPATIAL_MAP_FUNCTION,
+    <<"function (id, type, meta, ctx) {
+        if(type == 'custom_metadata' && meta['onedata_json'] && meta['onedata_json']['loc']) {
+            return [\"string\", id];
         }
         return null;
     }">>
@@ -145,7 +156,7 @@ create_get_update_delete_view(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
     UserId = <<"user1">>,
 
@@ -242,13 +253,13 @@ create_get_update_delete_view(Config) ->
 
     % updating view (with overriding map function) with SPACE_MANAGE_VIEWS privilege should succeed
     ?assertMatch(ok, update_view_via_rest(
-        Config, WorkerP1, ?SPACE_ID, ViewName, ?GEOSPATIAL_MAP_FUNCTION, #{}
+        Config, WorkerP1, ?SPACE_ID, ViewName, ?SPATIAL_MAP_FUNCTION, #{}
     )),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both after update
-    ExpMapFun2 = view_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
+    ExpMapFun2 = view_utils:escape_js_function(?SPATIAL_MAP_FUNCTION),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options2,
@@ -277,7 +288,7 @@ create_get_update_delete_view(Config) ->
 
 creating_view_with_invalid_params_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     lists:foreach(fun({Options, ExpError}) ->
@@ -311,7 +322,7 @@ creating_view_with_invalid_params_should_fail(Config) ->
 
 updating_view_with_invalid_params_should_fail(Config) ->
     Workers = [WorkerP1 | _] = ?config(op_worker_nodes, Config),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     % create view
@@ -366,7 +377,7 @@ updating_view_with_invalid_params_should_fail(Config) ->
 overwriting_view_should_fail(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     % create
@@ -398,7 +409,7 @@ overwriting_view_should_fail(Config) ->
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_ALREADY_EXISTS),
     ?assertMatch(ExpRestError, create_view_via_rest(
         Config, WorkerP1, ?SPACE_ID, ViewName,
-        ?GEOSPATIAL_MAP_FUNCTION, true, [], #{}
+        ?SPATIAL_MAP_FUNCTION, true, [], #{}
     )),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
@@ -424,7 +435,7 @@ overwriting_view_should_fail(Config) ->
 create_get_delete_reduce_fun(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
     UserId = <<"user1">>,
 
@@ -539,7 +550,7 @@ create_get_delete_reduce_fun(Config) ->
 
 getting_nonexistent_view_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
 
     lists:foreach(fun(Worker) ->
@@ -551,7 +562,7 @@ getting_nonexistent_view_should_fail(Config) ->
 
 getting_view_of_not_supported_space_should_fail(Config) ->
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     SpaceId = <<"space2">>,
     XattrName = ?XATTR_NAME,
 
@@ -612,7 +623,7 @@ query_view(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
     UserId = <<"user1">>,
 
@@ -664,11 +675,11 @@ query_view(Config) ->
     ?assertEqual(ErrorForbidden, Query(WorkerP2, #{}), ?ATTEMPTS).
 
 
-quering_view_with_invalid_params_should_fail(Config) ->
+querying_view_with_invalid_params_should_fail(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     Query = query_filter(Config, SpaceId, ViewName),
@@ -725,15 +736,15 @@ quering_view_with_invalid_params_should_fail(Config) ->
     ]).
 
 
-create_geospatial_view(Config) ->
+create_spatial_view(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
 
-    create_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName, ?GEOSPATIAL_MAP_FUNCTION, true),
+    create_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName, ?SPATIAL_MAP_FUNCTION, true),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
-    ExpMapFun = view_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
+    ExpMapFun = view_utils:escape_js_function(?SPATIAL_MAP_FUNCTION),
     ExpProviders = [?PROVIDER_ID(WorkerP1)],
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
@@ -747,11 +758,11 @@ create_geospatial_view(Config) ->
     end, Workers).
 
 
-query_geospatial_view(Config) ->
+query_spatial_view(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
 
     Path0 = filename:join(["/", SpaceName, "f0"]),
     Path1 = filename:join(["/", SpaceName, "f1"]),
@@ -767,7 +778,7 @@ query_geospatial_view(Config) ->
 
     ?assertMatch(ok, create_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName,
-        ?GEOSPATIAL_MAP_FUNCTION, true,
+        ?SPATIAL_MAP_FUNCTION, true,
         [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2), ?PROVIDER_ID(WorkerP3)], #{}
     )),
 
@@ -784,6 +795,28 @@ query_geospatial_view(Config) ->
         ?assertEqual(lists:sort([Guid1, Guid2]), Query(Worker, QueryOptions2), ?ATTEMPTS)
     end, Workers).
 
+querying_spatial_view_with_wrong_function_should_fail(Config) ->
+    Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+
+    Path1 = filename:join(["/", SpaceName, "file1"]),
+    {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1, 8#777),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid1}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
+
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, SpaceId, ViewName,
+        ?WRONG_SPATIAL_MAP_FUNCTION, true,
+        [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2), ?PROVIDER_ID(WorkerP3)], #{}
+    )),
+
+    Query = query_filter(Config, SpaceId, ViewName),
+
+    lists:foreach(fun(Worker) ->
+        QueryOptions1 = #{spatial => true, stale => false},
+        ?assertMatch({?HTTP_400_BAD_REQUEST, _}, Query(Worker, QueryOptions1), ?ATTEMPTS)
+    end, Workers).
 
 query_file_popularity_view(Config) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, Config),
@@ -799,11 +832,11 @@ query_file_popularity_view(Config) ->
 spatial_flag_test(Config) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
 
     ?assertMatch(ok, create_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName,
-        ?GEOSPATIAL_MAP_FUNCTION, true,
+        ?SPATIAL_MAP_FUNCTION, true,
         [?PROVIDER_ID(WorkerP1)], #{}
     )),
 
@@ -816,7 +849,7 @@ file_removal_test(Config) ->
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     Query = query_filter(Config, SpaceId, ViewName),
@@ -846,7 +879,7 @@ create_duplicated_views_on_remote_providers(Config) ->
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     FilePrefix = atom_to_list(?FUNCTION_NAME),
