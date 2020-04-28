@@ -63,6 +63,12 @@ post_init_per_suite(Suite, _Config, Return, State) ->
 post_end_per_suite(_Suite, _Config, Return, State = #state{disabled = true}) ->
     {Return, State};
 post_end_per_suite(Suite, Config, Return, State) ->
+    OnenvScript = ?config(onenv_script, Config),
+    PrivDir = ?config(priv_dir, Config),
+    
+    ct:pal("Gathering logs~n~n~p", [PrivDir]),
+    utils:cmd([OnenvScript, "export", PrivDir]),
+    
     ct:pal("Environment cleaning in ~p", [Suite]),
     test_onenv_starter:clean_environment(Config),
     {Return, State}.

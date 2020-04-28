@@ -18,10 +18,9 @@
 
 -define(DEFAULT_COOKIE, cluster_node).
 
-prepare_test_environment(Config, Suite) ->
+prepare_test_environment(Config, _Suite) ->
     application:start(yamerl),
     DataDir = ?config(data_dir, Config),
-    CtTestRoot = filename:join(DataDir, ".."),
     ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
         Token /= "test_distributed"
     end, filename:split(DataDir))),
@@ -41,8 +40,6 @@ prepare_test_environment(Config, Suite) ->
     PodsProplist = proplists:get_value("pods", StatusProplist),
     NodesConfig = prepare_nodes_config(PodsProplist),
 
-    [{PodName, _} | _] = PodsProplist,
-    set_up_dns(OnenvScript, PodName),
     add_entries_to_etc_hosts(StatusProplist),
 
     ping_nodes(NodesConfig),
@@ -51,7 +48,9 @@ prepare_test_environment(Config, Suite) ->
     A ++ [{onenv_script, OnenvScript}].
 
 clean_environment(Config) ->
-%%    ct:pal("clean environment: ~p", [Config]),
+    OnenvScript = ?config(onenv_script, Config),
+    % fixme
+%%    utils:cmd([OnenvScript, "clean"]),
     ok.
 
 
@@ -61,20 +60,24 @@ prepare_nodes_config(PodsProplist) ->
         case proplists:get_value("service-type", X) of 
             "oneprovider" -> 
                 WorkerNodes = maps:get(op_worker_nodes, Nodes, []), 
-                PanelNodes = maps:get(op_panel_nodes, Nodes, []), 
+                PanelNodes = maps:get(op_panel_nodes, Nodes, []),
+                CmNodes = maps:get(cm_nodes, Nodes, []), 
                 WorkerNode = list_to_atom("op_worker@" ++ H),
                 NewNodes = Nodes#{
                     op_worker_nodes => [WorkerNode | WorkerNodes], 
-                    op_panel_nodes => [list_to_atom("onepanel@" ++ H) | PanelNodes]
+                    op_panel_nodes => [list_to_atom("onepanel@" ++ H) | PanelNodes],
+                    cm_nodes => [list_to_atom("cluster_manager@" ++ H) | CmNodes]
                 },
                 NewPods = Pods#{WorkerNode => PodName},
                 {NewPods, NewNodes};
             "onezone" ->
                 WorkerNodes = maps:get(oz_worker_nodes, Nodes, []),
-                PanelNodes = maps:get(oz_panel_nodes, Nodes, []), 
+                PanelNodes = maps:get(oz_panel_nodes, Nodes, []),
+                CmNodes = maps:get(cm_nodes, Nodes, []), 
                 NewNodes = Nodes#{
-                    oz_worker_nodes => [list_to_atom("oz_worker@" ++ H) | WorkerNodes], 
-                    oz_panel_nodes => [list_to_atom("onepanel@" ++ H) | PanelNodes]
+                    oz_worker_nodes => [list_to_atom("oz_worker@" ++ H) | WorkerNodes],
+                    oz_panel_nodes => [list_to_atom("onepanel@" ++ H) | PanelNodes],
+                    cm_nodes => [list_to_atom("cluster_manager@" ++ H) | CmNodes]
                 },
                 {Pods, NewNodes};
             _ -> {Pods, Nodes}
@@ -84,7 +87,7 @@ prepare_nodes_config(PodsProplist) ->
 
 
 ping_nodes(Config) ->
-    NodesTypes = [op_worker_nodes, op_panel_nodes, oz_worker_nodes, oz_panel_nodes],
+    NodesTypes = [cm_nodes, op_worker_nodes, op_panel_nodes, oz_worker_nodes, oz_panel_nodes],
     erlang:set_cookie(node(), ?DEFAULT_COOKIE),
     lists:foreach(fun(NodeType) ->
         Nodes = proplists:get_value(NodeType, Config, []),
@@ -92,11 +95,6 @@ ping_nodes(Config) ->
             true = net_kernel:connect_node(Node)
         end, Nodes)
     end, NodesTypes).
-
-set_up_dns(OnenvScript, PodName) ->
-    ResolvConfEntry = utils:cmd([OnenvScript, "exec2", PodName, "head", "-n", "1", "/etc/resolv.conf"]),
-    [] = os:cmd("echo \"" ++ ResolvConfEntry ++ "\" > /etc/resolv.conf"),
-    ok.
 
 
 add_entries_to_etc_hosts(OnenvStatus) ->
@@ -137,6 +135,18 @@ prepare_base_config(NodesConfig) ->
         Acc#{ProviderId => [Node | OtherNodes]}
     end, #{}, proplists:get_value(op_worker_nodes, NodesConfig, [])),
     
+    ProviderPanels = lists:foldl(fun(Node, Acc) ->
+        [WorkerNode | _] = rpc:call(Node, service_op_worker, get_nodes, []),
+        ProviderId = rpc:call(WorkerNode, oneprovider, get_id, []),
+        OtherNodes = maps:get(ProviderId, Acc, []),
+        Acc#{ProviderId => [Node | OtherNodes]}
+    end, #{}, proplists:get_value(op_panel_nodes, NodesConfig, [])),
+    
+    PrimaryCm = maps:fold(fun(ProviderId, [PanelNode | _], Acc) ->
+        {ok, Hostname} = rpc:call(PanelNode, service_cluster_manager,  get_main_host, []),
+        Acc#{ProviderId => list_to_atom("cluster_manager@" ++ Hostname)}
+    end, #{}, ProviderPanels),
+    
     ProvidersList = maps:keys(ProvidersNodes),
 
     ProviderSpaces = lists:foldl(fun(ProviderId, Acc) ->
@@ -167,6 +177,8 @@ prepare_base_config(NodesConfig) ->
     NodesConfig ++ 
         [{provider_nodes, maps:to_list(ProvidersNodes)}] ++ 
         [{providers, ProvidersList}] ++ 
+        [{provider_panels, maps:to_list(ProviderPanels)}] ++
+        [{primary_cm, maps:to_list(PrimaryCm)}] ++ 
         [{users, maps:to_list(ProviderUsers)}] ++ 
         [{sess_id, maps:to_list(Sessions)}] ++
         [{provider_spaces, maps:to_list(ProviderSpaces)}].
