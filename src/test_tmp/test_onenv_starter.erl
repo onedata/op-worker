@@ -24,14 +24,16 @@ prepare_test_environment(Config, _Suite) ->
     ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
         Token /= "test_distributed"
     end, filename:split(DataDir))),
+    
+    ScenarioName = ?config(scenario, Config),
 
-    OnenvDir = filename:join([ProjectRoot, "one-env"]),
-    OnenvScript = filename:join([OnenvDir, "onenv"]),
-    OnenvConfig = filename:join([OnenvDir, "test_env_config.yaml"]),
-    OnenvStartLogs = utils:cmd(["cd", "../../..", "&&", OnenvScript, "up", OnenvConfig]),
+    OnenvScript = filename:join([ProjectRoot, "one-env", "onenv"]),
+    ScenarioPath = filename:join([ProjectRoot, "test_distributed", "onenv_scenarios", ScenarioName ++ ".yaml"]),
+    ct:pal("Starting onenv scenario ~p~n~n~p", [ScenarioName, ScenarioPath]),
+    OnenvStartLogs = utils:cmd(["cd", "../../..", "&&", OnenvScript, "up", ScenarioPath]),
     ct:pal("~s", [OnenvStartLogs]),
     
-    utils:cmd([OnenvScript, "wait"]),
+    utils:cmd([OnenvScript, "wait", "--timeout", "600"]),
     
     Status = utils:cmd([OnenvScript, "status"]),
     [StatusProplist] = yamerl:decode(Status),

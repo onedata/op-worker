@@ -76,26 +76,15 @@ failure_test(Config) ->
         ok = rpc:call(PanelNode, service, deregister_healthcheck, [op_worker, Ctx])
     end, ?config(op_panel_nodes, Config)),
     
-    
-    WorkerToKillP1Pod = kv_utils:get([pods, WorkerToKillP1], Config),
-    WorkerToKillP2Pod = kv_utils:get([pods, WorkerToKillP2], Config),
-    OnenvScript = kv_utils:get(onenv_script, Config),
-    
-    GetOpWorkerPidCommand = ["ps", "-e", "|", "grep", "pts/2", "|", "cut", "-d", "' '", "-f" , "2"],
-    PidWorkerToKillP1 = ?assertMatch([_ | _], string:trim(
-        utils:cmd([OnenvScript, "exec2", WorkerToKillP1Pod] ++ GetOpWorkerPidCommand))),
-    PidWorkerToKillP2 = ?assertMatch([_ | _], string:trim(
-        utils:cmd([OnenvScript, "exec2", WorkerToKillP2Pod] ++ GetOpWorkerPidCommand))),
-    
-    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP1Pod, "kill", "-s", "SIGKILL", PidWorkerToKillP1]),
+    ok = onenv_test_utils:kill_node(Config, WorkerToKillP1, op_worker),
     ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP1, oneprovider, get_id, []), 10),
-    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP2Pod, "kill", "-s", "SIGKILL", PidWorkerToKillP2]),
+    ok = onenv_test_utils:kill_node(Config, WorkerToKillP2, op_worker),
     ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, oneprovider, get_id, []), 10),
     ct:pal("Killed nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
     
-    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP1Pod, "op_worker", "start"]),
-    [] = utils:cmd([OnenvScript, "exec2", WorkerToKillP2Pod, "op_worker", "start"]),
+    ok = onenv_test_utils:start_node(Config, WorkerToKillP1, op_worker),
     ?assertNotEqual({badrpc, nodedown}, rpc:call(WorkerToKillP1, oneprovider, get_id, []), 60),
+    ok = onenv_test_utils:start_node(Config, WorkerToKillP2, op_worker),
     ?assertNotEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, oneprovider, get_id, []), 60),
     ct:pal("Started nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
     
@@ -130,5 +119,4 @@ failure_test(Config) ->
 
 
 init_per_testcase(_Case, Config) ->
-%%    lfm_proxy:init(Config, false).
-    Config.
+    lfm_proxy:init(Config, false).
