@@ -183,9 +183,15 @@ get_oz_domain() ->
         _ -> error({missing_env_variable, oz_domain})
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets the domain of OZ in env on specified node.
+%% @end
+%%--------------------------------------------------------------------
+-spec set_oz_domain(node()) -> ok | no_return().
 set_oz_domain(Node) ->
     {ok, Domain} = application:get_env(?APP_NAME, oz_domain),
-    rpc:call(Node, application, set_env, [?APP_NAME, oz_domain, Domain]).
+    ok = rpc:call(Node, application, set_env, [?APP_NAME, oz_domain, Domain]).
 
 
 %%--------------------------------------------------------------------

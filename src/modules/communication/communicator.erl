@@ -223,13 +223,6 @@ send_to_provider_internal(SessionId, Msg, Retries) ->
             timer:sleep(?SEND_RETRY_DELAY),
             send_to_provider_internal(SessionId, Msg, decrement_retries(Retries));
         {error, _Reason} ->
-            datastore_model:delete(#{
-                model => session,
-                disc_driver => undefined,
-                fold_enabled => true,
-                memory_copies => all
-            }, SessionId),
-            session_connections:ensure_connected(SessionId),
             timer:sleep(?SEND_RETRY_DELAY),
             send_to_provider_internal(SessionId, Msg, decrement_retries(Retries))
     end.
