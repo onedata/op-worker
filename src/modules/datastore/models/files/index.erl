@@ -407,12 +407,6 @@ query(ViewId, Options) ->
             {error, not_found};
         {error, {Category, Description}} when is_binary(Category) andalso is_binary(Description) ->
             % this is error from Couchbase
-            IdOrName = case get_name(ViewId) of
-                {ok, ViewName} -> ViewName;
-                {error, not_found} -> ViewId
-            end,
-            ?error("Query on view ~p failed. Error category: ~p.~n"
-            "Description: ~p.", [IdOrName, Category, Description]),
             ?ERROR_VIEW_QUERY_FAILED(Category, Description);
         Error ->
             Error
@@ -441,14 +435,6 @@ run_on_view_doc_change(update, [_, _, _], Result = {ok, Doc}) ->
 run_on_view_doc_change(_, _, Result) ->
     Result.
 
--spec get_name(id()) -> {ok, name()} | {error, term()}.
-get_name(ViewId) ->
-    case index:get(ViewId) of
-        {ok, #document{value = #index{name = Name}}} ->
-            {ok, Name};
-        Error ->
-            Error
-    end.
 
 %%-------------------------------------------------------------------
 %% @private
