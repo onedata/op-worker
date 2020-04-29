@@ -405,6 +405,9 @@ query(ViewId, Options) ->
             {error, not_found};
         {error, {<<"not_found">>, _}} ->
             {error, not_found};
+        {error, {Category, Description}} when is_binary(Category) andalso is_binary(Description) ->
+            % this is error from Couchbase
+            ?ERROR_VIEW_QUERY_FAILED(Category, Description);
         Error ->
             Error
     end.
@@ -523,6 +526,19 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
             return filtered;
         };
 
+        function isValidKey(key){
+            if(key) {
+                if(Array.isArray(key)){
+                    if (key.length > 0)
+                        return key.every(isValidKey);
+                    else
+                        return false;
+                }
+                return true;
+            }
+            return false;
+        };
+
         var spaceId = doc['_scope'];
 
         if(spaceId == '", SpaceId/binary, "' && doc['_deleted'] == false) {
@@ -563,9 +579,10 @@ map_function_wrapper(UserMapFunction, SpaceId) -> <<
             if(result) {
                 if ('list' in result) {
                     for (var keyValuePair of result['list'])
-                        emit(keyValuePair[0], keyValuePair[1]);
+                        if(isValidKey(keyValuePair[0]))
+                            emit(keyValuePair[0], keyValuePair[1]);
                 }
-                else{
+                else if(isValidKey(result[0])){
                     emit(result[0], result[1]);
                 }
             }
