@@ -31,7 +31,7 @@
 -export([clear_provider_id_cache/0]).
 -export([get_access_token/0, get_identity_token/0, get_identity_token_for_consumer/1]).
 -export([get_root_token_file_path/0]).
--export([backup_to_file/0]).
+-export([backup_to_file/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -189,12 +189,12 @@ delete() ->
 %% Backups provider identity in a file this node.
 %% @end
 %%--------------------------------------------------------------------
--spec backup_to_file() -> ok.
-backup_to_file() ->
+-spec backup_to_file(node()) -> ok.
+backup_to_file(Node) ->
     critical_section(fun() ->
         case datastore_model:get(?CTX, ?PROVIDER_AUTH_KEY) of
             {ok, #document{value = #provider_auth{provider_id = ProviderId, root_token = RootToken}}} ->
-                write_to_file(ProviderId, RootToken, [node()]);
+                write_to_file(ProviderId, RootToken, [Node]);
             {error, _} ->
                 ok
         end

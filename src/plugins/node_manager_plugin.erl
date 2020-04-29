@@ -251,5 +251,9 @@ node_down(_FailedNode, _IsFailedNodeMaster) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec node_recovery(node(), boolean()) -> ok.
-node_recovery(_RecoveredNode, _IsRecoveredNodeMaster) ->
-    provider_auth:backup_to_file().
+node_recovery(RecoveredNode, IsRecoveredNodeMaster) ->
+    case IsRecoveredNodeMaster of
+        true ->
+            oneprovider:set_oz_domain(RecoveredNode),
+            provider_auth:backup_to_file(RecoveredNode)
+    end.

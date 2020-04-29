@@ -143,8 +143,9 @@ start_gs_client_worker() ->
 
 -spec stop_gs_client_worker() -> ok | no_return().
 stop_gs_client_worker() ->
-    ok = supervisor:terminate_child(?GS_WORKER_SUP, ?GS_CLIENT_WORKER_GLOBAL_NAME),
-    ok = supervisor:delete_child(?GS_WORKER_SUP, ?GS_CLIENT_WORKER_GLOBAL_NAME).
+    supervisor:terminate_child(?GS_WORKER_SUP, ?GS_CLIENT_WORKER_GLOBAL_NAME),
+    supervisor:delete_child(?GS_WORKER_SUP, ?GS_CLIENT_WORKER_GLOBAL_NAME),
+    ok.
 
 -spec takeover_gs_client_worker() -> ok | no_return().
 takeover_gs_client_worker() ->
