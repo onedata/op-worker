@@ -12,6 +12,7 @@
 -ifndef(DATASTORE_SPECIFIC_MODELS_HRL).
 -define(DATASTORE_SPECIFIC_MODELS_HRL, 1).
 
+-include("modules/datastore/qos.hrl").
 -include("modules/events/subscriptions.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -40,25 +41,30 @@
 % membership is possible via groups and nested groups.
 % these records are synchronized from OZ via Graph Sync.
 %
+%
 % The below ASCII visual shows possible relations in entities graph.
 %
-%  provider    share
-%      ^         ^
-%       \       /
-%        \     /
-%         space    handle_service     handle
-%         ^  ^        ^        ^       ^   ^
-%         |   \      /         |      /    |
-%         |    \    /          |     /     |
-%        user    group          user      group
-%                  ^                        ^
-%                  |                        |
-%                  |                        |
-%                group                     user
-%                ^   ^
-%               /     \
-%              /       \
-%            user     user
+%           provider
+%              ^
+%              |
+%           storage                              share
+%              ^                                   ^
+%              |                                   |
+%            space            handle_service<----handle
+%           ^ ^ ^ ^             ^         ^       ^  ^
+%          /  | |  \           /          |      /   |
+%         /   | |   \         /           |     /    |
+%        /   /   \   \       /            |    /     |
+%       /   /     \   \     /             |   /      |
+% share user harvester group             user      group
+%              ^    ^     ^                          ^
+%             /      \    |                          |
+%            /        \   |                          |
+%          user        group                        user
+%                      ^   ^
+%                     /     \
+%                    /       \
+%                  user      user
 %
 
 -record(od_user, {
@@ -97,24 +103,34 @@
     direct_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
     eff_groups = #{} :: #{od_group:id() => [privileges:space_privilege()]},
 
+    storages = #{} :: #{storage:id() => Size :: integer()},
+
+    % This value is calculated after fetch from zone for performance reasons.
+    local_storages = [] :: [storage:id()],
+
     providers = #{} :: #{od_provider:id() => Size :: integer()},
 
     shares = [] :: [od_share:id()],
 
     harvesters = [] :: [od_harvester:id()],
 
+    support_parameters = #{} :: space_support:parameters_per_provider(),
+    support_state = #{} :: space_support:support_state_per_provider(),
+
     cache_state = #{} :: cache_state()
 }).
 
 %% Model for caching share details fetched from OZ
 -record(od_share, {
-    name = undefined :: undefined | binary(),
-    public_url = undefined :: undefined | binary(),
+    name :: binary(),
+    public_url :: binary(),
 
     % Direct relations to other entities
     space = undefined :: undefined | od_space:id(),
     handle = undefined :: undefined | od_handle:id(),
-    root_file = undefined :: undefined | binary(),
+
+    root_file :: binary(),
+    file_type :: od_share:file_type(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -131,9 +147,10 @@
     online = false :: boolean(),
 
     % Direct relations to other entities
-    spaces = #{} :: #{od_space:id() => Size :: integer()},
+    storages = [] :: [storage:id()],
 
     % Effective relations to other entities
+    eff_spaces = #{} :: #{od_space:id() => Size :: integer()},
     eff_users = [] :: [od_user:id()],
     eff_groups = [] :: [od_group:id()],
 
@@ -153,11 +170,11 @@
 
 %% Model for caching handle details fetched from OZ
 -record(od_handle, {
-    public_handle :: od_handle:public_handle() | undefined,
+    public_handle :: od_handle:public_handle(),
     resource_type :: od_handle:resource_type() | undefined,
     resource_id :: od_handle:resource_id() | undefined,
     metadata :: od_handle:metadata() | undefined,
-    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp() | undefined,
+    timestamp = od_handle:actual_timestamp() :: od_handle:timestamp(),
 
     % Direct relations to other entities
     handle_service :: od_handle_service:id() | undefined,
@@ -175,32 +192,42 @@
     cache_state = #{} :: cache_state()
 }).
 
+-record(od_storage, {
+    name = <<>> :: od_storage:name(),
+    provider :: od_provider:id() | undefined,
+    spaces = [] :: [od_space:id()],
+    qos_parameters = #{} :: od_storage:qos_parameters(),
+    cache_state = #{} :: cache_state()
+}).
+
+-record(od_token, {
+    revoked = false :: boolean(),
+
+    cache_state = #{} :: cache_state()
+}).
+
+-record(temporary_token_secret, {
+    generation :: temporary_token_secret:generation(),
+
+    cache_state = #{} :: cache_state()
+}).
+
 %%%===================================================================
 %%% Records specific for oneprovider
 %%%===================================================================
 
-%% Authorization of this provider, auth and identity macaroons are derived from
-%% the root macaroon and cached for a configurable time.
+%% Authorization of this provider, access and identity tokens are derived from
+%% the root token and cached for a configurable time.
 -record(provider_auth, {
     provider_id :: od_provider:id(),
-    root_macaroon :: binary(),
-    cached_auth_macaroon = {0, <<"">>} :: {ExpirationTime :: integer(), binary()},
-    cached_identity_macaroon = {0, <<"">>} :: {ExpirationTime :: integer(), binary()}
-}).
-
--record(authorization_nonce, {
-    timestamp :: integer()
+    root_token :: tokens:serialized(),
+    cached_access_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()},
+    cached_identity_token = {0, <<"">>} :: {ValidUntil :: time_utils:seconds(), tokens:serialized()}
 }).
 
 -record(file_download_code, {
     session_id :: session:id(),
     file_guid :: fslogic_worker:file_guid()
-}).
-
-%% Identity containing user_id
--record(user_identity, {
-    user_id :: undefined | od_user:id(),
-    provider_id :: undefined | oneprovider:id()
 }).
 
 -record(file_force_proxy, {
@@ -212,8 +239,9 @@
     status :: undefined | session:status(),
     accessed :: undefined | integer(),
     type :: undefined | session:type(),
-    identity :: undefined | session:identity(),
-    auth :: undefined | session:auth(),
+    identity :: aai:subject(),
+    credentials :: undefined | auth_manager:credentials(),
+    data_constraints :: data_constraints:constraints(),
     node :: node(),
     supervisor :: undefined | pid(),
     event_manager :: undefined | pid(),
@@ -221,7 +249,7 @@
     sequencer_manager :: undefined | pid(),
     async_request_manager :: undefined | pid(),
     connections = [] :: [pid()],
-    proxy_via :: oneprovider:id() | undefined,
+    proxy_via :: undefined | oneprovider:id(),
     % Key-value in-session memory
     memory = #{} :: map(),
     direct_io = #{} :: #{od_space:id() => boolean()}
@@ -233,8 +261,8 @@
     expiration_time :: idp_access_token:expires()
 }).
 
-%% File handle used by the module
--record(sfm_handle, {
+%% File handle used by the storage_driver module
+-record(sd_handle, {
     file_handle :: undefined | helpers:file_handle(),
     file :: undefined | helpers:file_id(),
     session_id :: undefined | session:id(),
@@ -243,37 +271,109 @@
     % It is associated only with file on storage.
     file_uuid :: undefined | file_meta:uuid(),
     space_id :: undefined | od_space:id(),
-    storage :: undefined | storage:doc(),
     storage_id :: undefined | storage:id(),
     open_flag :: undefined | helpers:open_flag(),
     needs_root_privileges :: undefined | boolean(),
-    file_size :: undefined | non_neg_integer(),
+    file_size = 0 :: non_neg_integer(),
     share_id :: undefined | od_share:id()
 }).
 
 -record(storage_sync_info, {
-    children_attrs_hashes = #{} :: #{non_neg_integer() => binary()},
+    children_hashes = #{} :: storage_sync_info:hashes(),
     mtime :: undefined | non_neg_integer(),
-    last_stat :: undefined | non_neg_integer()
+    last_stat :: undefined | non_neg_integer(),
+    % below counters are used to check whether all batches of given directory
+    % were processed, as they are processed in parallel
+    batches_to_process = 0 :: non_neg_integer(),
+    batches_processed = 0:: non_neg_integer(),
+    % below map contains new hashes, that will be used to update values in children_hashes
+    % when counters batches_to_process == batches_processed
+    hashes_to_update = #{} :: storage_sync_info:hashes()
+}).
+
+% An empty model used for creating storage_sync_links
+% For more information see storage_sync_links.erl
+-record(storage_sync_links, {}).
+
+% This model can be associated with file and holds information about hooks
+% for given file. Hooks will be executed on future change of given
+% file's file_meta document.
+-record(file_meta_posthooks, {
+    hooks = #{} :: #{file_meta_posthooks:hook_identifier() => file_meta_posthooks:hook()}
+}).
+
+% This model holds information about QoS entries defined for given file.
+% Each file can be associated with zero or one such record. It is used to
+% calculate effective_file_qos. (see file_qos.erl)
+-record(file_qos, {
+    % List containing qos_entry IDs defined for given file.
+    qos_entries = [] :: [qos_entry:id()],
+    % Mapping storage ID -> list containing qos_entry IDs.
+    % When new QoS entry is added for file or directory storages on which replicas
+    % should be stored are calculated using QoS expression. Calculated storages
+    % are used to create traverse requests in qos_entry document. When provider
+    % notices change in qos_entry document, it checks whether traverse request
+    % for his storage is present. If so, provider updates entry in assigned_entries
+    % map for his local storage.
+    assigned_entries = #{} :: file_qos:assigned_entries()
+}).
+
+% This model holds information about QoS entry, that is QoS requirement
+% defined by the user for file or directory through QoS expression and
+% number of required replicas. Each such requirement creates new qos_entry
+% document even if expressions are exactly the same. For each file / directory
+% multiple qos_entry can be defined.
+-record(qos_entry, {
+    type = user_defined :: qos_entry:type(),
+    file_uuid :: file_meta:uuid(),
+    expression = [] :: qos_expression:rpn(), % QoS expression in RPN form.
+    replicas_num = 1 :: qos_entry:replicas_num(), % Required number of file replicas.
+    % These are requests to providers to start QoS traverse.
+    traverse_reqs = #{} :: qos_traverse_req:traverse_reqs(),
+    % Contains id of provider that marked given entry as possible or impossible.
+    % If more than one provider concurrently marks entry as possible one provider is
+    % deterministically selected during conflict resolution.
+    possibility_check :: {possible | impossible, od_provider:id()}
+}).
+
+% This model holds information of QoS traverse state in a directory subtree in order 
+% to calculate entry status.
+-record(qos_status, {
+    % Initialize with empty binary so it always compares as lower than any actual filename
+    previous_batch_last_filename = <<>> :: file_meta:name(),
+    current_batch_last_filename = <<>> :: file_meta:name(),
+    files_list = [] :: [file_meta:uuid()],
+    child_dirs_count = 0 :: non_neg_integer(),
+    is_last_batch = false :: boolean(),
+    is_start_dir :: boolean()
 }).
 
 -record(file_meta, {
     name :: undefined | file_meta:name(),
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
+    acl = [] :: acl:acl(),
     owner :: undefined | od_user:id(),
     group_owner :: undefined | od_group:id(),
     is_scope = false :: boolean(),
-    scope :: datastore:key(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),
     parent_uuid :: undefined | file_meta:uuid()
 }).
 
+-record(storage_config, {
+    helper :: helpers:helper(),
+    readonly = false :: boolean(),
+    luma_config = undefined :: undefined | luma_config:config(),
+    imported_storage = false :: boolean()
+}).
+
+
+%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
 -record(storage, {
-    name = <<>> :: storage:name(),
-    helpers = [] :: [storage:helper()],
+    name = <<>> :: storage_config:name(),
+    helpers = [] :: [helpers:helper()],
     readonly = false :: boolean(),
     luma_config = undefined :: undefined | luma_config:config()
 }).
@@ -284,9 +384,32 @@
 }).
 
 %% Model that maps space to storage
+%%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release.
 -record(space_storage, {
     storage_ids = [] :: [storage:id()],
     mounted_in_root = [] :: [storage:id()]
+}).
+
+-record(space_unsupport_job, {
+    stage = init :: space_unsupport:stage(),
+    task_id :: traverse:id(),
+    space_id :: od_space:id(),
+    storage_id :: storage:id(),
+    % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id). 
+    % It is persisted so when slave job is restarted no additional task is created.
+    subtask_id = undefined :: space_unsupport:subtask_id() | undefined,
+    % Id of process waiting to be notified of task finish.
+    % NOTE: should be updated after provider restart
+    slave_job_pid  = undefined :: pid() | undefined
+}).
+
+%% Model that holds information necessary to tell whether whole subtree 
+%% of a directory was traversed so this directory can be cleaned up.
+-record(cleanup_traverse_status, {
+    % number of children listed but not yet traversed
+    pending_children_count = 0 :: non_neg_integer(),
+    % flag that informs whether all batches of children have been listed
+    all_batches_listed = false :: boolean()
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.
@@ -368,7 +491,7 @@
     bytes_to_release = 0 :: non_neg_integer(),
     released_files = 0 :: non_neg_integer(),
 
-    index_token :: undefined | file_popularity_view:index_token()
+    view_traverse_token :: undefined | view_traverse:token()
 }).
 
 %% Model which stores information about auto-cleaning per given space.
@@ -392,7 +515,7 @@
     file_id :: undefined | helpers:file_id(),
     rename_src_file_id :: undefined | helpers:file_id(),
     blocks = [] :: fslogic_location_cache:stored_blocks(),
-    version_vector = #{},
+    version_vector = #{} :: version_vector:version_vector(),
     size = 0 :: non_neg_integer() | undefined,
     space_id :: undefined | od_space:id(),
     recent_changes = {[], []} :: {
@@ -415,25 +538,18 @@
     storage_file_created = false :: boolean()
 }).
 
--define(DEFAULT_STORAGE_IMPORT_STRATEGY, {no_import, #{}}).
--define(DEFAULT_STORAGE_UPDATE_STRATEGY, {no_update, #{}}).
-
-%% Model that maps space to storage strategies
--record(storage_strategies, {
-    storage_import = ?DEFAULT_STORAGE_IMPORT_STRATEGY :: space_strategy:config(),
-    storage_update = ?DEFAULT_STORAGE_UPDATE_STRATEGY :: space_strategy:config()
+%% Model that stores configuration of storage_sync mechanism
+-record(storage_sync_config, {
+    import_enabled = false :: boolean(),
+    update_enabled = false :: boolean(),
+    import_config = #{} :: space_strategies:import_config(),
+    update_config = #{} :: space_strategies:update_config()
 }).
-
--define(DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY, {ignore_conflicts, #{}}).
--define(DEFAULT_FILE_CACHING_STRATEGY, {no_cache, #{}}).
--define(DEFAULT_ENOENT_HANDLING_STRATEGY, {error_passthrough, #{}}).
 
 %% Model that maps space to storage strategies
 -record(space_strategies, {
-    storage_strategies = #{} :: map(), %todo dialyzer crashes on: #{storage:id() => #storage_strategies{}},
-    file_conflict_resolution = ?DEFAULT_FILE_CONFLICT_RESOLUTION_STRATEGY :: space_strategy:config(),
-    file_caching = ?DEFAULT_FILE_CACHING_STRATEGY :: space_strategy:config(),
-    enoent_handling = ?DEFAULT_ENOENT_HANDLING_STRATEGY :: space_strategy:config()
+    % todo VFS-5717 rename model to storage_sync_configs?
+    sync_configs = #{} :: space_strategies:sync_configs()
 }).
 
 -record(storage_sync_monitoring, {
@@ -481,7 +597,7 @@
 
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
-    seq = #{} :: #{od_provider:id() => couchbase_changes:seq()}
+    seq = #{} :: #{od_provider:id() => {couchbase_changes:seq(), datastore_doc:timestamp()}}
 }).
 
 %% Model that holds state entries for DBSync worker
@@ -496,10 +612,36 @@
     file_guids = [] :: [fslogic_worker:file_guid()]
 }).
 
+-record(storage_traverse_job, {
+    % Information about execution environment and processing task
+    pool :: traverse:pool(),
+    task_id :: traverse:id(),
+    callback_module :: traverse:callback_module(),
+    % storage traverse specific fields
+    storage_file_id :: helper:name(),
+    space_id :: od_space:id(),
+    storage_id :: storage:id(),
+    iterator_module :: storage_traverse:iterator_module(),
+    offset = 0 ::  non_neg_integer(),
+    batch_size :: non_neg_integer(),
+    marker :: undefined | helpers:marker(),
+    max_depth :: non_neg_integer(),
+    % flag that informs whether slave_job should be scheduled on directories
+    execute_slave_on_dir :: boolean(),
+    % flag that informs whether children master jobs should be scheduled asynchronously
+    async_children_master_jobs :: boolean(),
+    % flag that informs whether job for processing next batch of given directory should be scheduled asynchronously
+    async_next_batch_job :: boolean(),
+    % initial argument for compute function (see storage_traverse.erl for more info)
+    fold_children_init :: term(),
+    % flag that informs whether compute function should be executed (see storage_traverse.erl for more info)
+    fold_children_enabled :: boolean(),
+    info :: storage_traverse:info()
+}).
+
 %% Model for holding current quota state for spaces
 -record(space_quota, {
-    current_size = 0 :: non_neg_integer(),
-    last_autocleaning_check = 0 :: non_neg_integer()
+    current_size = 0 :: non_neg_integer()
 }).
 
 %% Record that holds monitoring id
@@ -658,7 +800,7 @@
     % Mapping of providers to their data output and destinations
     stats_out = #{} :: #{od_provider:id() => histogram:histogram()},
     % Providers mapping to providers they recently sent data to
-    active_links = #{} :: undefined | #{od_provider:id() => [od_provider:id()]}
+    active_channels = #{} :: undefined | #{od_provider:id() => [od_provider:id()]}
 }).
 
 %% Model used for communication between providers during
@@ -672,8 +814,8 @@
     version_vector = #{} :: version_vector:version_vector(),
     requester :: od_provider:id(),
     requestee :: od_provider:id(),
-    report_id :: replica_deletion:report_id(),
-    type :: replica_deletion:type()
+    job_id :: replica_deletion:job_id(),
+    job_type :: replica_deletion:job_type()
 }).
 
 %% Model used for setting read-write lock to synchronize replica deletion

@@ -11,6 +11,9 @@
 -module(transfer_utils).
 -author("Jakub Kudzia").
 
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/privileges.hrl").
+
 %% API
 -export([encode_pid/1, decode_pid/1]).
 

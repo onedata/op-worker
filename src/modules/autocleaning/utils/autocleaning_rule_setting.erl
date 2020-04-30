@@ -55,8 +55,8 @@ update(#autocleaning_rule_setting{
     Enabled = autocleaning_utils:get_defined(enabled, UpdateSettingMap, CurrentEnabled),
     Value = autocleaning_utils:get_defined(value, UpdateSettingMap, CurrentValue),
     #autocleaning_rule_setting{
-        enabled = autocleaning_utils:assert_boolean(Enabled),
-        value = autocleaning_utils:assert_non_negative_integer(Value)
+        enabled = autocleaning_utils:assert_boolean(Enabled, enabled),
+        value = autocleaning_utils:assert_non_negative_integer(Value, value)
     }.
 
 %%-------------------------------------------------------------------

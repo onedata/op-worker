@@ -4,6 +4,113 @@
 CHANGELOG
 ---------
 
+### 20.02.0-beta3
+
+* VFS-5989 Regular files can now be shared. Also both files and
+  directories can be shared multiple times. Due to those changes
+  share REST API was reworked.
+* VFS-5901 Application config can now be customized with arbitrary number
+  of config files added to /etc/op_worker/config.d/ directory.
+
+* VFS-5989 Removed old share REST API operating on file paths/ids.
+
+* VFS-6149 Allowed for RPN expression in QoS entry create
+* VFS-6149 Implemented API for QoS gui
+* VFS-6076 Set oz_domain env in initializer
+* VFS-6250 Improve logging related to running on-connect-to-oz procedures
+* VFS-6250 Secured on_zone_connection when cluster not ready
+* VFS-5983 Fix consistent_hashing usage after deps update
+* VFS-5983 Support datastore HA
+* VFS-6140 Do not include cdmi attrs into inherited xattrs
+* VFS-6231 Added upgrade essential workers in node manager
+* VFS-6140 Refactor metadata management
+* ensure that sync does not invalidate remotely created file when finding empty file created by opening the file, before it is replicated
+* VFS-6237 fix sync not detecting deletions in nested directories
+* VFS-5998 Removed storage sync cancel when resupporting space
+* VFS-5830 optimize replica_deletion and autocleaning mechanisms
+* VFS-6211 Fixed rtranfer_worker not starting when no connection to onezone
+* VFS-6142 Fix get_children_attrs name collision detection
+* VFS-6142 Rename compute_file_attr fun to resolve_file_attr in attr_req
+* VFS-5998 Implemented cease support cleanup
+* VFS-5830 fix bug in countdown_server, remove commented out code
+* VFS-6142 Reduce get_file_attrs functions
+* VFS-6142 Improve get_children, get_children_attrs/details docs
+* VFS-6181 Limit number of messages send to changes_stream_handler
+* VFS-6140 Add upper limits when listing directory children
+* VFS-6140 Return file itself when listing children for regular file
+* VFS-6142 Return name with collision suffix when fetching file details
+* VFS-6142 Add get file/children details fun to allowed ops in share mode
+* VFS-6142 Rename file_info to file_details
+* VFS-6142 Remove redundancies in attr_req module
+* VFS-6142 Remove redundancies in dir_req module
+* VFS-6142 Rename read_dir_plus_plus to get_children_info
+* VFS-6142 Clean up lfm_proxy code
+* VFS-6185 Minor fix to dbsync_state
+* VFS-6185 Add seq timestamp to dbsync state
+* VFS-6142 Return file details instead of jsut attrs for gs get op_file.instance
+* VFS-6142 Fix gui gs translations of fields returned by read dir plus plus
+* VFS-6142 Add read dir plus plus operation
+* VFS-6140 Add cases for requesting files on providers not supporting user
+* VFS-5983 Update deps to support datastore HA
+* VFS-6140 Fix using share object ids in REST endpoints
+* VFS-6140 Add data rest routes
+* VFS-6076 Do not provide a default Onezone domain
+* VFS-5830 add autocleaning_view_traverse, refactor autocleaning to use autocleaning_view_traverse
+* VFS-5830 scheduling task to replica_deletion_master blocks when its queue is full which results in automatic throttling
+* VFS-6192 Process GS prush messages asynchronously to avoid deadlocks
+* VFS-6043 Periodically report dbsync state to Onezone, synchronize info about support parameters and state from Onezone
+* change order of clear blocks - truncate operations
+* VFS-5642 Fixed paths bounded cache initialization
+* VFS-6093 Update ctool and onedata-documentation ref
+* VFS-6093 Do not send consumerToken to oz if it is undefined
+* VFS-6093 Add consumer token to verify_access_token request payload
+* VFS-6093 Fix races on auth_cache reacting to token status changes
+* VFS-6081 reorder function in simple_scan module
+* VFS-6100 Implemented cleanup after QoS entry was deleted. Improved QoS cache management.
+* VFS-5646 Added traverse cancel after QoS entry was deleted
+* VFS-6081 sync handles recreating file with different type
+* VFS-5642 Fixed wrong QoS cache management
+* VFS-6093 Rename auth_manager proto_credentials() to client_tokens()
+* VFS-6093 Rename auth_manager:auth() to auth_manager:credentials()
+* VFS-5642 Fixed status check for file without QoS
+* VFS-6093 Set session_validity_check_interval_seconds to 15 by default
+* VFS-6093 Add debug logs to auth_cache
+* VFS-6081 bugfix and fixed dialysis
+* VFS-6081 fix sync ignoring newly created file when rename of file with the same name and suffix is in progress
+* VFS-6081 fix races in detecting deletions by sync, fix sync reimporting file in case of race between sync, delete of opened file and release
+* VFS-6093 Extract auth cache logic from auth_manager to auth_cache
+* VFS-5642 Fixed race when dir deleted during traverse
+* VFS-6093 Properly handle all kinds of client() in gs_client_worker
+* VFS-6093 Fix auth manager mocks
+* VFS-6093 Improve auth_manager docs
+* VFS-6093 Monitor oz token/temp token status gs pushes/notifications
+* VFS-6093 Monitor token status after successful verification
+* VFS-6106 Update ctool and cluster-worker refs
+* VFS-6093 Clean auth_manager code
+* VFS-6081 fix importing conflicting files
+* VFS-5642 Added qos_status doc fixed dialyzer
+* VFS-5633 Use uuid instead of filename in qos status link name
+* VFS-6093 Improve token_auth verification code
+* VFS-6093 Invalidate auth cache entries on oz connection termination
+* VFS-6093 Make sure that auth verification works even without cache
+* VFS-6081 refactor fslogic_delete:process_file_links function
+* VFS-6093 Add temporary_token_secret record
+* VFS-5642 Added specs in qos_status
+* VFS-6096 Implemented QoS related documents clean up procedure
+* VFS-5642 Implemented QoS status check during traverse
+* VFS-6093 Add od_token record
+* VFS-6093 add root_auth and guest_auth types to auth_manager
+* VFS-6081 further refactor of fslogic_delete module, add emitting events to storage_sync
+* VFS-6093 Accept session:auth() in auth_manager:get_caveats/to_auth_override
+* VFS-6081 add checks for fixed races in storage_sync, code refactor according to PR comments
+* Allow getting file_location of deleted file if it is opened
+* VFS-6081 add extra check to prevent races which resulted in sync reimporting files that were being deleted
+* VFS-6081 fix sync reimporting files with file_meta marked as deleted, minor refactor
+* VFS-6081 do not remove deletion_link when removing file from storage fails, add deletion_links for directories
+* Hotfix - rename opened deleted files - prevent race
+* Hotfix - rename opened deleted files, enotdir when needed and fix async_request_manager
+
+
 ### 19.02.2
 
 VFS-6081 sync handles recreating file with different type

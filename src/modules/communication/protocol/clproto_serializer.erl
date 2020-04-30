@@ -62,7 +62,7 @@ deserialize_client_message(Message, SessionId) ->
             message_stream = Stream,
             session_id = SessionId,
             effective_session_id = EffSessionId,
-            effective_session_auth = EffSessionAuth,
+            effective_client_tokens = EffSessionAuth,
             message_body = Body
         }}
     catch
@@ -130,7 +130,7 @@ serialize_client_message(#client_message{
     message_id = MsgId,
     message_stream = MsgStm,
     effective_session_id = EffSessionId,
-    effective_session_auth = Auth,
+    effective_client_tokens = Auth,
     message_body = MsgBody
 }, VerifyMsg) ->
 

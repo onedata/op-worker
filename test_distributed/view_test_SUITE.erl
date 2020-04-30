@@ -15,6 +15,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 %% export for ct
@@ -34,7 +35,13 @@
     query_view_using_custom_metadata/1,
     query_view_using_file_popularity/1,
     query_view_and_emit_ctx/1,
-    wrong_map_function/1
+    wrong_map_function/1,
+    emitting_null_key_in_map_function_should_return_empty_result/1,
+    spatial_function_returning_null_in_key_should_return_empty_result/1,
+    spatial_function_returning_null_in_array_key_should_return_empty_result/1,
+    spatial_function_returning_null_in_range_key_should_return_empty_result/1,
+    spatial_function_returning_integer_key_should_return_error/1,
+    spatial_function_returning_string_key_should_return_error/1
 ]).
 
 
@@ -62,8 +69,10 @@ end).
 
 -define(assertQuery(ExpectedRows, Worker, SpaceId, ViewName, Options, Attempts),
     ?assertMatch(ExpectedRows, begin
-        {ok, QueryResult} = query_view(Worker, SpaceId, ViewName, Options),
-        query_result_to_map(QueryResult)
+        case query_view(Worker, SpaceId, ViewName, Options) of
+            {ok, #{<<"rows">> := Rows}} -> Rows;
+            Error -> Error
+        end
     end, Attempts)).
 
 
@@ -79,7 +88,13 @@ all() -> ?ALL([
     query_view_using_custom_metadata,
     query_view_using_file_popularity,
     query_view_and_emit_ctx,
-    wrong_map_function
+    wrong_map_function,
+    emitting_null_key_in_map_function_should_return_empty_result,
+    spatial_function_returning_null_in_key_should_return_empty_result,
+    spatial_function_returning_null_in_array_key_should_return_empty_result,
+    spatial_function_returning_null_in_range_key_should_return_empty_result,
+    spatial_function_returning_integer_key_should_return_error,
+    spatial_function_returning_string_key_should_return_error
 ]).
 
 %%%===================================================================
@@ -112,8 +127,8 @@ query_simple_empty_view_test(Config) ->
         }
     ">>,
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
-    {ok, Result} = query_view(Worker, SpaceId, ViewName, []),
-    ?assertMatch([], query_result_to_map(Result)).
+    ?assertMatch({ok, #{<<"total_rows">> := 0, <<"rows">> := []}},
+        query_view(Worker, SpaceId, ViewName, [])).
 
 query_view_using_file_meta(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -122,7 +137,6 @@ query_view_using_file_meta(Config) ->
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
             if(type == 'file_meta')
@@ -153,7 +167,6 @@ query_view_using_times(Config) ->
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
             if(type == 'times')
@@ -175,7 +188,6 @@ query_view_using_custom_metadata_when_xattr_is_not_set(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
     ViewName = ?view_name,
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(id, file_meta, times, custom_metadata, file_popularity, ctx) {
@@ -239,7 +251,6 @@ query_view_using_file_popularity(Config) ->
     lfm_proxy:close(Worker, H),
 
     {ok, CdmiId} = file_id:guid_to_objectid(Guid),
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
 
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
@@ -273,7 +284,6 @@ query_view_and_emit_ctx(Config) ->
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
             if(type == 'file_meta')
@@ -296,7 +306,6 @@ wrong_map_function(Config) ->
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
-    ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"
         function(_, _, _, _) {
             throw 'Test error';
@@ -305,6 +314,87 @@ wrong_map_function(Config) ->
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
     ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}, {key, CdmiId}]).
 
+emitting_null_key_in_map_function_should_return_empty_result(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space_id1">>,
+    ViewName = ?view_name,
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
+    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    SimpleMapFunction = <<"
+        function(_, _, _, _) {
+            return [null, null];
+        }
+    ">>,
+    create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
+    ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}, {key, CdmiId}]).
+
+spatial_function_returning_null_in_key_should_return_empty_result(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space_id1">>,
+    ViewName = ?view_name,
+    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    SpatialFunction = <<"
+        function(_, _, _, _) {
+            return [null, null];
+        }
+    ">>,
+    create_view(Worker, SpaceId, ViewName, SpatialFunction, undefined, [], true, [ProviderId]),
+    ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}, {spatial, true}]).
+
+spatial_function_returning_null_in_array_key_should_return_empty_result(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space_id1">>,
+    ViewName = ?view_name,
+    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    SpatialFunction = <<"
+        function(_, _, _, _) {
+            return [[null, 1], null];
+        }
+    ">>,
+    create_view(Worker, SpaceId, ViewName, SpatialFunction, undefined, [], true, [ProviderId]),
+    ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}, {spatial, true}]).
+
+spatial_function_returning_null_in_range_key_should_return_empty_result(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space_id1">>,
+    ViewName = ?view_name,
+    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    SpatialFunction = <<"
+        function(_, _, _, _) {
+            return [[[null, 1], [5, 7]], null];
+        }
+    ">>,
+    create_view(Worker, SpaceId, ViewName, SpatialFunction, undefined, [], true, [ProviderId]),
+    ?assertQuery([], Worker, SpaceId, ViewName, [{stale, false}, {spatial, true}]).
+
+spatial_function_returning_integer_key_should_return_error(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space_id1">>,
+    ViewName = ?view_name,
+    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    SpatialFunction = <<"
+        function(_, _, _, _) {
+            return [1, null];
+        }
+    ">>,
+    create_view(Worker, SpaceId, ViewName, SpatialFunction, undefined, [], true, [ProviderId]),
+    ?assertQuery(?ERROR_VIEW_QUERY_FAILED(_, _),
+        Worker, SpaceId, ViewName, [{stale, false}, {spatial, true}]).
+
+spatial_function_returning_string_key_should_return_error(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SpaceId = <<"space_id1">>,
+    ViewName = ?view_name,
+    ProviderId = ?GET_DOMAIN_BIN(Worker),
+    SpatialFunction = <<"
+        function(_, _, _, _) {
+            return [[\"string\"], null];
+        }
+    ">>,
+    create_view(Worker, SpaceId, ViewName, SpatialFunction, undefined, [], true, [ProviderId]),
+    ?assertQuery(?ERROR_VIEW_QUERY_FAILED(_, _),
+        Worker, SpaceId, ViewName, [{stale, false}, {spatial, true}]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -345,11 +435,3 @@ query_view(Worker, SpaceId, ViewName, Options) ->
 
 list_views(Worker, SpaceId) ->
     rpc:call(Worker, index, list, [SpaceId]).
-
-query_result_to_map(QueryResult) ->
-    {Rows} = QueryResult,
-    lists:map(fun(Row) ->
-        {<<"value">>, {Value}} = lists:keyfind(<<"value">>, 1, Row),
-        Row2 = lists:keyreplace(<<"value">>, 1, Row, {<<"value">>, maps:from_list(Value)}),
-        maps:from_list(Row2)
-    end, Rows).

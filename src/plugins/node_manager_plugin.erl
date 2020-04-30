@@ -22,9 +22,11 @@
 -export([installed_cluster_generation/0]).
 -export([oldest_known_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
--export([listeners/0, modules_with_args/0]).
+-export([listeners/0]).
+-export([upgrade_essential_workers/0, custom_workers/0]).
 -export([before_init/1]).
 -export([upgrade_cluster/1]).
+-export([on_cluster_ready/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
 
@@ -35,7 +37,7 @@
 % This can be used to e.g. move models between services.
 % Oldest known generation is the lowest one that can be directly upgraded to newest.
 % Human readable version is included to for logging purposes.
--define(INSTALLED_CLUSTER_GENERATION, 1).
+-define(INSTALLED_CLUSTER_GENERATION, 2).
 -define(OLDEST_KNOWN_CLUSTER_GENERATION, {1, <<"19.02.*">>}).
 
 %%%===================================================================
@@ -50,7 +52,6 @@
 -spec installed_cluster_generation() -> node_manager:cluster_generation().
 installed_cluster_generation() ->
     ?INSTALLED_CLUSTER_GENERATION.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -102,11 +103,23 @@ listeners() -> [
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:modules_with_args/0}.
+%% List of workers modules with configs that should be started before upgrade.
 %% @end
 %%--------------------------------------------------------------------
--spec modules_with_args() -> Models :: [{atom(), [any()]}].
-modules_with_args() -> filter_disabled_workers([
+-spec upgrade_essential_workers() -> [{module(), [any()]}].
+upgrade_essential_workers() -> filter_disabled_workers([
+    {gs_worker, [
+        {supervisor_flags, gs_worker:supervisor_flags()}
+    ]}
+]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:custom_workers/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec custom_workers() -> [{module(), [any()]}].
+custom_workers() -> filter_disabled_workers([
     {session_manager_worker, [
         {supervisor_flags, session_manager_worker:supervisor_flags()},
         {supervisor_children_spec, session_manager_worker:supervisor_children_spec()}
@@ -119,18 +132,16 @@ modules_with_args() -> filter_disabled_workers([
         {supervisor_flags, monitoring_worker:supervisor_flags()},
         {supervisor_children_spec, monitoring_worker:supervisor_children_spec()}
     ]},
-    {gs_worker, [
-        {supervisor_flags, gs_worker:supervisor_flags()}
-    ]},
     {rtransfer_worker, [
         {supervisor_flags, rtransfer_worker:supervisor_flags()},
         {supervisor_children_spec, rtransfer_worker:supervisor_children_spec()}
     ]},
-    {space_sync_worker, []},
+    {storage_sync_worker, []},
     {harvesting_worker, [
         {supervisor_flags, harvesting_worker:supervisor_flags()},
         {supervisor_children_spec, harvesting_worker:supervisor_children_spec()}
-    ]}
+    ]},
+    {qos_worker, []}
 ]).
 
 %%-------------------------------------------------------------------
@@ -161,7 +172,9 @@ filter_disabled_workers(WorkersSpecs) ->
 %%--------------------------------------------------------------------
 -spec renamed_models() -> #{{record_version(), model()} => model()}.
 renamed_models() ->
-    #{{1, open_file} => file_handles}.
+    #{
+        {1, open_file} => file_handles
+    }.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -187,9 +200,21 @@ before_init([]) ->
 %% This callback is executed only on one cluster node.
 %% @end
 %%--------------------------------------------------------------------
--spec upgrade_cluster(node_manager:cluster_generation()) -> no_return().
-upgrade_cluster(_CurrentGeneration) ->
-    error(not_supported).
+-spec upgrade_cluster(node_manager:cluster_generation()) ->
+    {ok, node_manager:cluster_generation()}.
+upgrade_cluster(1) ->
+    storage:migrate_to_zone(),
+    {ok, 2}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:on_cluster_ready/1}.
+%% This callback is executed on all cluster nodes.
+%% @end
+%%--------------------------------------------------------------------
+on_cluster_ready() ->
+    space_unsupport:init_pools(),
+    gs_worker:on_cluster_ready().
 
 %%--------------------------------------------------------------------
 %% @doc

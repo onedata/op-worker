@@ -19,9 +19,11 @@
 %% API
 -export([schedule_replica_eviction/6]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -35,17 +37,27 @@
     SourceProviderId :: sync_req:provider_id(),
     MigrationProviderId :: sync_req:provider_id(), transfer:view_name(),
     sync_req:query_view_params()) -> sync_req:provider_response().
-schedule_replica_eviction(UserCtx, FileCtx, SourceProviderId,
+schedule_replica_eviction(
+    UserCtx, FileCtx0, SourceProviderId,
     MigrationProviderId, ViewName, QueryViewParams
 ) ->
-    check_permissions:execute(
-        [], %todo VFS-4844
-        [UserCtx, FileCtx, SourceProviderId, MigrationProviderId, ViewName, QueryViewParams],
-        fun schedule_replica_eviction_insecure/6).
+    data_constraints:is_in_readonly_mode(UserCtx) andalso throw(?EACCES),
+
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors] %todo VFS-4844
+    ),
+    schedule_replica_eviction_insecure(
+        UserCtx, FileCtx1,
+        SourceProviderId, MigrationProviderId,
+        ViewName, QueryViewParams
+    ).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private

@@ -17,12 +17,11 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
+-include("middleware/middleware.hrl").
 -include("http/cdmi.hrl").
 -include("http/rest.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% cowboy rest handler API
 -export([
@@ -72,13 +71,12 @@
         __FunctionCall
     catch
         throw:__Err ->
-            __ErrorResp = rest_translator:error_response(__Err),
-            {stop, send_response(__ErrorResp, __Req), __CdmiReq};
+            {stop, send_error_response(__Err, __Req), __CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            {stop, cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, __Req), __CdmiReq}
+            {stop, send_error_response(?ERROR_INTERNAL_SERVER_ERROR, __Req), __CdmiReq}
     end
 ).
 
@@ -110,14 +108,12 @@ init(Req, ReqTypeResolutionMethod) ->
         {cowboy_rest, Req, CdmiReq}
     catch
         throw:Err ->
-            ErrorResp = rest_translator:error_response(Err),
-            {ok, send_response(ErrorResp, Req), undefined};
+            {ok, send_error_response(Err, Req), undefined};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
-            {ok, NewReq, undefined}
+            {ok, send_error_response(?ERROR_INTERNAL_SERVER_ERROR, Req), undefined}
     end.
 
 
@@ -148,10 +144,9 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
     ReqVer = cowboy_req:header(?CDMI_VERSION_HEADER, Req),
     try {get_supported_version(ReqVer), parse_qs(cowboy_req:qs(Req)), Type} of
         {undefined, _, {capabilities, _}} ->
-            ErrorResp = rest_translator:error_response(
-                ?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>])
-            ),
-            {stop, send_response(ErrorResp, Req), CdmiReq};
+            {stop, send_error_response(
+                ?ERROR_BAD_VERSION([<<"1.1.1">>, <<"1.1">>]), Req
+            ), CdmiReq};
         {Version, Options, _} ->
             {false, Req, CdmiReq#cdmi_req{
                 version = Version,
@@ -159,21 +154,19 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
             }}
     catch
         throw:Err ->
-            ErrorResp = rest_translator:error_response(Err),
-            {stop, send_response(ErrorResp, Req), CdmiReq};
+            {stop, send_error_response(Err, Req), CdmiReq};
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
-            {stop, NewReq, CdmiReq}
+            {stop, send_error_response(?ERROR_INTERNAL_SERVER_ERROR, Req), CdmiReq}
     end.
 
 
 %%--------------------------------------------------------------------
 %% @doc Cowboy callback function.
 %% Returns whether the user is authorized to perform the action.
-%% CDMI requests, beside capabilities ones (?NOBODY authentication is
+%% CDMI requests, beside capabilities ones (?GUEST authentication is
 %% associated with them at init/2 fun), require concrete user
 %% authentication.
 %% NOTE: The name and description of this function is actually misleading;
@@ -185,26 +178,13 @@ malformed_request(Req, #cdmi_req{resource = Type} = CdmiReq) ->
 -spec is_authorized(cowboy_req:req(), cdmi_req()) ->
     {stop | true | {false, binary()}, cowboy_req:req(), cdmi_req()}.
 is_authorized(Req, #cdmi_req{auth = undefined} = CdmiReq) ->
-    try http_auth:authenticate(Req, rest) of
+    case http_auth:authenticate(Req, rest, allow_data_access_caveats) of
         {ok, ?USER = Auth} ->
             {true, Req, CdmiReq#cdmi_req{auth = Auth}};
-        {ok, ?NOBODY} ->
-            {stop, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), CdmiReq};
-        {error, not_found} ->
-            {stop, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), CdmiReq};
-        {error, Reason} ->
-            ?debug("Authentication error in ~p due to: ~p", [?MODULE, Reason]),
-            {{false, <<"authentication_error">>}, Req, CdmiReq}
-    catch
-        throw:Err ->
-            ErrorResp = rest_translator:error_response(Err),
-            {stop, send_response(ErrorResp, Req), CdmiReq};
-        Type:Message ->
-            ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
-                ?MODULE, ?FUNCTION_NAME, Type, Message
-            ]),
-            NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
-            {stop, NewReq, CdmiReq}
+        {ok, ?GUEST} ->
+            {stop, send_error_response(?ERROR_UNAUTHORIZED, Req), CdmiReq};
+        {error, _} = Error ->
+            {stop, send_error_response(Error, Req), CdmiReq}
     end;
 is_authorized(Req, CdmiReq) ->
     {true, Req, CdmiReq}.
@@ -239,8 +219,7 @@ resource_exists(Req, #cdmi_req{
         {error, ?ENOENT} ->
             {false, Req, CdmiReq};
         {error, Errno} ->
-            ErrorResp = rest_translator:error_response(?ERROR_POSIX(Errno)),
-            {stop, send_response(ErrorResp, Req), CdmiReq}
+            {stop, send_error_response(?ERROR_POSIX(Errno), Req), CdmiReq}
     end.
 
 
@@ -322,10 +301,7 @@ content_types_provided(Req, #cdmi_req{resource = dataobject} = CdmiReq) ->
 -spec error_no_version(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
 error_no_version(Req, CdmiReq) ->
-    ErrorResp = rest_translator:error_response(
-        ?ERROR_MISSING_REQUIRED_VALUE(<<"version">>)
-    ),
-    {stop, send_response(ErrorResp, Req), CdmiReq}.
+    {stop, send_error_response(?ERROR_MISSING_REQUIRED_VALUE(<<"version">>), Req), CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -337,10 +313,7 @@ error_no_version(Req, CdmiReq) ->
 -spec error_wrong_path(cowboy_req:req(), cdmi_req()) ->
     {term(), cowboy_req:req(), cdmi_req()}.
 error_wrong_path(Req, CdmiReq) ->
-    ErrorResp = rest_translator:error_response(
-        ?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>)
-    ),
-    {stop, send_response(ErrorResp, Req), CdmiReq}.
+    {stop, send_error_response(?ERROR_BAD_VALUE_IDENTIFIER(<<"path">>), Req), CdmiReq}.
 
 
 %%--------------------------------------------------------------------
@@ -479,7 +452,7 @@ resolve_resource_by_id(Req) ->
 
     {Auth1, BasePath} = case proplists:get_value(ObjectId, ?CAPABILITY_ID_TO_PATH) of
         undefined ->
-            case http_auth:authenticate(Req, rest) of
+            case http_auth:authenticate(Req, rest, allow_data_access_caveats) of
                 {ok, ?USER(_UserId, SessionId) = Auth0} ->
                     case lfm:get_file_path(SessionId, Guid) of
                         {ok, FilePath} ->
@@ -487,11 +460,13 @@ resolve_resource_by_id(Req) ->
                         {error, Errno} ->
                             throw(?ERROR_POSIX(Errno))
                     end;
-                _ ->
-                    throw(?ERROR_UNAUTHORIZED)
+                {ok, ?GUEST} ->
+                    throw(?ERROR_UNAUTHORIZED);
+                {error, _} = Error ->
+                    throw(Error)
             end;
         CapabilityPath ->
-            {?NOBODY, CapabilityPath}
+            {?GUEST, CapabilityPath}
     end,
 
     {Path, _} = get_path_of_id_request(Req),
@@ -511,23 +486,23 @@ resolve_resource_by_id(Req) ->
 %% @doc
 %% Resolves resource accessed (capability, container or dataobject) using
 %% specified absolute path (it must begin with /).
-%% For capability requests ?NOBODY authorization is additionally added.
+%% For capability requests ?GUEST authorization is additionally added.
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_resource_by_path(file_meta:path()) -> cdmi_req().
 resolve_resource_by_path(<<"/", ?ROOT_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        auth = ?NOBODY,
+        auth = ?GUEST,
         resource = {capabilities, root}
     };
 resolve_resource_by_path(<<"/", ?CONTAINER_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        auth = ?NOBODY,
+        auth = ?GUEST,
         resource = {capabilities, container}
     };
 resolve_resource_by_path(<<"/", ?DATAOBJECT_CAPABILITY_PATH>>) ->
     #cdmi_req{
-        auth = ?NOBODY,
+        auth = ?GUEST,
         resource = {capabilities, dataobject}
     };
 resolve_resource_by_path(Path) ->
@@ -638,13 +613,10 @@ redirect_to(Req, CdmiReq, Path) ->
 
 
 %% @private
--spec send_response(#rest_resp{}, cowboy_req:req()) -> cowboy_req:req().
-send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
-    RespBody = case Body of
-        {binary, Bin} -> Bin;
-        Map -> json_utils:encode(Map)
-    end,
-    cowboy_req:reply(Code, Headers, RespBody, Req).
+-spec send_error_response({error, term()}, cowboy_req:req()) -> cowboy_req:req().
+send_error_response({error, _} = Error, Req) ->
+    #rest_resp{code = Code, headers = Headers, body = Body} = rest_translator:error_response(Error),
+    cowboy_req:reply(Code, Headers, json_utils:encode(Body), Req).
 
 
 %%--------------------------------------------------------------------

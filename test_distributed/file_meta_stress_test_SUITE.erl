@@ -207,7 +207,7 @@ init_per_suite(Config) ->
             fun(_) -> [] end),
         NewConfig,
         initializer:mock_provider_id(
-            Workers, <<"provider1">>, <<"auth-macaroon">>, <<"identity-macaroon">>
+            Workers, <<"provider1">>, <<"access-token">>, <<"identity-token">>
         ),
         NewConfig
     end,

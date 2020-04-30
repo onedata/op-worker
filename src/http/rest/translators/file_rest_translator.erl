@@ -5,17 +5,18 @@
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc This module handles translation of op logic results concerning
+%%% @doc
+%%% This module handles translation of middleware results concerning
 %%% file entities into REST responses.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_rest_translator).
 -author("Bartosz Walkowicz").
 
--include("op_logic.hrl").
 -include("http/rest.hrl").
+-include("middleware/middleware.hrl").
 
--export([get_response/2]).
+-export([create_response/4, get_response/2]).
 
 
 %%%===================================================================
@@ -25,11 +26,45 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% {@link rest_translator_behaviour} callback create_response/4.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_response(gri:gri(), middleware:auth_hint(),
+    middleware:data_format(), Result :: term() | {gri:gri(), term()} |
+    {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
+create_response(#gri{aspect = object_id}, _, value, ObjectId) ->
+    ?OK_REPLY(#{<<"fileId">> => ObjectId}).
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% {@link rest_translator_behaviour} callback get_response/2.
 %% @end
 %%--------------------------------------------------------------------
--spec get_response(op_logic:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(#gri{aspect = rdf_metadata}, Metadata) ->
-    ?OK_REPLY({binary, Metadata});
-get_response(_, Metadata) ->
-    ?OK_REPLY(Metadata).
+-spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
+get_response(#gri{aspect = As}, Result) when
+    As =:= object_id;
+    As =:= list
+->
+    ?OK_REPLY(Result);
+get_response(#gri{aspect = children}, Children) ->
+    ?OK_REPLY(#{<<"children">> => lists:map(fun({Guid, Name}) ->
+        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+        #{
+            <<"id">> => ObjectId,
+            <<"name">> => Name
+        }
+    end, Children)});
+get_response(#gri{aspect = shares}, ShareIds) ->
+    ?OK_REPLY(#{<<"shares">> => ShareIds});
+get_response(#gri{aspect = As}, Metadata) when
+    As =:= attrs;
+    As =:= xattrs;
+    As =:= json_metadata
+->
+    ?OK_REPLY(Metadata);
+get_response(#gri{aspect = rdf_metadata}, RdfMetadata) ->
+    ?OK_REPLY({binary, RdfMetadata});
+
+get_response(#gri{aspect = file_qos_summary}, EffQosResp) ->
+    ?OK_REPLY(EffQosResp).

@@ -126,7 +126,7 @@
 -include("proto/common/clproto_message_id.hrl").
 -include("proto/oneclient/server_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([start_link/1]).
@@ -194,10 +194,10 @@ start_link(SessionId) ->
 %%--------------------------------------------------------------------
 -spec delegate_and_supervise(worker_ref(), term(), clproto_message_id:id(),
     respond_via()) -> ok | {ok, server_message()}.
-delegate_and_supervise(WorkerRef, Req, MsgId, RespondVia) ->
+delegate_and_supervise(WorkerRef, ReqOrHandlerFun, MsgId, RespondVia) ->
     try
         ReqId = {make_ref(), MsgId},
-        ok = delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia)
+        ok = delegate_request_insecure(WorkerRef, ReqOrHandlerFun, ReqId, RespondVia)
     catch
         Type:Error ->
             ?error_stacktrace("Failed to delegate request (~p) due to: ~p:~p", [

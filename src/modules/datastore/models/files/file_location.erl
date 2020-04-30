@@ -21,7 +21,7 @@
 -export([create/1, create/2, create_and_update_quota/2, save/1,
     save_and_update_quota/2, get/1, update/2,
     delete/1, delete_and_update_quota/1, get_owner_id/1,
-    set_last_replication_timestamp/2]).
+    set_last_replication_timestamp/2, get_last_replication_timestamp/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -262,6 +262,17 @@ get_version_vector(#document{value = FileLocation}) ->
     get_version_vector(FileLocation);
 get_version_vector(#file_location{version_vector = VV}) ->
     VV.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Sets last_replication_timestamp field in the doc.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_last_replication_timestamp(doc() | record()) -> non_neg_integer() | undefined.
+get_last_replication_timestamp(#document{value = FL}) ->
+    get_last_replication_timestamp(FL);
+get_last_replication_timestamp(FL = #file_location{}) ->
+    FL#file_location.last_replication_timestamp.
 
 %%-------------------------------------------------------------------
 %% @doc

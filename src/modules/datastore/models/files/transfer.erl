@@ -42,8 +42,7 @@
     increment_files_failed_and_processed_counters/1,
     increment_files_replicated_counter/1, mark_data_replication_finished/3,
 
-    rerun_not_ended_transfers/1,
-    restart_pools/0
+    rerun_not_ended_transfers/1
 ]).
 
 % list functions
@@ -513,19 +512,19 @@ mark_data_replication_finished(TransferId, SpaceId, BytesPerProvider) ->
                     bytes_replicated = OldBytes + BytesTransferred,
                     last_update = maps:merge(LastUpdateMap, NewTimestamps),
                     min_hist = transfer_histograms:update(
-                        BytesPerProvider, MinHistograms, ?MINUTE_STAT_TYPE,
+                        BytesPerProvider, MinHistograms, ?MINUTE_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     hr_hist = transfer_histograms:update(
-                        BytesPerProvider, HrHistograms, ?HOUR_STAT_TYPE,
+                        BytesPerProvider, HrHistograms, ?HOUR_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     dy_hist = transfer_histograms:update(
-                        BytesPerProvider, DyHistograms, ?DAY_STAT_TYPE,
+                        BytesPerProvider, DyHistograms, ?DAY_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     ),
                     mth_hist = transfer_histograms:update(
-                        BytesPerProvider, MthHistograms, ?MONTH_STAT_TYPE,
+                        BytesPerProvider, MthHistograms, ?MONTH_PERIOD,
                         LastUpdateMap, StartTime, ApproxCurrentTime
                     )
                 }}
@@ -653,16 +652,6 @@ get_link_key_by_state(#document{key = TransferId, value = Transfer}, TransferSta
     {ok, transfer_links:link_key()} | {error, term()}.
 get_link_key(TransferId, Timestamp) ->
     {ok, transfer_links:link_key(TransferId, Timestamp)}.
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Restarts worker pools used by replication and replica_eviction mechanisms.
-%% @end
-%%-------------------------------------------------------------------
--spec restart_pools() -> ok.
-restart_pools() ->
-    ok = stop_pools(),
-    ok = start_pools().
 
 %%%===================================================================
 %%% Internal functions
@@ -794,10 +783,6 @@ start_pools() ->
         {worker, {gen_transfer_worker, [?REPLICA_EVICTION_WORKER]}},
         {queue_type, lifo}
     ]),
-    {ok, _} = worker_pool:start_sup_pool(?REPLICA_DELETION_WORKERS_POOL, [
-        {workers, ?REPLICA_DELETION_WORKERS_NUM},
-        {worker, {?REPLICA_DELETION_WORKER, []}}
-    ]),
     ok.
 
 %%-------------------------------------------------------------------
@@ -811,9 +796,7 @@ start_pools() ->
 stop_pools() ->
     ok = wpool:stop_sup_pool(?REPLICATION_WORKERS_POOL),
     ok = wpool:stop_sup_pool(?REPLICATION_CONTROLLERS_POOL),
-    ok = wpool:stop_sup_pool(?REPLICA_EVICTION_WORKERS_POOL),
-    ok = wpool:stop_sup_pool(?REPLICA_DELETION_WORKERS_POOL),
-    ok.
+    ok = wpool:stop_sup_pool(?REPLICA_EVICTION_WORKERS_POOL).
 
 %%-------------------------------------------------------------------
 %% @private

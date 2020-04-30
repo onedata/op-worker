@@ -13,7 +13,7 @@
 -ifndef(COMMON_MESSAGES_HRL).
 -define(COMMON_MESSAGES_HRL, 1).
 
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -record(status, {
     code :: code(),

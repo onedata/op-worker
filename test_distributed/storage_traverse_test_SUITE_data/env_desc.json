@@ -110,7 +110,7 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st2",
-                        "mounted_in_root": "true"
+                        "imported_storage": "true"
                     }
                 }
             },
@@ -139,7 +139,7 @@
                 "providers": {
                     "p1": {
                         "storage": "s3_2",
-                        "mounted_in_root": "true"
+                        "imported_storage": "true"
                     }
                 }
             }

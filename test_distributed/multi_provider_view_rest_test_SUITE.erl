@@ -18,14 +18,14 @@
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("rest_test_utils.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/privileges.hrl").
 
 
 %% API
@@ -45,9 +45,10 @@
     getting_view_of_not_supported_space_should_fail/1,
     list_views/1,
     query_view/1,
-    quering_view_with_invalid_params_should_fail/1,
-    create_geospatial_view/1,
-    query_geospatial_view/1,
+    querying_view_with_invalid_params_should_fail/1,
+    create_spatial_view/1,
+    query_spatial_view/1,
+    querying_spatial_view_with_wrong_function_should_fail/1,
     query_file_popularity_view/1,
     spatial_flag_test/1,
     file_removal_test/1,
@@ -64,9 +65,10 @@ all() ->
         getting_view_of_not_supported_space_should_fail,
         list_views,
         query_view,
-        quering_view_with_invalid_params_should_fail,
-        create_geospatial_view,
-        query_geospatial_view,
+        querying_view_with_invalid_params_should_fail,
+        create_spatial_view,
+        query_spatial_view,
+        querying_spatial_view_with_wrong_function_should_fail,
         query_file_popularity_view,
         spatial_flag_test,
         file_removal_test,
@@ -114,10 +116,19 @@ end).
         return null;
     }">>
 ).
--define(GEOSPATIAL_MAP_FUNCTION,
+-define(SPATIAL_MAP_FUNCTION,
     <<"function (id, type, meta, ctx) {
         if(type == 'custom_metadata' && meta['onedata_json'] && meta['onedata_json']['loc']) {
             return [meta['onedata_json']['loc'], id];
+        }
+        return null;
+    }">>
+).
+
+-define(WRONG_SPATIAL_MAP_FUNCTION,
+    <<"function (id, type, meta, ctx) {
+        if(type == 'custom_metadata' && meta['onedata_json'] && meta['onedata_json']['loc']) {
+            return [\"string\", id];
         }
         return null;
     }">>
@@ -242,13 +253,13 @@ create_get_update_delete_view(Config) ->
 
     % updating view (with overriding map function) with SPACE_MANAGE_VIEWS privilege should succeed
     ?assertMatch(ok, update_view_via_rest(
-        Config, WorkerP1, ?SPACE_ID, ViewName, ?GEOSPATIAL_MAP_FUNCTION, #{}
+        Config, WorkerP1, ?SPACE_ID, ViewName, ?SPATIAL_MAP_FUNCTION, #{}
     )),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
     % get on both after update
-    ExpMapFun2 = view_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
+    ExpMapFun2 = view_utils:escape_js_function(?SPATIAL_MAP_FUNCTION),
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
             <<"indexOptions">> := Options2,
@@ -398,7 +409,7 @@ overwriting_view_should_fail(Config) ->
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_ALREADY_EXISTS),
     ?assertMatch(ExpRestError, create_view_via_rest(
         Config, WorkerP1, ?SPACE_ID, ViewName,
-        ?GEOSPATIAL_MAP_FUNCTION, true, [], #{}
+        ?SPATIAL_MAP_FUNCTION, true, [], #{}
     )),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
@@ -664,7 +675,7 @@ query_view(Config) ->
     ?assertEqual(ErrorForbidden, Query(WorkerP2, #{}), ?ATTEMPTS).
 
 
-quering_view_with_invalid_params_should_fail(Config) ->
+querying_view_with_invalid_params_should_fail(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
@@ -725,15 +736,15 @@ quering_view_with_invalid_params_should_fail(Config) ->
     ]).
 
 
-create_geospatial_view(Config) ->
+create_spatial_view(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     ViewName = ?VIEW_NAME(?FUNCTION_NAME),
 
-    create_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName, ?GEOSPATIAL_MAP_FUNCTION, true),
+    create_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName, ?SPATIAL_MAP_FUNCTION, true),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP2, ?SPACE_ID, 100), ?ATTEMPTS),
 
-    ExpMapFun = view_utils:escape_js_function(?GEOSPATIAL_MAP_FUNCTION),
+    ExpMapFun = view_utils:escape_js_function(?SPATIAL_MAP_FUNCTION),
     ExpProviders = [?PROVIDER_ID(WorkerP1)],
     lists:foreach(fun(Worker) ->
         ?assertMatch({ok, #{
@@ -747,16 +758,16 @@ create_geospatial_view(Config) ->
     end, Workers).
 
 
-query_geospatial_view(Config) ->
+query_spatial_view(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     ViewName = ?VIEW_NAME(?FUNCTION_NAME),
 
-    Path0 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f0"])),
-    Path1 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f1"])),
-    Path2 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f2"])),
-    Path3 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f3"])),
+    Path0 = filename:join(["/", SpaceName, "f0"]),
+    Path1 = filename:join(["/", SpaceName, "f1"]),
+    Path2 = filename:join(["/", SpaceName, "f2"]),
+    Path3 = filename:join(["/", SpaceName, "f3"]),
     {ok, _Guid0} = lfm_proxy:create(WorkerP1, SessionId, Path0, 8#777),
     {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1, 8#777),
     {ok, Guid2} = lfm_proxy:create(WorkerP1, SessionId, Path2, 8#777),
@@ -767,7 +778,7 @@ query_geospatial_view(Config) ->
 
     ?assertMatch(ok, create_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName,
-        ?GEOSPATIAL_MAP_FUNCTION, true,
+        ?SPATIAL_MAP_FUNCTION, true,
         [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2), ?PROVIDER_ID(WorkerP3)], #{}
     )),
 
@@ -784,6 +795,28 @@ query_geospatial_view(Config) ->
         ?assertEqual(lists:sort([Guid1, Guid2]), Query(Worker, QueryOptions2), ?ATTEMPTS)
     end, Workers).
 
+querying_spatial_view_with_wrong_function_should_fail(Config) ->
+    Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+
+    Path1 = filename:join(["/", SpaceName, "file1"]),
+    {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1, 8#777),
+    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, Guid1}, json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
+
+    ?assertMatch(ok, create_view_via_rest(
+        Config, WorkerP1, SpaceId, ViewName,
+        ?WRONG_SPATIAL_MAP_FUNCTION, true,
+        [?PROVIDER_ID(WorkerP1), ?PROVIDER_ID(WorkerP2), ?PROVIDER_ID(WorkerP3)], #{}
+    )),
+
+    Query = query_filter(Config, SpaceId, ViewName),
+
+    lists:foreach(fun(Worker) ->
+        QueryOptions1 = #{spatial => true, stale => false},
+        ?assertMatch({?HTTP_400_BAD_REQUEST, _}, Query(Worker, QueryOptions1), ?ATTEMPTS)
+    end, Workers).
 
 query_file_popularity_view(Config) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, Config),
@@ -803,7 +836,7 @@ spatial_flag_test(Config) ->
 
     ?assertMatch(ok, create_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName,
-        ?GEOSPATIAL_MAP_FUNCTION, true,
+        ?SPATIAL_MAP_FUNCTION, true,
         [?PROVIDER_ID(WorkerP1)], #{}
     )),
 
@@ -1114,7 +1147,7 @@ create_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Spatial, Pr
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, QueryString/binary>>,
 
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, put, Headers, MapFunction) of
@@ -1129,7 +1162,7 @@ update_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Options) ->
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, QueryString/binary>>,
 
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, patch, Headers, MapFunction) of
@@ -1142,7 +1175,7 @@ update_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Options) ->
 add_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName, ReduceFunction) ->
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, "/reduce">>,
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, put, Headers, ReduceFunction) of
@@ -1155,7 +1188,7 @@ add_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName, ReduceFunction) ->
 remove_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName) ->
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, "/reduce">>,
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, delete, Headers, []) of
@@ -1167,7 +1200,7 @@ remove_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName) ->
 
 get_view_via_rest(Config, Worker, SpaceId, ViewName) ->
     Path = ?VIEW_PATH(SpaceId, ViewName),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]),
     case rest_test_utils:request(Worker, Path, get, Headers, []) of
         {ok, 200, _, Body} ->
             {ok, json_utils:decode(Body)};
@@ -1322,9 +1355,7 @@ query_filter2(Config, SpaceId, ViewName) ->
 
 create_files_with_xattrs(Node, SessionId, SpaceName, Prefix, Num, XattrName) ->
     lists:map(fun(X) ->
-        Path = list_to_binary(filename:join(
-            ["/", binary_to_list(SpaceName), Prefix ++ integer_to_list(X)]
-        )),
+        Path = filename:join(["/", SpaceName, Prefix ++ integer_to_list(X)]),
         {ok, Guid} = lfm_proxy:create(Node, SessionId, Path, 8#777),
         ok = lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR(XattrName, X)),
         Guid

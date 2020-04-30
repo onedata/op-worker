@@ -27,7 +27,7 @@
 
 %% Record containing the state of REST request.
 -record(rest_req, {
-    method = get :: rest_handler:method(),
+    method = 'GET' :: rest_handler:method(),
     parse_body = ignore :: rest_handler:parse_body(),
     consumes = ['*'] :: ['*'] | [binary()],
     produces = [<<"application/json">>] :: [binary()],
@@ -36,7 +36,7 @@
 
 %% Record representing REST response.
 -record(rest_resp, {
-    code = 200 :: integer(),
+    code = ?HTTP_200_OK :: integer(),
     headers = #{} :: #{binary() => binary()},
     body = {binary, <<"">>} :: json_utils:json_term() | {binary, binary()}
 }).
@@ -51,7 +51,7 @@
 -define(OK_REPLY(__Body), #rest_resp{code = ?HTTP_200_OK, body = __Body}).
 -define(NO_CONTENT_REPLY, #rest_resp{code = ?HTTP_204_NO_CONTENT}).
 -define(CREATED_REPLY(__PathTokens, __Body), #rest_resp{
-    code = ?HTTP_200_OK,
+    code = ?HTTP_201_CREATED,
     headers = #{<<"Location">> => list_to_binary(oneprovider:get_rest_endpoint(
         string:trim(filename:join([<<"/">> | __PathTokens]), leading, [$/])
     ))},
