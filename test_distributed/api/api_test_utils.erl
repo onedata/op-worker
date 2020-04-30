@@ -21,6 +21,10 @@
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 -export([run_tests/2]).
+-export([
+    create_file/4, create_file/5,
+    wait_for_file_sync/3
+]).
 
 -type config() :: proplists:proplist().
 
@@ -42,6 +46,22 @@ run_tests(Config, Specs) ->
         (#suite_spec{} = SuiteSpec, AllTestsPassed) ->
             AllTestsPassed and run_suite(Config, SuiteSpec)
     end, true, Specs).
+
+
+create_file(FileType, Node, SessId, Path) ->
+    create_file(FileType, Node, SessId, Path, 8#777).
+
+
+create_file(<<"file">>, Node, SessId, Path, Mode) ->
+    lfm_proxy:create(Node, SessId, Path, Mode);
+create_file(<<"dir">>, Node, SessId, Path, Mode) ->
+    lfm_proxy:mkdir(Node, SessId, Path, Mode).
+
+
+-spec wait_for_file_sync(node(), session:id(), file_id:file_guid()) -> ok.
+wait_for_file_sync(Node, SessId, FileGuid) ->
+    ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, {guid, FileGuid}), ?ATTEMPTS),
+    ok.
 
 
 %%%===================================================================
