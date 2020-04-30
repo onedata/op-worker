@@ -65,7 +65,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file QoS summary
+    %% Get QoS summary for file or directory
     {<<"/data/:id/qos_summary">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
