@@ -339,11 +339,8 @@ get_harvesters(SpaceId) ->
     end.
 
 
--spec report_dbsync_state(od_space:id(), space_support:seq_per_provider()) -> ok | errors:error().
-report_dbsync_state(SpaceId, SeqPerProvider) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = update,
-        gri = #gri{type = od_space, id = SpaceId, aspect = {dbsync_state, oneprovider:get_id()}},
-        data = #{<<"seqPerProvider">> => SeqPerProvider}
-    }).
+-spec report_dbsync_state(od_space:id(), space_support:seq_per_provider()) -> ok.
+report_dbsync_state(_SpaceId, _SeqPerProvider) ->
+    % TODO VFS-6182 temporarily disabled, to be implemented in 20.02.0-rc1
+    ok.
 
