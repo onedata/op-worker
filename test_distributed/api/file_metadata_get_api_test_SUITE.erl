@@ -12,7 +12,7 @@
 -module(file_metadata_get_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_test_utils.hrl").
+-include("api_test_runner.hrl").
 -include("file_metadata_api_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -78,32 +78,24 @@ all() ->
 %%% Get Rdf metadata test functions
 %%%===================================================================
 
--define(RANDOM_FILE_TYPE(), lists_utils:random_element([<<"file">>, <<"dir">>])).
-
-
-randomly_choose_file_type_for_test() ->
-    FileType = ?RANDOM_FILE_TYPE(),
-    ct:pal("Choosen file type for test: ~s", [FileType]),
-    FileType.
-
 
 get_file_rdf_metadata_with_rdf_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_rdf_metadata_test_base(FileType, set_rdf, normal_mode, Config).
 
 
 get_file_rdf_metadata_without_rdf_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_rdf_metadata_test_base(FileType, do_not_set_rdf, normal_mode, Config).
 
 
 get_shared_file_rdf_metadata_with_rdf_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_rdf_metadata_test_base(FileType, set_rdf, share_mode, Config).
 
 
 get_shared_file_rdf_metadata_without_rdf_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_rdf_metadata_test_base(FileType, do_not_set_rdf, share_mode, Config).
 
 
@@ -150,7 +142,7 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
 
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
     lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
@@ -176,22 +168,22 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
 
 
 get_file_json_metadata_with_json_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_json_metadata_test_base(FileType, set_direct_json, normal_mode, Config).
 
 
 get_file_json_metadata_without_json_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_json_metadata_test_base(FileType, do_not_set_direct_json, normal_mode, Config).
 
 
 get_shared_file_json_metadata_with_json_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_json_metadata_test_base(FileType, set_direct_json, share_mode, Config).
 
 
 get_shared_file_json_metadata_without_json_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_json_metadata_test_base(FileType, do_not_set_direct_json, share_mode, Config).
 
 
@@ -385,7 +377,7 @@ get_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
 
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
     lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, json, ?JSON_METADATA_2, []),
@@ -412,22 +404,22 @@ get_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
 
 
 get_file_xattrs_with_xattrs_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_xattrs_test_base(FileType, set_direct_xattr, normal_mode, Config).
 
 
 get_file_xattrs_without_xattrs_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_xattrs_test_base(FileType, do_not_set_direct_xattr, normal_mode, Config).
 
 
 get_shared_file_xattrs_with_xattrs_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_xattrs_test_base(FileType, set_direct_xattr, share_mode, Config).
 
 
 get_shared_file_xattrs_without_xattrs_set_test(Config) ->
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     get_xattrs_test_base(FileType, do_not_set_direct_xattr, share_mode, Config).
 
 
@@ -678,7 +670,7 @@ get_file_xattrs_on_provider_not_supporting_space_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
 
-    FileType = randomly_choose_file_type_for_test(),
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
     ?assertMatch(ok, lfm_proxy:set_xattr(P1, SessIdP1, {guid, FileGuid}, ?XATTR_1)),
@@ -771,7 +763,7 @@ get_metadata_test_base(
 ) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ?assert(api_test_utils:run_tests(Config, [
+    ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
@@ -812,7 +804,7 @@ get_metadata_test_base(
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, FileShareObjectId} = file_id:guid_to_objectid(FileShareGuid),
 
-    ?assert(api_test_utils:run_tests(Config, [
+    ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,

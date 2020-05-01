@@ -12,7 +12,7 @@
 -module(file_data_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_test_utils.hrl").
+-include("api_test_runner.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
@@ -198,7 +198,7 @@ get_children_test(Config) ->
             ?assertEqual(ExpSuccessResult, Response)
     end end,
 
-    ?assert(api_test_utils:run_tests(Config, [
+    ?assert(api_test_runner:run_tests(Config, [
 
         %% TEST LISTING NORMAL DIR
 
@@ -620,7 +620,7 @@ get_attrs_test(Config) ->
         JsonAttrsInNormalMode = attrs_to_json(undefined, FileAttrs),
         JsonAttrsInShareMode = attrs_to_json(ShareId1, FileAttrs),
 
-        ?assert(api_test_utils:run_tests(Config, [
+        ?assert(api_test_runner:run_tests(Config, [
 
             %% TEST GET ATTRS FOR FILE IN NORMAL MODE
 
@@ -734,7 +734,7 @@ get_attrs_test(Config) ->
             ?assertEqual(ExpAttrs, Response)
     end,
 
-    ?assert(api_test_utils:run_tests(Config, [
+    ?assert(api_test_runner:run_tests(Config, [
         #scenario_spec{
             name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
             type = rest,
@@ -927,7 +927,7 @@ set_mode_test(Config) ->
         ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
         {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
 
-        ?assert(api_test_utils:run_tests(Config, [
+        ?assert(api_test_runner:run_tests(Config, [
 
             %% TEST SET MODE FOR FILE IN NORMAL MODE
 
@@ -990,7 +990,7 @@ set_mode_test(Config) ->
             true
         end,
 
-        ?assert(api_test_utils:run_tests(Config, [
+        ?assert(api_test_runner:run_tests(Config, [
 
             #scenario_spec{
                 name = <<"Set mode for shared ", FileType/binary, " using /data/ rest endpoint">>,
@@ -1081,7 +1081,7 @@ set_mode_test(Config) ->
             true
     end,
 
-    ?assert(api_test_utils:run_tests(Config, [
+    ?assert(api_test_runner:run_tests(Config, [
         #scenario_spec{
             name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
             type = rest,

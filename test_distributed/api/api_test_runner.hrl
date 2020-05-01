@@ -200,5 +200,7 @@ end)()).
 -define(REST_ERROR(__ERROR), #{<<"error">> => errors:to_json(__ERROR)}).
 
 -define(RANDOM_FILE_NAME(), generator:gen_name()).
+-define(RANDOM_FILE_TYPE(), lists_utils:random_element([<<"file">>, <<"dir">>])).
+
 
 -endif.
