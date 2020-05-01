@@ -32,60 +32,36 @@
 -export([
     % Set rdf metadata test cases
     set_file_rdf_metadata_test/1,
-    set_dir_rdf_metadata_test/1,
     set_shared_file_rdf_metadata_test/1,
-    set_shared_dir_rdf_metadata_test/1,
     set_file_rdf_metadata_on_provider_not_supporting_space_test/1,
-    set_dir_rdf_metadata_on_provider_not_supporting_space_test/1,
 
     % Set json metadata test cases
     set_file_json_metadata_test/1,
-    set_dir_json_metadata_test/1,
     set_file_primitive_json_metadata_test/1,
-    set_dir_primitive_json_metadata_test/1,
     set_shared_file_json_metadata_test/1,
-    set_shared_dir_json_metadata_test/1,
     set_file_json_metadata_on_provider_not_supporting_space_test/1,
-    set_dir_json_metadata_on_provider_not_supporting_space_test/1,
 
     % Set xattrs test cases
     set_file_xattrs_test/1,
-    set_dir_xattrs_test/1,
     set_shared_file_xattrs_test/1,
-    set_shared_dir_xattrs_test/1,
-    set_file_xattrs_on_provider_not_supporting_space_test/1,
-    set_dir_xattrs_on_provider_not_supporting_space_test/1
+    set_file_xattrs_on_provider_not_supporting_space_test/1
 ]).
 
 all() ->
     ?ALL([
         set_file_rdf_metadata_test,
-        set_dir_rdf_metadata_test,
         set_shared_file_rdf_metadata_test,
-        set_shared_dir_rdf_metadata_test,
         set_file_rdf_metadata_on_provider_not_supporting_space_test,
-        set_dir_rdf_metadata_on_provider_not_supporting_space_test,
 
         set_file_json_metadata_test,
-        set_dir_json_metadata_test,
         set_file_primitive_json_metadata_test,
-        set_dir_primitive_json_metadata_test,
         set_shared_file_json_metadata_test,
-        set_shared_dir_json_metadata_test,
         set_file_json_metadata_on_provider_not_supporting_space_test,
-        set_dir_json_metadata_on_provider_not_supporting_space_test,
 
         set_file_xattrs_test,
-        set_dir_xattrs_test,
         set_shared_file_xattrs_test,
-        set_shared_dir_xattrs_test,
-        set_file_xattrs_on_provider_not_supporting_space_test,
-        set_dir_xattrs_on_provider_not_supporting_space_test
+        set_file_xattrs_on_provider_not_supporting_space_test
     ]).
-
-%%%===================================================================
-%%% API
-%%%===================================================================
 
 
 %%%===================================================================
@@ -94,19 +70,11 @@ all() ->
 
 
 set_file_rdf_metadata_test(Config) ->
-    set_rdf_metadata_test_base(<<"file">>, Config).
-
-
-set_dir_rdf_metadata_test(Config) ->
-    set_rdf_metadata_test_base(<<"dir">>, Config).
-
-
-%% @private
-set_rdf_metadata_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
     api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
@@ -133,19 +101,11 @@ set_rdf_metadata_test_base(FileType, Config) ->
 
 
 set_shared_file_rdf_metadata_test(Config) ->
-    set_rdf_metadata_for_shared_file_test_base(<<"file">>, Config).
-
-
-set_shared_dir_rdf_metadata_test(Config) ->
-    set_rdf_metadata_for_shared_file_test_base(<<"dir">>, Config).
-
-
-%% @private
-set_rdf_metadata_for_shared_file_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
@@ -176,18 +136,10 @@ set_rdf_metadata_for_shared_file_test_base(FileType, Config) ->
 
 
 set_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
-    set_rdf_metadata_on_provider_not_supporting_space_test_base(<<"file">>, Config).
-
-
-set_dir_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
-    set_rdf_metadata_on_provider_not_supporting_space_test_base(<<"dir">>, Config).
-
-
-%% @private
-set_rdf_metadata_on_provider_not_supporting_space_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
 
@@ -259,19 +211,11 @@ remove_rdf(Node, FileGuid, Config) ->
 
 
 set_file_json_metadata_test(Config) ->
-    set_json_metadata_test_base(<<"file">>, Config).
-
-
-set_dir_json_metadata_test(Config) ->
-    set_json_metadata_test_base(<<"dir">>, Config).
-
-
-%% @private
-set_json_metadata_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
     api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
@@ -398,19 +342,11 @@ set_json_metadata_test_base(FileType, Config) ->
 
 
 set_file_primitive_json_metadata_test(Config) ->
-    set_primitive_json_metadata_test_base(<<"file">>, Config).
-
-
-set_dir_primitive_json_metadata_test(Config) ->
-    set_primitive_json_metadata_test_base(<<"dir">>, Config).
-
-
-%% @private
-set_primitive_json_metadata_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
     api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
@@ -457,19 +393,11 @@ set_primitive_json_metadata_test_base(FileType, Config) ->
 
 
 set_shared_file_json_metadata_test(Config) ->
-    set_json_metadata_for_shared_file_test_base(<<"file">>, Config).
-
-
-set_shared_dir_json_metadata_test(Config) ->
-    set_json_metadata_for_shared_file_test_base(<<"dir">>, Config).
-
-
-%% @private
-set_json_metadata_for_shared_file_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
@@ -500,18 +428,10 @@ set_json_metadata_for_shared_file_test_base(FileType, Config) ->
 
 
 set_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
-    set_json_metadata_on_provider_not_supporting_space_test_base(<<"file">>, Config).
-
-
-set_dir_json_metadata_on_provider_not_supporting_space_test(Config) ->
-    set_json_metadata_on_provider_not_supporting_space_test_base(<<"dir">>, Config).
-
-
-%% @private
-set_json_metadata_on_provider_not_supporting_space_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
 
@@ -578,19 +498,13 @@ remove_json(Node, FileGuid, Config) ->
 
 
 set_file_xattrs_test(Config) ->
-    set_xattrs_test_base(<<"file">>, normal_mode, Config).
-
-
-set_dir_xattrs_test(Config) ->
-    set_xattrs_test_base(<<"dir">>, normal_mode, Config).
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
+    set_xattrs_test_base(FileType, normal_mode, Config).
 
 
 set_shared_file_xattrs_test(Config) ->
-    set_xattrs_test_base(<<"file">>, share_mode, Config).
-
-
-set_shared_dir_xattrs_test(Config) ->
-    set_xattrs_test_base(<<"dir">>, share_mode, Config).
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
+    set_xattrs_test_base(FileType, share_mode, Config).
 
 
 %% @private
@@ -663,18 +577,10 @@ set_xattrs_test_base(FileType, TestMode, Config) ->
 
 
 set_file_xattrs_on_provider_not_supporting_space_test(Config) ->
-    set_xattrs_on_provider_not_supporting_space_test_base(<<"file">>, Config).
-
-
-set_dir_xattrs_on_provider_not_supporting_space_test(Config) ->
-    set_xattrs_on_provider_not_supporting_space_test_base(<<"dir">>, Config).
-
-
-%% @private
-set_xattrs_on_provider_not_supporting_space_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
 
