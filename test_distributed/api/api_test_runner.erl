@@ -339,13 +339,12 @@ run_expected_success_test_cases(Config, #scenario_spec{
 
 
 run_test_cases(ScenarioType, TargetNodes, Clients, DataSets, TestCaseFun) ->
-    lists:foldl(fun(TargetNode, OuterAcc) ->
-        OuterAcc and lists:foldl(fun(Client, MiddleAcc) ->
-            MiddleAcc and lists:foldl(fun(DataSet, InnerAcc) ->
-                InnerAcc and TestCaseFun(TargetNode, Client, DataSet)
-            end, true, DataSets)
-        end, true, filter_available_clients(ScenarioType, Clients))
-    end, true, TargetNodes).
+    lists:foldl(fun(Client, OuterAcc) ->
+        OuterAcc and lists:foldl(fun(DataSet, InnerAcc) ->
+            TargetNode = lists_utils:random_element(TargetNodes),
+            InnerAcc and TestCaseFun(TargetNode, Client, DataSet)
+        end, true, DataSets)
+    end, true, filter_available_clients(ScenarioType, Clients)).
 
 
 filter_available_clients(Type, Clients) when

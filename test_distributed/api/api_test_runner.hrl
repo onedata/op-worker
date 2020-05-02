@@ -36,6 +36,14 @@
     % of test case due to for example invalid aspect.
     gs_not_supported.
 
+% List of nodes to which api calls can be directed. However only one node
+% from this list will be chosen (randomly) for each test case.
+% It greatly shortens time needed to run tests and also allows to test e.g.
+% setting some value on one node and updating it on another node.
+% Checks whether value set on one node was synced with other nodes can be
+% performed using `verify_fun` callback.
+-type target_nodes() :: [node()].
+
 -record(client_spec, {
     correct = [] :: [aai:auth()],
     unauthorized = [] :: [aai:auth()],
@@ -103,7 +111,7 @@
 -record(scenario_spec, {
     name :: binary(),
     type :: scenario_type(),
-    target_nodes :: [node()],
+    target_nodes :: target_nodes(),
     client_spec :: client_spec(),
 
     setup_fun = fun() -> #{} end :: env_setup_fun(),
@@ -132,7 +140,7 @@
 % or check functions. List of scenario_spec() will be created from that common params as
 % well as scenario specific data contained in each scenario_template().
 -record(suite_spec, {
-    target_nodes :: [node()],
+    target_nodes :: target_nodes(),
     client_spec :: client_spec(),
 
     setup_fun = fun() -> #{} end :: env_setup_fun(),
