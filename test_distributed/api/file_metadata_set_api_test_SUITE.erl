@@ -286,7 +286,6 @@ set_file_json_metadata_test(Config) ->
                             <<"attr2">> => [null, null, ExampleJson]
                         }]}
                 end,
-%%                ct:pal("TEST CTX: ~p ~n~nEXP JSON: ~p", [TestCtx, ExpResult]),
                 ?assertMatch(ExpResult, get_json(Node, FileGuid, Config), ?ATTEMPTS)
             end, Providers),
 
@@ -457,26 +456,31 @@ remove_json(Node, FileGuid, Config) ->
 %%%===================================================================
 
 
--define(SET_XATTRS_DATA_SPEC, #data_spec{
-    required = [<<"metadata">>],
-    correct_values = #{<<"metadata">> => [
-        % Tests setting multiple xattrs at once
-        #{?XATTR_1_KEY => ?XATTR_1_VALUE, ?XATTR_2_KEY => ?XATTR_2_VALUE},
-        % Tests setting xattr internal types
-        #{?ACL_KEY => ?ACL_3},
-        #{?MIMETYPE_KEY => ?MIMETYPE_1},
-        #{?TRANSFER_ENCODING_KEY => ?TRANSFER_ENCODING_1},
-        #{?CDMI_COMPLETION_STATUS_KEY => ?CDMI_COMPLETION_STATUS_1},
-        #{?JSON_METADATA_KEY => ?JSON_METADATA_4},
-        #{?RDF_METADATA_KEY => ?RDF_METADATA_1}
-    ]}
-}).
-
-
 set_file_xattrs_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     {FileType, FilePath, FileGuid, _} = create_random_file(P1, P2, ?SPACE_2, false, Config),
 
+    DataSpec = #data_spec{
+        required = [<<"metadata">>],
+        correct_values = #{<<"metadata">> => [
+            % Tests setting multiple xattrs at once
+            #{?XATTR_1_KEY => ?XATTR_1_VALUE, ?XATTR_2_KEY => ?XATTR_2_VALUE},
+            % Tests setting xattr internal types
+            #{?ACL_KEY => ?ACL_3},
+            #{?MIMETYPE_KEY => ?MIMETYPE_1},
+            #{?TRANSFER_ENCODING_KEY => ?TRANSFER_ENCODING_1},
+            #{?CDMI_COMPLETION_STATUS_KEY => ?CDMI_COMPLETION_STATUS_1},
+            #{?JSON_METADATA_KEY => ?JSON_METADATA_4},
+            #{?RDF_METADATA_KEY => ?RDF_METADATA_1}
+        ]},
+        bad_values = [
+            {<<"metadata">>, <<"aaa">>, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)},
+            % Keys with prefixes `cdmi_` and `onedata_` are forbidden with exception
+            % for those listed in above correct_values
+            {<<"metadata">>, #{<<"cdmi_attr">> => <<"val">>}, ?ERROR_POSIX(?EPERM)},
+            {<<"metadata">>, #{<<"onedata_attr">> => <<"val">>}, ?ERROR_POSIX(?EPERM)}
+        ]
+    },
     GetExpCallResultFun = fun(#api_test_ctx{client = Client, data = #{<<"metadata">> := Xattrs}}) ->
         case {Client, maps:is_key(?ACL_KEY, Xattrs)} of
             {?USER_IN_SPACE_2_AUTH, true} ->
@@ -487,14 +491,14 @@ set_file_xattrs_test(Config) ->
         end
     end,
     VerifyEnvFun = fun
-        (expected_failure, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Xattrs}}) ->
-            assert_no_xattrs_set(TestNode, FileGuid, Xattrs, Config),
+        (expected_failure, #api_test_ctx{node = TestNode}) ->
+            assert_no_xattrs_set(TestNode, FileGuid, Config),
             true;
         (expected_success, #api_test_ctx{node = TestNode, client = Client, data = #{<<"metadata">> := Xattrs}}) ->
             case {Client, maps:is_key(?ACL_KEY, Xattrs)} of
                 {?USER_IN_SPACE_2_AUTH, true} ->
                     % Only owner (?USER_IN_BOTH_SPACES) can set acl in posix mode
-                    assert_no_xattrs_set(TestNode, FileGuid, Xattrs, Config);
+                    ?assertMatch({error, ?ENODATA}, get_xattr(TestNode, FileGuid, ?ACL_KEY, Config), ?ATTEMPTS);
                 _ ->
                     assert_xattrs_set(Providers, FileGuid, Xattrs, Config),
                     remove_xattrs(TestNode, Providers, FileGuid, Xattrs, Config)
@@ -510,7 +514,7 @@ set_file_xattrs_test(Config) ->
         VerifyEnvFun,
         Providers,
         ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
-        ?SET_XATTRS_DATA_SPEC,
+        DataSpec,
         _QsParams = [],
         Config
     ).
@@ -522,8 +526,22 @@ set_shared_file_xattrs_test(Config) ->
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_NOT_SUPPORTED end,
 
-    VerifyEnvFun = fun(_, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Xattrs}}) ->
-        assert_no_xattrs_set(TestNode, FileGuid, Xattrs, Config),
+    DataSpec = #data_spec{
+        required = [<<"metadata">>],
+        correct_values = #{<<"metadata">> => [
+            % Tests setting multiple xattrs at once
+            #{?XATTR_1_KEY => ?XATTR_1_VALUE, ?XATTR_2_KEY => ?XATTR_2_VALUE},
+            % Tests setting xattr internal types
+            #{?ACL_KEY => ?ACL_3},
+            #{?MIMETYPE_KEY => ?MIMETYPE_1},
+            #{?TRANSFER_ENCODING_KEY => ?TRANSFER_ENCODING_1},
+            #{?CDMI_COMPLETION_STATUS_KEY => ?CDMI_COMPLETION_STATUS_1},
+            #{?JSON_METADATA_KEY => ?JSON_METADATA_4},
+            #{?RDF_METADATA_KEY => ?RDF_METADATA_1}
+        ]}
+    },
+    VerifyEnvFun = fun(_, #api_test_ctx{node = TestNode}) ->
+        assert_no_xattrs_set(TestNode, FileGuid, Config),
         true
     end,
 
@@ -535,7 +553,7 @@ set_shared_file_xattrs_test(Config) ->
         VerifyEnvFun,
         Providers,
         ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
-        ?SET_XATTRS_DATA_SPEC,
+        DataSpec,
         _QsParams = [],
         Config
     ).
@@ -584,10 +602,11 @@ assert_xattrs_set(Nodes, FileGuid, Xattrs, Config) ->
 
 
 %% @private
-assert_no_xattrs_set(Node, FileGuid, Xattrs, Config) ->
-    lists:foreach(fun(Key) ->
-        ?assertMatch({error, ?ENODATA}, get_xattr(Node, FileGuid, Key, Config), ?ATTEMPTS)
-    end, maps:keys(Xattrs)).
+assert_no_xattrs_set(Node, FileGuid, Config) ->
+    ?assertMatch(
+        {ok, []},
+        lfm_proxy:list_xattr(Node, ?USER_IN_BOTH_SPACES_SESS_ID(Node, Config), {guid, FileGuid}, false, true)
+    ).
 
 
 %% @private
