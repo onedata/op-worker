@@ -149,7 +149,7 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
     {FileType, FilePath, FileGuid, _} = create_random_file(P1, P1, ?SPACE_1, false, Config),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_USER_NOT_SUPPORTED end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(P2)) end,
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
@@ -163,8 +163,8 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
     set_metadata_test_base(
         <<"rdf">>,
         FileType, FilePath, FileGuid, undefined,
-        create_validate_set_metadata_rest_call_fun(GetExpCallResultFun, P2),
-        create_validate_set_metadata_gs_call_fun(GetExpCallResultFun, P2),
+        create_validate_set_metadata_rest_call_fun(GetExpCallResultFun),
+        create_validate_set_metadata_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun,
         [P2],
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
@@ -415,7 +415,7 @@ set_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
     {FileType, FilePath, FileGuid, _} = create_random_file(P1, P1, ?SPACE_1, false, Config),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_USER_NOT_SUPPORTED end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(P2)) end,
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
@@ -429,8 +429,8 @@ set_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
     set_metadata_test_base(
         <<"json">>,
         FileType, FilePath, FileGuid, undefined,
-        create_validate_set_metadata_rest_call_fun(GetExpCallResultFun, P2),
-        create_validate_set_metadata_gs_call_fun(GetExpCallResultFun, P2),
+        create_validate_set_metadata_rest_call_fun(GetExpCallResultFun),
+        create_validate_set_metadata_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun,
         [P2],
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
@@ -545,7 +545,7 @@ set_file_xattrs_on_provider_not_supporting_space_test(Config) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
     {FileType, FilePath, FileGuid, _} = create_random_file(P1, P1, ?SPACE_1, false, Config),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_USER_NOT_SUPPORTED end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(P2)) end,
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
@@ -559,8 +559,8 @@ set_file_xattrs_on_provider_not_supporting_space_test(Config) ->
     set_metadata_test_base(
         <<"xattrs">>,
         FileType, FilePath, FileGuid, undefined,
-        create_validate_set_metadata_rest_call_fun(GetExpCallResultFun, P2),
-        create_validate_set_metadata_gs_call_fun(GetExpCallResultFun, P2),
+        create_validate_set_metadata_rest_call_fun(GetExpCallResultFun),
+        create_validate_set_metadata_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun,
         [P2],
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
@@ -623,46 +623,26 @@ get_xattr(Node, FileGuid, XattrKey, Config) ->
 
 %% @private
 create_validate_set_metadata_rest_call_fun(GetExpResultFun) ->
-    create_validate_set_metadata_rest_call_fun(GetExpResultFun, undefined).
-
-
-%% @private
-create_validate_set_metadata_rest_call_fun(GetExpResultFun, ProviderNotSupportingSpace) ->
-    fun
-        (#api_test_ctx{node = TestNode}, {ok, RespCode, RespBody}) when TestNode == ProviderNotSupportingSpace ->
-            ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
-            ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderDomain)),
-            ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody});
-        (TestCtx, {ok, RespCode, RespBody}) ->
-            case GetExpResultFun(TestCtx) of
-                ok ->
-                    ?assertEqual({?HTTP_204_NO_CONTENT, #{}}, {RespCode, RespBody});
-                {error, _} = Error ->
-                    ExpRestError = {errors:to_http_code(Error), ?REST_ERROR(Error)},
-                    ?assertEqual(ExpRestError, {RespCode, RespBody})
-            end
+    fun(TestCtx, {ok, RespCode, RespBody}) ->
+        case GetExpResultFun(TestCtx) of
+            ok ->
+                ?assertEqual({?HTTP_204_NO_CONTENT, #{}}, {RespCode, RespBody});
+            {error, _} = Error ->
+                ExpRestError = {errors:to_http_code(Error), ?REST_ERROR(Error)},
+                ?assertEqual(ExpRestError, {RespCode, RespBody})
+        end
     end.
 
 
 %% @private
 create_validate_set_metadata_gs_call_fun(GetExpResultFun) ->
-    create_validate_set_metadata_gs_call_fun(GetExpResultFun, undefined).
-
-
-%% @private
-create_validate_set_metadata_gs_call_fun(GetExpResultFun, ProviderNotSupportingSpace) ->
-    fun
-        (#api_test_ctx{node = TestNode}, Result) when TestNode == ProviderNotSupportingSpace ->
-            ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
-            ExpError = ?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderDomain),
-            ?assertEqual(ExpError, Result);
-        (TestCtx, Result) ->
-            case GetExpResultFun(TestCtx) of
-                ok ->
-                    ?assertEqual({ok, undefined}, Result);
-                {error, _} = ExpError ->
-                    ?assertEqual(ExpError, Result)
-            end
+    fun(TestCtx, Result) ->
+        case GetExpResultFun(TestCtx) of
+            ok ->
+                ?assertEqual({ok, undefined}, Result);
+            {error, _} = ExpError ->
+                ?assertEqual(ExpError, Result)
+        end
     end.
 
 

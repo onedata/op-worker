@@ -1056,28 +1056,14 @@ set_mode_test(Config) ->
     },
     Provider2DomainBin = ?GET_DOMAIN_BIN(Provider2),
 
-    ValidateRestSetMetadataOnProvidersNotSupportingUserFun = fun
-        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
-            Node == Provider2,
-            Client == ?USER_IN_BOTH_SPACES_AUTH
-        ->
-            ?assertEqual(?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)), Response);
-        (TestCaseCtx, Result) ->
-            ValidateRestSuccessfulCallFun(TestCaseCtx, Result)
+    ValidateRestSetMetadataOnProvidersNotSupportingUserFun = fun(_TestCtx, {ok, RespCode, RespBody}) ->
+        ExpCode = ?HTTP_400_BAD_REQUEST,
+        ExpBody = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)),
+        ?assertEqual({ExpCode, ExpBody}, {RespCode, RespBody})
     end,
     VerifyEnvFunForSetModeInSpace1Scenarios = fun
-        (expected_failure, #api_test_ctx{node = Node}) ->
+        (_, #api_test_ctx{node = Node}) ->
             ?assertMatch(8#777, GetMode(Node, Space1RootDirGuid), ?ATTEMPTS),
-            true;
-        (expected_success, #api_test_ctx{node = TestNode, client = Client, data = #{<<"mode">> := ModeBin}}) ->
-            case {TestNode, Client} of
-                {Provider1, ?USER_IN_BOTH_SPACES_AUTH} ->
-                    % Request from user not supported by provider should be rejected
-                    Mode = binary_to_integer(ModeBin, 8),
-                    lists:foreach(fun(Node) -> ?assertMatch(Mode, GetMode(Node, Space1RootDirGuid), ?ATTEMPTS) end, Providers);
-                _ ->
-                    ?assertMatch(8#777, GetMode(TestNode, Space1RootDirGuid), ?ATTEMPTS)
-            end,
             true
     end,
 
@@ -1085,7 +1071,7 @@ set_mode_test(Config) ->
         #scenario_spec{
             name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
             type = rest,
-            target_nodes = Providers,
+            target_nodes = [Provider2],
             client_spec = ClientSpecForSpace1Scenarios,
             prepare_args_fun = ConstructPrepareRestArgsFun(Space1RootObjectId),
             validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun,
@@ -1095,7 +1081,7 @@ set_mode_test(Config) ->
         #scenario_spec{
             name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using /files/ rest endpoint">>,
             type = rest_with_file_path,
-            target_nodes = Providers,
+            target_nodes = [Provider2],
             client_spec = ClientSpecForSpace1Scenarios,
             prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(Space1RootDirPath),
             validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun,
@@ -1105,7 +1091,7 @@ set_mode_test(Config) ->
         #scenario_spec{
             name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
             type = rest,
-            target_nodes = Providers,
+            target_nodes = [Provider2],
             client_spec = ClientSpecForSpace1Scenarios,
             prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(Space1RootObjectId),
             validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun,
@@ -1115,22 +1101,11 @@ set_mode_test(Config) ->
         #scenario_spec{
             name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using gs api">>,
             type = gs,
-            target_nodes = Providers,
+            target_nodes = [Provider2],
             client_spec = ClientSpecForSpace1Scenarios,
             prepare_args_fun = ConstructPrepareGsArgsFun(Space1RootDirGuid, private),
-            validate_result_fun = fun
-                (#api_test_ctx{node = Node, client = Client}, Result) when
-                    Node == Provider2,
-                    Client == ?USER_IN_BOTH_SPACES_AUTH
-                ->
-                    ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
-                (TestCtx, Result) ->
-                    case GetExpectedResultFun(TestCtx) of
-                        ok ->
-                            ?assertEqual({ok, undefined}, Result);
-                        {error, _} = ExpError ->
-                            ?assertEqual(ExpError, Result)
-                    end
+            validate_result_fun = fun(_TestCtx, Result) ->
+                ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result)
             end,
             verify_fun = VerifyEnvFunForSetModeInSpace1Scenarios,
             data_spec = DataSpec
