@@ -195,13 +195,12 @@ create_get_update_delete_view(Config) ->
     initializer:testmaster_mock_space_user_privileges(Workers, ?SPACE_ID, UserId, [?SPACE_VIEW_VIEWS]),
     ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := Options1,
-            <<"viewOptions">> := Options1,
-            <<"providers">> := [Provider1],
-            <<"mapFunction">> := ExpMapFun,
-            <<"reduceFunction">> := null,
-            <<"spatial">> := false
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => Options1,
+            <<"providers">> => [Provider1],
+            <<"mapFunction">> => ExpMapFun,
+            <<"reduceFunction">> => null,
+            <<"spatial">> => false
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
@@ -220,13 +219,12 @@ create_get_update_delete_view(Config) ->
 
     % assert nothing was changed
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := Options1,
-            <<"viewOptions">> := Options1,
-            <<"providers">> := [Provider1],
-            <<"mapFunction">> := ExpMapFun,
-            <<"reduceFunction">> := null,
-            <<"spatial">> := false
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => Options1,
+            <<"providers">> => [Provider1],
+            <<"mapFunction">> => ExpMapFun,
+            <<"reduceFunction">> => null,
+            <<"spatial">> => false
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
@@ -241,13 +239,12 @@ create_get_update_delete_view(Config) ->
 
     % get on both after update
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := Options2,
-            <<"viewOptions">> := Options2,
-            <<"providers">> := [Provider2],
-            <<"mapFunction">> := ExpMapFun,
-            <<"reduceFunction">> := null,
-            <<"spatial">> := false
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => Options2,
+            <<"providers">> => [Provider2],
+            <<"mapFunction">> => ExpMapFun,
+            <<"reduceFunction">> => null,
+            <<"spatial">> => false
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
@@ -261,13 +258,12 @@ create_get_update_delete_view(Config) ->
     % get on both after update
     ExpMapFun2 = view_utils:escape_js_function(?SPATIAL_MAP_FUNCTION),
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := Options2,
-            <<"viewOptions">> := Options2,
-            <<"providers">> := [Provider2],
-            <<"mapFunction">> := ExpMapFun2,
-            <<"reduceFunction">> := null,
-            <<"spatial">> := false
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => Options2,
+            <<"providers">> => [Provider2],
+            <<"mapFunction">> => ExpMapFun2,
+            <<"reduceFunction">> => null,
+            <<"spatial">> => false
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
@@ -332,7 +328,6 @@ updating_view_with_invalid_params_should_fail(Config) ->
         ?MAP_FUNCTION(XattrName), false, [], InitialOptions
     )),
     ExpView = #{
-        <<"indexOptions">> => InitialOptions,
         <<"viewOptions">> => InitialOptions,
         <<"providers">> => [?PROVIDER_ID(WorkerP1)],
         <<"mapFunction">> => view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
@@ -340,7 +335,7 @@ updating_view_with_invalid_params_should_fail(Config) ->
         <<"spatial">> => false
     },
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, ExpView}, get_view_via_rest(
+        ?assertEqual({ok, ExpView}, get_view_via_rest(
             Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS
         )
     end, Workers),
@@ -348,10 +343,10 @@ updating_view_with_invalid_params_should_fail(Config) ->
     lists:foreach(fun({Options, ExpError}) ->
         Worker = lists:nth(rand:uniform(length(Workers)), Workers),
         ExpRestError = rest_test_utils:get_rest_error(ExpError),
-        ?assertMatch(ExpRestError, update_view_via_rest(
+        ?assertEqual(ExpRestError, update_view_via_rest(
             Config, Worker, ?SPACE_ID, ViewName, <<>>, Options
         )),
-        ?assertMatch({ok, ExpView}, get_view_via_rest(
+        ?assertEqual({ok, ExpView}, get_view_via_rest(
             Config, Worker, ?SPACE_ID, ViewName)
         )
     end, [
@@ -395,13 +390,12 @@ overwriting_view_should_fail(Config) ->
 
     ExpMapFun1 = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := Options,
-            <<"viewOptions">> := Options,
-            <<"providers">> := [Provider2],
-            <<"mapFunction">> := ExpMapFun1,
-            <<"reduceFunction">> := null,
-            <<"spatial">> := false
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => Options,
+            <<"providers">> => [Provider2],
+            <<"mapFunction">> => ExpMapFun1,
+            <<"reduceFunction">> => null,
+            <<"spatial">> => false
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
@@ -416,13 +410,12 @@ overwriting_view_should_fail(Config) ->
 
 
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := Options,
-            <<"viewOptions">> := Options,
-            <<"providers">> := [Provider2],
-            <<"mapFunction">> := ExpMapFun1,
-            <<"reduceFunction">> := null,
-            <<"spatial">> := false
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => Options,
+            <<"providers">> => [Provider2],
+            <<"mapFunction">> => ExpMapFun1,
+            <<"reduceFunction">> => null,
+            <<"spatial">> => false
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
@@ -453,13 +446,12 @@ create_get_delete_reduce_fun(Config) ->
     % get on both
     ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := #{},
-            <<"viewOptions">> := #{},
-            <<"providers">> := [Provider1],
-            <<"mapFunction">> := ExpMapFun,
-            <<"reduceFunction">> := null,
-            <<"spatial">> := false
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => #{},
+            <<"providers">> => [Provider1],
+            <<"mapFunction">> => ExpMapFun,
+            <<"reduceFunction">> => null,
+            <<"spatial">> => false
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
@@ -475,13 +467,12 @@ create_get_delete_reduce_fun(Config) ->
 
     % view should not change
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := #{},
-            <<"viewOptions">> := #{},
-            <<"providers">> := [Provider1],
-            <<"mapFunction">> := ExpMapFun,
-            <<"reduceFunction">> := null,
-            <<"spatial">> := false
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => #{},
+            <<"providers">> => [Provider1],
+            <<"mapFunction">> => ExpMapFun,
+            <<"reduceFunction">> => null,
+            <<"spatial">> => false
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
@@ -496,13 +487,12 @@ create_get_delete_reduce_fun(Config) ->
     % get on both after adding reduce
     ExpReduceFun = view_utils:escape_js_function(?REDUCE_FUNCTION(XattrName)),
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := #{},
-            <<"viewOptions">> := #{},
-            <<"providers">> := [Provider1],
-            <<"mapFunction">> := ExpMapFun,
-            <<"reduceFunction">> := ExpReduceFun,
-            <<"spatial">> := false
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => #{},
+            <<"providers">> => [Provider1],
+            <<"mapFunction">> => ExpMapFun,
+            <<"reduceFunction">> => ExpReduceFun,
+            <<"spatial">> => false
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
@@ -514,13 +504,12 @@ create_get_delete_reduce_fun(Config) ->
 
     % reduce fun should stay
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := #{},
-            <<"viewOptions">> := #{},
-            <<"providers">> := [Provider1],
-            <<"mapFunction">> := ExpMapFun,
-            <<"reduceFunction">> := ExpReduceFun,
-            <<"spatial">> := false
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => #{},
+            <<"providers">> => [Provider1],
+            <<"mapFunction">> => ExpMapFun,
+            <<"reduceFunction">> => ExpReduceFun,
+            <<"spatial">> => false
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
@@ -532,13 +521,12 @@ create_get_delete_reduce_fun(Config) ->
 
     % get on both after adding reduce
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := #{},
-            <<"viewOptions">> := #{},
-            <<"providers">> := [Provider1],
-            <<"mapFunction">> := ExpMapFun,
-            <<"reduceFunction">> := null,
-            <<"spatial">> := false
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => #{},
+            <<"providers">> => [Provider1],
+            <<"mapFunction">> => ExpMapFun,
+            <<"reduceFunction">> => null,
+            <<"spatial">> => false
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers),
 
@@ -572,13 +560,12 @@ getting_view_of_not_supported_space_should_fail(Config) ->
 
     ExpMapFun = view_utils:escape_js_function(?MAP_FUNCTION(XattrName)),
     ExpProviders = [?PROVIDER_ID(WorkerP2)],
-    ?assertMatch({ok, #{
-        <<"indexOptions">> := #{},
-        <<"viewOptions">> := #{},
-        <<"providers">> := ExpProviders,
-        <<"mapFunction">> := ExpMapFun,
-        <<"reduceFunction">> := null,
-        <<"spatial">> := false
+    ?assertEqual({ok, #{
+        <<"viewOptions">> => #{},
+        <<"providers">> => ExpProviders,
+        <<"mapFunction">> => ExpMapFun,
+        <<"reduceFunction">> => null,
+        <<"spatial">> => false
     }}, get_view_via_rest(Config, WorkerP2, SpaceId, ViewName), ?ATTEMPTS),
 
     ExpRestError = rest_test_utils:get_rest_error(
@@ -747,13 +734,12 @@ create_spatial_view(Config) ->
     ExpMapFun = view_utils:escape_js_function(?SPATIAL_MAP_FUNCTION),
     ExpProviders = [?PROVIDER_ID(WorkerP1)],
     lists:foreach(fun(Worker) ->
-        ?assertMatch({ok, #{
-            <<"indexOptions">> := #{},
-            <<"viewOptions">> := #{},
-            <<"providers">> := ExpProviders,
-            <<"mapFunction">> := ExpMapFun,
-            <<"reduceFunction">> := null,
-            <<"spatial">> := true
+        ?assertEqual({ok, #{
+            <<"viewOptions">> => #{},
+            <<"providers">> => ExpProviders,
+            <<"mapFunction">> => ExpMapFun,
+            <<"reduceFunction">> => null,
+            <<"spatial">> => true
         }}, get_view_via_rest(Config, Worker, ?SPACE_ID, ViewName), ?ATTEMPTS)
     end, Workers).
 
@@ -915,98 +901,88 @@ create_duplicated_views_on_remote_providers(Config) ->
     ExpError2 = rest_test_utils:get_rest_error(?ERROR_BAD_VALUE_AMBIGUOUS_ID(<<"view_name">>)),
 
     % get by simple name
-    ?assertMatch({ok, #{
-        <<"indexOptions">> := Options1,
-        <<"viewOptions">> := Options1,
-        <<"providers">> := [Provider1, Provider2],
-        <<"mapFunction">> := ExpMapFun,
-        <<"reduceFunction">> := null,
-        <<"spatial">> := false
+    ?assertEqual({ok, #{
+        <<"viewOptions">> => Options1,
+        <<"providers">> => [Provider1, Provider2],
+        <<"mapFunction">> => ExpMapFun,
+        <<"reduceFunction">> => null,
+        <<"spatial">> => false
     }}, get_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName), ?ATTEMPTS),
 
-    ?assertMatch({ok, #{
-        <<"indexOptions">> := Options1,
-        <<"viewOptions">> := Options1,
-        <<"providers">> := [Provider2],
-        <<"mapFunction">> := ExpMapFun2,
-        <<"reduceFunction">> := null,
-        <<"spatial">> := false
+    ?assertEqual({ok, #{
+        <<"viewOptions">> => Options1,
+        <<"providers">> => [Provider2],
+        <<"mapFunction">> => ExpMapFun2,
+        <<"reduceFunction">> => null,
+        <<"spatial">> => false
     }}, get_view_via_rest(Config, WorkerP2, ?SPACE_ID, ViewName), ?ATTEMPTS),
 
     ?assertMatch(ExpError2, get_view_via_rest(Config, WorkerP3, ?SPACE_ID, ViewName), ?ATTEMPTS),
 
     % get by extended name
-    ?assertMatch({ok, #{
-        <<"indexOptions">> := Options1,
-        <<"viewOptions">> := Options1,
-        <<"providers">> := [Provider1, Provider2],
-        <<"mapFunction">> := ExpMapFun,
-        <<"reduceFunction">> := null,
-        <<"spatial">> := false
+    ?assertEqual({ok, #{
+        <<"viewOptions">> => Options1,
+        <<"providers">> => [Provider1, Provider2],
+        <<"mapFunction">> => ExpMapFun,
+        <<"reduceFunction">> => null,
+        <<"spatial">> => false
     }}, get_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName@P1), ?ATTEMPTS),
 
-    ?assertMatch({ok, #{
-        <<"indexOptions">> := Options1,
-        <<"viewOptions">> := Options1,
-        <<"providers">> := [Provider2],
-        <<"mapFunction">> := ExpMapFun2,
-        <<"reduceFunction">> := null,
-        <<"spatial">> := false
+    ?assertEqual({ok, #{
+        <<"viewOptions">> => Options1,
+        <<"providers">> => [Provider2],
+        <<"mapFunction">> => ExpMapFun2,
+        <<"reduceFunction">> => null,
+        <<"spatial">> => false
     }}, get_view_via_rest(Config, WorkerP2, ?SPACE_ID, ViewName@P2), ?ATTEMPTS),
 
-    ?assertMatch({ok, #{
-        <<"indexOptions">> := Options1,
-        <<"viewOptions">> := Options1,
-        <<"providers">> := [Provider1, Provider2],
-        <<"mapFunction">> := ExpMapFun,
-        <<"reduceFunction">> := null,
-        <<"spatial">> := false
+    ?assertEqual({ok, #{
+        <<"viewOptions">> => Options1,
+        <<"providers">> => [Provider1, Provider2],
+        <<"mapFunction">> => ExpMapFun,
+        <<"reduceFunction">> => null,
+        <<"spatial">> => false
     }}, get_view_via_rest(Config, WorkerP3, ?SPACE_ID, ViewName@P1), ?ATTEMPTS),
 
-    ?assertMatch({ok, #{
-        <<"indexOptions">> := Options1,
-        <<"viewOptions">> := Options1,
-        <<"providers">> := [Provider2],
-        <<"mapFunction">> := ExpMapFun2,
-        <<"reduceFunction">> := null,
-        <<"spatial">> := false
+    ?assertEqual({ok, #{
+        <<"viewOptions">> => Options1,
+        <<"providers">> => [Provider2],
+        <<"mapFunction">> => ExpMapFun2,
+        <<"reduceFunction">> => null,
+        <<"spatial">> => false
     }}, get_view_via_rest(Config, WorkerP3, ?SPACE_ID, ViewName@P2), ?ATTEMPTS),
 
     % get by shortened extended name
-    ?assertMatch({ok, #{
-        <<"indexOptions">> := Options1,
-        <<"viewOptions">> := Options1,
-        <<"providers">> := [Provider1, Provider2],
-        <<"mapFunction">> := ExpMapFun,
-        <<"reduceFunction">> := null,
-        <<"spatial">> := false
+    ?assertEqual({ok, #{
+        <<"viewOptions">> => Options1,
+        <<"providers">> => [Provider1, Provider2],
+        <<"mapFunction">> => ExpMapFun,
+        <<"reduceFunction">> => null,
+        <<"spatial">> => false
     }}, get_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName@P1Short), ?ATTEMPTS),
 
-    ?assertMatch({ok, #{
-        <<"indexOptions">> := Options1,
-        <<"viewOptions">> := Options1,
-        <<"providers">> := [Provider2],
-        <<"mapFunction">> := ExpMapFun2,
-        <<"reduceFunction">> := null,
-        <<"spatial">> := false
+    ?assertEqual({ok, #{
+        <<"viewOptions">> => Options1,
+        <<"providers">> => [Provider2],
+        <<"mapFunction">> => ExpMapFun2,
+        <<"reduceFunction">> => null,
+        <<"spatial">> => false
     }}, get_view_via_rest(Config, WorkerP2, ?SPACE_ID, ViewName@P2Short), ?ATTEMPTS),
 
-    ?assertMatch({ok, #{
-        <<"indexOptions">> := Options1,
-        <<"viewOptions">> := Options1,
-        <<"providers">> := [Provider1, Provider2],
-        <<"mapFunction">> := ExpMapFun,
-        <<"reduceFunction">> := null,
-        <<"spatial">> := false
+    ?assertEqual({ok, #{
+        <<"viewOptions">> => Options1,
+        <<"providers">> => [Provider1, Provider2],
+        <<"mapFunction">> => ExpMapFun,
+        <<"reduceFunction">> => null,
+        <<"spatial">> => false
     }}, get_view_via_rest(Config, WorkerP3, ?SPACE_ID, ViewName@P1Short), ?ATTEMPTS),
 
-    ?assertMatch({ok, #{
-        <<"indexOptions">> := Options1,
-        <<"viewOptions">> := Options1,
-        <<"providers">> := [Provider2],
-        <<"mapFunction">> := ExpMapFun2,
-        <<"reduceFunction">> := null,
-        <<"spatial">> := false
+    ?assertEqual({ok, #{
+        <<"viewOptions">> => Options1,
+        <<"providers">> => [Provider2],
+        <<"mapFunction">> => ExpMapFun2,
+        <<"reduceFunction">> => null,
+        <<"spatial">> => false
     }}, get_view_via_rest(Config, WorkerP3, ?SPACE_ID, ViewName@P2Short), ?ATTEMPTS),
 
 
