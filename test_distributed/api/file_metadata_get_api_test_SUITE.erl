@@ -12,7 +12,7 @@
 -module(file_metadata_get_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("api_test_utils.hrl").
+-include("api_test_runner.hrl").
 -include("file_metadata_api_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -32,75 +32,45 @@
 -export([
     % Get rdf metadata test cases
     get_file_rdf_metadata_with_rdf_set_test/1,
-    get_dir_rdf_metadata_with_rdf_set_test/1,
     get_file_rdf_metadata_without_rdf_set_test/1,
-    get_dir_rdf_metadata_without_rdf_set_test/1,
     get_shared_file_rdf_metadata_with_rdf_set_test/1,
-    get_shared_dir_rdf_metadata_with_rdf_set_test/1,
     get_shared_file_rdf_metadata_without_rdf_set_test/1,
-    get_shared_dir_rdf_metadata_without_rdf_set_test/1,
     get_file_rdf_metadata_on_provider_not_supporting_space_test/1,
-    get_dir_rdf_metadata_on_provider_not_supporting_space_test/1,
 
     % Get json metadata test cases
     get_file_json_metadata_with_json_set_test/1,
-    get_dir_json_metadata_with_json_set_test/1,
     get_file_json_metadata_without_json_set_test/1,
-    get_dir_json_metadata_without_json_set_test/1,
     get_shared_file_json_metadata_with_json_set_test/1,
-    get_shared_dir_json_metadata_with_json_set_test/1,
     get_shared_file_json_metadata_without_json_set_test/1,
-    get_shared_dir_json_metadata_without_json_set_test/1,
     get_file_json_metadata_on_provider_not_supporting_space_test/1,
-    get_dir_json_metadata_on_provider_not_supporting_space_test/1,
 
     % Get xattrs test cases
     get_file_xattrs_with_xattrs_set_test/1,
-    get_dir_xattrs_with_xattrs_set_test/1,
     get_file_xattrs_without_xattrs_set_test/1,
-    get_dir_xattrs_without_xattrs_set_test/1,
     get_shared_file_xattrs_with_xattrs_set_test/1,
-    get_shared_dir_xattrs_with_xattrs_set_test/1,
     get_shared_file_xattrs_without_xattrs_set_test/1,
-    get_shared_dir_xattrs_without_xattrs_set_test/1,
-    get_file_xattrs_on_provider_not_supporting_space_test/1,
-    get_dir_xattrs_on_provider_not_supporting_space_test/1
+    get_file_xattrs_on_provider_not_supporting_space_test/1
 ]).
 
 all() ->
     ?ALL([
         get_file_rdf_metadata_with_rdf_set_test,
-        get_dir_rdf_metadata_with_rdf_set_test,
         get_file_rdf_metadata_without_rdf_set_test,
-        get_dir_rdf_metadata_without_rdf_set_test,
         get_shared_file_rdf_metadata_with_rdf_set_test,
-        get_shared_dir_rdf_metadata_with_rdf_set_test,
         get_shared_file_rdf_metadata_without_rdf_set_test,
-        get_shared_dir_rdf_metadata_without_rdf_set_test,
         get_file_rdf_metadata_on_provider_not_supporting_space_test,
-        get_dir_rdf_metadata_on_provider_not_supporting_space_test,
 
         get_file_json_metadata_with_json_set_test,
-        get_dir_json_metadata_with_json_set_test,
         get_file_json_metadata_without_json_set_test,
-        get_dir_json_metadata_without_json_set_test,
         get_shared_file_json_metadata_with_json_set_test,
-        get_shared_dir_json_metadata_with_json_set_test,
         get_shared_file_json_metadata_without_json_set_test,
-        get_shared_dir_json_metadata_without_json_set_test,
         get_file_json_metadata_on_provider_not_supporting_space_test,
-        get_dir_json_metadata_on_provider_not_supporting_space_test,
 
         get_file_xattrs_with_xattrs_set_test,
-        get_dir_xattrs_with_xattrs_set_test,
         get_file_xattrs_without_xattrs_set_test,
-        get_dir_xattrs_without_xattrs_set_test,
         get_shared_file_xattrs_with_xattrs_set_test,
-        get_shared_dir_xattrs_with_xattrs_set_test,
         get_shared_file_xattrs_without_xattrs_set_test,
-        get_shared_dir_xattrs_without_xattrs_set_test,
-        get_file_xattrs_on_provider_not_supporting_space_test,
-        get_dir_xattrs_on_provider_not_supporting_space_test
+        get_file_xattrs_on_provider_not_supporting_space_test
     ]).
 
 
@@ -110,43 +80,28 @@ all() ->
 
 
 get_file_rdf_metadata_with_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"file">>, set_rdf, normal_mode, Config).
-
-
-get_dir_rdf_metadata_with_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"dir">>, set_rdf, normal_mode, Config).
+    get_rdf_metadata_test_base(set_rdf, normal_mode, Config).
 
 
 get_file_rdf_metadata_without_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"file">>, do_not_set_rdf, normal_mode, Config).
-
-
-get_dir_rdf_metadata_without_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"dir">>, do_not_set_rdf, normal_mode, Config).
+    get_rdf_metadata_test_base(do_not_set_rdf, normal_mode, Config).
 
 
 get_shared_file_rdf_metadata_with_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"file">>, set_rdf, share_mode, Config).
-
-
-get_shared_dir_rdf_metadata_with_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"dir">>, set_rdf, share_mode, Config).
+    get_rdf_metadata_test_base(set_rdf, share_mode, Config).
 
 
 get_shared_file_rdf_metadata_without_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"file">>, do_not_set_rdf, share_mode, Config).
-
-
-get_shared_dir_rdf_metadata_without_rdf_set_test(Config) ->
-    get_rdf_metadata_test_base(<<"dir">>, do_not_set_rdf, share_mode, Config).
+    get_rdf_metadata_test_base(do_not_set_rdf, share_mode, Config).
 
 
 %% @private
-get_rdf_metadata_test_base(FileType, SetRdfPolicy, TestMode, Config) ->
+get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
 
@@ -181,18 +136,10 @@ get_rdf_metadata_test_base(FileType, SetRdfPolicy, TestMode, Config) ->
 
 
 get_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
-    get_rdf_metadata_on_provider_not_supporting_space_test_base(<<"file">>, Config).
-
-
-get_dir_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
-    get_rdf_metadata_on_provider_not_supporting_space_test_base(<<"dir">>, Config).
-
-
-%% @private
-get_rdf_metadata_on_provider_not_supporting_space_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
     lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
@@ -218,39 +165,24 @@ get_rdf_metadata_on_provider_not_supporting_space_test_base(FileType, Config) ->
 
 
 get_file_json_metadata_with_json_set_test(Config) ->
-    get_json_metadata_test_base(<<"file">>, set_direct_json, normal_mode, Config).
-
-
-get_dir_json_metadata_with_json_set_test(Config) ->
-    get_json_metadata_test_base(<<"dir">>, set_direct_json, normal_mode, Config).
+    get_json_metadata_test_base(set_direct_json, normal_mode, Config).
 
 
 get_file_json_metadata_without_json_set_test(Config) ->
-    get_json_metadata_test_base(<<"file">>, do_not_set_direct_json, normal_mode, Config).
-
-
-get_dir_json_metadata_without_json_set_test(Config) ->
-    get_json_metadata_test_base(<<"dir">>, do_not_set_direct_json, normal_mode, Config).
+    get_json_metadata_test_base(do_not_set_direct_json, normal_mode, Config).
 
 
 get_shared_file_json_metadata_with_json_set_test(Config) ->
-    get_json_metadata_test_base(<<"file">>, set_direct_json, share_mode, Config).
-
-
-get_shared_dir_json_metadata_with_json_set_test(Config) ->
-    get_json_metadata_test_base(<<"dir">>, set_direct_json, share_mode, Config).
+    get_json_metadata_test_base(set_direct_json, share_mode, Config).
 
 
 get_shared_file_json_metadata_without_json_set_test(Config) ->
-    get_json_metadata_test_base(<<"file">>, do_not_set_direct_json, share_mode, Config).
-
-
-get_shared_dir_json_metadata_without_json_set_test(Config) ->
-    get_json_metadata_test_base(<<"dir">>, do_not_set_direct_json, share_mode, Config).
+    get_json_metadata_test_base(do_not_set_direct_json, share_mode, Config).
 
 
 %% @private
-get_json_metadata_test_base(FileType, SetDirectJsonPolicy, TestMode, Config) ->
+get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     {FileLayer5Path, FileLayer5Guid, ShareId} = create_get_json_metadata_tests_env(
         FileType, SetDirectJsonPolicy, TestMode, Config
     ),
@@ -436,18 +368,10 @@ create_get_json_call_exp_result_fun(ShareId, SetDirectJsonPolicy) ->
 
 
 get_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
-    get_json_metadata_on_provider_not_supporting_space_test_base(<<"file">>, Config).
-
-
-get_dir_json_metadata_on_provider_not_supporting_space_test(Config) ->
-    get_json_metadata_on_provider_not_supporting_space_test_base(<<"dir">>, Config).
-
-
-%% @private
-get_json_metadata_on_provider_not_supporting_space_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
     lfm_proxy:set_metadata(P1, SessIdP1, {guid, FileGuid}, json, ?JSON_METADATA_2, []),
@@ -474,39 +398,24 @@ get_json_metadata_on_provider_not_supporting_space_test_base(FileType, Config) -
 
 
 get_file_xattrs_with_xattrs_set_test(Config) ->
-    get_xattrs_test_base(<<"file">>, set_direct_xattr, normal_mode, Config).
-
-
-get_dir_xattrs_with_xattrs_set_test(Config) ->
-    get_xattrs_test_base(<<"dir">>, set_direct_xattr, normal_mode, Config).
+    get_xattrs_test_base(set_direct_xattr, normal_mode, Config).
 
 
 get_file_xattrs_without_xattrs_set_test(Config) ->
-    get_xattrs_test_base(<<"file">>, do_not_set_direct_xattr, normal_mode, Config).
-
-
-get_dir_xattrs_without_xattrs_set_test(Config) ->
-    get_xattrs_test_base(<<"dir">>, do_not_set_direct_xattr, normal_mode, Config).
+    get_xattrs_test_base(do_not_set_direct_xattr, normal_mode, Config).
 
 
 get_shared_file_xattrs_with_xattrs_set_test(Config) ->
-    get_xattrs_test_base(<<"file">>, set_direct_xattr, share_mode, Config).
-
-
-get_shared_dir_xattrs_with_xattrs_set_test(Config) ->
-    get_xattrs_test_base(<<"dir">>, set_direct_xattr, share_mode, Config).
+    get_xattrs_test_base(set_direct_xattr, share_mode, Config).
 
 
 get_shared_file_xattrs_without_xattrs_set_test(Config) ->
-    get_xattrs_test_base(<<"file">>, do_not_set_direct_xattr, share_mode, Config).
-
-
-get_shared_dir_xattrs_without_xattrs_set_test(Config) ->
-    get_xattrs_test_base(<<"dir">>, do_not_set_direct_xattr, share_mode, Config).
+    get_xattrs_test_base(do_not_set_direct_xattr, share_mode, Config).
 
 
 %% @private
-get_xattrs_test_base(FileType, SetDirectXattrsPolicy, TestMode, Config) ->
+get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     {FileLayer3Path, FileLayer3Guid, ShareId} = create_get_xattrs_tests_env(
         FileType, SetDirectXattrsPolicy, TestMode, Config
     ),
@@ -749,18 +658,10 @@ create_get_xattrs_call_exp_result_fun(ShareId, DirectMetadataSetPolicy, NotSetXa
 
 
 get_file_xattrs_on_provider_not_supporting_space_test(Config) ->
-    get_xattrs_on_provider_not_supporting_space_test_base(<<"file">>, Config).
-
-
-get_dir_xattrs_on_provider_not_supporting_space_test(Config) ->
-    get_xattrs_on_provider_not_supporting_space_test_base(<<"dir">>, Config).
-
-
-%% @private
-get_xattrs_on_provider_not_supporting_space_test_base(FileType, Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_1, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
     ?assertMatch(ok, lfm_proxy:set_xattr(P1, SessIdP1, {guid, FileGuid}, ?XATTR_1)),
@@ -853,7 +754,7 @@ get_metadata_test_base(
 ) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ?assert(api_test_utils:run_tests(Config, [
+    ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
@@ -894,7 +795,7 @@ get_metadata_test_base(
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, FileShareObjectId} = file_id:guid_to_objectid(FileShareGuid),
 
-    ?assert(api_test_utils:run_tests(Config, [
+    ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = Providers,
             client_spec = ClientSpec,
