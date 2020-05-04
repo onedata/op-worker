@@ -80,31 +80,28 @@ all() ->
 
 
 get_file_rdf_metadata_with_rdf_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_rdf_metadata_test_base(FileType, set_rdf, normal_mode, Config).
+    get_rdf_metadata_test_base(set_rdf, normal_mode, Config).
 
 
 get_file_rdf_metadata_without_rdf_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_rdf_metadata_test_base(FileType, do_not_set_rdf, normal_mode, Config).
+    get_rdf_metadata_test_base(do_not_set_rdf, normal_mode, Config).
 
 
 get_shared_file_rdf_metadata_with_rdf_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_rdf_metadata_test_base(FileType, set_rdf, share_mode, Config).
+    get_rdf_metadata_test_base(set_rdf, share_mode, Config).
 
 
 get_shared_file_rdf_metadata_without_rdf_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_rdf_metadata_test_base(FileType, do_not_set_rdf, share_mode, Config).
+    get_rdf_metadata_test_base(do_not_set_rdf, share_mode, Config).
 
 
 %% @private
-get_rdf_metadata_test_base(FileType, SetRdfPolicy, TestMode, Config) ->
+get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
 
@@ -168,27 +165,24 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
 
 
 get_file_json_metadata_with_json_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_json_metadata_test_base(FileType, set_direct_json, normal_mode, Config).
+    get_json_metadata_test_base(set_direct_json, normal_mode, Config).
 
 
 get_file_json_metadata_without_json_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_json_metadata_test_base(FileType, do_not_set_direct_json, normal_mode, Config).
+    get_json_metadata_test_base(do_not_set_direct_json, normal_mode, Config).
 
 
 get_shared_file_json_metadata_with_json_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_json_metadata_test_base(FileType, set_direct_json, share_mode, Config).
+    get_json_metadata_test_base(set_direct_json, share_mode, Config).
 
 
 get_shared_file_json_metadata_without_json_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_json_metadata_test_base(FileType, do_not_set_direct_json, share_mode, Config).
+    get_json_metadata_test_base(do_not_set_direct_json, share_mode, Config).
 
 
 %% @private
-get_json_metadata_test_base(FileType, SetDirectJsonPolicy, TestMode, Config) ->
+get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     {FileLayer5Path, FileLayer5Guid, ShareId} = create_get_json_metadata_tests_env(
         FileType, SetDirectJsonPolicy, TestMode, Config
     ),
@@ -404,27 +398,24 @@ get_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
 
 
 get_file_xattrs_with_xattrs_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_xattrs_test_base(FileType, set_direct_xattr, normal_mode, Config).
+    get_xattrs_test_base(set_direct_xattr, normal_mode, Config).
 
 
 get_file_xattrs_without_xattrs_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_xattrs_test_base(FileType, do_not_set_direct_xattr, normal_mode, Config).
+    get_xattrs_test_base(do_not_set_direct_xattr, normal_mode, Config).
 
 
 get_shared_file_xattrs_with_xattrs_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_xattrs_test_base(FileType, set_direct_xattr, share_mode, Config).
+    get_xattrs_test_base(set_direct_xattr, share_mode, Config).
 
 
 get_shared_file_xattrs_without_xattrs_set_test(Config) ->
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    get_xattrs_test_base(FileType, do_not_set_direct_xattr, share_mode, Config).
+    get_xattrs_test_base(do_not_set_direct_xattr, share_mode, Config).
 
 
 %% @private
-get_xattrs_test_base(FileType, SetDirectXattrsPolicy, TestMode, Config) ->
+get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
     {FileLayer3Path, FileLayer3Guid, ShareId} = create_get_xattrs_tests_env(
         FileType, SetDirectXattrsPolicy, TestMode, Config
     ),
