@@ -192,7 +192,6 @@ get_json(SpaceId, ViewName) ->
             }}} ->
                 ViewOptions = maps:from_list(Options),
                 {ok, #{
-                    <<"indexOptions">> => ViewOptions,
                     <<"viewOptions">> => ViewOptions,
                     <<"providers">> => Providers,
                     <<"mapFunction">> => MapFunction,

@@ -55,8 +55,6 @@ get_response(#gri{aspect = children}, Children) ->
             <<"name">> => Name
         }
     end, Children)});
-get_response(#gri{aspect = shares}, ShareIds) ->
-    ?OK_REPLY(#{<<"shares">> => ShareIds});
 get_response(#gri{aspect = As}, Metadata) when
     As =:= attrs;
     As =:= xattrs;
