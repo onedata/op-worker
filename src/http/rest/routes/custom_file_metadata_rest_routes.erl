@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of file_metadata REST methods.
+%%% This module contains definitions of custom_file_metadata REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_metadata_rest_routes).
+-module(custom_file_metadata_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of file_metadata REST paths.
+%% Definitions of custom_file_metadata REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
