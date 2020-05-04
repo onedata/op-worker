@@ -71,13 +71,13 @@ get_configuration(SessId) ->
 get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
     {ok, Storage} = storage:get(StorageId),
     Helper = storage:get_helper(Storage),
+    SessionId = user_ctx:get_session_id(UserCtx),
+    UserId = user_ctx:get_user_id(UserCtx),
     case HelperMode of
         ?FORCE_DIRECT_HELPER_MODE
             when SessionId =/= ?ROOT_SESS_ID
             andalso UserId =/= ?ROOT_USER_ID
         ->
-            SessionId = user_ctx:get_session_id(UserCtx),
-            UserId = user_ctx:get_user_id(UserCtx),
             case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
                 {ok, ClientStorageUserCtx} ->
                     HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
