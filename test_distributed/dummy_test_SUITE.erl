@@ -18,7 +18,7 @@
 
 %% API
 -export([all/0]).
--export([init_per_suite/1]).
+-export([init_per_suite/1, end_per_suite/1]).
 -export([init_per_testcase/2, end_per_testcase/2]).
 -export([foo_test/1]).
 
@@ -31,12 +31,12 @@ all() -> [
 %%%===================================================================
 
 foo_test(Config) ->
-    [P1, _P2] = kv_utils:get(providers, Config),
-    [User1] = kv_utils:get([users, P1], Config),
-    SessId = fun(P) -> kv_utils:get([sess_id, P, User1], Config) end,
-    [Worker1P1 | _] = kv_utils:get([provider_nodes, P1], Config),
+    [P1 | _] = test_config_utils:get_providers(Config),
+    [User1] = test_config_utils:get_provider_users(Config, P1),
+    SessId = fun(P) -> test_config_utils:get_user_session_id_on_provider(Config, User1, P) end,
+    [Worker1P1 | _] = test_config_utils:get_provider_nodes(Config, P1),
     
-    [SpaceId | _] = kv_utils:get([provider_spaces, P1], Config),
+    [SpaceId | _] = test_config_utils:get_provider_spaces(Config, P1),
     SpaceGuid = rpc:call(Worker1P1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     
     File = generator:gen_name(),
@@ -47,7 +47,10 @@ foo_test(Config) ->
     ok.
 
 init_per_suite(Config) ->
-    [{scenario, "2op-2nodes"} | Config].
+    Config1 = test_config_utils:add_envs(Config, op_worker, op_worker, [{dupa, osiem}]),
+    Config2 = test_config_utils:add_envs(Config1, op_worker, cluster_worker, [{ble, xd}]),
+    Config3 = test_config_utils:add_envs(Config2, cluster_manager, cluster_manager, [{lol, sadsad}]),
+    test_config_utils:set_onenv_scenario(Config3, "1op").
 
 init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
@@ -56,3 +59,6 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
     Config.
+
+end_per_suite(_Config) ->
+    ok.

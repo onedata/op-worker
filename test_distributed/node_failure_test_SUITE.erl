@@ -17,7 +17,8 @@
 
 %% API
 -export([all/0]).
--export([init_per_testcase/2]).
+-export([init_per_suite/1, end_per_suite/1]).
+-export([init_per_testcase/2, end_per_testcase/2]).
 
 -export([
     failure_test/1
@@ -76,15 +77,15 @@ failure_test(Config) ->
         ok = rpc:call(PanelNode, service, deregister_healthcheck, [op_worker, Ctx])
     end, ?config(op_panel_nodes, Config)),
     
-    ok = onenv_test_utils:kill_node(Config, WorkerToKillP1, op_worker),
+    ok = onenv_test_utils:kill_opw_node(Config, WorkerToKillP1),
     ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP1, oneprovider, get_id, []), 10),
-    ok = onenv_test_utils:kill_node(Config, WorkerToKillP2, op_worker),
+    ok = onenv_test_utils:kill_opw_node(Config, WorkerToKillP2),
     ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, oneprovider, get_id, []), 10),
     ct:pal("Killed nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
     
-    ok = onenv_test_utils:start_node(Config, WorkerToKillP1, op_worker),
+    ok = onenv_test_utils:start_opw_node(Config, WorkerToKillP1),
     ?assertNotEqual({badrpc, nodedown}, rpc:call(WorkerToKillP1, oneprovider, get_id, []), 60),
-    ok = onenv_test_utils:start_node(Config, WorkerToKillP2, op_worker),
+    ok = onenv_test_utils:start_opw_node(Config, WorkerToKillP2),
     ?assertNotEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, oneprovider, get_id, []), 60),
     ct:pal("Started nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
     
@@ -118,5 +119,16 @@ failure_test(Config) ->
     ok.
 
 
+init_per_suite(Config) ->
+    [{scenario, "2op-2nodes"} | Config].
+
 init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config, false).
+
+
+end_per_testcase(_Case, Config) ->
+    lfm_proxy:teardown(Config),
+    Config.
+
+end_per_suite(_Config) ->
+    ok.

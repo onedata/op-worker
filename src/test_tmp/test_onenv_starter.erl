@@ -5,6 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @doc
 %%% Functions used by ct test to start nodes using one_env for testing
+%%% fixme move to ctool
 %%% @end
 %%%-------------------------------------------------------------------
 -module(test_onenv_starter).
@@ -25,7 +26,10 @@ prepare_test_environment(Config, _Suite) ->
         Token /= "test_distributed"
     end, filename:split(DataDir))),
     
-    ScenarioName = ?config(scenario, Config),
+    ScenarioName = kv_utils:get(scenario, Config, "1op"),
+    
+    CustomEnvs = kv_utils:get(custom_envs, Config, []),
+    CustomConfigsPaths = add_custom_configs(ProjectRoot, CustomEnvs),
 
     OnenvScript = filename:join([ProjectRoot, "one-env", "onenv"]),
     ScenarioPath = filename:join([ProjectRoot, "test_distributed", "onenv_scenarios", ScenarioName ++ ".yaml"]),
@@ -38,25 +42,32 @@ prepare_test_environment(Config, _Suite) ->
     Status = utils:cmd([OnenvScript, "status"]),
     [StatusProplist] = yamerl:decode(Status),
     ct:pal("~s", [Status]),
-
+    case proplists:get_value("ready", StatusProplist) of
+        false -> throw(environment_not_ready);
+        true -> ok
+    end,
+    
     PodsProplist = proplists:get_value("pods", StatusProplist),
     NodesConfig = prepare_nodes_config(PodsProplist),
 
     add_entries_to_etc_hosts(StatusProplist),
-
     ping_nodes(NodesConfig),
-
     
-    A = prepare_base_config(NodesConfig),
-    B = A ++ [{onenv_script, OnenvScript}],
-    lists:foreach(fun(Node) ->
-        overwrite_sources(B, Node, ProjectRoot)
-    end, ?config(op_worker_nodes, B)),
-    B.
+    BaseConfig = prepare_base_test_config(NodesConfig),
+    BaseConfig ++ [
+        {onenv_script, OnenvScript},
+        {opw_script, script_path(ProjectRoot, "op_worker")}, 
+        {cm_script, script_path(ProjectRoot, "cluster_manager")},
+        {custom_configs, CustomConfigsPaths}
+    ].
+
 
 clean_environment(Config) ->
     OnenvScript = ?config(onenv_script, Config),
-    % fixme
+    CustomConfigsPaths = kv_utils:get(custom_configs, Config),
+    lists:foreach(fun(Path) ->
+        file:delete(Path)
+    end, CustomConfigsPaths),
 %%    utils:cmd([OnenvScript, "clean"]),
     ok.
 
@@ -135,7 +146,7 @@ add_entries_to_etc_hosts(OnenvStatus) ->
     file:close(File).
 
 
-prepare_base_config(NodesConfig) ->
+prepare_base_test_config(NodesConfig) ->
     ProvidersNodes = lists:foldl(fun(Node, Acc) -> 
         ProviderId = rpc:call(Node, oneprovider, get_id, []),
         OtherNodes = maps:get(ProviderId, Acc, []),
@@ -191,33 +202,23 @@ prepare_base_config(NodesConfig) ->
         [{provider_spaces, maps:to_list(ProviderSpaces)}].
 
 
-% fixme temporary solution - fix onenv sources after restart
-overwrite_sources(Config, Node, ProjectRoot) ->
-    Pod = kv_utils:get([pods, Node], Config),
-    
-    VersionBin = rpc:call(Node, oneprovider, get_version, []),
-    
-    lists:foreach(fun(Name) ->
-        TargetPrefix = filename:join(["/", "usr", "lib", Name, "lib"]),
-        SourcePrefix = filename:join([ProjectRoot, "_build", "default", "lib"]),
-        TargetDir = filename:join([TargetPrefix, Name ++ "-" ++ binary_to_list(VersionBin)]),
-        SourceDir = filename:join([SourcePrefix, Name, "*"]),
-        Deps = [{"cluster_worker", "3.0.0-beta3"}, {"ctool", "3.0.0-beta3"}, {"bp_tree", "1.0.0"}],
-        
-%%        ct:print("~p~n~p", [TargetDir, SourceDir]),
-        OnenvScript = kv_utils:get(onenv_script, Config),
-        utils:cmd([OnenvScript, "exec2", Pod, "rm", "-rf", TargetDir]),
-        utils:cmd([OnenvScript, "exec2", Pod, "mkdir", TargetDir]),
-        utils:cmd([OnenvScript, "exec2", Pod, "cp", "-Lrf", SourceDir, TargetDir]),
-    
-        lists:foreach(fun({Dep, Version}) ->
-            T = filename:join([TargetPrefix, Dep ++ "-" ++ Version]),
-            S = filename:join([SourcePrefix, Dep, "*"]),
-%%            ct:print("~p~n~p", [S,T]),
-            utils:cmd([OnenvScript, "exec2", Pod, "rm", "-rf", T]),
-            utils:cmd([OnenvScript, "exec2", Pod, "mkdir", T]),
-            utils:cmd([OnenvScript, "exec2", Pod, "cp", "-Lrf", S, T])
-        end, Deps)
-    
-        end, ["op_worker", "cluster_manager"]),
-    ok.
+% fixme currently works only for op_worker (other sources not mounted in testmaster docker)
+add_custom_configs(ProjectRoot, CustomEnvs) ->
+    lists:foldl(fun({Component, Envs}, Acc) ->
+        Path = test_custom_config_path(ProjectRoot, atom_to_list(Component)),
+        file:write_file(Path, io_lib:format("~p.", [Envs])),
+        [Path | Acc]
+    end, [], CustomEnvs).
+
+
+script_path(ProjectRoot, Service) ->
+    SourcesRelPath = sources_rel_path(ProjectRoot, Service),
+    filename:join([SourcesRelPath, Service, "bin", Service]).
+
+test_custom_config_path(ProjectRoot, Service) ->
+    SourcesRelPath = sources_rel_path(ProjectRoot, Service),
+    filename:join([SourcesRelPath, Service, "etc", "config.d", "ct_test_custom.config"]).
+
+sources_rel_path(ProjectRoot, Service) ->
+    Service1 = re:replace(Service, "_", "-", [{return, list}]),
+    filename:join([ProjectRoot, "..", Service1, "_build", "default", "rel"]).
