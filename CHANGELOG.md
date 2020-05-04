@@ -111,6 +111,17 @@ CHANGELOG
 * Hotfix - rename opened deleted files, enotdir when needed and fix async_request_manager
 
 
+### 19.02.2
+
+VFS-6081 sync handles recreating file with different type
+VFS-6081 fix races in detecting deletions by sync, fix sync reimporting file in case of race between sync, delete of opened file and release
+VFS-6081 fix importing conflicting files
+VFS-6081 add extra check to prevent races which resulted in sync reimporting files that were being deleted
+VFS-6035 Add VM option that forbids terminating the node with Ctrl + C
+VFS-6008 fix listing transfers when not all docs are synchronized
+VFS-5933 Remove the concept of default space
+
+
 ### 19.02.1
 
 * Bump version to 19.02.1
