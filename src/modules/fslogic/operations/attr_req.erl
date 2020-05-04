@@ -17,6 +17,7 @@
 -include("modules/fslogic/metadata.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/posix/acl.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
@@ -322,7 +323,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
             file_ctx:get_file_doc(FileCtx)
     end,
 
-    {{Uid, Gid}, FileCtx3} = file_ctx:get_posix_storage_user_context(FileCtx2, UserCtx),
+    {{Uid, Gid}, FileCtx3} = file_ctx:get_display_owner(FileCtx2),
 
     {Size, FileCtx4} = case maps:get(include_size, Opts, true) of
         true -> file_ctx:get_file_size(FileCtx3);

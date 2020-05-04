@@ -24,12 +24,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chmod_storage_file/3, rename_storage_file/6,
-    create_delayed_storage_file/1, create_delayed_storage_file/4,
-    delete_storage_file/2, create_parent_dirs/1, delete/2]).
+-export([chmod_storage_file/3, rename_storage_file/7,
+    create_delayed_regular_file/1, create_delayed_regular_file/4,
+    delete/2, delete_storage_file/2, mkdir_delayed/2]).
 
 % Test API
--export([create_storage_file/3]).
+-export([create_delayed_file/3]).
 
 -define(CLEANUP_MAX_RETRIES_NUM, 10).
 -define(CLEANUP_DELAY, 5).
@@ -47,19 +47,14 @@
     file_meta:posix_permissions()) -> ok | {error, Reason :: term()} | no_return().
 chmod_storage_file(UserCtx, FileCtx, Mode) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    case file_ctx:is_dir(FileCtx) of
-        {true, _FileCtx2} ->
+    case storage_driver:new_handle(SessId, FileCtx, false) of
+        {undefined, _} ->
             ok;
-        {false, FileCtx2} ->
-            case storage_driver:new_handle(SessId, FileCtx2, false) of
-                {undefined, _} ->
-                    ok;
-                {SDHandle, _} ->
-                    case storage_driver:chmod(SDHandle, Mode) of
-                        ok -> ok;
-                        {error, ?ENOENT} -> ok;
-                        {error, ?EROFS} -> {error, ?EROFS}
-                    end
+        {SDHandle, _} ->
+            case storage_driver:chmod(SDHandle, Mode) of
+                ok -> ok;
+                {error, ?ENOENT} -> ok;
+                {error, ?EROFS} -> {error, ?EROFS}
             end
     end.
 
@@ -68,19 +63,27 @@ chmod_storage_file(UserCtx, FileCtx, Mode) ->
 %% Renames file on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec rename_storage_file(session:id(), od_space:id(), storage:id(),
-    file_meta:uuid(), helpers:file_id(), helpers:file_id()) -> ok | {error, term()}.
-rename_storage_file(SessId, SpaceId, StorageId, FileUuid, SourceFileId, TargetFileId) ->
-    %create target dir
-    TargetDir = filename:dirname(TargetFileId),
-    TargetDirHandle = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId, TargetDir),
-    case storage_driver:mkdir(TargetDirHandle, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
-        ok -> ok;
-        {error, ?EEXIST} -> ok
+-spec rename_storage_file(user_ctx:ctx(), od_space:id(), storage:id(),
+    file_meta:uuid(), helpers:file_id(), file_ctx:ctx() | undefined, helpers:file_id()) -> ok | {error, term()}.
+rename_storage_file(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, TargetFileId) ->
+    case TargetParentCtx =/= undefined of
+        true ->
+            % we know target parent uuid, so we can create parent directories with correct mode
+            % ensure all target parent directories are created
+            {ok, _} = mkdir_delayed(TargetParentCtx, UserCtx);
+        false ->
+            % we don't know target parent uuid because it is a remote rename
+            % create parent directories with default mode
+            TargetDir = filename:dirname(TargetFileId),
+            TargetDirHandle = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId, TargetDir),
+            case storage_driver:mkdir(TargetDirHandle, ?DEFAULT_DIR_PERMS, true) of
+                ok -> ok;
+                {error, ?EEXIST} -> ok
+            end
     end,
-
     case SourceFileId =/= TargetFileId of
         true ->
+            SessId = user_ctx:get_session_id(UserCtx),
             SourceHandle = storage_driver:new_handle(SessId, SpaceId, FileUuid, StorageId, SourceFileId),
             storage_driver:mv(SourceHandle, TargetFileId);
             % TODO VFS-5290 - solution results in problems with sed
@@ -100,24 +103,35 @@ rename_storage_file(SessId, SpaceId, StorageId, FileUuid, SourceFileId, TargetFi
             ok
     end.
 
+
+-spec mkdir_delayed(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+mkdir_delayed(FileCtx, UserCtx) ->
+    case file_ctx:is_storage_file_created(FileCtx) of
+        {false, FileCtx2} ->
+            create_delayed_file(UserCtx, FileCtx2, false);
+        {true, FileCtx2} ->
+            {ok, FileCtx2}
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Create storage file if it hasn't been created yet (it has been delayed).
 %% Creation is performed with root credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec create_delayed_storage_file(file_ctx:ctx()) -> {file_meta:doc(), file_ctx:ctx()} | {error, cancelled}.
-create_delayed_storage_file(FileCtx) ->
-    create_delayed_storage_file(FileCtx, user_ctx:new(?ROOT_SESS_ID), false, true).
+-spec create_delayed_regular_file(file_ctx:ctx()) -> {file_meta:doc(), file_ctx:ctx()} | {error, cancelled}.
+create_delayed_regular_file(FileCtx) ->
+    create_delayed_regular_file(FileCtx, user_ctx:new(?ROOT_SESS_ID), false, true).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Create storage file if it hasn't been created yet (it has been delayed)
 %% @end
 %%--------------------------------------------------------------------
--spec create_delayed_storage_file(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
-    {file_meta:doc(), file_ctx:ctx()} | {error, cancelled}.
-create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
+-spec create_delayed_regular_file(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
+    {file_location:doc(), file_ctx:ctx()} | {error, cancelled}.
+create_delayed_regular_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
@@ -133,16 +147,17 @@ create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationE
                         true ->
                             Ans;
                         _ ->
-                            FileCtx3 = ?MODULE:create_storage_file(UserCtx, FileCtx2, VerifyDeletionLink),
+                            {ok, FileCtx3} = sd_utils:create_delayed_file(UserCtx, FileCtx2, VerifyDeletionLink),
                             {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
-
-                            {ok, #document{} = Doc} = location_and_link_utils:mark_location_created(
-                                FileUuid, FileLocationId, StorageFileId),
+                            {ok, Doc} = location_and_link_utils:mark_location_created(FileUuid,
+                                FileLocationId, StorageFileId),
                             {Doc, FileCtx4}
                     end
                 catch
                     _:{badmatch,{error, not_found}} ->
-                        {error, cancelled}
+                        {error, cancelled};
+                    throw:Reason ->
+                        {error, Reason}
                 end
             end);
         true ->
@@ -151,37 +166,40 @@ create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationE
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Create storage file.
+%% Create file (regular or directory !!!) on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec create_storage_file(user_ctx:ctx(), file_ctx:ctx(), boolean()) ->
-    file_ctx:ctx().
-create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
-    {#document{value = #file_meta{mode = Mode, owner = OwnerUserId}}, FileCtx2} =
-        file_ctx:get_file_doc(FileCtx),
-    {Chown, SessId} = case user_ctx:get_user_id(UserCtx) =:= OwnerUserId of
-        true -> {false, user_ctx:get_session_id(UserCtx)};
-        _ -> {true, user_ctx:get_session_id(user_ctx:new(?ROOT_SESS_ID))}
-    end,
-
-    {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
-    {ok, FinalCtx} = case storage_driver:create(SDHandle, Mode) of
+-spec create_delayed_file(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> {ok, file_ctx:ctx()}.
+create_delayed_file(UserCtx, FileCtx, VerifyDeletionLink) ->
+    {ShouldChown, SDHandle, FileCtx2} = check_if_should_schedule_chown_and_get_sd_handle(UserCtx, FileCtx),
+    {#document{value = #file_meta{
+        mode = Mode,
+        type = FileType
+    }}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
+    FinalResult = case create_storage_file_appropriate_to_type(SDHandle, Mode, FileType) of
         {error, ?ENOENT} ->
-            FileCtx4 = create_parent_dirs(FileCtx3),
-            {storage_driver:create(SDHandle, Mode), FileCtx4};
+            FileCtx4 = create_missing_parent_dirs(UserCtx, FileCtx3),
+            {create_storage_file_appropriate_to_type(SDHandle, Mode, FileType), FileCtx4};
         {error, ?EEXIST} ->
-            handle_eexists(VerifyDeletionLink, SDHandle, Mode, FileCtx3, UserCtx);
-        {error, ?EACCES} ->
+            handle_eexists(VerifyDeletionLink, SDHandle, Mode, FileCtx3, UserCtx, FileType);
+         {error, ?EACCES} ->
             % eacces is possible because there is race condition
             % on creating and chowning parent dir
             % for this reason it is acceptable to try chowning parent once
             {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
-            files_to_chown:chown_or_schedule_chowning(ParentCtx),
-            {storage_driver:create(SDHandle, Mode), FileCtx4};
+             case file_ctx:is_root_dir_const(ParentCtx) of
+                 true -> ok;
+                 false -> files_to_chown:chown_or_schedule_chowning(ParentCtx)
+             end,
+            {create_storage_file_appropriate_to_type(SDHandle, Mode, FileType), FileCtx4};
         ok ->
             {Storage, FileCtx4} = file_ctx:get_storage(FileCtx3),
-            FileCtx6 = case storage_sync_worker:is_syncable_object_storage(Storage) of
+            Helper = storage:get_helper(Storage),
+            HelperName = helper:get_name(Helper),
+            FileCtx6 = case HelperName =:= ?S3_HELPER_NAME andalso helper:is_sync_supported_on(Helper) of
                 true ->
+                    % pretend that parent directories has been created
+                    % this should only happen on synced S3 storage
                     {ParentCtx, FileCtx5} = file_ctx:get_parent(FileCtx4, UserCtx),
                     mark_parent_dirs_created_on_storage(ParentCtx, UserCtx),
                     FileCtx5;
@@ -191,9 +209,29 @@ create_storage_file(UserCtx, FileCtx, VerifyDeletionLink) ->
             {ok, FileCtx6}
     end,
 
-    case Chown of
-        true -> files_to_chown:chown_or_schedule_chowning(FinalCtx);
-        _ -> FinalCtx
+    case FinalResult of
+        {ok, FinalCtx}  ->
+            case ShouldChown of
+                true ->
+                    {ok, files_to_chown:chown_or_schedule_chowning(FinalCtx)};
+                _ ->
+                    {ok, FinalCtx}
+            end;
+        Error ->
+            Error
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Removes given file from storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
+delete(FileCtx, UserCtx) ->
+    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+    case IsDir of
+        true -> delete_storage_dir(FileCtx2, UserCtx);
+        false -> delete_storage_file(FileCtx2, UserCtx)
     end.
 
 
@@ -215,19 +253,9 @@ delete_storage_file(FileCtx, UserCtx) ->
             {ok, FileCtx3}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Removes given file. If it's a directory all its children will be
-%% deleted to.
-%% @end
-%%--------------------------------------------------------------------
--spec delete(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
-delete(FileCtx, UserCtx) ->
-    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
-    case IsDir of
-        true -> delete_storage_dir(FileCtx2, UserCtx);
-        false -> delete_storage_file(FileCtx2, UserCtx)
-    end.
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -258,53 +286,61 @@ delete_storage_dir(DirCtx, UserCtx) ->
                     ?debug("sd_utils:delete_storage_dir failed with ~p", [Error]),
                     {ok, FileCtx2};
                 Error ->
-                    ?error("sd_utils:delete_storage_dir failed with ~p", [Error]),
+                    ?error("sd_utils:delete_storage_dir ~p ~p failed with ~p", [DirCtx, SDHandle, Error]),
                     Error
             end
     end.
 
+-spec create_storage_file_appropriate_to_type(storage_driver:handle(), file_meta:mode(),
+    file_meta:type()) -> ok | {error, term()}.
+create_storage_file_appropriate_to_type(SFMHandle, Mode, ?REGULAR_FILE_TYPE) ->
+    storage_driver:create(SFMHandle, Mode);
+create_storage_file_appropriate_to_type(SFMHandle, Mode, ?DIRECTORY_TYPE) ->
+    storage_driver:mkdir(SFMHandle, Mode).
+
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
-%% Creates parent dir on storage
+%% Creates missing parent directories on storage
 %% @end
 %%--------------------------------------------------------------------
--spec create_parent_dirs(file_ctx:ctx()) -> file_ctx:ctx().
-create_parent_dirs(FileCtx) ->
+-spec create_missing_parent_dirs(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
+create_missing_parent_dirs(UserCtx, FileCtx) ->
     case file_ctx:is_root_dir_const(FileCtx) of
         true ->
             FileCtx;
         false ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx),
-            {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, undefined),
-            create_parent_dirs(ParentCtx, [], SpaceId, StorageId),
-            FileCtx4
+            {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
+            create_missing_parent_dirs(UserCtx, ParentCtx, []),
+            FileCtx2
     end.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Tail recursive helper function of ?MODULE:create_parent_dirs/1
+%% Tail recursive helper function of ?MODULE:create_missing_parent_dirs/1
 %% @end
 %%-------------------------------------------------------------------
--spec create_parent_dirs(file_ctx:ctx(), [file_ctx:ctx()], od_space:id(),
-    storage:id()) -> ok.
-create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, StorageId) ->
-    case file_ctx:is_space_dir_const(FileCtx) of
+-spec create_missing_parent_dirs(user_ctx:ctx(), file_ctx:ctx(), [file_ctx:ctx()]) -> ok.
+create_missing_parent_dirs(UserCtx, FileCtx, ParentCtxsToCreate) ->
+    IsSpaceDir = file_ctx:is_space_dir_const(FileCtx),
+    {IsStorageFileCreated, FileCtx2} = file_ctx:is_storage_file_created(FileCtx),
+    case IsStorageFileCreated or IsSpaceDir of
         true ->
+            ParentCtxsToCreate2 = case IsStorageFileCreated of
+                true -> ParentCtxsToCreate;
+                false -> [FileCtx2 | ParentCtxsToCreate]
+            end,
             lists:foreach(fun(Ctx) ->
-                create_dir(Ctx, SpaceId, StorageId)
-            end, [FileCtx | ChildrenDirCtxs]);
+                % create missing directories going down the file tree
+                case create_missing_parent_dir(UserCtx, Ctx) of
+                    {ok, _} -> ok;
+                    {error, Reason} -> throw(Reason)
+                end
+            end, ParentCtxsToCreate2);
         false ->
-            %TODO VFS-4297 stop recursion when parent file exists on storage,
-            %TODO currently recursion stops in space dir
-            {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
-            create_parent_dirs(ParentCtx, [FileCtx2 | ChildrenDirCtxs], SpaceId, StorageId)
+            {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, undefined),
+            create_missing_parent_dirs(UserCtx, ParentCtx, [FileCtx3 | ParentCtxsToCreate])
     end.
 
 %%-------------------------------------------------------------------
@@ -313,27 +349,23 @@ create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, StorageId) ->
 %% Creates directory on storage with suitable mode and owner.
 %% @end
 %%-------------------------------------------------------------------
--spec create_dir(file_ctx:ctx(), od_space:id(), storage:id()) -> file_ctx:ctx().
-create_dir(FileCtx, SpaceId, StorageId) ->
-    {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    SDHandle0 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId,
-        undefined, StorageId, FileId, undefined),
-    try
-        {#document{value = #file_meta{
-            mode = Mode}}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
-        case file_ctx:is_space_dir_const(FileCtx3) of
-            true ->
-                mkdir_and_maybe_chown(SDHandle0, ?AUTO_CREATED_PARENT_DIR_MODE,
-                    FileCtx3, false);
-            false ->
-                mkdir_and_maybe_chown(SDHandle0, Mode, FileCtx3, true)
-        end
-    catch
-        Error:Reason ->
-            ?error_stacktrace("Creating parent dir ~p failed due to ~p.
-            Parent dir will be create with default mode.", [FileId, {Error, Reason}]),
-            mkdir_and_maybe_chown(SDHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, FileCtx, true)
-    end.
+-spec create_missing_parent_dir(user_ctx:ctx(), file_ctx:ctx()) ->
+    {ok, file_ctx:ctx()} | {error, term()}.
+create_missing_parent_dir(UserCtx, FileCtx) ->
+%%    {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+%%    try
+        {#document{value = #file_meta{mode = Mode}}, FileCtx3} = file_ctx:get_file_doc(FileCtx),
+        R = mkdir_and_maybe_chown(UserCtx, FileCtx3, Mode),
+
+        R.
+%%    catch
+%%        Error:Reason ->
+%%            % TODO jk is this case really needed ??
+%%            ?error_stacktrace(
+%%                "Creating parent dir ~p failed due to ~p.~n"
+%%                "Parent dir will be create with default mode.", [FileId, {Error, Reason}]),
+%%            mkdir_and_maybe_chown(UserCtx, FileCtx, ?DEFAULT_DIR_MODE)
+%%    end.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -342,12 +374,13 @@ create_dir(FileCtx, SpaceId, StorageId) ->
 %% true.
 %% @end
 %%-------------------------------------------------------------------
--spec mkdir_and_maybe_chown(storage_driver:handle(), non_neg_integer(),
-    file_ctx:ctx(), boolean()) -> any().
-mkdir_and_maybe_chown(SDHandle, Mode, FileCtx, ShouldChown) ->
+-spec mkdir_and_maybe_chown(user_ctx:ctx(), file_ctx:ctx(), file_meta:mode()) ->
+    {ok, file_ctx:ctx()} | {error, term()}.
+mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case storage_driver:mkdir(SDHandle, Mode, false) of
+    {ShouldChown, SDHandle, FileCtx2} = check_if_should_schedule_chown_and_get_sd_handle(UserCtx, FileCtx),
+    Result = case storage_driver:mkdir(SDHandle, Mode, false) of
         ok ->
             case dir_location:mark_dir_created_on_storage(FileUuid, SpaceId) of
                 {ok, _} -> ok;
@@ -355,33 +388,17 @@ mkdir_and_maybe_chown(SDHandle, Mode, FileCtx, ShouldChown) ->
                 % so we have to handle situation when doc is already in db
                 {error, already_exists} -> ok
             end;
-        {error, ?EEXIST} -> ok
+        {error, ?EEXIST} ->
+            ok;
+        OtherError ->
+            OtherError
     end,
-    case ShouldChown of
-        true ->
-            files_to_chown:chown_or_schedule_chowning(FileCtx);
-        false ->
-            ok
-    end,
-    FileCtx.
-
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Creates file on storage with uuid as suffix
-%% @end
-%%-------------------------------------------------------------------
--spec create_storage_file_with_suffix(storage_driver:handle(),
-    file_meta:posix_permissions()) -> {ok, helpers:file_id()}.
-create_storage_file_with_suffix(#sd_handle{file_uuid = Uuid, file = FileId} = SDHandle, Mode) ->
-    NewName = ?CONFLICTING_STORAGE_FILE_NAME(FileId, Uuid),
-    SDHandle1 = SDHandle#sd_handle{file = NewName},
-    
-    ?debug("File ~p exists on storage, creating ~p instead", [FileId, NewName]),
-    case storage_driver:create(SDHandle1, Mode) of
-        ok ->
-            {ok, NewName};
-        Error ->
+    case {Result, ShouldChown} of
+        {ok, true} ->
+            {ok, files_to_chown:chown_or_schedule_chowning(FileCtx2)};
+        {ok, false} ->
+            {ok, FileCtx};
+        {Error, _} ->
             Error
     end.
 
@@ -391,12 +408,11 @@ create_storage_file_with_suffix(#sd_handle{file_uuid = Uuid, file = FileId} = SD
 %% Handles eexists error on storage.
 %% @end
 %%-------------------------------------------------------------------
--spec handle_eexists(boolean(), storage_driver:handle(),
-    file_meta:posix_permissions(), file_ctx:ctx(),  user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-handle_eexists(_VerifyDeletionLink, SDHandle, Mode, FileCtx, _UserCtx) ->
+-spec handle_eexists(boolean(), storage_driver:handle(), file_meta:posix_permissions(),
+    file_ctx:ctx(),  user_ctx:ctx(), file_meta:type()) -> {ok, file_ctx:ctx()}.
+handle_eexists(_VerifyDeletionLink, SDHandle, Mode, FileCtx, _UserCtx, ?REGULAR_FILE_TYPE) ->
     {ok, StorageFileId} = create_storage_file_with_suffix(SDHandle, Mode),
-    {ok, file_ctx:set_file_id(FileCtx, StorageFileId)}.
-    % TODO VFS-5271 - handle conflicting directories
+    {ok, file_ctx:set_file_id(FileCtx, StorageFileId)};
 %%    case VerifyDeletionLink of
 %%        false ->
 %%            {ok, StorageFileId} = create_storage_file_with_suffix(SDHandle, Mode),
@@ -413,6 +429,53 @@ handle_eexists(_VerifyDeletionLink, SDHandle, Mode, FileCtx, _UserCtx) ->
 %%                    {ok, file_ctx:set_file_id(FileCtx3, StorageFileId)}
 %%            end
 %%    end.
+handle_eexists(_VerifyDeletionLink, _SFMHandle, _Mode, FileCtx, _UserCtx, _) ->
+    % TODO VFS-5271 - handle conflicting directories
+    {ok, FileCtx}.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates file on storage with uuid as suffix
+%% @end
+%%-------------------------------------------------------------------
+-spec create_storage_file_with_suffix(storage_driver:handle(),
+    file_meta:posix_permissions()) -> {ok, helpers:file_id()}.
+create_storage_file_with_suffix(#sd_handle{file_uuid = Uuid, file = FileId} = SFMHandle, Mode) ->
+    NewName = ?CONFLICTING_STORAGE_FILE_NAME(FileId, Uuid),
+    SFMHandle1 = SFMHandle#sd_handle{file = NewName},
+    ?debug("File ~p exists on storage, creating ~p instead", [FileId, NewName]),
+    case storage_driver:create(SFMHandle1, Mode) of
+        ok -> {ok, NewName};
+        Error -> Error
+    end.
+
+% TODO ADD DOC
+-spec check_if_should_schedule_chown_and_get_sd_handle(user_ctx:ctx(), file_ctx:ctx()) ->
+    {boolean(), storage_driver:handle(), file_ctx:ctx()}.
+check_if_should_schedule_chown_and_get_sd_handle(UserCtx, FileCtx) ->
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    UserId = user_ctx:get_user_id(UserCtx),
+    OwnerUserId = file_meta:get_owner(FileDoc),
+    {IsOwner, SessId} = case UserId =:= OwnerUserId  of
+        true ->
+            % file does belong to user associated with UserCtx
+            % there is now need to try change its owner as it will be created
+            % with appropriate one
+            {true, user_ctx:get_session_id(UserCtx)};
+        _ ->
+            % file does not belong to user associated with UserCtx
+            % create it as ROOT and schedule chown
+            {false, ?ROOT_SESS_ID}
+    end,
+    {StorageDoc, FileCtx3} = file_ctx:get_storage(FileCtx2),
+    % file should be chowned if:
+    %  * storage helper supports chown operation (is posix compatible) and
+    %  * UserCtx is not associated with OwnerUserId
+    ShouldChown = storage:is_posix_compatible(StorageDoc) andalso not IsOwner,
+    {SDHandle, FileCtx4} = storage_driver:new_handle(SessId, FileCtx3),
+    {ShouldChown, SDHandle, FileCtx4}.
 
 %%-------------------------------------------------------------------
 %% @private

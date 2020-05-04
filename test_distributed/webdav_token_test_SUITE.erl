@@ -247,7 +247,7 @@ end_per_suite(Config) ->
 
 mock_luma(Worker) ->
     ok = test_utils:mock_new(Worker, luma_proxy),
-    ok = test_utils:mock_expect(Worker, luma_proxy, get_user_ctx, fun(_, _, _, _, _) ->
+    ok = test_utils:mock_expect(Worker, luma_proxy, get_user_ctx, fun(_, _, _, _) ->
         {ok, #{
             <<"credentialsType">> => <<"oauth2">>,
             <<"credentials">> => ?USER_CREDENTIALS

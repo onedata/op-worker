@@ -55,7 +55,6 @@ get_models() -> [
     times,
     helper_handle,
     space_strategies,
-    luma_cache,
     file_popularity,
     space_transfer_stats,
     space_transfer_stats_cache,
@@ -79,6 +78,9 @@ get_models() -> [
     storage_sync_links,
     storage_traverse_job,
     qos_status,
+    luma_users_cache,
+    luma_spaces_cache,
+    luma_reverse_cache,
 
     %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
     space_storage,

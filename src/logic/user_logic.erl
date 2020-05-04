@@ -25,7 +25,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 
 -export([get/2, get_protected_data/2, get_shared_data/3]).
--export([exists/2]).
+-export([exists/1, exists/2]).
 -export([get_full_name/1, get_full_name/3]).
 -export([fetch_idp_access_token/3]).
 -export([has_eff_group/2, has_eff_group/3]).
@@ -112,6 +112,9 @@ get_shared_data(Client, UserId, AuthHint) ->
         subscribe = true
     }).
 
+-spec exists(od_user:id()) -> boolean().
+exists(UserId) ->
+    exists(?ROOT_SESS_ID, UserId).
 
 %%--------------------------------------------------------------------
 %% @doc

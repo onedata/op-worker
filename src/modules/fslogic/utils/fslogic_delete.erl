@@ -353,7 +353,7 @@ delete_shares_and_update_parent_timestamps(UserCtx, FileCtx) ->
 -spec delete_shares(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
 delete_shares(UserCtx, FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
-    {ok, Shares} = file_meta:get_shares(FileDoc),
+    Shares = file_meta:get_shares(FileDoc),
     SessionId = user_ctx:get_session_id(UserCtx),
     [ok = share_logic:delete(SessionId, ShareId) || ShareId <- Shares],
     FileCtx2.
@@ -389,10 +389,7 @@ maybe_emit_event(_FileCtx, _UserCtx, _) ->
 get_open_file_handling_method(FileCtx) ->
     {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
     Helper = storage:get_helper(Storage),
-    HelperName = helper:get_name(Helper),
-    case lists:member(HelperName,
-        [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?WEBDAV_HELPER_NAME])
-    of
+    case helper:is_rename_supported_on(Helper) of
         true -> {?RENAME_HANDLING_METHOD, FileCtx2};
         _ -> {?LINK_HANDLING_METHOD, FileCtx2}
     end.

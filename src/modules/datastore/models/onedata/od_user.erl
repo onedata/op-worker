@@ -28,8 +28,7 @@
 %% #{
 %%     <<"idp">> => binary(),
 %%     <<"subjectId">> => binary(),
-%%     <<"name">> => undefined | binary(),
-%%     <<"login">> => undefined | binary(),
+%%     <<"username">> => undefined | binary(),
 %%     <<"emails">> => [binary()],
 %%     <<"entitlements">> => [binary()],
 %%     <<"custom">> => jiffy:json_value()

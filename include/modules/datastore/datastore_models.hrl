@@ -334,7 +334,7 @@
     possibility_check :: {possible | impossible, od_provider:id()}
 }).
 
-% This model holds information of QoS traverse state in a directory subtree in order 
+% This model holds information of QoS traverse state in a directory subtree in order
 % to calculate entry status.
 -record(qos_status, {
     % Initialize with empty binary so it always compares as lower than any actual filename
@@ -351,8 +351,11 @@
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
     acl = [] :: acl:acl(),
-    owner :: undefined | od_user:id(),
+    owner :: od_user:id(),
     group_owner :: undefined | od_group:id(),
+    % TODO a co z powyższym? ^^?  przydaloby sie kiedys wywalić
+    synced_storage :: undefined | storage:id(),
+    synced_gid :: undefined | non_neg_integer(),
     is_scope = false :: boolean(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
     shares = [] :: [od_share:id()],
@@ -363,7 +366,7 @@
 -record(storage_config, {
     helper :: helpers:helper(),
     readonly = false :: boolean(),
-    luma_config = undefined :: undefined | luma_config:config(),
+    luma_config :: undefined | luma_config:config(),
     imported_storage = false :: boolean()
 }).
 
@@ -379,6 +382,26 @@
 -record(luma_config, {
     url :: luma_config:url(),
     api_key :: luma_config:api_key()
+}).
+
+%% Model that stores local user mappings.
+%% Documents are stored per storage (their keys are ids of storages).
+-record(luma_users_cache, {
+   users = #{} :: #{od_user:id() => luma_user:credentials()}
+}).
+
+%% Model that stores default local user mapping for spaces supported by given storage.
+%% Documents are stored per storage (their keys are ids of storages).
+-record(luma_spaces_cache, {
+    spaces = #{} :: #{od_space:id() => luma_space:posix_credentials()}
+}).
+
+%% Model that stores reverse local user mappings.
+%% Documents are stored per storage (their keys are ids of storages).
+-record(luma_reverse_cache, {
+    users = #{} :: #{luma:uid() => od_user:id()},
+    acl_users = #{} :: #{luma:acl_who() => od_user:id()},
+    acl_groups = #{} ::  #{luma:acl_who() => od_group:id()}
 }).
 
 %% Model that maps space to storage
@@ -672,8 +695,6 @@
     ctime = 0 :: times:time(),
     mtime = 0 :: times:time()
 }).
-
--record(luma_cache, {}).
 
 %% Model that tracks popularity of file
 -record(file_popularity, {

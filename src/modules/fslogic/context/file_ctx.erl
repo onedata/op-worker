@@ -39,7 +39,7 @@
     parent :: undefined | ctx(),
     storage_file_id :: undefined | helpers:file_id(),
     space_name :: undefined | od_space:name(),
-    storage_posix_user_context :: undefined | luma:posix_user_ctx(),
+    display_owner :: undefined | luma:display_credentials(),
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
     storage :: undefined | storage:data(),
@@ -78,7 +78,7 @@
     get_file_doc_including_deleted/1, get_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
-    get_posix_storage_user_context/2, get_times/1,
+    get_display_owner/1, get_times/1,
     get_parent_guid/2, get_child/3,
     get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
     get_logical_path/2,
@@ -88,7 +88,7 @@
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
-    get_file_size_from_remote_locations/1, get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
+    get_file_size_from_remote_locations/1, get_owner/1, get_local_storage_file_size/1,
     is_space_synced/1, get_and_cache_file_doc_including_deleted/1, is_storage_file_created/1]).
 -export([is_dir/1]).
 
@@ -594,32 +594,35 @@ get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns posix storage user context, holding UID and GID of file on posix storage.
+%% Returns posix storage user ctx, holding UID and GID of file on posix storage.
 %% @end
 %%--------------------------------------------------------------------
--spec get_posix_storage_user_context(ctx(), user_ctx:ctx()) ->
-    {luma:posix_user_ctx(), ctx()}.
-get_posix_storage_user_context(
-    FileCtx = #file_ctx{storage_posix_user_context = undefined}, UserCtx) ->
-    IsSpaceDir = is_space_dir_const(FileCtx),
-    IsUserRootDir = is_root_dir_const(FileCtx),
+-spec get_display_owner(ctx()) -> {luma:display_credentials(), ctx()}.
+get_display_owner(
+    FileCtx = #file_ctx{display_owner = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
-    NewUserCtx = case IsSpaceDir orelse IsUserRootDir of
+    {FileMetaDoc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
+    OwnerId = file_meta:get_owner(FileMetaDoc),
+    {SyncedGid, SyncedStorageId} = file_meta:get_synced_gid_and_storage(FileMetaDoc),
+    {Storage, FileCtx3} = get_storage(FileCtx2),
+    {ok, DisplayOwner = {Uid, _Gid}} = luma:map_to_display_credentials(OwnerId, SpaceId, Storage),
+    FinalDisplayOwner = case Storage =:= undefined of
         true ->
-            FileCtx2 = FileCtx,
-            luma:get_posix_user_ctx(?ROOT_SESS_ID, ?ROOT_USER_ID, SpaceId);
+            DisplayOwner;
         false ->
-            {#document{
-                value = #file_meta{
-                    owner = OwnerId,
-                    group_owner = GroupOwnerId
-            }}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
-            SessionId = user_ctx:get_session_id(UserCtx),
-            luma:get_posix_user_ctx(SessionId, OwnerId, GroupOwnerId, SpaceId)
+            StorageId = storage:get_id(Storage),
+            ProviderId = file_meta:get_provider_id(FileMetaDoc),
+            case SyncedStorageId =:= StorageId andalso ProviderId =:= oneprovider:get_id() of
+                true ->
+                    %override display GID with GID that was found when syncing file from storage
+                    {Uid, SyncedGid};
+                false ->
+                    DisplayOwner
+            end
     end,
-    {NewUserCtx, FileCtx2#file_ctx{storage_posix_user_context = NewUserCtx}};
-get_posix_storage_user_context(
-    FileCtx = #file_ctx{storage_posix_user_context = UserCtx}, _UserCtx) ->
+    {FinalDisplayOwner, FileCtx3#file_ctx{display_owner = FinalDisplayOwner}};
+get_display_owner(
+    FileCtx = #file_ctx{display_owner = UserCtx}) ->
     {UserCtx, FileCtx}.
 
 %%--------------------------------------------------------------------
@@ -794,12 +797,16 @@ get_storage_id(FileCtx) ->
 %% Returns record of storage supporting space in which file was created.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage(ctx()) -> {storage:data(), ctx()}.
+-spec get_storage(ctx()) -> {storage:data() | undefined, ctx()}.
 get_storage(FileCtx = #file_ctx{storage = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
-    {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
-    {ok, Storage} = storage:get(StorageId),
-    {Storage, FileCtx#file_ctx{storage = Storage}};
+    case space_logic:get_local_storage_ids(SpaceId) of
+        {ok, []} ->
+            {undefined, FileCtx};
+        {ok, [StorageId | _]} ->
+            {ok, Storage} = storage:get(StorageId),
+            {Storage, FileCtx#file_ctx{storage = Storage}}
+    end;
 get_storage(FileCtx = #file_ctx{storage = Storage}) ->
     {Storage, FileCtx}.
 
@@ -1026,6 +1033,7 @@ get_active_perms_type_from_doc(#document{value = #file_meta{acl = []}}, FileCtx)
 get_active_perms_type_from_doc(#document{value = #file_meta{}}, FileCtx) ->
     {acl, FileCtx}.
 
+
 -spec is_storage_file_created(ctx()) -> {boolean(), ctx()}.
 is_storage_file_created(FileCtx) ->
     case is_dir(FileCtx) of
@@ -1036,6 +1044,7 @@ is_storage_file_created(FileCtx) ->
             {FileLocation, _} = get_local_file_location_doc(FileCtx2, false),
             {file_location:is_storage_file_created(FileLocation), FileCtx2}
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1117,21 +1126,6 @@ get_owner(FileCtx = #file_ctx{
 get_owner(FileCtx) ->
     {_, FileCtx2} = get_file_doc(FileCtx),
     get_owner(FileCtx2).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns id of file's group_owner.
-%% @end
-%%--------------------------------------------------------------------
--spec get_group_owner(ctx()) -> {od_group:id() | undefined, ctx()}.
-get_group_owner(FileCtx = #file_ctx{
-    file_doc = #document{
-        value = #file_meta{group_owner = GroupOwnerId}
-    }}) ->
-    {GroupOwnerId, FileCtx};
-get_group_owner(FileCtx) ->
-    {_, FileCtx2} = get_file_doc(FileCtx),
-    get_group_owner(FileCtx2).
 
 
 %%--------------------------------------------------------------------

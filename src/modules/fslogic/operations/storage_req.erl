@@ -72,10 +72,13 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
     {ok, Storage} = storage:get(StorageId),
     Helper = storage:get_helper(Storage),
     case HelperMode of
-        ?FORCE_DIRECT_HELPER_MODE ->
+        ?FORCE_DIRECT_HELPER_MODE
+            when SessionId =/= ?ROOT_SESS_ID
+            andalso UserId =/= ?ROOT_USER_ID
+        ->
             SessionId = user_ctx:get_session_id(UserCtx),
             UserId = user_ctx:get_user_id(UserCtx),
-            case luma:get_client_user_ctx(SessionId, UserId, SpaceId, Storage) of
+            case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
                 {ok, ClientStorageUserCtx} ->
                     HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
                     #fuse_response{
@@ -84,6 +87,10 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
                 {error, _} ->
                     #fuse_response{status = #status{code = ?ENOENT}}
             end;
+        ?FORCE_DIRECT_HELPER_MODE ->
+            % SessionId =:= ?ROOT_SESS_ID or UserId =:= ?ROOT_USER_ID
+            % This should never happen as client cannot pass root credentials
+            #fuse_response{status = #status{code = ?EACCES}};
         _ProxyOrAutoMode ->
             HelperParams = helper:get_proxy_params(Helper, StorageId),
             #fuse_response{
@@ -121,11 +128,18 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             throw(?ENOENT)
     end,
 
-    Helper = storage:get_helper(Storage),
+    case UserId =:= ?ROOT_USER_ID orelse SessionId =:= ?ROOT_SESS_ID of
+        true ->
+            % This should never happen as client cannot pass root credentials
+            throw(?EACCES);
+        false ->
+            ok
+    end,
 
-    case luma:get_client_user_ctx(SessionId, UserId, SpaceId, Storage) of
+    Helper = storage:get_helper(Storage),
+    case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
         {ok, ClientStorageUserCtx} ->
-            {ok, ServerStorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, Storage),
+            {ok, ServerStorageUserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
             HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
             {SpaceStorageFileId, _SpaceCtx2} = file_ctx:get_storage_file_id(SpaceCtx),
             DirName = filename:dirname(SpaceStorageFileId),
@@ -165,7 +179,7 @@ verify_storage_test_file(UserCtx, SpaceId, StorageId, FileId, FileContent) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     {ok, Storage} = storage:get(StorageId),
     Helper = storage:get_helper(Storage),
-    {ok, StorageUserCtx} = luma:get_server_user_ctx(SessionId, UserId, SpaceId, Storage),
+    {ok, StorageUserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
     verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, ?ENOENT,
         ?VERIFY_STORAGE_TEST_FILE_ATTEMPTS).
 

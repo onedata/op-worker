@@ -123,7 +123,7 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st2",
-                        "imported_storage": "true"
+                        "imported_storage": true
                     }
                 }
             },
@@ -138,7 +138,7 @@
                 "providers": {
                     "p1": {
                         "storage": "s32",
-                        "imported_storage": "true"
+                        "imported_storage": true
                     }
                 }
             }

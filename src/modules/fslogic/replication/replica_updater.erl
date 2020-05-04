@@ -38,23 +38,27 @@
 update(FileCtx, Blocks, FileSize, BumpVersion) ->
     replica_synchronizer:apply(FileCtx,
         fun() ->
-            Location = #document{
-                value = #file_location{
-                    size = OldSize
-                }
-            } = fslogic_cache:get_local_location(),
-            UpdatedLocation = append(Location, Blocks, BumpVersion),
-            case FileSize of
-                undefined ->
-                    fslogic_location_cache:save_location(UpdatedLocation),
-                    case fslogic_blocks:upper(Blocks) > OldSize of
-                        true -> {ok, size_changed};
-                        false -> {ok, size_not_changed}
+            case fslogic_cache:get_local_location() of
+                Location = #document{
+                    value = #file_location{
+                        size = OldSize
+                    }
+                } ->
+                    UpdatedLocation = append(Location, Blocks, BumpVersion),
+                    case FileSize of
+                        undefined ->
+                            fslogic_location_cache:save_location(UpdatedLocation),
+                            case fslogic_blocks:upper(Blocks) > OldSize of
+                                true -> {ok, size_changed};
+                                false -> {ok, size_not_changed}
+                            end;
+                        _ ->
+                            TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
+                            fslogic_location_cache:save_location(TruncatedLocation),
+                            {ok, size_changed}
                     end;
-                _ ->
-                    TruncatedLocation = do_local_truncate(FileSize, UpdatedLocation),
-                    fslogic_location_cache:save_location(TruncatedLocation),
-                    {ok, size_changed}
+                Error ->
+                    Error
             end
         end).
 

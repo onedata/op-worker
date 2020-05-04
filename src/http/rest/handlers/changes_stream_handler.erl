@@ -435,7 +435,6 @@ file_meta_field_idx(<<"name">>) -> #file_meta.name;
 file_meta_field_idx(<<"type">>) -> #file_meta.type;
 file_meta_field_idx(<<"mode">>) -> #file_meta.mode;
 file_meta_field_idx(<<"owner">>) -> #file_meta.owner;
-file_meta_field_idx(<<"group_owner">>) -> #file_meta.group_owner;
 file_meta_field_idx(<<"provider_id">>) -> #file_meta.provider_id;
 file_meta_field_idx(<<"shares">>) -> #file_meta.shares;
 file_meta_field_idx(<<"deleted">>) -> #file_meta.deleted;

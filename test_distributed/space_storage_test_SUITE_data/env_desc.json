@@ -21,20 +21,27 @@
                     "name": "/mnt/st2"
                 },
                 {
-                    "type": "s3",
-                    "name": "s3",
-                    "bucket": "onedata",
-                    "block_size": "0",
-                    "storage_path_type": "canonical"
+                    "type": "posix",
+                    "name": "/mnt/st3"
+                },
+                {
+                    "type": "posix",
+                    "name": "/mnt/st4"
                 },
                 {
                     "type": "s3",
-                    "name": "s3_2",
-                    "bucket": "onedata",
-                    "block_size": "0",
-                    "storage_path_type": "canonical"
+                    "name": "s3_no_luma",
+                    "bucket": "onedata"
+                },
+                {
+                    "type": "s3",
+                    "name": "s3_luma",
+                    "bucket": "onedata"
+                },
+                {
+                    "type": "posix",
+                    "name": "/mnt/st7"
                 }
-
             ],
             "users": [],
             "groups": {}
@@ -88,58 +95,112 @@
             "space1": {
                 "displayed_name": "space_name1",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
-                "groups": [
-                    "group1"
-                ],
+                "groups": ["group1"],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st1"
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
                     }
                 }
             },
             "space2": {
                 "displayed_name": "space_name2",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2",
+                    "user3",
+                    "user4"
                 ],
-                "groups": [
-                    "group1"
-                ],
+                "groups": [],
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st2",
-                        "imported_storage": true
+                        "supported_size": 10737418240,
+                        "luma": true
                     }
                 }
             },
             "space3": {
                 "displayed_name": "space_name3",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2"
                 ],
-                "groups": [
-                    "group1"
-                ],
+                "groups": [],
                 "providers": {
                     "p1": {
-                        "storage": "s3"
+                        "storage": "/mnt/st3",
+                        "supported_size": 10737418240,
+                        "imported_storage": true
                     }
                 }
             },
             "space4": {
                 "displayed_name": "space_name4",
                 "users": [
-                    "user1"
+                    "user1",
+                    "user2",
+                    "user3",
+                    "user4"
                 ],
-                "groups": [
-                    "group1"
-                ],
+                "groups": [],
                 "providers": {
                     "p1": {
-                        "storage": "s3_2",
-                        "imported_storage": true
+                        "storage": "/mnt/st4",
+                        "supported_size": 10737418240,
+                        "imported_storage": true,
+                        "luma": true
+                    }
+                }
+            },
+            "space5": {
+                "displayed_name": "space_name5",
+                "users": [
+                    "user1",
+                    "user2"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "s3_no_luma",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space6": {
+                "displayed_name": "space_name6",
+                "users": [
+                    "user1",
+                    "user2",
+                    "user3",
+                    "user4"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "s3_luma",
+                        "supported_size": 10737418240,
+                        "luma": true
+                    }
+                }
+            },
+            "space7": {
+                "displayed_name": "space_name6",
+                "users": [
+                    "user1",
+                    "user2",
+                    "user3",
+                    "user4"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st7",
+                        "supported_size": 10737418240,
+                        "luma": true
                     }
                 }
             }

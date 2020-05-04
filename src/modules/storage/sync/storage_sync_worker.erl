@@ -34,7 +34,7 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([notify_connection_to_oz/0, is_syncable_object_storage/1]).
+-export([notify_connection_to_oz/0]).
 
 %% Exported for tests
 -export([schedule_spaces_check/1]).
@@ -139,7 +139,7 @@ check_space(SpaceId) ->
 
 -spec check_storage(od_space:id(), storage:id(), space_strategies:sync_config()) -> ok.
 check_storage(SpaceId, StorageId, SyncConfig) ->
-    case is_syncable(StorageId) of
+    case is_sync_supported_on(StorageId) of
         true -> maybe_start_scan(SpaceId, StorageId, SyncConfig);
         false -> ok
     end.
@@ -193,35 +193,16 @@ maybe_start_update_scan(SpaceId, StorageId, SyncConfig) ->
     end.
 
 
--spec is_syncable(storage:data() | storage:id()) -> boolean().
-is_syncable(StorageId) when is_binary(StorageId) ->
+-spec is_sync_supported_on(storage:data() | storage:id()) -> boolean().
+is_sync_supported_on(StorageId) when is_binary(StorageId) ->
     case storage:get(StorageId) of
-        {ok, Storage} ->
-            is_syncable(Storage);
-        _ ->
-            false
+        {ok, Storage} -> is_sync_supported_on(Storage);
+        _ -> false
     end;
-is_syncable(Storage) ->
+is_sync_supported_on(Storage) ->
     Helper = storage:get_helper(Storage),
-    HelperName = helper:get_name(Helper),
-    case lists:member(HelperName,
-        [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?WEBDAV_HELPER_NAME])
-    of
-        true ->
-            true;
-        false ->
-            is_syncable_object_storage(Storage)
-    end.
+    helper:is_sync_supported_on(Helper).
 
--spec is_syncable_object_storage(storage:data()) -> boolean().
-is_syncable_object_storage(Storage) ->
-    Helper = storage:get_helper(Storage),
-    HelperName = helper:get_name(Helper),
-    StoragePathType = helper:get_storage_path_type(Helper),
-    Args = helper:get_args(Helper),
-    (HelperName =:= ?S3_HELPER_NAME)
-        andalso (StoragePathType =:= ?CANONICAL_STORAGE_PATH)
-        andalso (<<"0">> =:= maps:get(<<"blockSize">>, Args, undefined)).
 
 -spec schedule_spaces_check() -> ok.
 schedule_spaces_check() ->

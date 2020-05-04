@@ -139,7 +139,7 @@ get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
 
 
 %%%===================================================================
-%%% Internal functions
+%%% Internal functionsVFS
 %%%===================================================================
 
 
@@ -158,15 +158,11 @@ get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
     fslogic_worker:fuse_response().
 mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     CTime = time_utils:cluster_time_seconds(),
-    File = #document{value = #file_meta{
-        name = Name,
-        type = ?DIRECTORY_TYPE,
-        mode = Mode,
-        owner = user_ctx:get_user_id(UserCtx)
-    }},
+    Owner = user_ctx:get_user_id(UserCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
-    {ok, DirUuid} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx),
+    File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
+    {ok, DirUuid} = file_meta:create({uuid, ParentUuid}, File), %todo maybe pass file_ctx inside
     {ok, _} = times:save(#document{
         key = DirUuid,
         value = #times{mtime = CTime, atime = CTime, ctime = CTime},

@@ -546,7 +546,7 @@ create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
             {FL, FileCtx2};
         _ ->
             {#document{value = FL}, FileCtx2} =
-                sd_utils:create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
+                sd_utils:create_delayed_regular_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
             {FL, FileCtx2}
     end.
 
@@ -562,17 +562,12 @@ create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
 create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     case file_ctx:is_dir(ParentFileCtx) of
         {true, ParentFileCtx2} ->
-            File = #document{value = #file_meta{
-                name = Name,
-                type = ?REGULAR_FILE_TYPE,
-                mode = Mode,
-                owner = user_ctx:get_user_id(UserCtx)
-            }},
-            ParentFileUuid = file_ctx:get_uuid_const(ParentFileCtx2),
-            {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
-
-            CTime = time_utils:cluster_time_seconds(),
+            Owner = user_ctx:get_user_id(UserCtx),
+            ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
+            File = file_meta:new_doc(Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId),
+            {ok, FileUuid} = file_meta:create({uuid, ParentUuid}, File), %todo pass file_ctx
+            CTime = time_utils:cluster_time_seconds(),
             {ok, _} = times:save(#document{key = FileUuid, value = #times{
                 mtime = CTime, atime = CTime, ctime = CTime
             }, scope = SpaceId}),

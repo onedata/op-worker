@@ -17,8 +17,6 @@
 
 -define(ATTEMPTS, 30).
 
--define(SYNCED_STORAGE, todo).
--define(RDWR_STORAGE, todo).
 
 %% defaults
 -define(SCAN_INTERVAL, 10).
@@ -67,8 +65,11 @@
 -define(TEST_DATA_SIZE2, byte_size(?TEST_DATA2)).
 -define(WRITE_TEXT, <<"overwrite_test_data">>).
 
--define(TEST_UID, 1000).
--define(TEST_GID, 1000).
+-define(MOUNT_UID, 1000).
+-define(MOUNT_GID, 1000).
+
+-define(TEST_UID, 2000).
+-define(TEST_GID, 2000).
 
 -define(TEST_URL, <<"http://127.0.0.1:5000">>).
 

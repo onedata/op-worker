@@ -157,8 +157,9 @@ rename_or_delete(FileCtx,
         true ->
             NewFileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, TargetSpaceId)),
             {TargetStorageId, NewFileCtx2} = file_ctx:get_storage_id(NewFileCtx),
-            case sd_utils:rename_storage_file(?ROOT_SESS_ID, TargetSpaceId,
-                TargetStorageId, FileUuid, SourceFileId, RemoteTargetFileId)
+            % TODO VFS-6155 properly handle remote rename, target parent doc may not be synchronized yet, how do we know its mode?
+            case sd_utils:rename_storage_file(user_ctx:new(?ROOT_SESS_ID), TargetSpaceId,
+                TargetStorageId, FileUuid, SourceFileId, undefined, RemoteTargetFileId)
             of
                 ok -> ok;
                 {error, ?ENOENT} -> ok

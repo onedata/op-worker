@@ -23,6 +23,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -31,7 +32,7 @@
     is_readonly/1, is_imported_storage/1]).
 
 -export([update_helper/2, update_luma_config/2,
-    set_readonly/2, set_imported_storage/2]).
+    set_readonly/2, set_imported_storage/2, set_luma_config/2]).
 
 -export([delete_all/0]).
 
@@ -193,6 +194,11 @@ set_imported_storage(StorageId, Value) ->
         {ok, Storage#storage_config{imported_storage = Value}}
     end)).
 
+-spec set_luma_config(storage:id(), luma_config:config()) -> ok.
+set_luma_config(StorageId, LumaConfig) ->
+    ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
+        {ok, Storage#storage_config{luma_config = LumaConfig}}
+    end)).
 
 -spec delete_all() -> ok.
 delete_all() ->

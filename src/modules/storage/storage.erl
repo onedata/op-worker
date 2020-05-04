@@ -23,6 +23,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -34,7 +35,7 @@
 -export([get_id/1, get_helper/1, get_type/1, get_luma_config/1]).
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
--export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
+-export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1, is_posix_compatible/1]).
 -export([is_local/1]).
 
 %%% Functions to modify storage details
@@ -114,9 +115,11 @@ create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParamete
     end.
 
 
--spec get(id()) -> {ok, data()} | {error, term()}.
+-spec get(id() | data()) -> {ok, data()} | {error, term()}.
 get(StorageId) when is_binary(StorageId) ->
-    storage_config:get(StorageId).
+    storage_config:get(StorageId);
+get(StorageData) ->
+    {ok, StorageData}.
 
 
 %%-------------------------------------------------------------------
@@ -185,7 +188,8 @@ delete(StorageId) ->
 delete_insecure(StorageId) ->
     case storage_logic:delete_in_zone(StorageId) of
         ok ->
-            storage_config:delete(StorageId);
+            ok = storage_config:delete(StorageId),
+            luma:invalidate(StorageId);
         Error ->
             Error
     end.
@@ -208,6 +212,8 @@ clear_storages() ->
 %%%===================================================================
 
 -spec get_id(data()) -> id().
+get_id(StorageId) when is_binary(StorageId) ->
+    StorageId;
 get_id(StorageData) ->
     storage_config:get_id(StorageData).
 
@@ -277,6 +283,10 @@ is_local(StorageId) ->
         {ok, ProviderId} -> oneprovider:is_self(ProviderId)
     end.
 
+-spec is_posix_compatible(id() | data()) -> boolean().
+is_posix_compatible(StorageDataOrId) ->
+    Helper = get_helper(StorageDataOrId),
+    helper:is_posix_compatible(Helper).
 
 %%%===================================================================
 %%% Functions to modify storage details
@@ -478,7 +488,8 @@ on_space_supported(SpaceId, StorageId) ->
 -spec on_space_unsupported(od_space:id(), id()) -> ok.
 on_space_unsupported(SpaceId, StorageId) ->
     delete_associated_documents(SpaceId, StorageId),
-    main_harvesting_stream:space_unsupported(SpaceId).
+    main_harvesting_stream:space_unsupported(SpaceId),
+    luma:invalidate(StorageId, SpaceId).
 
 
 %% @private

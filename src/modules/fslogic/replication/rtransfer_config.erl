@@ -110,9 +110,9 @@ get_nodes(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec open(FileUUID :: binary(), read | write) ->
     {ok, Handle :: term()} | {error, Reason :: any()}.
-open(FileGUID, _OpenFlag) ->
+open(FileGuid, _OpenFlag) ->
     % TODO vfs-4412 - delete second arg and change name
-    sd_utils:create_delayed_storage_file(file_ctx:new_by_guid(FileGUID)),
+    sd_utils:create_delayed_regular_file(file_ctx:new_by_guid(FileGuid)),
     {ok, undefined}.
 
 %%--------------------------------------------------------------------

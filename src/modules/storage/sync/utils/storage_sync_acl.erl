@@ -17,7 +17,7 @@
 
 
 %% API
--export([decode_and_normalize/3, encode/1]).
+-export([decode_and_normalize/2, encode/1]).
 
 %%%===================================================================
 %%% API
@@ -32,11 +32,10 @@
 %% determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec decode_and_normalize(binary(), od_space:id(), storage:id()) ->
-    {ok, acl:acl()}.
-decode_and_normalize(ACLBin, SpaceId, StorageId) ->
+-spec decode_and_normalize(binary(), storage:id()) -> {ok, acl:acl()}.
+decode_and_normalize(ACLBin, StorageId) ->
     {ok, ACL} = decode(ACLBin),
-    normalize(ACL, SpaceId, StorageId).
+    normalize(ACL, StorageId).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -77,10 +76,9 @@ decode(ACLBin) ->
 %% determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize(acl:acl(), od_space:id(), storage:id()) ->
-    {ok, acl:acl()}.
-normalize(Acl, SpaceId, StorageId) ->
-    {ok, normalize(Acl, [], SpaceId, StorageId)}.
+-spec normalize(acl:acl(), storage:id()) -> {ok, acl:acl()}.
+normalize(Acl, StorageId) ->
+    {ok, normalize(Acl, [], StorageId)}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -155,13 +153,12 @@ encode_ace(#access_control_entity{
 %% Tail-recursive helper function for normalize/2.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize(acl:acl(), acl:acl(), od_space:id(), storage:id()) ->
-    acl:acl().
-normalize([], NormalizedACL, _SpaceId, _StorageId) ->
+-spec normalize(acl:acl(), acl:acl(), storage:id()) -> acl:acl().
+normalize([], NormalizedACL, _StorageId) ->
     lists:reverse(NormalizedACL);
-normalize([ACE | Rest], NormalizedACL, SpaceId, StorageId) ->
-    NormalizedACE = normalize_ace(ACE, SpaceId, StorageId),
-    normalize(Rest, [NormalizedACE | NormalizedACL], SpaceId, StorageId).
+normalize([ACE | Rest], NormalizedACL, StorageId) ->
+    NormalizedACE = normalize_ace(ACE, StorageId),
+    normalize(Rest, [NormalizedACE | NormalizedACL], StorageId).
 
 %%-------------------------------------------------------------------
 %% @private
@@ -169,18 +166,18 @@ normalize([ACE | Rest], NormalizedACL, SpaceId, StorageId) ->
 %% Normalizes given #access_control_entity.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize_ace(ace:ace(), od_space:id(), storage:id()) -> ace:ace().
-normalize_ace(ACE = #access_control_entity{identifier = ?owner}, _SpaceId, _StorageId) ->
+-spec normalize_ace(ace:ace(), storage:id()) -> ace:ace().
+normalize_ace(ACE = #access_control_entity{identifier = ?owner}, _StorageId) ->
     ACE;
-normalize_ace(ACE = #access_control_entity{identifier = ?group}, _SpaceId, _StorageId) ->
+normalize_ace(ACE = #access_control_entity{identifier = ?group}, _StorageId) ->
     ACE;
-normalize_ace(ACE = #access_control_entity{identifier = ?everyone}, _SpaceId, _StorageId) ->
+normalize_ace(ACE = #access_control_entity{identifier = ?everyone}, _StorageId) ->
     ACE;
 normalize_ace(ACE = #access_control_entity{
     aceflags = Flags,
     identifier = Who
-}, SpaceId, StorageId) ->
-    NormalizedWho = normalize_who(Flags, Who, SpaceId, StorageId),
+}, StorageId) ->
+    NormalizedWho = normalize_who(Flags, Who, StorageId),
     ACE#access_control_entity{identifier = NormalizedWho}.
 
 %%-------------------------------------------------------------------
@@ -191,11 +188,11 @@ normalize_ace(ACE = #access_control_entity{
 %% user or group is determined by identifier_group_mask in acemask field.
 %% @end
 %%-------------------------------------------------------------------
--spec normalize_who(non_neg_integer(), binary(), od_space:id(), storage:id()) ->
+-spec normalize_who(non_neg_integer(), luma:acl_who(), storage:id()) ->
     od_user:id() | od_group:id().
-normalize_who(Flags, Who, SpaceId, StorageId) when ?has_flag(Flags, ?identifier_group_mask) ->
-    {ok, GroupId} = reverse_luma:get_group_id_by_name(Who, SpaceId, StorageId),
+normalize_who(Flags, Who, StorageId) when ?has_flag(Flags, ?identifier_group_mask) ->
+    {ok, GroupId} = luma:map_acl_group_to_onedata_group(Who, StorageId),
     GroupId;
-normalize_who(_, Who, _SpaceId, StorageId) ->
-    {ok, UserId} = reverse_luma:get_user_id_by_name(Who, StorageId),
+normalize_who(_, Who, StorageId) ->
+    {ok, UserId} = luma:map_acl_user_to_onedata_user(Who, StorageId),
     UserId.

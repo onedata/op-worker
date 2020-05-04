@@ -58,8 +58,8 @@ is_applicable(#document{key = UserId}, FileCtx, #access_control_entity{
 is_applicable(#document{value = User}, FileCtx, #access_control_entity{
     identifier = ?group
 }) ->
-    {GroupOwnerId, FileCtx2} = file_ctx:get_group_owner(FileCtx),
-    {lists:member(GroupOwnerId, User#od_user.eff_groups), FileCtx2};
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {lists:member(SpaceId, User#od_user.eff_spaces), FileCtx};
 
 is_applicable(_UserDoc, FileCtx, #access_control_entity{
     identifier = ?everyone

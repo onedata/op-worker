@@ -89,7 +89,7 @@ rename_between_spaces(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) -
 %% @end
 %%--------------------------------------------------------------------
 -spec copy_and_remove(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
-TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 copy_and_remove(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     SessId = user_ctx:get_session_id(UserCtx),
@@ -192,10 +192,7 @@ rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFil
     TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
     {Storage, SourceFileCtx2} = file_ctx:get_storage(SourceFileCtx),
     Helper = storage:get_helper(Storage),
-    HelperName = helper:get_name(Helper),
-    case lists:member(HelperName,
-        [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
-         ?WEBDAV_HELPER_NAME]) of
+    case helper:is_rename_supported_on(Helper) of
         true ->
             rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx2,
                 TargetParentFileCtx, TargetName, SourceFileType, TargetFileType,
@@ -347,11 +344,11 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     StoragePathType = helper:get_storage_path_type(Helper),
 
     case StoragePathType of
-      ?FLAT_STORAGE_PATH ->
-          rename_file_on_flat_storage(UserCtx, SourceFileCtx1,
-              TargetParentFileCtx, TargetName, undefined);
-      _ ->
-        copy_and_remove(UserCtx, SourceFileCtx1, TargetParentFileCtx, TargetName)
+        ?FLAT_STORAGE_PATH ->
+            rename_file_on_flat_storage(UserCtx, SourceFileCtx1,
+                TargetParentFileCtx, TargetName, undefined);
+        _ ->
+            copy_and_remove(UserCtx, SourceFileCtx1, TargetParentFileCtx, TargetName)
     end;
 rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, TheSameType, TheSameType, TargetFileCtx
@@ -364,12 +361,12 @@ rename_into_different_place_within_non_posix_space(UserCtx, SourceFileCtx,
     StoragePathType = helper:get_storage_path_type(Helper),
 
     case StoragePathType of
-      ?FLAT_STORAGE_PATH ->
-          rename_file_on_flat_storage(UserCtx, SourceFileCtx1,
-              TargetParentFileCtx, TargetName, TargetGuid);
-      _ ->
-        ok = lfm:unlink(SessId, {guid, TargetGuid}, false),
-        copy_and_remove(UserCtx, SourceFileCtx1, TargetParentFileCtx, TargetName)
+        ?FLAT_STORAGE_PATH ->
+            rename_file_on_flat_storage(UserCtx, SourceFileCtx1,
+                TargetParentFileCtx, TargetName, TargetGuid);
+        _ ->
+            ok = lfm:unlink(SessId, {guid, TargetGuid}, false),
+            copy_and_remove(UserCtx, SourceFileCtx1, TargetParentFileCtx, TargetName)
     end;
 rename_into_different_place_within_non_posix_space(_, _, _, _,
     ?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, _
@@ -495,13 +492,13 @@ rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 -spec rename_meta_and_storage_file(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name(), boolean()) ->
     {TargetFileCtx :: file_ctx:ctx(), TargetFileId :: helpers:file_id()}.
-rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName, InvalidateCache) ->
+rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetName, InvalidateCache) ->
     {SourceFileId, SourceFileCtx} = file_ctx:get_storage_file_id(SourceFileCtx0),
-    {TargetParentFileId, TargetParentFileCtx} = file_ctx:get_storage_file_id(TargetParentFileCtx0),
+    {TargetParentFileId, TargetParentCtx} = file_ctx:get_storage_file_id(TargetParentCtx0),
     TargetFileId = filename:join(TargetParentFileId, TargetName),
 
     FileUuid = file_ctx:get_uuid_const(SourceFileCtx),
-    {ParentDoc, TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
+    {ParentDoc, TargetParentCtx2} = file_ctx:get_file_doc(TargetParentCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
     {SourceParentFileCtx, SourceFileCtx3} = file_ctx:get_parent(SourceFileCtx2, UserCtx),
     {PrevName, SourceFileCtx4} = file_ctx:get_aliased_name(SourceFileCtx3, UserCtx),
@@ -518,17 +515,17 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, Targ
     Helper = storage:get_helper(Storage),
     StorageId = storage:get_id(Storage),
     case helper:get_storage_path_type(Helper) of
-      ?FLAT_STORAGE_PATH ->
-        ok;
-      _ ->
-        case sd_utils:rename_storage_file(
-          user_ctx:get_session_id(UserCtx), SpaceId, StorageId, FileUuid, SourceFileId, TargetFileId)
-        of
-          ok -> ok;
-          {error, ?ENOENT} -> ok
-        end
+        ?FLAT_STORAGE_PATH ->
+            ok;
+        _ ->
+            case sd_utils:rename_storage_file(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId,
+                TargetParentCtx2, TargetFileId)
+            of
+                ok -> ok;
+                {error, ?ENOENT} -> ok
+            end
     end,
-    ParentGuid = file_ctx:get_guid_const(TargetParentFileCtx2),
+    ParentGuid = file_ctx:get_guid_const(TargetParentCtx2),
     fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx5, ParentGuid, TargetName, PrevName, UserCtx),
     {SourceFileCtx5, TargetFileId}.
 

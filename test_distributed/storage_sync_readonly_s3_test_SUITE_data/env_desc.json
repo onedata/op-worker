@@ -137,7 +137,7 @@
                     },
                     "p2": {
                         "storage": "synced_storage",
-                        "imported_storage": "true"
+                        "imported_storage": true
                     }
                 }
             }

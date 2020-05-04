@@ -46,10 +46,15 @@
 chown_or_schedule_chowning(FileCtx) ->
     {#document{value = #file_meta{owner = OwnerUserId}}, FileCtx2} =
         file_ctx:get_file_doc(FileCtx),
-    case user_logic:exists(?ROOT_SESS_ID, OwnerUserId) of
+    % space_owner is a virtual user therefore we don't check whether it exists in Onezone
+    case fslogic_uuid:is_space_owner(OwnerUserId) orelse user_logic:exists(OwnerUserId) of
         true ->
             chown_file(FileCtx2);
         false ->
+            % possible cases:
+            %  * user was deleted, but is still owner of a file
+            %  * file was synced from storage, and through reverse luma
+            %    we received id of user that has not yet logged to Onezone
             {ok, _} = add(FileCtx2, OwnerUserId),
             FileCtx2
     end.
@@ -61,17 +66,23 @@ chown_or_schedule_chowning(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec chown_file(file_ctx:ctx()) -> file_ctx:ctx().
 chown_file(FileCtx) ->
-    {SDHandle, FileCtx2} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx),
-    {#document{value =
-        #file_meta{
-            owner = OwnerUserId,
-            group_owner = GroupOwnerId
-    }}, FileCtx3} = file_ctx:get_file_doc(FileCtx2),
-    SpaceId = file_ctx:get_space_id_const(FileCtx3),
-    % TODO VFS-3868 implement chown in s3/ceph and remove this catch
-    {Uid, Gid} = luma:get_posix_user_ctx(?ROOT_SESS_ID, OwnerUserId, GroupOwnerId, SpaceId),
-    (catch storage_driver:chown(SDHandle, Uid, Gid)),
-    FileCtx3.
+    {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
+    % TODO VFS-3868 implement chown in other helpers and remove this case
+    case Storage =/= undefined andalso storage:is_posix_compatible(Storage) of
+        true ->
+            {SDHandle, FileCtx3} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx2),
+            {FileDoc, FileCtx4} = file_ctx:get_file_doc(FileCtx3),
+            OwnerId = file_meta:get_owner(FileDoc),
+            SpaceId = file_ctx:get_space_id_const(FileCtx4),
+            {ok, StorageCredentials} = luma:map_to_storage_credentials(OwnerId, SpaceId, Storage),
+            Gid = binary_to_integer(maps:get(<<"uid">>, StorageCredentials)),
+            Uid = binary_to_integer(maps:get(<<"gid">>, StorageCredentials)),
+            storage_driver:chown(SDHandle, Uid, Gid),
+            FileCtx4;
+        false ->
+            FileCtx2
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

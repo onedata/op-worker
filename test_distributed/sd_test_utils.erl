@@ -46,7 +46,7 @@ mkdir(Worker, SDHandle, Mode) ->
     rpc:call(Worker, storage_driver, mkdir, [SDHandle, Mode, true]).
 
 create_file(Worker, SDHandle, Mode) ->
-    ok = rpc:call(Worker, storage_driver, create, [SDHandle, Mode, true]).
+    ok = rpc:call(Worker, storage_driver, create, [SDHandle, Mode]).
 
 open(Worker, SDHandle, Flag) ->
     rpc:call(Worker, storage_driver, open_insecure, [SDHandle, Flag]).

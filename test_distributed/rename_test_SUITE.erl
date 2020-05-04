@@ -126,16 +126,27 @@ rename_dbsync_test(Config) ->
     SessId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W2)}}, Config),
 
     {_, _BaseDir} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(4, TestDir, ""))),
-    {_, _NastedDir} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(4, TestDir, "/nasted"))),
+    {_, _NestedDir} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W1, SessId1, filename(4, TestDir, "/nested"))),
     {_, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W1, SessId1, filename(4, TestDir, "/renamed_file1"), 8#770)),
     {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId1, {guid, File1Guid}, write)),
+
     ?assertEqual({ok, 5}, lfm_proxy:write(W1, Handle1, 0, <<"test1">>)),
     ?assertEqual(ok, lfm_proxy:close(W1, Handle1)),
-
-    ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId1, {guid, File1Guid}, filename(4, TestDir, "/nasted/renamed_file1_target"))),
-    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {path, filename(4, TestDir, "/nasted/renamed_file1_target")}, read), 30),
-    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W2, Handle3, 0, 10), 30),
-    ?assertEqual(ok, lfm_proxy:close(W2, Handle3)).
+%%
+%%    tracer:start(W1),
+%%    tracer:trace_calls(rename_req),
+%%    tracer:trace_calls(sd_utils),
+    try
+        ?assertMatch({ok, _}, lfm_proxy:mv(W1, SessId1, {guid, File1Guid}, filename(4, TestDir, "/nested/renamed_file1_target")))
+    catch
+        E:R ->
+            ct:pal("E:R: ~p", [{E, R}]),
+            ct:timetrap({hours, 10}),
+            ct:sleep({hours, 10})
+    end.
+%%    {_, Handle3} = ?assertMatch({ok, _}, lfm_proxy:open(W2, SessId2, {path, filename(4, TestDir, "/nested/renamed_file1_target")}, read), 30),
+%%    ?assertEqual({ok, <<"test1">>}, lfm_proxy:read(W2, Handle3, 0, 10), 30),
+%%    ?assertEqual(ok, lfm_proxy:close(W2, Handle3)).
 
 move_file_test(Config) ->
     [W | _] = sorted_workers(Config),

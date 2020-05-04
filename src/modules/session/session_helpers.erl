@@ -164,18 +164,18 @@ get_helper(SessId, SpaceId, StorageId, InCriticalSection) ->
     {ok, helpers:helper_handle()} | {error, term()}.
 add_missing_helper(SessId, SpaceId, StorageId) ->
     {ok, UserId} = session:get_user_id(SessId),
-
-    {ok, #document{key = HandleId, value = HelperHandle}} =
-        helper_handle:create(SessId, UserId, SpaceId, StorageId),
-
-    case session:add_local_links(SessId, ?HELPER_HANDLES_TREE_ID,
-        make_link_name(StorageId, SpaceId), HandleId
-    ) of
-        ok ->
-            {ok, HelperHandle};
-        {error, Reason} ->
-            helper_handle:delete(HandleId),
-            {error, Reason}
+    case helper_handle:create(SessId, UserId, SpaceId, StorageId) of
+        {ok, #document{key = HandleId, value = HelperHandle}} ->
+            LinkName = make_link_name(StorageId, SpaceId),
+            case session:add_local_links(SessId, ?HELPER_HANDLES_TREE_ID, LinkName, HandleId) of
+                ok ->
+                    {ok, HelperHandle};
+                {error, Reason} ->
+                    helper_handle:delete(HandleId),
+                    {error, Reason}
+            end;
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------

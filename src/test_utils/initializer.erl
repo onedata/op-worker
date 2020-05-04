@@ -1534,10 +1534,18 @@ storage_mock_teardown(Workers) ->
 %%--------------------------------------------------------------------
 -spec maybe_set_imported_storage_value(proplists:proplist()) -> boolean().
 maybe_set_imported_storage_value(ProviderConfig) ->
-    case proplists:get_value(<<"imported_storage">>, ProviderConfig) of
-        <<"true">> -> true;
-        _ -> false
-    end.
+    proplists:get_value(<<"imported_storage">>, ProviderConfig, false).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Returns true if storage configured by ProviderConfig should have
+%% imported storage value set to true.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_enable_luma(proplists:proplist()) -> boolean().
+maybe_enable_luma(ProviderConfig) ->
+    proplists:get_value(<<"luma">>, ProviderConfig, false).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1553,7 +1561,7 @@ setup_storage(Worker, Domain, ProviderConfig, Config) ->
                 undefined ->
                     ok;
                 StorageId ->
-                    on_space_supported(Worker, StorageId, maybe_set_imported_storage_value(ProviderConfig))
+                    on_space_supported(Worker, StorageId, ProviderConfig)
             end;
         StorageName ->
             StorageId = case ?config({storage_id, Domain}, Config) of
@@ -1561,7 +1569,7 @@ setup_storage(Worker, Domain, ProviderConfig, Config) ->
                 undefined -> StorageName;
                 StId -> StId
             end,
-            on_space_supported(Worker, StorageId, maybe_set_imported_storage_value(ProviderConfig))
+            on_space_supported(Worker, StorageId, ProviderConfig)
     end.
 
 %%--------------------------------------------------------------------
@@ -1571,9 +1579,14 @@ setup_storage(Worker, Domain, ProviderConfig, Config) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec on_space_supported(atom(), storage:id(), boolean()) -> any().
-on_space_supported(Worker, StorageId, ImportedStorage) ->
-    case ImportedStorage of
+on_space_supported(Worker, StorageId, ProviderConfig) ->
+    case maybe_set_imported_storage_value(ProviderConfig) of
         true -> ok = rpc:call(Worker, storage_config, set_imported_storage, [StorageId, true]);
+        false -> ok
+    end,
+
+    case maybe_enable_luma(ProviderConfig) of
+        true -> ok = rpc:call(Worker, storage_config, set_luma_config, [StorageId, #luma_config{url = <<"luma_url">>}]);
         false -> ok
     end.
 

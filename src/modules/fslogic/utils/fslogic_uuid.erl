@@ -20,6 +20,7 @@
 -export([user_root_dir_uuid/1, user_root_dir_guid/1, root_dir_guid/0]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, space_dir_uuid_to_spaceid/1, spaceid_to_space_dir_guid/1]).
+-export([is_space_owner/1, unpack_space_owner/1]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
 -define(SPACE_ROOT_PREFIX, "space_").
@@ -147,6 +148,18 @@ is_space_dir_uuid(_) -> false.
 -spec space_dir_uuid_to_spaceid(file_meta:uuid()) -> od_space:id().
 space_dir_uuid_to_spaceid(<<?SPACE_ROOT_PREFIX, SpaceId/binary>>) ->
     SpaceId.
+
+-spec is_space_owner(od_user:id()) -> boolean().
+is_space_owner(<<?SPACE_OWNER_PREFIX_STR, _SpaceId/binary>>) ->
+    true;
+is_space_owner(_) ->
+    false.
+
+-spec unpack_space_owner(od_user:id()) -> {ok, od_space:id()} | {error, term()}.
+unpack_space_owner(<<?SPACE_OWNER_PREFIX_STR, SpaceId/binary>>) ->
+    {ok, SpaceId};
+unpack_space_owner(_) ->
+    {error, not_space_owner}.
 
 %%%===================================================================
 %%% Internal functions
