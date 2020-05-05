@@ -181,14 +181,14 @@ check_owner_principal_permission_test() ->
 
 check_group_principal_permission_test() ->
     Id1 = <<"id1">>,
-    Gid1 = <<"gid1">>,
     Principal = <<"GROUP@">>,
     FileGuid = <<"file_guid">>,
+    SpaceId = <<"space">>,
     FileDoc = #document{key = FileGuid, value = #file_meta{}},
-    FileCtx = file_ctx:new_by_doc(FileDoc, <<"space">>, undefined),
+    FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId, undefined),
     meck:new(file_ctx, [passthrough]),
     meck:expect(file_ctx, get_file_doc, fun(Ctx) -> {FileDoc, Ctx} end),
-    User1 = #document{key = Id1, value = #od_user{eff_groups = [Gid1]}},
+    User1 = #document{key = Id1, value = #od_user{eff_spaces = [SpaceId]}},
     Ace5 = #access_control_entity{acetype = ?allow_mask, aceflags = ?no_flags_mask, identifier = Principal, acemask = ?read_mask},
     Ace6 = #access_control_entity{acetype = ?deny_mask, aceflags = ?no_flags_mask, identifier = Principal, acemask = ?write_mask},
     % read permission
