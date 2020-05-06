@@ -214,6 +214,7 @@ upgrade_cluster(1) ->
 %% @end
 %%--------------------------------------------------------------------
 on_cluster_ready() ->
+    fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
     gs_worker:on_cluster_ready().
 

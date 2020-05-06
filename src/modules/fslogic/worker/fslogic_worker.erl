@@ -168,7 +168,6 @@ init(_Args) ->
         {fun session_manager:create_guest_session/0, []}
     ]),
 
-    fslogic_delete:cleanup_opened_files(),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -662,7 +661,6 @@ periodical_spaces_autocleaning_check() ->
         {ok, SpaceIds} ->
             MyNode = node(),
             lists:foreach(fun(SpaceId) ->
-                % MW_CHECK - serwis
                 case datastore_key:responsible_node(SpaceId) of
                     MyNode -> autocleaning_api:check(SpaceId);
                     _ -> ok

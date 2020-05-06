@@ -81,6 +81,7 @@ cancel_run(SpaceId, ARId) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec check(od_space:id()) -> ok | {ok, autocleaning:run_id()} | {error, term()}.
+% Czemu jest to wolane z fslogic i z checkera?
 check(SpaceId) ->
     case file_popularity_api:is_enabled(SpaceId) of
         true ->

@@ -80,7 +80,7 @@ handle_file_deleted_on_synced_storage(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec cleanup_opened_files() -> ok.
 cleanup_opened_files() ->
-    case file_handles:list_local() of
+    case file_handles:list() of
         {ok, Docs} ->
             RemovedFiles = lists:filter(fun(Doc) -> file_handles:is_removed(Doc) end, Docs),
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
