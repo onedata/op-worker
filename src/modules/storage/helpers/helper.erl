@@ -282,7 +282,7 @@ is_rename_supported_on(?POSIX_HELPER_NAME) -> true;
 is_rename_supported_on(?GLUSTERFS_HELPER_NAME) -> true;
 is_rename_supported_on(?NULL_DEVICE_HELPER_NAME) -> true;
 is_rename_supported_on(?WEBDAV_HELPER_NAME) -> true;
-is_rename_supported_on(#helper{name = HelperName}) -> is_sync_supported_on(HelperName);
+is_rename_supported_on(#helper{name = HelperName}) -> is_rename_supported_on(HelperName);
 is_rename_supported_on(_) -> false.
 
 %%%===================================================================

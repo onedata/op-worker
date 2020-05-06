@@ -352,8 +352,6 @@
     mode = 0 :: file_meta:posix_permissions(),
     acl = [] :: acl:acl(),
     owner :: od_user:id(),
-    group_owner :: undefined | od_group:id(),
-    % TODO a co z powyższym? ^^?  przydaloby sie kiedys wywalić
     synced_storage :: undefined | storage:id(),
     synced_gid :: undefined | non_neg_integer(),
     is_scope = false :: boolean(),
@@ -399,9 +397,9 @@
 %% Model that stores reverse local user mappings.
 %% Documents are stored per storage (their keys are ids of storages).
 -record(luma_reverse_cache, {
-    users = #{} :: #{luma:uid() => od_user:id()},
-    acl_users = #{} :: #{luma:acl_who() => od_user:id()},
-    acl_groups = #{} ::  #{luma:acl_who() => od_group:id()}
+    users = #{} :: luma_reverse_cache:internal_map(),
+    acl_users = #{} :: luma_reverse_cache:internal_map(),
+    acl_groups = #{} ::  luma_reverse_cache:internal_map()
 }).
 
 %% Model that maps space to storage

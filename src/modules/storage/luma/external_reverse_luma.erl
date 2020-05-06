@@ -37,7 +37,7 @@
 %%      <<"idp">> => binary(),
 %%      <<"subjectId">> => binary()
 %% }
--type user_response() :: #{binary() => binary()}.
+-type user_response() :: json_utils:json_map().
 
 %% Group response expected format is represented as a map:
 %% #{
@@ -50,7 +50,7 @@
 %%      <<"idp">> => binary(),
 %%      <<"idpEntitlement">> => binary()
 %% }
--type group_response() :: #{binary() => binary()}.
+-type group_response() :: json_utils:json_map().
 
 %% Mapping user schemes
 -define(ONEDATA_USER_SCHEME, <<"onedataUser">>).

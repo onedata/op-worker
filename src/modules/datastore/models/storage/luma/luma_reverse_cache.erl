@@ -40,6 +40,8 @@
 -type internal_value() :: od_user:id() | od_group:id().
 -type internal_map() :: #{internal_key() => internal_value()}.
 
+-export_type([internal_map/0]).
+
 -define(UID, uid).
 -define(ACL_USER, acl_user).
 -define(ACL_GROUP, acl_group).
@@ -58,7 +60,7 @@ map_uid_to_onedata_user(Storage, Uid) ->
 -spec map_acl_user_to_onedata_user(storage:data(), luma:acl_who()) ->
     {ok, od_user:id()} | {error, term()}.
 map_acl_user_to_onedata_user(Storage, AclUser) ->
-    map(Storage, AclUser, ?ACL_GROUP).
+    map(Storage, AclUser, ?ACL_USER).
 
 -spec map_acl_group_to_onedata_group(storage:data(), luma:acl_who()) ->
     {ok, od_group:id()} | {error, term()}.
@@ -85,24 +87,22 @@ map(Storage, Key, Mode) ->
 
 -spec get_internal(storage:data(), internal_key(), mode()) ->
     {ok, internal_value()} | {error, term()}.
-get_internal(#document{value = ReverseLumaCache}, Key, Flag) ->
-    get_internal(ReverseLumaCache, Key, Flag);
-get_internal(#luma_reverse_cache{users = Users}, Key, ?UID) ->
-    maps_get(Key, Users);
-get_internal(#luma_reverse_cache{acl_users = AclUsers}, Key, ?ACL_USER) ->
-    maps_get(Key, AclUsers);
-get_internal(#luma_reverse_cache{acl_groups = AclGroups}, Key, ?ACL_GROUP) ->
-    maps_get(Key, AclGroups);
-get_internal(Storage, Key, Flag) ->
+get_internal(Storage, Key, Mode) ->
     StorageId = storage:get_id(Storage),
     case datastore_model:get(?CTX, StorageId) of
-        {ok, Doc} -> get_internal(Doc, Key, Flag);
-        Error -> Error
+        {ok, #document{value = LRC}} ->
+            case Mode of
+                ?UID -> get_from_internal_map(Key, LRC#luma_reverse_cache.users);
+                ?ACL_USER -> get_from_internal_map(Key, LRC#luma_reverse_cache.acl_users);
+                ?ACL_GROUP -> get_from_internal_map(Key, LRC#luma_reverse_cache.acl_groups)
+            end;
+        Error ->
+            Error
     end.
 
--spec maps_get(internal_key(), internal_map()) ->
+-spec get_from_internal_map(internal_key(), internal_map()) ->
     {ok, internal_value()} | {error, not_found}.
-maps_get(Key, Map) ->
+get_from_internal_map(Key, Map) ->
     case maps:get(Key, Map, undefined) of
         undefined -> {error, not_found};
         Value -> {ok, Value}
@@ -137,16 +137,19 @@ cache(StorageId, AclUser, UserId, ?ACL_USER) ->
 cache(StorageId, AclGroup, GroupId, ?ACL_GROUP) ->
     update(StorageId, cache_acl_group_fun(AclGroup, GroupId)).
 
+-spec cache_uid_fun(luma:uid(), od_user:id()) -> diff().
 cache_uid_fun(Uid, UserId) ->
     fun(RLC = #luma_reverse_cache{users = Users}) ->
         {ok, RLC#luma_reverse_cache{users = Users#{Uid => UserId}}}
     end.
 
+-spec cache_acl_user_fun(luma:acl_who(), od_user:id()) -> diff().
 cache_acl_user_fun(AclUser, UserId) ->
     fun(RLC = #luma_reverse_cache{acl_users = AclUsers}) ->
         {ok, RLC#luma_reverse_cache{acl_users = AclUsers#{AclUser => UserId}}}
     end.
 
+-spec cache_acl_group_fun(luma:acl_who(), od_group:id()) -> diff().
 cache_acl_group_fun(AclGroup, GroupId) ->
     fun(RLC = #luma_reverse_cache{acl_groups = AclGroups}) ->
         {ok, RLC#luma_reverse_cache{acl_groups = AclGroups#{AclGroup => GroupId}}}
@@ -154,7 +157,7 @@ cache_acl_group_fun(AclGroup, GroupId) ->
 
 -spec update(storage:id(), diff()) -> ok.
 update(StorageId, Diff) ->
-    {ok, Default} = Diff(#luma_spaces_cache{}),
+    {ok, Default} = Diff(#luma_reverse_cache{}),
     ok = ?extract_ok(datastore_model:update(?CTX, StorageId, Diff, Default)).
 
 %%%===================================================================

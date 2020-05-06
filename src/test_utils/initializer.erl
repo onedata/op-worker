@@ -699,6 +699,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
     HarvestersSetup = proplists:get_value(<<"harvesters">>, GlobalSetup, []),
     StoragesSetup = proplists:get_value(<<"storages">>, GlobalSetup, []),
+    LumaConfigFile = proplists:get_value(<<"luma_config">>, GlobalSetup, undefined),
+
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
 
     lists:foreach(fun({_, SpaceConfig}) ->
@@ -838,6 +840,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
             end
         end, Providers0)
     end, SpacesSetup),
+
+    setup_luma(StoragesSetupMap, LumaConfigFile, Config),
 
     %% Set expiration time for session to value specified in Config or to 1d.
     FuseSessionTTL = case ?config(fuse_session_grace_period_seconds, Config) of
@@ -1536,16 +1540,6 @@ storage_mock_teardown(Workers) ->
 maybe_set_imported_storage_value(ProviderConfig) ->
     proplists:get_value(<<"imported_storage">>, ProviderConfig, false).
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns true if storage configured by ProviderConfig should have
-%% imported storage value set to true.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_enable_luma(proplists:proplist()) -> boolean().
-maybe_enable_luma(ProviderConfig) ->
-    proplists:get_value(<<"luma">>, ProviderConfig, false).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1578,16 +1572,79 @@ setup_storage(Worker, Domain, ProviderConfig, Config) ->
 %% Add space storage mapping
 %% @end
 %%--------------------------------------------------------------------
--spec on_space_supported(atom(), storage:id(), boolean()) -> any().
+-spec on_space_supported(atom(), storage:id(), proplists:proplist()) -> any().
 on_space_supported(Worker, StorageId, ProviderConfig) ->
     case maybe_set_imported_storage_value(ProviderConfig) of
         true -> ok = rpc:call(Worker, storage_config, set_imported_storage, [StorageId, true]);
         false -> ok
-    end,
+    end.
 
-    case maybe_enable_luma(ProviderConfig) of
-        true -> ok = rpc:call(Worker, storage_config, set_luma_config, [StorageId, #luma_config{url = <<"luma_url">>}]);
-        false -> ok
+-spec setup_luma(map(), binary(), proplists:proplist()) -> ok.
+setup_luma(StoragesSetupMap, LumaConfigFile, Config) ->
+    maps:fold(fun(ProviderDomain, ProviderStorageConfig, _) ->
+        Workers = get_same_domain_workers(Config, binary_to_atom(ProviderDomain, utf8)),
+        maps:fold(fun(StorageId, StorageConfig, _) ->
+            case maps:get(<<"luma">>, StorageConfig, false) of
+                true ->
+                    {_, []} = rpc:multicall(Workers, storage_config, set_luma_config, [StorageId, #luma_config{url = <<"TEST LUMA URL">>}]);
+                false ->
+                    ok
+            end
+        end, undefined, ProviderStorageConfig),
+        setup_luma_mock(Workers, LumaConfigFile, Config)
+    end, undefined, StoragesSetupMap).
+
+-spec setup_luma_mock([node()], binary(), proplists:proplist()) -> ok.
+setup_luma_mock(Workers, LumaConfigFile, Config) ->
+    LumaConfigPath = filename:join([proplists:get_value(data_dir, Config), LumaConfigFile]),
+    {ok, ConfigJSONBin} = file:read_file(LumaConfigPath),
+    LumaConfig = json_utils:decode(ConfigJSONBin),
+    ok = test_utils:mock_new(Workers, luma_utils),
+    ok = test_utils:mock_expect(Workers, luma_utils, http_client_post, fun(Url, _ReqHeaders, ReqBody) ->
+        case lists:last(binary:split(Url, <<"/">>, [global])) of
+            <<"onedata_user_to_credentials">> ->
+                mock_onedata_user_to_credentials_luma_endpoint(ReqBody, LumaConfig);
+            <<"default_owner">> ->
+                mock_space_default_owner_endpoint(ReqBody, LumaConfig);
+            <<"default">> ->
+                mock_space_default_display_owner_endpoint(ReqBody, LumaConfig)
+        end
+    end).
+
+-spec mock_onedata_user_to_credentials_luma_endpoint(binary(), json_utils:json_map()) -> term().
+mock_onedata_user_to_credentials_luma_endpoint(ReqBody, LumaConfig) ->
+    Body = json_utils:decode(ReqBody),
+    StorageId = maps:get(<<"storageId">>, Body),
+    UserId = maps:get(<<"onedataUserId">>, Body),
+    case kv_utils:get([StorageId, <<"users">>, UserId], LumaConfig, undefined) of
+        undefined ->
+            {ok, 404, undefined, json_utils:encode(#{})};
+        Response ->
+            {ok, 200, undefined, json_utils:encode(Response)}
+    end.
+
+-spec mock_space_default_owner_endpoint(binary(), json_utils:json_map()) -> term().
+mock_space_default_owner_endpoint(ReqBody, LumaConfig) ->
+    Body = json_utils:decode(ReqBody),
+    StorageId = maps:get(<<"storageId">>, Body),
+    SpaceId = maps:get(<<"spaceId">>, Body),
+    case kv_utils:get([StorageId, <<"spaces">>, SpaceId, <<"defaultOwner">>], LumaConfig, undefined) of
+        undefined ->
+            {ok, 404, undefined, json_utils:encode(#{})};
+        Response ->
+            {ok, 200, undefined, json_utils:encode(Response)}
+    end.
+
+-spec mock_space_default_display_owner_endpoint(binary(), json_utils:json_map()) -> term().
+mock_space_default_display_owner_endpoint(ReqBody, LumaConfig) ->
+    Body = json_utils:decode(ReqBody),
+    StorageId = maps:get(<<"storageId">>, Body),
+    SpaceId = maps:get(<<"spaceId">>, Body),
+    case kv_utils:get([StorageId, <<"spaces">>, SpaceId, <<"displayOwner">>], LumaConfig, undefined) of
+        undefined ->
+            {ok, 404, undefined, json_utils:encode(#{})};
+        Response ->
+            {ok, 200, undefined, json_utils:encode(Response)}
     end.
 
 

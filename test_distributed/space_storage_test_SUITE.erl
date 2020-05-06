@@ -91,7 +91,8 @@ space_directory_mode_and_owner_test(Config) ->
                     expected_owner => ?MOUNT_DIR_OWNER,
                     expected_display_owner => ?MOUNT_DIR_OWNER
                 }
-            ],
+            ]
+                    ,
             ?SPACE_ID2 => [
                 #{
                     user => ?USER1,
@@ -855,7 +856,6 @@ init_per_testcase(Config) ->
 init_per_testcase(default, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     clean_mapping_caches(W1),
-    mock_external_luma_responses(W1),
     lfm_proxy:init(Config);
 init_per_testcase(_Case, Config) ->
     Config.
@@ -868,7 +868,6 @@ end_per_testcase(default, Config) ->
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     clean_spaces(Workers),
     lists:foreach(fun(W) -> clean_posix_storage_mountpoints(W) end, Workers),
-    unmock_external_luma_responses(W1),
     lfm_proxy:teardown(Config);
 end_per_testcase(_Case, _Config) ->
     ok.
@@ -1043,42 +1042,4 @@ run_test(TestName, TestBaseFun, TestNo, Config, SpaceId, TestArgs) ->
             ct:timetrap({hours, 10}),
             ct:sleep({hours, 10}),
             false
-    end.
-
-mock_external_luma_responses(Worker) ->
-    ok = test_utils:mock_new(Worker, luma_utils),
-    ok = test_utils:mock_expect(Worker, luma_utils, http_client_post, fun(Url, _ReqHeaders, ReqBody) ->
-        case lists:last(binary:split(Url, <<"/">>, [global])) of
-            <<"onedata_user_to_credentials">> ->
-                mock_onedata_user_to_credentials_endpoint(ReqBody);
-            <<"default_owner">> ->
-                mock_endpoints_per_support(ReqBody, ?LUMA_DEFAULT_OWNER_MOCK);
-            <<"default">> ->
-                mock_endpoints_per_support(ReqBody, ?LUMA_DEFAULT_DISPLAY_OWNER_MOCK)
-        end
-    end).
-
-mock_onedata_user_to_credentials_endpoint(ReqBody) ->
-    Body = json_utils:decode(ReqBody),
-    UserId = maps:get(<<"onedataUserId">>, Body),
-    StorageId = maps:get(<<"storageId">>, Body),
-    case maps:get({UserId, StorageId}, ?LUMA_MAPPING_MOCK, undefined) of
-        undefined ->
-            {ok, 404, undefined, json_utils:encode(#{})};
-        Response ->
-            {ok, 200, undefined, json_utils:encode(Response)}
-    end.
-
-unmock_external_luma_responses(Worker) ->
-    ok = test_utils:mock_unload(Worker, [external_luma]).
-
-mock_endpoints_per_support(ReqBody, MockMap) ->
-    Body = json_utils:decode(ReqBody),
-    SpaceId = maps:get(<<"spaceId">>, Body),
-    StorageId = maps:get(<<"storageId">>, Body),
-    case maps:get({SpaceId, StorageId}, MockMap, undefined) of
-        undefined ->
-            {ok, 404, undefined, json_utils:encode(#{})};
-        Response ->
-            {ok, 200, undefined, json_utils:encode(Response)}
     end.

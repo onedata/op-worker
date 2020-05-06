@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get/2, get/3, add_helper_specific_fields/4, delete/1]).
+-export([get/2, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -42,17 +42,11 @@
 -spec get(storage(), od_user:id()) ->
     {ok, luma_user:credentials()} | {error, term()}.
 get(Storage, UserId) ->
-    get(Storage, UserId, ?ROOT_SESS_ID).
-
-
--spec get(storage(), od_user:id(), session:id()) ->
-    {ok, luma_user:credentials()} | {error, term()}.
-get(Storage, UserId, SessionId) ->
    case get_internal(Storage, UserId) of
        {ok, StorageUser} ->
            {ok, StorageUser};
        {error, not_found} ->
-           acquire_and_cache(Storage, UserId, SessionId)
+           acquire_and_cache(Storage, UserId)
    end.
 
 
@@ -79,17 +73,14 @@ get_internal(Storage, UserId) ->
     end.
 
 
--spec acquire_and_cache(storage(), od_user:id(), session:id()) ->
+-spec acquire_and_cache(storage(), od_user:id()) ->
     {ok, luma_user:credentials()} | {error, term()}.
-acquire_and_cache(Storage, UserId, SessionId) ->
+acquire_and_cache(Storage, UserId) ->
     % ensure Storage is a document
     {ok, StorageData} = storage:get(Storage),
     case acquire(StorageData, UserId) of
         {ok, StorageCredentials, DisplayUid} ->
-            Helper = storage:get_helper(StorageData),
-            {ok, StorageCredentials2} =
-                add_helper_specific_fields(UserId, SessionId, StorageCredentials, Helper),
-            LumaUserCredentials = luma_user:new(StorageCredentials2, DisplayUid),
+            LumaUserCredentials = luma_user:new(StorageCredentials, DisplayUid),
             cache(storage:get_id(StorageData), UserId, LumaUserCredentials),
             {ok, LumaUserCredentials};
         Error ->
@@ -99,6 +90,9 @@ acquire_and_cache(Storage, UserId, SessionId) ->
 
 -spec acquire(storage:data(), od_user:id()) -> 
     {ok, luma:storage_credentials(), luma:uid()} | {error, term()}.
+acquire(Storage, ?ROOT_USER_ID) ->
+    Helper = storage:get_helper(Storage),
+    {ok, helper:get_admin_ctx(Helper), ?ROOT_UID};
 acquire(Storage, UserId) ->
     IsSpaceOwner = fslogic_uuid:is_space_owner(UserId),
     case storage:is_luma_enabled(Storage) andalso not IsSpaceOwner of
@@ -131,88 +125,6 @@ acquire(Storage, UserId) ->
                     {ok, helper:get_admin_ctx(Helper), Uid}
             end
     end.
-
-
--spec add_helper_specific_fields(od_user:id(), session:id(), luma:storage_credentials(),
-    helpers:helper()) -> any().
-add_helper_specific_fields(UserId, SessionId, StorageCredentials, Helper) ->
-    case helper:get_name(Helper) of
-        ?WEBDAV_HELPER_NAME ->
-            add_webdav_specific_fields(UserId, SessionId, StorageCredentials, Helper);
-        _Other ->
-            {ok, StorageCredentials}
-    end.
-
-
-add_webdav_specific_fields(UserId, SessionId, StorageCredentials = #{
-    <<"credentialsType">> := <<"oauth2">>
-}, Helper) ->
-    fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, Helper);
-add_webdav_specific_fields(_UserId, _SessionId, StorageCredentials, _Helper) ->
-    {ok, StorageCredentials}.
-
-
--spec fill_in_webdav_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(),
-    helpers:helper()) -> {ok, luma:storage_credentials()} | {error, term()}.
-fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, Helper = #helper{
-    args = #{<<"oauth2IdP">> := OAuth2IdP}
-}) ->
-    fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, Helper, OAuth2IdP);
-fill_in_webdav_oauth2_token(UserId, SessionId, UserCtx, Helper = #helper{}) ->
-    % OAuth2IdP was not explicitly set, try to infer it
-    case provider_logic:zone_get_offline_access_idps() of
-        {ok, [OAuth2IdP]} ->
-            fill_in_webdav_oauth2_token(UserId, SessionId, UserCtx, Helper, OAuth2IdP);
-        {ok, []} ->
-            ?error("Empty list of identity providers retrieved from Onezone"),
-            {error, missing_identity_provider};
-        {ok, _} ->
-            ?error("Ambiguous list of identity providers retrieved from Onezone"),
-            {error, ambiguous_identity_provider}
-    end.
-
-
--spec fill_in_webdav_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(),
-    helpers:helper(), binary()) -> {ok, luma:storage_credentials()} | {error, term()}.
-fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCredentials = #{
-    <<"onedataAccessToken">> := OnedataAccessToken,
-    <<"adminId">> := AdminId
-}, _Helper, OAuth2IdP) ->
-    TokenCredentials = auth_manager:build_token_credentials(
-        OnedataAccessToken, undefined, undefined,
-        undefined, disallow_data_access_caveats
-    ),
-    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(
-        AdminId, TokenCredentials, OAuth2IdP
-    ),
-    AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCredentials),
-    {ok, AdminCtx2#{
-        <<"accessToken">> => IdPAccessToken,
-        <<"accessTokenTTL">> => integer_to_binary(TTL)
-    }};
-fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, #helper{
-    insecure = false
-}, OAuth2IdP) ->
-    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(UserId, SessionId, OAuth2IdP),
-    UserCtx2 = maps:remove(<<"onedataAccessToken">>, StorageCredentials),
-    {ok, UserCtx2#{
-        <<"accessToken">> => IdPAccessToken,
-        <<"accessTokenTTL">> => integer_to_binary(TTL)
-    }};
-fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCredentials = #{
-    <<"onedataAccessToken">> := OnedataAccessToken,
-    <<"adminId">> := AdminId
-}, #helper{insecure = true}, OAuth2IdP) ->
-    TokenCredentials = auth_manager:build_token_credentials(
-        OnedataAccessToken, undefined, undefined,
-        undefined, disallow_data_access_caveats
-    ),
-    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(AdminId, TokenCredentials, OAuth2IdP),
-    AdminCtx2 = maps:remove(<<"onedataAccessToken">>, AdminCredentials),
-    {ok, AdminCtx2#{
-        <<"accessToken">> => IdPAccessToken,
-        <<"accessTokenTTL">> => integer_to_binary(TTL)
-    }}.
 
 
 -spec ensure_display_uid_defined(luma:uid() | undefined, luma:storage_credentials(),

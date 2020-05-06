@@ -214,7 +214,7 @@ init_per_testcase(Case, Config) when
 ->
     [W | _] = ?config(op_worker_nodes, Config),
     enable_webdav_test_mode_insecure_storage(W, initializer:get_storage_id(W)),
-    test_utils:mock_new(W, [helpers, helpers_fallback, helpers_reload], [passthrough]),
+    test_utils:mock_new(W, [helpers, helpers_reload], [passthrough]),
     Config;
 
 init_per_testcase(Case, Config) when
@@ -225,13 +225,13 @@ init_per_testcase(Case, Config) when
 ->
     [W | _] = ?config(op_worker_nodes, Config),
     enable_webdav_test_mode_secure_storage(W, initializer:get_storage_id(W)),
-    test_utils:mock_new(W, [helpers, helpers_fallback, helpers_reload], [passthrough]),
+    test_utils:mock_new(W, [helpers, helpers_reload], [passthrough]),
     mock_luma(W),
     Config.
 
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(W, [helpers_fallback, helpers_reload, helpers, luma_proxy]),
+    ok = test_utils:mock_unload(W, [helpers_reload, helpers, external_luma]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?SESSION(W, Config)]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?ROOT_SESS_ID]),
     Config.
@@ -246,11 +246,13 @@ end_per_suite(Config) ->
 %%%===================================================================
 
 mock_luma(Worker) ->
-    ok = test_utils:mock_new(Worker, luma_proxy),
-    ok = test_utils:mock_expect(Worker, luma_proxy, get_user_ctx, fun(_, _, _, _) ->
+    ok = test_utils:mock_new(Worker, external_luma),
+    ok = test_utils:mock_expect(Worker, external_luma, map_onedata_user_to_credentials, fun(_, _) ->
         {ok, #{
-            <<"credentialsType">> => <<"oauth2">>,
-            <<"credentials">> => ?USER_CREDENTIALS
+            <<"storageCredentials">> => #{
+                <<"credentialsType">> => <<"oauth2">>,
+                <<"credentials">> => ?USER_CREDENTIALS
+            }
         }}
     end).
 

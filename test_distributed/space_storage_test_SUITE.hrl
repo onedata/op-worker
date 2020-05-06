@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% Macros used in space_storage_test_SUITE
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -82,61 +82,5 @@
 -define(MOUNT_DIR_OWNER, ?OWNER(?MOUNT_DIR_UID, ?MOUNT_DIR_GID)).
 
 -define(OWNER(Uid, Gid), #{uid => Uid, gid => Gid}).
-
-% Mocked LUMA mappings
--define(LUMA_MAPPING_MOCK, #{
-        {?USER1, ?STORAGE_ID2} => #{
-            <<"storageCredentials">> => #{<<"uid">> => 2001},
-            <<"displayUid">> => <<"2221">>
-        },
-        {?USER2, ?STORAGE_ID2} => #{
-            <<"storageCredentials">> => #{<<"uid">> => <<"2002">>}
-        },
-        {?USER4, ?STORAGE_ID2} => #{
-            <<"storageCredentials">> => #{<<"uid">> => <<"forbidden type">>}
-        },
-        {?USER1, ?STORAGE_ID4} => #{
-            <<"storageCredentials">> => #{<<"uid">> => <<"4001">>},
-            <<"displayUid">> => 4441
-        },
-        {?USER2, ?STORAGE_ID4} => #{
-            <<"storageCredentials">> => #{<<"uid">> => 4002}
-        },
-        {?USER4, ?STORAGE_ID4} => #{
-            <<"storageCredentials">> => #{<<"uid">> => 4004},
-            <<"displayUid">> => <<"forbidden type">>
-        },
-        {?USER1, ?STORAGE_ID6} => #{
-            <<"storageCredentials">> => #{
-                <<"accessKey">> => <<"AccessKey">>,
-                <<"secretKey">> => <<"SecretKey">>
-            },
-            <<"displayUid">> => 6661
-        },
-        {?USER2, ?STORAGE_ID6} => #{
-            <<"storageCredentials">> => #{
-                <<"accessKey">> => <<"AccessKey">>,
-                <<"secretKey">> => <<"SecretKey">>
-            }
-        },
-        {?USER4, ?STORAGE_ID6} => #{
-            <<"storageCredentials">> => #{
-                <<"accessKey">> => <<"AccessKey">>
-                % secretKey is intentionally missing
-            }
-        }
-    }
-).
-
--define(LUMA_DEFAULT_OWNER_MOCK, #{
-    {?SPACE_ID2, ?STORAGE_ID2} => #{<<"uid">> => 2000, <<"gid">> => 2000},
-    {?SPACE_ID4, ?STORAGE_ID4} => #{<<"uid">> => 4000, <<"gid">> => 4000}
-}).
-
--define(LUMA_DEFAULT_DISPLAY_OWNER_MOCK, #{
-    {?SPACE_ID2, ?STORAGE_ID2} => #{<<"uid">> => 2222, <<"gid">> => 2222},
-    {?SPACE_ID4, ?STORAGE_ID4} => #{<<"uid">> => 4444, <<"gid">> => 4444},
-    {?SPACE_ID6, ?STORAGE_ID6} => #{<<"uid">> => 6666, <<"gid">> => 6666}
-}).
 
 -endif.

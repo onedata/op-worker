@@ -1,0 +1,107 @@
+{
+    "/mnt/st2": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 2001
+                },
+                "displayUid": 2221
+            },
+            "user2": {
+                "storageCredentials": {
+                    "uid": 2002
+                }
+            },
+            "user4": {
+                "storageCredentials": {
+                    "uid": "forbidden type"
+                }
+            }
+        },
+        "spaces": {
+            "space2": {
+                "defaultOwner": {
+                    "uid": 2000,
+                    "gid": 2000
+                },
+                "displayOwner": {
+                    "uid": 2222,
+                    "gid": 2222
+                }
+            }
+        }
+    },
+    "/mnt/st4": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 4001
+                },
+                "displayUid": 4441
+            },
+            "user2": {
+                "storageCredentials": {
+                    "uid": 4002
+                }
+            },
+            "user4": {
+                "storageCredentials": {
+                    "uid": 4004
+                },
+                "displayUid": "forbidden type"
+            }
+        },
+        "spaces": {
+            "space4": {
+                "defaultOwner": {
+                    "uid": 4000,
+                    "gid": 4000
+                },
+                "displayOwner": {
+                    "uid": 4444,
+                    "gid": 4444
+                }
+            }
+        }
+    },
+    "s3_luma": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey",
+                    "secretKey": "SecretKey"
+                },
+                "displayUid": 6661
+            },
+            "user2": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey",
+                    "secretKey": "SecretKey"
+                }
+            },
+            "user4": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey"
+                }
+            }
+        },
+        "spaces": {
+            "space6": {
+                "displayOwner": {
+                    "uid": 6666,
+                    "gid": 6666
+                }
+            } 
+        }
+    },
+    "/mnt/st7": {
+        "users": {},
+        "spaces": {
+            "space7": {
+                "defaultOwner": { 
+                    "gid": 7000
+                }
+            }
+        }
+    }
+}

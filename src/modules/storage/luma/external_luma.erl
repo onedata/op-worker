@@ -29,12 +29,22 @@
     fetch_display_override_owner/2
 ]).
 
+%% User mapping request body is represented as a map:
+%% #{
+%%     <<"storageId">> => storage:id(), // guaranteed
+%%     <<"onedataUserId">> => od_user:id(),  // guaranteed
+%%     <<"idpIdentities">> => [idp_identity()], // guaranteed
+%%     <<"userDetails">> => additional_user_details() //optional
+%% }.
+-type user_mapping_request() :: json_utils:json_map().
+
+
 %% Idp identity is represented as a map:
 %% #{
 %%     <<"idp">> => binary(),
 %%     <<"subjectId">> => binary()
 %% }
--type idp_identity() :: map().
+-type idp_identity() ::json_utils:json_map().
 
 %% Additional user details are represented as a map:
 %% #{
@@ -43,7 +53,7 @@
 %%     <<"emails">> => [binary()]
 %%     <<"linkedAccounts">> => [od_user:linked_account()]
 %% }
--type additional_user_details() :: map().
+-type additional_user_details() :: json_utils:json_map().
 
 %% Expected result of mapping onedata user to user credentials is
 %% expressed in the form of the following map.
@@ -51,15 +61,16 @@
 %%     <<"storageCredentials">> => helpers:user_ctx(),
 %%     <<"displayUid">> => integer() // optional
 %% }
--type user_entry() :: map().
+-type user_entry() :: json_utils:json_map().
 
 %% Expected result of mapping space to default/display credentials for space
 %% #{
 %%     <<"uid">> => non_neg_integer(),
 %%     <<"gid">> => non_neg_integer()
 %% }
--type space_entry() :: map().
+-type space_entry() :: json_utils:json_map().
 
+-export_type([space_entry/0, user_entry/0]).
 
 %%%===================================================================
 %%% API functions
@@ -144,7 +155,7 @@ fetch_display_override_owner(SpaceId, Storage) ->
 %% Constructs user context request that will be sent to the external LUMA service.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_user_request_body(od_user:id(), storage:data()) -> Body :: binary().
+-spec prepare_user_request_body(od_user:id(), storage:data()) -> user_mapping_request().
 prepare_user_request_body(UserId, Storage) ->
     StorageId = storage:get_id(Storage),
     AdditionalUserDetails = get_additional_user_details(UserId),

@@ -98,7 +98,9 @@
                     "user1",
                     "user2"
                 ],
-                "groups": ["group1"],
+                "groups": [
+                    "group1"
+                ],
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st1",
@@ -118,8 +120,7 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st2",
-                        "supported_size": 10737418240,
-                        "luma": true
+                        "supported_size": 10737418240
                     }
                 }
             },
@@ -151,8 +152,7 @@
                     "p1": {
                         "storage": "/mnt/st4",
                         "supported_size": 10737418240,
-                        "imported_storage": true,
-                        "luma": true
+                        "imported_storage": true
                     }
                 }
             },
@@ -182,8 +182,7 @@
                 "providers": {
                     "p1": {
                         "storage": "s3_luma",
-                        "supported_size": 10737418240,
-                        "luma": true
+                        "supported_size": 10737418240
                     }
                 }
             },
@@ -199,11 +198,27 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st7",
-                        "supported_size": 10737418240,
-                        "luma": true
+                        "supported_size": 10737418240
                     }
                 }
             }
-        }
+        },
+        "storages": {
+            "p1": {
+                "/mnt/st2": {
+                    "luma": true
+                },
+                "/mnt/st4": {
+                    "luma": true
+                },
+                "s3_luma": {
+                    "luma": true
+                },
+                "/mnt/st7": {
+                    "luma": true
+                }
+            }
+        },
+        "luma_config": "luma.json"
     }
 }

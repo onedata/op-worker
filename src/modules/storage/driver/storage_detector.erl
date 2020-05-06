@@ -118,7 +118,7 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
     ok | ?ERROR_STORAGE_TEST_FAILED(_).
 verify_storage_on_all_nodes(Helper) ->
     AdminCtx = helper:get_admin_ctx(Helper),
-    {ok, AdminCtx2} = luma_users_cache:add_helper_specific_fields(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx, Helper),
+    {ok, AdminCtx2} = luma:add_helper_specific_fields(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx, Helper),
     {ok, [Node | Nodes]} = node_manager:get_cluster_nodes(),
     FileId = generate_file_id(),
     case create_test_file(Node, Helper, AdminCtx2, FileId) of
