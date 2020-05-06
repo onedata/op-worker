@@ -134,6 +134,7 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
 local_file_location_should_have_correct_uid_for_local_user(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
+    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(W1, SpaceId),
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
@@ -181,12 +182,17 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     lfm_proxy:close(W1, Handle2),
 
     %then
-    {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [?ROOT_SESS_ID, UserId, SpaceId]),
+    {ok, #{<<"uid">> := UidBin, <<"gid">> := GidBin}} =
+        rpc:call(W1, luma, map_to_storage_credentials, [UserId, SpaceId, StorageId]),
+    Uid = binary_to_integer(UidBin),
+    Gid = binary_to_integer(GidBin),
     {ok, CorrectFileInfo} =
         rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileToCompareFID])]),
     {ok, FileInfo} =
         rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileFID])]),
     ?assertEqual(Uid, FileInfo#file_info.uid),
+    ?assertNotEqual(0, FileInfo#file_info.uid),
+    ?assertEqual(Gid, FileInfo#file_info.gid),
     ?assertNotEqual(0, FileInfo#file_info.uid),
     ?assertEqual(CorrectFileInfo#file_info.uid, FileInfo#file_info.uid),
     ?assertEqual(CorrectFileInfo#file_info.gid, FileInfo#file_info.gid).
@@ -194,6 +200,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
 local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    {ok, StorageId} = storage_test_utils:get_supporting_storage_id(W1, SpaceId),
     ExternalUser = <<"external_user_id">>,
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
@@ -202,12 +209,6 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     FileMeta = #file_meta{
         mode = 8#777,
         name = <<"local_file_location_should_be_chowned_when_missing_user_appears1">>,
-        type = ?REGULAR_FILE_TYPE,
-        owner = ExternalUser
-    },
-    FileMeta2 = #file_meta{
-        mode = 8#777,
-        name = <<"local_file_location_should_be_chowned_when_missing_user_appears2">>,
         type = ?REGULAR_FILE_TYPE,
         owner = ExternalUser
     },
@@ -226,20 +227,6 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
             }
         }])
     ),
-    {ok, FileUuid2} = ?assertMatch(
-        {ok, _},
-        rpc:call(W1, file_meta, create, [{uuid, SpaceDirUuid}, #document{value = FileMeta2}])),
-    ?assertMatch(
-        {ok, _},
-        rpc:call(W1, times, create, [#document{
-            key = FileUuid2,
-            value = #times{
-                atime = CTime,
-                ctime = CTime,
-                mtime = CTime
-            }
-        }])
-    ),
 
     {ok, FileToCompareGUID} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>, 8#777),
@@ -251,39 +238,31 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     [$/ | FileToCompareFID] =
         binary_to_list(get_storage_file_id_by_uuid(W1, FileToCompareUUID)),
     [$/ | File1FID] = binary_to_list(get_storage_file_id_by_uuid(W1, FileUuid)),
-    [$/ | File2FID] = binary_to_list(get_storage_file_id_by_uuid(W1, FileUuid2)),
 
     %when
     rpc:call(W1, dbsync_events, change_replicated,
         [SpaceId, #document{key = FileUuid, value = FileMeta}]),
-    rpc:call(W1, dbsync_events, change_replicated,
-        [SpaceId, #document{key = FileUuid2, value = FileMeta2}]),
 
     FileGuid1 = file_id:pack_guid(FileUuid, SpaceId), % create delayed storage files
     {ok, Handle1} = lfm_proxy:open(W1, SessionId, {guid, FileGuid1}, read),
     lfm_proxy:close(W1, Handle1),
 
-    FileGuid2 = file_id:pack_guid(FileUuid2, SpaceId),
-    {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid2}, read),
-    lfm_proxy:close(W1, Handle2),
-
     % Simulate new user appearing
     rpc:call(W1, od_user, run_after, [create, [], {ok, #document{key = ExternalUser, value = #od_user{}}}]),
 
     %then
-    {Uid, _Gid} = rpc:call(W1, luma, get_posix_user_ctx, [?ROOT_SESS_ID, ExternalUser, SpaceId]),
+    {ok, #{<<"uid">> := UidBin, <<"gid">> := GidBin}} =
+        rpc:call(W1, luma, map_to_storage_credentials, [ExternalUser, SpaceId, StorageId]),
+    Uid = binary_to_integer(UidBin),
+    Gid = binary_to_integer(GidBin),
     {ok, CorrectFileInfo} =
         rpc:call(W1, file, read_file_info, [filename:join([StorageDir, FileToCompareFID])]),
     {ok, FileInfo1} =
         rpc:call(W1, file, read_file_info, [filename:join([StorageDir, File1FID])]),
-    {ok, FileInfo2} =
-        rpc:call(W1, file, read_file_info, [filename:join([StorageDir, File2FID])]),
-    ?assertEqual(Uid, FileInfo1#file_info.uid),
-    ?assertEqual(Uid, FileInfo2#file_info.uid),
+    ?assertEqual(Uid, FileInfo1#file_info.uid, 10),
+    ?assertEqual(Gid, FileInfo1#file_info.gid, 10),
     ?assertNotEqual(CorrectFileInfo#file_info.uid, FileInfo1#file_info.uid),
-    ?assertNotEqual(CorrectFileInfo#file_info.uid, FileInfo2#file_info.uid),
-    ?assertEqual(CorrectFileInfo#file_info.gid, FileInfo1#file_info.gid),
-    ?assertEqual(CorrectFileInfo#file_info.gid, FileInfo2#file_info.gid).
+    ?assertEqual(CorrectFileInfo#file_info.gid, FileInfo1#file_info.gid, 10).
 
 write_should_add_blocks_to_file_location(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),

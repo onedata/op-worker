@@ -513,21 +513,23 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 
     {Storage, SourceFileCtx5} = file_ctx:get_storage(SourceFileCtx4),
     Helper = storage:get_helper(Storage),
+    StoragePathType = helper:get_storage_path_type(Helper),
     StorageId = storage:get_id(Storage),
-    case helper:get_storage_path_type(Helper) of
-        ?FLAT_STORAGE_PATH ->
-            ok;
-        _ ->
+    {IsStorageFileCreated, SourceFileCtx6} = file_ctx:is_storage_file_created(SourceFileCtx5),
+    case StoragePathType =:= ?CANONICAL_STORAGE_PATH andalso IsStorageFileCreated of
+        true ->
             case sd_utils:rename_storage_file(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId,
                 TargetParentCtx2, TargetFileId)
             of
                 ok -> ok;
                 {error, ?ENOENT} -> ok
-            end
+            end;
+        false ->
+            ok
     end,
     ParentGuid = file_ctx:get_guid_const(TargetParentCtx2),
-    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx5, ParentGuid, TargetName, PrevName, UserCtx),
-    {SourceFileCtx5, TargetFileId}.
+    fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx6, ParentGuid, TargetName, PrevName, UserCtx),
+    {SourceFileCtx6, TargetFileId}.
 
 %%--------------------------------------------------------------------
 %% @private

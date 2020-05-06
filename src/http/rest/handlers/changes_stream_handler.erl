@@ -147,7 +147,7 @@
 ]).
 
 -define(FILE_META_FIELDS, [
-    <<"name">>, <<"type">>, <<"mode">>, <<"owner">>, <<"group_owner">>,
+    <<"name">>, <<"type">>, <<"mode">>, <<"owner">>,
     <<"provider_id">>, <<"shares">>, <<"deleted">>
 ]).
 

@@ -13,6 +13,7 @@
 -author("Michal Wrona").
 -author("Jakub Kudzia").
 
+ % TODO ogarnac ten i reverse_luma_test_SUITE
 -include("luma_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -97,7 +98,7 @@ all() ->
 
 insecure_get_server_user_ctx_for_root_returns_admin_ctx(Config) ->
     ?RUN(Config, ?INSECURE_STORAGE_CONFIGS,
-        fun insecure_get_server_user_ctx_for_root_returns_admin_ctx_base/2
+        fun insecure_map_to_storage_credentials_for_root_returns_admin_ctx_base/2
     ).
 
 insecure_get_server_user_ctx_for_root_returns_admin_ctx_invalidate_cache(Config) ->
@@ -229,7 +230,7 @@ get_posix_user_ctx_by_group_id_should_return_0_for_root(Config) ->
 %%% Test bases
 %%%===================================================================
 
-insecure_get_server_user_ctx_for_root_returns_admin_ctx_base(Config, StorageLumaConfig) ->
+insecure_map_to_storage_credentials_for_root_returns_admin_ctx_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     AdminCtx = maps:get(admin_ctx, StorageLumaConfig),
@@ -237,14 +238,12 @@ insecure_get_server_user_ctx_for_root_returns_admin_ctx_base(Config, StorageLuma
     ok = test_utils:mock_new(Worker, luma, [passthrough]),
 
     % get ctx for the 1st time
-    Result = rpc:call(Worker, luma, get_server_user_ctx, [?ROOT_SESS_ID, ?ROOT_USER_ID, ?SPACE_ID, Storage]),
+    Result = rpc:call(Worker, luma, map_to_storage_credentials, [?ROOT_SESS_ID, ?ROOT_USER_ID, ?SPACE_ID, Storage]),
 
     % get ctx for the 2nd time, now it should be served from cache
-    Result = rpc:call(Worker, luma, get_server_user_ctx, [?ROOT_SESS_ID, ?ROOT_USER_ID, ?SPACE_ID, Storage]),
+    Result = rpc:call(Worker, luma, map_to_storage_credentials, [?ROOT_SESS_ID, ?ROOT_USER_ID, ?SPACE_ID, Storage]),
 
-    % AdminCtx should be served from cache
-    ?assertEqual({ok, ExpectedCtx}, Result),
-    test_utils:mock_assert_num_calls(Worker, luma, get_admin_ctx, ['_', '_'], 1).
+    ?assertEqual({ok, ExpectedCtx}, Result).
 
 insecure_get_server_user_ctx_for_root_returns_admin_ctx_invalidate_cache_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -878,7 +877,7 @@ generate_posix_identifier(Id, {Low, High}) ->
     Low + (PosixId rem (High - Low)).
 
 invalidate_luma_cache(Worker, StorageId) ->
-    ok = rpc:call(Worker, luma_cache, invalidate, [StorageId]).
+    ok = rpc:call(Worker, luma, invalidate, [StorageId]).
 
 invalidate_cache_for_all_storages(Worker) ->
     StorageIds = lists:usort(lists:map(fun(StorageLumaConfig) ->

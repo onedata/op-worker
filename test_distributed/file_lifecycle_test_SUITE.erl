@@ -34,8 +34,8 @@
 -define(TEST_CASES, [
     open_race_test, make_open_race_test, make_open_race_test2, create_open_race_test,
     create_open_race_test2, create_delete_race_test,
-%%    rename_to_opened_file_test, % TODO VFS-5290
-%%    create_file_existing_on_disk_test, % TODO VFS-5271
+    %%    rename_to_opened_file_test, % TODO VFS-5290
+    %%    create_file_existing_on_disk_test, % TODO VFS-5271
     open_delete_race_test, open_delete_race_test2
 ]).
 
@@ -55,7 +55,7 @@ open_race_test(Config) ->
     check_dir_init(W),
 
     test_utils:mock_new(W, sd_utils, [passthrough]),
-    test_utils:mock_expect(W, sd_utils, create_storage_file,
+    test_utils:mock_expect(W, sd_utils, create_delayed_file,
         fun(UserCtx, FileCtx, VerifyLink) ->
             Ans = meck:passthrough([UserCtx, FileCtx, VerifyLink]),
             timer:sleep(2000),
@@ -75,15 +75,15 @@ open_race_test(Config) ->
     end),
 
     OpenAns1 = receive
-                   {open_ans, A} -> A
-               after
-                   5000 -> timeout
-               end,
+        {open_ans, A} -> A
+    after
+        5000 -> timeout
+    end,
     OpenAns2 = receive
-                   {open_ans, A2} -> A2
-               after
-                   5000 -> timeout
-               end,
+        {open_ans, A2} -> A2
+    after
+        5000 -> timeout
+    end,
 
     {ok, Open1} = ?assertMatch({ok, _}, OpenAns1),
     {ok, Open2} = ?assertMatch({ok, _}, OpenAns2),
@@ -113,10 +113,10 @@ make_open_race_test(Config, Mock) ->
 
                     Master ! {open_file, self()},
                     ok = receive
-                             file_opened -> ok
-                         after
-                             5000 -> timeout
-                         end,
+                        file_opened -> ok
+                    after
+                        5000 -> timeout
+                    end,
                     Ans
                 end);
         file_meta ->
@@ -125,10 +125,10 @@ make_open_race_test(Config, Mock) ->
                 fun(FileDoc) ->
                     Master ! {open_file, self()},
                     ok = receive
-                             file_opened -> ok
-                         after
-                             5000 -> timeout
-                         end,
+                        file_opened -> ok
+                    after
+                        5000 -> timeout
+                    end,
 
                     meck:passthrough([FileDoc])
                 end)
@@ -191,10 +191,10 @@ create_open_race_test(Config, Mock) ->
 
                     Master ! {open_file, self()},
                     ok = receive
-                             file_opened -> ok
-                         after
-                             5000 -> timeout
-                         end,
+                        file_opened -> ok
+                    after
+                        5000 -> timeout
+                    end,
                     Ans
                 end);
         fslogic_times ->
@@ -203,10 +203,10 @@ create_open_race_test(Config, Mock) ->
                 fun(FileCtx) ->
                     Master ! {open_file, self()},
                     ok = receive
-                             file_opened -> ok
-                         after
-                             5000 -> timeout
-                         end,
+                        file_opened -> ok
+                    after
+                        5000 -> timeout
+                    end,
                     meck:passthrough([FileCtx])
                 end)
     end,
@@ -216,22 +216,22 @@ create_open_race_test(Config, Mock) ->
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     spawn(fun() ->
         Master ! {create_ans, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)}
-          end),
+    end),
 
     MockProc = receive
-                   {open_file, Proc} -> Proc
-               after
-                   5000 -> timeout
-               end,
+        {open_file, Proc} -> Proc
+    after
+        5000 -> timeout
+    end,
     ?assert(is_pid(MockProc)),
     {ok, Open1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, {path, FilePath}, rdwr)),
     MockProc ! file_opened,
 
     CreateAns = receive
-                    {create_ans, A} -> A
-                after
-                    5000 -> timeout
-                end,
+        {create_ans, A} -> A
+    after
+        5000 -> timeout
+    end,
     ?assertMatch({ok, _}, CreateAns),
     {ok, {_, CreateHandle}} = CreateAns,
 
@@ -260,32 +260,32 @@ create_delete_race_test(Config) ->
 
             Master ! {unlink, self()},
             ok = receive
-                     file_unlinked -> ok
-                 after
-                     5000 -> timeout
-                 end,
+                file_unlinked -> ok
+            after
+                5000 -> timeout
+            end,
             Ans
         end),
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     spawn(fun() ->
         Master ! {create_ans, lfm_proxy:create_and_open(W, SessId1, FilePath, 8#777)}
-          end),
+    end),
 
     MockProc = receive
-                   {unlink, Proc} -> Proc
-               after
-                   5000 -> timeout
-               end,
+        {unlink, Proc} -> Proc
+    after
+        5000 -> timeout
+    end,
     ?assert(is_pid(MockProc)),
     ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, FilePath})),
     MockProc ! file_unlinked,
 
     CreateAns = receive
-                    {create_ans, A} -> A
-                after
-                    5000 -> timeout
-                end,
+        {create_ans, A} -> A
+    after
+        5000 -> timeout
+    end,
     ?assertMatch({error, ecanceled}, CreateAns),
 
     check_dir(W, 0),
@@ -298,9 +298,9 @@ rename_to_opened_file_test(Config) ->
     MountPoint = get_mount_point(W),
     StorageSpacePath = filename:join([MountPoint, "space_id1"]),
     Dirs1Length = case rpc:call(W, file, list_dir, [StorageSpacePath]) of
-                      {ok, Dirs1} -> length(Dirs1);
-                      _ -> 0
-                  end,
+        {ok, Dirs1} -> length(Dirs1);
+        _ -> 0
+    end,
 
     {SessId1, _UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)},
@@ -362,10 +362,10 @@ open_delete_race_test_base(Config, MockDeletionLink) ->
 
             Master ! {delete_file, self()},
             ok = receive
-                     file_deleted -> ok
-                 after
-                     5000 -> timeout
-                 end,
+                file_deleted -> ok
+            after
+                5000 -> timeout
+            end,
 
             Ans
         end),
@@ -379,19 +379,19 @@ open_delete_race_test_base(Config, MockDeletionLink) ->
     end),
 
     MakeProc = receive
-                   {delete_file, Proc} -> Proc
-               after
-                   5000 -> timeout
-               end,
+        {delete_file, Proc} -> Proc
+    after
+        5000 -> timeout
+    end,
     ?assert(is_pid(MakeProc)),
     ?assertMatch(ok, lfm_proxy:unlink(W, SessId1, {path, FilePath})),
     MakeProc ! file_deleted,
 
     OpenAns = receive
-                  {open_ans, A} -> A
-              after
-                  5000 -> timeout
-              end,
+        {open_ans, A} -> A
+    after
+        5000 -> timeout
+    end,
     ?assertMatch({ok, _}, OpenAns),
 
     check_dir(W, 1),

@@ -1934,10 +1934,20 @@ verify_workers(Workers, TestFun, Timeout, SpawnOnWorker) ->
         ({_W, error, _Reason}) -> true;
         (_) -> false
     end, TestAns),
+    try
+
     case Error of
         true -> ?assert(TestAns);
         _ -> ok
+    end
+
+    catch
+        E:R ->
+            ct:pal("SLEEP"),
+            ct:timetrap({hours, 10}),
+            ct:sleep({hours, 10})
     end,
+
 
     lists:map(fun({_W, Ans}) -> Ans end, TestAns).
 

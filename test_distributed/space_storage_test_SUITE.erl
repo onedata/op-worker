@@ -1039,7 +1039,5 @@ run_test(TestName, TestBaseFun, TestNo, Config, SpaceId, TestArgs) ->
         Error:Reason ->
             ct:pal("Test ~p for space ~p and setup no. ~p FAILED.~nError: ~p.~n"
             "Stacktrace:~n~p", [TestName, SpaceId, TestNo, {Error, Reason}, erlang:get_stacktrace()]),
-            ct:timetrap({hours, 10}),
-            ct:sleep({hours, 10}),
             false
     end.

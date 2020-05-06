@@ -75,8 +75,8 @@ chown_file(FileCtx) ->
             OwnerId = file_meta:get_owner(FileDoc),
             SpaceId = file_ctx:get_space_id_const(FileCtx4),
             {ok, StorageCredentials} = luma:map_to_storage_credentials(OwnerId, SpaceId, Storage),
-            Gid = binary_to_integer(maps:get(<<"uid">>, StorageCredentials)),
-            Uid = binary_to_integer(maps:get(<<"gid">>, StorageCredentials)),
+            Uid = binary_to_integer(maps:get(<<"uid">>, StorageCredentials)),
+            Gid = binary_to_integer(maps:get(<<"gid">>, StorageCredentials)),
             storage_driver:chown(SDHandle, Uid, Gid),
             FileCtx4;
         false ->

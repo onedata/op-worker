@@ -82,11 +82,11 @@ run_scenarios(#perms_test_spec{
         lfm_proxy:mkdir(Node, OwnerSessId, ScenariosRootDirPath, 8#777)
     ),
 
-    run_space_privs_scenarios(ScenariosRootDirPath, Spec, Config),
-    run_data_access_caveats_scenarios(ScenariosRootDirPath, Spec, Config),
-    run_share_test_scenarios(ScenariosRootDirPath, Spec, Config),
-    run_posix_perms_scenarios(ScenariosRootDirPath, Spec, Config),
-    run_acl_perms_scenarios(ScenariosRootDirPath, Spec, Config).
+%%    run_space_privs_scenarios(ScenariosRootDirPath, Spec, Config),
+%%    run_data_access_caveats_scenarios(ScenariosRootDirPath, Spec, Config),
+%%    run_share_test_scenarios(ScenariosRootDirPath, Spec, Config),
+    run_posix_perms_scenarios(ScenariosRootDirPath, Spec, Config).
+%%    run_acl_perms_scenarios(ScenariosRootDirPath, Spec, Config).
 
 
 %%%===================================================================
@@ -173,6 +173,8 @@ run_space_privs_scenario(
                 Reason
             ]
         ),
+%%        ct:timetrap({hours, 10}),
+%%        ct:sleep({hours, 10}),
         erlang:error(space_privs_test_failed)
     after
         initializer:testmaster_mock_space_user_privileges(
@@ -589,6 +591,8 @@ run_posix_perms_scenario(
                 Reason
             ]
         ),
+%%        ct:timetrap({hours, 10}),
+%%        ct:sleep({hours, 10}),
         erlang:error(posix_perms_test_failed)
     end.
 

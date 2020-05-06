@@ -1990,7 +1990,17 @@ open_file(Worker, Config, Path, OpenMode) ->
 
 write_to_file(Config, Path, Data, Offset) ->
     [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+    tracer:start(WorkerP1),
+    tracer:trace_calls(lfm_proxy, open),
+    tracer:trace_calls(lfm, open),
+    tracer:trace_calls(lfm_files, open),
+    tracer:trace_calls(sd_utils, create_missing_parent_dir),
+    tracer:trace_calls(sd_utils, create_delayed_file),
+    tracer:trace_calls(file_req, open_file_with_extended_info),
+    tracer:trace_calls(file_req, open_file_with_extended_info_insecure),
+    ct:pal("WorkerP1: ~p", [WorkerP1]),
     {ok, FileHandle} = open_file(WorkerP1, Config, Path, write),
+    tracer:stop(),
     Result = lfm_proxy:write(WorkerP1, FileHandle, Offset, Data),
     lfm_proxy:close(WorkerP1, FileHandle),
     Result.

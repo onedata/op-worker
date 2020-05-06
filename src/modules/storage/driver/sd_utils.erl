@@ -210,6 +210,7 @@ create_delayed_file(UserCtx, FileCtx, VerifyDeletionLink) ->
             {ok, FileCtx6}
     end,
 
+
     case FinalResult of
         {ok, FinalCtx}  ->
             case ShouldChown of
@@ -356,9 +357,7 @@ create_missing_parent_dir(UserCtx, FileCtx) ->
 %%    {FileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
 %%    try
         {#document{value = #file_meta{mode = Mode}}, FileCtx3} = file_ctx:get_file_doc(FileCtx),
-        R = mkdir_and_maybe_chown(UserCtx, FileCtx3, Mode),
-
-        R.
+        mkdir_and_maybe_chown(UserCtx, FileCtx3, Mode).
 %%    catch
 %%        Error:Reason ->
 %%            % TODO jk is this case really needed ??
@@ -394,6 +393,7 @@ mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
         OtherError ->
             OtherError
     end,
+
     case {Result, ShouldChown} of
         {ok, true} ->
             {ok, files_to_chown:chown_or_schedule_chowning(FileCtx2)};

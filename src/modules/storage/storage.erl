@@ -210,7 +210,9 @@ clear_storages() ->
 %%% Functions to retrieve storage details
 %%%===================================================================
 
--spec get_id(data()) -> id().
+-spec get_id(id() | data()) -> id().
+get_id(StorageId) when is_binary(StorageId) ->
+    StorageId;
 get_id(StorageData) ->
     storage_config:get_id(StorageData).
 

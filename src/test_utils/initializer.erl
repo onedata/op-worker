@@ -743,7 +743,14 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     end, SpacesSetup),
 
     StoragesSetupMap = lists:foldl(fun({P, Storages}, Acc) ->
-        Acc#{atom_to_binary(proplists:get_value(P, DomainMappings), utf8) => json_utils:list_to_map(Storages)}
+        StoragesMap = json_utils:list_to_map(Storages),
+        StoragesMap2 = maps:map(fun(_StorageId, Desc) ->
+            case Desc =:= [] of
+                true -> #{};
+                false -> Desc
+            end
+        end, StoragesMap),
+        Acc#{atom_to_binary(proplists:get_value(P, DomainMappings), utf8) => StoragesMap2}
     end, #{}, StoragesSetup),
 
     MasterWorkers = lists:map(fun(Domain) ->
@@ -1026,6 +1033,10 @@ user_logic_mock_setup(Workers, Users) ->
 
     test_utils:mock_expect(Workers, user_logic, get, fun(Client, UserId) ->
         GetUserFun(private, Client, UserId)
+    end),
+
+    test_utils:mock_expect(Workers, user_logic, exists, fun(UserId) ->
+        user_logic:exists(?ROOT_SESS_ID, UserId)
     end),
 
     test_utils:mock_expect(Workers, user_logic, exists, fun(Client, UserId) ->
@@ -1483,16 +1494,12 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
 storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     StorageMap = maps:fold(fun(ProviderId, InitialStorageDesc, Acc) ->
         NewStorageDesc = maps:map(fun(StorageId, Desc) ->
-            Desc1 = case Desc of
-                [] -> #{};
-                _ -> Desc
-            end,
-            QosParameters = maps:get(<<"qos_parameters">>, Desc1, #{}),
+            QosParameters = maps:get(<<"qos_parameters">>, Desc, #{}),
             ExtendedQosParameters = QosParameters#{
                 <<"storageId">> => StorageId,
                 <<"providerId">> => ProviderId
             },
-            Desc1#{<<"provider_id">> => ProviderId, <<"qos_parameters">> => ExtendedQosParameters}
+            Desc#{<<"provider_id">> => ProviderId, <<"qos_parameters">> => ExtendedQosParameters}
         end, InitialStorageDesc),
         maps:merge(Acc, NewStorageDesc)
     end, #{}, StoragesSetupMap),
@@ -1630,7 +1637,9 @@ setup_luma(StoragesSetupMap, LumaConfigFile, Config) ->
         setup_luma_mock(Workers, LumaConfigFile, Config)
     end, undefined, StoragesSetupMap).
 
--spec setup_luma_mock([node()], binary(), proplists:proplist()) -> ok.
+-spec setup_luma_mock([node()], binary() | undefined, proplists:proplist()) -> ok.
+setup_luma_mock(_Workers, undefined, _Config) ->
+    ok;
 setup_luma_mock(Workers, LumaConfigFile, Config) ->
     LumaConfigPath = filename:join([proplists:get_value(data_dir, Config), LumaConfigFile]),
     {ok, ConfigJSONBin} = file:read_file(LumaConfigPath),

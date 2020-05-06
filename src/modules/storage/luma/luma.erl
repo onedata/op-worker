@@ -68,10 +68,12 @@
 map_to_storage_credentials(UserId, SpaceId, StorageId) ->
     map_to_storage_credentials(?ROOT_SESS_ID, UserId, SpaceId, StorageId).
 
-map_to_storage_credentials(SessId, UserId, SpaceId, StorageId) ->
-    case map_to_storage_credentials_internal(UserId, SpaceId, StorageId) of
+-spec map_to_storage_credentials(session:id(), od_user:id(), od_space:id(),
+    storage:id() | storage:data()) -> {ok, storage_credentials()} | {error, term()}.
+map_to_storage_credentials(SessId, UserId, SpaceId, Storage) ->
+    case map_to_storage_credentials_internal(UserId, SpaceId, Storage) of
         {ok, StorageCredentials} ->
-            add_helper_specific_fields(UserId, SessId, StorageCredentials, storage:get_helper(StorageId));
+            add_helper_specific_fields(UserId, SessId, StorageCredentials, storage:get_helper(Storage));
         Error ->
             Error
     end.
@@ -194,19 +196,17 @@ add_helper_specific_fields(UserId, SessionId, StorageCredentials, Helper) ->
 %%% Internal functions
 %%%===================================================================
 
--spec map_to_storage_credentials(session:id(), od_user:id(), od_space:id(),
+-spec map_to_storage_credentials_internal(od_user:id(), od_space:id(),
     storage:id() | storage:data()) -> {ok, storage_credentials()} | {error, term()}.
 map_to_storage_credentials_internal(?ROOT_USER_ID, _SpaceId, Storage) ->
     Helper = storage:get_helper(Storage),
     {ok, helper:get_admin_ctx(Helper)};
-map_to_storage_credentials_internal(UserId, SpaceId, StorageId) when is_binary(StorageId)->
-    {ok, Storage} = storage:get(StorageId),
-    map_to_storage_credentials_internal(UserId, SpaceId, Storage);
 map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
     try
+        {ok, StorageData} = storage:get(Storage),
         case fslogic_uuid:is_space_owner(UserId) of
-            true -> map_space_owner_to_storage_credentials(Storage, SpaceId);
-            false -> map_normal_user_to_storage_credentials(UserId, Storage, SpaceId)
+            true -> map_space_owner_to_storage_credentials(StorageData, SpaceId);
+            false -> map_normal_user_to_storage_credentials(UserId, StorageData, SpaceId)
         end
     catch
         Error2:Reason ->
