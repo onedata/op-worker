@@ -10,7 +10,7 @@
 %%% Handler for streaming changes happening to `file_meta`, `file_location`,
 %%% `times` or `custom_metadata` in scope of given space.
 %%%
-%%% Possible fields to observer are shown below.
+%%% Possible fields to observe are shown below.
 %%%
 %%% fileMeta:
 %%%     - name
@@ -52,6 +52,8 @@
 %%% whether information about this record should be send always or
 %%% on this record changes only (`always` boolean flag with default value
 %%% being 'false' - not sending information on other docs changes).
+%%% Optionally `triggers`, that is list of documents whose changes
+%%% triggers sending events, can also be specified.
 %%%
 %%% <record>:
 %%%     [fields: <fields>]
@@ -63,6 +65,9 @@
 %%%
 %%% EXAMPLE REQUEST:
 %%%
+%%% triggers:
+%%%     - fileMeta,
+%%%     - times
 %%% fileMeta:
 %%%     fields: [owner]
 %%% customMetadata:
@@ -120,13 +125,15 @@
 %% for tests
 -export([init_stream/1]).
 
+-type observable_doc() :: file_meta | file_location | times | custom_metadata.
+-type triggers() :: [observable_doc()].
+
 -record(change_req, {
-    record :: file_meta | file_location | times | custom_metadata,
+    record :: observable_doc(),
     always = false :: boolean(),
     fields = [] :: [binary()],
     exists = [] :: [binary()]
 }).
-
 -type change_req() :: #change_req{}.
 
 -define(DEFAULT_TIMEOUT, <<"infinity">>).
@@ -134,6 +141,10 @@
 
 -define(DEFAULT_ALWAYS, false).
 -define(ONEDATA_SPECIAL_XATTRS, [<<"onedata_json">>, <<"onedata_rdf">>]).
+
+-define(OBSERVABLE_DOCUMENTS, [
+    <<"fileMeta">>, <<"fileLocation">>, <<"times">>, <<"customMetadata">>
+]).
 
 -define(FILE_META_FIELDS, [
     <<"name">>, <<"type">>, <<"mode">>, <<"owner">>, <<"group_owner">>,
@@ -146,7 +157,7 @@
 ]).
 
 -define(TIME_FIELDS, [
-    <<"provider_id">>, <<"storage_id">>, <<"size">>
+    <<"atime">>, <<"mtime">>, <<"ctime">>
 ]).
 
 
@@ -319,13 +330,8 @@ parse_timeout(Params) ->
     case maps:get(<<"timeout">>, Params, ?DEFAULT_TIMEOUT) of
         <<"infinity">> ->
             infinity;
-        Number ->
-            try
-                binary_to_integer(Number)
-            catch
-                _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(<<"timeout">>))
-            end
+        NumberBin ->
+            parse_integer(<<"timeout">>, NumberBin)
     end.
 
 
@@ -335,24 +341,31 @@ parse_last_seq(SpaceId, Params) ->
     case maps:get(<<"last_seq">>, Params, ?DEFAULT_LAST_SEQ) of
         <<"now">> ->
             dbsync_state:get_seq(SpaceId, oneprovider:get_id());
-        Number ->
-            try
-                binary_to_integer(Number)
-            catch
-                _:_ ->
-                    throw(?ERROR_BAD_VALUE_INTEGER(<<"last_seq">>))
-            end
+        NumberBin ->
+            parse_integer(<<"last_seq">>, NumberBin)
+    end.
+
+
+%% @private
+-spec parse_integer(binary(), binary()) -> integer() | no_return().
+parse_integer(Param, ValueBin) ->
+    try
+        binary_to_integer(ValueBin)
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_INTEGER(Param))
     end.
 
 
 %% @private
 -spec parse_body(binary(), map()) -> map() | no_return().
 parse_body(Body, State) ->
-    Json = json_utils:decode(Body),
-    case is_map(Json) of
+    ChangesSpecification = json_utils:decode(Body),
+    case is_map(ChangesSpecification) of
         true -> ok;
-        false -> throw(?ERROR_BAD_VALUE_JSON(<<"changes specification">>))
+        false -> throw(?ERROR_BAD_VALUE_JSON(<<"changesSpecification">>))
     end,
+
+    Triggers = parse_triggers(ChangesSpecification),
 
     ChangesReqs = maps:fold(fun
         (<<"fileMeta">> = RecName, RawSpec, Acc) when is_map(RawSpec) ->
@@ -396,12 +409,43 @@ parse_body(Body, State) ->
             [ChangesReq | Acc];
         (RecordName, _, _) ->
             throw(?ERROR_BAD_DATA(RecordName))
-    end, [], Json),
+    end, [], maps:remove(<<"triggers">>, ChangesSpecification)),
 
     case ChangesReqs of
-        [] -> throw(?ERROR_BAD_VALUE_EMPTY(<<"changes specification">>));
-        _ -> State#{changes_reqs => ChangesReqs}
+        [] ->
+            throw(?ERROR_BAD_VALUE_EMPTY(<<"changesSpecification">>));
+        _ ->
+            State#{
+                triggers => Triggers,
+                changes_reqs => ChangesReqs
+            }
     end.
+
+
+%% @private
+-spec parse_triggers(map()) -> triggers() | no_return().
+parse_triggers(ChangesSpecification) ->
+    RawTriggers = case maps:get(<<"triggers">>, ChangesSpecification, undefined) of
+        undefined ->
+            ?OBSERVABLE_DOCUMENTS;
+        TriggersSpec when is_list(TriggersSpec) ->
+            TriggersSpec;
+        _ ->
+            throw(?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"triggers">>))
+    end,
+
+    lists:usort(lists:map(fun
+        (<<"fileMeta">>) ->
+            file_meta;
+        (<<"fileLocation">>) ->
+            file_location;
+        (<<"times">>) ->
+            times;
+        (<<"customMetadata">>) ->
+            custom_metadata;
+        (_) ->
+            throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"triggers">>, ?OBSERVABLE_DOCUMENTS))
+    end, RawTriggers)).
 
 
 %% @private
@@ -468,19 +512,23 @@ times_field_idx(_FieldName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec init_stream(State :: map()) -> map().
-init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
+init_stream(#{last_seq := Since, space_id := SpaceId, triggers := Triggers} = State) ->
     ?info("[ changes ]: Starting stream ~p", [Since]),
     Ref = make_ref(),
     Pid = self(),
 
     % TODO VFS-5570
     Node = datastore_key:responsible_node(SpaceId),
-    {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
-        [<<"onedata">>, SpaceId, fun(Feed) ->
-            notify(Pid, Ref, Feed)
-        end, [{since, Since}], [Pid]]),
+    {ok, Stream} = rpc:call(Node, couchbase_changes, stream, [
+        <<"onedata">>,
+        SpaceId,
+        fun(Feed) -> notify(Pid, Ref, Triggers, Feed) end,
+        [{since, Since}],
+        [Pid]
+    ]),
 
     State#{changes_stream => Stream, ref => Ref, loop_pid => Pid}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -518,6 +566,7 @@ stream_loop(Req, State = #{
             % TODO VFS-4025 - is it always ok?
             ok
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -791,36 +840,44 @@ get_record_changes(Changed, FieldsNamesAndIndices, _Exists, #document{
 %% Forwards changes feed to a streaming process.
 %% @end
 %%--------------------------------------------------------------------
--spec notify(pid(), reference(),
+-spec notify(pid(), reference(), triggers(),
     {ok, [datastore:doc()] | datastore:doc() | end_of_stream} |
     {error, couchbase_changes:since(), term()}) -> ok.
-notify(Pid, Ref, {ok, #document{} = Doc}) ->
-    case is_file_related_doc(Doc) of
+notify(Pid, Ref, Triggers, {ok, #document{} = Doc}) ->
+    case is_observed_doc(Doc, Triggers) of
         true ->
             call_changes_stream_handler(Pid, Ref, [Doc]);
         false ->
             ok
     end,
     ok;
-notify(Pid, Ref, {ok, Docs}) when is_list(Docs) ->
-    case lists:filter(fun(Doc) -> is_file_related_doc(Doc) end, Docs) of
+notify(Pid, Ref, Triggers, {ok, Docs}) when is_list(Docs) ->
+    case lists:filter(fun(Doc) -> is_observed_doc(Doc, Triggers) end, Docs) of
         [] ->
             ok;
         RelevantDocs ->
             call_changes_stream_handler(Pid, Ref, RelevantDocs)
     end,
     ok;
-notify(Pid, Ref, {ok, end_of_stream}) ->
+notify(Pid, Ref, _Triggers, {ok, end_of_stream}) ->
     Pid ! {Ref, stream_ended},
     ok;
-notify(Pid, Ref, {error, _Seq, shutdown = Reason}) ->
+notify(Pid, Ref, _Triggers, {error, _Seq, shutdown = Reason}) ->
     ?debug("Changes stream terminated due to: ~p", [Reason]),
     Pid ! {Ref, stream_ended},
     ok;
-notify(Pid, Ref, {error, _Seq, Reason}) ->
+notify(Pid, Ref, _Triggers, {error, _Seq, Reason}) ->
     ?error("Changes stream terminated abnormally due to: ~p", [Reason]),
     Pid ! {Ref, stream_ended},
     ok.
+
+
+%% @private
+-spec is_observed_doc(datastore:doc(), triggers()) -> boolean().
+is_observed_doc(#document{value = Record}, Triggers) when is_tuple(Record) ->
+    lists:member(element(1, Record), Triggers);
+is_observed_doc(_Doc, _Triggers) ->
+    false.
 
 
 %%--------------------------------------------------------------------
@@ -837,12 +894,3 @@ call_changes_stream_handler(Pid, Ref, Msg) ->
             ok
     end,
     ok.
-
-
-%% @private
--spec is_file_related_doc(datastore:doc()) -> boolean().
-is_file_related_doc(#document{value = #file_meta{}})       -> true;
-is_file_related_doc(#document{value = #custom_metadata{}}) -> true;
-is_file_related_doc(#document{value = #times{}})           -> true;
-is_file_related_doc(#document{value = #file_location{}})   -> true;
-is_file_related_doc(_)                                     -> false.
