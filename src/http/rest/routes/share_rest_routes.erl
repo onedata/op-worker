@@ -2,7 +2,7 @@
 %%% This file has been automatically generated from Swagger
 %%% specification - DO NOT EDIT!
 %%%
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @copyright (C) 2019-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -43,7 +43,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove a specific share
+    %% Remove share
     {<<"/shares/:shid">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{

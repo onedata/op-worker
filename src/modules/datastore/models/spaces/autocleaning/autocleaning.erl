@@ -78,7 +78,10 @@ get_current_run(SpaceId) ->
 
 -spec create_or_update(id(), map()) -> ok | error().
 create_or_update(SpaceId, NewConfiguration) ->
-    {ok, SupportSize} = provider_logic:get_support_size(SpaceId),
+    SupportSize = case provider_logic:get_support_size(SpaceId) of
+        {ok, S} -> S;
+        {error, not_found} -> 0
+    end,
     case autocleaning:get(SpaceId) of
         {error, not_found} ->
             ?extract_ok(create(SpaceId, NewConfiguration, SupportSize));

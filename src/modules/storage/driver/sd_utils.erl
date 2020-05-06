@@ -24,9 +24,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chmod_storage_file/3, rename_storage_file/7,
-    create_delayed_regular_file/1, create_delayed_regular_file/4,
-    delete/2, delete_storage_file/2, mkdir_delayed/2]).
+-export([chmod_storage_file/3, rename_storage_file/7]).
+-export([create_delayed_regular_file/1, create_delayed_regular_file/4, mkdir_delayed/2]).
+-export([delete/2, delete_storage_file/2, delete_storage_dir/2]).
+
 
 % Test API
 -export([create_delayed_file/3]).
@@ -253,10 +254,6 @@ delete_storage_file(FileCtx, UserCtx) ->
             {ok, FileCtx3}
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes directory from storage.
@@ -290,6 +287,10 @@ delete_storage_dir(DirCtx, UserCtx) ->
                     Error
             end
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 -spec create_storage_file_appropriate_to_type(storage_driver:handle(), file_meta:mode(),
     file_meta:type()) -> ok | {error, term()}.

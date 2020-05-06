@@ -142,7 +142,7 @@ handle_graph_request(Auth, AuthHint, GRI, Operation, Data, VersionedEntity) ->
         auth = Auth,
         operation = Operation,
         gri = GRI,
-        data = Data,
+        data = utils:ensure_defined(Data, undefined, #{}),
         auth_hint = AuthHint,
         return_revision = true
     },
@@ -174,6 +174,7 @@ is_type_supported(#gri{type = op_file}) -> true;
 is_type_supported(#gri{type = op_replica}) -> true;
 is_type_supported(#gri{type = op_share}) -> true;
 is_type_supported(#gri{type = op_transfer}) -> true;
+is_type_supported(#gri{type = op_qos}) -> true;
 is_type_supported(#gri{type = op_handle}) -> true;
 is_type_supported(#gri{type = op_handle_service}) -> true;
 is_type_supported(#gri{type = _}) -> false.

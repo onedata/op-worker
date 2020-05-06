@@ -1101,11 +1101,18 @@ tag_children(Links) ->
             } | Children];
         (Group, Children) ->
             LocalTreeId = oneprovider:get_id(),
-            {LocalLinks, RemoteLinks} = lists:partition(fun
-                (#link{tree_id = TreeId}) -> TreeId == LocalTreeId
-            end, Group),
-            RemoteTreeIds = [Link#link.tree_id || Link <- RemoteLinks],
-            RemoteTreeIdsLen = [size(TreeId) || TreeId <- RemoteTreeIds],
+            {RemoteTreeIds, RemoteTreeIdsLen} = lists:foldl(
+                fun(#link{tree_id = TreeId}, {IdsAcc, IdsLenAcc} = Acc) ->
+                    case TreeId of
+                        LocalTreeId ->
+                            Acc;
+                        _ ->
+                            {[TreeId | IdsAcc], [size(TreeId), IdsLenAcc]}
+                    end
+                end,
+                {[], []},
+                Group
+            ),
             Len = binary:longest_common_prefix(RemoteTreeIds),
             Len2 = min(max(4, Len + 1), lists:min(RemoteTreeIdsLen)),
             lists:foldl(fun
@@ -1121,11 +1128,13 @@ tag_children(Links) ->
                 }, Children2) ->
                     [#child_link_uuid{
                         uuid = FileUuid,
-                        name = <<Name/binary,
+                        name = <<
+                            Name/binary,
                             ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR_CHAR,
-                            TreeId:Len2/binary>>
+                            TreeId:Len2/binary
+                        >>
                     } | Children2]
-            end, Children, LocalLinks ++ RemoteLinks)
+            end, Children, Group)
     end, [], [Group2 | Groups2]).
 
 %%--------------------------------------------------------------------

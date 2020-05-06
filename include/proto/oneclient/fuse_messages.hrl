@@ -135,7 +135,7 @@
 }).
 
 -record(get_xattr, {
-    name :: xattr:name(),
+    name :: custom_metadata:name(),
     inherited = false :: boolean()
 }).
 
@@ -146,7 +146,7 @@
 }).
 
 -record(remove_xattr, {
-    name :: xattr:name()
+    name :: custom_metadata:name()
 }).
 
 -record(list_xattr, {
@@ -283,7 +283,7 @@
 }).
 
 -record(xattr_list, {
-    names :: [xattr:name()]
+    names :: [custom_metadata:name()]
 }).
 
 -type fuse_response_type() ::
@@ -297,6 +297,11 @@
 -record(fuse_response, {
     status :: undefined | #status{},
     fuse_response :: fuse_response_type()
+}).
+
+-define(FUSE_OK_RESP(__RESPONSE), #fuse_response{
+    status = #status{code = ?OK},
+    fuse_response = __RESPONSE
 }).
 
 -endif.

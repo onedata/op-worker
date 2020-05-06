@@ -19,16 +19,22 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([raw_to_rpn/1, calculate_assigned_storages/3]).
+-export([rpn_to_infix/1]).
+-export([ensure_rpn/1]).
+-export([calculate_assigned_storages/3]).
+
+-ifdef(TEST).
+-export([infix_to_rpn/1]).
+-endif.
 
 
-% The raw type stores expression as single binary. It is used to store input
-% from user. In the process of adding new qos_entry raw expression is
+% The infix type stores expression as single binary. It is used to store input
+% from user. In the process of adding new qos_entry infix expression is
 % parsed to rpn form (list of "key=value" binaries separated by operators)
--type raw() :: binary(). % e.g. <<"country=FR&type=disk">>
+-type infix() :: binary(). % e.g. <<"country=FR&type=disk">>
 -type rpn() :: [binary()]. % e.g. [<<"country=FR">>, <<"type=disk">>, <<"&">>]
 
--export_type([rpn/0, raw/0]).
+-export_type([rpn/0]).
 
 -type operator_stack() :: [operator_or_paren()].
 -type operator_or_paren() :: operator() | paren().
@@ -41,24 +47,23 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Transforms QoS expression from infix notation to reverse polish notation.
-%% @end
-%%--------------------------------------------------------------------
--spec raw_to_rpn(raw()) -> {ok, rpn()} | ?ERROR_INVALID_QOS_EXPRESSION.
-raw_to_rpn(Expression) ->
-    OperatorsBin = <<?UNION/binary, ?INTERSECTION/binary, ?COMPLEMENT/binary>>,
-    ParensBin = <<?L_PAREN/binary, ?R_PAREN/binary>>,
-    NormalizedExpression = re:replace(Expression, "\s", "", [global, {return, binary}]),
-    Tokens = re:split(NormalizedExpression, <<"([", ParensBin/binary, OperatorsBin/binary, "])">>),
-    try
-        {ok, raw_to_rpn_internal(Tokens, [], [])}
-    catch
-        throw:?ERROR_INVALID_QOS_EXPRESSION ->
-            ?ERROR_INVALID_QOS_EXPRESSION
-    end.
 
+-spec rpn_to_infix(rpn()) -> {ok, infix()}.
+rpn_to_infix(RPNExpression) ->
+    rpn_to_infix(RPNExpression, []).
+
+
+-spec ensure_rpn(infix() | rpn() | any()) -> rpn() | no_return().
+ensure_rpn(Expression) when is_binary(Expression) ->
+    {ok, ExpressionInRpn} = infix_to_rpn(Expression),
+    ExpressionInRpn;
+ensure_rpn(ExpressionList) when is_list(ExpressionList) ->
+    case lists:all(fun is_binary/1 , ExpressionList) of
+        true -> ExpressionList;
+        false -> throw(?ERROR_INVALID_QOS_EXPRESSION)
+    end;
+ensure_rpn(_) ->
+    throw(?ERROR_INVALID_QOS_EXPRESSION).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -68,7 +73,7 @@ raw_to_rpn(Expression) ->
 %%--------------------------------------------------------------------
 -spec calculate_assigned_storages(file_ctx:ctx(), rpn(), qos_entry:replicas_num()) ->
     {true, [storage:id()]} | false | {error, term()}.
-calculate_assigned_storages(FileCtx, Expression, ReplicasNum) ->
+calculate_assigned_storages(FileCtx, ExpressionInRpn, ReplicasNum) ->
     % TODO: VFS-5574 add check if storage has enough free space
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, SpaceStorages} = space_logic:get_all_storage_ids(SpaceId),
@@ -78,7 +83,7 @@ calculate_assigned_storages(FileCtx, Expression, ReplicasNum) ->
     end, #{}, SpaceStorages),
 
     try
-        EligibleStorages = filter_storages(AllStoragesWithParams, Expression),
+        EligibleStorages = filter_storages(AllStoragesWithParams, ExpressionInRpn),
         choose_storages(EligibleStorages, ReplicasNum)
     catch
         throw:?ERROR_INVALID_QOS_EXPRESSION ->
@@ -91,31 +96,64 @@ calculate_assigned_storages(FileCtx, Expression, ReplicasNum) ->
 %%%===================================================================
 
 %% @private
--spec raw_to_rpn_internal([expr_token()], operator_stack(), rpn()) -> rpn().
-raw_to_rpn_internal([<<>>], [], []) ->
+-spec infix_to_rpn(infix()) -> {ok, rpn()}.
+infix_to_rpn(Expression) ->
+    OperatorsBin = <<?UNION/binary, ?INTERSECTION/binary, ?COMPLEMENT/binary>>,
+    ParensBin = <<?L_PAREN/binary, ?R_PAREN/binary>>,
+    NormalizedExpression = re:replace(Expression, "\s", "", [global, {return, binary}]),
+    Tokens = re:split(NormalizedExpression, <<"([", ParensBin/binary, OperatorsBin/binary, "])">>),
+    {ok, infix_to_rpn(Tokens, [], [])}.
+
+%% @private
+-spec infix_to_rpn([expr_token()], operator_stack(), rpn()) -> rpn().
+infix_to_rpn([<<>>], [], []) ->
     [];
-raw_to_rpn_internal([<<>> | Expression], Stack, RPNExpression) ->
-    raw_to_rpn_internal(Expression, Stack, RPNExpression);
-raw_to_rpn_internal([], Stack, RPNExpression) ->
-    RPNExpression ++ Stack;
-raw_to_rpn_internal([Operator | Expression], Stack, RPNExpression) when
+infix_to_rpn([<<>> | Expression], Stack, RPNExpression) ->
+    infix_to_rpn(Expression, Stack, RPNExpression);
+infix_to_rpn([], Stack, RPNExpression) ->
+    case lists:member(<<"(">>, Stack) of
+        true -> throw(?ERROR_INVALID_QOS_EXPRESSION);
+        false -> RPNExpression ++ Stack
+    end;
+infix_to_rpn([Operator | Expression], Stack, RPNExpression) when
     Operator =:= ?INTERSECTION orelse
         Operator =:= ?UNION orelse
         Operator =:= ?COMPLEMENT ->
     {Stack2, RPNExpression2} = handle_operator(Operator, Stack, RPNExpression),
-    raw_to_rpn_internal(Expression, Stack2, RPNExpression2);
-raw_to_rpn_internal([?L_PAREN | Expression], Stack, RPNExpression) ->
-    raw_to_rpn_internal(Expression, [?L_PAREN|Stack], RPNExpression);
-raw_to_rpn_internal([?R_PAREN | Expression], Stack, RPNExpression) ->
+    infix_to_rpn(Expression, Stack2, RPNExpression2);
+infix_to_rpn([?L_PAREN | Expression], Stack, RPNExpression) ->
+    infix_to_rpn(Expression, [?L_PAREN | Stack], RPNExpression);
+infix_to_rpn([?R_PAREN | Expression], Stack, RPNExpression) ->
     {Stack2, RPNExpression2} = handle_right_paren(Stack, RPNExpression),
-    raw_to_rpn_internal(Expression, Stack2, RPNExpression2);
-raw_to_rpn_internal([Operand | Expression], Stack, RPNExpression) ->
+    infix_to_rpn(Expression, Stack2, RPNExpression2);
+infix_to_rpn([?QOS_ANY_STORAGE | Expression], Stack, RPNExpression) ->
+    infix_to_rpn(Expression, Stack, RPNExpression ++ [?QOS_ANY_STORAGE]);
+infix_to_rpn([Operand | Expression], Stack, RPNExpression) ->
     case binary:split(Operand, [?EQUALITY], [global]) of
         [_Key, _Val] ->
-            raw_to_rpn_internal(Expression, Stack, RPNExpression ++ [Operand]);
+            infix_to_rpn(Expression, Stack, RPNExpression ++ [Operand]);
         _ ->
             throw(?ERROR_INVALID_QOS_EXPRESSION)
     end.
+
+
+%% @private
+-spec rpn_to_infix(rpn(), [expr_token()]) -> {ok, infix()}.
+rpn_to_infix([ExprToken | ExpressionTail], Stack) ->
+    case lists:member(ExprToken, ?OPERATORS) of
+        true ->
+            [Operand1, Operand2 | StackTail] = Stack,
+            InfixTokens = [Operand2, ExprToken, Operand1],
+            ExtendedInfixTokens = case ExpressionTail of
+                [] -> InfixTokens;
+                _ -> [<<"(">> | InfixTokens] ++ [<<")">>]
+            end,
+            rpn_to_infix(ExpressionTail, [str_utils:join_binary(ExtendedInfixTokens) | StackTail]);
+        false ->
+            rpn_to_infix(ExpressionTail, [ExprToken | Stack])
+    end;
+rpn_to_infix([], [Res]) ->
+    {ok, Res}.
 
 
 %%--------------------------------------------------------------------
@@ -204,6 +242,8 @@ apply_operator(_, _) ->
 %%--------------------------------------------------------------------
 -spec select_storages_with_param(storages_with_params(), expr_token()) ->
     [[storage:id()] | expr_token()].
+select_storages_with_param(AllStoragesWithParams, ?QOS_ANY_STORAGE) ->
+    maps:keys(AllStoragesWithParams);
 select_storages_with_param(AllStoragesWithParams, ExprToken) ->
     case binary:split(ExprToken, [?EQUALITY], [global]) of
         [Key, Val] ->

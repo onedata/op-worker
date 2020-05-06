@@ -37,10 +37,6 @@
     two_keys_without_value_connected_with_operand/1,
     operator_without_second_operand/1,
     operator_without_first_operand/1,
-    two_operators_in_row/1,
-    closing_paren_without_matching_opening_one/1,
-    opening_paren_without_matching_closing_one/1,
-    mismatching_nested_parens/1,
 
     % Single QoS expression tests
     simple_key_val_qos/1,
@@ -90,10 +86,6 @@ all() -> [
     two_keys_without_value_connected_with_operand,
     operator_without_second_operand,
     operator_without_first_operand,
-    two_operators_in_row,
-    closing_paren_without_matching_opening_one,
-    opening_paren_without_matching_closing_one,
-    mismatching_nested_parens,
 
     % Single QoS expression tests
     simple_key_val_qos,
@@ -292,98 +284,34 @@ qos_bounded_cache_should_not_be_cleaned_if_not_overfilled(Config) ->
 %%%===================================================================
 
 key_without_value(Config) ->
-    [Worker] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-
-    create_test_file(Config),
-
-    ?assertMatch(
-        {error, ?EINVAL},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country">>, 1)
-    ).
+    Expr = [<<"country">>],
+    invalid_expression_test_base(Config, Expr).
 
 
 two_keys_without_value_connected_with_operand(Config) ->
-    [Worker] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-
-    create_test_file(Config),
-
-    ?assertMatch(
-        {error, ?EINVAL},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country|type">>, 1)
-    ).
+    Expr = [<<"country">>, <<"|">>, <<"type">>],
+    invalid_expression_test_base(Config, Expr).
 
 
 operator_without_second_operand(Config) ->
-    [Worker] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-
-    create_test_file(Config),
-
-    ?assertMatch(
-        {error, ?EINVAL},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL&">>, 1)
-    ).
+    Expr = [<<"country=PL">>,<<"&">>],
+    invalid_expression_test_base(Config, Expr).
 
 
 operator_without_first_operand(Config) ->
+    Expr = [<<"country=PL">>,<<"|">>],
+    invalid_expression_test_base(Config, Expr).
+
+
+invalid_expression_test_base(Config, Expr) ->
     [Worker] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-
+    
     create_test_file(Config),
-
+    
     ?assertMatch(
         {error, ?EINVAL},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"|country=PL">>, 1)
-    ).
-
-
-two_operators_in_row(Config) ->
-    [Worker] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-
-    create_test_file(Config),
-
-    ?assertMatch(
-        {error, ?EINVAL},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL&-type-disk">>, 1)
-    ).
-
-
-closing_paren_without_matching_opening_one(Config) ->
-    [Worker] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-
-    create_test_file(Config),
-
-    ?assertMatch(
-        {error, ?EINVAL},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"country=PL)">>, 1)
-    ).
-
-
-opening_paren_without_matching_closing_one(Config) ->
-    [Worker] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-
-    create_test_file(Config),
-
-    ?assertMatch(
-        {error, ?EINVAL},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"(country=PL">>, 1)
-    ).
-
-
-mismatching_nested_parens(Config) ->
-    [Worker] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-
-    create_test_file(Config),
-
-    ?assertMatch(
-        {error, ?EINVAL},
-        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, <<"(type=disk|tier=t2&(country=PL)">>, 1)
+        lfm_proxy:add_qos_entry(Worker, SessId, {path, ?TEST_FILE_PATH}, Expr, 1)
     ).
 
 

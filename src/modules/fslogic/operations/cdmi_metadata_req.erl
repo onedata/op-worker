@@ -1,21 +1,20 @@
 %%%--------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2016-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for handing requests operating on file's cdmi
-%%% metadata.
+%%% This module is responsible for handing requests operating on file's
+%%% cdmi metadata.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(cdmi_metadata_req).
 -author("Tomasz Lichon").
 
--include("proto/oneprovider/provider_messages.hrl").
 -include("modules/fslogic/metadata.hrl").
--include_lib("ctool/include/posix/acl.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 %% API
 -export([
@@ -31,6 +30,7 @@
 
 
 %%--------------------------------------------------------------------
+%% @doc
 %% @equiv get_transfer_encoding_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
@@ -45,24 +45,28 @@ get_transfer_encoding(UserCtx, FileCtx0) ->
 
 
 %%--------------------------------------------------------------------
-%% @equiv set_transfer_encoding_insecure/3 with permission checks
+%% @doc
+%% @equiv set_transfer_encoding_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec set_transfer_encoding(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:transfer_encoding(), Create :: boolean(), Replace :: boolean()) ->
+-spec set_transfer_encoding(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    custom_metadata:transfer_encoding(),
+    Create :: boolean(),
+    Replace :: boolean()
+) ->
     fslogic_worker:provider_response().
 set_transfer_encoding(UserCtx, FileCtx0, Encoding, Create, Replace) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?write_attributes]
     ),
-    set_transfer_encoding_insecure(
-        UserCtx, FileCtx1,
-        Encoding, Create, Replace
-    ).
+    set_transfer_encoding_insecure(UserCtx, FileCtx1, Encoding, Create, Replace).
 
 
 %%--------------------------------------------------------------------
+%% @doc
 %% @equiv get_cdmi_completion_status_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
@@ -77,11 +81,17 @@ get_cdmi_completion_status(UserCtx, FileCtx0) ->
 
 
 %%--------------------------------------------------------------------
-%% @equiv set_cdmi_completion_status_insecure/3 with permission checks
+%% @doc
+%% @equiv set_cdmi_completion_status_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec set_cdmi_completion_status(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:cdmi_completion_status(), Create :: boolean(), Replace :: boolean()) ->
+-spec set_cdmi_completion_status(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    custom_metadata:cdmi_completion_status(),
+    Create :: boolean(),
+    Replace :: boolean()
+) ->
     fslogic_worker:provider_response().
 set_cdmi_completion_status(UserCtx, FileCtx0, CompletionStatus, Create, Replace) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
@@ -95,6 +105,7 @@ set_cdmi_completion_status(UserCtx, FileCtx0, CompletionStatus, Create, Replace)
 
 
 %%--------------------------------------------------------------------
+%% @doc
 %% @equiv get_mimetype_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
@@ -109,11 +120,17 @@ get_mimetype(UserCtx, FileCtx0) ->
 
 
 %%--------------------------------------------------------------------
-%% @equiv set_mimetype_insecure/3 with permission checks
+%% @doc
+%% @equiv set_mimetype_insecure/5 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec set_mimetype(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:mimetype(), Create :: boolean(), Replace :: boolean()) ->
+-spec set_mimetype(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    custom_metadata:mimetype(),
+    Create :: boolean(),
+    Replace :: boolean()
+) ->
     fslogic_worker:provider_response().
 set_mimetype(UserCtx, FileCtx0, Mimetype, Create, Replace) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
@@ -129,6 +146,7 @@ set_mimetype(UserCtx, FileCtx0, Mimetype, Create, Replace) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns encoding suitable for rest transfer.
 %% @end
@@ -136,24 +154,33 @@ set_mimetype(UserCtx, FileCtx0, Mimetype, Create, Replace) ->
 -spec get_transfer_encoding_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_transfer_encoding_insecure(_UserCtx, FileCtx) ->
-    case xattr:get_by_name(FileCtx, ?TRANSFER_ENCODING_KEY) of
+    case get_cdmi_metadata(FileCtx, ?TRANSFER_ENCODING_KEY) of
         {ok, Val} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #transfer_encoding{value = Val}};
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #transfer_encoding{value = Val}
+            };
         {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Sets encoding suitable for rest transfer.
 %% @end
 %%--------------------------------------------------------------------
--spec set_transfer_encoding_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:transfer_encoding(), Create :: boolean(), Replace :: boolean()) ->
+-spec set_transfer_encoding_insecure(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    custom_metadata:transfer_encoding(),
+    Create :: boolean(),
+    Replace :: boolean()
+) ->
     fslogic_worker:provider_response().
 set_transfer_encoding_insecure(_UserCtx, FileCtx, Encoding, Create, Replace) ->
-    case xattr:set(FileCtx, ?TRANSFER_ENCODING_KEY, Encoding, Create, Replace) of
+    case set_cdmi_metadata(FileCtx, ?TRANSFER_ENCODING_KEY, Encoding, Create, Replace) of
         {ok, _} ->
             fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
@@ -163,6 +190,7 @@ set_transfer_encoding_insecure(_UserCtx, FileCtx, Encoding, Create, Replace) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns completion status, which tells if the file is under modification by
 %% cdmi at the moment.
@@ -171,7 +199,7 @@ set_transfer_encoding_insecure(_UserCtx, FileCtx, Encoding, Create, Replace) ->
 -spec get_cdmi_completion_status_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_cdmi_completion_status_insecure(_UserCtx, FileCtx) ->
-    case xattr:get_by_name(FileCtx, ?CDMI_COMPLETION_STATUS_KEY) of
+    case get_cdmi_metadata(FileCtx, ?CDMI_COMPLETION_STATUS_KEY) of
         {ok, Val} ->
             #provider_response{
                 status = #status{code = ?OK},
@@ -183,16 +211,22 @@ get_cdmi_completion_status_insecure(_UserCtx, FileCtx) ->
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Sets completion status, which tells if the file is under modification by
 %% cdmi at the moment.
 %% @end
 %%--------------------------------------------------------------------
--spec set_cdmi_completion_status_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:cdmi_completion_status(), Create :: boolean(), Replace :: boolean()) ->
+-spec set_cdmi_completion_status_insecure(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    custom_metadata:cdmi_completion_status(),
+    Create :: boolean(),
+    Replace :: boolean()
+) ->
     fslogic_worker:provider_response().
 set_cdmi_completion_status_insecure(_UserCtx, FileCtx, CompletionStatus, Create, Replace) ->
-    case xattr:set(FileCtx, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus, Create, Replace) of
+    case set_cdmi_metadata(FileCtx, ?CDMI_COMPLETION_STATUS_KEY, CompletionStatus, Create, Replace) of
         {ok, _} ->
             #provider_response{status = #status{code = ?OK}};
         {error, not_found} ->
@@ -201,6 +235,7 @@ set_cdmi_completion_status_insecure(_UserCtx, FileCtx, CompletionStatus, Create,
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Returns mimetype of file.
 %% @end
@@ -208,27 +243,60 @@ set_cdmi_completion_status_insecure(_UserCtx, FileCtx, CompletionStatus, Create,
 -spec get_mimetype_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_mimetype_insecure(_UserCtx, FileCtx) ->
-    case xattr:get_by_name(FileCtx, ?MIMETYPE_KEY) of
+    case get_cdmi_metadata(FileCtx, ?MIMETYPE_KEY) of
         {ok, Val} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = #mimetype{value = Val}};
+            #provider_response{
+                status = #status{code = ?OK},
+                provider_response = #mimetype{value = Val}
+            };
         {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
 
 
 %%--------------------------------------------------------------------
+%% @private
 %% @doc
 %% Sets mimetype of file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_mimetype_insecure(user_ctx:ctx(), file_ctx:ctx(),
-    xattr:mimetype(), Create :: boolean(), Replace :: boolean()) ->
+-spec set_mimetype_insecure(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    custom_metadata:mimetype(),
+    Create :: boolean(),
+    Replace :: boolean()
+) ->
     fslogic_worker:provider_response().
 set_mimetype_insecure(_UserCtx, FileCtx, Mimetype, Create, Replace) ->
-    case xattr:set(FileCtx, ?MIMETYPE_KEY, Mimetype, Create, Replace) of
+    case set_cdmi_metadata(FileCtx, ?MIMETYPE_KEY, Mimetype, Create, Replace) of
         {ok, _} ->
             fslogic_times:update_ctime(FileCtx),
             #provider_response{status = #status{code = ?OK}};
         {error, not_found} ->
             #provider_response{status = #status{code = ?ENOATTR}}
     end.
+
+
+%% @private
+-spec get_cdmi_metadata(file_ctx:ctx(), custom_metadata:name()) ->
+    {ok, custom_metadata:value()} | {error, term()}.
+get_cdmi_metadata(FileCtx, CdmiAttrName) ->
+    custom_metadata:get_xattr(file_ctx:get_uuid_const(FileCtx), CdmiAttrName).
+
+
+%% @private
+-spec set_cdmi_metadata(
+    file_ctx:ctx(),
+    custom_metadata:name(),
+    custom_metadata:value(),
+    Create :: boolean(),
+    Replace :: boolean()
+) ->
+    {ok, file_meta:uuid()} | {error, term()}.
+set_cdmi_metadata(FileCtx, CdmiAttrName, CdmiAttrValue, Create, Replace) ->
+    custom_metadata:set_xattr(
+        file_ctx:get_uuid_const(FileCtx),
+        file_ctx:get_space_id_const(FileCtx),
+        CdmiAttrName, CdmiAttrValue, Create, Replace
+    ).

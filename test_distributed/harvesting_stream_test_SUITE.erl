@@ -147,25 +147,28 @@ all() -> ?ALL([
 -define(assertHarvestMetadataNotCalled(ExpSpaceId, ExpDestination, ExpSeqs,
     ExpHarvestingStreamPid, Timeout
 ), (
-    (fun(__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout) ->
+    (fun AssertFun(__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, __Timeout) ->
+        Start = time_utils:system_time_seconds(),
         __TimeoutInMillis = timer:seconds(__Timeout),
         receive
-            ?HARVEST_METADATA_CALLED(
+            __HM = ?HARVEST_METADATA_CALLED(
                 __SpaceId,
                 __Destination,
                 __ReceivedBatch,
                 __HarvestingStreamPid
             ) ->
+                ElapsedTime = time_utils:system_time_seconds() - Start,
                 __ReceivedSeqs = [__Seq || #{<<"seq">> := __Seq} <- __ReceivedBatch],
                 case sequential_subtract(__Seqs, __ReceivedSeqs) of
-                    __Seqs -> ok;
+                    __Seqs ->
+                        AssertFun(__SpaceId, __Destination, __Seqs, __HarvestingStreamPid, max(__Timeout - ElapsedTime, 0));
                     _ ->
                         __Args = [
                             {module, ?MODULE},
-                            {line, ?LINE},
-                            {expected, {__SpaceId, __Destination, __ReceivedSeqs, __HarvestingStreamPid, __Timeout}},
-                            {value, timeout}],
-                        ct:print("assertHarvestMetadataNotCalled_failed: ~lp~n", [__Args]),
+                            {line, ?LINE}
+                        ],
+                        ct:print("assertHarvestMetadataNotCalled_failed: ~lp~n"
+                            "Unexpectedly received: ~p~n", [__Args, __HM]),
                         erlang:error({assertHarvestMetadataNotCalled_failed, __Args})
                 end
         after
@@ -757,7 +760,7 @@ backoff_should_be_used_on_space_level_error(Config) ->
         ?HARVESTER_ID(2) => [?INDEX_ID(1), ?INDEX_ID(2)]
     },
         RelevantSeqs1 ++ RelevantSeqs2, MainStreamPid
-    ),
+    , 120),
 
     couchbase_changes_stream_mock:stream_changes(MainChangesStreamPid, Changes3),
     ?assertHarvestMetadataCalled(SpaceId, #{
@@ -765,7 +768,7 @@ backoff_should_be_used_on_space_level_error(Config) ->
         ?HARVESTER_ID(2) => [?INDEX_ID(1), ?INDEX_ID(2)]
     },
         RelevantSeqs3, MainStreamPid
-    ).
+    , 120).
 
 error_mix_test(Config) ->
     [N | _] = Nodes = ?config(op_worker_nodes, Config),

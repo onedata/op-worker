@@ -22,7 +22,9 @@
     % StartId can be used to list dir children starting from this file
     index_startid :: binary(),
     active_permissions_type :: file_meta:permissions_type(),
-    has_metadata :: boolean()
+    has_metadata :: boolean(),
+    has_direct_qos :: boolean(),
+    has_eff_qos :: boolean()
 }).
 
 -endif.

@@ -6,10 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains tests concerning file metadata basic API (REST + gs).
+%%% This file contains tests concerning file metadata delete basic API
+%%% (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_metadata_api_test_SUITE).
+-module(file_metadata_delete_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
 %% API

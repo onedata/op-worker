@@ -70,10 +70,12 @@
 -define(FILE_DELETED, deleted).
 -define(FILE_NEVER_EXISTED, never_existed).
 
-%% Modes of Local User Mapping (LUMA)
+% Maximal uid value in common linux distributions
+-define(UID_MAX, 2147483647).
 
--define(NO_LUMA, no_luma).
--define(EMBEDDED_LUMA, embedded_luma).
--define(EXTERNAL_LUMA, external_luma).
+% Special values masking file real uid/gid in share mode as agreed with Oneclient
+% developers (they can `case` on such values to perform some special actions).
+-define(SHARE_UID, ?UID_MAX-1).
+-define(SHARE_GID, ?SHARE_UID).
 
 -endif.

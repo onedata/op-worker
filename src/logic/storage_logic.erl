@@ -31,7 +31,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([create_in_zone/2, create_in_zone/3, get/1, delete_in_zone/1]).
+-export([create_in_zone/1, create_in_zone/2, get/1, delete_in_zone/1]).
 -export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_space_support/2]).
@@ -52,10 +52,9 @@
 %%--------------------------------------------------------------------
 %% @equiv create_in_zone(Name, QosParameters, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), od_storage:qos_parameters()) ->
-    {ok, storage:id()} | errors:error().
-create_in_zone(Name, QosParameters) ->
-    create_in_zone(Name, QosParameters, undefined).
+-spec create_in_zone(od_storage:name()) -> {ok, storage:id()} | errors:error().
+create_in_zone(Name) ->
+    create_in_zone(Name, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -63,15 +62,14 @@ create_in_zone(Name, QosParameters) ->
 %% Creates document containing storage public information in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), od_storage:qos_parameters(), storage:id() | undefined) ->
+-spec create_in_zone(od_storage:name(), storage:id() | undefined) ->
     {ok, storage:id()} | errors:error().
-create_in_zone(Name, QosParameters, StorageId) ->
+create_in_zone(Name, StorageId) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
         data = #{
-            <<"name">> => Name,
-            <<"qos_parameters">> => QosParameters
+            <<"name">> => Name
         }
     }),
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->

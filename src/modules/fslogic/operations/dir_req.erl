@@ -203,14 +203,35 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 ) ->
     fslogic_worker:fuse_response().
 get_children_insecure(UserCtx, FileCtx0, Offset, Limit, Token, StartId, ChildrenWhiteList) ->
+    ParentGuid = file_ctx:get_guid_const(FileCtx0),
     {Children, NewToken, IsLast, FileCtx1} = list_children(
         UserCtx, FileCtx0, Offset, Limit, Token, StartId, ChildrenWhiteList
     ),
-    ChildrenLinks = lists:map(fun(ChildFile) ->
-        ChildGuid = file_ctx:get_guid_const(ChildFile),
-        {ChildName, _ChildFile3} = file_ctx:get_aliased_name(ChildFile, UserCtx),
-        #child_link{name = ChildName, guid = ChildGuid}
-    end, Children),
+    ChildrenNum = length(Children),
+    ChildrenLinks = lists:filtermap(fun({Num, ChildCtx}) ->
+        ChildGuid = file_ctx:get_guid_const(ChildCtx),
+        {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
+        case Num == 1 orelse Num == ChildrenNum of
+            true ->
+                try
+                    {FileDoc, _ChildCtx3} = file_ctx:get_file_doc(ChildCtx2),
+                    case file_meta:check_name(file_id:guid_to_uuid(ParentGuid), ChildName, FileDoc) of
+                        {conflicting, ExtendedName, _Others} ->
+                            {true, #child_link{name = ExtendedName, guid = ChildGuid}};
+                        _ ->
+                            {true, #child_link{name = ChildName, guid = ChildGuid}}
+                    end
+                catch _:_ ->
+                    % Documents for file have not yet synchronized
+                    false
+                end;
+            false ->
+                % Other files than first and last don't need to resolve name
+                % conflicts (to check for collisions) as list_children
+                % (file_meta:tag_children to be precise) already did it
+                {true, #child_link{name = ChildName, guid = ChildGuid}}
+        end
+    end, lists:zip(lists:seq(1, ChildrenNum), Children)),
 
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},

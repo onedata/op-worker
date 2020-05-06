@@ -61,6 +61,7 @@ response(#op_req{operation = delete} = OpReq, {ok, DataFormat, Result}) ->
 error_response({error, _} = Error) ->
     #rest_resp{
         code = errors:to_http_code(Error),
+        headers = #{<<"content-type">> => <<"application/json">>},
         body = #{<<"error">> => errors:to_json(Error)}
     }.
 

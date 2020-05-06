@@ -17,7 +17,7 @@
 
 
 %% API
--export([init/1, teardown/1]).
+-export([init/1, init/2, teardown/1]).
 -export([
     stat/3, get_details/3,
     resolve_guid/3, get_file_path/3,
@@ -90,17 +90,24 @@
 
 -spec init(Config :: list()) -> list().
 init(Config) ->
+    init(Config, true).
+
+-spec init(Config :: list(), boolean()) -> list().
+init(Config, Link) ->
     Host = self(),
+    ServerFun = fun() ->
+        lfm_handles = ets:new(lfm_handles, [public, set, named_table]),
+        Host ! {self(), done},
+        receive
+            exit -> ok
+        end
+    end,
     Servers = lists:map(
         fun(W) ->
-            spawn_link(W,
-                fun() ->
-                    lfm_handles = ets:new(lfm_handles, [public, set, named_table]),
-                    Host ! {self(), done},
-                    receive
-                        exit -> ok
-                    end
-                end)
+            case Link of
+                true -> spawn_link(W, ServerFun);
+                false -> spawn(W, ServerFun)
+            end
         end, lists:usort(?config(op_worker_nodes, Config))),
 
     lists:foreach(
@@ -498,13 +505,13 @@ get_children_details(Worker, SessId, FileKey, Offset, Limit, StartId) ->
 %%%===================================================================
 
 
--spec get_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), xattr:name()) ->
+-spec get_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), custom_metadata:name()) ->
     {ok, #xattr{}} | lfm:error_reply().
 get_xattr(Worker, SessId, FileKey, XattrKey) ->
     get_xattr(Worker, SessId, FileKey, XattrKey, false).
 
 
--spec get_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), xattr:name(), boolean()) ->
+-spec get_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), custom_metadata:name(), boolean()) ->
     {ok, #xattr{}} | lfm:error_reply().
 get_xattr(Worker, SessId, FileKey, XattrKey, Inherited) ->
     ?EXEC(Worker, lfm:get_xattr(SessId, uuid_to_guid(Worker, FileKey), XattrKey, Inherited)).
@@ -523,14 +530,14 @@ set_xattr(Worker, SessId, FileKey, Xattr, Create, Replace) ->
     ?EXEC(Worker, lfm:set_xattr(SessId, uuid_to_guid(Worker, FileKey), Xattr, Create, Replace)).
 
 
--spec remove_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), xattr:name()) ->
+-spec remove_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), custom_metadata:name()) ->
     ok | lfm:error_reply().
 remove_xattr(Worker, SessId, FileKey, XattrKey) ->
     ?EXEC(Worker, lfm:remove_xattr(SessId, uuid_to_guid(Worker, FileKey), XattrKey)).
 
 
 -spec list_xattr(node(), session:id(), fslogic_worker:file_guid_or_path() | file_meta:uuid_or_path(), boolean(), boolean()) ->
-    {ok, [xattr:name()]} | lfm:error_reply().
+    {ok, [custom_metadata:name()]} | lfm:error_reply().
 list_xattr(Worker, SessId, FileKey, Inherited, ShowInternal) ->
     ?EXEC(Worker, lfm:list_xattr(SessId, uuid_to_guid(Worker, FileKey), Inherited, ShowInternal)).
 
@@ -564,37 +571,37 @@ remove_acl(Worker, SessId, FileKey) ->
 
 
 -spec get_transfer_encoding(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
-    {ok, xattr:transfer_encoding()} | lfm:error_reply().
+    {ok, custom_metadata:transfer_encoding()} | lfm:error_reply().
 get_transfer_encoding(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_transfer_encoding(SessId, uuid_to_guid(Worker, FileKey))).
 
 
--spec set_transfer_encoding(node(), session:id(), lfm:file_key() | file_meta:uuid(), xattr:transfer_encoding()) ->
+-spec set_transfer_encoding(node(), session:id(), lfm:file_key() | file_meta:uuid(), custom_metadata:transfer_encoding()) ->
     ok | lfm:error_reply().
 set_transfer_encoding(Worker, SessId, FileKey, Encoding) ->
     ?EXEC(Worker, lfm:set_transfer_encoding(SessId, uuid_to_guid(Worker, FileKey), Encoding)).
 
 
 -spec get_cdmi_completion_status(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
-    {ok, xattr:cdmi_completion_status()} | lfm:error_reply().
+    {ok, custom_metadata:cdmi_completion_status()} | lfm:error_reply().
 get_cdmi_completion_status(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_cdmi_completion_status(SessId, uuid_to_guid(Worker, FileKey))).
 
 
 -spec set_cdmi_completion_status(node(), session:id(),
-    lfm:file_key() | file_meta:uuid(), xattr:cdmi_completion_status()) ->
+    lfm:file_key() | file_meta:uuid(), custom_metadata:cdmi_completion_status()) ->
     ok | lfm:error_reply().
 set_cdmi_completion_status(Worker, SessId, FileKey, CompletionStatus) ->
     ?EXEC(Worker, lfm:set_cdmi_completion_status(SessId, uuid_to_guid(Worker, FileKey), CompletionStatus)).
 
 
 -spec get_mimetype(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
-    {ok, xattr:mimetype()} | lfm:error_reply().
+    {ok, custom_metadata:mimetype()} | lfm:error_reply().
 get_mimetype(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_mimetype(SessId, uuid_to_guid(Worker, FileKey))).
 
 
--spec set_mimetype(node(), session:id(), lfm:file_key() | file_meta:uuid(), xattr:mimetype()) ->
+-spec set_mimetype(node(), session:id(), lfm:file_key() | file_meta:uuid(), custom_metadata:mimetype()) ->
     ok | lfm:error_reply().
 set_mimetype(Worker, SessId, FileKey, Mimetype) ->
     ?EXEC(Worker, lfm:set_mimetype(SessId, uuid_to_guid(Worker, FileKey), Mimetype)).
@@ -612,19 +619,19 @@ has_custom_metadata(Worker, SessId, FileKey) ->
 
 
 -spec get_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type(), custom_metadata:filter(), boolean()
+    custom_metadata:type(), custom_metadata:query(), boolean()
 ) ->
     {ok, custom_metadata:value()}.
-get_metadata(Worker, SessId, FileKey, Type, Names, Inherited) ->
-    ?EXEC(Worker, lfm:get_metadata(SessId, FileKey, Type, Names, Inherited)).
+get_metadata(Worker, SessId, FileKey, Type, Query, Inherited) ->
+    ?EXEC(Worker, lfm:get_metadata(SessId, FileKey, Type, Query, Inherited)).
 
 
 -spec set_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type(), custom_metadata:value(), custom_metadata:filter()
+    custom_metadata:type(), custom_metadata:value(), custom_metadata:query()
 ) ->
     ok.
-set_metadata(Worker, SessId, FileKey, Type, Value, Names) ->
-    ?EXEC(Worker, lfm:set_metadata(SessId, FileKey, Type, Value, Names)).
+set_metadata(Worker, SessId, FileKey, Type, Value, Query) ->
+    ?EXEC(Worker, lfm:set_metadata(SessId, FileKey, Type, Value, Query)).
 
 
 -spec remove_metadata(node(), session:id(), lfm:file_key(),
@@ -720,15 +727,15 @@ get_file_distribution(Worker, SessId, FileKey) ->
 
 
 -spec get_effective_file_qos(node(), session:id(), lfm:file_key()) ->
-    {ok, {[qos_entry:id()], file_qos:assigned_entries()}} | lfm:error_reply().
+    {ok, {#{qos_entry:id() => qos_status:fulfilled()}, file_qos:assigned_entries()}} | lfm:error_reply().
 get_effective_file_qos(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_effective_file_qos(SessId, FileKey)).
 
 
--spec add_qos_entry(node(), session:id(), lfm:file_key(), qos_expression:raw(),
+-spec add_qos_entry(node(), session:id(), lfm:file_key(), qos_expression:rpn(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | lfm:error_reply().
-add_qos_entry(Worker, SessId, FileKey, Expression, ReplicasNum) ->
-    ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, Expression, ReplicasNum)).
+add_qos_entry(Worker, SessId, FileKey, ExpressionInRpn, ReplicasNum) ->
+    ?EXEC(Worker, lfm:add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum)).
 
 
 -spec get_qos_entry(node(), session:id(), qos_entry:id()) ->

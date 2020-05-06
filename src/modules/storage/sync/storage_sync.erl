@@ -18,7 +18,8 @@
 -export([
     enable_import/3, configure_import/3, configure_import/4, disable_import/2,
     configure_update/3, configure_update/4, disable_update/2,
-    get_import_details/2, get_update_details/2, cancel/2, clean_up/2]).
+    get_import_details/2, get_update_details/2, is_import_enabled/2, 
+    cancel/2, clean_up/2]).
 
 %%%===================================================================
 %%% API functions
@@ -74,6 +75,17 @@ get_import_details(SpaceId, StorageId) ->
     space_strategies:sync_details().
 get_update_details(SpaceId, StorageId) ->
     space_strategies:get_update_details(SpaceId, StorageId).
+
+-spec is_import_enabled(od_space:id(), storage:id()) -> boolean().
+is_import_enabled(SpaceId, StorageId) ->
+    {ok, SyncConfigs} = space_strategies:get_sync_configs(SpaceId),
+    SyncConfig = maps:get(StorageId, SyncConfigs, undefined),
+    case SyncConfig of
+        undefined -> false;
+        _ ->
+            {ImportEnabled, _ImportConfig} = space_strategies:get_import_details(SyncConfig),
+            ImportEnabled
+    end.
 
 -spec cancel(od_space:id(), storage:id()) -> ok.
 cancel(SpaceId, StorageId) ->

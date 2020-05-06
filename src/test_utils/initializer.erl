@@ -39,7 +39,7 @@
     communicator_mock/1, clean_test_users_and_spaces_no_validate/1,
     domain_to_provider_id/1, mock_test_file_context/2, unmock_test_file_context/1
 ]).
--export([mock_auth_manager/1, unmock_auth_manager/1]).
+-export([mock_auth_manager/1, mock_auth_manager/2, unmock_auth_manager/1]).
 -export([mock_provider_ids/1, mock_provider_id/4, unmock_provider_ids/1]).
 -export([unload_quota_mocks/1, disable_quota_limit/1]).
 -export([testmaster_mock_space_user_privileges/4, node_get_mocked_space_user_privileges/2]).
@@ -394,8 +394,8 @@ setup_storage([Worker | Rest], Config) ->
     ),
     StorageName = <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
     {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, false, undefined, false]),
-    rpc:call(Worker, storage, on_storage_created, [StorageId]),
     storage_logic_mock_setup(Worker, #{?GET_DOMAIN_BIN(Worker) => #{StorageId => #{}}}, []),
+    rpc:call(Worker, storage, on_storage_created, [StorageId]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
     setup_storage(Rest, Config).
 
@@ -491,38 +491,56 @@ unmock_test_file_context(Config) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Mocks auth_manager:verify for all providers in given environment.
+%% Mocks auth_manager functions for all providers in given environment.
 %% @end
 %%--------------------------------------------------------------------
 -spec mock_auth_manager(proplists:proplist()) -> ok.
 mock_auth_manager(Config) ->
+    mock_auth_manager(Config, _CheckIfUserIsSupported = false).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Mocks auth_manager functions for all providers in given environment.
+%% @end
+%%--------------------------------------------------------------------
+-spec mock_auth_manager(proplists:proplist(), CheckIfUserIsSupported :: boolean()) -> ok.
+mock_auth_manager(Config, CheckIfUserIsSupported) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, auth_manager, [passthrough]),
     test_utils:mock_expect(Workers, auth_manager, verify_credentials,
         fun(TokenCredentials) ->
             case tokens:deserialize(auth_manager:get_access_token(TokenCredentials)) of
-                {ok, Token} ->
-                    Consumer = case auth_manager:get_consumer_token(TokenCredentials) of
-                        undefined ->
-                            undefined;
-                        ConsumerToken ->
-                            {ok, #token{subject = Csm}} = tokens:deserialize(ConsumerToken),
-                            Csm
+                {ok, #token{subject = ?SUB(user, UserId)} = Token} ->
+                    IsUserSupported = case CheckIfUserIsSupported of
+                        true -> provider_logic:has_eff_user(UserId);
+                        false -> true
                     end,
-                    AuthCtx = #auth_ctx{
-                        current_timestamp = time_utils:cluster_time_seconds(),
-                        ip = auth_manager:get_peer_ip(TokenCredentials),
-                        interface = auth_manager:get_interface(TokenCredentials),
-                        service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
-                        consumer = Consumer,
-                        data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenCredentials),
-                        group_membership_checker = fun(_, _) -> false end
-                    },
-                    case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx) of
-                        {ok, Auth} ->
-                            {ok, Auth, undefined};
-                        {error, _} = Err1 ->
-                            Err1
+                    case IsUserSupported of
+                        true ->
+                            Consumer = case auth_manager:get_consumer_token(TokenCredentials) of
+                                undefined ->
+                                    undefined;
+                                ConsumerToken ->
+                                    {ok, #token{subject = Csm}} = tokens:deserialize(ConsumerToken),
+                                    Csm
+                            end,
+                            AuthCtx = #auth_ctx{
+                                current_timestamp = time_utils:cluster_time_seconds(),
+                                ip = auth_manager:get_peer_ip(TokenCredentials),
+                                interface = auth_manager:get_interface(TokenCredentials),
+                                service = ?SERVICE(?OP_WORKER, oneprovider:get_id()),
+                                consumer = Consumer,
+                                data_access_caveats_policy = auth_manager:get_data_access_caveats_policy(TokenCredentials),
+                                group_membership_checker = fun(_, _) -> false end
+                            },
+                            case tokens:verify(Token, ?TOKENS_SECRET, AuthCtx) of
+                                {ok, Auth} ->
+                                    {ok, Auth, undefined};
+                                {error, _} = Err1 ->
+                                    Err1
+                            end;
+                        false ->
+                            ?ERROR_USER_NOT_SUPPORTED
                     end;
                 {error, _} = Err2 ->
                     Err2
@@ -1118,10 +1136,19 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         {ok, #document{value = #od_provider{storages = ProviderStorageIds}}} = provider_logic:get(),
         {ok, [X || X <- ProviderStorageIds, Y <-maps:keys(StorageIds), X==Y]}
     end),
+    
+    test_utils:mock_expect(Workers, space_logic, get_local_storage_id, fun(SpaceId) ->
+        {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
+        {ok, StorageId}
+    end),
 
     test_utils:mock_expect(Workers, space_logic, get_all_storage_ids, fun(SpaceId) ->
         {ok, #document{value = #od_space{storages = StorageIds}}} = GetSpaceFun(?ROOT_SESS_ID, SpaceId),
         {ok, maps:keys(StorageIds)}
+    end),
+    
+    test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(SpaceId) ->
+        space_logic:get_provider_ids(?ROOT_SESS_ID, SpaceId)
     end),
 
     test_utils:mock_expect(Workers, space_logic, get_provider_ids, fun(SpaceId) ->
@@ -1152,6 +1179,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 
     test_utils:mock_expect(Workers, space_logic, get_harvesters, fun(SpaceId) ->
         {ok, proplists:get_value(SpaceId, SpacesHarvesters, [])}
+    end),
+    
+    test_utils:mock_expect(Workers, space_logic, report_dbsync_state, fun(_SpaceId, _) ->
+        ok
     end).
 
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
@@ -1451,12 +1482,17 @@ harvester_logic_mock_setup(Workers, HarvestersSetup) ->
     [{binary(), [#{{binary(), binary()} => non_neg_integer()}]}]) -> ok.
 storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     StorageMap = maps:fold(fun(ProviderId, InitialStorageDesc, Acc) ->
-        NewStorageDesc = maps:map(fun(_StorageId, Desc) ->
+        NewStorageDesc = maps:map(fun(StorageId, Desc) ->
             Desc1 = case Desc of
                 [] -> #{};
                 _ -> Desc
             end,
-            Desc1#{<<"provider_id">> => ProviderId}
+            QosParameters = maps:get(<<"qos_parameters">>, Desc1, #{}),
+            ExtendedQosParameters = QosParameters#{
+                <<"storageId">> => StorageId,
+                <<"providerId">> => ProviderId
+            },
+            Desc1#{<<"provider_id">> => ProviderId, <<"qos_parameters">> => ExtendedQosParameters}
         end, InitialStorageDesc),
         maps:merge(Acc, NewStorageDesc)
     end, #{}, StoragesSetupMap),
@@ -1471,7 +1507,7 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
 
     GetStorageFun = fun(SM) ->
         fun (<<"all">>) ->
-                % This is useful when changing storage parameters. Used only in mock.
+                % This is useful when changing storage QoS parameters. Used only in mock.
                 {ok, SM};
             (StorageId) ->
                 StorageDesc = maps:get(StorageId, SM, #{}),

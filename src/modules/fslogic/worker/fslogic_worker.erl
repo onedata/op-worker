@@ -579,15 +579,15 @@ handle_provider_request(UserCtx, #set_mimetype{value = Value}, FileCtx) ->
     cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Value, false, false);
 handle_provider_request(UserCtx, #get_metadata{
     type = Type,
-    names = Names,
+    query = Query,
     inherited = Inherited
 }, FileCtx) ->
-    metadata_req:get_metadata(UserCtx, FileCtx, Type, Names, Inherited);
+    metadata_req:get_metadata(UserCtx, FileCtx, Type, Query, Inherited);
 handle_provider_request(UserCtx, #set_metadata{
     metadata = #metadata{type = Type, value = Value},
-    names = Names
+    query = Query
 }, FileCtx) ->
-    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Names, false, false);
+    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Query, false, false);
 handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
     metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
@@ -596,8 +596,10 @@ handle_provider_request(UserCtx, #create_share{name = Name}, FileCtx) ->
     share_req:create_share(UserCtx, FileCtx, Name);
 handle_provider_request(UserCtx, #remove_share{share_id = ShareId}, FileCtx) ->
     share_req:remove_share(UserCtx, FileCtx, ShareId);
-handle_provider_request(UserCtx, #add_qos_entry{expression = Expression, replicas_num = ReplicasNum}, FileCtx) ->
-    qos_req:add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum);
+handle_provider_request(UserCtx, #add_qos_entry{
+    expression = ExpressionInRpn, replicas_num = ReplicasNum, entry_type = EntryType
+}, FileCtx) ->
+    qos_req:add_qos_entry(UserCtx, FileCtx, ExpressionInRpn, ReplicasNum, EntryType);
 handle_provider_request(UserCtx, #get_effective_file_qos{}, FileCtx) ->
     qos_req:get_effective_file_qos(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->

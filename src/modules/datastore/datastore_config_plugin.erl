@@ -78,6 +78,8 @@ get_models() -> [
     storage_sync_links,
     storage_traverse_job,
     qos_status,
+    space_unsupport_job,
+    cleanup_traverse_status,
     luma_users_cache,
     luma_spaces_cache,
     luma_reverse_cache,

@@ -1,11 +1,19 @@
 %%%-------------------------------------------------------------------
 %%% @author Tomasz Lichon
-%%% @copyright (C) 2017 ACK CYFRONET AGH
+%%% @copyright (C) 2017-2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
-%%% @doc API for files' json metadata.
+%%% @doc
+%%% API for files' json metadata. This api differs from one offered for
+%%% other xattrs in following aspects:
+%%% - 'inherited' flag causes all ancestors json metadata to be gathered
+%%% and merged before returning rather than getting the first ancestor
+%%% metadata with defined xattr undef specified key (as it happens for
+%%% other xattrs)
+%%% - Filters, that is path under/from which json metadata should be
+%%% set/fetched.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(json_metadata).
@@ -16,127 +24,163 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([get/3, set/5, remove/1]).
+-export([get/4, set/6, remove/2]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Gets json metadata subtree
-%% e. g. for meta:
-%%
-%% {'l1': {'l2': 'value'}}
-%%
-%% get_json_metadata(FileUuid, [<<"l1">>, <<"l2">>]) -> {ok, <<"value">>}
-%% get_json_metadata(FileUuid, [<<"l1">>]) -> {ok, #{<<"l2">> => <<"value">>}}
-%% get_json_metadata(FileUuid, []) -> {ok, #{<<"l1">> => {<<"l2">> => <<"value">>}}}
-%%
-%% @end
-%%--------------------------------------------------------------------
--spec get(file_ctx:ctx(), custom_metadata:filter(), Inherited :: boolean()) ->
-    {ok, map()} | {error, term()}.
-get(FileCtx, Names, false) ->
-    case custom_metadata:get(file_ctx:get_uuid_const(FileCtx)) of
-        {ok, #document{value = #custom_metadata{value = #{?JSON_METADATA_KEY := Json}}}} ->
-            {ok, custom_meta_manipulation:find(Json, Names)};
-        {ok, #document{value = #custom_metadata{}}} ->
-            {error, not_found};
-        Error ->
-            Error
-    end;
-get(FileCtx, Names, true) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    case file_meta:get_ancestors(FileUuid) of
-        {ok, Uuids} ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
-            Jsons = lists:map(fun(Uuid) ->
-                AncestorCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, SpaceId)),
-                case get(AncestorCtx, Names, false) of
-                    {ok, Json} ->
-                        Json;
-                    {error, not_found} ->
-                        #{}
-                end
-            end, [FileUuid | Uuids]),
-            {ok, custom_meta_manipulation:merge(Jsons)};
-        Error ->
-            Error
-    end.
 
-%%--------------------------------------------------------------------
-%% @doc Set json metadata subtree
-%% e. g. for meta:
-%%
-%% {'l1': {'l2': 'value'}}
-%%
-%% set_json_metadata(FileUuid, <<"new_value">> [<<"l1">>, <<"l2">>])
-%%    meta: {'l1': {'l2': 'new_value'}}
-%% set_json_metadata(FileUuid, [<<"l1">>])
-%%    meta: {'l1': 'new_value'}
-%% set_json_metadata(FileUuid, []) -> {ok, #{<<"l1">> => {<<"l2">> => <<"value">>}}}
-%%    meta: 'new_value'
-%%--------------------------------------------------------------------
--spec set(file_ctx:ctx(), map(), [binary()], Create :: boolean(), Replace :: boolean()) ->
-    {ok, file_meta:uuid()} | {error, term()}.
-set(FileCtx, JsonToInsert, Names, Create, Replace) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, FileObjectid} = file_id:guid_to_objectid(file_ctx:get_guid_const(FileCtx)),
-    ToCreate = #document{
-        key = FileUuid,
-        value = #custom_metadata{
-            space_id = file_ctx:get_space_id_const(FileCtx),
-            file_objectid = FileObjectid,
-            value = #{
-                ?JSON_METADATA_KEY => custom_meta_manipulation:insert(undefined, JsonToInsert, Names)
-            }
-        },
-        scope = file_ctx:get_space_id_const(FileCtx)
-    },
-    UpdatingFunction = update_custom_meta_fun(JsonToInsert, Names, Create, Replace),
-
-    case Replace of
+-spec get(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    custom_metadata:query(),
+    Inherited :: boolean()
+) ->
+    {ok, custom_metadata:value()} | {error, term()}.
+get(UserCtx, FileCtx, Query, Inherited) ->
+    Result = case Inherited of
         true ->
-            case custom_metadata:update(FileUuid, UpdatingFunction) of
-                {error, not_found} ->
-                    {error, ?ENODATA};
-                OtherAns ->
-                    OtherAns
+            case gather_ancestors_json_metadata(UserCtx, FileCtx, []) of
+                {ok, []} ->
+                    ?ERROR_NOT_FOUND;
+                {ok, GatheredJsons} ->
+                    {ok, json_utils:merge(GatheredJsons)}
             end;
         false ->
-            custom_metadata:create_or_update(ToCreate, UpdatingFunction)
+            get_direct_json_metadata(UserCtx, FileCtx)
+    end,
+    case Result of
+        {ok, Json} ->
+            case json_utils:query(Json, Query) of
+                {ok, _} = Ans -> Ans;
+                error -> ?ERROR_NOT_FOUND
+            end;
+        {error, _} = Error ->
+            Error
     end.
 
-%%--------------------------------------------------------------------
-%% @doc Removes file's json metadata
-%% @equiv remove_xattr_metadata(FileUuid, ?JSON_METADATA_KEY).
-%%--------------------------------------------------------------------
--spec remove(file_ctx:ctx()) -> ok | {error, term()}.
-remove(FileCtx) ->
-    custom_metadata:remove_xattr_metadata(file_ctx:get_uuid_const(FileCtx), ?JSON_METADATA_KEY).
+
+-spec set(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    json_utils:json_term(),
+    custom_metadata:query(),
+    Create :: boolean(),
+    Replace :: boolean()
+) ->
+    {ok, file_meta:uuid()} | {error, term()}.
+set(UserCtx, FileCtx0, Json, Query, Create, Replace) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?write_metadata]
+    ),
+    set_insecure(FileCtx1, Json, Query, Create, Replace).
+
+
+-spec remove(user_ctx:ctx(), file_ctx:ctx()) -> ok | {error, term()}.
+remove(UserCtx, FileCtx) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx,
+        [traverse_ancestors, ?write_metadata]
+    ),
+    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    custom_metadata:remove_xattr(FileUuid, ?JSON_METADATA_KEY).
+
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns function used for updating custom_metadata doc.
-%% @end
-%%--------------------------------------------------------------------
--spec update_custom_meta_fun(map(), [binary()],
-    Create :: boolean(), Replace :: boolean()) -> function().
-update_custom_meta_fun(JsonToInsert, Names, Create, Replace) ->
-    fun(Meta = #custom_metadata{value = MetaValue}) ->
+
+%% @private
+-spec gather_ancestors_json_metadata(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    [custom_metadata:value()]
+) ->
+    {ok, custom_metadata:value()} | {error, term()}.
+gather_ancestors_json_metadata(UserCtx, FileCtx0, GatheredMetadata) ->
+    AllMetadata = case get_direct_json_metadata(UserCtx, FileCtx0) of
+        {ok, Metadata} ->
+            [Metadata | GatheredMetadata];
+        ?ERROR_NOT_FOUND ->
+            GatheredMetadata
+    end,
+
+    case file_ctx:get_and_check_parent(FileCtx0, UserCtx) of
+        {undefined, _FileCtx1} ->
+            {ok, AllMetadata};
+        {ParentCtx, _FileCtx1} ->
+            gather_ancestors_json_metadata(UserCtx, ParentCtx, AllMetadata)
+    end.
+
+
+%% @private
+-spec get_direct_json_metadata(user_ctx:ctx(), file_ctx:ctx()) ->
+    {ok, custom_metadata:value()} | {error, term()}.
+get_direct_json_metadata(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0,
+        [traverse_ancestors, ?read_metadata]
+    ),
+    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    custom_metadata:get_xattr(FileUuid, ?JSON_METADATA_KEY).
+
+
+%% @private
+-spec set_insecure(
+    file_ctx:ctx(),
+    json_utils:json_term(),
+    custom_metadata:query(),
+    Create :: boolean(),
+    Replace :: boolean()
+) ->
+    {ok, file_meta:uuid()} | {error, term()}.
+set_insecure(FileCtx, JsonToInsert, Query, Create, Replace) ->
+    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    {ok, FileObjectId} = file_id:guid_to_objectid(file_ctx:get_guid_const(FileCtx)),
+    ToCreate = #document{
+        key = FileUuid,
+        value = #custom_metadata{
+            space_id = file_ctx:get_space_id_const(FileCtx),
+            file_objectid = FileObjectId,
+            value = #{
+                ?JSON_METADATA_KEY => case json_utils:insert(undefined, JsonToInsert, Query) of
+                    {ok, Json} -> Json;
+                    error -> throw({error, ?ENOATTR})
+                end
+            }
+        },
+        scope = file_ctx:get_space_id_const(FileCtx)
+    },
+    Diff = fun(Meta = #custom_metadata{value = MetaValue}) ->
         case {maps:is_key(?JSON_METADATA_KEY, MetaValue), Create, Replace} of
             {true, true, _} ->
                 {error, ?EEXIST};
             {false, _, true} ->
                 {error, ?ENODATA};
             _ ->
-                Json = maps:get(?JSON_METADATA_KEY, MetaValue, #{}),
-                NewJson = custom_meta_manipulation:insert(Json, JsonToInsert, Names),
-                {ok, Meta#custom_metadata{value = MetaValue#{?JSON_METADATA_KEY => NewJson}}}
+                PrevJson = maps:get(?JSON_METADATA_KEY, MetaValue, undefined),
+                case json_utils:insert(PrevJson, JsonToInsert, Query) of
+                    {ok, NewJson} ->
+                        {ok, Meta#custom_metadata{
+                            value = MetaValue#{?JSON_METADATA_KEY => NewJson}
+                        }};
+                    error ->
+                        {error, ?ENOATTR}
+                end
         end
+    end,
+    case Replace of
+        true ->
+            case custom_metadata:update(FileUuid, Diff) of
+                {error, not_found} ->
+                    {error, ?ENODATA};
+                OtherAns ->
+                    OtherAns
+            end;
+        false ->
+            custom_metadata:create_or_update(ToCreate, Diff)
     end.
