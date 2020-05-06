@@ -56,6 +56,7 @@
     start/3,
     restart/3,
     cancel_cleaning/2,
+    sync_cancel_cleaning/2,
     notify_files_to_process/5,
     notify_finished_traverse/2,
     notify_processed_file/3,
@@ -109,7 +110,9 @@
     finished_batches = ordsets:new() :: ordsets:ordset(batch_no()),
     % number of the last batch which token has already been persisted in the autocleaning model
     last_persisted_batch = undefined :: undefined | batch_no(),
-    last_update_counters_timestamp = 0
+    last_update_counters_timestamp = 0,
+
+    report_terminate_to :: pid() | undefined
 }).
 
 % helper record that stores counters for each batch of files
@@ -126,10 +129,12 @@
 }).
 
 % Message types
--define(CANCEL_CLEANING, cancel_cleaning).
 -define(STOP_CLEANING, stop_cleaning).
 -define(TRAVERSE_FINISHED, traverse_finished).
 -define(SHOULD_CONTINUE, should_continue).
+-record(cancel_cleaning, {
+    report_to :: pid() | undefined
+}).
 -record(file_released, {
     bytes :: non_neg_integer(),
     batch_no :: batch_no()
@@ -152,7 +157,7 @@
 -type state() :: #state{}.
 -type batch_file_counters() :: #batch_file_counters{}.
 %% @formatter:off
--type message_type() :: ?CANCEL_CLEANING | ?STOP_CLEANING | ?TRAVERSE_FINISHED | ?SHOULD_CONTINUE |
+-type message_type() :: #cancel_cleaning{} | ?STOP_CLEANING | ?TRAVERSE_FINISHED | ?SHOULD_CONTINUE |
                         #files_to_process{} | #file_released{} | #files_processed{}.
 %% @formatter:on
 
@@ -187,8 +192,8 @@ start(SpaceId, Config, CurrentSize) ->
                 ARId ->
                     StartTime = autocleaning_run:get_started_at(AR),
                     ok = autocleaning_run_links:add_link(ARId, SpaceId, StartTime),
-                    case get_node_and_start(SpaceId, ARId, AR, Config) of
-                        {ok, _Pid} ->
+                    case start_service(SpaceId, ARId, AR, Config) of
+                        ok ->
                             {ok, ARId};
                         {error, not_found} ->
                             ?error(
@@ -219,8 +224,7 @@ restart(ARId, SpaceId, Config) ->
                 ?ACTIVE ->
                     % ensure that there is a link for given autocleaning_run
                     ok = autocleaning_run_links:add_link(ARId, SpaceId, StartTime),
-                    {ok, _Pid} = gen_server2:start({global, {?SERVER, SpaceId}}, ?MODULE,
-                        [ARId, SpaceId, AR, Config], []),
+                    ok = start_service(SpaceId, ARId, AR, Config),
                     ?debug("Restarted auto-cleaning run ~p in space ~p", [ARId, SpaceId]),
                     {ok, ARId};
                 Status
@@ -289,22 +293,53 @@ unpack_batch_id(BatchId) ->
 %%% Internal API
 %%%===================================================================
 
--spec get_node_and_start(od_space:id(), autocleaning:run_id(), autocleaning_run:record(), autocleaning:config()) ->
-    {ok, pid()} | {error, term()}.
-get_node_and_start(SpaceId, AutocleaningRunId, AutocleaningRun, AutocleaningConfig) ->
-    % MW_CHECK - serwis
-    Node = consistent_hashing:get_assigned_node(SpaceId),
-    rpc:call(Node, autocleaning_run_controller, start_internal, [SpaceId, AutocleaningRunId, AutocleaningRun, AutocleaningConfig]).
+-spec start_service(od_space:id(), autocleaning:run_id(), autocleaning_run:record(), autocleaning:config()) ->
+    ok | aborted.
+start_service(SpaceId, AutocleaningRunId, AutocleaningRun, AutocleaningConfig) ->
+    ServiceOptions = #{
+        start_function => start_internal,
+        start_function_args => [SpaceId, AutocleaningRunId, AutocleaningRun, AutocleaningConfig],
+        stop_function => sync_cancel_cleaning,
+        stop_function_args => [SpaceId, AutocleaningRunId]
+    },
+    internal_services_manager:start_service(?MODULE, SpaceId, ServiceOptions).
 
 -spec start_internal(od_space:id(), autocleaning:run_id(), autocleaning_run:record(), autocleaning:config()) ->
-    {ok, pid()} | {error, term()}.
+    ok | abort.
 start_internal(SpaceId, AutocleaningRunId, AutocleaningRun, AutocleaningConfig) ->
-    gen_server2:start({global, {?SERVER, SpaceId}}, ?MODULE, [AutocleaningRunId, SpaceId, AutocleaningRun, AutocleaningConfig], []).
+    case gen_server2:start({global, {?SERVER, SpaceId}}, ?MODULE,
+        [AutocleaningRunId, SpaceId, AutocleaningRun, AutocleaningConfig], []) of
+        {ok, _} -> ok;
+        _ -> abort
+    end.
+
+sync_cancel_cleaning(SpaceId, AutocleaningRunId) ->
+    gen_server2:cast(?SERVER(SpaceId), #message{
+        type = #cancel_cleaning{report_to = self()},
+        run_id = AutocleaningRunId
+    }),
+    wait_for_terminate(SpaceId).
+
+wait_for_terminate(SpaceId) ->
+    receive
+        {controller_terminated, SpaceId} -> ok
+    after
+        10000 ->
+            case global:whereis_name(?SERVER(SpaceId)) of
+                undefined ->
+                    ok;
+                Pid ->
+                    case is_process_alive(Pid) of
+                        false -> ok;
+                        true -> wait_for_terminate(SpaceId)
+                    end
+            end
+    end.
 
 -spec cancel_cleaning(od_space:id(), run_id()) -> ok.
 cancel_cleaning(SpaceId, AutocleaningRunId) ->
     gen_server2:cast(?SERVER(SpaceId), #message{
-        type = ?CANCEL_CLEANING,
+        type = #cancel_cleaning{},
         run_id = AutocleaningRunId
     }).
 
@@ -497,7 +532,9 @@ handle_info(_Info, State) ->
 terminate(Reason, #state{
     run_id = ARId,
     released_files = ReleasedFiles,
-    released_bytes = ReleasedBytes
+    released_bytes = ReleasedBytes,
+    space_id = SpaceId,
+    report_terminate_to = ReportTo
 }) ->
     case Reason of
         normal ->
@@ -508,6 +545,8 @@ terminate(Reason, #state{
             )
     end,
     autocleaning_run:mark_finished(ARId, ReleasedFiles, ReleasedBytes),
+    ok = internal_services_manager:report_service_stop(?MODULE, SpaceId, SpaceId),
+    ReportTo ! {controller_terminated, SpaceId},
     ok.
 
 %%--------------------------------------------------------------------
@@ -527,9 +566,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec handle_cast_internal(message_type(), state()) ->
     {noreply, state()} | {stop, normal | {error, term()}, state()}.
-handle_cast_internal(?CANCEL_CLEANING, State = #state{run_id = ARId}) ->
+handle_cast_internal(#cancel_cleaning{report_to = ReportTo}, State = #state{run_id = ARId}) ->
     autocleaning_run:mark_cancelling(ARId),
-    {noreply, process_updated_state(State#state{run_cancelled = true})};
+    {noreply, process_updated_state(State#state{run_cancelled = true, report_terminate_to= ReportTo})};
 handle_cast_internal(#files_to_process{
     files_number = FilesNumber,
     batch_no = BatchNo,

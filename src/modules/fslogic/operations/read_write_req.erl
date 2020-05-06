@@ -72,7 +72,6 @@ write(UserCtx, FileCtx, HandleId, ByteSequences) ->
 %%--------------------------------------------------------------------
 -spec get_proxyio_node(file_meta:uuid()) -> node().
 get_proxyio_node(Uuid) ->
-    % MW_CHECK - todo - jak potem posprzatac?
     datastore_key:responsible_node(Uuid).
 
 %%%===================================================================

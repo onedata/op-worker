@@ -270,6 +270,8 @@
 -callback on_harvesting_doc_not_found(harvesting_stream:state()) ->
     handling_result().
 
+-callback terminate(term(), harvesting_stream:state()) -> ok.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -419,6 +421,7 @@ handle_info(Info, State) ->
     State :: state()) -> term().
 terminate(Reason, State = #hs_state{name = Name}) ->
     ?debug("Stopping harvesting_stream ~p due to reason: ~p", [Name, Reason]),
+    terminate(Reason, State),
     ?log_terminate(Reason, State).
 
 %%--------------------------------------------------------------------

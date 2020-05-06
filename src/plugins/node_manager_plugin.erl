@@ -255,5 +255,6 @@ node_recovery(RecoveredNode, IsRecoveredNodeMaster) ->
     case IsRecoveredNodeMaster of
         true ->
             oneprovider:set_oz_domain(RecoveredNode),
-            provider_auth:backup_to_file(RecoveredNode)
+            provider_auth:backup_to_file(RecoveredNode),
+            replica_synchronizer:cancel_and_terminate_slaves()
     end.

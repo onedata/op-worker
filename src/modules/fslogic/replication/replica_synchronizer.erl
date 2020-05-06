@@ -93,7 +93,7 @@
     synchronize/6, request_synchronization/6, request_synchronization/7,
     update_replica/4, force_flush_events/1, delete_whole_file_replica/2,
     cancel/1, cancel_transfers_of_session/2,
-    terminate_all/0
+    terminate_all/0, cancel_and_terminate_slaves/0
 ]).
 % gen_server callbacks
 -export([handle_call/3, handle_cast/2, handle_info/2, init/1, code_change/3,
@@ -229,6 +229,14 @@ terminate_all() ->
     lists:foreach(fun(Pid) -> Pid ! terminate end, Pids),
     wait_for_terminate(Pids).
 
+cancel_and_terminate_slaves() ->
+    Selection = gproc:select([{{{'_', '_', '$1'}, '_', '_'},
+        [{is_binary, '$1'}], ['$$']}]),
+    Pids = request_terminate(Selection),
+
+    lists:foreach(fun(Pid) -> Pid ! check_and_terminate_slave end, Pids),
+    wait_for_slave_check(Pids).
+
 %%%===================================================================
 %%% Apply functions
 %%%===================================================================
@@ -313,11 +321,6 @@ apply_or_run_locally(Uuid, InCacheFun, ApplyOnCacheFun, FallbackFun) ->
 -spec apply_if_alive_no_check(file_meta:uuid(), term()) ->
     term().
 apply_if_alive_no_check(Uuid, FunOrMsg) ->
-    % MW_CHECK - musi umrzec jak master wraca - moze przeiterowac po wszystkich i wymusic terminate (wiemy ktory ma byc na innym node)
-    % tylko co jakk pojawi sie nowy request? a mmoze jakos mu zaznaczac ze jest zapasowym (wiemy to na starcie) - tylko co dalej?
-    % idealnie byloby zeby one dzialaly tak jak procesy datastore'a
-    % Rozwiazanie - przy wstawaniu zaznaczamy liste uuid'ow na slave node i wysylamy na slave node'a nastepne calle az tam sie nie zabije
-    % Przy wstawaniu musi byc tryb ktory mowi zeby sprawdzac na innym node (az uzupelnimy liste)
     Node = datastore_key:responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_if_alive_internal, [Uuid, FunOrMsg]).
 
@@ -331,7 +334,6 @@ apply_if_alive_no_check(Uuid, FunOrMsg) ->
     term().
 apply_no_check(FileCtx, FunOrMsg) ->
     Uuid = file_ctx:get_uuid_const(FileCtx),
-    % MW_CHECK - musi umrzec jak master wraca
     Node = datastore_key:responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_internal, [FileCtx, FunOrMsg]).
 
@@ -344,7 +346,6 @@ apply_no_check(FileCtx, FunOrMsg) ->
 -spec apply_or_run_locally_no_check(file_meta:uuid(), fun(() -> term()), fun(() -> term())) ->
     term().
 apply_or_run_locally_no_check(Uuid, Fun, FallbackFun) ->
-    % MW_CHECK - musi umrzec jak master wraca
     Node = datastore_key:responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_or_run_locally_internal, [Uuid, Fun, FallbackFun]).
 
@@ -363,21 +364,28 @@ apply_or_run_locally_no_check(Uuid, Fun, FallbackFun) ->
 apply_internal(FileCtx, FunOrMsg) ->
     try
         {ok, Process} = get_process(FileCtx),
-        send_or_apply(Process, FunOrMsg)
+        case send_or_apply(Process, FunOrMsg) of
+            {error, node_changed} ->
+                ?debug("Synchronizer process stopped because of node change, "
+                "retrying with a new one"),
+                apply_no_check(FileCtx, FunOrMsg);
+            Other ->
+                Other
+        end
     catch
         %% The process we called was already terminating because of idle timeout,
         %% there's nothing to worry about.
         exit:{{shutdown, timeout}, _} ->
             ?debug("Synchronizer process stopped because of a timeout, "
             "retrying with a new one"),
-            apply_internal(FileCtx, FunOrMsg);
+            apply_no_check(FileCtx, FunOrMsg);
         _:{noproc, _} ->
             ?debug("Synchronizer noproc, retrying with a new one"),
-            apply_internal(FileCtx, FunOrMsg);
+            apply_no_check(FileCtx, FunOrMsg);
         exit:{normal, _} ->
             ?debug("Synchronizer process stopped because of exit:normal, "
             "retrying with a new one"),
-            apply_internal(FileCtx, FunOrMsg)
+            apply_no_check(FileCtx, FunOrMsg)
     end.
 
 %%--------------------------------------------------------------------
@@ -481,6 +489,8 @@ init_or_return_existing(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {Pid, _} = gproc:reg_or_locate({n, l, FileUuid}),
     ok = proc_lib:init_ack({ok, Pid}),
+    % TODO - sprawdzic czy jestesmy na wlasciwym node i jak nie to wywalic blad
+    % moze robic to tylko jak jestesmy w stanie po restarcie
     case self() of
         Pid ->
             {ok, State, Timeout} = init(FileCtx),
@@ -763,6 +773,16 @@ handle_info({fslogic_cache_flushed, Key, Check1, Check2}, State) ->
 handle_info(terminate, State) ->
     {stop, normal, State};
 
+handle_info({check_and_terminate_slave, ReportTo}, #state{file_ctx = Ctx} = State) ->
+    Uuid = file_ctx:get_uuid_const(Ctx),
+    LocalNode = node(),
+    case datastore_key:responsible_node(Uuid) of
+        LocalNode -> ok;
+        _ -> cancel_all_and_terminate(State)
+    end,
+    ReportTo ! {slave_checked, self()},
+    {stop, normal, State};
+
 handle_info(Msg, State) ->
     ?log_bad_request(Msg),
     {noreply, State, ?DIE_AFTER}.
@@ -993,6 +1013,16 @@ cancel_ref(Ref, RetryNum) ->
             "retrying with a new one"),
             cancel_ref(Ref, RetryNum - 1)
     end.
+
+cancel_all_and_terminate(#state{in_progress = InProgress, from_to_refs = Froms}) ->
+    lists:foreach(fun({_, FetchRef, _}) ->
+        cancel_ref(FetchRef, 3)
+    end, ordsets:to_list(InProgress)),
+
+    lists:foreach(fun(From) ->
+        gen_server2:reply(From, {error, node_changed})
+    end, maps:keys(Froms)).
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1538,6 +1568,25 @@ wait_for_terminate(Pid) ->
             wait_for_terminate(Pid);
         _ ->
             ok
+    end.
+
+wait_for_slave_check([]) ->
+    ok;
+wait_for_slave_check([Pid | Pids]) ->
+    wait_for_slave_check(Pid),
+    wait_for_slave_check(Pids);
+wait_for_slave_check(Pid) ->
+    receive
+        {slave_checked, Pid} ->
+            ok
+    after
+        1000 ->
+            case erlang:is_process_alive(Pid) of
+                true ->
+                    wait_for_slave_check(Pid);
+                _ ->
+                    ok
+            end
     end.
 
 %%--------------------------------------------------------------------
