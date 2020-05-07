@@ -99,7 +99,7 @@ cleanup_opened_files() ->
                 ok = file_handles:delete(FileUuid)
             end, Docs);
         Error ->
-            ?error_stacktrace("Cannot clean open files descriptors - ~p", [Error])
+            ?error("Cannot clean open files descriptors - ~p", [Error])
     end.
 
 %%%===================================================================

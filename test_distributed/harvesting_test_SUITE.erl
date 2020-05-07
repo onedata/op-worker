@@ -1096,7 +1096,7 @@ end_per_testcase(_Case, Config) ->
     ok = test_utils:mock_unload(Workers, space_logic),
     lists:foreach(fun(W) ->
         SupervisorPid = whereis(W, harvesting_stream_sup),
-        exit(SupervisorPid, kill)
+        exit(SupervisorPid, normal)
     end, Workers),
     lfm_proxy:teardown(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),

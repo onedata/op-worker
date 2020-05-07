@@ -419,9 +419,9 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: state()) -> term().
-terminate(Reason, State = #hs_state{name = Name}) ->
+terminate(Reason, State = #hs_state{name = Name, callback_module = Mod}) ->
     ?debug("Stopping harvesting_stream ~p due to reason: ~p", [Name, Reason]),
-    terminate(Reason, State),
+    Mod:terminate(Reason, State),
     ?log_terminate(Reason, State).
 
 %%--------------------------------------------------------------------

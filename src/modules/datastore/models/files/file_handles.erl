@@ -73,15 +73,12 @@ exists(Key) ->
 -spec list() -> {ok, [doc()]} | {error, term()}.
 list() ->
     Nodes = consistent_hashing:get_all_nodes(),
-    lists:foldl(fun(Node, Acc) ->
-        case datastore_model:fold(?CTX#{fold_node => Node}, fun(Doc, InternalAcc) -> {ok, [Doc | InternalAcc]} end, Acc) of
-            {ok, NewAcc} ->
-                NewAcc;
-            Error ->
-                ?error_stacktrace("Cannot list file handles, error: ~p", [Error]),
-                Acc
-        end
-    end, [], Nodes).
+    lists:foldl(fun
+        (Node, {ok, Acc}) ->
+            datastore_model:fold(?CTX#{fold_node => Node}, fun(Doc, InternalAcc) -> {ok, [Doc | InternalAcc]} end, Acc);
+        (_Node, Error) ->
+            Error
+    end, {ok, []}, Nodes).
 
 -spec is_removed(record() | doc()) -> boolean().
 is_removed(#document{value = FileHandles}) ->

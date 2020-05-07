@@ -337,6 +337,7 @@ on_harvesting_doc_not_found(State) ->
 start_service(SpaceId) ->
     case harvesting_stream_sup:start_main_stream(SpaceId) of
         ok -> ok;
+        % Nothing to do - harvester stopped in init fun
         {error, normal} -> abort;
         {error, {normal, _}} -> abort
     end.
