@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% This header file contains definitions of macros used in
+%%% external_luma and reverse_external_luma modules.
 %%% @end
 %%%-------------------------------------------------------------------
 

@@ -7,6 +7,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
+%%% WRITEME jk
 %%% TODO OPISAĆ LUMA - > local user mapping, entry module
 %%% storage credentials, display credentials
 %%% @end

@@ -354,13 +354,18 @@
     mode = 0 :: file_meta:posix_permissions(),
     acl = [] :: acl:acl(),
     owner :: od_user:id(),
-    synced_storage :: undefined | storage:id(),
-    synced_gid :: undefined | non_neg_integer(),
     is_scope = false :: boolean(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),
-    parent_uuid :: undefined | file_meta:uuid()
+    parent_uuid :: undefined | file_meta:uuid(),
+
+    % Below fields are set by storage_sync.
+    % They are used to override display gid, only in
+    % the syncing provider, with the gid that file
+    % belongs to on synced storage.
+    synced_storage :: undefined | storage:id(),
+    synced_gid :: undefined | luma:gid()
 }).
 
 -record(storage_config, {
@@ -385,19 +390,19 @@
 }).
 
 %% Model that stores local user mappings.
-%% Documents are stored per storage (their keys are ids of storages).
+%% Documents are stored per storage (document's key is a StorageId).
 -record(luma_users_cache, {
    users = #{} :: #{od_user:id() => luma_user:credentials()}
 }).
 
 %% Model that stores default local user mapping for spaces supported by given storage.
-%% Documents are stored per storage (their keys are ids of storages).
+%% Documents are stored per storage (document's key is a StorageId).
 -record(luma_spaces_cache, {
     spaces = #{} :: #{od_space:id() => luma_space:posix_credentials()}
 }).
 
 %% Model that stores reverse local user mappings.
-%% Documents are stored per storage (their keys are ids of storages).
+%% Documents are stored per storage (document's key is a StorageId).
 -record(luma_reverse_cache, {
     users = #{} :: luma_reverse_cache:internal_map(),
     acl_users = #{} :: luma_reverse_cache:internal_map(),

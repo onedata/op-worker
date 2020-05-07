@@ -8,7 +8,7 @@
 %%% @doc
 %%% Module used for creation and validation of helper
 %%% argument and user/group ctx maps.
-%%% TODO VFS-6312 use middleware_sanitizer to pares helper params instead of custom functions
+%%% TODO VFS-6312 use middleware_sanitizer to parse helper params instead of custom functions
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helper_params).

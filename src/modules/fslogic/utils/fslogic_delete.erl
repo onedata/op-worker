@@ -411,11 +411,11 @@ ensure_dir_for_deleted_files_created(SpaceId) ->
 rename_storage_file(FileCtx, SourceFileId, TargetFileId) ->
     % ensure SourceFileId is set in FileCtx
     FileCtx2 = file_ctx:set_file_id(FileCtx, SourceFileId),
-    {SFMHandle, FileCtx3} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx2 ),
+    {SDHandle, FileCtx3} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx2 ),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     case init_file_location_rename(FileUuid, TargetFileId) of
         {ok, #document{value = NewFL}} ->
-            case storage_driver:mv(SFMHandle, TargetFileId) of
+            case storage_driver:mv(SDHandle, TargetFileId) of
                 ok ->
                     FinalFL = case finalize_file_location_rename(FileUuid) of
                         {ok, #document{value = NewFL2}} -> NewFL2;

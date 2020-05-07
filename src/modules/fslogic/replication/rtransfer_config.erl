@@ -112,7 +112,7 @@ get_nodes(ProviderId) ->
     {ok, Handle :: term()} | {error, Reason :: any()}.
 open(FileGuid, _OpenFlag) ->
     % TODO vfs-4412 - delete second arg and change name
-    sd_utils:create_delayed_regular_file(file_ctx:new_by_guid(FileGuid)),
+    sd_utils:create_delayed(file_ctx:new_by_guid(FileGuid)),
     {ok, undefined}.
 
 %%--------------------------------------------------------------------

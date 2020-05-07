@@ -139,7 +139,7 @@ get_children_details(UserCtx, FileCtx0, Offset, Limit, StartId) ->
 
 
 %%%===================================================================
-%%% Internal functionsVFS
+%%% Internal functions
 %%%===================================================================
 
 

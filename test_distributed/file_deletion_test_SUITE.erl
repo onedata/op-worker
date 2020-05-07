@@ -406,31 +406,31 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
     {ok, H2} = lfm_proxy:open(Worker, SessId, {guid, G2}, rdwr),
 
     FileCtx1 = rpc:call(Worker, file_ctx, new_by_guid, [G1]),
-    {SfmHandle1, _} = rpc:call(Worker, storage_driver, new_handle, [?ROOT_SESS_ID, FileCtx1]),
+    {SDHandle1, _} = rpc:call(Worker, storage_driver, new_handle, [?ROOT_SESS_ID, FileCtx1]),
     FileCtx2 = rpc:call(Worker, file_ctx, new_by_guid, [G2]),
-    {SfmHandle2, _} = rpc:call(Worker, storage_driver, new_handle, [?ROOT_SESS_ID, FileCtx2]),
+    {SDHandle2, _} = rpc:call(Worker, storage_driver, new_handle, [?ROOT_SESS_ID, FileCtx2]),
 
-    ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
-    ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60),
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SDHandle1]), 60),
+    ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SDHandle2]), 60),
 
     case DeleteNewFileFirst of
         true ->
             ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
             ok = lfm_proxy:close(Worker, H2),
-            ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
-            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60),
+            ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SDHandle1]), 60),
+            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SDHandle2]), 60),
             ok = lfm_proxy:close(Worker, H1);
 
         false ->
             ok = lfm_proxy:close(Worker, H1),
-            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
-            ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60),
+            ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SDHandle1]), 60),
+            ?assertMatch({ok, _}, rpc:call(Worker, storage_driver, stat, [SDHandle2]), 60),
             ok = lfm_proxy:unlink(Worker, SessId, {guid, G2}),
             ok = lfm_proxy:close(Worker, H2)
     end,
 
-    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle1]), 60),
-    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SfmHandle2]), 60).
+    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SDHandle1]), 60),
+    ?assertEqual({error, ?ENOENT}, rpc:call(Worker, storage_driver, stat, [SDHandle2]), 60).
     
 
 %===================================================================

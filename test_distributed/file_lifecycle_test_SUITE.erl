@@ -55,7 +55,7 @@ open_race_test(Config) ->
     check_dir_init(W),
 
     test_utils:mock_new(W, sd_utils, [passthrough]),
-    test_utils:mock_expect(W, sd_utils, create_delayed_file,
+    test_utils:mock_expect(W, sd_utils, generic_create_delayed,
         fun(UserCtx, FileCtx, VerifyLink) ->
             Ans = meck:passthrough([UserCtx, FileCtx, VerifyLink]),
             timer:sleep(2000),

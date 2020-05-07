@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO
+%%% This module is responsible for performing operations on helpers.
+%%% It is possible to hook custom (for specific helper) error handling here.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helpers_runner).
@@ -20,18 +21,18 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
+-type handle() :: helpers:helper_handle() | helpers:file_handle().
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
 
-%%-spec apply_and_maybe_handle_ekeyexpired
-%%    (SfmHandle, Operation, HelperOrFileHandle) -> Result when
-%%    SfmHandle :: storage_driver:handle(),
-%%    Operation :: fun(() -> Result),
-%%    HelperOrFileHandle :: helpers:helper_handle() | helpers:file_handle(),
-%%    Result :: ok | {ok, term()} | {error, term()}.
+-spec run_and_handle_error
+    (SDHandle, Operation) -> Result when
+    SDHandle :: storage_driver:handle(),
+    Operation :: fun((helpers:helper_handle()) -> Result),
+    Result :: ok | {ok, term()} | {error, term()}.
 run_and_handle_error(SDHandle = #sd_handle{
     session_id = SessionId,
     space_id = SpaceId,
@@ -46,9 +47,20 @@ run_and_handle_error(SDHandle = #sd_handle{
             throw(Reason)
     end.
 
+-spec run_with_file_handle_and_handle_error
+    (SDHandle, Operation) -> Result when
+    SDHandle :: storage_driver:handle(),
+    Operation :: fun((helpers:file_handle()) -> Result),
+    Result :: ok | {ok, term()} | {error, term()}.
 run_with_file_handle_and_handle_error(SDHandle = #sd_handle{file_handle = FileHandle}, Operation) ->
     run_and_handle_error(SDHandle, FileHandle, Operation).
 
+-spec run_and_handle_error
+    (SDHandle, Handle, Operation) -> Result when
+    SDHandle :: storage_driver:handle(),
+    Handle :: handle(),
+    Operation :: fun((handle()) -> Result),
+    Result :: ok | {ok, term()} | {error, term()}.
 run_and_handle_error(SDHandle, FileOrHelperHandle, Operation) ->
     case Operation(FileOrHelperHandle) of
         Error = {error, _} ->
@@ -62,11 +74,15 @@ run_and_handle_error(SDHandle, FileOrHelperHandle, Operation) ->
             OtherResult
     end.
 
+-spec handle_error({error, term()}, handle(), storage_driver:handle()) ->
+    {error, term()} | retry.
 handle_error({error, ?EKEYEXPIRED}, FileOrHelperHandle, SDHandle) ->
     handle_ekeyexpired(FileOrHelperHandle, SDHandle);
 handle_error(Error, _, _) ->
     Error.
 
+-spec handle_ekeyexpired(handle(), storage_driver:handle()) ->
+    {error, term()} | retry.
 handle_ekeyexpired(FileOrHelperHandle, #sd_handle{
     session_id = SessionId,
     space_id = SpaceId,

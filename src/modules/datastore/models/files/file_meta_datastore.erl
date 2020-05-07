@@ -209,15 +209,15 @@ get_record_struct(10) ->
         ]}]},
         {owner, string},
         % field group_owner has been deleted in this version
-        % field 'synced_storage' has been added in this version
-        {synced_storage, string},
-        % field 'synced_gid' has been added in this version
-        {synced_gid, integer},
         {is_scope, boolean},
         {provider_id, string},
         {shares, [string]},
         {deleted, boolean},
-        {parent_uuid, string}
+        {parent_uuid, string},
+        % field 'synced_storage' has been added in this version
+        {synced_storage, string},
+        % field 'synced_gid' has been added in this version
+        {synced_gid, integer}
     ]}.
 
 %%--------------------------------------------------------------------

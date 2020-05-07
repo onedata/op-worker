@@ -27,7 +27,8 @@
 -export([get_name/1, get_args/1, get_admin_ctx/1, get_redacted_admin_ctx/1,
     is_insecure/1, get_params/2, get_proxy_params/2, get_timeout/1,
     get_storage_path_type/1]).
--export([is_posix_compatible/1, is_rename_supported_on/1, is_sync_supported_on/1, is_nfs4_acl_supported_on/1]).
+-export([is_posix_compatible/1, is_rename_supported_on/1,
+    is_sync_supported_on/1, is_nfs4_acl_supported_on/1]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1, get_type/1]).
 

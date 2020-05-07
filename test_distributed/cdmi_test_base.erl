@@ -1995,7 +1995,7 @@ write_to_file(Config, Path, Data, Offset) ->
     tracer:trace_calls(lfm, open),
     tracer:trace_calls(lfm_files, open),
     tracer:trace_calls(sd_utils, create_missing_parent_dir),
-    tracer:trace_calls(sd_utils, create_delayed_file),
+    tracer:trace_calls(sd_utils, generic_create_delayed),
     tracer:trace_calls(file_req, open_file_with_extended_info),
     tracer:trace_calls(file_req, open_file_with_extended_info_insecure),
     ct:pal("WorkerP1: ~p", [WorkerP1]),

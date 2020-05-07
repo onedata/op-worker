@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This is a helper module for luma_spaces_cache module.
-%%% It encapsulates #credentials{} record.
+%%% It encapsulates #posix_credentials{} record.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_space).

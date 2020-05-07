@@ -249,7 +249,7 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
 -spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
 chmod_insecure(UserCtx, FileCtx, Mode) ->
-    sd_utils:chmod_storage_file(UserCtx, FileCtx, Mode),
+    sd_utils:chmod(UserCtx, FileCtx, Mode),
     chmod_attrs_only_insecure(FileCtx, Mode),
     fslogic_times:update_ctime(FileCtx),
 

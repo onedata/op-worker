@@ -32,7 +32,8 @@
     is_readonly/1, is_imported_storage/1]).
 
 -export([update_helper/2, update_luma_config/2,
-    set_readonly/2, set_imported_storage/2, set_luma_config/2]).
+    set_readonly/2, set_imported_storage/2,
+    set_luma_config/2]).
 
 -export([delete_all/0]).
 

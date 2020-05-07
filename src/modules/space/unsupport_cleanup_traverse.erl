@@ -157,7 +157,7 @@ do_slave_job({#document{key = FileUuid, scope = SpaceId}, TraverseInfo}, TaskId)
     
     {ParentFileCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
     
-    RemoveStorageFiles andalso sd_utils:delete_storage_file(FileCtx1, UserCtx),
+    RemoveStorageFiles andalso sd_utils:unlink(FileCtx1, UserCtx),
     fslogic_location_cache:force_flush(FileUuid),
     fslogic_location_cache:clear_blocks(FileCtx1, LocationId),
     fslogic_location_cache:delete_location(FileUuid, LocationId),
@@ -178,7 +178,7 @@ gen_id(SpaceId, StorageId) ->
 -spec cleanup_dir(id(), file_ctx:ctx(), boolean()) -> ok.
 cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    RemoveStorageFiles andalso sd_utils:delete_storage_dir(FileCtx, UserCtx),
+    RemoveStorageFiles andalso sd_utils:rmdir(FileCtx, UserCtx),
     dir_location:delete(file_ctx:get_uuid_const(FileCtx)),
     cleanup_traverse_status:delete(TaskId, file_ctx:get_uuid_const(FileCtx)),
     case file_ctx:is_space_dir_const(FileCtx) of

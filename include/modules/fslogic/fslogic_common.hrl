@@ -38,6 +38,7 @@
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_IDENTITY, ?SUB(root, ?ROOT_USER_ID)).
 -define(ROOT_SESS_ID, <<"0">>).
+%% root display posix compatible credentials
 -define(ROOT_UID, 0).
 -define(ROOT_GID, 0).
 

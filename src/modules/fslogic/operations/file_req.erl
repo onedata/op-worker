@@ -164,9 +164,9 @@ release(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
     ok = file_handles:register_release(FileCtx, SessId, 1),
     ok = case session_handles:get(SessId, HandleId) of
-        {ok, SfmHandle} ->
+        {ok, SDHandle} ->
             ok = session_handles:remove(SessId, HandleId),
-            ok = storage_driver:release(SfmHandle);
+            ok = storage_driver:release(SDHandle);
         {error, {not_found, _}} ->
             ok;
         {error, not_found} ->
@@ -228,7 +228,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         Error:Reason ->
             ?error_stacktrace("create_file_insecure error: ~p:~p",
                 [Error, Reason]),
-            sd_utils:delete_storage_file(FileCtx, UserCtx),
+            sd_utils:unlink(FileCtx, UserCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             fslogic_location_cache:delete_local_location(FileUuid),
             file_meta:delete(FileUuid),
@@ -549,7 +549,7 @@ create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
             {FL, FileCtx2};
         _ ->
             {#document{value = FL}, FileCtx2} =
-                sd_utils:create_delayed_regular_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
+                sd_utils:create_delayed(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
             {FL, FileCtx2}
     end.
 
