@@ -1278,7 +1278,7 @@ end_per_testcase(_, Config) ->
     lists:foreach(fun(Node) ->
         Children = rpc:call(Node, supervisor, which_children, [harvesting_stream_sup]),
         lists:foreach(fun({_Id, Child, _Type, _Modules}) ->
-            gen_server2:call(Child, ?TERMINATE, infinity)
+            catch gen_server2:call(Child, ?TERMINATE, timer:seconds(30))
         end, Children),
         % TODO - dlaczego terminate_child nie zamyka ladnie stream'ow
         ok = rpc:call(Node, supervisor, terminate_child, [harvesting_worker_sup, harvesting_stream_sup]),
