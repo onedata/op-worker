@@ -1276,7 +1276,11 @@ end_per_testcase(_, Config) ->
     ok = test_utils:mock_unload(Nodes, harvester_logic),
     ok = test_utils:mock_unload(Nodes, space_logic),
     lists:foreach(fun(Node) ->
-
+        Children = rpc:call(Node, supervisor, which_children, [harvesting_stream_sup]),
+        lists:foreach(fun({_Id, Child, _Type, _Modules}) ->
+            gen_server2:call(Child, ?TERMINATE, infinity)
+        end, Children),
+        % TODO - dlaczego terminate_child nie zamyka ladnie stream'ow
         ok = rpc:call(Node, supervisor, terminate_child, [harvesting_worker_sup, harvesting_stream_sup]),
         {ok, _} = rpc:call(Node, supervisor, restart_child, [harvesting_worker_sup, harvesting_stream_sup])
     end, Nodes),

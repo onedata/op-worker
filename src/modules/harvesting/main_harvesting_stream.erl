@@ -152,6 +152,8 @@ name([SpaceId | _]) ->
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     harvesting_stream:state()) -> harvesting_stream:handling_result().
+handle_call(?TERMINATE, _From, State) ->
+    {stop, normal, ok, State};
 handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
     handle_call_async(Request, State).
@@ -169,8 +171,6 @@ handle_cast(?SPACE_REMOVED, State = #hs_state{space_id = SpaceId}) ->
     {stop, normal, State};
 handle_cast(?SPACE_UNSUPPORTED, State) ->
     broadcast_space_unsupported_message(State),
-    {stop, normal, State};
-handle_cast(?TERMINATE, State) ->
     {stop, normal, State};
 handle_cast(?START_AUX_STREAMS(AuxDestination, Until), State = #hs_state{space_id = SpaceId}) ->
     start_aux_streams(SpaceId, AuxDestination, Until),
@@ -343,7 +343,7 @@ start_service(SpaceId) ->
     end.
 
 stop_service(SpaceId) ->
-    gen_server2:cast({global, ?MAIN_HARVESTING_STREAM(SpaceId)}, ?TERMINATE).
+    gen_server2:call({global, ?MAIN_HARVESTING_STREAM(SpaceId)}, ?TERMINATE, infinity).
 
 %%%===================================================================
 %%% Internal API
