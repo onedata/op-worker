@@ -343,7 +343,13 @@ os.remove(new_cover)
 if args.cover:
     for file in env_descs:
         os.remove(file)
-        shutil.move(file + '.bak', file)
+ 
+
+# remove onenv container
+container = docker.ps(all=True, quiet=True, filters=[('name', 'one-env')])
+if container:
+    docker.remove(container, force=True)
+
 
 if ret != 0 and not skipped_test_exists("test_distributed/logs/*/surefire.xml"):
     ret = 0

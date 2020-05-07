@@ -21,11 +21,12 @@
 -export([init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-    failure_test/1
+    failure_test/1,
+    dummy_test/1
 ]).
 
 all() -> [
-    failure_test
+    dummy_test
 ].
 
 %%%===================================================================
@@ -119,8 +120,16 @@ failure_test(Config) ->
     ok.
 
 
+dummy_test(_Config) ->
+    ok.
+
+
+%%%===================================================================
+%%% SetUp and TearDown functions
+%%%===================================================================
+
 init_per_suite(Config) ->
-    [{scenario, "2op-2nodes"} | Config].
+    test_config_utils:set_onenv_scenario(Config, "1op").
 
 init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config, false).

@@ -18,6 +18,11 @@
     start_opw_node/2
 ]).
 
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
 kill_opw_node(Config, Node) ->
     % fixme find service type from Node prefix [op_worker, oz_worker, onepanel]@host
     OnenvScript = kv_utils:get(onenv_script, Config),

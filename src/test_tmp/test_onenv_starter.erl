@@ -11,6 +11,8 @@
 -module(test_onenv_starter).
 -author("Michal Stanisz").
 
+-include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/aai/caveats.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -68,7 +70,7 @@ clean_environment(Config) ->
     lists:foreach(fun(Path) ->
         file:delete(Path)
     end, CustomConfigsPaths),
-%%    utils:cmd([OnenvScript, "clean"]),
+    utils:cmd([OnenvScript, "clean", "--all", "--persistent-volumes"]),
     ok.
 
 
@@ -173,24 +175,20 @@ prepare_base_test_config(NodesConfig) ->
         Acc#{ProviderId => Spaces}
     end, #{}, ProvidersList),
     
-    Sessions = lists:foldl(fun(ProviderId, Acc) ->
+    ProviderUsers = lists:foldl(fun(ProviderId, Acc) ->
         [Node | _] = maps:get(ProviderId, ProvidersNodes),
-        {ok, L} = rpc:call(Node, session, list, []),
-        ProviderSessions = lists:filtermap(fun({_, SessId, SessionDoc, _, _,_,_,_,_,_}) ->
-            case element(4, SessionDoc) of
-                fuse -> 
-                    {_,_,_,UserId} = element(5, SessionDoc),
-                    {true, {UserId, SessId}};
-                _ -> false
-            end
-        end, L),
-        Acc#{ProviderId => ProviderSessions}
-    end, #{}, ProvidersList),
-    
-    ProviderUsers = maps:fold(fun(ProviderId, UserSessionMapping, Acc) ->
-        Users = lists:usort(lists:map(fun({UserId, _SessionId}) -> UserId end, UserSessionMapping)),
+        {ok, Users} = rpc:call(Node, provider_logic, get_eff_users, []),
         Acc#{ProviderId => Users}
-    end, #{}, Sessions),
+    end, #{}, ProvidersList),
+
+    [OzNode | _ ] = kv_utils:get(oz_worker_nodes, NodesConfig),
+    Sessions = maps:map(fun(ProviderId, Users) ->
+        [Node | _] = maps:get(ProviderId, ProvidersNodes),
+        lists:map(fun(UserId) ->
+            {ok, SessId} = setup_user_session(UserId, OzNode, Node),
+            {UserId, SessId}
+        end, Users)
+    end, ProviderUsers),
     
     NodesConfig ++ 
         [{provider_nodes, maps:to_list(ProvidersNodes)}] ++ 
@@ -222,3 +220,17 @@ test_custom_config_path(ProjectRoot, Service) ->
 sources_rel_path(ProjectRoot, Service) ->
     Service1 = re:replace(Service, "_", "-", [{return, list}]),
     filename:join([ProjectRoot, "..", Service1, "_build", "default", "rel"]).
+
+setup_user_session(UserId, OzNode, OpwNode) ->
+    TimeCaveat = #cv_time{valid_until = rpc:call(OzNode, time_utils, cluster_time_seconds, []) + 100},
+    {ok, AccessToken} =
+        rpc:call(OzNode, token_logic, create_user_temporary_token,
+            [?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}]),
+    {ok, SerializedAccessToken} = rpc:call(OzNode, tokens, serialize, [AccessToken]),
+    Nonce = base64:encode(crypto:strong_rand_bytes(8)),
+    Identity = ?SUB(user, UserId),
+    Credentials = 
+        rpc:call(OpwNode, auth_manager, build_token_credentials, 
+            [SerializedAccessToken, undefined, undefined, undefined, allow_data_access_caveats]),
+    
+    rpc:call(OpwNode, session_manager, reuse_or_create_fuse_session, [Nonce, Identity, Credentials]).

@@ -9,10 +9,16 @@ sourcesRoot: ".."
 # or pre-installed packages inside dockers. When enabled, sources are expected
 # to be found in CWD (from where the 'up' script was run) or one dir above.
 sources:
+  onezone:
+    node-1:
+      - oz_worker
+      - cluster-manager
+      - oz-panel
   oneprovider-1:
     node-1:
       - op-worker
       - cluster-manager
+      - op-panel
 
 
 # Onezone image to use. Note that if 'sources' option is enabled, it must
@@ -36,7 +42,7 @@ luma: false
 onedataCli: false
 
 # Determines if oneclients should start.
-oneclients: true
+oneclients: false
 
 # Oneclient image to use.
 oneclientImage: "docker.onedata.org/oneclient-dev:ID-73dfaf09ea"

@@ -1,0 +1,19 @@
+# Used when specific branch for given repo does not exist.
+default: develop
+
+branches:
+  # Specification of branches from which docker images list will be pulled.
+  # Onezone packages plan
+  onezone: current_branch
+  # Oneprovider packages plan
+  onedata: current_branch
+  oneclient_docker_build: current_branch
+  luma_docker_build: develop
+  rest_cli_docker_build: develop
+
+  # Specification of branches from which sources for components will be pulled.
+  oz-worker: current_branch
+  op-worker: current_branch
+  onepanel: current_branch
+  cluster-manager: current_branch
+  oneclient: current_branch
