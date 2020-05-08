@@ -234,7 +234,8 @@ cancel_and_terminate_slaves() ->
         [{is_binary, '$1'}], ['$$']}]),
     Pids = request_terminate(Selection),
 
-    lists:foreach(fun(Pid) -> Pid ! check_and_terminate_slave end, Pids),
+    ReportTo = self(),
+    lists:foreach(fun(Pid) -> Pid ! {check_and_terminate_slave, ReportTo} end, Pids),
     wait_for_slave_check(Pids).
 
 %%%===================================================================
