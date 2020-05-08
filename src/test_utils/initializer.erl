@@ -1177,7 +1177,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
         {ok, proplists:get_value(SpaceId, SpacesHarvesters, [])}
     end),
     
-    test_utils:mock_expect(Workers, space_logic, report_dbsync_state, fun(_SpaceId, _) ->
+    test_utils:mock_expect(Workers, space_logic, report_provider_sync_progress, fun(_SpaceId, _) ->
         ok
     end).
 

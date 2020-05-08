@@ -21,6 +21,7 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/space_support/support_stage.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -125,30 +126,30 @@
     ?PROVIDER_1 := {space_support_parameters, global, lazy},
     ?PROVIDER_2 := {space_support_parameters, none, eager}
 }).
--define(SPACE_SUPPORT_STATE_PER_PROVIDER_VALUE(__Space), #{
+-define(SPACE_SUPPORT_STAGE_PER_PROVIDER_VALUE(__Space), #{
     ?PROVIDER_1 => #{
-        <<"stage">> => <<"active">>,
+        <<"providerStage">> => <<"active">>,
         <<"perStorage">> => #{
             <<"st1">> => <<"active">>
         }
     },
     ?PROVIDER_2 => #{
-        <<"stage">> => <<"remodelling">>,
+        <<"providerStage">> => <<"remodelling">>,
         <<"perStorage">> => #{
-            <<"st1">> => #{<<"resizing">> => 154329200},
+            <<"st1">> => <<"resizing:154329200">>,
             <<"st2">> => <<"joining">>
         }
     }
 }).
 -define(SPACE_SUPPORT_STAGE_PER_PROVIDER_MATCHER(__Space), #{
-    ?PROVIDER_1 := #support_stage{
-        stage = active,
+    ?PROVIDER_1 := #support_stage_details{
+        provider_stage = active,
         per_storage = #{
             <<"st1">> := active
         }
     },
-    ?PROVIDER_2 := #support_stage{
-        stage = remodelling,
+    ?PROVIDER_2 := #support_stage_details{
+        provider_stage = remodelling,
         per_storage = #{
             <<"st1">> := {resizing, 154329200},
             <<"st2">> := joining
@@ -435,8 +436,8 @@ end).
     <<"gri">> => gri:serialize(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
     <<"name">> => ?SPACE_NAME(__SpaceId),
     <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
-    <<"supportParameters">> => ?SPACE_SUPPORT_PARAMETERS_PER_PROVIDER_VALUE(__SpaceId),
-    <<"supportState">> => ?SPACE_SUPPORT_STATE_PER_PROVIDER_VALUE(__SpaceId)
+    <<"supportParametersPerProvider">> => ?SPACE_SUPPORT_PARAMETERS_PER_PROVIDER_VALUE(__SpaceId),
+    <<"supportStagePerProvider">> => ?SPACE_SUPPORT_STAGE_PER_PROVIDER_VALUE(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     (?SPACE_PROTECTED_DATA_VALUE(__SpaceId))#{

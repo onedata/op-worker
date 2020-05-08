@@ -97,7 +97,7 @@ mock_gs_client(Config) ->
 
     % dbsync reports its state regularly - mock the function so as not to generate
     % requests to gs_client which would interfere with request counting in tests
-    ok = test_utils:mock_expect(Nodes, space_logic, report_dbsync_stats, fun(_, _) ->
+    ok = test_utils:mock_expect(Nodes, space_logic, report_provider_sync_progress, fun(_, _) ->
         ok
     end),
     

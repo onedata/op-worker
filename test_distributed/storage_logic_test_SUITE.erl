@@ -149,7 +149,7 @@ resupport_cleanup_test(Config) ->
         onezone_domain = <<"zone">>,
         subject = ?SUB(user, <<"user1">>),
         id = <<"user1">>,
-        type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId, space_support:build_parameters(global, eager)),
+        type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId, support_parameters:build(global, eager)),
         persistence = named
     }, <<"secret">>, [])),
     
