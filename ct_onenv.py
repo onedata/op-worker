@@ -270,9 +270,10 @@ import os, shutil, subprocess, sys, stat
 
 home = '{user_home}'
 os.environ['HOME'] = home
+if not os.path.exists(home):
+    os.makedirs(home)
 
 if {shed_privileges}:
-
     os.environ['PATH'] = os.environ['PATH'].replace('sbin', 'bin')
     os.chown(home, {gid}, {gid})
     docker_gid = os.stat('/var/run/docker.sock').st_gid

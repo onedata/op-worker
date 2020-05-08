@@ -4,7 +4,8 @@
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @doc
-%%% Functions used by ct test to start nodes using one_env for testing
+%%% Functions used by ct test to start and manage environment 
+%%% using onenv for testing.
 %%% fixme move to ctool
 %%% @end
 %%%-------------------------------------------------------------------
@@ -21,16 +22,17 @@
 
 -define(DEFAULT_COOKIE, cluster_node).
 
+-spec prepare_test_environment(test_config:config(), string()) -> test_config:config().
 prepare_test_environment(Config, _Suite) ->
     application:start(yamerl),
-    DataDir = ?config(data_dir, Config),
+    DataDir = test_config:get_custom(Config, data_dir),
     ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
         Token /= "test_distributed"
     end, filename:split(DataDir))),
     
-    ScenarioName = kv_utils:get(scenario, Config, "1op"),
+    ScenarioName = test_config:get_scenario(Config, "1op"),
     
-    CustomEnvs = kv_utils:get(custom_envs, Config, []),
+    CustomEnvs = test_config:get_envs(Config),
     CustomConfigsPaths = add_custom_configs(ProjectRoot, CustomEnvs),
 
     OnenvScript = filename:join([ProjectRoot, "one-env", "onenv"]),
@@ -56,20 +58,18 @@ prepare_test_environment(Config, _Suite) ->
     ping_nodes(NodesConfig),
     
     BaseConfig = prepare_base_test_config(NodesConfig),
-    BaseConfig ++ [
-        {onenv_script, OnenvScript},
-        {opw_script, script_path(ProjectRoot, "op_worker")}, 
-        {cm_script, script_path(ProjectRoot, "cluster_manager")},
-        {custom_configs, CustomConfigsPaths}
-    ].
+    test_config:set_many(BaseConfig, [
+        {set_onenv_script_path, [OnenvScript]},
+        [op_worker_script, script_path(ProjectRoot, "op_worker")], 
+        [cluster_manager_script, script_path(ProjectRoot, "cluster_manager")],
+        [custom_configs, CustomConfigsPaths]
+    ]).
 
 
 clean_environment(Config) ->
-    OnenvScript = ?config(onenv_script, Config),
-    CustomConfigsPaths = kv_utils:get(custom_configs, Config),
-    lists:foreach(fun(Path) ->
-        file:delete(Path)
-    end, CustomConfigsPaths),
+    OnenvScript = test_config:get_onenv_script_path(Config),
+    CustomConfigsPaths = test_config:get_custom(Config, custom_configs),
+    lists:foreach(fun file:delete/1, CustomConfigsPaths),
     utils:cmd([OnenvScript, "clean", "--all", "--persistent-volumes"]),
     ok.
 
@@ -190,14 +190,15 @@ prepare_base_test_config(NodesConfig) ->
         end, Users)
     end, ProviderUsers),
     
-    NodesConfig ++ 
-        [{provider_nodes, maps:to_list(ProvidersNodes)}] ++ 
-        [{providers, ProvidersList}] ++ 
-        [{provider_panels, maps:to_list(ProviderPanels)}] ++
-        [{primary_cm, maps:to_list(PrimaryCm)}] ++ 
-        [{users, maps:to_list(ProviderUsers)}] ++ 
-        [{sess_id, maps:to_list(Sessions)}] ++
-        [{provider_spaces, maps:to_list(ProviderSpaces)}].
+    test_config:set_many(NodesConfig, [
+        [provider_nodes, ProvidersNodes],
+        [providers, ProvidersList],
+        [provider_panels, ProviderPanels],
+        [primary_cm, PrimaryCm],
+        [users, ProviderUsers], 
+        [sess_id, Sessions],
+        [provider_spaces, ProviderSpaces]
+    ]).
 
 
 % fixme currently works only for op_worker (other sources not mounted in testmaster docker)
@@ -217,6 +218,7 @@ test_custom_config_path(ProjectRoot, Service) ->
     SourcesRelPath = sources_rel_path(ProjectRoot, Service),
     filename:join([SourcesRelPath, Service, "etc", "config.d", "ct_test_custom.config"]).
 
+% fixme hardcoded paths
 sources_rel_path(ProjectRoot, Service) ->
     Service1 = re:replace(Service, "_", "-", [{return, list}]),
     filename:join([ProjectRoot, "..", Service1, "_build", "default", "rel"]).

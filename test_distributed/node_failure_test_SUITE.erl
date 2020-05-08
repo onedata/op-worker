@@ -78,9 +78,9 @@ failure_test(Config) ->
         ok = rpc:call(PanelNode, service, deregister_healthcheck, [op_worker, Ctx])
     end, ?config(op_panel_nodes, Config)),
     
-    ok = onenv_test_utils:kill_opw_node(Config, WorkerToKillP1),
+    ok = onenv_test_utils:kill_node(Config, WorkerToKillP1),
     ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP1, oneprovider, get_id, []), 10),
-    ok = onenv_test_utils:kill_opw_node(Config, WorkerToKillP2),
+    ok = onenv_test_utils:kill_node(Config, WorkerToKillP2),
     ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, oneprovider, get_id, []), 10),
     ct:pal("Killed nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
     
@@ -129,7 +129,7 @@ dummy_test(_Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    test_config_utils:set_onenv_scenario(Config, "1op").
+    test_config:set_onenv_scenario(Config, "1op").
 
 init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config, false).

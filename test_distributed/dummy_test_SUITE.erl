@@ -25,18 +25,19 @@
 all() -> [
     foo_test
 ].
+% fixme delete this suite
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 foo_test(Config) ->
-    [P1 | _] = test_config_utils:get_providers(Config),
-    [User1] = test_config_utils:get_provider_users(Config, P1),
-    SessId = fun(P) -> test_config_utils:get_user_session_id_on_provider(Config, User1, P) end,
-    [Worker1P1 | _] = test_config_utils:get_provider_nodes(Config, P1),
+    [P1 | _] = test_config:get_providers(Config),
+    [User1] = test_config:get_provider_users(Config, P1),
+    SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
+    [Worker1P1 | _] = test_config:get_provider_nodes(Config, P1),
     
-    [SpaceId | _] = test_config_utils:get_provider_spaces(Config, P1),
+    [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
     SpaceGuid = rpc:call(Worker1P1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     
     File = generator:gen_name(),
@@ -44,13 +45,17 @@ foo_test(Config) ->
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker1P1, SessId(P1), {guid, FileGuid}, rdwr)),
     {ok, _} = ?assertMatch({ok, _}, lfm_proxy:write(Worker1P1, Handle, 0, <<"sadsadsa">>)),
     ?assertEqual(ok, lfm_proxy:close(Worker1P1, Handle)),
+    ct:print("sleeping now"),
+    timer:sleep(timer:hours(10)),
     ok.
 
 init_per_suite(Config) ->
-    Config1 = test_config_utils:add_envs(Config, op_worker, op_worker, [{dupa, osiem}]),
-    Config2 = test_config_utils:add_envs(Config1, op_worker, cluster_worker, [{ble, xd}]),
-    Config3 = test_config_utils:add_envs(Config2, cluster_manager, cluster_manager, [{lol, sadsad}]),
-    test_config_utils:set_onenv_scenario(Config3, "1op").
+    test_config:set_many(Config, [
+        {add_envs, [op_worker, op_worker, [{dupa, osiem}]]},
+        {add_envs, [op_worker, cluster_worker, [{ble, xd}]]},
+        {add_envs, [cluster_manager, cluster_manager, [{lol, sadsad}]]},
+        {set_onenv_scenario, ["1op"]}
+    ]).
 
 init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
