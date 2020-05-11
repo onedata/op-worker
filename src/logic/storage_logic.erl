@@ -34,9 +34,9 @@
 
 -export([create_in_zone/3, create_in_zone/4, delete_in_zone/1]).
 -export([get/1, get_shared_data/2]).
--export([support_space/3]).
+-export([init_space_support/3]).
 -export([update_space_support_size/3]).
--export([revoke_space_support/2]).
+-export([init_unsupport/2, complete_unsupport_resize/2, complete_unsupport_purge/2, finalize_unsupport/2]).
 -export([get_name_of_local_storage/1, get_name_of_remote_storage/2]).
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
 -export([get_provider/2]).
@@ -50,6 +50,9 @@
 -export([upgrade_support_to_21_02/2]).
 
 -compile({no_auto_import, [get/1]}).
+
+-type unsupport_aspect() ::  init_unsupport | complete_unsupport_resize 
+    | complete_unsupport_purge | finalize_unsupport.
 
 %%%===================================================================
 %%% API
@@ -126,9 +129,9 @@ get_shared_data(StorageId, SpaceId) ->
     }).
 
 
--spec support_space(storage:id(), tokens:serialized(), od_space:support_size()) ->
+-spec init_space_support(storage:id(), tokens:serialized(), od_space:support_size()) ->
     {ok, od_space:id()} | errors:error().
-support_space(StorageId, SpaceSupportToken, SupportSize) ->
+init_space_support(StorageId, SpaceSupportToken, SupportSize) ->
     Data = #{<<"token">> => SpaceSupportToken, <<"size">> => SupportSize},
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
@@ -157,27 +160,30 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
         gs_client_worker:invalidate_cache(od_provider, oneprovider:get_id())
     end).
 
+-spec init_unsupport(storage:id(), od_space:id()) -> ok | errors:error().
+init_unsupport(StorageId, SpaceId) ->
+    update_unsupport_stage(StorageId, SpaceId, init_unsupport).
 
--spec revoke_space_support(storage:id(), od_space:id()) -> ok | errors:error().
-revoke_space_support(StorageId, SpaceId) ->
-    % @todo VFS-6311 implement proper support stage management, for now the
-    % Oneprovider just pretends to go trough the steps
-    UnsupportStages = [
-        init_unsupport,
-        complete_unsupport_resize,
-        complete_unsupport_purge,
-        finalize_unsupport
-    ],
-    Result = lists_utils:foldl_while(fun(Step, _) ->
-        StepResult = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-            operation = create,
-            gri = #gri{type = od_storage, id = StorageId, aspect = {Step, SpaceId}}
-        }),
-        case StepResult of
-            ok -> {cont, ok};
-            {error, _} = Error -> {halt, Error}
-        end
-    end, ok, UnsupportStages),
+-spec complete_unsupport_resize(storage:id(), od_space:id()) -> ok | errors:error().
+complete_unsupport_resize(StorageId, SpaceId) ->
+    update_unsupport_stage(StorageId, SpaceId, complete_unsupport_resize).
+
+-spec complete_unsupport_purge(storage:id(), od_space:id()) -> ok | errors:error().
+complete_unsupport_purge(StorageId, SpaceId) ->
+    update_unsupport_stage(StorageId, SpaceId, complete_unsupport_purge).
+
+-spec finalize_unsupport(storage:id(), od_space:id()) -> ok | errors:error().
+finalize_unsupport(StorageId, SpaceId) ->
+    update_unsupport_stage(StorageId, SpaceId, finalize_unsupport).
+
+
+-spec update_unsupport_stage(storage:id(), od_space:id(), unsupport_aspect()) -> 
+    ok | errors:error().
+update_unsupport_stage(StorageId, SpaceId, Aspect) ->
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = create,
+        gri = #gri{type = od_storage, id = StorageId, aspect = {Aspect, SpaceId}}
+    }),
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_space, SpaceId),
         gs_client_worker:invalidate_cache(od_storage, StorageId),

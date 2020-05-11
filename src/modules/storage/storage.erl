@@ -413,8 +413,9 @@ update_helper(StorageId, UpdateFun) ->
 support_space(StorageId, SerializedToken, SupportSize) ->
     case validate_support_request(SerializedToken) of
         ok ->
-            case storage_logic:support_space(StorageId, SerializedToken, SupportSize) of
+            case storage_logic:init_space_support(StorageId, SerializedToken, SupportSize) of
                 {ok, SpaceId} ->
+                    %% @TODO VFS-6136 add in proper space lifecycle
                     on_space_supported(SpaceId, StorageId),
                     {ok, SpaceId};
                 {error, _} = Error ->
@@ -464,12 +465,7 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
-    %% @TODO VFS-6132 Use space_unsupport when it is implemented
-    %% @TODO VFS-6208 Cancel sync and auto-cleaning traverse and clean up ended tasks when unsupporting
-    case storage_logic:revoke_space_support(StorageId, SpaceId) of
-        ok -> on_space_unsupported(SpaceId, StorageId);
-        Error -> Error
-    end.
+    space_unsupport:run(SpaceId, StorageId).
 
 
 -spec supports_any_space(id()) -> boolean() | errors:error().
@@ -525,14 +521,6 @@ on_space_supported(SpaceId, StorageId) ->
     % (when space was unsupported in Onezone without provider knowledge)
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
     space_logic:on_space_supported(SpaceId).
-
-
-%% @private
--spec on_space_unsupported(od_space:id(), id()) -> ok.
-on_space_unsupported(SpaceId, StorageId) ->
-    space_unsupport:cleanup_local_documents(SpaceId, StorageId),
-    auto_storage_import_worker:notify_space_unsupported(SpaceId),
-    main_harvesting_stream:space_unsupported(SpaceId).
 
 
 %% @private

@@ -9,10 +9,10 @@
 %%% This module is responsible for handling space unsupport procedure. 
 %%% 
 %%% Unsupport procedure consists of following activities: 
-%%%     * blocking all operations, that modify local files replicas 
+%%%     * blocking all operations, that modify local files replicas (@TODO VFS-6135 NYI)
 %%%     * replicating all local replicas to other providers 
 %%%     * cleaning up local storage and local metadata 
-%%%     * waiting for all remote providers to be up to date with this provider dbsync changes
+%%%     * waiting for all remote providers to be up to date with this provider dbsync changes (@TODO VFS-7164 NYI)
 %%%     * cleaning up database from documents synced in space scope 
 %%%     * cleaning up database from local documents related to space support
 %%% @end
@@ -33,13 +33,12 @@
 -export([init_pools/0, run/2]).
 -export([report_cleanup_traverse_finished/2]).
 -export([get_all_stages/0]).
+-export([cleanup_local_documents/2]).
 
 %% traverse behaviour callbacks
 -export([get_job/1, update_job_progress/5]).
 -export([do_master_job/2, do_slave_job/2]).
 -export([task_finished/2]).
-%% @TODO VFS-6132 Do not export when space_unsupport is used in storage:revoke_space_support
--export([cleanup_local_documents/2]).
 
 -type stage() :: init | replicate | cleanup_traverse | wait_for_dbsync 
     | delete_synced_documents | delete_local_documents.
@@ -67,6 +66,8 @@ init_pools() ->
 
 -spec run(od_space:id(), storage:id()) -> ok.
 run(SpaceId, StorageId) ->
+    %% @TODO VFS-7167 handle last unsupport
+    ok = storage_logic:init_unsupport(StorageId, SpaceId),
     % ensure that file_meta doc for space is created, so it is not needed to always 
     % check if it exists when doing operations on files
     file_meta:make_space_exist(SpaceId),
@@ -152,10 +153,11 @@ get_next_jobs_base(delete_local_documents) -> [].
 execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId}) ->
     main_harvesting_stream:space_unsupported(SpaceId),
     storage_import:stop_auto_scan(SpaceId),
+    auto_storage_import_worker:notify_space_unsupported(SpaceId),
     %% @TODO VFS-6133 Stop all incoming transfers
     %% @TODO VFS-6134 Close all open file handles
     %% @TODO VFS-6135 Block all modifying file operations
-    %% @TODO VFS-6136 Inform onezone that unsupport started
+    %% @TODO VFS-6208 Cancel sync and auto-cleaning traverse and clean up ended tasks when unsupporting
     ok;
 
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = Job) ->
@@ -164,12 +166,13 @@ execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = 
     Expression = <<?QOS_ANY_STORAGE, "\\ storageId = ", StorageId/binary>>,
     {ok, QosEntryId} = lfm:add_qos_entry(?ROOT_SESS_ID, {guid, SpaceGuid}, Expression, 1, internal),
     NewJob = Job#space_unsupport_job{subtask_id = QosEntryId},
-    space_unsupport_job:save(NewJob),
+    {ok, _} = space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
-execute_stage(#space_unsupport_job{stage = replicate, subtask_id = QosEntryId} = _Job) ->
+execute_stage(#space_unsupport_job{stage = replicate} = Job) ->
+    #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, subtask_id = QosEntryId} = Job,
     %% @TODO Use subscription after resolving VFS-5647
-    %% @TODO Insecure(fulfilling qos can fail - wait will never end) before resolving VFS-5737
     wait(fun() -> lfm:check_qos_status(?ROOT_SESS_ID, QosEntryId) == {ok, ?FULFILLED} end),
+    ok = storage_logic:complete_unsupport_resize(StorageId, SpaceId),
     lfm:remove_qos_entry(?ROOT_SESS_ID, QosEntryId);
 
 execute_stage(#space_unsupport_job{stage = cleanup_traverse, subtask_id = undefined} = Job) ->
@@ -182,7 +185,7 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
     % This clause can be run after provider restart so update slave_job_pid if needed
     maybe_update_slave_job_pid(Job),
     
-    #space_unsupport_job{subtask_id = TraverseId} = Job,
+    #space_unsupport_job{space_id = SpaceId, storage_id = StorageId, subtask_id = TraverseId} = Job,
     
     case unsupport_cleanup_traverse:is_finished(TraverseId) of
         true -> ok;
@@ -190,19 +193,18 @@ execute_stage(#space_unsupport_job{stage = cleanup_traverse} = Job) ->
             receive cleanup_traverse_finished ->
                 ok
             end
-    end;
+    end,
+    ok = storage_logic:complete_unsupport_purge(StorageId, SpaceId);
 
 execute_stage(#space_unsupport_job{stage = wait_for_dbsync} = _Job) ->
     %% @TODO VFS-6164 wait for all documents to be saved on disc
-    %% @TODO VFS-6136 wait until all other providers are up to date with dbsync changes
-    %% @TODO VFS-6135 Stop dbsync
+    %% @TODO VFS-7164 wait until all other providers are up to date with dbsync changes
+    %% @TODO VFS-7164 Stop dbsync
     timer:sleep(timer:seconds(60)),
     ok;
 
 execute_stage(#space_unsupport_job{stage = delete_synced_documents} = Job) ->
-    #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
-    %% @TODO VFS-6136 Inform onezone that unsupport started in init
-    storage_logic:revoke_space_support(StorageId, SpaceId),
+    #space_unsupport_job{space_id = SpaceId} = Job,
     start_changes_stream(SpaceId),
     receive end_of_stream ->
         ok
@@ -219,7 +221,7 @@ execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
         qos_entry:remove_from_failed_files_list(SpaceId, FileUuid)
     end),
     unsupport_cleanup_traverse:delete_ended(SpaceId, StorageId),
-    ok.
+    ok = storage_logic:finalize_unsupport(StorageId, SpaceId).
 
 
 %%%===================================================================
