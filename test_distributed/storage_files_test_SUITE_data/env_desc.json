@@ -1,0 +1,226 @@
+{
+    "dirs_config": {
+        "cluster_manager": {
+            "input_dir": "_build/default/rel/cluster_manager",
+            "target_dir": "_build/default/rel/test_cluster"
+        },
+        "op_worker": {
+            "input_dir": "_build/default/rel/op_worker",
+            "target_dir": "_build/default/rel/test_cluster"
+        }
+    },
+    "os_configs": {
+        "cfg1": {
+            "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st1"
+                },
+                {
+                    "type": "posix",
+                    "name": "/mnt/st2"
+                },
+                {
+                    "type": "posix",
+                    "name": "/mnt/st3"
+                },
+                {
+                    "type": "posix",
+                    "name": "/mnt/st4"
+                },
+                {
+                    "type": "s3",
+                    "name": "s3_no_luma",
+                    "bucket": "onedata"
+                },
+                {
+                    "type": "s3",
+                    "name": "s3_luma",
+                    "bucket": "onedata"
+                },
+                {
+                    "type": "posix",
+                    "name": "/mnt/st7"
+                }
+            ],
+            "users": [],
+            "groups": {}
+        }
+    },
+    "provider_domains": {
+        "p1": {
+            "db_driver": "couchdb",
+            "os_config": "cfg1",
+            "cluster_manager": {
+                "cm": {
+                    "vm.args": {
+                        "setcookie": "test_cookie1"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "worker_num": 1
+                    }
+                }
+            },
+            "op_worker": {
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie1"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ],
+                        "oz_domain": "oz",
+                        "graph_sync_healthcheck_interval": 999999999
+                    }
+                }
+            }
+        }
+    },
+    "test_global_setup": {
+        "groups": {
+            "group1": {
+                "users": [
+                    "user1"
+                ]
+            }
+        },
+        "spaces": {
+            "space1": {
+                "displayed_name": "space_name1",
+                "users": [
+                    "user1",
+                    "user2"
+                ],
+                "groups": [
+                    "group1"
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space2": {
+                "displayed_name": "space_name2",
+                "users": [
+                    "user1",
+                    "user2",
+                    "user3",
+                    "user4"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space3": {
+                "displayed_name": "space_name3",
+                "users": [
+                    "user1",
+                    "user2"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st3",
+                        "supported_size": 10737418240,
+                        "imported_storage": true
+                    }
+                }
+            },
+            "space4": {
+                "displayed_name": "space_name4",
+                "users": [
+                    "user1",
+                    "user2",
+                    "user3",
+                    "user4"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st4",
+                        "supported_size": 10737418240,
+                        "imported_storage": true
+                    }
+                }
+            },
+            "space5": {
+                "displayed_name": "space_name5",
+                "users": [
+                    "user1",
+                    "user2"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "s3_no_luma",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space6": {
+                "displayed_name": "space_name6",
+                "users": [
+                    "user1",
+                    "user2",
+                    "user3",
+                    "user4"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "s3_luma",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space7": {
+                "displayed_name": "space_name6",
+                "users": [
+                    "user1",
+                    "user2",
+                    "user3",
+                    "user4"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st7",
+                        "supported_size": 10737418240
+                    }
+                }
+            }
+        },
+        "storages": {
+            "p1": {
+                "/mnt/st2": {
+                    "luma": true
+                },
+                "/mnt/st4": {
+                    "luma": true
+                },
+                "s3_luma": {
+                    "luma": true
+                },
+                "/mnt/st7": {
+                    "luma": true
+                }
+            }
+        },
+        "luma_configs": {
+            "p1": "luma.json"
+        }
+    }
+}
