@@ -5,14 +5,12 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains tests which check whether files in space
-%%% are properly mapped to files on storage.
+%%% This module contains tests which check whether files are created on
+%%% storage with proper permissions and ownership.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_files_test_SUITE).
 -author("Jakub Kudzia").
-
-% TODO dodać suitę na bamboo
 
 -include("storage_files_test_SUITE.hrl").
 -include("modules/datastore/datastore_models.hrl").
