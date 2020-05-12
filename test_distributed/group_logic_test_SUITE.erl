@@ -47,14 +47,14 @@ get_shared_data_test(Config) ->
     rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1]),
     rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_2]),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_group),
 
     % Group shared data should now be cached
     ?assertMatch(
         {ok, ?GROUP_SHARED_DATA_MATCHER(?GROUP_1)},
         rpc:call(Node, group_logic, get_shared_data, [User1Sess, ?GROUP_1, ?THROUGH_SPACE(?SPACE_1)])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_group)),
 
     % Provider should also be able to fetch the data from cache without
     % additional requests
@@ -62,7 +62,7 @@ get_shared_data_test(Config) ->
         {ok, ?GROUP_SHARED_DATA_MATCHER(?GROUP_1)},
         rpc:call(Node, group_logic, get_shared_data, [?ROOT_SESS_ID, ?GROUP_1, undefined])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_group)),
 
     % Provider should also be able to fetch non-cached data
     logic_tests_common:invalidate_cache(Config, od_group, ?GROUP_1),
@@ -70,14 +70,14 @@ get_shared_data_test(Config) ->
         {ok, ?GROUP_SHARED_DATA_MATCHER(?GROUP_1)},
         rpc:call(Node, group_logic, get_shared_data, [?ROOT_SESS_ID, ?GROUP_1, undefined])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_group)),
 
     % Make sure that other users cannot access cached data
     ?assertMatch(
         ?ERROR_FORBIDDEN,
         rpc:call(Node, group_logic, get_shared_data, [User3Sess, ?GROUP_1, ?THROUGH_SPACE(?SPACE_2)])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_group)),
 
     ok.
 
@@ -87,7 +87,7 @@ subscribe_test(Config) ->
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_group),
 
     % Simulate received updates on different scopes (in rising order)
     Group1SharedGRI = #gri{type = od_group, id = ?GROUP_1, aspect = instance, scope = shared},
@@ -98,7 +98,7 @@ subscribe_test(Config) ->
         {ok, ?GROUP_SHARED_DATA_MATCHER(?GROUP_1)},
         rpc:call(Node, group_logic, get_shared_data, [User1Sess, ?GROUP_1, undefined])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_group)),
 
     ChangedData1 = Group1SharedData#{
         <<"revision">> => 2,
@@ -114,7 +114,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, group_logic, get_shared_data, [User1Sess, ?GROUP_1, undefined])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_group)),
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage3 = #gs_push_graph{gri = Group1SharedGRI, change_type = deleted},
@@ -151,7 +151,7 @@ convenience_functions_test(Config) ->
     % THROUGH_SPACE authorization without making additional requests.
     rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1]),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_group),
 
     % Test convenience functions and if they fetch correct scopes
 
@@ -160,12 +160,12 @@ convenience_functions_test(Config) ->
         {ok, ?GROUP_NAME(?GROUP_1)},
         rpc:call(Node, group_logic, get_name, [?GROUP_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_group)),
     ?assertMatch(
         {ok, ?GROUP_NAME(?GROUP_1)},
         rpc:call(Node, group_logic, get_name, [User1Sess, ?GROUP_1, ?THROUGH_SPACE(?SPACE_1)])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_group)),
 
     ok.
 
@@ -187,10 +187,11 @@ confined_access_token_test(Config) ->
         ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
         rpc:call(Node, group_logic, get_shared_data, [TokenCredentials, ?GROUP_1, undefined])
     ),
-    % Nevertheless, GraphCalls should be increased by 2 as:
-    % 1) TokenCredentials was verified to retrieve caveats
-    % 2) auth_manager fetched token data to subscribe itself for updates from oz
-    ?assertEqual(GraphCalls+2, logic_tests_common:count_reqs(Config, graph)).
+    % Nevertheless, GraphCalls should be increased by 3 as following requests should be made:
+    % - first to verify token credentials,
+    % - second to subscribe for token revocation notifications in oz,
+    % - third to fetch user data to initialize userRootDir, etc.
+    ?assertEqual(GraphCalls+3, logic_tests_common:count_reqs(Config, graph)).
 
 
 %%%===================================================================

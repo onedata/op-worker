@@ -10,6 +10,7 @@
 %%% WRITEME jk
 %%% TODO OPISAĆ LUMA - > local user mapping, entry module
 %%% storage credentials, display credentials
+%%% opisać jaki ma być priorytet
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma).

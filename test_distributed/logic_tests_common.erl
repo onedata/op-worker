@@ -27,6 +27,7 @@
     simulate_push/2,
     create_user_session/2,
     count_reqs/2,
+    count_reqs/3,
     invalidate_cache/3,
     invalidate_all_test_records/1,
     mock_request_processing_time/3,
@@ -41,7 +42,6 @@
 init_per_testcase(Config) ->
     wait_for_mocked_connection(Config),
 
-    invalidate_all_test_records(Config),
     mock_request_processing_time(Config, 1, 20),
     mock_harvest_request_processing_time(Config, 1, 100),
     set_request_timeout(Config, 30000),
@@ -53,7 +53,7 @@ init_per_testcase(Config) ->
         ?USER_3 => create_user_session(Config, ?USER_3),
         ?USER_INCREASING_REV => create_user_session(Config, ?USER_INCREASING_REV)
     },
-
+    invalidate_all_test_records(Config),
     [{sessions, UserSessions} | Config].
 
 
@@ -183,6 +183,15 @@ count_reqs(Config, Type) ->
         [rpc:call(N, meck, num_calls, [gs_client, async_request, ['_', RequestMatcher]]) || N <- Nodes]
     ).
 
+count_reqs(Config, Type, EntityType) ->
+    Nodes = ?NODES(Config),
+    RequestMatcher = case Type of
+        graph -> #gs_req{request = #gs_req_graph{gri = #gri{type = EntityType, _ = '_'}, _ = '_'}, _ = '_'};
+        unsub -> #gs_req{request = #gs_req_unsub{gri = #gri{type = EntityType, _ = '_'}}, _ = '_'}
+    end,
+    lists:sum(
+        [rpc:call(N, meck, num_calls, [gs_client, async_request, ['_', RequestMatcher]]) || N <- Nodes]
+    ).
 
 invalidate_cache(Config, Type, Id) ->
     [Node | _] = ?NODES(Config),

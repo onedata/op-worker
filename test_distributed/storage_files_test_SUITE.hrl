@@ -10,8 +10,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(SPACE_STORAGE_TEST_SUITE_HRL).
--define(SPACE_STORAGE_TEST_SUITE_HRL, 1).
+-ifndef(STORAGE_FILES_TEST_SUITE_HRL).
+-define(STORAGE_FILES_TEST_SUITE_HRL, 1).
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").

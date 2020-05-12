@@ -831,8 +831,11 @@ get_storage(FileCtx = #file_ctx{storage = undefined}) ->
         {ok, []} ->
             {undefined, FileCtx};
         {ok, [StorageId | _]} ->
-            {ok, Storage} = storage:get(StorageId),
-            {Storage, FileCtx#file_ctx{storage = Storage}}
+            Storage2 = case storage:get(StorageId) of
+                {ok, Storage} -> Storage;
+                {error, not_found} -> undefined
+            end,
+            {Storage2, FileCtx#file_ctx{storage = Storage2}}
     end;
 get_storage(FileCtx = #file_ctx{storage = Storage}) ->
     {Storage, FileCtx}.

@@ -9,10 +9,12 @@
 %%% are properly mapped to files on storage.
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_storage_test_SUITE).
+-module(storage_files_test_SUITE).
 -author("Jakub Kudzia").
 
--include("space_storage_test_SUITE.hrl").
+% TODO dodać suitę na bamboo
+
+-include("storage_files_test_SUITE.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -864,7 +866,7 @@ end_per_testcase(Config) ->
     end_per_testcase(default, Config).
 
 end_per_testcase(default, Config) ->
-    [W1 | _] = Workers = ?config(op_worker_nodes, Config),
+    Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     clean_spaces(Workers),
     lists:foreach(fun(W) -> clean_posix_storage_mountpoints(W) end, Workers),

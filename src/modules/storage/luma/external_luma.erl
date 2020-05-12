@@ -99,7 +99,9 @@ map_onedata_user_to_credentials(UserId, Storage) ->
                 [UserId, storage:get_id(Storage), Code, json_utils:decode(RespBody)]),
             {error, external_luma_error};
         {error, Reason} ->
-            {error, Reason}
+            ?error("Mapping user ~p to storage credentials on storage ~p failed .~n"
+            "Unexpected error ~p.", [UserId, storage:get_id(Storage), Reason]),
+            {error, external_luma_error}
     end.
 
 
@@ -121,7 +123,9 @@ fetch_default_owner(SpaceId, Storage) ->
                 [storage:get_id(Storage), SpaceId, Code, json_utils:decode(RespBody)]),
             {error, external_luma_error};
         {error, Reason} ->
-            {error, Reason}
+            ?error("Default storage credentials for storage ~p supporting space ~p could not be fetched.~n"
+            "Unexpected error ~p.", [storage:get_id(Storage), SpaceId, Reason]),
+            {error, external_luma_error}
     end.
 
 -spec fetch_display_override_owner(od_space:id(), storage:data()) ->
@@ -142,7 +146,9 @@ fetch_display_override_owner(SpaceId, Storage) ->
                 [storage:get_id(Storage), SpaceId, Code, json_utils:decode(RespBody)]),
             {error, external_luma_error};
         {error, Reason} ->
-            {error, Reason}
+            ?error("Display override owner for storage ~p supporting space ~p could not be fetched.~n"
+            "Unexpected error ~p.", [storage:get_id(Storage), SpaceId, Reason]),
+            {error, external_luma_error}
     end.
 
 %%%===================================================================

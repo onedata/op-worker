@@ -1,0 +1,563 @@
+{
+    "posixStorageId": {
+        "reverse": {
+            "users": {
+                "1000": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "1001": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                },
+                "1002": {
+                    "mappingScheme": "unknown",
+                    "onedataUserId": "user3"
+                },
+                "1003": {
+                    "mappingScheme": "onedataUser"
+                },
+                "1004": {
+                    "mappingScheme": "idpUser",
+                    "subjectId": "subjectId"
+                },
+                "1005": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp"
+                },
+                "1006": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": 1
+                },
+                "1007": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "1008": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": {}
+                },
+                "1009": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": 1
+                },
+                "1010": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "1011": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": {}
+                }
+            },
+            "aclUsers": {
+                "user0@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "user1@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                },
+                "user2@nfs.domain.org": {
+                    "mappingScheme": "unknown",
+                    "onedataUserId": "user3"
+                },
+                "user3@nfs.domain.org": {
+                    "mappingScheme": "onedataUser"
+                },
+                "user4@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "subjectId": "subjectId"
+                },
+                "user5@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp"
+                },
+                "user6@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": 1
+                },
+                "user7@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "user8@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": {}
+                },
+                "user9@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": 1
+                },
+                "user10@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "user11@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": {}
+                }
+            },
+            "aclGroups": {
+                "group0@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": "group1"
+                },
+                "group1@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": "entitlementId"
+                },
+                "group2@nfs.domain.org": {
+                    "mappingScheme": "unknown",
+                    "onedataGroupId": "group3"
+                },
+                "group3@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup"
+                },
+                "group4@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idpEntitlement": "entitlementId"
+                },
+                "group5@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp"
+                },
+                "group6@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": 1
+                },
+                "group7@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "group8@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": {}
+                },
+                "group9@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": 1
+                },
+                "group10@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "group11@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": {}
+                }
+            }
+        }
+    },
+    "glusterfsStorageId": {
+        "reverse": {
+            "users": {
+                "1000": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "1001": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                },
+                "1002": {
+                    "mappingScheme": "unknown",
+                    "onedataUserId": "user3"
+                },
+                "1003": {
+                    "mappingScheme": "onedataUser"
+                },
+                "1004": {
+                    "mappingScheme": "idpUser",
+                    "subjectId": "subjectId"
+                },
+                "1005": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp"
+                },
+                "1006": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": 1
+                },
+                "1007": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "1008": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": {}
+                },
+                "1009": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": 1
+                },
+                "1010": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "1011": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": {}
+                }
+            },
+            "aclUsers": {
+                "user0@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "user1@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                },
+                "user2@nfs.domain.org": {
+                    "mappingScheme": "unknown",
+                    "onedataUserId": "user3"
+                },
+                "user3@nfs.domain.org": {
+                    "mappingScheme": "onedataUser"
+                },
+                "user4@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "subjectId": "subjectId"
+                },
+                "user5@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp"
+                },
+                "user6@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": 1
+                },
+                "user7@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "user8@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": {}
+                },
+                "user9@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": 1
+                },
+                "user10@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "user11@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": {}
+                }
+            },
+            "aclGroups": {
+                "group0@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": "group1"
+                },
+                "group1@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": "entitlementId"
+                },
+                "group2@nfs.domain.org": {
+                    "mappingScheme": "unknown",
+                    "onedataGroupId": "group3"
+                },
+                "group3@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup"
+                },
+                "group4@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idpEntitlement": "entitlementId"
+                },
+                "group5@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp"
+                },
+                "group6@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": 1
+                },
+                "group7@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "group8@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": {}
+                },
+                "group9@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": 1
+                },
+                "group10@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "group11@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": {}
+                }
+            }
+        }
+    },
+    "nulldeviceStorageId": {
+        "reverse": {
+            "users": {
+                "1000": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "1001": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                },
+                "1002": {
+                    "mappingScheme": "unknown",
+                    "onedataUserId": "user3"
+                },
+                "1003": {
+                    "mappingScheme": "onedataUser"
+                },
+                "1004": {
+                    "mappingScheme": "idpUser",
+                    "subjectId": "subjectId"
+                },
+                "1005": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp"
+                },
+                "1006": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": 1
+                },
+                "1007": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "1008": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": {}
+                },
+                "1009": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": 1
+                },
+                "1010": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "1011": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": {}
+                }
+            },
+            "aclUsers": {
+                "user0@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "user1@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                },
+                "user2@nfs.domain.org": {
+                    "mappingScheme": "unknown",
+                    "onedataUserId": "user3"
+                },
+                "user3@nfs.domain.org": {
+                    "mappingScheme": "onedataUser"
+                },
+                "user4@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "subjectId": "subjectId"
+                },
+                "user5@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp"
+                },
+                "user6@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": 1
+                },
+                "user7@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "user8@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": {}
+                },
+                "user9@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": 1
+                },
+                "user10@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "user11@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": {}
+                }
+            },
+            "aclGroups": {
+                "group0@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": "group1"
+                },
+                "group1@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": "entitlementId"
+                },
+                "group2@nfs.domain.org": {
+                    "mappingScheme": "unknown",
+                    "onedataGroupId": "group3"
+                },
+                "group3@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup"
+                },
+                "group4@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idpEntitlement": "entitlementId"
+                },
+                "group5@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp"
+                },
+                "group6@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": 1
+                },
+                "group7@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "group8@nfs.domain.org": {
+                    "mappingScheme": "onedataGroup",
+                    "onedataGroupId": {}
+                },
+                "group9@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": 1
+                },
+                "group10@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": [
+                        1,
+                        2,
+                        3
+                    ]
+                },
+                "group11@nfs.domain.org": {
+                    "mappingScheme": "idpEntitlement",
+                    "idp": "idp",
+                    "idpEntitlement": {}
+                }
+            }
+        }
+    }
+}

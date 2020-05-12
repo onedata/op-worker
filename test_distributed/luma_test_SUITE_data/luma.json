@@ -1,0 +1,724 @@
+{
+    "posixStorageId": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 1000
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "uid": null
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "uid": [1, 2, 3]
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "uid": "string"
+                }
+            },
+            "user7": {
+                "storageCredentials": {
+                    "uid": {
+                        "key": "value"
+                    }
+                }
+            },
+            "user8": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "user9": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": "string"
+            },
+            "user10": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spaces": {
+            "space1": {
+                "defaultOwner": {
+                    "uid": 1,
+                    "gid": 1
+                },
+                "displayOwner": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
+    "cephStorageId": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "username": "USER",
+                    "key": "USER_KEY"
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "username": null
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "username": [1, 2, 3]
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "username": "user"
+                }
+            },
+            "user7": {
+                "storageCredentials": {
+                    "username": "user",
+                    "key": {"key2":  "value"}
+                }
+            },
+            "user8": {
+                "storageCredentials": {
+                    "username": "user",
+                    "key": "key"
+                },
+                "displayUid": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "user9": {
+                "storageCredentials": {
+                    "username": "user",
+                    "key": "key"
+                },
+                "displayUid": "string"
+            },
+            "user10": {
+                "storageCredentials": {
+                    "username": "user",
+                    "key": "key"
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spaces": {
+            "space1": {
+                "displayOwner": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
+    "s3StorageId": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "accessKey": "USER_ACCESS_KEY",
+                    "secretKey": "USER_SECRET_KEY"
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "accessKey": null
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "accessKey": [1, 2, 3]
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "accessKey": "accessKey"
+                }
+            },
+            "user7": {
+                "storageCredentials": {
+                    "accessKey": "accessKey",
+                    "secretKey": {"key2":  "value"}
+                }
+            },
+            "user8": {
+                "storageCredentials": {
+                    "accessKey": "accessKey",
+                    "secretKey": "secretKey"
+                },
+                "displayUid": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "user9": {
+                "storageCredentials": {
+                    "accessKey": "accessKey",
+                    "secretKey": "secretKey"
+                },
+                "displayUid": "string"
+            },
+            "user10": {
+                "storageCredentials": {
+                    "accessKey": "accessKey",
+                    "secretKey": "secretKey"
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spaces": {
+            "space1": {
+                "displayOwner": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
+    "swiftStorageId": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "username": "USER",
+                    "password": "USER_PASSWD"
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "username": null
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "username": [1, 2, 3]
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "username": "user"
+                }
+            },
+            "user7": {
+                "storageCredentials": {
+                    "username": "user",
+                    "password": {"key2":  "value"}
+                }
+            },
+            "user8": {
+                "storageCredentials": {
+                    "username": "user",
+                    "password": "password"
+                },
+                "displayUid": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "user9": {
+                "storageCredentials": {
+                    "username": "user",
+                    "password": "password"
+                },
+                "displayUid": "string"
+            },
+            "user10": {
+                "storageCredentials": {
+                    "username": "user",
+                    "password": "password"
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spaces": {
+            "space1": {
+                "displayOwner": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
+    "cephradosStorageId": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "username": "USER",
+                    "key": "USER_KEY"
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "username": null
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "username": [1, 2, 3]
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "username": "user"
+                }
+            },
+            "user7": {
+                "storageCredentials": {
+                    "username": "user",
+                    "key": {"key2":  "value"}
+                }
+            },
+            "user8": {
+                "storageCredentials": {
+                    "username": "user",
+                    "key": "key"
+                },
+                "displayUid": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "user9": {
+                "storageCredentials": {
+                    "username": "user",
+                    "key": "key"
+                },
+                "displayUid": "string"
+            },
+            "user10": {
+                "storageCredentials": {
+                    "username": "user",
+                    "key": "key"
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spaces": {
+            "space1": {
+                "displayOwner": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
+    "glusterfsStorageId": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 1000
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "uid": null
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "uid": [1, 2, 3]
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "uid": "string"
+                }
+            },
+            "user7": {
+                "storageCredentials": {
+                    "uid": {
+                        "key": "value"
+                    }
+                }
+            },
+            "user8": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "user9": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": "string"
+            },
+            "user10": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spaces": {
+            "space1": {
+                "defaultOwner": {
+                    "uid": 1,
+                    "gid": 1
+                },
+                "displayOwner": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
+    "nulldeviceStorageId": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 1000
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "uid": null
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "uid": [1, 2, 3]
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "uid": "string"
+                }
+            },
+            "user7": {
+                "storageCredentials": {
+                    "uid": {
+                        "key": "value"
+                    }
+                }
+            },
+            "user8": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "user9": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": "string"
+            },
+            "user10": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spaces": {
+            "space1": {
+                "defaultOwner": {
+                    "uid": 1,
+                    "gid": 1
+                },
+                "displayOwner": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
+    "webdavNoneStorageId": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "credentialsType": "none"
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "credentialsType": "none"
+                },
+                "displayUid": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "user5": {
+                "storageCredentials": {
+                    "credentialsType": "none"
+                },
+                "displayUid": "string"
+            },
+            "user6": {
+                "storageCredentials": {
+                    "credentialsType": "none"
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spaces": {
+            "space1": {
+                "displayOwner": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
+    "webdavBasicStorageId": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "credentialsType": "basic",
+                    "credentials": "user:password"
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "credentialsType": "basic",
+                    "credentials": [1, 2, 3]
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "credentialsType": "basic",
+                    "credentials": {}
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "credentialsType": "basic",
+                    "credentials": "user:password"
+                },
+                "displayUid": [1, 2, 3]
+            },
+            "user7": {
+                "storageCredentials": {
+                    "credentialsType": "basic",
+                    "credentials": "user:password"
+                },
+                "displayUid": "string"
+            },
+            "user8": {
+                "storageCredentials": {
+                    "credentialsType": "basic",
+                    "credentials": "user:password"
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spaces": {
+            "space1": {
+                "displayOwner": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
+    "webdavTokenStorageId": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "credentialsType": "token",
+                    "credentials": "USER_TOKEN"
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "credentialsType": "token",
+                    "credentials": [1, 2, 3]
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "credentialsType": "token",
+                    "credentials": {}
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "credentialsType": "token",
+                    "credentials": "USER_TOKEN"
+                },
+                "displayUid": [1, 2, 3]
+            },
+            "user7": {
+                "storageCredentials": {
+                    "credentialsType": "token",
+                    "credentials": "USER_TOKEN"
+                },
+                "displayUid": "string"
+            },
+            "user8": {
+                "storageCredentials": {
+                    "credentialsType": "token",
+                    "credentials": "USER_TOKEN"
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spaces": {
+            "space1": {
+                "displayOwner": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
+    "webdavOauth2StorageId": {
+        "users": {
+            "user1": {
+                "storageCredentials": {
+                    "credentialsType": "oauth2",
+                    "credentials": "USER_OAUTH2",
+                    "accessToken": "IDP_USER_TOKEN",
+                    "accessTokenTTL": 3600
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "credentialsType": "oauth2",
+                    "credentials": [1, 2, 3]
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "credentialsType": "oauth2",
+                    "credentials": {}
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "credentialsType": "oauth2",
+                    "credentials": "USER_OAUTH2"
+                },
+                "displayUid": [1, 2, 3]
+            },
+            "user7": {
+                "storageCredentials": {
+                    "credentialsType": "oauth2",
+                    "credentials": "USER_OAUTH2"
+                },
+                "displayUid": "string"
+            },
+            "user8": {
+                "storageCredentials": {
+                    "credentialsType": "oauth2",
+                    "credentials": "USER_OAUTH2"
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spaces": {
+            "space1": {
+                "displayOwner": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    }
+}

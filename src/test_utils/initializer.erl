@@ -717,8 +717,10 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
     HarvestersSetup = proplists:get_value(<<"harvesters">>, GlobalSetup, []),
     StoragesSetup = proplists:get_value(<<"storages">>, GlobalSetup, []),
-    LumaConfigFile = proplists:get_value(<<"luma_config">>, GlobalSetup, undefined),
-
+    LumaConfigFiles = json_utils:list_to_map(proplists:get_value(<<"luma_configs">>, GlobalSetup, undefined)),
+    LumaConfigFiles2 = maps:fold(fun(P, LumaConfigFile, Acc) ->
+        Acc#{proplists:get_value(P, DomainMappings) => LumaConfigFile}
+    end, #{}, LumaConfigFiles),
     Domains = lists:usort([?GET_DOMAIN(W) || W <- AllWorkers]),
 
     lists:foreach(fun({_, SpaceConfig}) ->
@@ -866,7 +868,8 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         end, Providers0)
     end, SpacesSetup),
 
-    setup_luma(StoragesSetupMap, LumaConfigFile, Config),
+    setup_luma(StoragesSetupMap, Config),
+    setup_luma_mock(LumaConfigFiles2, Config),
 
     %% Set expiration time for session to value specified in Config or to 1d.
     FuseSessionTTL = case ?config(fuse_session_grace_period_seconds, Config) of
@@ -1219,26 +1222,34 @@ provider_logic_mock_setup(_Config, AllWorkers, DomainMappings, SpacesSetup,
             undefined ->
                 {error, not_found};
             Spaces ->
+                EffSpaces = maps:from_list(lists:map(fun(SpaceId) ->
+                    Storages = proplists:get_value(SpaceId, SpacesToStorages,
+                        maps:from_list([{St, 1000000000} || St <- CustomStorages])),
+                    ProvidersSupp = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
+                        maps:update_with(ProviderId, fun(PrevSupport) -> PrevSupport + Support end, Support, Acc)
+                    end, #{}, Storages),
+                    {SpaceId, maps:get(PID, ProvidersSupp, 1000000000)}
+                end, Spaces)),
+
+
+                ProviderSpacesToStorages = lists:foldl(fun({_SpaceId, SupportMap}, AccOut) ->
+                    AccOut ++ lists:foldl(fun({StorageName, P}, AccIn) when P == PID -> [StorageName | AccIn];
+                        (_, AccIn) -> AccIn
+                    end, [], maps:keys(SupportMap))
+                end, [], SpacesToStorages),
+                ProviderCustomStorages = lists:filtermap(fun
+                    ({StorageName, P}) when P == PID -> {true, StorageName};
+                    (_) -> false
+                end, CustomStorages),
+                ProviderStoragesSetupMap = maps:keys(maps:get(PID, StoragesSetupMap, #{})),
+                Storages = lists:usort(ProviderSpacesToStorages++ ProviderCustomStorages ++ ProviderStoragesSetupMap),
+
                 {ok, #document{key = PID, value = #od_provider{
                     name = PID,
                     subdomain_delegation = false,
                     domain = PID,  % domain is the same as Id
-                    eff_spaces = maps:from_list(lists:map(fun(SpaceId) ->
-                        Storages = proplists:get_value(SpaceId, SpacesToStorages,
-                            maps:from_list([{St, 1000000000} || St <- CustomStorages])),
-                        ProvidersSupp = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
-                            maps:update_with(ProviderId, fun(PrevSupport) -> PrevSupport + Support end, Support, Acc)
-                        end, #{}, Storages),
-                        {SpaceId, maps:get(PID, ProvidersSupp)}
-                    end, Spaces)),
-                    storages = lists:usort(lists:foldl(fun({_SpaceId, SupportMap}, AccOut) ->
-                        AccOut ++ lists:foldl(fun({StorageName, P}, AccIn) when P == PID -> [StorageName | AccIn];
-                                                 (_, AccIn) -> AccIn
-                        end, [], maps:keys(SupportMap))
-                    end, [], SpacesToStorages) ++
-                    lists:filtermap(fun({StorageName, P}) when P == PID -> {true, StorageName};
-                                       (_) -> false
-                    end, CustomStorages) ++ maps:keys(maps:get(PID, StoragesSetupMap, #{}))),
+                    eff_spaces = EffSpaces,
+                    storages = Storages,
                     longitude = 0.0,
                     latitude = 0.0
                 }}}
@@ -1622,8 +1633,8 @@ on_space_supported(Worker, StorageId, ProviderConfig) ->
         false -> ok
     end.
 
--spec setup_luma(map(), binary(), proplists:proplist()) -> ok.
-setup_luma(StoragesSetupMap, LumaConfigFile, Config) ->
+-spec setup_luma(map(), proplists:proplist()) -> ok.
+setup_luma(StoragesSetupMap, Config) ->
     maps:fold(fun(ProviderDomain, ProviderStorageConfig, _) ->
         Workers = get_same_domain_workers(Config, binary_to_atom(ProviderDomain, utf8)),
         maps:fold(fun(StorageId, StorageConfig, _) ->
@@ -1633,28 +1644,34 @@ setup_luma(StoragesSetupMap, LumaConfigFile, Config) ->
                 false ->
                     ok
             end
-        end, undefined, ProviderStorageConfig),
-        setup_luma_mock(Workers, LumaConfigFile, Config)
+        end, undefined, ProviderStorageConfig)
     end, undefined, StoragesSetupMap).
 
--spec setup_luma_mock([node()], binary() | undefined, proplists:proplist()) -> ok.
-setup_luma_mock(_Workers, undefined, _Config) ->
-    ok;
-setup_luma_mock(Workers, LumaConfigFile, Config) ->
-    LumaConfigPath = filename:join([proplists:get_value(data_dir, Config), LumaConfigFile]),
-    {ok, ConfigJSONBin} = file:read_file(LumaConfigPath),
-    LumaConfig = json_utils:decode(ConfigJSONBin),
-    ok = test_utils:mock_new(Workers, luma_utils),
-    ok = test_utils:mock_expect(Workers, luma_utils, http_client_post, fun(Url, _ReqHeaders, ReqBody) ->
-        case lists:last(binary:split(Url, <<"/">>, [global])) of
-            <<"onedata_user_to_credentials">> ->
-                mock_onedata_user_to_credentials_luma_endpoint(ReqBody, LumaConfig);
-            <<"default_owner">> ->
-                mock_space_default_owner_endpoint(ReqBody, LumaConfig);
-            <<"default">> ->
-                mock_space_default_display_owner_endpoint(ReqBody, LumaConfig)
-        end
-    end).
+-spec setup_luma_mock(map(), proplists:proplist()) -> ok.
+setup_luma_mock(LumaConfigFiles, Config) ->
+    maps:fold(fun(ProviderDomain, LumaConfigFile, _) ->
+        Workers = get_same_domain_workers(Config, ProviderDomain),
+        LumaConfigPath = filename:join([proplists:get_value(data_dir, Config), LumaConfigFile]),
+        {ok, ConfigJSONBin} = file:read_file(LumaConfigPath),
+        LumaConfig = json_utils:decode(ConfigJSONBin),
+        ok = test_utils:mock_new(Workers, luma_utils),
+        ok = test_utils:mock_expect(Workers, luma_utils, http_client_post, fun(Url, _ReqHeaders, ReqBody) ->
+            case lists:last(binary:split(Url, <<"/">>, [global])) of
+                <<"onedata_user_to_credentials">> ->
+                    mock_onedata_user_to_credentials_luma_endpoint(ReqBody, LumaConfig);
+                <<"default_owner">> ->
+                    mock_space_default_owner_endpoint(ReqBody, LumaConfig);
+                <<"default">> ->
+                    mock_space_default_display_owner_endpoint(ReqBody, LumaConfig);
+                <<"uid_to_onedata_user">> ->
+                    mock_uid_to_onedata_user_endpoint(ReqBody, LumaConfig);
+                <<"acl_user_to_onedata_user">> ->
+                    mock_acl_user_to_onedata_user_endpoint(ReqBody, LumaConfig);
+                <<"acl_group_to_onedata_group">> ->
+                    mock_acl_group_to_onedata_user_endpoint(ReqBody, LumaConfig)
+            end
+        end)
+    end, undefined, LumaConfigFiles).
 
 -spec mock_onedata_user_to_credentials_luma_endpoint(binary(), json_utils:json_map()) -> term().
 mock_onedata_user_to_credentials_luma_endpoint(ReqBody, LumaConfig) ->
@@ -1692,6 +1709,41 @@ mock_space_default_display_owner_endpoint(ReqBody, LumaConfig) ->
             {ok, 200, undefined, json_utils:encode(Response)}
     end.
 
+-spec mock_uid_to_onedata_user_endpoint(binary(), json_utils:json_map()) -> term().
+mock_uid_to_onedata_user_endpoint(ReqBody, LumaConfig) ->
+    Body = json_utils:decode(ReqBody),
+    StorageId = maps:get(<<"storageId">>, Body),
+    Uid = integer_to_binary(maps:get(<<"uid">>, Body)),
+    case kv_utils:get([StorageId, <<"reverse">>, <<"users">>, Uid], LumaConfig, undefined) of
+        undefined ->
+            {ok, 404, undefined, json_utils:encode(#{})};
+        Response ->
+            {ok, 200, undefined, json_utils:encode(Response)}
+    end.
+
+-spec mock_acl_user_to_onedata_user_endpoint(binary(), json_utils:json_map()) -> term().
+mock_acl_user_to_onedata_user_endpoint(ReqBody, LumaConfig) ->
+    Body = json_utils:decode(ReqBody),
+    StorageId = maps:get(<<"storageId">>, Body),
+    AclUser = maps:get(<<"aclUser">>, Body),
+    case kv_utils:get([StorageId, <<"reverse">>, <<"aclUsers">>, AclUser], LumaConfig, undefined) of
+        undefined ->
+            {ok, 404, undefined, json_utils:encode(#{})};
+        Response ->
+            {ok, 200, undefined, json_utils:encode(Response)}
+    end.
+
+-spec mock_acl_group_to_onedata_user_endpoint(binary(), json_utils:json_map()) -> term().
+mock_acl_group_to_onedata_user_endpoint(ReqBody, LumaConfig) ->
+    Body = json_utils:decode(ReqBody),
+    StorageId = maps:get(<<"storageId">>, Body),
+    AclGroup = maps:get(<<"aclGroup">>, Body),
+    case kv_utils:get([StorageId, <<"reverse">>, <<"aclGroups">>, AclGroup], LumaConfig, undefined) of
+        undefined ->
+            {ok, 404, undefined, json_utils:encode(#{})};
+        Response ->
+            {ok, 200, undefined, json_utils:encode(Response)}
+    end.
 
 -spec index_of(term(), [term()]) -> not_found | integer().
 index_of(Value, List) ->

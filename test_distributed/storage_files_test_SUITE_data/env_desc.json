@@ -219,6 +219,8 @@
                 }
             }
         },
-        "luma_config": "luma.json"
+        "luma_configs": {
+            "p1": "luma.json"
+        }
     }
 }

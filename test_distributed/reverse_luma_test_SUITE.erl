@@ -11,6 +11,7 @@
 -module(reverse_luma_test_SUITE).
 -author("Jakub Kudzia").
 
+-include("luma_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -22,311 +23,186 @@
 -export([all/0, init_per_testcase/2, end_per_testcase/2, init_per_suite/1, end_per_suite/1]).
 
 -export([
-    get_user_id_on_posix_storage/1,
-    get_user_id_on_posix_storage_by_acl_username/1,
-    get_user_id_on_posix_storage_should_return_root_user_id_when_reverse_luma_is_disabled/1,
-    get_user_id_on_posix_storage_by_acl_username_should_return_error_when_reverse_luma_is_disabled/1,
-    get_user_id_on_posix_storage_should_fail_with_404_error/1,
-    get_user_id_on_posix_storage_by_acl_username_should_fail_with_404_error/1,
-    get_user_id_should_fail_with_not_supported_storage_error/1,
-    get_user_id_by_acl_username_should_fail_with_not_supported_storage_error/1,
-    get_user_id_on_posix_storage_should_query_reverse_luma_once/1,
-    get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once/1,
-    get_user_id_on_posix_storage_should_query_reverse_luma_twice/1,
-    get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice/1,
-    get_group_id_on_posix_storage/1,
-    get_group_id_on_posix_storage_by_acl_groupname/1,
-    get_group_id_on_posix_storage_should_return_undefined_when_reverse_luma_is_disabled/1,
-    get_group_id_on_posix_storage_by_acl_groupname_should_return_error_when_reverse_luma_is_disabled/1,
-    get_group_id_on_posix_storage_should_fail_with_404_error/1,
-    get_group_id_on_posix_storage_by_acl_groupname_should_fail_with_404_error/1,
-    get_group_id_should_fail_with_not_supported_storage_error/1,
-    get_group_id_by_acl_groupname_should_fail_with_not_supported_storage_error/1,
-    get_group_id_on_posix_storage_should_query_reverse_luma_once/1,
-    get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_once/1,
-    get_group_id_on_posix_storage_should_query_reverse_luma_twice/1,
-    get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_twice/1
+    map_uid_to_onedata_user_on_storage_without_luma/1,
+    map_acl_user_to_onedata_user_should_fail_on_storage_without_luma/1,
+    map_acl_group_to_onedata_group_should_fail_on_storage_without_luma/1,
+    map_uid_to_onedata_user_on_storage_with_ext_luma/1,
+    map_uid_to_onedata_user_using_idp_on_storage_with_ext_luma/1,
+    map_uid_to_onedata_user_failure_ext_luma/1,
+    map_acl_user_to_onedata_user_on_storage_with_ext_luma/1,
+    map_acl_user_to_onedata_user_using_idp_on_storage_with_ext_luma/1,
+    map_acl_user_to_onedata_user_failure_ext_luma/1,
+    map_acl_group_to_onedata_group_on_storage_with_ext_luma/1,
+    map_acl_group_to_onedata_group_using_idp_on_storage_with_ext_luma/1,
+    map_acl_group_to_onedata_group_failure_ext_luma/1
 ]).
 
 all() ->
     ?ALL([
-        get_user_id_on_posix_storage,
-        get_user_id_on_posix_storage_by_acl_username,
-        get_user_id_on_posix_storage_should_return_root_user_id_when_reverse_luma_is_disabled,
-        get_user_id_on_posix_storage_by_acl_username_should_return_error_when_reverse_luma_is_disabled,
-        get_user_id_on_posix_storage_should_fail_with_404_error,
-        get_user_id_on_posix_storage_by_acl_username_should_fail_with_404_error,
-        get_user_id_should_fail_with_not_supported_storage_error,
-        get_user_id_by_acl_username_should_fail_with_not_supported_storage_error,
-        get_user_id_on_posix_storage_should_query_reverse_luma_once,
-        get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once,
-        get_user_id_on_posix_storage_should_query_reverse_luma_twice,
-        get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice,
-        get_group_id_on_posix_storage,
-        get_group_id_on_posix_storage_by_acl_groupname,
-        get_group_id_on_posix_storage_should_return_undefined_when_reverse_luma_is_disabled,
-        get_group_id_on_posix_storage_by_acl_groupname_should_return_error_when_reverse_luma_is_disabled,
-        get_group_id_on_posix_storage_should_fail_with_404_error,
-        get_group_id_on_posix_storage_by_acl_groupname_should_fail_with_404_error,
-        get_group_id_should_fail_with_not_supported_storage_error,
-        get_group_id_by_acl_groupname_should_fail_with_not_supported_storage_error,
-        get_group_id_on_posix_storage_should_query_reverse_luma_once,
-        get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_once,
-        get_group_id_on_posix_storage_should_query_reverse_luma_twice,
-        get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_twice
+        map_uid_to_onedata_user_on_storage_without_luma,
+        map_acl_user_to_onedata_user_should_fail_on_storage_without_luma,
+        map_acl_group_to_onedata_group_should_fail_on_storage_without_luma,
+        map_uid_to_onedata_user_on_storage_with_ext_luma,
+        map_uid_to_onedata_user_using_idp_on_storage_with_ext_luma,
+        map_uid_to_onedata_user_failure_ext_luma,
+        map_acl_user_to_onedata_user_on_storage_with_ext_luma,
+        map_acl_user_to_onedata_user_using_idp_on_storage_with_ext_luma,
+        map_acl_user_to_onedata_user_failure_ext_luma,
+        map_acl_group_to_onedata_group_on_storage_with_ext_luma,
+        map_acl_group_to_onedata_group_using_idp_on_storage_with_ext_luma,
+        map_acl_group_to_onedata_group_failure_ext_luma
     ]).
 
--define(TEST_URL, <<"http://127.0.0.1:5000">>).
+-define(IDP, <<"idp">>).
+-define(SUBJECT_ID, <<"subjectId">>).
+-define(ENTITLEMENT_ID, <<"entitlementId">>).
 
--define(DEFAULT_TIMEOUT, timer:minutes(5)).
+% there are 10 users for which mappings in luma.json are incorrect
+-define(ERROR_USERS_NUM, 10).
 
--define(TEST_PROVIDER_ID, <<"test_provider_id">>).
--define(TEST_USER_ID, <<"test_user_id">>).
--define(TEST_MAPPED_USER_ID, <<"test_mapped_user_id">>).
--define(TEST_GROUP_ID, <<"test_group_id">>).
--define(TEST_MAPPED_GROUP_ID, <<"test_mapped_group_id">>).
+% uids for which mappings defined in luma.json are incorrect
+-define(ERR_UIDS, lists:seq(?UID(2), ?UID(2) + ?ERROR_USERS_NUM - 1)).
 
--define(LUMA_CONFIG, #luma_config{
-    url = ?TEST_URL,
-    api_key = <<"test_api_key">>
-}).
+% acl users for which mappings defined in luma.json are incorrect
+-define(ERR_ACL_USERS, [?ACL_USER(I) || I <- lists:seq(2, 2 + ?ERROR_USERS_NUM - 1)]).
 
--define(STORAGE_DISABLED_LUMA, ?STORAGE(?POSIX_HELPER_NAME, undefined)).
--define(STORAGE_ID, <<"test_storage_id">>).
-
--define(STORAGE, ?STORAGE(?STORAGE_ID, ?POSIX_HELPER_NAME, ?LUMA_CONFIG)).
--define(STORAGE(LumaConfig), ?STORAGE(?STORAGE_ID, ?POSIX_HELPER_NAME, LumaConfig)).
--define(STORAGE(HelperName, LumaConfig), ?STORAGE(?STORAGE_ID, HelperName, LumaConfig)).
--define(STORAGE(StorageId, HelperName, LumaConfig), #document{
-    key = StorageId,
-    value = #storage_config{
-        helper = #helper{name = HelperName},
-        readonly = false,
-        imported_storage = false,
-        luma_config = LumaConfig
-    }
-}).
-
--define(SPACE_ID, <<"test_space_id">>).
+% acl groups for which mappings defined in luma.json are incorrect
+-define(ERR_ACL_GROUPS, [?ACL_GROUP(I) || I <- lists:seq(2, 2 + ?ERROR_USERS_NUM - 1)]).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-get_user_id_on_posix_storage(Config) ->
+map_uid_to_onedata_user_on_storage_without_luma(Config) ->
+    ?RUN(Config, ?NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_uid_to_onedata_user_on_storage_without_luma_base/2
+    ).
+
+map_acl_user_to_onedata_user_should_fail_on_storage_without_luma(Config) ->
+    ?RUN(Config, ?NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_user_to_onedata_user_should_fail_on_storage_without_luma_base/2
+    ).
+
+map_acl_group_to_onedata_group_should_fail_on_storage_without_luma(Config) ->
+    ?RUN(Config, ?NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_group_to_onedata_group_should_fail_on_storage_without_luma_base/2
+    ).
+
+map_uid_to_onedata_user_on_storage_with_ext_luma(Config) ->
+    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_uid_to_onedata_user_on_storage_with_ext_luma_base/2
+    ).
+
+map_uid_to_onedata_user_using_idp_on_storage_with_ext_luma(Config) ->
+    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_uid_to_onedata_user_using_idp_on_storage_with_ext_luma_base/2
+    ).
+
+map_uid_to_onedata_user_failure_ext_luma(Config) ->
+    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_uid_to_onedata_user_failure_ext_luma_base/2
+    ).
+
+map_acl_user_to_onedata_user_on_storage_with_ext_luma(Config) ->
+    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_user_to_onedata_user_on_storage_with_ext_luma_base/2
+    ).
+
+map_acl_user_to_onedata_user_using_idp_on_storage_with_ext_luma(Config) ->
+    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_user_to_onedata_user_using_idp_on_storage_with_ext_luma_base/2
+    ).
+
+map_acl_user_to_onedata_user_failure_ext_luma(Config) ->
+    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_user_to_onedata_user_failure_ext_luma_base/2
+    ).
+
+map_acl_group_to_onedata_group_on_storage_with_ext_luma(Config) ->
+    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_group_to_onedata_group_on_storage_with_ext_luma_base/2
+    ).
+
+map_acl_group_to_onedata_group_using_idp_on_storage_with_ext_luma(Config) ->
+    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_group_to_onedata_group_using_idp_on_storage_with_ext_luma_base/2
+    ).
+
+map_acl_group_to_onedata_group_failure_ext_luma(Config) ->
+    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_group_to_onedata_group_failure_ext_luma_base/2
+    ).
+
+%%%===================================================================
+%%% Test base functions
+%%%===================================================================
+
+map_uid_to_onedata_user_on_storage_without_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_user_id,
-        [<<"0">>, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result).
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    ?assertEqual({ok, ?SPACE_OWNER_ID(?SPACE_ID)}, map_uid_to_onedata_user(Worker, ?UID0, ?SPACE_ID, Storage)).
 
-get_user_id_on_posix_storage_by_acl_username(Config) ->
+map_acl_user_to_onedata_user_should_fail_on_storage_without_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
-        [<<"user@nfsdomain.org">>, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result).
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    ?assertEqual({error, luma_disabled}, map_acl_user_to_onedata_user(Worker, ?ACL_USER0, Storage)).
 
-get_user_id_on_posix_storage_should_return_root_user_id_when_reverse_luma_is_disabled(Config) ->
+map_acl_group_to_onedata_group_should_fail_on_storage_without_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_user_id,
-        [<<"0">>, ?STORAGE_DISABLED_LUMA]),
-    ?assertEqual({ok, ?ROOT_USER_ID}, Result).
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    ?assertEqual({error, luma_disabled}, map_acl_group_to_onedata_group(Worker, ?ACL_GROUP0, Storage)).
 
-get_user_id_on_posix_storage_by_acl_username_should_return_error_when_reverse_luma_is_disabled(Config) ->
+map_uid_to_onedata_user_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
-        [<<"user@nfsdomain.org">>, ?STORAGE_DISABLED_LUMA]),
-    ?assertEqual({error, luma_disabled}, Result).
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    ?assertEqual({ok, ?USER_ID}, map_uid_to_onedata_user(Worker, ?UID0, ?SPACE_ID, Storage)).
 
-get_user_id_on_posix_storage_should_fail_with_404_error(Config) ->
+map_uid_to_onedata_user_using_idp_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_user_id,
-        [<<"0">>, ?STORAGE]),
-    ?assertMatch({error, {luma_server, {404, _}}}, Result).
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    ?assertEqual({ok, ?USER_ID2}, map_uid_to_onedata_user(Worker, ?UID1, ?SPACE_ID, Storage)).
 
-get_user_id_on_posix_storage_by_acl_username_should_fail_with_404_error(Config) ->
+map_uid_to_onedata_user_failure_ext_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
-        [<<"user@nfsdomain.org">>, ?STORAGE]),
-    ?assertMatch({error,{luma_server, {404, _}}}, Result).
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    lists:foreach(fun(Uid) ->
+        ct:pal("Uid: ~p", [Uid]),
+        ?assertEqual({error, external_luma_error}, map_uid_to_onedata_user(Worker, Uid, ?SPACE_ID, Storage))
+    end, ?ERR_UIDS).
 
-get_user_id_should_fail_with_not_supported_storage_error(Config) ->
+map_acl_user_to_onedata_user_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_user_id,
-        [<<"0">>, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, ?LUMA_CONFIG)]),
-    ?assertEqual({error, not_supported_storage_type}, Result).
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    ?assertEqual({ok, ?USER_ID}, map_acl_user_to_onedata_user(Worker, ?ACL_USER0, Storage)).
 
-get_user_id_by_acl_username_should_fail_with_not_supported_storage_error(Config) ->
+map_acl_user_to_onedata_user_using_idp_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
-        [<<"user@nfsdomain.org">>, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, ?LUMA_CONFIG)]),
-    ?assertEqual({error, not_supported_storage_type}, Result).
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    ?assertEqual({ok, ?USER_ID2}, map_acl_user_to_onedata_user(Worker, ?ACL_USER1, Storage)).
 
-get_user_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
+map_acl_user_to_onedata_user_failure_ext_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    lists:foreach(fun(AclUser) ->
+        ?assertEqual({error, external_luma_error}, map_acl_user_to_onedata_user(Worker, AclUser, Storage))
+    end, ?ERR_ACL_USERS).
 
-    Result = rpc:call(Worker, reverse_luma, get_user_id,
-        [<<"0">>, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result),
-
-    Result2 = rpc:call(Worker, reverse_luma, get_user_id,
-        [<<"0">>, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result2),
-
-    test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
-        ['_', '_', '_', '_'], 1).
-
-get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once(Config) ->
+map_acl_group_to_onedata_group_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    ?assertEqual({ok, ?GROUP_ID}, map_acl_group_to_onedata_group(Worker, ?ACL_GROUP0, Storage)).
 
-    Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
-        [<<"user@nfsdomain.org">>, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result),
-
-    Result2 = rpc:call(Worker, reverse_luma, get_user_id_by_name,
-        [<<"user@nfsdomain.org">>, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result2),
-
-    test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id_by_name,
-        ['_', '_', '_', '_'], 1).
-
-get_user_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
+map_acl_group_to_onedata_group_using_idp_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    ?assertEqual({ok, ?GROUP_ID2}, map_acl_group_to_onedata_group(Worker, ?ACL_GROUP1, Storage)).
 
-    Result = rpc:call(Worker, reverse_luma, get_user_id,
-        [<<"0">>, ?STORAGE(?LUMA_CONFIG)]),
-    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result),
-
-    rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
-
-    Result2 = rpc:call(Worker, reverse_luma, get_user_id,
-        [<<"0">>, ?STORAGE(?LUMA_CONFIG)]),
-
-    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result2),
-
-    test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id,
-        ['_', '_', '_', '_'], 2).
-
-get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice(Config) ->
+map_acl_group_to_onedata_group_failure_ext_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-
-    Result = rpc:call(Worker, reverse_luma, get_user_id_by_name,
-        [<<"user@nfsdomain.org">>, ?STORAGE(?LUMA_CONFIG)]),
-    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result),
-
-    rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
-
-    Result2 = rpc:call(Worker, reverse_luma, get_user_id_by_name,
-        [<<"user@nfsdomain.org">>, ?STORAGE(?LUMA_CONFIG)]),
-
-    ?assertEqual({ok, ?TEST_MAPPED_USER_ID}, Result2),
-
-    test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_user_id_by_name,
-        ['_', '_', '_', '_'], 2).
-
-get_group_id_on_posix_storage(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id,
-        [<<"0">>, ?SPACE_ID, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result).
-
-get_group_id_on_posix_storage_by_acl_groupname(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
-        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result).
-
-get_group_id_on_posix_storage_should_return_undefined_when_reverse_luma_is_disabled(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id,
-        [<<"0">>, ?SPACE_ID, ?STORAGE_DISABLED_LUMA]),
-    ?assertEqual({ok, undefined}, Result).
-
-get_group_id_on_posix_storage_by_acl_groupname_should_return_error_when_reverse_luma_is_disabled(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
-        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE_DISABLED_LUMA]),
-    ?assertEqual({error, luma_disabled}, Result).
-
-get_group_id_on_posix_storage_should_fail_with_404_error(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id,
-        [<<"0">>, ?SPACE_ID, ?STORAGE]),
-    ?assertMatch({error, {luma_server, {404, _}}}, Result).
-
-get_group_id_on_posix_storage_by_acl_groupname_should_fail_with_404_error(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
-        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE]),
-    ?assertMatch({error, {luma_server, {404, _}}}, Result).
-
-get_group_id_should_fail_with_not_supported_storage_error(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id,
-        [<<"0">>, ?SPACE_ID, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, ?LUMA_CONFIG)]),
-    ?assertEqual({error, not_supported_storage_type}, Result).
-
-get_group_id_by_acl_groupname_should_fail_with_not_supported_storage_error(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
-        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE(<<"NOT SUPPORTED HELPER NAME">>, ?LUMA_CONFIG)]),
-    ?assertEqual({error, not_supported_storage_type}, Result).
-
-get_group_id_on_posix_storage_should_query_reverse_luma_once(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id,
-        [<<"0">>, ?SPACE_ID, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result),
-
-    Result2 = rpc:call(Worker, reverse_luma, get_group_id,
-        [<<"0">>, ?SPACE_ID, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result2),
-
-    test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_group_id,
-        ['_', '_', '_', '_', '_'], 1).
-
-get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_once(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
-        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result),
-
-    Result2 = rpc:call(Worker, reverse_luma, get_group_id_by_name,
-        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE]),
-    ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result2),
-
-    test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_group_id_by_name,
-        ['_', '_', '_', '_', '_'], 1).
-
-get_group_id_on_posix_storage_should_query_reverse_luma_twice(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id,
-        [<<"0">>, ?SPACE_ID, ?STORAGE(?LUMA_CONFIG)]),
-    ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result),
-    ok = rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
-
-    Result2 = rpc:call(Worker, reverse_luma, get_group_id,
-        [<<"0">>, ?SPACE_ID, ?STORAGE(?LUMA_CONFIG)]),
-    ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result2),
-
-    test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_group_id,
-        ['_', '_', '_', '_', '_'], 2).
-
-get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_twice(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = rpc:call(Worker, reverse_luma, get_group_id_by_name,
-        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE(?LUMA_CONFIG)]),
-    ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result),
-
-    rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
-
-    Result2 = rpc:call(Worker, reverse_luma, get_group_id_by_name,
-        [<<"group@nfsdomain.org">>, ?SPACE_ID, ?STORAGE(?LUMA_CONFIG)]),
-
-    ?assertEqual({ok, ?TEST_MAPPED_GROUP_ID}, Result2),
-
-    test_utils:mock_assert_num_calls(Worker, reverse_luma_proxy, get_group_id_by_name,
-        ['_', '_', '_', '_', '_'], 2).
-
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    lists:foreach(fun(AclGroup) ->
+        ?assertEqual({error, external_luma_error}, map_acl_group_to_onedata_group(Worker, AclGroup, Storage))
+    end, ?ERR_ACL_GROUPS).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -345,200 +221,38 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config).
 
-init_per_testcase(Case, Config) when
-    Case =:= get_user_id_on_posix_storage;
-    Case =:= get_user_id_on_posix_storage_should_query_reverse_luma_once ->
-
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
-    mock_resolve_user_post(Worker,
-        {ok, 200, [], str_utils:format_bin("{
-        \"idp\": \"~s\",
-        \"subjectId\": \"~s\"
-        \}", [?TEST_PROVIDER_ID, ?TEST_USER_ID])}),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case, Config) when
-    Case =:= get_user_id_on_posix_storage_by_acl_username;
-    Case =:= get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_once ->
-
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
-    mock_resolve_acl_user_post(Worker,
-        {ok, 200, [], str_utils:format_bin("{
-        \"idp\": \"~s\",
-        \"subjectId\": \"~s\"
-        \}", [?TEST_PROVIDER_ID, ?TEST_USER_ID])}),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case = get_user_id_on_posix_storage_should_query_reverse_luma_twice, Config)->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
-    mock_resolve_user_post(Worker,
-        {ok, 200, [], str_utils:format_bin("{
-        \"idp\": \"~s\",
-        \"subjectId\": \"~s\"
-        \}", [?TEST_PROVIDER_ID, ?TEST_USER_ID])}),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case = get_user_id_on_posix_storage_by_acl_username_should_query_reverse_luma_twice, Config)->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
-    mock_resolve_acl_user_post(Worker,
-        {ok, 200, [], str_utils:format_bin("{
-        \"idp\": \"~s\",
-        \"subjectId\": \"~s\"
-        \}", [?TEST_PROVIDER_ID, ?TEST_USER_ID])}),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case = get_user_id_on_posix_storage_should_fail_with_404_error, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
-    mock_resolve_user_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case = get_user_id_on_posix_storage_by_acl_username_should_fail_with_404_error, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
-    mock_resolve_acl_user_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case, Config) when
-    Case =:= get_group_id_on_posix_storage;
-    Case =:= get_group_id_on_posix_storage_should_query_reverse_luma_once;
-    Case =:= get_group_id_on_posix_storage_should_query_reverse_luma_twice
-    ->
-
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy, provider_logic], [passthrough]),
-    mock_resolve_group_post(Worker,
-        {
-            ok, 200, [], str_utils:format_bin("{
-                \"idp\": \"~s\",
-                \"groupId\": \"~s\"\}", [?TEST_PROVIDER_ID, ?TEST_GROUP_ID])
-        }
-    ),
-    mock_idp_group_mapping(Worker,
-        ?TEST_PROVIDER_ID, ?TEST_GROUP_ID,
-        ?TEST_MAPPED_GROUP_ID
-    ),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case, Config) when
-    Case =:= get_group_id_on_posix_storage_by_acl_groupname;
-    Case =:= get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_twice;
-    Case =:= get_group_id_on_posix_storage_by_acl_groupname_should_query_reverse_luma_once->
-
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
-    mock_resolve_acl_group_post(Worker,
-        {
-            ok, 200, [], str_utils:format_bin("{
-                \"idp\": \"~s\",
-                \"groupId\": \"~s\"\}", [?TEST_PROVIDER_ID, ?TEST_GROUP_ID])
-        }
-    ),
-    mock_idp_group_mapping(Worker,
-        ?TEST_PROVIDER_ID, ?TEST_GROUP_ID,
-        ?TEST_MAPPED_GROUP_ID
-    ),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case = get_group_id_on_posix_storage_should_fail_with_404_error, Config)  ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
-    mock_resolve_group_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case = get_group_id_on_posix_storage_by_acl_groupname_should_fail_with_404_error, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [reverse_luma_proxy], [passthrough]),
-    mock_resolve_acl_group_post(Worker, {ok, 404, [], <<"{\"error\": \"reason\"\}">>}),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    mock_idp_user_mapping(Worker,
-        ?TEST_PROVIDER_ID, ?TEST_USER_ID,
-        ?TEST_MAPPED_USER_ID
-    ),
+    mock_map_idp_user_to_onedata(Worker),
+    mock_map_idp_group_to_onedata(Worker),
     Config.
 
 end_per_testcase(_Case, Config) ->
-    Workers = [Worker | _] = ?config(op_worker_nodes, Config),
-    ok = rpc:call(Worker, luma_cache, invalidate, [?STORAGE_ID]),
-    test_utils:mock_unload(Workers, [reverse_luma_proxy, provider_logic]).
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    luma_test_utils:invalidate_cache_for_all_storages(Worker).
 
-mock_resolve_acl_user_post(Worker, Expected) ->
-    test_utils:mock_expect(Worker, reverse_luma_proxy, http_client_post, fun
-        (Url, Headers, Body) when is_binary(Url) ->
-            case lists:last(binary:split(Url, <<"/">>, [global])) of
-                <<"resolve_acl_user">> ->
-                    Expected;
-                _ ->
-                    meck:passthrough([Url, Headers, Body])
-            end;
-        (Url, Headers, Body) ->
-            meck:passthrough([Url, Headers, Body])
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+map_uid_to_onedata_user(Worker, Uid, SpaceId, Storage) ->
+    rpc:call(Worker, luma, map_uid_to_onedata_user, [Uid, SpaceId, Storage]).
+
+map_acl_user_to_onedata_user(Worker, AclUser, Storage) ->
+    rpc:call(Worker, luma, map_acl_user_to_onedata_user, [AclUser, Storage]).
+
+map_acl_group_to_onedata_group(Worker, AclGroup, Storage) ->
+    rpc:call(Worker, luma, map_acl_group_to_onedata_group, [AclGroup, Storage]).
+
+mock_map_idp_user_to_onedata(Worker) ->
+    test_utils:mock_expect(Worker, provider_logic, map_idp_user_to_onedata, fun
+        (?IDP, ?SUBJECT_ID) ->
+            {ok, ?USER_ID2}
     end).
 
-mock_resolve_user_post(Worker, Expected) ->
-    test_utils:mock_expect(Worker, reverse_luma_proxy, http_client_post, fun
-        (Url, Headers, Body) when is_binary(Url) ->
-            case lists:last(binary:split(Url, <<"/">>, [global])) of
-                <<"resolve_user">> ->
-                    Expected;
-                _ ->
-                    meck:passthrough([Url, Headers, Body])
-            end;
-        (Url, Headers, Body) ->
-            meck:passthrough([Url, Headers, Body])
+mock_map_idp_group_to_onedata(Worker) ->
+    test_utils:mock_expect(Worker, provider_logic, map_idp_group_to_onedata, fun
+        (?IDP, ?ENTITLEMENT_ID) ->
+            {ok, ?GROUP_ID2}
     end).
-
-mock_resolve_group_post(Worker, ExpectedLuma) ->
-    test_utils:mock_expect(Worker, reverse_luma_proxy, http_client_post, fun
-        (Url, Headers, Body) when is_binary(Url) ->
-            case lists:last(binary:split(Url, <<"/">>, [global])) of
-                <<"resolve_group">> ->
-                    ExpectedLuma;
-                _ ->
-                    meck:passthrough([Url, Headers, Body])
-            end;
-        (Url, Headers, Body) ->
-            meck:passthrough([Url, Headers, Body])
-    end).
-
-mock_resolve_acl_group_post(Worker, ExpectedLuma) ->
-    test_utils:mock_expect(Worker, reverse_luma_proxy, http_client_post, fun
-        (Url, Headers, Body) when is_binary(Url) ->
-            case lists:last(binary:split(Url, <<"/">>, [global])) of
-                <<"resolve_acl_group">> ->
-                    ExpectedLuma;
-                _ ->
-                    meck:passthrough([Url, Headers, Body])
-            end;
-        (Url, Headers, Body) ->
-            meck:passthrough([Url, Headers, Body])
-    end).
-
-mock_idp_group_mapping(Worker, IdP, IdpGroupId, GroupId) ->
-    test_utils:mock_expect(Worker, provider_logic, map_idp_group_to_onedata,
-        fun(IdPArg, IdpGroupIdArg) ->
-            case {IdPArg, IdpGroupIdArg} of
-                {IdP, IdpGroupId} ->
-                    {ok, GroupId};
-                _ ->
-                    ?ERROR_BAD_VALUE_ID_NOT_FOUND(IdP)
-            end
-        end).
-
-mock_idp_user_mapping(Worker, IdP, IdpUserId, UserId) ->
-    test_utils:mock_expect(Worker, provider_logic, map_idp_user_to_onedata,
-        fun(IdPArg, IdpUserIdArg) ->
-            case {IdPArg, IdpUserIdArg} of
-                {IdP, IdpUserId} ->
-                    {ok, UserId};
-                _ ->
-                    ?ERROR_BAD_VALUE_ID_NOT_FOUND(IdP)
-            end
-        end).
