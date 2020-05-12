@@ -717,7 +717,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     SpacesSetup = proplists:get_value(<<"spaces">>, GlobalSetup),
     HarvestersSetup = proplists:get_value(<<"harvesters">>, GlobalSetup, []),
     StoragesSetup = proplists:get_value(<<"storages">>, GlobalSetup, []),
-    LumaConfigFiles = json_utils:list_to_map(proplists:get_value(<<"luma_configs">>, GlobalSetup, undefined)),
+    LumaConfigFiles = json_utils:list_to_map(proplists:get_value(<<"luma_configs">>, GlobalSetup, #{})),
     LumaConfigFiles2 = maps:fold(fun(P, LumaConfigFile, Acc) ->
         Acc#{proplists:get_value(P, DomainMappings) => LumaConfigFile}
     end, #{}, LumaConfigFiles),

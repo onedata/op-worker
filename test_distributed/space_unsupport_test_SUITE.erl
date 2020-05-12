@@ -385,11 +385,12 @@ assert_local_documents_cleaned_up(Worker, SpaceId, StorageId) ->
 assert_local_documents_cleaned_up(Worker) ->
     AllModels = datastore_config_plugin:get_models(),
     ModelsToCheck = AllModels
-        -- [storage_config, provider_auth, % Models not connected with space support
-            file_meta, times, %% These documents without scope are related to user root dir, which is not cleaned up during unsupport
+        -- [storage_config, provider_auth, % Models not associated with space support
+            file_meta, times, %% These documents without scope are related to user root dir,
+                              %% which is not cleaned up during unsupport
             dbsync_state, %% @TODO VFS-6135 check after dbsync is stopped in space unsupport
             file_local_blocks, %% @TODO VFS-6275 check after file_local_blocks cleanup is properly implemented
-            luma_users_cache % These documents are connected with storage, not with space support
+            luma_users_cache % These documents are associated with storage, not with space support
         ],
     assert_documents_cleaned_up(Worker, <<>>, ModelsToCheck).
 

@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% Utility functions used in tests that operate on provider's
+%%% storage via RPC.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_test_utils).
@@ -15,7 +16,9 @@
 %% API
 -export([read_file/2, read_file_info/2, list_dir/2,
     space_path/2, file_path/3,
-    get_space_mount_point/2, get_supporting_storage_id/2, storage_mount_point/2, get_helper/2]).
+    get_space_mount_point/2, get_supporting_storage_id/2,
+    storage_mount_point/2, get_helper/2
+]).
 
 
 %%%===================================================================

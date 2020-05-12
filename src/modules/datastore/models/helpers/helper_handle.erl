@@ -13,7 +13,6 @@
 -author("Konrad Zemek").
 
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/logging.hrl").
 
 
 %% API
@@ -51,8 +50,7 @@ create(SessionId, UserId, SpaceId, StorageId) ->
         {ok, UserCtx} ->
             HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
             HelperDoc = #document{value = HelperHandle},
-            Result = datastore_model:create(?CTX, HelperDoc),
-            Result;
+            datastore_model:create(?CTX, HelperDoc);
         Error ->
             Error
     end.

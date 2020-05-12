@@ -373,7 +373,7 @@ get_private_attrs(FileCtx0, #document{
         shares = Shares
     }
 }) ->
-    {{Uid, Gid}, FileCtx1} = file_ctx:get_display_owner(FileCtx0),
+    {{Uid, Gid}, FileCtx1} = file_ctx:get_display_credentials(FileCtx0),
     {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx1}.
 
 

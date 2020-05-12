@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get/2, delete/1]).
+-export([get/2, delete/1, cache_posix_compatible_mapping/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -49,6 +49,11 @@ get(Storage, UserId) ->
            acquire_and_cache(Storage, UserId)
    end.
 
+-spec cache_posix_compatible_mapping(storage:data(), od_user:id(), luma:uid()) -> ok.
+cache_posix_compatible_mapping(Storage, UserId, Uid) ->
+    StorageCredentials = #{<<"uid">> => integer_to_binary(Uid)},
+    LumaUserCredentials = luma_user:new(StorageCredentials, Uid),
+    cache(storage:get_id(Storage), UserId, LumaUserCredentials).
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(StorageId) ->

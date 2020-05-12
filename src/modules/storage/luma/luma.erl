@@ -1,5 +1,4 @@
 %%%-------------------------------------------------------------------
-%%% @author Krzysztof Trzepla
 %%% @author Jakub Kudzia
 %%% @copyright (C) 2016 ACK CYFRONET AGH
 %%% This software is released under the MIT license
@@ -7,15 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME jk
-%%% TODO OPISAĆ LUMA - > local user mapping, entry module
-%%% storage credentials, display credentials
+%%% The main module responsible for Local User Mapping (aka LUMA).
+%%% storage credentials, display credentials kieyd które?
 %%% opisać jaki ma być priorytet
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma).
 
--author("Krzysztof Trzepla").
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
@@ -24,14 +21,14 @@
 -include_lib("ctool/include/errors.hrl").
 
 
-%% LUMA
+%% LUMA API
 -export([
     map_to_storage_credentials/3,
     map_to_storage_credentials/4,
     map_to_display_credentials/3
 ]).
 
-%% Reverse LUMA
+%% Reverse LUMA API
 -export([
     map_uid_to_onedata_user/3,
     map_acl_user_to_onedata_user/2,
@@ -39,7 +36,11 @@
 ]).
 
 %% API functions
--export([invalidate/1, invalidate/2, add_helper_specific_fields/4]).
+-export([
+    invalidate/1,
+    invalidate/2,
+    add_helper_specific_fields/4
+]).
 
 -type uid() :: non_neg_integer().
 -type gid() :: non_neg_integer().
@@ -52,14 +53,6 @@
 
 -export_type([uid/0, gid/0, storage_credentials/0, display_credentials/0,
     space_entry/0, user_entry/0, acl_who/0]).
-
-
-% TODO przekazywać storage czy storage id?
-% TODO dodac force run synca
-
-%todo error handling
-%TODO ogarnac cache i jego inwalidacje na życzenie
-
 
 %%%===================================================================
 %%% LUMA functions
@@ -179,10 +172,6 @@ invalidate(StorageId) ->
 invalidate(StorageId, SpaceId) ->
     luma_spaces_cache:delete(StorageId, SpaceId).
 
--spec is_reverse_luma_supported(storage:data()) -> boolean().
-is_reverse_luma_supported(Storage) ->
-    Helper = storage:get_helper(Storage),
-    helper:is_posix_compatible(Helper).
 
 -spec add_helper_specific_fields(od_user:id(), session:id(), luma:storage_credentials(),
     helpers:helper()) -> any().
@@ -207,8 +196,13 @@ map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
     try
         {ok, StorageData} = storage:get(Storage),
         case fslogic_uuid:is_space_owner(UserId) of
-            true -> map_space_owner_to_storage_credentials(StorageData, SpaceId);
-            false -> map_normal_user_to_storage_credentials(UserId, StorageData, SpaceId)
+            true ->
+                % SpaceOwner can be owner of a file in 3 cases:
+                % * It is owner of a space directory, so when it's created on storage,
+                %   It will
+                map_space_owner_to_storage_credentials(StorageData, SpaceId);
+            false ->
+                map_normal_user_to_storage_credentials(UserId, StorageData, SpaceId)
         end
     catch
         Error2:Reason ->
@@ -218,6 +212,8 @@ map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
     end.
 
 
+-spec add_webdav_specific_fields(od_user:id(), session:id(), storage_credentials(), helpers:helper()) ->
+    {ok, luma:storage_credentials()} | {error, term()}.
 add_webdav_specific_fields(UserId, SessionId, StorageCredentials = #{
     <<"credentialsType">> := <<"oauth2">>
 }, Helper) ->
@@ -297,12 +293,12 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCredentials = #{
 
 
 % todo napisac w docku, ze to moze sie zdarzyc jak plik byl zaimportowany przez space_ownera albo usera jeszcze nie ma
+
 -spec map_space_owner_to_storage_credentials(storage:data(), od_space:id()) ->
     {ok, storage_credentials()} | {error, term()}.
 map_space_owner_to_storage_credentials(Storage, SpaceId) ->
     case storage:is_posix_compatible(Storage) of
         true ->
-            % TODo handle error here, jaki zwracac blad?
             {ok, SpacePosixCredentials} = luma_spaces_cache:get(Storage, SpaceId),
             DefaultUid = luma_space:get_default_uid(SpacePosixCredentials),
             DefaultGid = luma_space:get_default_gid(SpacePosixCredentials),
@@ -323,8 +319,10 @@ map_normal_user_to_storage_credentials(UserId, Storage, SpaceId) ->
             StorageCredentials = luma_user:get_storage_credentials(LumaUser),
             case storage:is_posix_compatible(Storage) of
                 true ->
-                    % TODo handle error here, jaki zwracac blad?
                     {ok, SpacePosixCredentials} = luma_spaces_cache:get(Storage, SpaceId),
+                    Uid = binary_to_integer(maps:get(<<"uid">>, StorageCredentials)),
+                    % cache reverse mapping
+                    luma_reverse_cache:cache_uid_mapping(Storage, Uid, UserId),
                     DefaultGid = luma_space:get_default_gid(SpacePosixCredentials),
                     {ok, StorageCredentials#{<<"gid">> => integer_to_binary(DefaultGid)}};
                 false ->
@@ -336,7 +334,6 @@ map_normal_user_to_storage_credentials(UserId, Storage, SpaceId) ->
 
 -spec map_space_owner_to_display_credentials(storage:data(), od_space:id()) -> {ok, display_credentials()}.
 map_space_owner_to_display_credentials(Storage, SpaceId) ->
-    % TODo handle error here, jaki zwracac blad?
     {ok, SpacePosixCredentials} = luma_spaces_cache:get(Storage, SpaceId),
     DisplayUid = luma_space:get_display_uid(SpacePosixCredentials),
     DisplayGid = luma_space:get_display_gid(SpacePosixCredentials),
@@ -347,7 +344,6 @@ map_space_owner_to_display_credentials(Storage, SpaceId) ->
 map_normal_user_to_display_credentials(OwnerId, Storage, SpaceId) ->
     case luma_users_cache:get(Storage, OwnerId) of
         {ok, LumaUser} ->
-            % TODo handle error here, jaki zwracac blad?
             {ok, SpacePosixCredentials} = luma_spaces_cache:get(Storage, SpaceId),
             DisplayUid = luma_user:get_display_uid(LumaUser),
             DisplayGid = luma_space:get_display_gid(SpacePosixCredentials),
@@ -355,3 +351,8 @@ map_normal_user_to_display_credentials(OwnerId, Storage, SpaceId) ->
         Error ->
             Error
     end.
+
+-spec is_reverse_luma_supported(storage:data()) -> boolean().
+is_reverse_luma_supported(Storage) ->
+    Helper = storage:get_helper(Storage),
+    helper:is_posix_compatible(Helper).

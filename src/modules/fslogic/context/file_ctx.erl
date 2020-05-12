@@ -39,7 +39,7 @@
     parent :: undefined | ctx(),
     storage_file_id :: undefined | helpers:file_id(),
     space_name :: undefined | od_space:name(),
-    display_owner :: undefined | luma:display_credentials(),
+    display_credentials :: undefined | luma:display_credentials(),
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
     storage :: undefined | storage:data(),
@@ -78,7 +78,7 @@
     get_file_doc_including_deleted/1, get_parent/2, get_and_check_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
-    get_display_owner/1, get_times/1,
+    get_display_credentials/1, get_times/1,
     get_parent_guid/2, get_child/3,
     get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
     get_logical_path/2,
@@ -618,17 +618,17 @@ get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
 %% Returns posix storage user ctx, holding UID and GID of file on posix storage.
 %% @end
 %%--------------------------------------------------------------------
--spec get_display_owner(ctx()) -> {luma:display_credentials(), ctx()}.
-get_display_owner(FileCtx = #file_ctx{display_owner = undefined}) ->
+-spec get_display_credentials(ctx()) -> {luma:display_credentials(), ctx()}.
+get_display_credentials(FileCtx = #file_ctx{display_credentials = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
     {FileMetaDoc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
     OwnerId = file_meta:get_owner(FileMetaDoc),
     {SyncedGid, SyncedStorageId} = file_meta:get_synced_gid_and_storage(FileMetaDoc),
     {Storage, FileCtx3} = get_storage(FileCtx2),
-    {ok, DisplayOwner = {Uid, _Gid}} = luma:map_to_display_credentials(OwnerId, SpaceId, Storage),
-    FinalDisplayOwner = case Storage =:= undefined of
+    {ok, DisplayCredentials = {Uid, _Gid}} = luma:map_to_display_credentials(OwnerId, SpaceId, Storage),
+    FinalDisplayCredentials = case Storage =:= undefined of
         true ->
-            DisplayOwner;
+            DisplayCredentials;
         false ->
             StorageId = storage:get_id(Storage),
             ProviderId = file_meta:get_provider_id(FileMetaDoc),
@@ -637,12 +637,12 @@ get_display_owner(FileCtx = #file_ctx{display_owner = undefined}) ->
                     %override display GID with GID that was found when syncing file from storage
                     {Uid, SyncedGid};
                 false ->
-                    DisplayOwner
+                    DisplayCredentials
             end
     end,
-    {FinalDisplayOwner, FileCtx3#file_ctx{display_owner = FinalDisplayOwner}};
-get_display_owner(FileCtx = #file_ctx{display_owner = DisplayOwner}) ->
-    {DisplayOwner, FileCtx}.
+    {FinalDisplayCredentials, FileCtx3#file_ctx{display_credentials = FinalDisplayCredentials}};
+get_display_credentials(FileCtx = #file_ctx{display_credentials = DisplayCredentials}) ->
+    {DisplayCredentials, FileCtx}.
 
 %%--------------------------------------------------------------------
 %% @doc

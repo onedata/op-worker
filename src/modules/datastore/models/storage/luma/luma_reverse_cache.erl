@@ -21,6 +21,7 @@
     map_uid_to_onedata_user/2,
     map_acl_user_to_onedata_user/2,
     map_acl_group_to_onedata_group/2,
+    cache_uid_mapping/3,
     delete/1
 ]).
 
@@ -66,6 +67,10 @@ map_acl_user_to_onedata_user(Storage, AclUser) ->
     {ok, od_group:id()} | {error, term()}.
 map_acl_group_to_onedata_group(Storage, AclGroup) ->
     map(Storage, AclGroup, ?ACL_GROUP).
+
+-spec cache_uid_mapping(storage:data(), luma:uid(), od_user:id()) -> ok.
+cache_uid_mapping(Storage, Uid, UserId) ->
+    cache(storage:get_id(Storage), Uid, UserId, ?UID).
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(StorageId) ->
@@ -122,7 +127,14 @@ acquire_and_cache(Storage, Key, Mode) ->
 -spec acquire(storage:data(), internal_key(), mode()) ->
     {ok, internal_value()} | {error, term()}.
 acquire(Storage, Uid, ?UID) ->
-    external_reverse_luma:map_uid_to_onedata_user(Uid, Storage);
+    case external_reverse_luma:map_uid_to_onedata_user(Uid, Storage) of
+        {ok, UserId} ->
+            % cache reverse mapping
+            luma_users_cache:cache_posix_compatible_mapping(Storage, UserId, Uid),
+            {ok, UserId};
+        Error ->
+            Error
+    end;
 acquire(Storage, AclUser, ?ACL_USER) ->
     external_reverse_luma:map_acl_user_to_onedata_user(AclUser, Storage);
 acquire(Storage, AclGroup, ?ACL_GROUP) ->

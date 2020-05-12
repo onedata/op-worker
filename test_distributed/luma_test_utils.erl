@@ -15,7 +15,12 @@
 -include("luma_test_utils.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 
--export([run_test_for_all_storage_configs/5, invalidate_cache_for_all_storages/1]).
+-export([run_test_for_all_storage_configs/5, invalidate_cache_for_all_storages/1, mock_stat_on_space_mount_dir/1]).
+
+% LUMA API
+-export([map_to_storage_creds/4, map_to_storage_creds/5, map_to_display_creds/4,
+    map_uid_to_onedata_user/4, map_acl_user_to_onedata_user/3, map_acl_group_to_onedata_group/3,
+    invalidate_luma_cache/2]).
 
 -export([new_ceph_user_ctx/2, new_cephrados_user_ctx/2, new_posix_user_ctx/2,
     new_s3_user_ctx/2, new_swift_user_ctx/2, new_glusterfs_user_ctx/2,
@@ -48,7 +53,6 @@ run_test(TestCase, TestFun, Module, Config, StorageConfig) ->
     TestFun(Config, StorageConfig),
     Module:end_per_testcase(TestCase, Config2).
 
-
 invalidate_cache_for_all_storages(Worker) ->
     StorageIds = lists:usort(lists:map(fun(StorageLumaConfig) ->
         Storage = maps:get(storage_record, StorageLumaConfig),
@@ -58,6 +62,34 @@ invalidate_cache_for_all_storages(Worker) ->
     lists:foreach(fun(StorageId) ->
         invalidate_luma_cache(Worker, StorageId)
     end, StorageIds).
+
+mock_stat_on_space_mount_dir(Worker) ->
+    ok = test_utils:mock_new(Worker, storage_file_ctx),
+    ok = test_utils:mock_expect(Worker, storage_file_ctx, stat, fun(StFileCtx) ->
+        {#statbuf{st_uid = ?SPACE_MOUNT_UID, st_gid = ?SPACE_MOUNT_GID}, StFileCtx}
+    end).
+
+%%%===================================================================
+%%% LUMA API functions
+%%%===================================================================
+
+map_to_storage_creds(Worker, UserId, SpaceId, Storage) ->
+    rpc:call(Worker, luma, map_to_storage_credentials, [UserId, SpaceId, Storage]).
+
+map_to_storage_creds(Worker, SessId, UserId, SpaceId, Storage) ->
+    rpc:call(Worker, luma, map_to_storage_credentials, [SessId, UserId, SpaceId, Storage]).
+
+map_to_display_creds(Worker, UserId, SpaceId, Storage) ->
+    rpc:call(Worker, luma, map_to_display_credentials, [UserId, SpaceId, Storage]).
+
+map_uid_to_onedata_user(Worker, Uid, SpaceId, Storage) ->
+    rpc:call(Worker, luma, map_uid_to_onedata_user, [Uid, SpaceId, Storage]).
+
+map_acl_user_to_onedata_user(Worker, AclUser, Storage) ->
+    rpc:call(Worker, luma, map_acl_user_to_onedata_user, [AclUser, Storage]).
+
+map_acl_group_to_onedata_group(Worker, AclGroup, Storage) ->
+    rpc:call(Worker, luma, map_acl_group_to_onedata_group, [AclGroup, Storage]).
 
 invalidate_luma_cache(Worker, StorageId) ->
     ok = rpc:call(Worker, luma, invalidate, [StorageId]).
