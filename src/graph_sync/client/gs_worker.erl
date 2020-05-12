@@ -25,7 +25,7 @@
 %% API
 -export([is_connected/0, force_connection_start/0]).
 -export([terminate_connection/0, restart_connection/0]).
--export([on_cluster_ready/0]).
+-export([on_db_and_workers_ready/0]).
 -export([supervisor_flags/0]).
 
 -define(GS_WORKER_SUP, gs_worker_sup).
@@ -93,10 +93,16 @@ restart_connection() ->
     ok.
 
 
--spec on_cluster_ready() -> ok.
-on_cluster_ready() ->
-    % run `on_connect_to_oz` because it is not done when 
-    % connection was established and cluster was not ready
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback for when the cluster's DB and workers are initialized and it is
+%% possible to run the deferred on-connect procedures. They are not run during
+%% the first connection to Onezone as is is established in the upgrade_cluster
+%% step, before initialization of all workers (which are required in the process).
+%% @end
+%%--------------------------------------------------------------------
+-spec on_db_and_workers_ready() -> ok.
+on_db_and_workers_ready() ->
     case {node() == get_gs_client_node(), is_connected()} of
         {true, true} ->
             try
@@ -104,9 +110,10 @@ on_cluster_ready() ->
             catch
                 % Connection was lost in meantime. Ignore it as `on_connect_to_oz`
                 % will be called when connection is established again.
-                _:{_, ?ERROR_NO_CONNECTION_TO_ONEZONE}  -> ok
+                _:{_, ?ERROR_NO_CONNECTION_TO_ONEZONE} -> ok
             end;
-        _ -> ok
+        _ ->
+            ok
     end.
 
 %%%===================================================================
