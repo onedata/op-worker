@@ -113,6 +113,12 @@ parser.add_argument(
     help='compile test suites before run',
     dest='auto_compile')
 
+parser.add_argument(
+    '--path-to-sources',
+    default=os.getcwd(),
+    help='path ot sources to be mounted in onenv container. Use when sources are outside HOME directory',
+    dest='path_to_sources')
+
 args = parser.parse_args()
 dockers_config.ensure_image(args, 'image', 'worker')
 
@@ -165,6 +171,8 @@ if incl_dirs:
 code_paths.extend(
     glob.glob(os.path.join(script_dir, '_build/default/lib', '*', 'ebin')))
 ct_command.extend(code_paths)
+
+ct_command.extend(['-env', 'path_to_sources', args.path_to_sources])
 
 if args.suites:
     ct_command.append('-suite')
@@ -331,7 +339,7 @@ ret = docker.run(tty=True,
                  workdir=os.path.join(script_dir, 'test_distributed'),
                  volumes=volumes,
                  reflect=[
-                     (script_dir, 'rw'),
+                     (os.path.normpath(os.path.join(script_dir, '..')), 'rw'),
                      ('/var/run/docker.sock', 'rw'),
                      (HOST_STORAGE_PATH, 'rw'),
                      ('/etc/passwd', 'ro')
@@ -353,7 +361,7 @@ if container:
     docker.remove(container, force=True)
 
 
-if ret != 0 and not skipped_test_exists("test_distributed/logs/*/surefire.xml"):
+if ret != 0 and not skipped_test_exists(os.path.join(script_dir, "test_distributed/logs/*/surefire.xml")):
     ret = 0
 
 sys.exit(ret)

@@ -37,8 +37,10 @@ prepare_test_environment(Config, _Suite) ->
 
     OnenvScript = filename:join([ProjectRoot, "one-env", "onenv"]),
     ScenarioPath = filename:join([ProjectRoot, "test_distributed", "onenv_scenarios", ScenarioName ++ ".yaml"]),
+    PathToSources = os:getenv("path_to_sources"),
+    ct:print("Path to sources: ~p", [PathToSources]),
     ct:pal("Starting onenv scenario ~p~n~n~p", [ScenarioName, ScenarioPath]),
-    OnenvStartLogs = utils:cmd(["cd", "../../..", "&&", OnenvScript, "up", ScenarioPath]),
+    OnenvStartLogs = utils:cmd(["cd", "../../..", "&&", OnenvScript, "up", "--path-to-sources", PathToSources, ScenarioPath]),
     ct:pal("~s", [OnenvStartLogs]),
     
     utils:cmd([OnenvScript, "wait", "--timeout", "600"]),
