@@ -30,7 +30,9 @@ import glob
 import fnmatch
 import xml.etree.ElementTree as ElementTree
 
-sys.path.insert(0, 'bamboos/docker')
+script_dir = os.path.dirname(os.path.abspath(__file__))
+print(script_dir)
+sys.path.insert(0, os.path.join(script_dir, 'bamboos/docker'))
 from environment import docker, dockers_config
 from environment.common import HOST_STORAGE_PATH, remove_dockers_and_volumes
 
@@ -114,7 +116,6 @@ parser.add_argument(
 args = parser.parse_args()
 dockers_config.ensure_image(args, 'image', 'worker')
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
 uid = str(int(time.time()))
 
 excl_mods = glob.glob(
