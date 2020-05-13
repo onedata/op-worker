@@ -1,14 +1,90 @@
 %%%-------------------------------------------------------------------
 %%% @author Jakub Kudzia
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% The main module responsible for Local User Mapping (aka LUMA).
-%%% storage credentials, display credentials kieyd które?
-%%% opisać jaki ma być priorytet
+%%% It contains functions that should be used for mapping onedata users
+%%% to storage users and the other way round.
+%%%
+%%% There are 3 modes of LUMA that can be configured for a specific storage:
+%%%  * NO_LUMA - no luma service, default mappings are used
+%%%  * EMBEDDED_LUMA - custom mappings can be set using REST API
+%%%                    and stored in the database.
+%%%                    It must be configured before supporting space with
+%%%                    the storage.
+%%%  * EXTERNAL_LUMA - external HTTP server that implements required
+%%%                    LUMA API (described on onedata.org).
+%%%                    The server is lazily queried for custom mappings
+%%%                    which are then stored in the database. This mode
+%%%                    can be treated as a lazy feed for embedded luma store.
+%%%
+%%%
+%%% Functions exported by this module can be divided into 3 groups:
+%%%  * LUMA functions
+%%%  * reverse LUMA functions
+%%%  * management functions
+%%%
+%%% Each of the above groups is described below.
+%%%
+%%%-------------------------------------------------------------------
+%%% LUMA API
+%%%-------------------------------------------------------------------
+%%% This API is used to map onedata user to 2 types of credentials:
+%%%  * storage_credentials() - these are basically credentials passed
+%%%    to helper. They allow to perform operations on storage in context
+%%%    of a specific user.
+%%%  * display_credentials() - these are POSIX credentials (UID & GID)
+%%%    which are returned in getattr response. They are used to present
+%%%    file owners in the result of ls operation in Oneclient.
+%%%
+%%% % TODO trzeba opisac priorytet (albo odeslac do doków gdzie to jest)
+%%% % TODO trzeba opisac co mozna skonfigurowac, ze jest mapowanie dla uzytkownika i dla space'a
+%%% % TODO trzeba opisac czemu na posix-like jest troche inaczej (groupa)
+%%%
+%%%
+%%%-------------------------------------------------------------------
+%%% Reverse LUMA API
+%%%-------------------------------------------------------------------
+%%% This API is used only by storage_sync mechanism.
+%%% It is used to map storage users/groups to users/groups in onedata.
+%%%
+%%% If EMBEDDED_LUMA mode is set for given storage, mappings should
+%%% be set in the luma_reverse_cache model using REST API.
+%%%
+%%% If EXTERNAL_LUMA mode is set for given storage, external 3rd party
+%%% server is queried for mappings and mappings are stored in
+%%% luma_reverse_cache model
+%%%
+%%% There are 3 operations implemented:
+%%%  * map_uid_to_onedata_user - which allows to map storage owner
+%%%    (identified by UID) of a specific, synchronized file to a onedata user.
+%%%    The resulting user becomes owner of a file  which means that it is
+%%%    set as file's owner in file_meta document).
+%%%    If LUMA service is disabled for given storage, virtual ?SPACE_OWNER(SpaceId)
+%%%    becomes owner of a synchronized file.
+%%%  * map_acl_user_to_onedata_user - which allows to map a named ACL user
+%%%    to a onedata user. This mapping allows to associate ACE with a specific
+%%%    logical user.
+%%%    Enabling LUMA service is necessary for synchronizing storage NFSv4 ACLs.
+%%%    If LUMA service is disabled for given storage, this operation will
+%%%    return error.
+%%%  * map_acl_group_to_onedata_group - which allows to map a named ACL group
+%%%    to a onedata group. This mapping allows to associate ACE with a specific
+%%%    logical group.
+%%%    Enabling LUMA service is necessary for synchronizing storage NFSv4 ACLs.
+%%%    If LUMA service is disabled for given storage, this operation will
+%%%    return error.
+%%%
+%%%-------------------------------------------------------------------
+%%% Management API
+%%%-------------------------------------------------------------------
+%%% Other function, exported by this module, that are not directly
+%%% related to mapping users.
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma).
@@ -35,10 +111,10 @@
     map_acl_group_to_onedata_group/2
 ]).
 
-%% API functions
+%% Management API functions
 -export([
-    invalidate/1,
-    invalidate/2,
+    invalidate_cache/1,
+    invalidate_cache/2,
     add_helper_specific_fields/4
 ]).
 
@@ -46,13 +122,12 @@
 -type gid() :: non_neg_integer().
 -type display_credentials() :: {uid(), gid()}.
 -type storage_credentials() :: helper:user_ctx().
--type user_entry() :: external_luma:user_entry().
--type space_entry() :: external_luma:space_entry().
+-type space_mapping_response() :: external_luma:space_mapping_response().
 
 -type acl_who() :: binary().
 
 -export_type([uid/0, gid/0, storage_credentials/0, display_credentials/0,
-    space_entry/0, user_entry/0, acl_who/0]).
+    space_mapping_response/0, acl_who/0]).
 
 %%%===================================================================
 %%% LUMA functions
@@ -101,7 +176,7 @@ map_to_display_credentials(OwnerId, SpaceId, Storage) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns od_user:id() for storage user associated with given Uid.
-%% If LUMA is disabled, function returns ?SPACE_OWNER_ID(SpaceId).
+%% If LUMA service is disabled, function returns ?SPACE_OWNER_ID(SpaceId).
 %% @end
 %%--------------------------------------------------------------------
 -spec map_uid_to_onedata_user(uid(), od_space:id(), storage:id()) ->
@@ -119,7 +194,7 @@ map_uid_to_onedata_user(Uid, SpaceId, StorageId) ->
 %% @doc
 %% Returns od_user:id() for storage user associated with given
 %% NFSv4 ACL username.
-%% If LUMA is disabled, function returns error.
+%% If LUMA service is disabled, function returns error.
 %% @end
 %%--------------------------------------------------------------------
 -spec map_acl_user_to_onedata_user(acl_who(), storage:id()) ->
@@ -139,7 +214,7 @@ map_acl_user_to_onedata_user(AclUser, StorageId) ->
 %% @doc
 %% Returns od_group:id() for storage group associated with given
 %% NFSv4 ACL group.
-%% If LUMA is disabled, function returns error.
+%% If LUMA service is disabled, function returns error.
 %% @end
 %%--------------------------------------------------------------------
 -spec map_acl_group_to_onedata_group(acl_who(), storage:id()) ->
@@ -156,17 +231,17 @@ map_acl_group_to_onedata_group(AclGroup, StorageId) ->
     end.
 
 %%%===================================================================
-%%% API functions
+%%% Management API functions
 %%%===================================================================
 
--spec invalidate(storage:id()) -> ok | {error, term()}.
-invalidate(StorageId) ->
+-spec invalidate_cache(storage:id()) -> ok | {error, term()}.
+invalidate_cache(StorageId) ->
     luma_users_cache:delete(StorageId),
     luma_spaces_cache:delete(StorageId),
     luma_reverse_cache:delete(StorageId).
 
--spec invalidate(storage:id(), od_space:id()) -> ok | {error, term()}.
-invalidate(StorageId, SpaceId) ->
+-spec invalidate_cache(storage:id(), od_space:id()) -> ok | {error, term()}.
+invalidate_cache(StorageId, SpaceId) ->
     luma_spaces_cache:delete(StorageId, SpaceId).
 
 
@@ -194,9 +269,6 @@ map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
         {ok, StorageData} = storage:get(Storage),
         case fslogic_uuid:is_space_owner(UserId) of
             true ->
-                % SpaceOwner can be owner of a file in 3 cases:
-                % * It is owner of a space directory, so when it's created on storage,
-                %   It will % todo dokoncz
                 map_space_owner_to_storage_credentials(StorageData, SpaceId);
             false ->
                 map_normal_user_to_storage_credentials(UserId, StorageData, SpaceId)
@@ -287,9 +359,6 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCredentials = #{
         <<"accessToken">> => IdPAccessToken,
         <<"accessTokenTTL">> => integer_to_binary(TTL)
     }}.
-
-
-% todo napisac w docku, ze to moze sie zdarzyc jak plik byl zaimportowany przez space_ownera albo usera jeszcze nie ma
 
 -spec map_space_owner_to_storage_credentials(storage:data(), od_space:id()) ->
     {ok, storage_credentials()} | {error, term()}.

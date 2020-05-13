@@ -26,7 +26,7 @@
     map_acl_group_to_onedata_group/2
 ]).
 
-%% User response expected format is represented as a map:
+%% User mapping response expected format is represented as a map:
 %% #{
 %%      <<"mappingScheme">> => ?ONEDATA_USER_SCHEME | ?IDP_USER_SCHEME,
 %%
@@ -37,9 +37,9 @@
 %%      <<"idp">> => binary(),
 %%      <<"subjectId">> => binary()
 %% }
--type user_response() :: json_utils:json_map().
+-type user_mapping_response() :: json_utils:json_map().
 
-%% Group response expected format is represented as a map:
+%% Group mapping response expected format is represented as a map:
 %% #{
 %%      <<"mappingScheme">> => ?ONEDATA_GROUP_SCHEME | ?IDP_ENTITLEMENT_SCHEME,
 %%
@@ -50,7 +50,7 @@
 %%      <<"idp">> => binary(),
 %%      <<"idpEntitlement">> => binary()
 %% }
--type group_response() :: json_utils:json_map().
+-type group_mapping_response() :: json_utils:json_map().
 
 %% Mapping user schemes
 -define(ONEDATA_USER_SCHEME, <<"onedataUser">>).
@@ -165,7 +165,7 @@ sanitize_user_mapping(Response) ->
             {error, external_luma_error}
     end.
 
--spec sanitize_idp_user_scheme(user_response()) -> {ok, od_user:id()} | {error, term()}.
+-spec sanitize_idp_user_scheme(user_mapping_response()) -> {ok, od_user:id()} | {error, term()}.
 sanitize_idp_user_scheme(Response) ->
     SanitizedResponse = middleware_sanitizer:sanitize_data(Response, #{
        required => #{
@@ -178,7 +178,7 @@ sanitize_idp_user_scheme(Response) ->
     provider_logic:map_idp_user_to_onedata(Idp, SubjectId).
 
 
--spec sanitize_onedata_user_scheme(user_response()) -> {ok, od_user:id()}.
+-spec sanitize_onedata_user_scheme(user_mapping_response()) -> {ok, od_user:id()}.
 sanitize_onedata_user_scheme(Response) ->
     SanitizedResponse = middleware_sanitizer:sanitize_data(Response, #{
         required => #{<<"onedataUserId">> => {binary, non_empty}}
@@ -204,7 +204,7 @@ sanitize_group_mapping(Response) ->
     end.
 
 
--spec sanitize_idp_group_scheme(group_response()) -> {ok, od_group:id()} | {error, term()}.
+-spec sanitize_idp_group_scheme(group_mapping_response()) -> {ok, od_group:id()} | {error, term()}.
 sanitize_idp_group_scheme(Response) ->
     SanitizedResponse = middleware_sanitizer:sanitize_data(Response, #{
         required => #{
@@ -217,7 +217,7 @@ sanitize_idp_group_scheme(Response) ->
     provider_logic:map_idp_group_to_onedata(Idp, IdpEntitlement).
 
 
--spec sanitize_onedata_group_scheme(group_response()) -> {ok, od_group:id()}.
+-spec sanitize_onedata_group_scheme(group_mapping_response()) -> {ok, od_group:id()}.
 sanitize_onedata_group_scheme(Response) ->
     SanitizedResponse = middleware_sanitizer:sanitize_data(Response, #{
         required => #{<<"onedataGroupId">> => {binary, non_empty}}

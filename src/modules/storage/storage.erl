@@ -188,7 +188,7 @@ delete_insecure(StorageId) ->
     case storage_logic:delete_in_zone(StorageId) of
         ok ->
             ok = storage_config:delete(StorageId),
-            luma:invalidate(StorageId);
+            luma:invalidate_cache(StorageId);
         Error ->
             Error
     end.

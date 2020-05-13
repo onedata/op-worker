@@ -6,7 +6,18 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME jk
+%%% This module is used for storing reverse LUMA mappings.
+%%% Mappings are used by storage_sync mechanism to associate
+%%% storage users/groups with specific users/groups in onedata.
+%%% Documents of this model are stored per StorageId.
+%%%
+%%% Mappings may be set in 2 ways:
+%%%  * preconfigured using REST API in case EMBEDDED_LUMA
+%%%    is set for given storage.
+%%%  * cached after querying external, 3rd party LUMA server in case
+%%%    EXTERNAL_LUMA mode is set for given storage.
+%%%
+%%% For more info please read the docs of luma.erl module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_reverse_cache).
@@ -40,8 +51,6 @@
 -type internal_key() :: luma:uid() | luma:acl_who().
 -type internal_value() :: od_user:id() | od_group:id().
 -type internal_map() :: #{internal_key() => internal_value()}.
-
--export_type([internal_map/0]).
 
 -define(UID, uid).
 -define(ACL_USER, acl_user).

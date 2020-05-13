@@ -6,7 +6,20 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME jk
+%%% This module is used for storing LUMA mappings for users.
+%%% Mappings are used to associate
+%%% onedata users with specific storage users.
+%%% Documents of this model are stored per StorageId.
+%%%
+%%% Mappings may be set in 3 ways:
+%%%  * filled by default algorithm in case NO_LUMA mode is set for given
+%%%    storage (see acquire_default_mapping function).
+%%%  * preconfigured using REST API in case EMBEDDED_LUMA
+%%%    is set for given storage
+%%%  * cached after querying external, 3rd party LUMA server in case
+%%%    EXTERNAL_LUMA mode is set for given storage
+%%%
+%%% For more info please read the docs of luma.erl module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_users_cache).
@@ -28,8 +41,6 @@
     memory_copies => all
 }).
 
-% TODO invalidation ?
-
 -type id() :: storage:id().
 -type record() :: #luma_users_cache{}.
 -type diff() :: datastore_doc:diff(record()).
@@ -40,14 +51,14 @@
 %%%===================================================================
 
 -spec get(storage(), od_user:id()) ->
-    {ok, luma_user:credentials()} | {error, term()}.
+    {ok, luma_user:entry()} | {error, term()}.
 get(Storage, UserId) ->
-   case get_internal(Storage, UserId) of
-       {ok, StorageUser} ->
-           {ok, StorageUser};
-       {error, not_found} ->
-           acquire_and_cache(Storage, UserId)
-   end.
+    case get_internal(Storage, UserId) of
+        {ok, StorageUser} ->
+            {ok, StorageUser};
+        {error, not_found} ->
+            acquire_and_cache(Storage, UserId)
+    end.
 
 -spec cache_posix_compatible_mapping(storage:data(), od_user:id(), luma:uid()) -> ok.
 cache_posix_compatible_mapping(Storage, UserId, Uid) ->
@@ -64,7 +75,7 @@ delete(StorageId) ->
 %%%===================================================================
 
 -spec get_internal(storage(), od_user:id()) ->
-    {ok, luma_user:credentials()} | {error, term()}.
+    {ok, luma_user:entry()} | {error, term()}.
 get_internal(Storage, UserId) ->
     StorageId = storage:get_id(Storage),
     case datastore_model:get(?CTX, StorageId) of
@@ -79,7 +90,7 @@ get_internal(Storage, UserId) ->
 
 
 -spec acquire_and_cache(storage(), od_user:id()) ->
-    {ok, luma_user:credentials()} | {error, term()}.
+    {ok, luma_user:entry()} | {error, term()}.
 acquire_and_cache(Storage, UserId) ->
     % ensure Storage is a document
     {ok, StorageData} = storage:get(Storage),
@@ -93,45 +104,61 @@ acquire_and_cache(Storage, UserId) ->
     end.
 
 
--spec acquire(storage:data(), od_user:id()) -> 
+-spec acquire(storage:data(), od_user:id()) ->
     {ok, luma:storage_credentials(), luma:uid()} | {error, term()}.
 acquire(Storage, ?ROOT_USER_ID) ->
     Helper = storage:get_helper(Storage),
     {ok, helper:get_admin_ctx(Helper), ?ROOT_UID};
 acquire(Storage, UserId) ->
-    IsSpaceOwner = fslogic_uuid:is_space_owner(UserId),
-    case storage:is_luma_enabled(Storage) andalso not IsSpaceOwner of
-        true ->
-            case external_luma:map_onedata_user_to_credentials(UserId, Storage) of
-                {ok, LumaResponse} ->
-                    StorageCredentials = maps:get(<<"storageCredentials">>, LumaResponse),
-                    DisplayUid = maps:get(<<"displayUid">>, LumaResponse, undefined),
-                    DisplayUid2 = ensure_display_uid_defined(DisplayUid, StorageCredentials, UserId, Storage),
-                    {ok, StorageCredentials, DisplayUid2};
-                {error, external_luma_error} ->
-                    {error, not_found};
-                OtherError ->
-                    OtherError
-            end;
-        false ->
-            case {storage:is_posix_compatible(Storage), IsSpaceOwner} of
-                {true, false} ->
-                    Uid = luma_utils:generate_uid(UserId),
-                    {ok, #{<<"uid">> => integer_to_binary(Uid)}, Uid};
-                {_, true} ->
-                    {ok, SpaceId} = fslogic_uuid:unpack_space_owner(UserId),
-                    {ok, SpacePosixCredentials} = luma_spaces_cache:get(Storage, SpaceId),
-                    DefaultUid = luma_space:get_default_uid(SpacePosixCredentials),
-                    DisplayUid = luma_space:get_display_uid(SpacePosixCredentials),
-                    {ok, #{<<"uid">> => integer_to_binary(DefaultUid)}, DisplayUid};
-                _ ->
-                    Helper = storage:get_helper(Storage),
-                    Uid = luma_utils:generate_uid(UserId),
-                    {ok, helper:get_admin_ctx(Helper), Uid}
-            end
+    case storage:is_luma_enabled(Storage) of
+        true -> acquire_mapping_from_external_luma(Storage, UserId);
+        false -> acquire_default_mapping(Storage, UserId)
     end.
 
+-spec acquire_mapping_from_external_luma(storage:data(), od_user:id()) ->
+    {ok, luma:storage_credentials(), luma:uid()} | {error, term()}.
+acquire_mapping_from_external_luma(Storage, UserId) ->
+    case external_luma:map_onedata_user_to_credentials(UserId, Storage) of
+        {ok, LumaResponse} ->
+            StorageCredentials = maps:get(<<"storageCredentials">>, LumaResponse),
+            DisplayUid = maps:get(<<"displayUid">>, LumaResponse, undefined),
+            DisplayUid2 = ensure_display_uid_defined(DisplayUid, StorageCredentials, UserId, Storage),
+            {ok, StorageCredentials, DisplayUid2};
+        {error, external_luma_error} ->
+            {error, not_found};
+        OtherError ->
+            OtherError
+    end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function returns default mapping for user in case of NO_LUMA mode.
+%% On POSIX compatible storages it generates uid basing on UserId.
+%% On POSIX incompatible storages it returns AdminCtx of the storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec acquire_default_mapping(storage:data(), od_user:id()) ->
+    {ok, luma:storage_credentials(), luma:uid()} | {error, term()}.
+acquire_default_mapping(Storage, UserId) ->
+    Uid = luma_utils:generate_uid(UserId),
+    case storage:is_posix_compatible(Storage) of
+        true ->
+            {ok, #{<<"uid">> => integer_to_binary(Uid)}, Uid};
+        false ->
+            Helper = storage:get_helper(Storage),
+            {ok, helper:get_admin_ctx(Helper), Uid}
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function ensures that DisplayUid is defined.
+%% In case it is undefined:
+%% - on POSIX compatible storages use, uid from StorageCredentials
+%% - on POSIX incompatible storages generate uid basing on UserId
+%% @end
+%%--------------------------------------------------------------------
 -spec ensure_display_uid_defined(luma:uid() | undefined, luma:storage_credentials(),
     od_user:id(), storage:data()) -> luma:uid().
 ensure_display_uid_defined(undefined, StorageCredentials, UserId, Storage) ->
@@ -145,7 +172,7 @@ ensure_display_uid_defined(DisplayUid, _StorageCredentials, _UserId, _Storage) -
     DisplayUid.
 
 
--spec cache(id(), od_user:id(), luma_user:credentials()) -> ok.
+-spec cache(id(), od_user:id(), luma_user:entry()) -> ok.
 cache(StorageId, UserId, LumaUserCredentials) ->
     update(StorageId, fun(LumaUsers = #luma_users_cache{users = Users}) ->
         {ok, LumaUsers#luma_users_cache{
@@ -181,9 +208,9 @@ get_ctx() ->
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(1) ->
-   {record, [
-       {users, #{string => {record, [
-           {storage_credentials, #{string => string}},
-           {display_uid, integer}
-       ]}}}
-   ]}.
+    {record, [
+        {users, #{string => {record, [
+            {storage_credentials, #{string => string}},
+            {display_uid, integer}
+        ]}}}
+    ]}.

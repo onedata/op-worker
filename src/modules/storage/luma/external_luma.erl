@@ -25,8 +25,8 @@
 %% API
 -export([
     map_onedata_user_to_credentials/2,
-    fetch_default_owner/2,
-    fetch_display_override_owner/2
+    fetch_default_posix_credentials/2,
+    fetch_default_display_credentials/2
 ]).
 
 %% User mapping request body is represented as a map:
@@ -61,16 +61,16 @@
 %%     <<"storageCredentials">> => helpers:user_ctx(),
 %%     <<"displayUid">> => integer() // optional
 %% }
--type user_entry() :: json_utils:json_map().
+-type user_mapping_response() :: json_utils:json_map().
 
 %% Expected result of mapping space to default/display credentials for space
 %% #{
 %%     <<"uid">> => non_neg_integer(),
 %%     <<"gid">> => non_neg_integer()
 %% }
--type space_entry() :: json_utils:json_map().
+-type space_mapping_response() :: json_utils:json_map().
 
--export_type([space_entry/0, user_entry/0]).
+-export_type([space_mapping_response/0]).
 
 %%%===================================================================
 %%% API functions
@@ -82,7 +82,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec map_onedata_user_to_credentials(od_user:id(), storage:data()) ->
-    {ok, user_entry()} | {error, Reason :: term()}.
+    {ok, user_mapping_response()} | {error, Reason :: term()}.
 map_onedata_user_to_credentials(UserId, Storage) ->
     Body = prepare_user_request_body(UserId, Storage),
     case luma_utils:do_luma_request(?ONEDATA_USER_TO_CREDENTIALS_PATH, Body, Storage) of
@@ -105,14 +105,14 @@ map_onedata_user_to_credentials(UserId, Storage) ->
     end.
 
 
--spec fetch_default_owner(od_space:id(), storage:data()) ->
-    {ok, space_entry()} | {error, term()}.
-fetch_default_owner(SpaceId, Storage) ->
+-spec fetch_default_posix_credentials(od_space:id(), storage:data()) ->
+    {ok, space_mapping_response()} | {error, term()}.
+fetch_default_posix_credentials(SpaceId, Storage) ->
     Body = #{
         <<"storageId">> => storage:get_id(Storage),
         <<"spaceId">> => SpaceId
     },
-    case luma_utils:do_luma_request(?DEFAULT_OWNER_PATH, Body, Storage) of
+    case luma_utils:do_luma_request(?DEFAULT_POSIX_OWNER_PATH, Body, Storage) of
         {ok, ?HTTP_200_OK, _RespHeaders, RespBody} ->
             sanitize_space_mapping(RespBody);
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
@@ -128,9 +128,9 @@ fetch_default_owner(SpaceId, Storage) ->
             {error, external_luma_error}
     end.
 
--spec fetch_display_override_owner(od_space:id(), storage:data()) ->
-    {ok, space_entry()} | {error, term()}.
-fetch_display_override_owner(SpaceId, Storage) ->
+-spec fetch_default_display_credentials(od_space:id(), storage:data()) ->
+    {ok, space_mapping_response()} | {error, term()}.
+fetch_default_display_credentials(SpaceId, Storage) ->
     Body = #{
         <<"storageId">> => storage:get_id(Storage),
         <<"spaceId">> => SpaceId
@@ -194,7 +194,7 @@ get_idp_identities(AdditionalUserDetails) ->
     end, maps:get(<<"linkedAccounts">>, AdditionalUserDetails, [])).
 
 
--spec sanitize_user_mapping(binary(), storage:data()) -> {ok, user_entry()} | {error, term()}.
+-spec sanitize_user_mapping(binary(), storage:data()) -> {ok, user_mapping_response()} | {error, term()}.
 sanitize_user_mapping(Response, Storage) ->
     try
         DecodedResponse = json_utils:decode(Response),
@@ -209,7 +209,7 @@ sanitize_user_mapping(Response, Storage) ->
             {error, external_luma_error}
     end.
 
--spec sanitize_space_mapping(binary()) -> {ok, space_entry()} | {error, term()}.
+-spec sanitize_space_mapping(binary()) -> {ok, space_mapping_response()} | {error, term()}.
 sanitize_space_mapping(Response) ->
     try
         DecodedResponse = json_utils:decode(Response),

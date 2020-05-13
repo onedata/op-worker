@@ -5569,7 +5569,7 @@ verify_file_deleted(Worker, FileGuid, Master, Attempts) ->
 clean_luma_cache(Worker) ->
     {ok, StorageIds} = rpc:call(Worker, provider_logic, get_storage_ids, []),
     lists:foreach(fun(StorageId) ->
-        ok = rpc:call(Worker, luma, invalidate, [StorageId])
+        ok = rpc:call(Worker, luma, invalidate_cache, [StorageId])
     end, StorageIds).
 
 

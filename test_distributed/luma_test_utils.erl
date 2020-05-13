@@ -92,7 +92,7 @@ map_acl_group_to_onedata_group(Worker, AclGroup, Storage) ->
     rpc:call(Worker, luma, map_acl_group_to_onedata_group, [AclGroup, Storage]).
 
 invalidate_luma_cache(Worker, StorageId) ->
-    ok = rpc:call(Worker, luma, invalidate, [StorageId]).
+    ok = rpc:call(Worker, luma, invalidate_cache, [StorageId]).
 
 %%%===================================================================
 %%% Helpers API functions

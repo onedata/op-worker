@@ -6,7 +6,19 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME jk
+%%% This module is used for storing defaults (for spaces) that are used in
+%%% LUMA mappings for users.
+%%% Documents of this model are stored per StorageId.
+%%%
+%%% Mappings may be set in 3 ways:
+%%%  * filled by default algorithm in case NO_LUMA mode is set for given
+%%%    storage
+%%%  * preconfigured using REST API in case EMBEDDED_LUMA
+%%%    is set for given storage
+%%%  * cached after querying external, 3rd party LUMA server in case
+%%%    EXTERNAL_LUMA mode is set for given storage
+%%%
+%%% For more info please read the docs of luma.erl module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_spaces_cache).
@@ -36,7 +48,7 @@
 %%% API functions
 %%%===================================================================
 
--spec get(storage(), od_space:id()) -> {ok, luma_space:posix_credentials()} | {error, term()}.
+-spec get(storage(), od_space:id()) -> {ok, luma_space:entry()} | {error, term()}.
 get(Storage, SpaceId) ->
     case get_internal(Storage, SpaceId) of
         {ok, SupportCredentials} ->
@@ -72,7 +84,7 @@ delete(StorageId, SpaceId) ->
 %%%===================================================================
 
 -spec get_internal(storage(), od_space:id()) ->
-    {ok, luma_space:posix_credentials()} | {error, term()}.
+    {ok, luma_space:entry()} | {error, term()}.
 get_internal(Storage, SpaceId) ->
     StorageId = storage:get_id(Storage),
     case datastore_model:get(?CTX, StorageId) of
@@ -87,90 +99,60 @@ get_internal(Storage, SpaceId) ->
 
 
 -spec acquire_and_cache(storage(), od_space:id()) ->
-    {ok, luma_space:posix_credentials()} | {error, term()}.
+    {ok, luma_space:entry()} | {error, term()}.
 acquire_and_cache(Storage, SpaceId) ->
     % ensure Storage is a document
     {ok, StorageData} = storage:get(Storage),
     try
-        {ok, PosixCredentials} = acquire(StorageData, SpaceId),
-        cache(storage:get_id(StorageData), SpaceId, PosixCredentials),
-        {ok, PosixCredentials}
+        {ok, LumaSpace} = acquire(StorageData, SpaceId),
+        cache(storage:get_id(StorageData), SpaceId, LumaSpace),
+        {ok, LumaSpace}
     catch
         throw:Reason ->
             {error, Reason}
     end.
 
 
--spec acquire(storage:data(), od_space:id()) -> 
-    {ok, luma_space:posix_credentials()}.
+-spec acquire(storage:data(), od_space:id()) -> {ok, luma_space:entry()}.
 acquire(Storage, SpaceId) ->
-    IgnoreLumaDefaultOwner = storage:is_imported_storage(Storage)
-        andalso storage:is_posix_compatible(Storage),
-    {DefOwner2, DisplayOwner2} = case {storage:is_luma_enabled(Storage), IgnoreLumaDefaultOwner} of
+    IsNotPosix = not storage:is_posix_compatible(Storage),
+    % default owner is ignored on:
+    % - posix incompatible storages
+    % - synced storage
+    IgnoreLumaDefaultOwner = IsNotPosix orelse storage:is_imported_storage(Storage),
+    {DefaultPosixCredentials, DisplayCredentials} = case {storage:is_luma_enabled(Storage), IgnoreLumaDefaultOwner} of
         {true, false} ->
-            {ok, DefOwner} = fetch_default_owner(Storage, SpaceId),
-            {ok, DisplayOwner} = fetch_display_override_owner(Storage, SpaceId),
+            {ok, DefOwner} = fetch_default_posix_credentials(Storage, SpaceId),
+            {ok, DisplayOwner} = fetch_display_credentials(Storage, SpaceId),
             {DefOwner, DisplayOwner};
         {true, true} ->
-            {ok, DisplayOwner} = fetch_display_override_owner(Storage, SpaceId),
+            {ok, DisplayOwner} = fetch_display_credentials(Storage, SpaceId),
             {#{}, DisplayOwner};
         {false, _} ->
             {#{}, #{}}
     end,
-    {ok, refill_with_defaults(DefOwner2, DisplayOwner2, SpaceId, Storage)}.
+    {ok, luma_space:new(DefaultPosixCredentials, DisplayCredentials, SpaceId, Storage, IgnoreLumaDefaultOwner)}.
 
 
--spec fetch_default_owner(storage:data(), od_space:id()) -> 
-    {ok, luma:space_entry()} | {error, term()}.
-fetch_default_owner(Storage, SpaceId) ->
-    case external_luma:fetch_default_owner(SpaceId, Storage) of
-        {ok, DefaultOwner} -> {ok, DefaultOwner};
+-spec fetch_default_posix_credentials(storage:data(), od_space:id()) ->
+    {ok, luma:space_mapping_response()} | {error, term()}.
+fetch_default_posix_credentials(Storage, SpaceId) ->
+    case external_luma:fetch_default_posix_credentials(SpaceId, Storage) of
+        {ok, DefaultCredentials} -> {ok, DefaultCredentials};
         {error, not_found} -> {ok, #{}};
         {error, Reason} -> throw(Reason)
     end.
 
--spec fetch_display_override_owner(storage:data(), od_space:id()) ->
-    {ok, luma:space_entry()} | {error, term()}.
-fetch_display_override_owner(Storage, SpaceId) ->
-    case external_luma:fetch_display_override_owner(SpaceId, Storage) of
-        {ok, DisplayOwner} -> {ok, DisplayOwner};
+-spec fetch_display_credentials(storage:data(), od_space:id()) ->
+    {ok, luma:space_mapping_response()} | {error, term()}.
+fetch_display_credentials(Storage, SpaceId) ->
+    case external_luma:fetch_default_display_credentials(SpaceId, Storage) of
+        {ok, DisplayCredentials} -> {ok, DisplayCredentials};
         {error, not_found} -> {ok, #{}};
         {error, Reason} -> throw(Reason)
     end.
 
--spec refill_with_defaults(luma:space_entry(), luma:space_entry(),
-    od_space:id(), storage:data()) -> luma_space:posix_credentials().
-refill_with_defaults(DefaultOwner, DisplayOwner, SpaceId, Storage) ->
-    DefaultUid = maps:get(<<"uid">>, DefaultOwner, undefined),
-    DefaultGid = maps:get(<<"gid">>, DefaultOwner, undefined),
-    DisplayUid = maps:get(<<"uid">>, DisplayOwner, undefined),
-    DisplayGid = maps:get(<<"gid">>, DisplayOwner, undefined),
-
-    {DefaultUid2, DefaultGid2} = case {DefaultUid, DefaultGid} of
-        {undefined, undefined} ->
-            get_posix_compatible_fallback_owner(Storage, SpaceId);
-        {_, undefined} ->
-            {_, FallbackGid} = get_posix_compatible_fallback_owner(Storage, SpaceId),
-            {DefaultUid, FallbackGid};
-        {undefined, _} ->
-            {FallbackUid, _} = get_posix_compatible_fallback_owner(Storage, SpaceId),
-            {FallbackUid, DefaultGid};
-        _ ->
-            {DefaultUid, DefaultGid}
-    end,
-
-    DisplayUid2 = case DisplayUid =:= undefined of
-        true -> DefaultUid2;
-        false -> DisplayUid
-    end,
-
-    DisplayGid2 = case DisplayGid =:= undefined of
-        true -> DefaultGid2;
-        false -> DisplayGid
-    end,
-    luma_space:new(DefaultUid2, DefaultGid2, DisplayUid2, DisplayGid2).
-
--spec cache(storage:id(), od_space:id(), luma_space:posix_credentials()) -> ok.
+-spec cache(storage:id(), od_space:id(), luma_space:entry()) -> ok.
 cache(StorageId, SpaceId, PosixCredentials) ->
     update(StorageId, fun(SSC = #luma_spaces_cache{spaces = Spaces}) ->
         {ok, SSC#luma_spaces_cache{
@@ -183,22 +165,6 @@ update(StorageId, Diff) ->
     {ok, Default} = Diff(#luma_spaces_cache{}),
     ok = ?extract_ok(datastore_model:update(?CTX, StorageId, Diff, Default)).
 
--spec get_posix_compatible_fallback_owner(storage:data(), od_space:id()) -> {luma:uid(), luma:gid()}.
-get_posix_compatible_fallback_owner(Storage, SpaceId) ->
-    case storage:is_posix_compatible(Storage) of
-        true ->
-            get_mountpoint_owner(Storage, SpaceId);
-        false ->
-            Uid = luma_utils:generate_uid(?SPACE_OWNER_ID(SpaceId)),
-            Gid = luma_utils:generate_gid(SpaceId),
-            {Uid, Gid}
-    end.
-
--spec get_mountpoint_owner(storage:data(), od_space:id()) -> {luma:uid(), luma:gid()}.
-get_mountpoint_owner(Storage, SpaceId) ->
-    StorageFileCtx = storage_file_ctx:new(?DIRECTORY_SEPARATOR_BINARY, SpaceId, storage:get_id(Storage)),
-    {#statbuf{st_uid = Uid, st_gid = Gid}, _} = storage_file_ctx:stat(StorageFileCtx),
-    {Uid, Gid}.
 
 %%%===================================================================
 %%% datastore_model callbacks
