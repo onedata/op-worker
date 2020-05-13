@@ -26,8 +26,10 @@
     space_directory_mode_and_owner_test/1,
     regular_file_mode_and_owner_test/1,
     regular_file_custom_mode_and_owner_test/1,
+    regular_file_unknown_owner_test/1,
     directory_mode_and_owner_test/1,
     directory_custom_mode_and_owner_test/1,
+    directory_with_unknown_owner_test/1,
     rename_file_test/1,
     creating_file_should_result_in_eacces_when_mapping_is_not_found/1
 ]).
@@ -60,8 +62,10 @@ all() -> [
     space_directory_mode_and_owner_test,
     regular_file_mode_and_owner_test,
     regular_file_custom_mode_and_owner_test,
+    regular_file_unknown_owner_test,
     directory_mode_and_owner_test,
     directory_custom_mode_and_owner_test,
+    directory_with_unknown_owner_test,
     rename_file_test,
     creating_file_should_result_in_eacces_when_mapping_is_not_found
 ].
@@ -92,7 +96,7 @@ space_directory_mode_and_owner_test(Config) ->
                     expected_display_owner => ?MOUNT_DIR_OWNER
                 }
             ]
-                    ,
+            ,
             ?SPACE_ID2 => [
                 #{
                     user => ?USER1,
@@ -386,6 +390,36 @@ regular_file_custom_mode_and_owner_test(Config) ->
         generic_test_args = #{file_perms => 8#777}
     }).
 
+regular_file_unknown_owner_test(Config) ->
+    ?RUN(#test_spec{
+        config = Config,
+        test_fun = fun regular_file_unknown_owner_test_base/4,
+        custom_test_setups = #{
+            ?SPACE_ID1 => [
+                #{
+                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_owner2 => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER)),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
+                }
+            ],
+            ?SPACE_ID3 => [
+                #{
+                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_owner2 => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER)),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
+                }
+            ],
+            ?SPACE_ID5 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?GEN_OWNER(?UNKNOWN_USER, ?SPACE_ID5)
+                }
+            ]
+
+        },
+        generic_test_args = #{file_perms => ?DEFAULT_FILE_PERMS}
+    }).
+
 directory_mode_and_owner_test(Config) ->
     ?RUN(#test_spec{
         config = Config,
@@ -598,6 +632,36 @@ directory_custom_mode_and_owner_test(Config) ->
         generic_test_args = #{dir_perms => 8#777}
     }).
 
+directory_with_unknown_owner_test(Config) ->
+    ?RUN(#test_spec{
+        config = Config,
+        test_fun = fun directory_with_unknown_owner_test_base/4,
+        custom_test_setups = #{
+            ?SPACE_ID1 => [
+                #{
+                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_owner2 => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER)),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
+                }
+            ],
+            ?SPACE_ID3 => [
+                #{
+                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_owner2 => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER)),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
+                }
+            ],
+            ?SPACE_ID5 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?GEN_OWNER(?UNKNOWN_USER, ?SPACE_ID5)
+                }
+            ]
+
+        },
+        generic_test_args = #{dir_perms => ?DEFAULT_DIR_PERMS}
+    }).
+
 rename_file_test(Config) ->
     % this test case is not run for user=?ROOT_USER_ID because
     % we cannot perform mv in context of ROOT as path cannot be resolve in context of special session
@@ -720,7 +784,6 @@ space_directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
         ?assertFileInfo(maps:merge(#{mode => ?DEFAULT_DIR_MODE}, ExpectedOwner), Worker, SpacePath)
     end).
 
-
 regular_file_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     User = maps:get(user, TestArgs),
@@ -745,6 +808,46 @@ regular_file_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
         StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, FileName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
         ?assertFileInfo(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner), Worker, StorageFilePath)
+    end).
+
+regular_file_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
+    % this test is only run on spaces without LUMA because mapping is not defined for ?UNKNOWN_USER
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker, Config, ?USER1),
+    FileName = ?FILE_NAME(TestName),
+    ExpectedDisplayOwner = maps:get(expected_display_owner, TestArgs),
+    ExpectedDisplayUid = maps:get(uid, ExpectedDisplayOwner),
+    ExpectedDisplayGid = maps:get(gid, ExpectedDisplayOwner),
+    FilePerms = maps:get(file_perms, TestArgs),
+
+    % when
+    {ok, FileGuid} = lfm_proxy:create(Worker, SessId, ?SPACE_GUID(SpaceId), FileName, FilePerms),
+    {FileUuid, _} = file_id:unpack_guid(FileGuid),
+
+    % pretend that files belongs to an unknown user (not yet logged to Onezone)
+    % such file may occur when it was synced from storage in remote provider with reverse LUMA
+    {ok, _} = rpc:call(Worker, file_meta, update, [FileUuid, fun(FM) ->
+        {ok, FM#file_meta{owner = ?UNKNOWN_USER}}
+    end]),
+
+    {ok, _} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, read),
+
+    % then
+    ?assertMatch({ok, #file_attr{
+        uid = ExpectedDisplayUid,
+        gid = ExpectedDisplayGid,
+        mode = FilePerms
+    }}, lfm_proxy:stat(Worker, SessId, {guid, FileGuid})),
+
+    ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
+        StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, FileName),
+        ExpectedOwner = maps:get(expected_owner, TestArgs),
+        ?assertFileInfo(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner), Worker, StorageFilePath),
+
+        % pretend that ?UNKNOWN_USER logged to Onezone
+        ok = rpc:call(Worker, files_to_chown, chown_delayed_files, [?UNKNOWN_USER]),
+        ExpectedOwner2 = maps:get(expected_owner2, TestArgs),
+        ?assertFileInfo(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner2), Worker, StorageFilePath)
     end).
 
 directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
@@ -775,6 +878,48 @@ directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
         StorageDirPath = storage_test_utils:file_path(Worker, SpaceId, DirName),
         ExpectedOwner = maps:get(expected_owner, TestArgs),
         ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, StorageDirPath)
+    end).
+
+directory_with_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
+    % this test is only run on spaces without LUMA because mapping is not defined for ?UNKNOWN_USER
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker, Config, ?USER1),
+    DirName = ?DIR_NAME(TestName),
+    FileName = ?FILE_NAME(TestName),
+    ExpectedDisplayOwner = maps:get(expected_display_owner, TestArgs),
+    ExpectedDisplayUid = maps:get(uid, ExpectedDisplayOwner),
+    ExpectedDisplayGid = maps:get(gid, ExpectedDisplayOwner),
+    DirPerms = maps:get(dir_perms, TestArgs),
+
+    % when
+    {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, ?SPACE_GUID(SpaceId), DirName, DirPerms),
+    {DirUuid, _} = file_id:unpack_guid(DirGuid),
+
+    % pretend that files belongs to an unknown user (not yet logged to Onezone)
+    % such file may occur when it was synced from storage in remote provider with reverse LUMA
+    {ok, _} = rpc:call(Worker, file_meta, update, [DirUuid, fun(FM) ->
+        {ok, FM#file_meta{owner = ?UNKNOWN_USER}}
+    end]),
+
+    % directory is created on storage when its child is created on storage
+    {ok, _} = lfm_proxy:create_and_open(Worker, SessId, DirGuid, FileName, ?DEFAULT_FILE_PERMS),
+
+    % then
+    ?assertMatch({ok, #file_attr{
+        uid = ExpectedDisplayUid,
+        gid = ExpectedDisplayGid,
+        mode = DirPerms
+    }}, lfm_proxy:stat(Worker, SessId, {guid, DirGuid})),
+
+    ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
+        StorageDirPath = storage_test_utils:file_path(Worker, SpaceId, DirName),
+        ExpectedOwner = maps:get(expected_owner, TestArgs),
+        ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, StorageDirPath),
+
+        % pretend that ?UNKNOWN_USER logged to Onezone
+        ok = rpc:call(Worker, files_to_chown, chown_delayed_files, [?UNKNOWN_USER]),
+        ExpectedOwner2 = maps:get(expected_owner2, TestArgs),
+        ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner2), Worker, StorageDirPath)
     end).
 
 rename_file_test_base(TestName, Config, SpaceId, TestArgs) ->

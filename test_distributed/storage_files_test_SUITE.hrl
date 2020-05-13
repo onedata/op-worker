@@ -25,12 +25,12 @@
 -define(SPACE_ID6, <<"space6">>).
 -define(SPACE_ID7, <<"space7">>).
 
--define(STORAGE_ID1, <<"/mnt/st1">>).
--define(STORAGE_ID2, <<"/mnt/st2">>).
--define(STORAGE_ID3, <<"/mnt/st3">>).
--define(STORAGE_ID4, <<"/mnt/st4">>).
--define(STORAGE_ID5, <<"s3_no_luma">>).
--define(STORAGE_ID6, <<"s3_luma">>).
+-define(STORAGE_ID1, <<"/mnt/st1">>). % posix storage without LUMA
+-define(STORAGE_ID2, <<"/mnt/st2">>). % posix storage with LUMA
+-define(STORAGE_ID3, <<"/mnt/st3">>). % synced (mount_in_root) posix storage without LUMA
+-define(STORAGE_ID4, <<"/mnt/st4">>). % synced (mount_in_root) posix storage with LUMA
+-define(STORAGE_ID5, <<"s3_no_luma">>). % s3 storage without LUMA
+-define(STORAGE_ID6, <<"s3_luma">>). % s3 storage with LUMA
 
 -define(SPACE_NAME(SpaceId, Config), ?config(SpaceId, ?config(spaces, Config))).
 -define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
@@ -39,6 +39,7 @@
 -define(USER2, <<"user2">>).
 -define(USER3, <<"user3">>).
 -define(USER4, <<"user4">>).
+-define(UNKNOWN_USER, <<"UNKNOWN OWNER ID">>).
 
 % Macros for test file names
 -define(DIR_NAME(Suffix), <<"dir_", (atom_to_binary(Suffix, latin1))/binary>>).

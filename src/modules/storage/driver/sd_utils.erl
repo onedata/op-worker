@@ -193,7 +193,7 @@ generic_create_delayed(UserCtx, FileCtx, VerifyDeletionLink) ->
             {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
              case file_ctx:is_root_dir_const(ParentCtx) of
                  true -> ok;
-                 false -> files_to_chown:chown_or_schedule_chowning(ParentCtx)
+                 false -> files_to_chown:chown_or_delay(ParentCtx)
              end,
             create_storage_file(SDHandle, FileCtx4);
         {ok, FileCtx4} ->
@@ -216,7 +216,7 @@ generic_create_delayed(UserCtx, FileCtx, VerifyDeletionLink) ->
         {ok, FinalCtx}  ->
             case ShouldChown of
                 true ->
-                    {ok, files_to_chown:chown_or_schedule_chowning(FinalCtx)};
+                    {ok, files_to_chown:chown_or_delay(FinalCtx)};
                 _ ->
                     {ok, FinalCtx}
             end;
@@ -400,7 +400,7 @@ mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
 
     case {Result, ShouldChown} of
         {ok, true} ->
-            {ok, files_to_chown:chown_or_schedule_chowning(FileCtx3)};
+            {ok, files_to_chown:chown_or_delay(FileCtx3)};
         {ok, false} ->
             {ok, FileCtx};
         {Error, _} ->

@@ -81,9 +81,6 @@ map_to_display_credentials(?ROOT_USER_ID, _SpaceId, _Storage) ->
 map_to_display_credentials(OwnerId, SpaceId, undefined) ->
     % unsupported space;
     {ok, {luma_utils:generate_uid(OwnerId), luma_utils:generate_gid(SpaceId)}};
-map_to_display_credentials(OwnerId, SpaceId, StorageId) when is_binary(StorageId) ->
-    {ok, Storage} = storage:get(StorageId),
-    map_to_display_credentials(OwnerId, SpaceId, Storage);
 map_to_display_credentials(OwnerId, SpaceId, Storage) ->
     try
         case fslogic_uuid:is_space_owner(OwnerId) of
@@ -199,7 +196,7 @@ map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
             true ->
                 % SpaceOwner can be owner of a file in 3 cases:
                 % * It is owner of a space directory, so when it's created on storage,
-                %   It will
+                %   It will % todo dokoncz
                 map_space_owner_to_storage_credentials(StorageData, SpaceId);
             false ->
                 map_normal_user_to_storage_credentials(UserId, StorageData, SpaceId)
@@ -332,14 +329,15 @@ map_normal_user_to_storage_credentials(UserId, Storage, SpaceId) ->
             Error
     end.
 
--spec map_space_owner_to_display_credentials(storage:data(), od_space:id()) -> {ok, display_credentials()}.
+-spec map_space_owner_to_display_credentials(storage:id() | storage:data(), od_space:id()) ->
+    {ok, display_credentials()}.
 map_space_owner_to_display_credentials(Storage, SpaceId) ->
     {ok, SpacePosixCredentials} = luma_spaces_cache:get(Storage, SpaceId),
     DisplayUid = luma_space:get_display_uid(SpacePosixCredentials),
     DisplayGid = luma_space:get_display_gid(SpacePosixCredentials),
     {ok, {DisplayUid, DisplayGid}}.
 
--spec map_normal_user_to_display_credentials(od_user:id(), storage:data(), od_space:id()) ->
+-spec map_normal_user_to_display_credentials(od_user:id(), storage:id() | storage:data(), od_space:id()) ->
     {ok, display_credentials()} | {error, term()}.
 map_normal_user_to_display_credentials(OwnerId, Storage, SpaceId) ->
     case luma_users_cache:get(Storage, OwnerId) of
