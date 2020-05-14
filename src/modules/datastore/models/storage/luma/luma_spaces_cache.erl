@@ -9,10 +9,16 @@
 %%% This module is used for storing defaults (for spaces) that are used in
 %%% LUMA mappings for users.
 %%% Documents of this model are stored per StorageId.
+%%% Each documents consists of map #{od_space:id() => luma_space:entry()},
+%%% so the mappings are actually associated with
+%%% pair (storage:id(), od_space:id()).
+%%%
+%%% For more info on luma_space:entry() structure please see
+%%% luma_space.erl module.
 %%%
 %%% Mappings may be set in 3 ways:
 %%%  * filled by default algorithm in case NO_LUMA mode is set for given
-%%%    storage
+%%%    storage (see luma_space:ensure_all_fields_defined/4 function)
 %%%  * preconfigured using REST API in case EMBEDDED_LUMA
 %%%    is set for given storage
 %%%  * cached after querying external, 3rd party LUMA server in case
@@ -116,9 +122,9 @@ acquire_and_cache(Storage, SpaceId) ->
 -spec acquire(storage:data(), od_space:id()) -> {ok, luma_space:entry()}.
 acquire(Storage, SpaceId) ->
     IsNotPosix = not storage:is_posix_compatible(Storage),
-    % default owner is ignored on:
+    % default credentials are ignored on:
     % - posix incompatible storages
-    % - synced storage
+    % - synced storages (storage mountpoint credentials are used as default credentials)
     IgnoreLumaDefaultOwner = IsNotPosix orelse storage:is_imported_storage(Storage),
     {DefaultPosixCredentials, DisplayCredentials} = case {storage:is_luma_enabled(Storage), IgnoreLumaDefaultOwner} of
         {true, false} ->
@@ -131,7 +137,7 @@ acquire(Storage, SpaceId) ->
         {false, _} ->
             {#{}, #{}}
     end,
-    {ok, luma_space:new(DefaultPosixCredentials, DisplayCredentials, SpaceId, Storage, IgnoreLumaDefaultOwner)}.
+    {ok, luma_space:new(DefaultPosixCredentials, DisplayCredentials, SpaceId, Storage)}.
 
 
 -spec fetch_default_posix_credentials(storage:data(), od_space:id()) ->

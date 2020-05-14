@@ -95,8 +95,7 @@ space_directory_mode_and_owner_test(Config) ->
                     expected_owner => ?MOUNT_DIR_OWNER,
                     expected_display_owner => ?MOUNT_DIR_OWNER
                 }
-            ]
-            ,
+            ],
             ?SPACE_ID2 => [
                 #{
                     user => ?USER1,

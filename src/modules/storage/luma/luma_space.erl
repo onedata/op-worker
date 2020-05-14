@@ -30,7 +30,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
--export([new/5, get_default_uid/1, get_default_gid/1, get_display_uid/1, get_display_gid/1]).
+-export([new/4, get_default_uid/1, get_default_gid/1, get_display_uid/1, get_display_gid/1]).
 
 -record(luma_space, {
     default_uid :: undefined | luma:uid(),
@@ -46,16 +46,16 @@
 %%% API functions
 %%%===================================================================
 
--spec new(luma:space_mapping_response(), luma:space_mapping_response(), od_space:id(), storage:data(), boolean()) ->
-    luma_space:entry().
-new(DefaultPosixCredentials, DisplayCredentials, SpaceId, Storage, IgnoreLumaDefaultOwner) ->
+-spec new(luma:space_mapping_response(), luma:space_mapping_response(), od_space:id(), storage:data()) ->
+    entry().
+new(DefaultPosixCredentials, DisplayCredentials, SpaceId, Storage) ->
     LumaSpace0 = #luma_space{
         default_uid = maps:get(<<"uid">>, DefaultPosixCredentials, undefined),
         default_gid = maps:get(<<"gid">>, DefaultPosixCredentials, undefined),
         display_uid = maps:get(<<"uid">>, DisplayCredentials, undefined),
         display_gid = maps:get(<<"gid">>, DisplayCredentials, undefined)
     },
-    refill_undefined(LumaSpace0, SpaceId, Storage, IgnoreLumaDefaultOwner).
+    ensure_all_fields_defined(LumaSpace0, SpaceId, Storage, storage:is_posix_compatible(Storage)).
 
 -spec get_default_uid(entry()) -> luma:uid().
 get_default_uid(#luma_space{default_uid = DefaultUid}) ->
@@ -85,82 +85,64 @@ get_display_gid(#luma_space{display_gid = DisplayGid}) ->
 %% Otherwise all fields must be set.
 %% @end
 %%--------------------------------------------------------------------
--spec refill_undefined(luma_space:entry(), od_space:id(), storage:data(),
-    IgnoreLumaDefault :: boolean()) -> luma_space:entry().
-refill_undefined(LS = #luma_space{
+-spec ensure_all_fields_defined(entry(), od_space:id(), storage:data(), IsPosix :: boolean()) -> entry().
+ensure_all_fields_defined(LumaSpace, SpaceId, Storage, true) ->
+    ensure_all_fields_defined(LumaSpace, SpaceId, Storage);
+ensure_all_fields_defined(LumaSpace, SpaceId, Storage, false) ->
+    ensure_display_fields_defined(LumaSpace, SpaceId, Storage).
+
+
+-spec ensure_all_fields_defined(entry(), od_space:id(), storage:data()) -> entry().
+ensure_all_fields_defined(LS = #luma_space{
     default_uid = DefaultUid,
     default_gid = DefaultGid,
     display_uid = DisplayUid,
     display_gid = DisplayGid
-}, _SpaceId, _Storage, false)
+}, _SpaceId, _Storage)
     when DefaultUid =/= undefined
     andalso DefaultGid =/= undefined
-    andalso DisplayUid =/= undefined
-    andalso DisplayGid =/= undefined
 ->
-    % all values are defined
-    LS;
-refill_undefined(LS = #luma_space{
-    display_uid = DisplayUid,
-    display_gid = DisplayGid
-}, _SpaceId, _Storage, true)
-    when DisplayUid =/= undefined
-    andalso DisplayGid =/= undefined
-->
-    % default_ fields can be undefined
-    LS;
-refill_undefined(LS = #luma_space{
+    % both default_ fields are defined
+    % use default_ fields as display_ fallbacks
+    LS#luma_space{
+        display_uid = ensure_defined(DisplayUid, DefaultUid),
+        display_gid = ensure_defined(DisplayGid, DefaultGid)
+    };
+ensure_all_fields_defined(LS = #luma_space{
     default_uid = DefaultUid,
     default_gid = DefaultGid,
     display_uid = DisplayUid,
     display_gid = DisplayGid
-}, SpaceId, Storage, false)
-    when DisplayUid =/= undefined
-    andalso DisplayGid =/= undefined
-->
+}, SpaceId, Storage) ->
     % at least one of default_ fields is undefined
     {FallbackUid, FallbackGid} = get_posix_compatible_fallback_credentials(Storage, SpaceId),
+    DefaultUid2 = ensure_defined(DefaultUid, FallbackUid),
+    DefaultGid2 = ensure_defined(DefaultGid, FallbackGid),
     LS#luma_space{
-        default_uid = ensure_defined(DefaultUid, FallbackUid),
-        default_gid = ensure_defined(DefaultGid, FallbackGid)
-    };
-refill_undefined(LS = #luma_space{
-    default_uid = DefaultUid,
-    default_gid = DefaultGid,
+        default_uid = DefaultUid2,
+        default_gid = DefaultGid2,
+        display_uid = ensure_defined(DisplayUid, DefaultUid2),
+        display_gid = ensure_defined(DisplayGid, DefaultGid2)
+    }.
+
+-spec ensure_display_fields_defined(entry(), od_space:id(), storage:id()) -> entry().
+ensure_display_fields_defined(LS = #luma_space{
     display_uid = DisplayUid,
     display_gid = DisplayGid
-}, _SpaceId, _Storage, false)
-    when DefaultUid =/= undefined
-    andalso DefaultGid =/= undefined
-    ->
-    % both default fields are defined
-    % at least one of display_ fields is undefined
-    LS#luma_space{
-        default_uid = ensure_defined(DisplayUid, DefaultUid),
-        default_gid = ensure_defined(DisplayGid, DefaultGid)
-    };
-refill_undefined(LS = #luma_space{
+}, _SpaceId, _Storage)
+    when DisplayUid =/= undefined
+    andalso DisplayGid =/= undefined
+->
+    % default_ fields can be undefined
+    LS;
+ensure_display_fields_defined(LS = #luma_space{
     display_uid = DisplayUid,
     display_gid = DisplayGid
-}, SpaceId, Storage, true) ->
+}, SpaceId, Storage) ->
     % default_ fields can be undefined
     % at least one of display_ fields is undefined
     {FallbackUid, FallbackGid} = get_posix_compatible_fallback_credentials(Storage, SpaceId),
     LS#luma_space{
-        display_uid = ensure_defined(DisplayUid, FallbackUid),
-        display_gid = ensure_defined(DisplayGid, FallbackGid)
-    };
-refill_undefined(LS = #luma_space{
-    default_uid = DefaultUid,
-    default_gid = DefaultGid,
-    display_uid = DisplayUid,
-    display_gid = DisplayGid
-}, SpaceId, Storage, false) ->
-    % at least one of all fields is undefined
-    {FallbackUid, FallbackGid} = get_posix_compatible_fallback_credentials(Storage, SpaceId),
-    LS#luma_space{
-        default_uid = ensure_defined(DefaultUid, FallbackUid),
-        default_gid = ensure_defined(DefaultGid, FallbackGid),
         display_uid = ensure_defined(DisplayUid, FallbackUid),
         display_gid = ensure_defined(DisplayGid, FallbackGid)
     }.

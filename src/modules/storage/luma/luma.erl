@@ -20,8 +20,7 @@
 %%%                    LUMA API (described on onedata.org).
 %%%                    The server is lazily queried for custom mappings
 %%%                    which are then stored in the database. This mode
-%%%                    can be treated as a lazy feed for embedded luma store.
-%%%
+%%%                    can be treated as a lazy feed for EMBEDDED_LUMA store.
 %%%
 %%% Functions exported by this module can be divided into 3 groups:
 %%%  * LUMA functions
@@ -34,17 +33,56 @@
 %%% LUMA API
 %%%-------------------------------------------------------------------
 %%% This API is used to map onedata user to 2 types of credentials:
-%%%  * storage_credentials() - these are basically credentials passed
-%%%    to helper. They allow to perform operations on storage in context
+%%%  * storage_credentials() - these are credentials passed to helper.
+%%%    They allow to perform operations on storage in context
 %%%    of a specific user.
 %%%  * display_credentials() - these are POSIX credentials (UID & GID)
 %%%    which are returned in getattr response. They are used to present
 %%%    file owners in the result of ls operation in Oneclient.
 %%%
-%%% % TODO trzeba opisac priorytet (albo odeslac do doków gdzie to jest)
-%%% % TODO trzeba opisac co mozna skonfigurowac, ze jest mapowanie dla uzytkownika i dla space'a
-%%% % TODO trzeba opisac czemu na posix-like jest troche inaczej (groupa)
+%%% Credentials are cached in 2 models:
+%%%  * luma_users_cache - this model is used for storing
+%%%    storage_credentials() for a pair (storage:id(), od_user:id()).
+%%     It also stores display_uid which is a component of
+%%     display_credentials().
+%%%  * luma_spaces_cache - this model is used for storing 2 pairs of
+%%%    POSIX credentials (UID & GID) for a given space support
+%%%    identified by pair (storage:id(), od_space:id()).
+%%%    First of them is called default (default_uid, default_gid) and
+%%%    is used only on POSIX compatible storages (described below
+%%%    in the section considering acquiring of credentials on POSIX
+%%%    compatible storages).
+%%%    Second one is called display (display_uid, display_gid) and is
+%%%    used to store default display credentials.
 %%%
+%%%    Please see luma_spaces_cache.erl and luma_users_cache.erl for
+%%%    more info (i.e. how caches are filled according to LUMA mode
+%%%    for given storage).
+%%%
+%%% On each type of storage, display_credentials() have the
+%%% following structure:
+%%% {#luma_user.display_uid, #luma_space.display_gid}
+%%%
+%%% storage_credentials() are composed differently depending on
+%%% the storage type (whether its POSIX-compatible).
+%%%
+%%% On POSIX incompatible storages, storage_credentials() are
+%%% basically #luma_user.storage_credentials field.
+%%%
+%%% On POSIX compatible storages,
+%%% (currently POSIX, GLUSTERFS, NULLDEVICE) only uid field is stored
+%%% in #luma_user.storage_credentials. That is because we treat all
+%%% space members as a space group. That means, that when accessing
+%%% a file, group permissions are checked for all members of the space.
+%%% For consistency, it is vital to ensure, that all files created in
+%%% the space will have the same GID owner (as all space members are
+%%% in the same, virtual, "space group").
+%%% Due to above reasons, storage_credentials() on POSIX compatible
+%%% storages are constructed in the following way:
+%%% #{
+%%%     <<"uid">> => maps:get(<<"uid">>, #luma_user.storage_credentials),
+%%%     <<"gid">> => #luma_space.default_gid
+%%% }
 %%%
 %%%-------------------------------------------------------------------
 %%% Reverse LUMA API
@@ -78,6 +116,22 @@
 %%%    Enabling LUMA service is necessary for synchronizing storage NFSv4 ACLs.
 %%%    If LUMA service is disabled for given storage, this operation will
 %%%    return error.
+%%%
+%%% GIDs on synced storage - IMPORTANT NOTE!!!
+%%%
+%%% It is possible that synced files have different GIDs. We do no try
+%%% to map them to onedata groups model as it's not compatible with POSIX
+%%% groups model.
+%%% It is encouraged that admin of the legacy storage that it to be synced
+%%% should ensure that the file structure is compliant with Onedata model
+%%% (all files in the space should have the same group owner).
+%%% If such "preparation" is not performed we must accept that even if
+%%% access is granted by logical permissions check, it may be denied by the
+%%% storage.
+%%%
+%%% We only save synced gid in file_meta and use this GID as the override
+%%% for display_gid but only in the syncing provider.
+%%% (see file_ctx:get_display_credentials/1)
 %%%
 %%%-------------------------------------------------------------------
 %%% Management API

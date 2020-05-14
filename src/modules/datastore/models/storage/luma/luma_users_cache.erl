@@ -10,16 +10,25 @@
 %%% Mappings are used to associate
 %%% onedata users with specific storage users.
 %%% Documents of this model are stored per StorageId.
+%%% Each documents consists of map #{od_user:id() => luma_user:entry()},
+%%% so the mappings are actually associated with pair (storage:id(), od_user:id()).
+%%%
+%%% For more info in luma_user:entry() structure please see
+%%% luma_user.erl module.
 %%%
 %%% Mappings may be set in 3 ways:
 %%%  * filled by default algorithm in case NO_LUMA mode is set for given
-%%%    storage (see acquire_default_mapping function).
+%%%    storage - if storage is POSIX compatible, UID is generated and
+%%%    used in both fields: storage_credentials and display_uid.
+%%%    On POSIX incompatible storages, helper's AdminCtx is used as
+%%%    storage_credentials and display_uid is generated.
+%%%    (see acquire_default_mapping function).
 %%%  * preconfigured using REST API in case EMBEDDED_LUMA
 %%%    is set for given storage
 %%%  * cached after querying external, 3rd party LUMA server in case
 %%%    EXTERNAL_LUMA mode is set for given storage
 %%%
-%%% For more info please read the docs of luma.erl module.
+%%% For more info please read the docs of luma.erl.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_users_cache).
