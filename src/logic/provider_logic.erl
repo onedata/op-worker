@@ -676,12 +676,13 @@ zone_time_seconds() ->
             {ok, Timestamp1} ->
                 {ok, Timestamp1};
             _ ->
-                % Fallback to REST in case GS returned an error
-                case oz_providers:get_zone_time(none) of
+                % Fallback to REST in case GS returned an error. 
+                case oneprovider:get_oz_domain_or_undefined() =/= undefined 
+                    andalso oz_providers:get_zone_time(none) of
                     {ok, Timestamp2} ->
                         {ok, Timestamp2};
                     _ ->
-                        % Use local time if Onezone is unreachable
+                        % Use local time if Onezone is unreachable or cluster is not initialized
                         {ok, time_utils:system_time_millis()}
                 end
         end
