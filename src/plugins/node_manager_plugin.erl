@@ -243,7 +243,7 @@ exometer_reporters() -> [].
 %%--------------------------------------------------------------------
 -spec node_down(FailedNode :: node(), IsFailedNodeMaster :: boolean()) -> ok.
 node_down(_FailedNode, true) ->
-    session_manager:restart_dead_sessions(),
+%%    session_manager:restart_dead_sessions(),
     ok;
 node_down(_FailedNode, false) ->
     ok.
