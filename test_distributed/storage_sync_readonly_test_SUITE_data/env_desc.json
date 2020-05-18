@@ -136,8 +136,7 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st1",
-                        "imported_storage": true
+                        "storage": "/mnt/st1"
                     },
                     "p2": {
                         "storage": "/mnt/synced_storage",

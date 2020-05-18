@@ -201,17 +201,23 @@ create_directory_import_test(Config, MountSpaceInRoot) ->
     ?assertMatch({ok, [{_, ?TEST_DIR}]},
         lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10)),
 
+    StorageSDHandleW1 = sd_test_utils:get_storage_mountpoint_handle(W1, ?SPACE_ID, RDWRStorage),
+    StorageW2 = get_supporting_storage(W2, ?SPACE_ID),
+    StorageSDHandleW2 = sd_test_utils:get_storage_mountpoint_handle(W1, ?SPACE_ID, StorageW2),
+    {ok, #statbuf{st_uid = MountUid1}} = sd_test_utils:stat(W1, StorageSDHandleW1),
+    {ok, #statbuf{st_uid = MountUid2, st_gid = MountGid2}} = sd_test_utils:stat(W2, StorageSDHandleW2),
+
     SpaceOwner = ?SPACE_OWNER_ID(?SPACE_ID),
     ?assertMatch({ok, #file_attr{
         owner_id = SpaceOwner,
-        uid = ?MOUNT_UID,
+        uid = MountUid1,
         gid = 0
     }}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
     ?assertMatch({ok, #file_attr{
         owner_id = SpaceOwner,
-        uid = ?MOUNT_UID,
-        gid = ?MOUNT_GID
+        uid = MountUid2,
+        gid = MountGid2
     }}, lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
     ?assertMonitoring(W1, #{
@@ -307,10 +313,15 @@ create_directory_import_check_user_id_test(Config, MountSpaceInRoot) ->
     }}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
     GeneratedUid = rpc:call(W2, luma_utils, generate_uid, [?USER1]),
+
+    StorageW2 = get_supporting_storage(W2, ?SPACE_ID),
+    StorageSDHandleW2 = sd_test_utils:get_storage_mountpoint_handle(W1, ?SPACE_ID, StorageW2),
+    {ok, #statbuf{st_gid = MountGid2}} = sd_test_utils:stat(W2, StorageSDHandleW2),
+
     ?assertMatch({ok, #file_attr{
         owner_id = ?USER1,
         uid = GeneratedUid,
-        gid = ?MOUNT_GID
+        gid = MountGid2
     }}, lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
     ?assertMonitoring(W1, #{
@@ -673,10 +684,13 @@ create_file_import_check_user_id_test(Config, MountSpaceInRoot) ->
     lfm_proxy:close(W1, Handle1),
 
     GeneratedUid = rpc:call(W1, luma_utils, generate_uid, [?USER1]),
+    StorageW2 = get_supporting_storage(W2, ?SPACE_ID),
+    StorageSDHandleW2 = sd_test_utils:get_storage_mountpoint_handle(W1, ?SPACE_ID, StorageW2),
+    {ok, #statbuf{st_gid = MountGid2}} = sd_test_utils:stat(W2, StorageSDHandleW2),
     ?assertMatch({ok, #file_attr{
         owner_id = ?USER1,
         uid = GeneratedUid,
-        gid = ?MOUNT_GID
+        gid = MountGid2
     }}, lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
 
     ?assertMonitoring(W1, #{
@@ -6213,7 +6227,6 @@ init_per_testcase(_Case, Config, Readonly) ->
     ConfigWithProxy = lfm_proxy:init(Config),
     Config2 = add_synced_storages(ConfigWithProxy),
     Config3 = add_rdwr_storages(Config2),
-    mock_stat_on_space_mount_dir(Workers),
     create_init_file(Config3, Readonly),
     Config3.
 
@@ -6309,12 +6322,6 @@ end_per_testcase(_Case, Config, Readonly) ->
     clean_synced_storage(Config, Readonly),
     cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
     test_utils:mock_unload(Workers, [storage_sync_engine, storage_sync_hash, link_utils,
-        storage_sync_traverse, storage_sync_deletion, storage_driver, helpers, luma_space]),
+        storage_sync_traverse, storage_sync_deletion, storage_driver, helpers]),
     timer:sleep(timer:seconds(1)),
     lfm_proxy:teardown(Config).
-
-mock_stat_on_space_mount_dir(Worker) ->
-    ok = test_utils:mock_new(Worker, luma_space),
-    ok = test_utils:mock_expect(Worker, luma_space, stat, fun(StFileCtx) ->
-        {#statbuf{st_uid = ?MOUNT_UID, st_gid = ?MOUNT_GID}, StFileCtx}
-    end).

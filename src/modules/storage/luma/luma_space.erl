@@ -32,9 +32,6 @@
 %% API
 -export([new/4, get_default_uid/1, get_default_gid/1, get_display_uid/1, get_display_gid/1]).
 
-%% exported for mocking in tests
--export([stat/1]).
-
 -record(luma_space, {
     default_uid :: undefined | luma:uid(),
     default_gid :: undefined | luma:gid(),
@@ -178,12 +175,9 @@ get_posix_compatible_fallback_credentials(Storage, SpaceId) ->
 -spec get_mountpoint_credentials(storage:data(), od_space:id()) -> {luma:uid(), luma:gid()}.
 get_mountpoint_credentials(Storage, SpaceId) ->
     StorageFileCtx = storage_file_ctx:new(?DIRECTORY_SEPARATOR_BINARY, SpaceId, storage:get_id(Storage)),
-    {#statbuf{st_uid = Uid, st_gid = Gid}, _} = luma_space:stat(StorageFileCtx), % call by module to mock in tests
+    {#statbuf{st_uid = Uid, st_gid = Gid}, _} = storage_file_ctx:stat(StorageFileCtx),
     {Uid, Gid}.
 
--spec stat(storage_file_ctx:ctx()) -> {helpers:stat(), storage_file_ctx:ctx()}.
-stat(StorageFileCtx) ->
-    storage_file_ctx:stat(StorageFileCtx).
 
 -spec ensure_defined(term(), term()) -> term().
 ensure_defined(Value, Default) ->

@@ -65,7 +65,6 @@
 -define(TEST_DATA_SIZE2, byte_size(?TEST_DATA2)).
 -define(WRITE_TEXT, <<"overwrite_test_data">>).
 
--define(MOUNT_UID, 1000).
 -define(MOUNT_GID, 1000).
 
 -define(TEST_UID, 2000).

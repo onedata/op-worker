@@ -1013,7 +1013,7 @@ end_per_testcase(default, Config) ->
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     clean_spaces(Workers),
     lists:foreach(fun(W) -> clean_posix_storage_mountpoints(W) end, Workers),
-    test_utils:mock_unload(hd(Workers), luma_space),
+    test_utils:mock_unload(hd(Workers), storage_file_ctx),
     lfm_proxy:teardown(Config);
 end_per_testcase(_Case, _Config) ->
     ok.
@@ -1189,7 +1189,7 @@ run_test(TestName, TestBaseFun, TestNo, Config, SpaceId, TestArgs) ->
     end.
 
 mock_stat_on_space_mount_dir(Worker) ->
-    ok = test_utils:mock_new(Worker, luma_space),
-    ok = test_utils:mock_expect(Worker, luma_space, stat, fun(StFileCtx) ->
+    ok = test_utils:mock_new(Worker, storage_file_ctx),
+    ok = test_utils:mock_expect(Worker, storage_file_ctx, stat, fun(StFileCtx) ->
         {#statbuf{st_uid = ?MOUNT_DIR_UID, st_gid = ?MOUNT_DIR_GID}, StFileCtx}
     end).

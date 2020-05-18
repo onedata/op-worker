@@ -280,8 +280,8 @@ upgrade_record(9, {
     ?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, _GroupOwner, IsScope,
     ProviderId, Shares, Deleted, ParentUuid
 }) ->
-    {10, {?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, undefined, undefined, IsScope,
-        ProviderId, Shares, Deleted, ParentUuid
+    {10, {?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, IsScope,
+        ProviderId, Shares, Deleted, ParentUuid, undefined, undefined
     }}.
 
 
