@@ -64,8 +64,8 @@ invalidate_cache_for_all_storages(Worker) ->
     end, StorageIds).
 
 mock_stat_on_space_mount_dir(Worker) ->
-    ok = test_utils:mock_new(Worker, storage_file_ctx),
-    ok = test_utils:mock_expect(Worker, storage_file_ctx, stat, fun(StFileCtx) ->
+    ok = test_utils:mock_new(Worker, luma_space),
+    ok = test_utils:mock_expect(Worker, luma_space, stat, fun(StFileCtx) ->
         {#statbuf{st_uid = ?SPACE_MOUNT_UID, st_gid = ?SPACE_MOUNT_GID}, StFileCtx}
     end).
 

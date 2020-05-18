@@ -1000,6 +1000,7 @@ init_per_testcase(Config) ->
 init_per_testcase(default, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     clean_mapping_caches(W1),
+    mock_stat_on_space_mount_dir(W1),
     lfm_proxy:init(Config);
 init_per_testcase(_Case, Config) ->
     Config.
@@ -1012,6 +1013,7 @@ end_per_testcase(default, Config) ->
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     clean_spaces(Workers),
     lists:foreach(fun(W) -> clean_posix_storage_mountpoints(W) end, Workers),
+    test_utils:mock_unload(hd(Workers), luma_space),
     lfm_proxy:teardown(Config);
 end_per_testcase(_Case, _Config) ->
     ok.
@@ -1185,3 +1187,9 @@ run_test(TestName, TestBaseFun, TestNo, Config, SpaceId, TestArgs) ->
             "Stacktrace:~n~p", [TestName, SpaceId, TestNo, {Error, Reason}, erlang:get_stacktrace()]),
             false
     end.
+
+mock_stat_on_space_mount_dir(Worker) ->
+    ok = test_utils:mock_new(Worker, luma_space),
+    ok = test_utils:mock_expect(Worker, luma_space, stat, fun(StFileCtx) ->
+        {#statbuf{st_uid = ?MOUNT_DIR_UID, st_gid = ?MOUNT_DIR_GID}, StFileCtx}
+    end).

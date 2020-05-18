@@ -6213,6 +6213,7 @@ init_per_testcase(_Case, Config, Readonly) ->
     ConfigWithProxy = lfm_proxy:init(Config),
     Config2 = add_synced_storages(ConfigWithProxy),
     Config3 = add_rdwr_storages(Config2),
+    mock_stat_on_space_mount_dir(Workers),
     create_init_file(Config3, Readonly),
     Config3.
 
@@ -6308,6 +6309,12 @@ end_per_testcase(_Case, Config, Readonly) ->
     clean_synced_storage(Config, Readonly),
     cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
     test_utils:mock_unload(Workers, [storage_sync_engine, storage_sync_hash, link_utils,
-        storage_sync_traverse, storage_sync_deletion, storage_driver, helpers]),
+        storage_sync_traverse, storage_sync_deletion, storage_driver, helpers, luma_space]),
     timer:sleep(timer:seconds(1)),
     lfm_proxy:teardown(Config).
+
+mock_stat_on_space_mount_dir(Worker) ->
+    ok = test_utils:mock_new(Worker, luma_space),
+    ok = test_utils:mock_expect(Worker, luma_space, stat, fun(StFileCtx) ->
+        {#statbuf{st_uid = ?MOUNT_UID, st_gid = ?MOUNT_GID}, StFileCtx}
+    end).

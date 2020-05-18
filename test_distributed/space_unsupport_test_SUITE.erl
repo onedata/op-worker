@@ -390,7 +390,8 @@ assert_local_documents_cleaned_up(Worker) ->
                               %% which is not cleaned up during unsupport
             dbsync_state, %% @TODO VFS-6135 check after dbsync is stopped in space unsupport
             file_local_blocks, %% @TODO VFS-6275 check after file_local_blocks cleanup is properly implemented
-            luma_users_cache % These documents are associated with storage, not with space support
+            luma_users_cache, % These documents are associated with storage, not with space support
+            luma_reverse_cache % These documents are associated with storage, not with space support
         ],
     assert_documents_cleaned_up(Worker, <<>>, ModelsToCheck).
 
