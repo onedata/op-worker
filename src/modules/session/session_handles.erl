@@ -36,7 +36,7 @@
 add(SessId, HandleId, Handle) ->
     case sd_handle:create(#document{value = Handle}) of
         {ok, Key} ->
-            session:add_local_links(SessId, ?FILE_HANDLES_TREE_ID, HandleId, Key);
+            session_local_links:add_links(SessId, ?FILE_HANDLES_TREE_ID, HandleId, Key);
         {error, Reason} ->
             {error, Reason}
     end.
@@ -49,11 +49,11 @@ add(SessId, HandleId, Handle) ->
 -spec remove(SessId :: session:id(), HandleId :: storage_driver:handle_id()) ->
     ok | {error, term()}.
 remove(SessId, HandleId) ->
-    case session:get_local_link(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
+    case session_local_links:get_link(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
         {ok, [#link{target = HandleKey}]} ->
             case sd_handle:delete(HandleKey) of
                 ok ->
-                    session:delete_local_links(SessId, ?FILE_HANDLES_TREE_ID, HandleId);
+                    session_local_links:delete_links(SessId, ?FILE_HANDLES_TREE_ID, HandleId);
                 {error, Reason} ->
                     {error, Reason}
             end;
@@ -69,7 +69,7 @@ remove(SessId, HandleId) ->
 -spec get(SessId :: session:id(), HandleId :: storage_driver:handle_id()) ->
     {ok, storage_driver:handle()} | {error, term()}.
 get(SessId, HandleId) ->
-    case session:get_local_link(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
+    case session_local_links:get_link(SessId, ?FILE_HANDLES_TREE_ID, HandleId) of
         {ok, [#link{target = HandleKey}]} ->
             case sd_handle:get(HandleKey) of
                 {ok, #document{value = Handle}} ->
@@ -99,12 +99,12 @@ remove_handles(SessId) ->
 %%--------------------------------------------------------------------
 -spec remove_local_handles(SessId :: session:id()) -> ok.
 remove_local_handles(SessId) ->
-    {ok, Links} = session:fold_local_links(SessId, ?FILE_HANDLES_TREE_ID,
+    {ok, Links} = session_local_links:fold_links(SessId, ?FILE_HANDLES_TREE_ID,
         fun(Link = #link{}, Acc) -> {ok, [Link | Acc]} end
     ),
     Names = lists:map(fun(#link{name = Name, target = HandleKey}) ->
         sd_handle:delete(HandleKey),
         Name
     end, Links),
-    session:delete_local_links(SessId, ?FILE_HANDLES_TREE_ID, Names),
+    session_local_links:delete_links(SessId, ?FILE_HANDLES_TREE_ID, Names),
     ok.

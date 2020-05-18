@@ -192,7 +192,8 @@ init(_Args) ->
         start_function => start_gs_client_worker,
         stop_function => stop_gs_client_worker,
         takeover_function => takeover_gs_client_worker,
-        healthcheck_fun => connection_healthcheck
+        healthcheck_fun => connection_healthcheck,
+        async_start => true
     },
     ok = internal_services_manager:start_service(?MODULE, ?GS_CLIENT_WORKER_GLOBAL_NAME_BIN,
         ?GS_CLIENT_WORKER_GLOBAL_NAME_BIN, ServiceOptions),

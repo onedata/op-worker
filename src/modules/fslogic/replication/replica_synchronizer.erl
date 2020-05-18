@@ -229,6 +229,14 @@ terminate_all() ->
     lists:foreach(fun(Pid) -> Pid ! terminate end, Pids),
     wait_for_terminate(Pids).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Terminates all synchronizers that are slaves according to HA
+%% (work on other than dedicated node because of dedicated node failure).
+%% Cancels all requests before termination.
+%% @end
+%%--------------------------------------------------------------------
+-spec cancel_and_terminate_slaves() -> ok.
 cancel_and_terminate_slaves() ->
     Selection = gproc:select([{{{'_', '_', '$1'}, '_', '_'},
         [{is_binary, '$1'}], ['$$']}]),
@@ -779,7 +787,7 @@ handle_info({check_and_terminate_slave, ReportTo}, #state{file_ctx = Ctx} = Stat
     LocalNode = node(),
     case datastore_key:responsible_node(Uuid) of
         LocalNode -> ok;
-        _ -> cancel_all_and_terminate(State)
+        _ -> cancel_all_transfers(State)
     end,
     ReportTo ! {slave_checked, self()},
     {stop, normal, State};
@@ -1015,7 +1023,8 @@ cancel_ref(Ref, RetryNum) ->
             cancel_ref(Ref, RetryNum - 1)
     end.
 
-cancel_all_and_terminate(#state{in_progress = InProgress, from_to_refs = Froms}) ->
+-spec cancel_all_transfers(#state{}) -> ok.
+cancel_all_transfers(#state{in_progress = InProgress, from_to_refs = Froms}) ->
     lists:foreach(fun({_, FetchRef, _}) ->
         cancel_ref(FetchRef, 3)
     end, ordsets:to_list(InProgress)),

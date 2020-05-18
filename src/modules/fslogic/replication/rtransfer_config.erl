@@ -215,6 +215,7 @@ add_storage(StorageId) ->
     {_, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, add_storage,
                                   [StorageId, HelperName, HelperArgs]),
+    % TODO - sprawdzic wyniki
     BadNodes =/= [] andalso
         ?error("Failed to add storage ~p on nodes ~p", [StorageId, BadNodes]).
 

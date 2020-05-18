@@ -357,8 +357,13 @@ call(SpaceId, Request) ->
     catch
         exit:{Reason, _} when Reason =:= noproc orelse Reason =:= normal ->
             ?debug("Stream ~p was stopped, retrying with a new one", [Name]),
-            case internal_services_manager:start_service(
-                ?MODULE, SpaceId, start_service, stop_service, [SpaceId], SpaceId) of
+            ServiceOptions = #{
+                start_function => start_service,
+                stop_function => stop_service,
+                start_function_args => [SpaceId],
+                allow_override => true
+            },
+            case internal_services_manager:start_service(?MODULE, SpaceId, SpaceId, ServiceOptions) of
                 ok ->
                     call(SpaceId, Request);
                 aborted ->
