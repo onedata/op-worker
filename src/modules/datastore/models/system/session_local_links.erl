@@ -21,6 +21,9 @@
 % API - protected local links
 -export([add_protected_links/4, fold_protected_links/4, delete_protected_links/3]).
 
+%% datastore_model callbacks
+-export([get_ctx/0]).
+
 -define(CTX, #{
     model => ?MODULE,
     disc_driver => undefined,
@@ -75,3 +78,16 @@ fold_protected_links(SessId, TreeID, Fun, FoldNode) ->
     (session:id(), datastore:tree_id(), [datastore:link_name()]) -> [ok | {error, term()}].
 delete_protected_links(SessId, TreeID, LinkName) ->
     datastore_model:delete_links(?CTX#{ha_disabled => false}, ?PROTECTED_LINK_KEY(SessId), TreeID, LinkName).
+
+%%%===================================================================
+%%% datastore_model callbacks
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns model's context.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.

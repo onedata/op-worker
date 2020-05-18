@@ -56,8 +56,8 @@ get_documents_diff(Worker, After, Before, SessionClosed) ->
             Ans2;
         _ ->
             Ans3 = lists:filter(fun
-                                    ({ok, #document{value = #links_node{model = session}}}) -> false;
-                                    ({ok, #document{value = #links_forest{model = session}}}) -> false;
+                                    ({ok, #document{value = #links_node{model = session_local_links}}}) -> false;
+                                    ({ok, #document{value = #links_forest{model = session_local_links}}}) -> false;
                                     ({ok, #document{value = #session{}}}) -> false;
                                     ({ok, #document{value = #helper_handle{}}}) -> false;
                                     (_) -> true
