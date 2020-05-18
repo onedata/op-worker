@@ -11,7 +11,7 @@
 -module(test_config).
 -author("Michal Stanisz").
 
-% init per suite functions
+% init per suite config setters
 -export([
     set_onenv_scenario/2,
     add_envs/4
@@ -25,6 +25,7 @@
     get_custom/2, get_custom/3
 ]).
 
+% config setters
 -export([
     set_many/2,
     set_custom/3
@@ -56,7 +57,7 @@ add_envs(Config, Component, Application, Envs) ->
 
 
 %%%===================================================================
-%%% Config getters
+%%% Commonly used config getters
 %%%===================================================================
 
 -spec get_providers(config()) -> [od_provider:id()].
@@ -85,7 +86,7 @@ get_user_session_id_on_provider(Config, User, ProviderId) ->
 
 
 %%%===================================================================
-%%% Custom % fixme
+%%% 
 %%%===================================================================
 
 -spec get_custom(config(), key() | [key()]) -> any().

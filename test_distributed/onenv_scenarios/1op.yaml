@@ -11,7 +11,7 @@ sourcesRoot: ".."
 sources:
   onezone:
     node-1:
-      - oz_worker
+      - oz-worker
       - cluster-manager
       - oz-panel
   oneprovider-1:

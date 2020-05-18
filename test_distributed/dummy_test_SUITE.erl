@@ -53,6 +53,7 @@ init_per_suite(Config) ->
     test_config:set_many(Config, [
         {add_envs, [op_worker, op_worker, [{dupa, osiem}]]},
         {add_envs, [op_worker, cluster_worker, [{ble, xd}]]},
+        {add_envs, [oz_worker, cluster_worker, [{trolololo, xd}]]},
         {add_envs, [cluster_manager, cluster_manager, [{lol, sadsad}]]},
         {set_onenv_scenario, ["1op"]}
     ]).

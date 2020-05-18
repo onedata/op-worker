@@ -22,6 +22,8 @@
 
 -define(DEFAULT_COOKIE, cluster_node).
 
+-type path() :: string().
+
 -spec prepare_test_environment(test_config:config(), string()) -> test_config:config().
 prepare_test_environment(Config, _Suite) ->
     application:start(yamerl),
@@ -29,18 +31,22 @@ prepare_test_environment(Config, _Suite) ->
     ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
         Token /= "test_distributed"
     end, filename:split(DataDir))),
+    PathToSources = os:getenv("path_to_sources"),
+    AbsPathToSources = filename:join([ProjectRoot, PathToSources]),
     
     ScenarioName = test_config:get_scenario(Config, "1op"),
     
+    % fixme to functions
+    % Set custom envs
     CustomEnvs = test_config:get_envs(Config),
-    CustomConfigsPaths = add_custom_configs(ProjectRoot, CustomEnvs),
+    CustomConfigsPaths = add_custom_configs(AbsPathToSources, CustomEnvs),
 
+    % Start environment
     OnenvScript = filename:join([ProjectRoot, "one-env", "onenv"]),
     ScenarioPath = filename:join([ProjectRoot, "test_distributed", "onenv_scenarios", ScenarioName ++ ".yaml"]),
-    PathToSources = os:getenv("path_to_sources"),
-    ct:print("Path to sources: ~p", [PathToSources]),
     ct:pal("Starting onenv scenario ~p~n~n~p", [ScenarioName, ScenarioPath]),
-    OnenvStartLogs = utils:cmd(["cd", "../../..", "&&", OnenvScript, "up", "--path-to-sources", PathToSources, ScenarioPath]),
+    StartCmd = ["cd", "../../..", "&&", OnenvScript, "up", "--path-to-sources", PathToSources, ScenarioPath],
+    OnenvStartLogs = utils:cmd(StartCmd),
     ct:pal("~s", [OnenvStartLogs]),
     
     utils:cmd([OnenvScript, "wait", "--timeout", "600"]),
@@ -56,18 +62,19 @@ prepare_test_environment(Config, _Suite) ->
     PodsProplist = proplists:get_value("pods", StatusProplist),
     NodesConfig = prepare_nodes_config(PodsProplist),
 
-    add_entries_to_etc_hosts(StatusProplist),
-    ping_nodes(NodesConfig),
+    add_entries_to_etc_hosts(PodsProplist),
+    connect_nodes(NodesConfig),
     
     BaseConfig = prepare_base_test_config(NodesConfig),
     test_config:set_many(BaseConfig, [
         {set_onenv_script_path, [OnenvScript]},
-        [op_worker_script, script_path(ProjectRoot, "op_worker")], 
-        [cluster_manager_script, script_path(ProjectRoot, "cluster_manager")],
+        [op_worker_script, script_path(AbsPathToSources, "op_worker")], 
+        [cluster_manager_script, script_path(AbsPathToSources, "cluster_manager")],
         [custom_configs, CustomConfigsPaths]
     ]).
 
 
+-spec clean_environment(test_config:config()) -> ok.
 clean_environment(Config) ->
     OnenvScript = test_config:get_onenv_script_path(Config),
     CustomConfigsPaths = test_config:get_custom(Config, custom_configs),
@@ -76,7 +83,12 @@ clean_environment(Config) ->
     ok.
 
 
+% fixme doc
+%% @private
+-spec prepare_nodes_config(test_config:config()) -> test_config:config().
 prepare_nodes_config(PodsProplist) ->
+    % fixme add zone to pods
+    % fixme variable names
     {P, N} = lists:foldl(fun({PodName, X}, {Pods, Nodes}) -> 
         H = proplists:get_value("hostname", X), 
         case proplists:get_value("service-type", X) of 
@@ -108,7 +120,9 @@ prepare_nodes_config(PodsProplist) ->
     maps:to_list(N) ++ [{pods, maps:to_list(P)}].
 
 
-ping_nodes(Config) ->
+%% @private
+-spec connect_nodes(test_config:config()) -> ok.
+connect_nodes(Config) ->
     NodesTypes = [cm_nodes, op_worker_nodes, op_panel_nodes, oz_worker_nodes, oz_panel_nodes],
     erlang:set_cookie(node(), ?DEFAULT_COOKIE),
     lists:foreach(fun(NodeType) ->
@@ -119,9 +133,10 @@ ping_nodes(Config) ->
     end, NodesTypes).
 
 
-add_entries_to_etc_hosts(OnenvStatus) ->
-    PodsConfig = proplists:get_value("pods", OnenvStatus),
-
+% fixme use nodes_config
+%% @private
+-spec add_entries_to_etc_hosts(test_config:config()) -> ok.
+add_entries_to_etc_hosts(PodsConfig) ->
     HostsEntries = lists:foldl(fun({_ServiceName, ServiceConfig}, Acc0) ->
         ServiceType = proplists:get_value("service-type", ServiceConfig),
         case lists:member(ServiceType, ["onezone", "oneprovider"]) of
@@ -150,6 +165,8 @@ add_entries_to_etc_hosts(OnenvStatus) ->
     file:close(File).
 
 
+%% @private
+-spec prepare_base_test_config(test_config:config()) -> test_config:config().
 prepare_base_test_config(NodesConfig) ->
     ProvidersNodes = lists:foldl(fun(Node, Acc) -> 
         ProviderId = rpc:call(Node, oneprovider, get_id, []),
@@ -203,38 +220,52 @@ prepare_base_test_config(NodesConfig) ->
     ]).
 
 
-% fixme currently works only for op_worker (other sources not mounted in testmaster docker)
-add_custom_configs(ProjectRoot, CustomEnvs) ->
+%% @private
+-spec setup_user_session(UserId :: binary(), OzwNode :: node(), OpwNode :: node()) -> 
+    {ok, SessId :: binary()}.
+setup_user_session(UserId, OzwNode, OpwNode) ->
+    % fixme more time?
+    TimeCaveat = #cv_time{valid_until = rpc:call(OzwNode, time_utils, cluster_time_seconds, []) + 100},
+    {ok, AccessToken} =
+        rpc:call(OzwNode, token_logic, create_user_temporary_token,
+            [?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}]),
+    {ok, SerializedAccessToken} = rpc:call(OzwNode, tokens, serialize, [AccessToken]),
+    Nonce = base64:encode(crypto:strong_rand_bytes(8)),
+    Identity = ?SUB(user, UserId),
+    Credentials =
+        rpc:call(OpwNode, auth_manager, build_token_credentials,
+            [SerializedAccessToken, undefined, undefined, undefined, allow_data_access_caveats]),
+    
+    rpc:call(OpwNode, session_manager, reuse_or_create_fuse_session, [Nonce, Identity, Credentials]).
+
+
+%% @private
+-spec add_custom_configs(path(), [{Component :: atom(), proplists:proplist()}]) -> [path()].
+add_custom_configs(PathToSources, CustomEnvs) ->
     lists:foldl(fun({Component, Envs}, Acc) ->
-        Path = test_custom_config_path(ProjectRoot, atom_to_list(Component)),
+        Path = test_custom_config_path(PathToSources, atom_to_list(Component)),
         file:write_file(Path, io_lib:format("~p.", [Envs])),
         [Path | Acc]
     end, [], CustomEnvs).
 
 
-script_path(ProjectRoot, Service) ->
-    SourcesRelPath = sources_rel_path(ProjectRoot, Service),
+%% @private
+-spec script_path(path(), string()) -> path().
+script_path(PathToSources, Service) ->
+    SourcesRelPath = sources_rel_path(PathToSources, Service),
     filename:join([SourcesRelPath, Service, "bin", Service]).
 
-test_custom_config_path(ProjectRoot, Service) ->
-    SourcesRelPath = sources_rel_path(ProjectRoot, Service),
+
+%% @private
+-spec test_custom_config_path(path(), string()) -> path().
+test_custom_config_path(PathToSources, Service) ->
+    SourcesRelPath = sources_rel_path(PathToSources, Service),
     filename:join([SourcesRelPath, Service, "etc", "config.d", "ct_test_custom.config"]).
 
-% fixme hardcoded paths
-sources_rel_path(ProjectRoot, Service) ->
-    Service1 = re:replace(Service, "_", "-", [{return, list}]),
-    filename:join([ProjectRoot, "..", Service1, "_build", "default", "rel"]).
 
-setup_user_session(UserId, OzNode, OpwNode) ->
-    TimeCaveat = #cv_time{valid_until = rpc:call(OzNode, time_utils, cluster_time_seconds, []) + 100},
-    {ok, AccessToken} =
-        rpc:call(OzNode, token_logic, create_user_temporary_token,
-            [?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}]),
-    {ok, SerializedAccessToken} = rpc:call(OzNode, tokens, serialize, [AccessToken]),
-    Nonce = base64:encode(crypto:strong_rand_bytes(8)),
-    Identity = ?SUB(user, UserId),
-    Credentials = 
-        rpc:call(OpwNode, auth_manager, build_token_credentials, 
-            [SerializedAccessToken, undefined, undefined, undefined, allow_data_access_caveats]),
-    
-    rpc:call(OpwNode, session_manager, reuse_or_create_fuse_session, [Nonce, Identity, Credentials]).
+%% @private
+% fixme parse output to find sources path
+-spec sources_rel_path(path(), string()) -> path().
+sources_rel_path(PathToSources, Service) ->
+    Service1 = re:replace(Service, "_", "-", [{return, list}]),
+    filename:join([PathToSources, Service1, "_build", "default", "rel"]).

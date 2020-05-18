@@ -4,8 +4,6 @@
 Copyright (C) 2020 ACK CYFRONET AGH
 This software is released under the MIT license cited in 'LICENSE.txt'
 
-#fixme
-
 Runs oneprovider integration tests, providing Erlang's ct_run with every
 environmental argument it needs for successful run. The output is put into
 'test_distributed/logs'. The (init|end)_per_suite "testcases" are removed from
@@ -71,47 +69,6 @@ parser.add_argument(
     action='append',
     help='name of the test case',
     dest='cases')
-
-parser.add_argument(
-    '--performance', '-p',
-    action='store_true',
-    default=False,
-    help='run performance tests',
-    dest='performance')
-
-parser.add_argument(
-    '--cover',
-    action='store_true',
-    default=False,
-    help='run cover analysis',
-    dest='cover')
-
-parser.add_argument(
-    '--stress',
-    action='store_true',
-    default=False,
-    help='run stress tests',
-    dest='stress')
-
-parser.add_argument(
-    '--stress-no-clearing',
-    action='store_true',
-    default=False,
-    help='run stress tests without clearing data between test cases',
-    dest='stress_no_clearing')
-
-parser.add_argument(
-    '--stress-time',
-    action='store',
-    help='time of stress test in sek',
-    dest='stress_time')
-
-parser.add_argument(
-    '--auto-compile',
-    action='store_true',
-    default=False,
-    help='compile test suites before run',
-    dest='auto_compile')
 
 parser.add_argument(
     '--path-to-sources',
@@ -182,95 +139,6 @@ if args.cases:
     ct_command.append('-case')
     ct_command.extend(args.cases)
 
-if args.stress_time:
-    ct_command.extend(['-env', 'stress_time', args.stress_time])
-
-if args.performance:
-    ct_command.extend(['-env', 'performance', 'true'])
-elif args.stress:
-    ct_command.extend(['-env', 'stress', 'true'])
-elif args.stress_no_clearing:
-    ct_command.extend(['-env', 'stress_no_clearing', 'true'])
-elif args.cover:
-    ct_command.extend(['-cover', 'cover_tmp.spec'])
-
-    env_descs = []
-    tests_dir = os.path.join(script_dir, 'test_distributed')
-    for root, dirnames, filenames in os.walk(tests_dir):
-        for filename in fnmatch.filter(filenames, 'env_desc.json'):
-            env_descs.append(os.path.join(root, filename))
-
-    for file in env_descs:
-        shutil.copyfile(file, file + '.bak')
-        with open(file, 'r') as jsonFile:
-            data = json.load(jsonFile)
-
-            configs_to_change = []
-            if 'provider_domains' in data:
-                for provider in data['provider_domains']:
-                    if 'op_worker' in data['provider_domains'][provider]:
-                        configs_to_change.append(
-                            ('op_worker', data['provider_domains'][provider][
-                                'op_worker'].values())
-                        )
-                    if 'cluster_manager' in data['provider_domains'][provider]:
-                        configs_to_change.append(
-                            ('cluster_manager',
-                             data['provider_domains'][provider][
-                                 'cluster_manager'].values())
-                        )
-
-            if 'cluster_domains' in data:
-                for cluster in data['cluster_domains']:
-                    if 'cluster_worker' in data['cluster_domains'][cluster]:
-                        configs_to_change.append(
-                            ('cluster_worker', data['cluster_domains'][cluster][
-                                'cluster_worker'].values())
-                        )
-                    if 'cluster_manager' in data['cluster_domains'][cluster]:
-                        configs_to_change.append(
-                            ('cluster_manager',
-                             data['cluster_domains'][cluster][
-                                 'cluster_manager'].values())
-                        )
-
-            if 'zone_domains' in data:
-                for zone in data['zone_domains']:
-                    configs_to_change.append(
-                        ('oz_worker',
-                         data['zone_domains'][zone]['oz_worker'].values())
-                    )
-                    configs_to_change.append(
-                        ('oz_worker',
-                         data['zone_domains'][zone]['cluster_manager'].values())
-                    )
-
-            if 'onepanel_domains' in data:
-                for onepanel in data['onepanel_domains']:
-                    configs_to_change.append(
-                        ('onepanel', data['onepanel_domains'][onepanel][
-                            'onepanel'].values())
-                    )
-
-            for (app_name, configs) in configs_to_change:
-                for config in configs:
-                    if app_name in config['sys.config']:
-                        config['sys.config'][app_name][
-                            'covered_dirs'] = docker_dirs
-                        config['sys.config'][app_name][
-                            'covered_excluded_modules'] = excl_mods
-                    elif 'cluster_manager' in config['sys.config']:
-                        config['sys.config']['cluster_manager'][
-                            'covered_dirs'] = docker_dirs
-                        config['sys.config']['cluster_manager'][
-                            'covered_excluded_modules'] = excl_mods
-                    else:
-                        config['sys.config']['covered_dirs'] = docker_dirs
-                        config['sys.config'][
-                            'covered_excluded_modules'] = excl_mods
-
-            with open(file, 'w') as jsonFile:
-                jsonFile.write(json.dumps(data))
 
 config_dirs = ['.docker', '.kube', '.minikube', '.one-env']
 
@@ -339,7 +207,8 @@ ret = docker.run(tty=True,
                  workdir=os.path.join(script_dir, 'test_distributed'),
                  volumes=volumes,
                  reflect=[
-                     (os.path.normpath(os.path.join(script_dir, '..')), 'rw'),
+                     (args.path_to_sources, 'rw'),
+                     (script_dir, 'rw'),
                      ('/var/run/docker.sock', 'rw'),
                      (HOST_STORAGE_PATH, 'rw'),
                      ('/etc/passwd', 'ro')
@@ -349,11 +218,6 @@ ret = docker.run(tty=True,
                  image=args.image,
                  command=['python', '-c', command])
 
-os.remove(new_cover)
-if args.cover:
-    for file in env_descs:
-        os.remove(file)
- 
 
 # remove onenv container
 container = docker.ps(all=True, quiet=True, filters=[('name', 'one-env')])
