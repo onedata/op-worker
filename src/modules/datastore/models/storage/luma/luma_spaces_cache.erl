@@ -125,15 +125,15 @@ acquire(Storage, SpaceId) ->
     % default credentials are ignored on:
     % - posix incompatible storages
     % - synced storages (storage mountpoint credentials are used as default credentials)
-    IgnoreLumaDefaultOwner = IsNotPosix orelse storage:is_imported_storage(Storage),
-    {DefaultPosixCredentials, DisplayCredentials} = case {storage:is_luma_enabled(Storage), IgnoreLumaDefaultOwner} of
+    IgnoreLumaDefaultCreds = IsNotPosix orelse storage:is_imported_storage(Storage),
+    {DefaultPosixCredentials, DisplayCredentials} = case {storage:is_luma_enabled(Storage), IgnoreLumaDefaultCreds} of
         {true, false} ->
-            {ok, DefOwner} = fetch_default_posix_credentials(Storage, SpaceId),
-            {ok, DisplayOwner} = fetch_display_credentials(Storage, SpaceId),
-            {DefOwner, DisplayOwner};
+            {ok, DefaultCreds} = fetch_default_posix_credentials(Storage, SpaceId),
+            {ok, DisplayCreds} = fetch_display_credentials(Storage, SpaceId),
+            {DefaultCreds, DisplayCreds};
         {true, true} ->
-            {ok, DisplayOwner} = fetch_display_credentials(Storage, SpaceId),
-            {#{}, DisplayOwner};
+            {ok, DisplayCreds} = fetch_display_credentials(Storage, SpaceId),
+            {#{}, DisplayCreds};
         {false, _} ->
             {#{}, #{}}
     end,

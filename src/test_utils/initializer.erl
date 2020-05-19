@@ -1659,7 +1659,7 @@ setup_luma_mock(LumaConfigFiles, Config) ->
             case lists:last(binary:split(Url, <<"/">>, [global])) of
                 <<"onedata_user_to_credentials">> ->
                     mock_onedata_user_to_credentials_luma_endpoint(ReqBody, LumaConfig);
-                <<"default_owner">> ->
+                <<"default_credentials">> ->
                     mock_space_default_owner_endpoint(ReqBody, LumaConfig);
                 <<"default">> ->
                     mock_space_default_display_owner_endpoint(ReqBody, LumaConfig);

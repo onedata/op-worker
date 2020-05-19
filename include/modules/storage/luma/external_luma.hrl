@@ -26,10 +26,10 @@
 %% LUMA endpoints
 -define(ONEDATA_USER_TO_CREDENTIALS_PATH,
     str_utils:join_binary([?STORAGE_ACCESS_ALL_PATH, <<"onedata_user_to_credentials">>], <<"/">>)).
--define(DEFAULT_POSIX_OWNER_PATH,
-    str_utils:join_binary([?STORAGE_ACCESS_POSIX_PATH, <<"default_owner">>], <<"/">>)).
+-define(DEFAULT_POSIX_CREDENTIALS_PATH,
+    str_utils:join_binary([?STORAGE_ACCESS_POSIX_PATH, <<"default_credentials">>], <<"/">>)).
 -define(ONECLIENT_DISPLAY_OVERRIDE_PATH,
-    <<"oneclient_owner_display_override/all/default">>).
+    <<"oneclient_display_credentials/all/default">>).
 
 %% Reverse LUMA endpoints
 -define(UID_TO_ONEDATA_USER_PATH,

@@ -112,7 +112,7 @@ fetch_default_posix_credentials(SpaceId, Storage) ->
         <<"storageId">> => storage:get_id(Storage),
         <<"spaceId">> => SpaceId
     },
-    case luma_utils:do_luma_request(?DEFAULT_POSIX_OWNER_PATH, Body, Storage) of
+    case luma_utils:do_luma_request(?DEFAULT_POSIX_CREDENTIALS_PATH, Body, Storage) of
         {ok, ?HTTP_200_OK, _RespHeaders, RespBody} ->
             sanitize_space_mapping(RespBody);
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
@@ -141,12 +141,12 @@ fetch_default_display_credentials(SpaceId, Storage) ->
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
             {error, not_found};
         {ok, Code, _RespHeaders, RespBody} ->
-            ?error("Display override owner for storage ~p supporting space ~p could not be fetched.~n"
+            ?error("Display credentials for storage ~p supporting space ~p could not be fetched.~n"
             "Request to external LUMA service returned code ~p and body ~p.",
                 [storage:get_id(Storage), SpaceId, Code, json_utils:decode(RespBody)]),
             {error, external_luma_error};
         {error, Reason} ->
-            ?error("Display override owner for storage ~p supporting space ~p could not be fetched.~n"
+            ?error("Display credentials for storage ~p supporting space ~p could not be fetched.~n"
             "Unexpected error ~p.", [storage:get_id(Storage), SpaceId, Reason]),
             {error, external_luma_error}
     end.
