@@ -129,7 +129,7 @@ code_paths.extend(
     glob.glob(os.path.join(script_dir, '_build/default/lib', '*', 'ebin')))
 ct_command.extend(code_paths)
 
-ct_command.extend(['-env', 'path_to_sources', args.path_to_sources])
+ct_command.extend(['-env', 'path_to_sources', os.path.normpath(os.path.join(os.getcwd(), args.path_to_sources))])
 
 if args.suites:
     ct_command.append('-suite')

@@ -45,9 +45,14 @@ prepare_test_environment(Config, _Suite) ->
     OnenvScript = filename:join([ProjectRoot, "one-env", "onenv"]),
     ScenarioPath = filename:join([ProjectRoot, "test_distributed", "onenv_scenarios", ScenarioName ++ ".yaml"]),
     ct:pal("Starting onenv scenario ~p~n~n~p", [ScenarioName, ScenarioPath]),
-    StartCmd = ["cd", "../../..", "&&", OnenvScript, "up", "--path-to-sources", PathToSources, ScenarioPath],
+    StartCmd = ["cd", ProjectRoot, "&&", OnenvScript, "up", "--path-to-sources", AbsPathToSources, ScenarioPath],
     OnenvStartLogs = utils:cmd(StartCmd),
     ct:pal("~s", [OnenvStartLogs]),
+    
+    Config1 = test_config:set_many(Config, [
+        {set_onenv_script_path, [OnenvScript]},
+        [custom_configs, CustomConfigsPaths]
+    ]),
     
     utils:cmd([OnenvScript, "wait", "--timeout", "600"]),
     
@@ -55,28 +60,34 @@ prepare_test_environment(Config, _Suite) ->
     [StatusProplist] = yamerl:decode(Status),
     ct:pal("~s", [Status]),
     case proplists:get_value("ready", StatusProplist) of
-        false -> throw(environment_not_ready);
+        false -> 
+            ok = clean_environment(Config1),
+            throw(environment_not_ready);
         true -> ok
     end,
     
     PodsProplist = proplists:get_value("pods", StatusProplist),
-    NodesConfig = prepare_nodes_config(PodsProplist),
-
     add_entries_to_etc_hosts(PodsProplist),
+    
+    NodesConfig = prepare_nodes_config(Config1, PodsProplist),
     connect_nodes(NodesConfig),
     
     BaseConfig = prepare_base_test_config(NodesConfig),
     test_config:set_many(BaseConfig, [
-        {set_onenv_script_path, [OnenvScript]},
         [op_worker_script, script_path(AbsPathToSources, "op_worker")], 
-        [cluster_manager_script, script_path(AbsPathToSources, "cluster_manager")],
-        [custom_configs, CustomConfigsPaths]
+        % fixme use deployment_info
+        [cluster_manager_script, script_path(AbsPathToSources, "cluster_manager")]
     ]).
 
 
 -spec clean_environment(test_config:config()) -> ok.
 clean_environment(Config) ->
     OnenvScript = test_config:get_onenv_script_path(Config),
+    PrivDir = test_config:get_custom(Config, priv_dir),
+    
+    ct:pal("Gathering logs~n~n~p", [PrivDir]),
+    utils:cmd([OnenvScript, "export", PrivDir]),
+    
     CustomConfigsPaths = test_config:get_custom(Config, custom_configs),
     lists:foreach(fun file:delete/1, CustomConfigsPaths),
     utils:cmd([OnenvScript, "clean", "--all", "--persistent-volumes"]),
@@ -84,40 +95,50 @@ clean_environment(Config) ->
 
 
 % fixme doc
+% fixme maybe move to test_config
 %% @private
--spec prepare_nodes_config(test_config:config()) -> test_config:config().
-prepare_nodes_config(PodsProplist) ->
-    % fixme add zone to pods
-    % fixme variable names
-    {P, N} = lists:foldl(fun({PodName, X}, {Pods, Nodes}) -> 
-        H = proplists:get_value("hostname", X), 
+-spec prepare_nodes_config(test_config:config(), proplists:proplist()) -> test_config:config().
+prepare_nodes_config(Config, PodsProplist) ->
+    lists:foldl(fun({PodName, X}, TmpConfig) -> 
+        Hostname = proplists:get_value("hostname", X), 
         case proplists:get_value("service-type", X) of 
-            "oneprovider" -> 
-                WorkerNodes = maps:get(op_worker_nodes, Nodes, []), 
-                PanelNodes = maps:get(op_panel_nodes, Nodes, []),
-                CmNodes = maps:get(cm_nodes, Nodes, []), 
-                WorkerNode = list_to_atom("op_worker@" ++ H),
-                NewNodes = Nodes#{
-                    op_worker_nodes => [WorkerNode | WorkerNodes], 
-                    op_panel_nodes => [list_to_atom("onepanel@" ++ H) | PanelNodes],
-                    cm_nodes => [list_to_atom("cluster_manager@" ++ H) | CmNodes]
-                },
-                NewPods = Pods#{WorkerNode => PodName},
-                {NewPods, NewNodes};
-            "onezone" ->
-                WorkerNodes = maps:get(oz_worker_nodes, Nodes, []),
-                PanelNodes = maps:get(oz_panel_nodes, Nodes, []),
-                CmNodes = maps:get(cm_nodes, Nodes, []), 
-                NewNodes = Nodes#{
-                    oz_worker_nodes => [list_to_atom("oz_worker@" ++ H) | WorkerNodes],
-                    oz_panel_nodes => [list_to_atom("onepanel@" ++ H) | PanelNodes],
-                    cm_nodes => [list_to_atom("cluster_manager@" ++ H) | CmNodes]
-                },
-                {Pods, NewNodes};
-            _ -> {Pods, Nodes}
+            "oneprovider" -> insert_nodes(op, Hostname, PodName, TmpConfig);
+            "onezone" -> insert_nodes(oz, Hostname, PodName, TmpConfig);
+            _ -> TmpConfig
         end 
-    end, {#{}, #{}}, PodsProplist),
-    maps:to_list(N) ++ [{pods, maps:to_list(P)}].
+    end, Config, PodsProplist).
+
+
+service_to_key(worker, op) -> op_worker_nodes;
+service_to_key(worker, oz) -> oz_worker_nodes;
+service_to_key(onepanel, op) -> op_panel_nodes;
+service_to_key(onepanel, oz) -> oz_panel_nodes;
+service_to_key(cluster_manager, _) -> cm_nodes.
+
+% fixme specs
+node_name_prefix(worker, Type) -> atom_to_list(Type) ++ "_worker";
+node_name_prefix(Service, _) -> atom_to_list(Service).
+
+
+add_node_to_config(Node, Key, PodName, Config) ->
+    PrevNodes = test_config:get_custom(Config, Key, []),
+    PrevPods = test_config:get_custom(Config, pods, #{}),
+    test_config:set_many(Config, [
+        [Key, [Node | PrevNodes]],
+        [pods, PrevPods#{Node => PodName}]
+    ]).
+
+%fixme name
+insert_nodes(ServiceType, Hostname, PodName, Config) ->
+    NodesAndKeys = lists:map(fun(NodeType) ->
+        NodeName = list_to_atom(node_name_prefix(NodeType, ServiceType) ++ "@" ++ Hostname),
+        Key = service_to_key(NodeType, ServiceType),
+        {NodeName, Key}
+    end, [worker, onepanel, cluster_manager]),
+    
+    lists:foldl(fun({Node, Key}, TmpConfig) ->
+        add_node_to_config(Node, Key, PodName, TmpConfig)
+    end, Config, NodesAndKeys).
 
 
 %% @private
@@ -126,14 +147,13 @@ connect_nodes(Config) ->
     NodesTypes = [cm_nodes, op_worker_nodes, op_panel_nodes, oz_worker_nodes, oz_panel_nodes],
     erlang:set_cookie(node(), ?DEFAULT_COOKIE),
     lists:foreach(fun(NodeType) ->
-        Nodes = proplists:get_value(NodeType, Config, []),
+        Nodes = test_config:get_custom(Config, NodeType, []),
         lists:foreach(fun(Node) ->
             true = net_kernel:connect_node(Node)
         end, Nodes)
     end, NodesTypes).
 
 
-% fixme use nodes_config
 %% @private
 -spec add_entries_to_etc_hosts(test_config:config()) -> ok.
 add_entries_to_etc_hosts(PodsConfig) ->
@@ -165,6 +185,7 @@ add_entries_to_etc_hosts(PodsConfig) ->
     file:close(File).
 
 
+% fixme move to op_worker and init_per_suite posthook
 %% @private
 -spec prepare_base_test_config(test_config:config()) -> test_config:config().
 prepare_base_test_config(NodesConfig) ->
@@ -249,6 +270,7 @@ add_custom_configs(PathToSources, CustomEnvs) ->
     end, [], CustomEnvs).
 
 
+% fixme use deployment info
 %% @private
 -spec script_path(path(), string()) -> path().
 script_path(PathToSources, Service) ->
@@ -264,7 +286,6 @@ test_custom_config_path(PathToSources, Service) ->
 
 
 %% @private
-% fixme parse output to find sources path
 -spec sources_rel_path(path(), string()) -> path().
 sources_rel_path(PathToSources, Service) ->
     Service1 = re:replace(Service, "_", "-", [{return, list}]),

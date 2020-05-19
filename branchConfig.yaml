@@ -15,5 +15,4 @@ branches:
   oz-worker: current_branch
   op-worker: current_branch
   onepanel: current_branch
-  cluster-manager: current_branch
   oneclient: current_branch

@@ -42,14 +42,9 @@ init(_Id, _Opts) ->
 -spec post_init_per_suite(Suite :: atom(), _Config :: [term()], Return :: [term()],
     State :: state()) -> {[term()], state()}.
 post_init_per_suite(Suite, _Config, Return, State) ->
-    case ?config(?CTH_ENV_UP, Return) of
-        ?DISABLE ->
-            {Return, State#state{disabled = true}};
-        _ ->
-            ct:pal("Environment initialization in ~p", [Suite]),
-            NewConfig = test_onenv_starter:prepare_test_environment(Return, Suite),
-            {NewConfig, State}
-    end.
+        ct:pal("Environment initialization in ~p", [Suite]),
+        NewConfig = test_onenv_starter:prepare_test_environment(Return, Suite),
+        {NewConfig, State}.
 
 
 %%--------------------------------------------------------------------
@@ -60,15 +55,7 @@ post_init_per_suite(Suite, _Config, Return, State) ->
 %%--------------------------------------------------------------------
 -spec post_end_per_suite(Suite :: atom(), Config :: [term()], Return :: term(),
     State :: state()) -> {[term()], state()}.
-post_end_per_suite(_Suite, _Config, Return, State = #state{disabled = true}) ->
-    {Return, State};
 post_end_per_suite(Suite, Config, Return, State) ->
-    OnenvScript = ?config(onenv_script, Config),
-    PrivDir = ?config(priv_dir, Config),
-    
-    ct:pal("Gathering logs~n~n~p", [PrivDir]),
-    utils:cmd([OnenvScript, "export", PrivDir]),
-    
     ct:pal("Environment cleaning in ~p", [Suite]),
     test_onenv_starter:clean_environment(Config),
     {Return, State}.

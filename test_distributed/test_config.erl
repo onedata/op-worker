@@ -66,7 +66,7 @@ get_providers(Config) ->
 
 -spec get_all_op_worker_nodes(config()) -> [node()].
 get_all_op_worker_nodes(Config) ->
-    get_custom(Config, op_worker_nodes).
+    get_custom(Config, op_worker_nodes, []).
 
 -spec get_provider_nodes(config(), od_provider:id()) -> [node()].
 get_provider_nodes(Config, ProviderId) ->
