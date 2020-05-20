@@ -26,7 +26,6 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% CTH callback called when hook is being installed.
-% fixme
 %% @end
 %%--------------------------------------------------------------------
 -spec init(_Id :: term(), _Opts :: term()) -> {ok, state(), non_neg_integer()}.
@@ -36,15 +35,20 @@ init(_Id, _Opts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-% fixme
+%% CTH callback called after init_per_suite. Starts test environment.
+%% Name of test environment yaml file should be provided in Config 
+%% by calling test_config:set_onenv_scenario/2 in init_per_suite. 
+%% Given file must exist in test_distributed/onenv_scenarios.
+%% If you intend to perform some initialization after environment is up,
+%% pass fun(Config) -> ...end under key ?ENV_UP_POSTHOOK to Config.
 %% @end
 %%--------------------------------------------------------------------
 -spec post_init_per_suite(Suite :: atom(), _Config :: [term()], Return :: [term()],
     State :: state()) -> {[term()], state()}.
 post_init_per_suite(Suite, _Config, Return, State) ->
-        ct:pal("Environment initialization in ~p", [Suite]),
-        NewConfig = test_onenv_starter:prepare_test_environment(Return, Suite),
-        {NewConfig, State}.
+    ct:pal("Environment initialization in ~p", [Suite]),
+    NewConfig = test_onenv_starter:prepare_test_environment(Return, Suite),
+    {NewConfig, State}.
 
 
 %%--------------------------------------------------------------------

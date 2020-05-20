@@ -21,6 +21,7 @@
 -define(DEFAULT_COOKIE, cluster_node).
 
 -type path() :: string().
+-type component() :: worker | onepanel | cluster_manager.
 
 -spec prepare_test_environment(test_config:config(), string()) -> test_config:config().
 prepare_test_environment(Config0, _Suite) ->
@@ -29,56 +30,20 @@ prepare_test_environment(Config0, _Suite) ->
     ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
         Token /= "test_distributed"
     end, filename:split(DataDir))),
-    PathToSources = os:getenv("path_to_sources"),
-    AbsPathToSources = filename:join([ProjectRoot, PathToSources]),
     OnenvScript = filename:join([ProjectRoot, "one-env", "onenv"]),
     
-    ScenarioName = test_config:get_scenario(Config0, "1op"),
-    
-    % dummy first onenv call, so setup info is not printed to stdout fixme
-    utils:cmd([OnenvScript, "status"]),
-    % fixme find_sources do not exit on error
+    utils:cmd([OnenvScript, "status"]), % dummy first call to onenv to setup configs
     Sources = utils:cmd(["cd", ProjectRoot, "&&", OnenvScript, "find_sources"]),
-    ct:print("~nUsing sources from:~n~n~s", [Sources]),
+    ct:pal("~nUsing sources from:~n~n~s", [Sources]),
     
     Config = test_config:set_many(Config0, [
         {set_onenv_script_path, [OnenvScript]},
         {set_project_root_path, [ProjectRoot]}
     ]),
-    % fixme remove custom config files here?
     
-    % fixme to functions
-    % Set custom envs
-    CustomEnvs = test_config:get_envs(Config),
-    CustomConfigsPaths = add_custom_configs(Config, CustomEnvs),
-
-    % Start environment
-    ScenarioPath = filename:join([ProjectRoot, "test_distributed", "onenv_scenarios", ScenarioName ++ ".yaml"]),
-    ct:pal("Starting onenv scenario ~p~n~n~p", [ScenarioName, ScenarioPath]),
-    StartCmd = ["cd", ProjectRoot, "&&", OnenvScript, "up", "--path-to-sources", AbsPathToSources, ScenarioPath],
-    OnenvStartLogs = utils:cmd(StartCmd),
-    ct:pal("~s", [OnenvStartLogs]),
-    
-    Config1 = test_config:set_many(Config, [
-        [custom_configs, CustomConfigsPaths]
-    ]),
-    
-    utils:cmd([OnenvScript, "wait", "--timeout", "600"]),
-    
-    Status = utils:cmd([OnenvScript, "status"]),
-    [StatusProplist] = yamerl:decode(Status),
-    ct:pal("~s", [Status]),
-    case proplists:get_value("ready", StatusProplist) of
-        false -> 
-            ok = clean_environment(Config1),
-            throw(environment_not_ready);
-        true -> ok
-    end,
-    
-    PodsProplist = proplists:get_value("pods", StatusProplist),
+    PodsProplist = start_environment(Config),
     add_entries_to_etc_hosts(PodsProplist),
-    
-    NodesConfig = prepare_nodes_config(Config1, PodsProplist),
+    NodesConfig = prepare_nodes_config(Config, PodsProplist),
     connect_nodes(NodesConfig),
     
     test_config:set_many(NodesConfig, [
@@ -87,64 +52,88 @@ prepare_test_environment(Config0, _Suite) ->
     ]).
 
 
+%% @private
+-spec start_environment(test_config:config()) -> proplists:proplist().
+start_environment(Config) ->
+    PathToSources = os:getenv("path_to_sources"),
+    ScenarioName = test_config:get_scenario(Config),
+    OnenvScript = test_config:get_onenv_script_path(Config),
+    ProjectRoot = test_config:get_project_root_path(Config),
+    AbsPathToSources = filename:join([ProjectRoot, PathToSources]),
+    CustomEnvs = test_config:get_custom_envs(Config),
+    
+    CustomConfigsPaths = add_custom_configs(Config, CustomEnvs),
+    
+    ScenarioPath = filename:join([ProjectRoot, "test_distributed", "onenv_scenarios", ScenarioName ++ ".yaml"]),
+    ct:pal("Starting onenv scenario ~p~n~n~p", [ScenarioName, ScenarioPath]),
+    StartCmd = ["cd", ProjectRoot, "&&", OnenvScript, "up", "--path-to-sources", AbsPathToSources, ScenarioPath],
+    OnenvStartLogs = utils:cmd(StartCmd),
+    ct:pal("~s", [OnenvStartLogs]),
+
+    lists:foreach(fun file:delete/1, CustomConfigsPaths),
+    utils:cmd([OnenvScript, "wait", "--timeout", "600"]),
+    
+    Status = utils:cmd([OnenvScript, "status"]),
+    [StatusProplist] = yamerl:decode(Status),
+    ct:pal("~s", [Status]),
+    case proplists:get_value("ready", StatusProplist) of
+        false ->
+            ok = clean_environment(Config),
+            throw(environment_not_ready);
+        true -> ok
+    end,
+    proplists:get_value("pods", StatusProplist).
+
+
 -spec clean_environment(test_config:config()) -> ok.
 clean_environment(Config) ->
     OnenvScript = test_config:get_onenv_script_path(Config),
     PrivDir = test_config:get_custom(Config, priv_dir),
     
-    ct:pal("Gathering logs~n~n~p", [PrivDir]),
     utils:cmd([OnenvScript, "export", PrivDir]),
-    
-    CustomConfigsPaths = test_config:get_custom(Config, custom_configs),
-    lists:foreach(fun file:delete/1, CustomConfigsPaths),
     utils:cmd([OnenvScript, "clean", "--all", "--persistent-volumes"]),
     ok.
 
 
-% fixme doc
-% fixme maybe move to test_config
 %% @private
 -spec prepare_nodes_config(test_config:config(), proplists:proplist()) -> test_config:config().
 prepare_nodes_config(Config, PodsProplist) ->
     lists:foldl(fun({PodName, X}, TmpConfig) -> 
         Hostname = proplists:get_value("hostname", X), 
         case proplists:get_value("service-type", X) of 
-            "oneprovider" -> insert_nodes(op, Hostname, PodName, TmpConfig);
-            "onezone" -> insert_nodes(oz, Hostname, PodName, TmpConfig);
-            _ -> TmpConfig
+            "oneprovider" -> 
+                NodesAndKeys = prepare_nodes(op, Hostname),
+                add_nodes_to_config(NodesAndKeys, PodName, TmpConfig);
+            "onezone" ->
+                NodesAndKeys = prepare_nodes(oz, Hostname),
+                add_nodes_to_config(NodesAndKeys, PodName, TmpConfig);
+            _ -> 
+                TmpConfig
         end 
     end, Config, PodsProplist).
 
 
-service_to_key(worker, op) -> op_worker_nodes;
-service_to_key(worker, oz) -> oz_worker_nodes;
-service_to_key(onepanel, op) -> op_panel_nodes;
-service_to_key(onepanel, oz) -> oz_panel_nodes;
-service_to_key(cluster_manager, _) -> cm_nodes.
-
-% fixme specs
-node_name_prefix(worker, Type) -> atom_to_list(Type) ++ "_worker";
-node_name_prefix(Service, _) -> atom_to_list(Service).
-
-
-add_node_to_config(Node, Key, PodName, Config) ->
-    PrevNodes = test_config:get_custom(Config, Key, []),
-    PrevPods = test_config:get_custom(Config, pods, #{}),
-    test_config:set_many(Config, [
-        [Key, [Node | PrevNodes]],
-        [pods, PrevPods#{Node => PodName}]
-    ]).
-
-%fixme name
-insert_nodes(ServiceType, Hostname, PodName, Config) ->
-    NodesAndKeys = lists:map(fun(NodeType) ->
+%% @private
+-spec prepare_nodes(oz | op, string()) -> [{node(), test_config:key()}].
+prepare_nodes(ServiceType, Hostname) ->
+    lists:map(fun(NodeType) ->
         NodeName = list_to_atom(node_name_prefix(NodeType, ServiceType) ++ "@" ++ Hostname),
-        Key = service_to_key(NodeType, ServiceType),
+        Key = service_to_config_key(NodeType, ServiceType),
         {NodeName, Key}
-    end, [worker, onepanel, cluster_manager]),
-    
+    end, [worker, onepanel, cluster_manager]).
+
+
+%% @private
+-spec add_nodes_to_config([{node(), test_config:key()}], PodName :: string(), test_config:config()) ->
+    test_config:config().
+add_nodes_to_config(NodesAndKeys, PodName, Config) ->
     lists:foldl(fun({Node, Key}, TmpConfig) ->
-        add_node_to_config(Node, Key, PodName, TmpConfig)
+        PrevNodes = test_config:get_custom(TmpConfig, Key, []),
+        PrevPods = test_config:get_custom(TmpConfig, pods, #{}),
+        test_config:set_many(TmpConfig, [
+            [Key, [Node | PrevNodes]],
+            [pods, PrevPods#{Node => PodName}]
+        ])
     end, Config, NodesAndKeys).
 
 
@@ -203,21 +192,21 @@ add_custom_configs(Config, CustomEnvs) ->
 
 
 %% @private
--spec script_path(test_config:config(), string()) -> path().
+-spec script_path(test_config:config(), test_config:service_as_list()) -> path().
 script_path(Config, Service) ->
     SourcesRelPath = sources_rel_path(Config, Service),
     filename:join([SourcesRelPath, Service, "bin", Service]).
 
 
 %% @private
--spec test_custom_config_path(test_config:config(), string()) -> path().
+-spec test_custom_config_path(test_config:config(), test_config:service_as_list()) -> path().
 test_custom_config_path(Config, Service) ->
     SourcesRelPath = sources_rel_path(Config, Service),
     filename:join([SourcesRelPath, Service, "etc", "config.d", "ct_test_custom.config"]).
 
 
 %% @private
--spec sources_rel_path(test_config:config(), string()) -> path().
+-spec sources_rel_path(test_config:config(), test_config:service_as_list()) -> path().
 sources_rel_path(Config, Service) ->
     Service1 = re:replace(Service, "_", "-", [{return, list}]),
     
@@ -227,3 +216,18 @@ sources_rel_path(Config, Service) ->
     [Sources] = yamerl:decode(SourcesYaml),
     
     filename:join([kv_utils:get([Service1], Sources), "_build", "default", "rel"]).
+
+
+%% @private
+-spec service_to_config_key(component(), op | oz) -> test_config:key().
+service_to_config_key(worker, op) -> op_worker_nodes;
+service_to_config_key(worker, oz) -> oz_worker_nodes;
+service_to_config_key(onepanel, op) -> op_panel_nodes;
+service_to_config_key(onepanel, oz) -> oz_panel_nodes;
+service_to_config_key(cluster_manager, _) -> cm_nodes.
+
+
+%% @private
+-spec node_name_prefix(component(), op | oz) -> string().
+node_name_prefix(worker, Type) -> atom_to_list(Type) ++ "_worker";
+node_name_prefix(Component, _) -> atom_to_list(Component).

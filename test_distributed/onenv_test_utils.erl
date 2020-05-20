@@ -5,7 +5,6 @@
 %%% cited in 'LICENSE.txt'.
 %%% @doc
 %%% This module contains test utility functions useful in tests using onenv.
-%%% fixme move to ctool
 %%% @end
 %%%-------------------------------------------------------------------
 -module(onenv_test_utils).
@@ -22,13 +21,10 @@
     start_opw_node/2
 ]).
 
--type service() :: string(). % "op_worker" | "oz_worker" | "op_panel" | "oz_panel" | "cluster_manager"
-
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-% fixme keep this in provider
 -spec prepare_base_test_config(test_config:config()) -> test_config:config().
 prepare_base_test_config(NodesConfig) ->
     ProvidersNodes = lists:foldl(fun(Node, Acc) ->
@@ -87,8 +83,7 @@ prepare_base_test_config(NodesConfig) ->
 -spec setup_user_session(UserId :: binary(), OzwNode :: node(), OpwNode :: node()) ->
     {ok, SessId :: binary()}.
 setup_user_session(UserId, OzwNode, OpwNode) ->
-    % fixme more time?
-    TimeCaveat = #cv_time{valid_until = rpc:call(OzwNode, time_utils, cluster_time_seconds, []) + 100},
+    TimeCaveat = #cv_time{valid_until = rpc:call(OzwNode, time_utils, cluster_time_seconds, []) + 100000},
     {ok, AccessToken} =
         rpc:call(OzwNode, token_logic, create_user_temporary_token,
             [?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}]),
@@ -113,6 +108,7 @@ kill_node(Config, Node) ->
     [] = utils:cmd([OnenvScript, "exec2", Pod, "kill", "-s", "SIGKILL", PidToKill]),
     ok.
 
+
 -spec start_opw_node(kv_utils:nested(), node()) -> ok.
 start_opw_node(Config, Node) ->
     OnenvScript = kv_utils:get(onenv_script, Config),
@@ -121,7 +117,9 @@ start_opw_node(Config, Node) ->
     [] = utils:cmd([OnenvScript, "exec2", Pod, OpScriptPath, "start"]),
     ok.
 
--spec get_service(node()) -> service().
+
+%% @private
+-spec get_service(node()) -> test_config:service_as_list().
 get_service(Node) ->
     [Service, Host] = string:split(atom_to_list(Node), "@"),
     case Service of
