@@ -76,7 +76,7 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
             {ok, undefined}
     end,
     case HelperMode of
-        ?FORCE_DIRECT_HELPER_MODE ->
+        ?FORCE_DIRECT_HELPER_MODE when Helper =/= undefined ->
             SessionId = user_ctx:get_session_id(UserCtx),
             UserId = user_ctx:get_user_id(UserCtx),
             HelperName = helper:get_name(Helper),
