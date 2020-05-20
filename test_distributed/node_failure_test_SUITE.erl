@@ -1,14 +1,17 @@
 %%%-------------------------------------------------------------------
-%%% @author Michal Stanisz
+%%% @author Michal Wrzeszcz
 %%% @copyright (C) 2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
-%%%--------------------------------------------------------------------
+%%% @end
+%%%-------------------------------------------------------------------
 %%% @doc
+%%% This file contains test of behaviour in case of node failure.
+%%% NOTE: Currently it is impossible to fix node after failure during the tests so SUITE should contain single test.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(node_failure_test_SUITE).
--author("Michal Stanisz").
+-author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
 -include("proto/oneclient/common_messages.hrl").
@@ -21,12 +24,11 @@
 -export([init_per_testcase/2, end_per_testcase/2]).
 
 -export([
-    failure_test/1,
-    dummy_test/1
+    failure_test/1
 ]).
 
 all() -> [
-    dummy_test
+    failure_test
 ].
 
 %%%===================================================================
@@ -34,13 +36,13 @@ all() -> [
 %%%===================================================================
 
 failure_test(Config) ->
-    [P1, P2] = kv_utils:get(providers, Config),
-    [User1] = kv_utils:get([users, P1], Config),
-    SessId = fun(P) -> kv_utils:get([sess_id, P, User1], Config) end,
-    [Worker1P1 | _] = kv_utils:get([provider_nodes, P1], Config),
-    [Worker1P2 | _] = WorkersP2 = kv_utils:get([provider_nodes, P2], Config),
-    [SpaceId | _] = kv_utils:get([provider_spaces, P1], Config),
-    Workers = kv_utils:get(op_worker_nodes, Config),
+    [P1, P2] = test_config:get_providers(Config),
+    [User1] = test_config:get_provider_users(Config, P1),
+    SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
+    [Worker1P1 | _] = test_config:get_provider_nodes(Config, P1),
+    [Worker1P2 | _] = WorkersP2 = test_config:get_provider_nodes(Config, P2),
+    [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
+    Workers = test_config:get_all_op_worker_nodes(Config),
     
     SpaceGuid = rpc:call(Worker1P1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     FileData = <<"1234567890abcd">>,
@@ -116,11 +118,6 @@ failure_test(Config) ->
 %%                end
 %%            end, Attempts)
     end, Files),
-    
-    ok.
-
-
-dummy_test(_Config) ->
     ok.
 
 
@@ -129,7 +126,17 @@ dummy_test(_Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    test_config:set_onenv_scenario(Config, "1op").
+    Posthook = fun(NewConfig) ->
+        onenv_test_utils:prepare_base_test_config(NewConfig)
+    end,
+    test_config:set_many(Config, [
+        {add_envs, [op_worker, op_worker, [{key, value}]]},
+        {add_envs, [op_worker, cluster_worker, [{key, value}]]},
+        {add_envs, [oz_worker, cluster_worker, [{key, value}]]},
+        {add_envs, [cluster_manager, cluster_manager, [{key, value}]]},
+        {set_onenv_scenario, ["2op-2nodes"]}, % name of yaml file in test_distributed/onenv_scenarios
+        {set_posthook, Posthook}
+    ]).
 
 init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config, false).

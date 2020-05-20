@@ -72,7 +72,7 @@ parser.add_argument(
 
 parser.add_argument(
     '--path-to-sources',
-    default=os.getcwd(),
+    default=os.path.normpath(os.path.join(os.getcwd(), '..')),
     help='path ot sources to be mounted in onenv container. Use when sources are outside HOME directory',
     dest='path_to_sources')
 

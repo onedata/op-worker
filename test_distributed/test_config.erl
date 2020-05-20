@@ -22,7 +22,7 @@
 
 % test config getters
 -export([
-    get_providers/1, get_all_op_worker_nodes/1,
+    get_providers/1, get_all_op_worker_nodes/1, get_all_oz_worker_nodes/1,
     get_provider_nodes/2, get_provider_spaces/2, get_provider_users/2,
     get_user_session_id_on_provider/3,
     get_custom/2, get_custom/3
@@ -80,6 +80,10 @@ get_providers(Config) ->
 -spec get_all_op_worker_nodes(config()) -> [node()].
 get_all_op_worker_nodes(Config) ->
     get_custom(Config, op_worker_nodes, []).
+
+-spec get_all_oz_worker_nodes(config()) -> [node()].
+get_all_oz_worker_nodes(Config) ->
+    get_custom(Config, oz_worker_nodes, []).
 
 -spec get_provider_nodes(config(), od_provider:id()) -> [node()].
 get_provider_nodes(Config, ProviderId) ->

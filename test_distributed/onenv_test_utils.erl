@@ -26,19 +26,19 @@
 %%%===================================================================
 
 -spec prepare_base_test_config(test_config:config()) -> test_config:config().
-prepare_base_test_config(NodesConfig) ->
+prepare_base_test_config(Config) ->
     ProvidersNodes = lists:foldl(fun(Node, Acc) ->
         ProviderId = rpc:call(Node, oneprovider, get_id, []),
         OtherNodes = maps:get(ProviderId, Acc, []),
         Acc#{ProviderId => [Node | OtherNodes]}
-    end, #{}, proplists:get_value(op_worker_nodes, NodesConfig, [])),
+    end, #{}, proplists:get_value(op_worker_nodes, Config, [])),
     
     ProviderPanels = lists:foldl(fun(Node, Acc) ->
         [WorkerNode | _] = rpc:call(Node, service_op_worker, get_nodes, []),
         ProviderId = rpc:call(WorkerNode, oneprovider, get_id, []),
         OtherNodes = maps:get(ProviderId, Acc, []),
         Acc#{ProviderId => [Node | OtherNodes]}
-    end, #{}, proplists:get_value(op_panel_nodes, NodesConfig, [])),
+    end, #{}, proplists:get_value(op_panel_nodes, Config, [])),
     
     PrimaryCm = maps:fold(fun(ProviderId, [PanelNode | _], Acc) ->
         {ok, Hostname} = rpc:call(PanelNode, service_cluster_manager,  get_main_host, []),
@@ -59,7 +59,7 @@ prepare_base_test_config(NodesConfig) ->
         Acc#{ProviderId => Users}
     end, #{}, ProvidersList),
     
-    [OzNode | _ ] = kv_utils:get(oz_worker_nodes, NodesConfig),
+    [OzNode | _ ] = test_config:get_all_oz_worker_nodes(Config),
     Sessions = maps:map(fun(ProviderId, Users) ->
         [Node | _] = maps:get(ProviderId, ProvidersNodes),
         lists:map(fun(UserId) ->
@@ -68,7 +68,7 @@ prepare_base_test_config(NodesConfig) ->
         end, Users)
     end, ProviderUsers),
     
-    test_config:set_many(NodesConfig, [
+    test_config:set_many(Config, [
         [provider_nodes, ProvidersNodes],
         [providers, ProvidersList],
         [provider_panels, ProviderPanels],
@@ -99,21 +99,21 @@ setup_user_session(UserId, OzwNode, OpwNode) ->
 
 -spec kill_node(test_config:config(), node()) -> ok.
 kill_node(Config, Node) ->
-    OnenvScript = kv_utils:get(onenv_script, Config),
-    Pod = kv_utils:get([pods, Node], Config),
+    OnenvScript = test_config:get_onenv_script_path(Config),
+    Pod = test_config:get_custom(Config, [pods, Node]),
     Service = get_service(Node),
     GetPidCommand = 
-        ["ps", "-eo", "'%p,%a'", "|", "grep", "beam.*," ++ Service, "|", "cut", "-d", "','", "-f" , "1"],
+        ["ps", "-eo", "'%p,%a'", "|", "grep", "beam.*" ++ Service, "|", "cut", "-d", "','", "-f" , "1"],
     PidToKill = ?assertMatch([_ | _], string:trim(utils:cmd([OnenvScript, "exec2", Pod] ++ GetPidCommand))),
     [] = utils:cmd([OnenvScript, "exec2", Pod, "kill", "-s", "SIGKILL", PidToKill]),
     ok.
 
 
--spec start_opw_node(kv_utils:nested(), node()) -> ok.
+-spec start_opw_node(test_config:config(), node()) -> ok.
 start_opw_node(Config, Node) ->
-    OnenvScript = kv_utils:get(onenv_script, Config),
-    OpScriptPath = kv_utils:get(op_worker_script, Config),
-    Pod = kv_utils:get([pods, Node], Config),
+    OnenvScript = test_config:get_onenv_script_path(Config),
+    OpScriptPath = test_config:get_custom(Config, op_worker_script),
+    Pod = test_config:get_custom(Config, [pods, Node]),
     [] = utils:cmd([OnenvScript, "exec2", Pod, OpScriptPath, "start"]),
     ok.
 

@@ -31,8 +31,12 @@ prepare_test_environment(Config0, _Suite) ->
         Token /= "test_distributed"
     end, filename:split(DataDir))),
     OnenvScript = filename:join([ProjectRoot, "one-env", "onenv"]),
+    PathToSources = os:getenv("path_to_sources"),
+    AbsPathToSources = filename:join([ProjectRoot, PathToSources]),
     
-    utils:cmd([OnenvScript, "status"]), % dummy first call to onenv to setup configs
+    % Dummy first call to onenv to setup configs. 
+    % Path to sources must be proivided in first onenv call that creates one-env docker
+    utils:cmd([OnenvScript, "status", "--path-to-sources", AbsPathToSources]), 
     Sources = utils:cmd(["cd", ProjectRoot, "&&", OnenvScript, "find_sources"]),
     ct:pal("~nUsing sources from:~n~n~s", [Sources]),
     
@@ -55,23 +59,21 @@ prepare_test_environment(Config0, _Suite) ->
 %% @private
 -spec start_environment(test_config:config()) -> proplists:proplist().
 start_environment(Config) ->
-    PathToSources = os:getenv("path_to_sources"),
     ScenarioName = test_config:get_scenario(Config),
     OnenvScript = test_config:get_onenv_script_path(Config),
     ProjectRoot = test_config:get_project_root_path(Config),
-    AbsPathToSources = filename:join([ProjectRoot, PathToSources]),
     CustomEnvs = test_config:get_custom_envs(Config),
     
     CustomConfigsPaths = add_custom_configs(Config, CustomEnvs),
     
     ScenarioPath = filename:join([ProjectRoot, "test_distributed", "onenv_scenarios", ScenarioName ++ ".yaml"]),
     ct:pal("Starting onenv scenario ~p~n~n~p", [ScenarioName, ScenarioPath]),
-    StartCmd = ["cd", ProjectRoot, "&&", OnenvScript, "up", "--path-to-sources", AbsPathToSources, ScenarioPath],
+    StartCmd = ["cd", ProjectRoot, "&&", OnenvScript, "up", ScenarioPath],
     OnenvStartLogs = utils:cmd(StartCmd),
     ct:pal("~s", [OnenvStartLogs]),
 
     lists:foreach(fun file:delete/1, CustomConfigsPaths),
-    utils:cmd([OnenvScript, "wait", "--timeout", "600"]),
+    utils:cmd([OnenvScript, "wait", "--timeout", "900"]),
     
     Status = utils:cmd([OnenvScript, "status"]),
     [StatusProplist] = yamerl:decode(Status),
