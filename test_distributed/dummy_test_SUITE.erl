@@ -50,12 +50,17 @@ foo_test(Config) ->
     ok.
 
 init_per_suite(Config) ->
+    Posthook = fun(NewConfig) ->
+        onenv_test_utils:prepare_base_test_config(NewConfig)
+    end,
+    
     test_config:set_many(Config, [
         {add_envs, [op_worker, op_worker, [{dupa, osiem}]]},
         {add_envs, [op_worker, cluster_worker, [{ble, xd}]]},
         {add_envs, [oz_worker, cluster_worker, [{trolololo, xd}]]},
         {add_envs, [cluster_manager, cluster_manager, [{lol, sadsad}]]},
-        {set_onenv_scenario, ["1op"]}
+        {set_onenv_scenario, ["1op"]},
+        [?ENV_UP_POSTHOOK, Posthook]
     ]).
 
 init_per_testcase(_Case, Config) ->

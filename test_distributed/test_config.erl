@@ -38,6 +38,11 @@
     get_onenv_script_path/1
 ]).
 
+-export([
+    get_project_root_path/1,
+    set_project_root_path/2
+]).
+
 -type key() :: atom() | binary() | any().
 -opaque config() :: kv_utils:nested(key(), any()).
 -export_type([config/0]).
@@ -119,10 +124,26 @@ set_many(Config, FunsAndArgs) ->
     lists:foldl(fun
         ({FunName, Args}, TmpConfig) when is_list(Args)-> erlang:apply(?MODULE, FunName, [TmpConfig | Args]);
         ({FunName, Arg}, TmpConfig) when not is_list(Arg)-> erlang:apply(?MODULE, FunName, [TmpConfig, Arg]);
-        (Args, TmpConfig) when is_list(Args)-> erlang:apply(?MODULE, set_custom, [TmpConfig | Args])
+        (Args, TmpConfig) when is_list(Args)-> erlang:apply(?MODULE, set_custom, [TmpConfig | Args]) % fixme rozbic Args
     end, Config, FunsAndArgs).
 
 %fixme docs, specs and reorganize
+
+%%%===================================================================
+%%% Environment setup API
+%%%===================================================================
+
+get_project_root_path(Config) ->
+    get_custom(Config, project_root).
+
+set_project_root_path(Config, OnenvScript) ->
+    set_custom(Config, project_root, OnenvScript).
+
+get_onenv_script_path(Config) ->
+    get_custom(Config, onenv_script).
+
+set_onenv_script_path(Config, OnenvScript) ->
+    set_custom(Config, onenv_script, OnenvScript).
 
 -spec get_scenario(config(), any()) -> any().
 get_scenario(Config, Default) ->
@@ -130,9 +151,3 @@ get_scenario(Config, Default) ->
 
 get_envs(Config) ->
     get_custom(Config, custom_envs, []).
-
-get_onenv_script_path(Config) ->
-    get_custom(Config, onenv_script).
-
-set_onenv_script_path(Config, OnenvScript) ->
-    set_custom(Config, onenv_script, OnenvScript).

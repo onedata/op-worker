@@ -12,8 +12,6 @@
 -module(test_onenv_starter).
 -author("Michal Stanisz").
 
--include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/aai/caveats.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -25,24 +23,36 @@
 -type path() :: string().
 
 -spec prepare_test_environment(test_config:config(), string()) -> test_config:config().
-prepare_test_environment(Config, _Suite) ->
+prepare_test_environment(Config0, _Suite) ->
     application:start(yamerl),
-    DataDir = test_config:get_custom(Config, data_dir),
+    DataDir = test_config:get_custom(Config0, data_dir),
     ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
         Token /= "test_distributed"
     end, filename:split(DataDir))),
     PathToSources = os:getenv("path_to_sources"),
     AbsPathToSources = filename:join([ProjectRoot, PathToSources]),
+    OnenvScript = filename:join([ProjectRoot, "one-env", "onenv"]),
     
-    ScenarioName = test_config:get_scenario(Config, "1op"),
+    ScenarioName = test_config:get_scenario(Config0, "1op"),
+    
+    % dummy first onenv call, so setup info is not printed to stdout fixme
+    utils:cmd([OnenvScript, "status"]),
+    % fixme find_sources do not exit on error
+    Sources = utils:cmd(["cd", ProjectRoot, "&&", OnenvScript, "find_sources"]),
+    ct:print("~nUsing sources from:~n~n~s", [Sources]),
+    
+    Config = test_config:set_many(Config0, [
+        {set_onenv_script_path, [OnenvScript]},
+        {set_project_root_path, [ProjectRoot]}
+    ]),
+    % fixme remove custom config files here?
     
     % fixme to functions
     % Set custom envs
     CustomEnvs = test_config:get_envs(Config),
-    CustomConfigsPaths = add_custom_configs(AbsPathToSources, CustomEnvs),
+    CustomConfigsPaths = add_custom_configs(Config, CustomEnvs),
 
     % Start environment
-    OnenvScript = filename:join([ProjectRoot, "one-env", "onenv"]),
     ScenarioPath = filename:join([ProjectRoot, "test_distributed", "onenv_scenarios", ScenarioName ++ ".yaml"]),
     ct:pal("Starting onenv scenario ~p~n~n~p", [ScenarioName, ScenarioPath]),
     StartCmd = ["cd", ProjectRoot, "&&", OnenvScript, "up", "--path-to-sources", AbsPathToSources, ScenarioPath],
@@ -50,7 +60,6 @@ prepare_test_environment(Config, _Suite) ->
     ct:pal("~s", [OnenvStartLogs]),
     
     Config1 = test_config:set_many(Config, [
-        {set_onenv_script_path, [OnenvScript]},
         [custom_configs, CustomConfigsPaths]
     ]),
     
@@ -72,11 +81,9 @@ prepare_test_environment(Config, _Suite) ->
     NodesConfig = prepare_nodes_config(Config1, PodsProplist),
     connect_nodes(NodesConfig),
     
-    BaseConfig = prepare_base_test_config(NodesConfig),
-    test_config:set_many(BaseConfig, [
-        [op_worker_script, script_path(AbsPathToSources, "op_worker")], 
-        % fixme use deployment_info
-        [cluster_manager_script, script_path(AbsPathToSources, "cluster_manager")]
+    test_config:set_many(NodesConfig, [
+        [op_worker_script, script_path(NodesConfig, "op_worker")], 
+        [cluster_manager_script, script_path(NodesConfig, "cluster_manager")]
     ]).
 
 
@@ -185,108 +192,38 @@ add_entries_to_etc_hosts(PodsConfig) ->
     file:close(File).
 
 
-% fixme move to op_worker and init_per_suite posthook
 %% @private
--spec prepare_base_test_config(test_config:config()) -> test_config:config().
-prepare_base_test_config(NodesConfig) ->
-    ProvidersNodes = lists:foldl(fun(Node, Acc) -> 
-        ProviderId = rpc:call(Node, oneprovider, get_id, []),
-        OtherNodes = maps:get(ProviderId, Acc, []),
-        Acc#{ProviderId => [Node | OtherNodes]}
-    end, #{}, proplists:get_value(op_worker_nodes, NodesConfig, [])),
-    
-    ProviderPanels = lists:foldl(fun(Node, Acc) ->
-        [WorkerNode | _] = rpc:call(Node, service_op_worker, get_nodes, []),
-        ProviderId = rpc:call(WorkerNode, oneprovider, get_id, []),
-        OtherNodes = maps:get(ProviderId, Acc, []),
-        Acc#{ProviderId => [Node | OtherNodes]}
-    end, #{}, proplists:get_value(op_panel_nodes, NodesConfig, [])),
-    
-    PrimaryCm = maps:fold(fun(ProviderId, [PanelNode | _], Acc) ->
-        {ok, Hostname} = rpc:call(PanelNode, service_cluster_manager,  get_main_host, []),
-        Acc#{ProviderId => list_to_atom("cluster_manager@" ++ Hostname)}
-    end, #{}, ProviderPanels),
-    
-    ProvidersList = maps:keys(ProvidersNodes),
-
-    ProviderSpaces = lists:foldl(fun(ProviderId, Acc) ->
-        [Node | _] = maps:get(ProviderId, ProvidersNodes),
-        {ok, Spaces} = rpc:call(Node, provider_logic, get_spaces, []),
-        Acc#{ProviderId => Spaces}
-    end, #{}, ProvidersList),
-    
-    ProviderUsers = lists:foldl(fun(ProviderId, Acc) ->
-        [Node | _] = maps:get(ProviderId, ProvidersNodes),
-        {ok, Users} = rpc:call(Node, provider_logic, get_eff_users, []),
-        Acc#{ProviderId => Users}
-    end, #{}, ProvidersList),
-
-    [OzNode | _ ] = kv_utils:get(oz_worker_nodes, NodesConfig),
-    Sessions = maps:map(fun(ProviderId, Users) ->
-        [Node | _] = maps:get(ProviderId, ProvidersNodes),
-        lists:map(fun(UserId) ->
-            {ok, SessId} = setup_user_session(UserId, OzNode, Node),
-            {UserId, SessId}
-        end, Users)
-    end, ProviderUsers),
-    
-    test_config:set_many(NodesConfig, [
-        [provider_nodes, ProvidersNodes],
-        [providers, ProvidersList],
-        [provider_panels, ProviderPanels],
-        [primary_cm, PrimaryCm],
-        [users, ProviderUsers], 
-        [sess_id, Sessions],
-        [provider_spaces, ProviderSpaces]
-    ]).
-
-
-%% @private
--spec setup_user_session(UserId :: binary(), OzwNode :: node(), OpwNode :: node()) -> 
-    {ok, SessId :: binary()}.
-setup_user_session(UserId, OzwNode, OpwNode) ->
-    % fixme more time?
-    TimeCaveat = #cv_time{valid_until = rpc:call(OzwNode, time_utils, cluster_time_seconds, []) + 100},
-    {ok, AccessToken} =
-        rpc:call(OzwNode, token_logic, create_user_temporary_token,
-            [?ROOT, UserId, #{<<"caveats">> => [TimeCaveat]}]),
-    {ok, SerializedAccessToken} = rpc:call(OzwNode, tokens, serialize, [AccessToken]),
-    Nonce = base64:encode(crypto:strong_rand_bytes(8)),
-    Identity = ?SUB(user, UserId),
-    Credentials =
-        rpc:call(OpwNode, auth_manager, build_token_credentials,
-            [SerializedAccessToken, undefined, undefined, undefined, allow_data_access_caveats]),
-    
-    rpc:call(OpwNode, session_manager, reuse_or_create_fuse_session, [Nonce, Identity, Credentials]).
-
-
-%% @private
--spec add_custom_configs(path(), [{Component :: atom(), proplists:proplist()}]) -> [path()].
-add_custom_configs(PathToSources, CustomEnvs) ->
+-spec add_custom_configs(test_config:config(), [{Component :: atom(), proplists:proplist()}]) -> [path()].
+add_custom_configs(Config, CustomEnvs) ->
     lists:foldl(fun({Component, Envs}, Acc) ->
-        Path = test_custom_config_path(PathToSources, atom_to_list(Component)),
+        Path = test_custom_config_path(Config, atom_to_list(Component)),
         file:write_file(Path, io_lib:format("~p.", [Envs])),
         [Path | Acc]
     end, [], CustomEnvs).
 
 
-% fixme use deployment info
 %% @private
--spec script_path(path(), string()) -> path().
-script_path(PathToSources, Service) ->
-    SourcesRelPath = sources_rel_path(PathToSources, Service),
+-spec script_path(test_config:config(), string()) -> path().
+script_path(Config, Service) ->
+    SourcesRelPath = sources_rel_path(Config, Service),
     filename:join([SourcesRelPath, Service, "bin", Service]).
 
 
 %% @private
--spec test_custom_config_path(path(), string()) -> path().
-test_custom_config_path(PathToSources, Service) ->
-    SourcesRelPath = sources_rel_path(PathToSources, Service),
+-spec test_custom_config_path(test_config:config(), string()) -> path().
+test_custom_config_path(Config, Service) ->
+    SourcesRelPath = sources_rel_path(Config, Service),
     filename:join([SourcesRelPath, Service, "etc", "config.d", "ct_test_custom.config"]).
 
 
 %% @private
--spec sources_rel_path(path(), string()) -> path().
-sources_rel_path(PathToSources, Service) ->
+-spec sources_rel_path(test_config:config(), string()) -> path().
+sources_rel_path(Config, Service) ->
     Service1 = re:replace(Service, "_", "-", [{return, list}]),
-    filename:join([PathToSources, Service1, "_build", "default", "rel"]).
+    
+    OnenvScript = test_config:get_onenv_script_path(Config),
+    ProjectRoot = test_config:get_project_root_path(Config),
+    SourcesYaml = utils:cmd(["cd", ProjectRoot, "&&", OnenvScript, "find_sources"]),
+    [Sources] = yamerl:decode(SourcesYaml),
+    
+    filename:join([kv_utils:get([Service1], Sources), "_build", "default", "rel"]).
