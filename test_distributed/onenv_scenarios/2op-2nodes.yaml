@@ -9,18 +9,27 @@ sourcesRoot: ".."
 # or pre-installed packages inside dockers. When enabled, sources are expected
 # to be found in CWD (from where the 'up' script was run) or one dir above.
 sources:
+  onezone:
+    node-1:
+      - oz-worker
+      - cluster-manager
+      - oz-panel
   oneprovider-1:
     node-1:
+      - op-panel
       - op-worker
       - cluster-manager
     node-2:
+      - op-panel
       - op-worker
       - cluster-manager
   oneprovider-2:
     node-1:
+      - op-panel
       - op-worker
       - cluster-manager
     node-2:
+      - op-panel
       - op-worker
       - cluster-manager
 

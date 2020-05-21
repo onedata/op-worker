@@ -18,7 +18,7 @@
 -export([
     prepare_base_test_config/1,
     kill_node/2,
-    start_opw_node/2
+    start_node/2
 ]).
 
 %%%===================================================================
@@ -102,19 +102,25 @@ kill_node(Config, Node) ->
     OnenvScript = test_config:get_onenv_script_path(Config),
     Pod = test_config:get_custom(Config, [pods, Node]),
     Service = get_service(Node),
-    GetPidCommand = 
-        ["ps", "-eo", "'%p,%a'", "|", "grep", "beam.*" ++ Service, "|", "cut", "-d", "','", "-f" , "1"],
-    PidToKill = ?assertMatch([_ | _], string:trim(utils:cmd([OnenvScript, "exec2", Pod] ++ GetPidCommand))),
-    [] = utils:cmd([OnenvScript, "exec2", Pod, "kill", "-s", "SIGKILL", PidToKill]),
+    GetPidCommand = [
+        "ps", "-eo", "'%p,%a'", 
+        "|", "grep", "beam.*rel/" ++ Service, 
+        "|", "head", "-n", "1", 
+        "|", "cut", "-d", "','", "-f" , "1"
+    ],
+    PidToKill = ?assertMatch([_ | _], string:trim(utils:cmd([OnenvScript, "exec_custom", Pod] ++ GetPidCommand))),
+    ct:print("Pid to kill: ~p", [PidToKill]),
+    [] = utils:cmd([OnenvScript, "exec_custom", Pod, "kill", "-s", "SIGKILL", PidToKill]),
     ok.
 
 
--spec start_opw_node(test_config:config(), node()) -> ok.
-start_opw_node(Config, Node) ->
+-spec start_node(test_config:config(), node()) -> ok.
+start_node(Config, Node) ->
     OnenvScript = test_config:get_onenv_script_path(Config),
-    OpScriptPath = test_config:get_custom(Config, op_worker_script),
+    Service = get_service(Node),
+    ScriptPath = test_config:get_custom(Config, list_to_atom(Service ++ "_script")),
     Pod = test_config:get_custom(Config, [pods, Node]),
-    [] = utils:cmd([OnenvScript, "exec2", Pod, OpScriptPath, "start"]),
+    [] = utils:cmd([OnenvScript, "exec_custom", Pod, ScriptPath, "start"]),
     ok.
 
 

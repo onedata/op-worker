@@ -5,6 +5,7 @@
 %%% cited in 'LICENSE.txt'.
 %%% @doc
 %%% CT hook responsible for starting test environment.
+% fixme move to ctool
 %%% @end
 %%%-------------------------------------------------------------------
 -module(cth_onenv_up).
