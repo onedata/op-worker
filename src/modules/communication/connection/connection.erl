@@ -217,6 +217,9 @@ send_msg(Pid, Msg) ->
         exit:{noproc, _} ->
             ?debug("Connection process ~p does not exist", [Pid]),
             {error, no_connection};
+        exit:{{nodedown, Node}, _} ->
+            ?debug("Node ~p with connection process ~p is down", [Node, Pid]),
+            {error, no_connection};
         exit:{normal, _} ->
             ?debug("Exit of connection process ~p for message ~s", [
                 Pid, clproto_utils:msg_to_string(Msg)
