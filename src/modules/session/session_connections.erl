@@ -52,7 +52,7 @@ deregister(SessId, Conn) ->
 %% Returns list of effective connections for specified session.
 %% @end
 %%--------------------------------------------------------------------
--spec list(session:id()) -> {ok, [Conn :: pid()]} | error().
+-spec list(session:id()) -> {ok, session:id(), [Conn :: pid()]} | error().
 list(SessId) ->
     case get_proxy_session(SessId) of
         {ok, _, #session{status = initializing}} ->
