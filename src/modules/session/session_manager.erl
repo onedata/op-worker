@@ -30,7 +30,11 @@
     reuse_or_create_gui_session/2,
     create_root_session/0, create_guest_session/0
 ]).
--export([remove_session/1]).
+-export([
+    restart_dead_sessions/0,
+    maybe_restart_session/1,
+    remove_session/1
+]).
 
 -type error() :: {error, Reason :: term()}.
 
@@ -161,6 +165,32 @@ create_guest_session() ->
     }).
 
 
+-spec restart_dead_sessions() -> ok.
+restart_dead_sessions() ->
+    {ok, AllSessions} = session:list(),
+
+    lists:foreach(fun(#document{key = SessId, value = #session{supervisor = Sup}}) ->
+        case is_alive(Sup) of
+            true -> ok;
+            false -> maybe_restart_session(SessId)
+        end
+    end, AllSessions).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% @equiv maybe_restart_session_internal(SessId) in critical section.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_restart_session(SessId) ->
+    {ok, SessId} | error() when SessId :: session:id().
+maybe_restart_session(SessId) ->
+    % TODO VFS-5895 check if this critical section is still necessary
+    critical_section:run([?MODULE, SessId], fun() ->
+        maybe_restart_session_internal(SessId)
+    end).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Removes session from cache, stops session supervisor and disconnects remote
@@ -281,13 +311,18 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
         (#session{identity = ValidIdentity} = ExistingSess) ->
             case Identity of
                 ValidIdentity ->
-                    {ok, ExistingSess};
+                    maybe_clear_session_record(ExistingSess);
                 _ ->
                     {error, {invalid_identity, Identity}}
             end
     end,
     case session:update(SessId, Diff) of
+        {ok, #document{key = SessId, value = #session{supervisor = undefined}}} ->
+            supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),
+            {ok, SessId};
         {ok, #document{key = SessId}} ->
+            {ok, SessId};
+        {error, update_not_needed} ->
             {ok, SessId};
         {error, not_found} ->
             case start_session(#document{key = SessId, value = Sess}) of
@@ -307,6 +342,61 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% Checks if session processes are still alive and if not restarts them.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_restart_session_internal(SessId) ->
+    {ok, SessId} | {error, term()} when SessId :: session:id().
+maybe_restart_session_internal(SessId) ->
+    case session:update(SessId, fun maybe_clear_session_record/1) of
+        {ok, #document{key = SessId, value = #session{type = SessType, supervisor = undefined}}} ->
+            supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),
+            {ok, SessId};
+        {ok, #document{key = SessId}} ->
+            {ok, SessId};
+        {error, update_not_needed} ->
+            {ok, SessId};
+        {error, _Reason} = Error ->
+            Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Checks if session processes are still alive and if not clears entries in
+%% session doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec maybe_clear_session_record(session:record()) ->
+    {ok, session:record()} | {error, update_not_needed}.
+maybe_clear_session_record(#session{supervisor = Sup, connections = Cons} = Sess) ->
+    case is_alive(Sup) of
+        true ->
+            case lists:partition(fun is_alive/1, Cons) of
+                {_, []} ->
+                    {error, update_not_needed};
+                {AliveCons, _DeadCons} ->
+                    {ok, Sess#session{connections = AliveCons}}
+            end;
+        false ->
+            % All session processes but connection ones are on the same
+            % node as supervisor. If supervisor is dead so they are.
+            {ok, Sess#session{
+                node = undefined,
+                supervisor = undefined,
+                event_manager = undefined,
+                watcher = undefined,
+                sequencer_manager = undefined,
+                async_request_manager = undefined,
+                connections = lists:filter(fun is_alive/1, Cons)
+            }}
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
 %% Creates session doc and starts supervisor.
 %% @end
 %%--------------------------------------------------------------------
@@ -318,6 +408,17 @@ start_session(#document{value = #session{type = SessType}} = Doc) ->
             {ok, SessId};
         Error ->
             Error
+    end.
+
+
+%% @private
+-spec is_alive(pid()) -> boolean().
+is_alive(Pid) ->
+    try rpc:pinfo(Pid, [status]) of
+        [{status, _}] -> true;
+        _ -> false
+    catch _:_ ->
+        false
     end.
 
 
