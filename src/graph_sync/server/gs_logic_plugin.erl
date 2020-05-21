@@ -23,7 +23,7 @@
 
 %% API
 -export([verify_handshake_auth/2]).
--export([client_connected/2, client_disconnected/2]).
+-export([client_connected/2, client_heartbeat/2, client_disconnected/2]).
 -export([verify_auth_override/2]).
 -export([is_authorized/5]).
 -export([handle_rpc/4]).
@@ -72,6 +72,17 @@ verify_handshake_auth({token, AccessToken}, PeerIp) ->
 client_connected(?USER(_UserId, SessionId), ConnectionRef) ->
     session_connections:register(SessionId, ConnectionRef);
 client_connected(_, _) ->
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link gs_logic_plugin_behaviour} callback client_heartbeat/2.
+%% @end
+%%--------------------------------------------------------------------
+-spec client_heartbeat(aai:auth(), gs_server:conn_ref()) ->
+    ok.
+client_heartbeat(_, _) ->
     ok.
 
 
