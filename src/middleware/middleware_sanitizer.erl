@@ -25,6 +25,7 @@
 -type value_constraint() ::
     any |
     non_empty |
+    guid |
     [term()] | % A list of accepted values
     {between, integer(), integer()} |
     {not_lower_than, integer()} | {not_greater_than, integer()} |
@@ -33,10 +34,10 @@
 -type param_spec() :: {type_constraint(), value_constraint()}.
 % The 'aspect' keyword allows to validate the data provided in aspect identifier.
 -type params_spec() :: #{
-    Param :: binary() | {aspect, binary()} => param_spec()
+    Param :: binary() | id | {aspect, binary()} => param_spec()
 }.
 
--type data() :: #{Param :: aspect | binary() => term()}.
+-type data() :: #{Param :: id | aspect | binary() => term()}.
 -type data_spec() :: #{
     required => params_spec(),
     at_least_one => params_spec(),
@@ -283,6 +284,14 @@ check_value(json, non_empty, Param, Map) when map_size(Map) == 0 ->
     throw(?ERROR_BAD_VALUE_EMPTY(Param));
 check_value(_, non_empty, _Param, _) ->
     ok;
+
+check_value(binary, guid, Param, Value) ->
+    try
+        {_, _, _} = file_id:unpack_share_guid(Value),
+        ok
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_IDENTIFIER(Param))
+    end;
 
 check_value(_, {not_lower_than, Threshold}, Param, Value) ->
     case Value >= Threshold of

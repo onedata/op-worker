@@ -230,7 +230,7 @@ ensure_operation_supported(#req_ctx{plugin = Plugin, req = #op_req{
 %%--------------------------------------------------------------------
 -spec sanitize_request(req_ctx()) -> req_ctx().
 sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
-    gri = #gri{aspect = Aspect},
+    gri = #gri{id = Id, aspect = Aspect},
     data = RawData
 } = Req} = ReqCtx) ->
     case Plugin:data_spec(Req) of
@@ -238,10 +238,10 @@ sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
             ReqCtx;
         DataSpec ->
             SanitizedData = middleware_sanitizer:sanitize_data(
-                RawData#{aspect => Aspect}, DataSpec
+                RawData#{id => Id, aspect => Aspect}, DataSpec
             ),
             ReqCtx#req_ctx{req = Req#op_req{
-                data = maps:remove(aspect, SanitizedData)
+                data = maps:without([id, aspect], SanitizedData)
             }}
     end.
 
