@@ -63,7 +63,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
         <<"expression">> => {any, 
             fun(Expression) -> {true, qos_expression:ensure_rpn(Expression)} end},
         <<"fileId">> => {binary, 
-            fun(ObjectId) -> middleware_utils:decode_object_id(ObjectId, <<"fileId">>) end}
+            fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)} end}
     },
     optional => #{<<"replicasNum">> => {integer, {not_lower_than, 1}}}
 };
@@ -221,8 +221,9 @@ delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
 %% @private
 -spec fetch_qos_entry(aai:auth(), qos_entry:id()) ->
     {ok, {qos_entry:record(), middleware:revision()}} | ?ERROR_NOT_FOUND.
-fetch_qos_entry(?USER(_UserId, SessionId), QosEntryId) ->
-    case lfm:get_qos_entry(SessionId, QosEntryId) of
+fetch_qos_entry(_Auth, QosEntryId) ->
+    % fixme explain 
+    case lfm:get_qos_entry(?ROOT_SESS_ID, QosEntryId) of
         {ok, QosEntry} ->
             {ok, {QosEntry, 1}};
         _ ->

@@ -28,7 +28,7 @@
 
 randomly_choose_file_type_for_test() ->
     FileType = ?RANDOM_FILE_TYPE(),
-    ct:pal("Choosen file type for test: ~s", [FileType]),
+    ct:pal("Chosen file type for test: ~s", [FileType]),
     FileType.
 
 

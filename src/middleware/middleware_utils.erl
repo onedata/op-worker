@@ -63,11 +63,9 @@ assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
 
 
 -spec decode_object_id(file_id:objectid(), binary()) -> 
-    {true, file_id:file_guid()} | no_return().
+    file_id:file_guid() | no_return().
 decode_object_id(ObjectId, Key) ->
     case catch file_id:objectid_to_guid(ObjectId) of
-        {ok, Guid} ->
-            {true, Guid};
-        _Error ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(Key))
+        {ok, Guid} -> Guid;
+        _Error -> throw(?ERROR_BAD_VALUE_IDENTIFIER(Key))
     end.

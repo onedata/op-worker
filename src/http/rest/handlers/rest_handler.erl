@@ -318,12 +318,7 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
 resolve_bindings(_SessionId, ?BINDING(Key), Req) ->
     cowboy_req:binding(Key, Req);
 resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
-    case catch file_id:objectid_to_guid(cowboy_req:binding(Key, Req)) of
-        {ok, Guid} ->
-            Guid;
-        _Error ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(Key))
-    end;
+    middleware_utils:decode_object_id(cowboy_req:binding(Key, Req), Key);
 resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
     Path = filename:join([<<"/">> | cowboy_req:path_info(Req)]),
     case guid_utils:ensure_guid(SessionId, {path, Path}) of

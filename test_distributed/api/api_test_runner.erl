@@ -188,8 +188,8 @@ run_invalid_clients_test_cases(Config, SupportedClientsPerNode, #scenario_spec{
             try
                 validate_error_result(ScenarioType, ExpError, Result),
                 EnvVerifyFun(expected_failure, TestCaseCtx)
-            catch _:_ ->
-                log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result),
+            catch E:T ->
+                log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result, E, T),
                 false
             end
         end
@@ -249,8 +249,8 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                         try
                             validate_error_result(ScenarioType, ExpError, Result),
                             EnvVerifyFun(expected_failure, TestCaseCtx)
-                        catch _:_ ->
-                            log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result),
+                        catch E:T ->
+                            log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result, E, T),
                             false
                         end
                 end
@@ -322,14 +322,17 @@ run_expected_success_test_cases(Config, #scenario_spec{
             try
                 case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
                     true ->
-                        ValidateResultFun(TestCaseCtx, Result),
-                        EnvVerifyFun(expected_success, TestCaseCtx);
+                        NewTestCaseCtx = case ValidateResultFun(TestCaseCtx, Result) of
+                            {ok, Ctx} -> Ctx;
+                            _ -> TestCaseCtx
+                        end,
+                        EnvVerifyFun(expected_success, NewTestCaseCtx);
                     false ->
                         validate_error_result(ScenarioType, ?ERROR_USER_NOT_SUPPORTED, Result),
                         EnvVerifyFun(expected_failure, TestCaseCtx)
                 end
-            catch _:_ ->
-                log_failure(ScenarioName, TargetNode, Client, Args, succes, Result),
+            catch E:T ->
+                log_failure(ScenarioName, TargetNode, Client, Args, success, Result, E, T),
                 false
             after
                 EnvTeardownFun(Env)
@@ -374,19 +377,23 @@ validate_error_result(Type, ExpError, Result) when
     ?assertEqual(ExpError, Result).
 
 
-log_failure(ScenarioName, TargetNode, Client, Args, Expected, Got) ->
+log_failure(ScenarioName, TargetNode, Client, Args, Expected, Got, Error, Type) ->
     ct:pal("~s test case failed:~n"
     "Node: ~p~n"
     "Client: ~p~n"
     "Args: ~s~n"
     "Expected: ~p~n"
-    "Got: ~p~n", [
+    "Got: ~p~n"
+    "Error: ~p:~p~n"
+    "Stacktrace: ~p~n", [
         ScenarioName,
         TargetNode,
         aai:auth_to_printable(Client),
         io_lib_pretty:print(Args, fun get_record_def/2),
         Expected,
-        Got
+        Got,
+        Error, Type,
+        erlang:get_stacktrace()
     ]).
 
 
