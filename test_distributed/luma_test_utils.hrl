@@ -17,7 +17,7 @@
 -include("modules/storage/helpers/helpers.hrl").
 
 
--define(STRIP_OK(Result), begin {ok, _} = Result, element(2, Result) end).
+-define(STRIP_OK(Result), element(2, {ok, _} = Result)).
 
 -define(TEST_BASE,
     binary_to_atom(<<(atom_to_binary(?FUNCTION_NAME, latin1))/binary, "_base">>, latin1)).
@@ -522,7 +522,6 @@ end).
     user_credentials => ?POSIX_GENERATED_USER_CREDENTIALS,
     display_credentials => ?POSIX_MOUNT_CREDENTIALS,
     user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_POSIX,
-    user_id => ?USER,
     storage_record => ?POSIX_STORAGE_DOC_NO_LUMA
 }).
 

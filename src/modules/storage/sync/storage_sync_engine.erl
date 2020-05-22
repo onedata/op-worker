@@ -508,39 +508,73 @@ cleanup_file(ParentCtx, StorageFileCtx) ->
 -spec import_file_unsafe(storage_file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx(), storage_file_ctx:ctx()}.
 import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
-    {StatBuf, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    #statbuf{
-        st_mode = Mode,
-        st_atime = ATime,
-        st_ctime = CTime,
-        st_mtime = MTime,
-        st_size = FSize,
-        st_gid = Gid
-    } = StatBuf,
-    {OwnerId, StorageFileCtx3} = get_owner_id(StorageFileCtx2),
+    {OwnerId, StorageFileCtx2} = get_owner_id(StorageFileCtx),
     ParentUuid = file_ctx:get_uuid_const(ParentCtx),
     FileUuid = datastore_key:new(),
+    {ok, StorageFileCtx3} = create_location(FileUuid, StorageFileCtx2, OwnerId),
+    {ok, FileCtx, StorageFileCtx4} = create_file_meta(FileUuid, StorageFileCtx3, OwnerId, ParentUuid),
+    {ok, StorageFileCtx5} = create_times(FileUuid, StorageFileCtx4),
+    {ok, StorageFileCtx6} = maybe_import_nfs4_acl(FileCtx, StorageFileCtx5, Info),
+    {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+    storage_sync_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    {?IMPORTED, FileCtx2, StorageFileCtx6}.
 
+
+-spec create_location(file_meta:uuid(), storage_file_ctx:ctx(), od_user:id()) -> {ok, storage_file_ctx:ctx()}.
+create_location(FileUuid, StorageFileCtx, OwnerId) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+    {#statbuf{
+        st_mode = Mode,
+        st_mtime = MTime
+    }, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     case file_meta:type(Mode) of
         ?REGULAR_FILE_TYPE ->
-            StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx3),
+            StatTimestamp = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx2),
             storage_sync_info:update_mtime(StorageFileId, SpaceId, MTime, StatTimestamp),
-            ok = location_and_link_utils:create_imported_file_location(
-                SpaceId, StorageId, FileUuid, StorageFileId, FSize, OwnerId);
+            create_file_location(FileUuid, OwnerId, StorageFileCtx2);
         _ ->
-            {ok, _} = dir_location:mark_dir_created_on_storage(FileUuid, SpaceId)
-    end,
+            create_dir_location(FileUuid, StorageFileCtx2)
+    end.
 
-    {ok, FileCtx} = create_file_meta(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId, Gid, StorageId),
-    {ok, _} = create_times(FileUuid, MTime, ATime, CTime, SpaceId),
-    ok = maybe_import_nfs4_acl(FileCtx, StorageFileCtx3, Info),
-    {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
-    storage_sync_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
-    {?IMPORTED, FileCtx2, StorageFileCtx3}.
+
+-spec create_dir_location(file_meta:uuid(), storage_file_ctx:ctx()) -> {ok, storage_file_ctx:ctx()}.
+create_dir_location(FileUuid, StorageFileCtx) ->
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
+    Helper = storage:get_helper(Storage),
+    {SyncedGid, StorageFileCtx4} = case helper:is_posix_compatible(Helper) of
+        true ->
+            {#statbuf{st_gid = StGid}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
+            {StGid, StorageFileCtx3};
+        false ->
+            {undefined, StorageFileCtx2}
+    end,
+    ok = dir_location:mark_dir_created_on_storage(FileUuid, StorageId, SyncedGid),
+    {ok, StorageFileCtx4}.
+
+
+-spec create_file_location(file_meta:uuid(), od_user:id(), storage_file_ctx:ctx()) -> {ok, storage_file_ctx:ctx()}.
+create_file_location(FileUuid, OwnerId, StorageFileCtx) ->
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
+    IsPosix = helper:is_posix_compatible(storage:get_helper(Storage)),
+    {#statbuf{
+        st_gid = StGid,
+        st_size = StSize
+    }, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
+    SyncedGid = case IsPosix of
+        true -> StGid;
+        false -> undefined
+    end,
+    ok = location_and_link_utils:create_imported_file_location(SpaceId, StorageId, FileUuid, StorageFileId,
+        StSize, OwnerId, SyncedGid),
+    {ok, StorageFileCtx3}.
+
 
 -spec get_attr_including_deleted(file_ctx:ctx()) -> {ok, #file_attr{}} | {error, term()}.
 get_attr_including_deleted(FileCtx) ->
@@ -567,18 +601,21 @@ get_attr_including_deleted(FileCtx) ->
             {error, Error}
     end.
 
--spec create_file_meta(file_meta:uuid(), file_meta:name(), file_meta:mode(), od_user:id(),
-    file_meta:uuid(), od_space:id(), non_neg_integer(), storage:id()) -> {ok, file_ctx:ctx()} | {error, term()}.
-create_file_meta(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId, SyncedGid, SyncedStorageId) ->
+-spec create_file_meta(file_meta:uuid(), storage_file_ctx:ctx(), od_user:id(), file_meta:uuid()) ->
+    {ok, file_ctx:ctx(), storage_file_ctx:ctx()} | {error, term()}.
+create_file_meta(FileUuid, StorageFileCtx, OwnerId, ParentUuid) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+    {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     FileMetaDoc = file_meta:new_doc(FileUuid, FileName, file_meta:type(Mode), Mode band 8#1777,
-        OwnerId, ParentUuid, SpaceId, SyncedGid, SyncedStorageId),
+        OwnerId, ParentUuid, SpaceId),
     {ok, FinalDoc} = case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
         {error, already_exists} ->
             % there was race with creating file by lfm
             % file will be imported with suffix
             FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
             FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, file_meta:type(Mode),
-                Mode band 8#1777, OwnerId, ParentUuid, SpaceId, SyncedGid, SyncedStorageId),
+                Mode band 8#1777, OwnerId, ParentUuid, SpaceId),
             {ok, FileUuid} = file_meta:create({uuid, ParentUuid}, FileMetaDoc2),
             {ok, FileMetaDoc2};
         {ok, FileUuid} ->
@@ -586,20 +623,23 @@ create_file_meta(FileUuid, FileName, Mode, OwnerId, ParentUuid, SpaceId, SyncedG
     end,
     FileCtx = file_ctx:new_by_doc(FinalDoc, SpaceId, undefined),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-    {ok, FileCtx}.
+    {ok, FileCtx, StorageFileCtx2}.
 
--spec create_times(file_meta:uuid(), times:time(), times:time(), times:time(), od_space:id()) ->
-    {ok, datastore:key()}.
-create_times(FileUuid, MTime, ATime, CTime, SpaceId) ->
-    times:save(#document{
+-spec create_times(file_meta:uuid(), storage_file_ctx:ctx()) ->
+    {ok, storage_file_ctx:ctx()}.
+create_times(FileUuid, StorageFileCtx) ->
+    {StatBuf, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx2),
+    {ok, _} = times:save(#document{
         key = FileUuid,
         value = #times{
-            mtime = MTime,
-            atime = ATime,
-            ctime = CTime
+            mtime = StatBuf#statbuf.st_mtime,
+            atime = StatBuf#statbuf.st_atime,
+            ctime = StatBuf#statbuf.st_ctime
         },
         scope = SpaceId}
-    ).
+    ),
+    {ok, StorageFileCtx2}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -617,11 +657,12 @@ get_owner_id(StorageFileCtx) ->
     {OwnerId, StorageFileCtx2}.
 
 
--spec maybe_import_nfs4_acl(file_ctx:ctx(), storage_file_ctx:ctx(), storage_sync_traverse:info()) -> ok.
+-spec maybe_import_nfs4_acl(file_ctx:ctx(), storage_file_ctx:ctx(), storage_sync_traverse:info()) ->
+    {ok, storage_file_ctx:ctx()}.
 maybe_import_nfs4_acl(FileCtx, StorageFileCtx, #{storage_type := ?BLOCK_STORAGE, sync_acl := true}) ->
     import_nfs4_acl(FileCtx, StorageFileCtx);
-maybe_import_nfs4_acl(_FileCtx, _StorageFileCtx, _Info) ->
-    ok.
+maybe_import_nfs4_acl(_FileCtx, StorageFileCtx, _Info) ->
+    {ok, StorageFileCtx}.
 
 
 %%-------------------------------------------------------------------
@@ -630,29 +671,29 @@ maybe_import_nfs4_acl(_FileCtx, _StorageFileCtx, _Info) ->
 %% Import file's nfs4 ACL.
 %% @end
 %%-------------------------------------------------------------------
--spec import_nfs4_acl(file_ctx:ctx(), storage_file_ctx:ctx()) -> ok.
+-spec import_nfs4_acl(file_ctx:ctx(), storage_file_ctx:ctx()) -> {ok, storage_file_ctx:ctx()}.
 import_nfs4_acl(FileCtx, StorageFileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     Helper = storage:get_helper(StorageId),
-    case not file_ctx:is_space_dir_const(FileCtx) andalso helper:is_nfs4_acl_supported_on(Helper) of
+    case not file_ctx:is_space_dir_const(FileCtx) andalso helper:is_nfs4_acl_supported(Helper) of
         false ->
             ok;
         true->
             try
-                {ACLBin, _} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
+                {ACLBin, StorageFileCtx2} = storage_file_ctx:get_nfs4_acl(StorageFileCtx),
                 {ok, NormalizedACL} = storage_sync_acl:decode_and_normalize(ACLBin, StorageId),
                 {SanitizedAcl, FileCtx2} = sanitize_acl(NormalizedACL, FileCtx),
                 #provider_response{status = #status{code = ?OK}} =
                     acl_req:set_acl(UserCtx, FileCtx2, SanitizedAcl),
-                ok
+                {ok, StorageFileCtx2}
             catch
                 throw:Reason
                     when Reason =:= ?ENOTSUP
                     orelse Reason =:= ?ENOENT
                     orelse Reason =:= ?ENODATA
                 ->
-                    ok
+                    {ok, StorageFileCtx}
             end
     end.
 
@@ -909,7 +950,6 @@ update_times(FileCtx, #statbuf{st_atime = StorageATime, st_mtime = StorageMTime,
 maybe_update_owner(StorageFileCtx, #file_attr{}, FileCtx, #{storage_type := ?OBJECT_STORAGE}) ->
     {false, FileCtx, StorageFileCtx, ?OWNER_ATTR_NAME};
 maybe_update_owner(StorageFileCtx, #file_attr{owner_id = OldOwnerId}, FileCtx, _Info) ->
-    % TODO tutaj trzeba zrobic update w posix_ownerhsip też !!!
     {Updated, StorageFileCtx3} = case file_ctx:is_space_dir_const(FileCtx) of
         true -> {false, StorageFileCtx};
         false ->
@@ -946,7 +986,7 @@ maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := true}) -
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     Helper = storage:get_helper(StorageId),
-    case not file_ctx:is_space_dir_const(FileCtx) andalso helper:is_nfs4_acl_supported_on(Helper) of
+    case not file_ctx:is_space_dir_const(FileCtx) andalso helper:is_nfs4_acl_supported(Helper) of
         false ->
             {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME};
         true ->

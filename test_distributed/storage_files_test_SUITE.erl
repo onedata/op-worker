@@ -844,7 +844,7 @@ regular_file_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
         ?assertFileInfo(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner), Worker, StorageFilePath),
 
         % pretend that ?UNKNOWN_USER logged to Onezone
-        ok = rpc:call(Worker, files_to_chown, chown_delayed_files, [?UNKNOWN_USER]),
+        ok = rpc:call(Worker, files_to_chown, chown_deferred_files, [?UNKNOWN_USER]),
         ExpectedOwner2 = maps:get(expected_owner2, TestArgs),
         ?assertFileInfo(maps:merge(#{mode => ?FILE_MODE(FilePerms)}, ExpectedOwner2), Worker, StorageFilePath)
     end).
@@ -916,7 +916,7 @@ directory_with_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
         ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner), Worker, StorageDirPath),
 
         % pretend that ?UNKNOWN_USER logged to Onezone
-        ok = rpc:call(Worker, files_to_chown, chown_delayed_files, [?UNKNOWN_USER]),
+        ok = rpc:call(Worker, files_to_chown, chown_deferred_files, [?UNKNOWN_USER]),
         ExpectedOwner2 = maps:get(expected_owner2, TestArgs),
         ?assertFileInfo(maps:merge(#{mode => ?DIR_MODE(DirPerms)}, ExpectedOwner2), Worker, StorageDirPath)
     end).

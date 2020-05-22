@@ -28,6 +28,7 @@
     storage_file_id :: helpers:file_id(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),
+    storage :: undefined | storage:data(),
     stat :: undefined | helpers:stat(),
     % field used to store timestamp of cached stat structure
     stat_timestamp :: undefined | non_neg_integer(),
@@ -46,7 +47,7 @@
     get_child_ctx_const/2, get_parent_ctx_const/1,
     get_stat_timestamp_const/1, get_handle_const/1
 ]).
--export([stat/1, get_nfs4_acl/1]).
+-export([stat/1, get_nfs4_acl/1, get_storage/1]).
 
 %%%===================================================================
 %%% API functions
@@ -165,6 +166,14 @@ stat(StorageFileCtx = #storage_file_ctx{stat = StatBuf}) ->
 -spec get_nfs4_acl(ctx()) -> {binary(), ctx()}.
 get_nfs4_acl(StorageFileCtx) ->
     get_xattr(StorageFileCtx, <<"system.nfs4_acl">>).
+
+-spec get_storage(ctx()) -> {storage:data(), ctx()}.
+get_storage(StorageFileCtx = #storage_file_ctx{storage = undefined}) ->
+    StorageId = get_storage_id_const(StorageFileCtx),
+    {ok, Storage} = storage:get(StorageId),
+    {Storage, StorageFileCtx#storage_file_ctx{storage = Storage}};
+get_storage(StorageFileCtx = #storage_file_ctx{storage = Storage}) ->
+    {Storage, StorageFileCtx}.
 
 %%%===================================================================
 %%% Internal functions

@@ -27,8 +27,8 @@
 -export([get_name/1, get_args/1, get_admin_ctx/1, get_redacted_admin_ctx/1,
     is_insecure/1, get_params/2, get_proxy_params/2, get_timeout/1,
     get_storage_path_type/1]).
--export([is_posix_compatible/1, is_rename_supported_on/1,
-    is_sync_supported_on/1, is_nfs4_acl_supported_on/1]).
+-export([is_posix_compatible/1, is_rename_supported/1,
+    is_sync_supported/1, is_nfs4_acl_supported/1]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1, get_type/1]).
 
@@ -258,33 +258,33 @@ is_posix_compatible(?NULL_DEVICE_HELPER_NAME) -> true;
 is_posix_compatible(#helper{name = HelperName}) -> is_posix_compatible(HelperName);
 is_posix_compatible(_) -> false.
 
--spec is_sync_supported_on(helpers:helper()) -> boolean().
-is_sync_supported_on(#helper{name = ?POSIX_HELPER_NAME}) -> true;
-is_sync_supported_on(#helper{name = ?GLUSTERFS_HELPER_NAME}) -> true;
-is_sync_supported_on(#helper{name = ?NULL_DEVICE_HELPER_NAME}) -> true;
-is_sync_supported_on(#helper{name = ?WEBDAV_HELPER_NAME}) -> true;
-is_sync_supported_on(#helper{
+-spec is_sync_supported(helpers:helper()) -> boolean().
+is_sync_supported(#helper{name = ?POSIX_HELPER_NAME}) -> true;
+is_sync_supported(#helper{name = ?GLUSTERFS_HELPER_NAME}) -> true;
+is_sync_supported(#helper{name = ?NULL_DEVICE_HELPER_NAME}) -> true;
+is_sync_supported(#helper{name = ?WEBDAV_HELPER_NAME}) -> true;
+is_sync_supported(#helper{
     name = ?S3_HELPER_NAME,
     storage_path_type = ?CANONICAL_STORAGE_PATH,
     args = Args
 }) ->
     <<"0">> =:= maps:get(<<"blockSize">>, Args, undefined);
-is_sync_supported_on(_) -> false.
+is_sync_supported(_) -> false.
 
--spec is_nfs4_acl_supported_on(helpers:helper() | name()) -> boolean().
-is_nfs4_acl_supported_on(?POSIX_HELPER_NAME) -> true;
-is_nfs4_acl_supported_on(?GLUSTERFS_HELPER_NAME) -> true;
-is_nfs4_acl_supported_on(#helper{name = HelperName}) -> is_nfs4_acl_supported_on(HelperName);
-is_nfs4_acl_supported_on(_) -> false.
+-spec is_nfs4_acl_supported(helpers:helper() | name()) -> boolean().
+is_nfs4_acl_supported(?POSIX_HELPER_NAME) -> true;
+is_nfs4_acl_supported(?GLUSTERFS_HELPER_NAME) -> true;
+is_nfs4_acl_supported(#helper{name = HelperName}) -> is_nfs4_acl_supported(HelperName);
+is_nfs4_acl_supported(_) -> false.
 
 
--spec is_rename_supported_on(helpers:helper() | name()) -> boolean().
-is_rename_supported_on(?POSIX_HELPER_NAME) -> true;
-is_rename_supported_on(?GLUSTERFS_HELPER_NAME) -> true;
-is_rename_supported_on(?NULL_DEVICE_HELPER_NAME) -> true;
-is_rename_supported_on(?WEBDAV_HELPER_NAME) -> true;
-is_rename_supported_on(#helper{name = HelperName}) -> is_rename_supported_on(HelperName);
-is_rename_supported_on(_) -> false.
+-spec is_rename_supported(helpers:helper() | name()) -> boolean().
+is_rename_supported(?POSIX_HELPER_NAME) -> true;
+is_rename_supported(?GLUSTERFS_HELPER_NAME) -> true;
+is_rename_supported(?NULL_DEVICE_HELPER_NAME) -> true;
+is_rename_supported(?WEBDAV_HELPER_NAME) -> true;
+is_rename_supported(#helper{name = HelperName}) -> is_rename_supported(HelperName);
+is_rename_supported(_) -> false.
 
 %%%===================================================================
 %%% Upgrade functions

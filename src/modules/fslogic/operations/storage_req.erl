@@ -73,11 +73,12 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
     Helper = storage:get_helper(Storage),
     SessionId = user_ctx:get_session_id(UserCtx),
     UserId = user_ctx:get_user_id(UserCtx),
-    case HelperMode of
-        ?FORCE_DIRECT_HELPER_MODE
-            when SessionId =/= ?ROOT_SESS_ID
-            andalso UserId =/= ?ROOT_USER_ID
-        ->
+    case {HelperMode, is_root_credentials(SessionId, UserId)} of
+        {_, true} ->
+            % SessionId =:= ?ROOT_SESS_ID or UserId =:= ?ROOT_USER_ID
+            % This should never happen as client cannot pass root credentials
+            #fuse_response{status = #status{code = ?EACCES}};
+        {?FORCE_DIRECT_HELPER_MODE, false} ->
             case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
                 {ok, ClientStorageUserCtx} ->
                     HelperParams = helper:get_params(Helper, ClientStorageUserCtx),
@@ -87,11 +88,7 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
                 {error, _} ->
                     #fuse_response{status = #status{code = ?ENOENT}}
             end;
-        ?FORCE_DIRECT_HELPER_MODE ->
-            % SessionId =:= ?ROOT_SESS_ID or UserId =:= ?ROOT_USER_ID
-            % This should never happen as client cannot pass root credentials
-            #fuse_response{status = #status{code = ?EACCES}};
-        _ProxyOrAutoMode ->
+        {_ProxyOrAutoMode, false} ->
             HelperParams = helper:get_proxy_params(Helper, StorageId),
             #fuse_response{
                status = #status{code = ?OK},
@@ -128,7 +125,7 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             throw(?ENOENT)
     end,
 
-    case UserId =:= ?ROOT_USER_ID orelse SessionId =:= ?ROOT_SESS_ID of
+    case is_root_credentials(SessionId, UserId) of
         true ->
             % This should never happen as client cannot pass root credentials
             throw(?EACCES);
@@ -227,3 +224,8 @@ verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent, _, At
             verify_storage_test_file_loop(Helper, StorageUserCtx, FileId, FileContent,
                 ?ENOENT, Attempts - 1)
     end.
+
+-spec is_root_credentials(session:id(), od_user:id()) -> boolean().
+is_root_credentials(?ROOT_SESS_ID, _) -> true;
+is_root_credentials(_SessionId, ?ROOT_USER_ID) -> true;
+is_root_credentials(_, _) -> false.

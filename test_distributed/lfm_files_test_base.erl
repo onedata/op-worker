@@ -56,9 +56,9 @@
     share_permission_denied/1,
     echo_loop/1,
     echo_loop_base/1,
-    storage_file_creation_should_be_delayed_until_open/1,
-    delayed_creation_should_not_prevent_mv/1,
-    delayed_creation_should_not_prevent_truncate/1,
+    storage_file_creation_should_be_deferred_until_open/1,
+    deferred_creation_should_not_prevent_mv/1,
+    deferred_creation_should_not_prevent_truncate/1,
     new_file_should_not_have_popularity_doc/1,
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
@@ -1578,7 +1578,7 @@ share_permission_denied(Config) ->
 
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, Guid})).
 
-storage_file_creation_should_be_delayed_until_open(Config) ->
+storage_file_creation_should_be_deferred_until_open(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
@@ -1598,7 +1598,7 @@ storage_file_creation_should_be_delayed_until_open(Config) ->
     verify_file_content(Config, Handle, <<"test_data">>),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
-delayed_creation_should_not_prevent_mv(Config) ->
+deferred_creation_should_not_prevent_mv(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
@@ -1613,7 +1613,7 @@ delayed_creation_should_not_prevent_mv(Config) ->
     verify_file_content(Config, Handle, <<"test_data">>),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
-delayed_creation_should_not_prevent_truncate(Config) ->
+deferred_creation_should_not_prevent_truncate(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},

@@ -10,7 +10,7 @@
 %%% upgrader function for this model.
 %%% @end
 %%%-------------------------------------------------------------------
--module(transfer_upgrader).
+-module(transfer_model).
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").

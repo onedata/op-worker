@@ -201,7 +201,7 @@ is_sync_supported_on(StorageId) when is_binary(StorageId) ->
     end;
 is_sync_supported_on(Storage) ->
     Helper = storage:get_helper(Storage),
-    helper:is_sync_supported_on(Helper).
+    helper:is_sync_supported(Helper).
 
 
 -spec schedule_spaces_check() -> ok.

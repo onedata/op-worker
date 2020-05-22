@@ -243,7 +243,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     rpc:call(W1, dbsync_events, change_replicated,
         [SpaceId, #document{key = FileUuid, value = FileMeta}]),
 
-    FileGuid1 = file_id:pack_guid(FileUuid, SpaceId), % create delayed storage files
+    FileGuid1 = file_id:pack_guid(FileUuid, SpaceId), % create deferred storage files
     {ok, Handle1} = lfm_proxy:open(W1, SessionId, {guid, FileGuid1}, read),
     lfm_proxy:close(W1, Handle1),
 
@@ -1273,10 +1273,10 @@ init_per_testcase(local_file_location_should_be_chowned_when_missing_user_appear
     [W1 | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(W1, sd_utils, [passthrough]),
-    test_utils:mock_expect(W1, sd_utils, create_delayed,
+    test_utils:mock_expect(W1, sd_utils, create_deferred,
         fun(FileCtx, UserCtx, VerifyLink, CheckLocationExists) ->
             {Doc, FileCtx2} = meck:passthrough([FileCtx, UserCtx, VerifyLink, CheckLocationExists]),
-            {Doc, files_to_chown:chown_or_delay(FileCtx2)}
+            {Doc, files_to_chown:chown_or_defer(FileCtx2)}
         end),
     init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->

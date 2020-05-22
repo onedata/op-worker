@@ -119,7 +119,7 @@
 %%%
 %%% GIDs on synced storage - IMPORTANT NOTE!!!
 %%%
-%%% It is possible that synced files have different GIDs. We do no try
+%%% It is possible that synced files have different GIDs. We do not try
 %%% to map them to onedata groups model as it's not compatible with POSIX
 %%% groups model.
 %%% It is encouraged that admin of the legacy storage that it to be synced

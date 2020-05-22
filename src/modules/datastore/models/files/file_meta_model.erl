@@ -9,7 +9,7 @@
 %%% This module contains datastore callbacks for file_meta model.
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_meta_datastore).
+-module(file_meta_model).
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -213,11 +213,7 @@ get_record_struct(10) ->
         {provider_id, string},
         {shares, [string]},
         {deleted, boolean},
-        {parent_uuid, string},
-        % field 'synced_storage' has been added in this version
-        {synced_storage, string},
-        % field 'synced_gid' has been added in this version
-        {synced_gid, integer}
+        {parent_uuid, string}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -281,7 +277,7 @@ upgrade_record(9, {
     ProviderId, Shares, Deleted, ParentUuid
 }) ->
     {10, {?FILE_META_MODEL, Name, Type, Mode, ACL, Owner, IsScope,
-        ProviderId, Shares, Deleted, ParentUuid, undefined, undefined
+        ProviderId, Shares, Deleted, ParentUuid
     }}.
 
 

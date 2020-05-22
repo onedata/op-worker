@@ -27,9 +27,9 @@
     non_empty |
     [term()] | % A list of accepted values
     {between, integer(), integer()} |
-    {not_lower_than, integer()} | {not_greater_than, integer()} | custom_constraint().
+    {not_lower_than, integer()} | {not_greater_than, integer()} | custom_value_constraint().
 
--type custom_constraint() :: fun((Val :: term()) -> true | {true, NewVal :: term()} | false).
+-type custom_value_constraint() :: fun((Val :: term()) -> true | {true, NewVal :: term()} | false).
 
 -type param_spec() :: {type_constraint(), value_constraint()}.
 % The 'aspect' keyword allows to validate the data provided in aspect identifier.

@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([chown_or_delay/1, chown_delayed_files/1]).
+-export([chown_or_defer/1, chown_deferred_files/1]).
 -export([get/1, delete/1]).
 
 %% datastore_model callbacks
@@ -38,29 +38,29 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% If given UserId is present in provider, then file owner is changes.
+%% If given UserId is present in provider, then file owner is changed.
 %% Otherwise, file is added to files awaiting owner change.
 %% @end
 %%--------------------------------------------------------------------
--spec chown_or_delay(file_ctx:ctx()) -> file_ctx:ctx().
-chown_or_delay(FileCtx) ->
+-spec chown_or_defer(file_ctx:ctx()) -> file_ctx:ctx().
+chown_or_defer(FileCtx) ->
     {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
     % TODO VFS-3868 implement chown in other helpers and remove this case
     case Storage =/= undefined andalso storage:is_posix_compatible(Storage) of
-        true -> chown_or_delay_on_posix_compatible_storage(FileCtx2);
+        true -> chown_or_defer_on_posix_compatible_storage(FileCtx2);
         false -> FileCtx2
     end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Chown all delayed files of given user
+%% Chown all deferred files of given user
 %% @end
 %%--------------------------------------------------------------------
--spec chown_delayed_files(od_user:id()) -> ok.
-chown_delayed_files(UserId) ->
+-spec chown_deferred_files(od_user:id()) -> ok.
+chown_deferred_files(UserId) ->
     case files_to_chown:get(UserId) of
         {ok, #document{value = #files_to_chown{file_guids = FileGuids}}} ->
-            lists:foreach(fun chown_pending_file/1, FileGuids),
+            lists:foreach(fun chown_deferred_file/1, FileGuids),
             delete(UserId);
         {error, not_found} ->
             ok
@@ -89,36 +89,39 @@ delete(Key) ->
 %%% Internal functions
 %%%===================================================================
 
--spec chown_or_delay_on_posix_compatible_storage(file_ctx:ctx()) -> file_ctx:ctx().
-chown_or_delay_on_posix_compatible_storage(FileCtx) ->
+-spec chown_or_defer_on_posix_compatible_storage(file_ctx:ctx()) -> file_ctx:ctx().
+chown_or_defer_on_posix_compatible_storage(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     OwnerUserId = file_meta:get_owner(FileDoc),
     % space_owner is a virtual user therefore we don't check whether it exists in Onezone
-    case {fslogic_uuid:is_space_owner(OwnerUserId), user_logic:exists(OwnerUserId)} of
-        {true, _} ->
+    case fslogic_uuid:is_space_owner(OwnerUserId)of
+        true ->
             chown_file(FileCtx2, OwnerUserId);
-        {false, true} ->
-            chown_file(FileCtx2, OwnerUserId);
-        {false, false} ->
-            % possible cases:
-            %  * user was deleted, but is still owner of a file
-            %  * file was synced from storage, and through reverse luma
-            %    we received id of user that has not yet logged to Onezone
-            SpaceId = file_ctx:get_space_id_const(FileCtx2),
-            % temporarily chown file to ?SPACE_OWNER_ID so that it does not belong to root on storage
-            chown_file(FileCtx2, ?SPACE_OWNER_ID(SpaceId)),
-            ok = delay_chown(FileCtx2, OwnerUserId),
-            FileCtx2
+        false ->
+            case user_logic:exists(OwnerUserId) of
+                true ->
+                    chown_file(FileCtx2, OwnerUserId);
+                false ->
+                    % possible cases:
+                    %  * user was deleted, but is still owner of a file
+                    %  * file was synced from storage, and through reverse luma
+                    %    we received id of user that has not yet logged to Onezone
+                    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+                    % temporarily chown file to ?SPACE_OWNER_ID so that it does not belong to root on storage
+                    chown_file(FileCtx2, ?SPACE_OWNER_ID(SpaceId)),
+                    ok = defer_chown(FileCtx2, OwnerUserId),
+                    FileCtx2
+            end
     end.
 
--spec chown_pending_file(fslogic_worker:file_guid()) -> file_ctx:ctx().
-chown_pending_file(FileGuid) ->
+-spec chown_deferred_file(fslogic_worker:file_guid()) -> file_ctx:ctx().
+chown_deferred_file(FileGuid) ->
     try
         FileCtx = file_ctx:new_by_guid(FileGuid),
         chown_file(FileCtx)
     catch
         _:Error ->
-            ?error_stacktrace("Cannot chown pending file ~p due to error ~p", [FileGuid, Error])
+            ?error_stacktrace("Cannot chown deferred file ~p due to error ~p", [FileGuid, Error])
     end.
 
 -spec chown_file(file_ctx:ctx()) -> file_ctx:ctx().
@@ -145,8 +148,8 @@ chown_file(FileCtx, OwnerId) ->
 %% Add file that need to be chowned in future.
 %% @end
 %%--------------------------------------------------------------------
--spec delay_chown(file_ctx:ctx(), od_user:id()) -> ok | {error, term()}.
-delay_chown(FileCtx, UserId) ->
+-spec defer_chown(file_ctx:ctx(), od_user:id()) -> ok | {error, term()}.
+defer_chown(FileCtx, UserId) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
     UpdateFun = fun(FTC = #files_to_chown{file_guids = Guids}) ->
         case lists:member(FileGuid, Guids) of

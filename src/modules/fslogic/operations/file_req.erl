@@ -549,7 +549,7 @@ create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
             {FL, FileCtx2};
         _ ->
             {#document{value = FL}, FileCtx2} =
-                sd_utils:create_delayed(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
+                sd_utils:create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
             {FL, FileCtx2}
     end.
 

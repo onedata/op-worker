@@ -615,7 +615,7 @@ get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns posix storage user ctx, holding UID and GID of file on posix storage.
+%% Returns POSIX compatible display credentials.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_display_credentials(ctx()) -> {luma:display_credentials(), ctx()}.
@@ -623,26 +623,21 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
     {FileMetaDoc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
     OwnerId = file_meta:get_owner(FileMetaDoc),
-    {SyncedGid, SyncedStorageId} = file_meta:get_synced_gid_and_storage(FileMetaDoc),
     {Storage, FileCtx3} = get_storage(FileCtx2),
-    {ok, DisplayCredentials = {Uid, _Gid}} = luma:map_to_display_credentials(OwnerId, SpaceId, Storage),
-    FinalDisplayCredentials = case Storage =:= undefined of
+    {ok, DisplayCredentials = {Uid, Gid}} = luma:map_to_display_credentials(OwnerId, SpaceId, Storage),
+    case Storage =:= undefined of
         true ->
-            DisplayCredentials;
+            {DisplayCredentials, FileCtx3#file_ctx{display_credentials = DisplayCredentials}};
         false ->
-            StorageId = storage:get_id(Storage),
-            ProviderId = file_meta:get_provider_id(FileMetaDoc),
-            case SyncedStorageId =:= StorageId andalso ProviderId =:= oneprovider:get_id() of
-                true ->
-                    %override display GID with GID that was found when syncing file from storage
-                    {Uid, SyncedGid};
-                false ->
-                    DisplayCredentials
-            end
-    end,
-    {FinalDisplayCredentials, FileCtx3#file_ctx{display_credentials = FinalDisplayCredentials}};
+            {SyncedGid, FileCtx4} = get_synced_gid(FileCtx3),
+            % if SyncedGid =/= undefined override display Gid
+            FinalGid = utils:ensure_defined(SyncedGid, undefined, Gid),
+            FinalDisplayCredentials = {Uid, FinalGid},
+            {FinalDisplayCredentials, FileCtx4#file_ctx{display_credentials = FinalDisplayCredentials}}
+    end;
 get_display_credentials(FileCtx = #file_ctx{display_credentials = DisplayCredentials}) ->
     {DisplayCredentials, FileCtx}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1443,4 +1438,15 @@ list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
             Children;
         false ->
             []
+    end.
+
+-spec get_synced_gid(ctx()) -> {luma:gid() | undefined, ctx()}.
+get_synced_gid(FileCtx) ->
+    case is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            {DirLocation, _} = get_dir_location_doc(FileCtx2),
+            {dir_location:get_synced_gid(DirLocation), FileCtx2};
+        {false, FileCtx2} ->
+            {FileLocation, _} = get_local_file_location_doc(FileCtx2, skip_local_blocks),
+            {file_location:get_synced_gid(FileLocation), FileCtx2}
     end.

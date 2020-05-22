@@ -42,9 +42,9 @@
 -export([get_name/1]).
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
-    make_space_exist/1, new_doc/6, new_doc/9, type/1, get_ancestors/1,
+    make_space_exist/1, new_doc/6, new_doc/7, type/1, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1,
-    get_synced_gid_and_storage/1, get_mode/1]).
+    get_mode/1]).
 -export([check_name/3, has_suffix/1, is_deleted/1]).
 % For tests
 -export([get_all_links/2]).
@@ -703,12 +703,6 @@ get_owner(#document{value = FileMeta}) ->
 get_owner(#file_meta{owner = Owner}) ->
     Owner.
 
--spec get_synced_gid_and_storage(file_meta() | doc()) -> {luma:gid() | undefined, storage:id() | undefined}.
-get_synced_gid_and_storage(#document{value = FileMeta}) ->
-    get_synced_gid_and_storage(FileMeta) ;
-get_synced_gid_and_storage(#file_meta{synced_gid = SyncedGid, synced_storage = SyncedStorage}) ->
-    {SyncedGid, SyncedStorage}.
-
 -spec get_mode(file_meta() | doc()) -> mode().
 get_mode(#document{value = FileMeta}) ->
     get_mode(FileMeta) ;
@@ -845,11 +839,11 @@ make_space_exist(SpaceId) ->
 
 -spec new_doc(name(), type(), posix_permissions(), od_user:id(), uuid(), od_space:id()) -> doc().
 new_doc(FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
-    new_doc(undefined, FileName, FileType, Mode, Owner, ParentUuid, SpaceId, undefined, undefined).
+    new_doc(undefined, FileName, FileType, Mode, Owner, ParentUuid, SpaceId).
 
 -spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
-    uuid(), od_space:id(), non_neg_integer() | undefined, storage:id() | undefined) -> doc().
-new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId, SyncedGid, SyncedStorage) ->
+    uuid(), od_space:id()) -> doc().
+new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
     #document{
         key = FileUuid,
         value = #file_meta{
@@ -857,8 +851,6 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId, SyncedGi
             type = FileType,
             mode = Mode,
             owner = Owner,
-            synced_gid = SyncedGid,
-            synced_storage = SyncedStorage,
             parent_uuid = ParentUuid,
             provider_id = oneprovider:get_id()
         },
@@ -1264,7 +1256,7 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(Version) ->
-    file_meta_datastore:get_record_struct(Version).
+    file_meta_model:get_record_struct(Version).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1274,7 +1266,7 @@ get_record_struct(Version) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(Version, Record) ->
-    file_meta_datastore:upgrade_record(Version, Record).
+    file_meta_model:upgrade_record(Version, Record).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1285,4 +1277,4 @@ upgrade_record(Version, Record) ->
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) -> default.
 resolve_conflict(Ctx, Doc1, Doc2) ->
-    file_meta_datastore:resolve_conflict(Ctx, Doc1, Doc2).
+    file_meta_model:resolve_conflict(Ctx, Doc1, Doc2).

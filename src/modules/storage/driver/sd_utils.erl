@@ -25,12 +25,12 @@
 
 %% API
 -export([chmod/3, rename/7]).
--export([create_delayed/1, create_delayed/4, mkdir_delayed/2]).
+-export([create_deferred/1, create_deferred/4, mkdir_deferred/2]).
 -export([delete/2, unlink/2, rmdir/2]).
 
 
 % Test API
--export([generic_create_delayed/3]).
+-export([generic_create_deferred/3]).
 
 -define(CLEANUP_MAX_RETRIES_NUM, 10).
 -define(CLEANUP_DELAY, 5).
@@ -71,7 +71,7 @@ rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, Tar
         true ->
             % we know target parent uuid, so we can create parent directories with correct mode
             % ensure all target parent directories are created
-            {ok, _} = mkdir_delayed(TargetParentCtx, UserCtx);
+            {ok, _} = mkdir_deferred(TargetParentCtx, UserCtx);
         false ->
             % we don't know target parent uuid because it is a remote rename
             % create parent directories with default mode
@@ -105,11 +105,11 @@ rename(UserCtx, SpaceId, StorageId, FileUuid, SourceFileId, TargetParentCtx, Tar
     end.
 
 
--spec mkdir_delayed(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-mkdir_delayed(FileCtx, UserCtx) ->
+-spec mkdir_deferred(file_ctx:ctx(), user_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+mkdir_deferred(FileCtx, UserCtx) ->
     case file_ctx:is_storage_file_created(FileCtx) of
         {false, FileCtx2} ->
-            generic_create_delayed(UserCtx, FileCtx2, false);
+            generic_create_deferred(UserCtx, FileCtx2, false);
         {true, FileCtx2} ->
             {ok, FileCtx2}
     end.
@@ -118,23 +118,23 @@ mkdir_delayed(FileCtx, UserCtx) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Create regular file on storage if it hasn't been created yet
-%% (its creation has been delayed).
+%% (its creation has been deferred).
 %% Creation is performed with root credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec create_delayed(file_ctx:ctx()) -> {file_meta:doc(), file_ctx:ctx()} | {error, cancelled}.
-create_delayed(FileCtx) ->
-    create_delayed(FileCtx, user_ctx:new(?ROOT_SESS_ID), false, true).
+-spec create_deferred(file_ctx:ctx()) -> {file_meta:doc(), file_ctx:ctx()} | {error, cancelled}.
+create_deferred(FileCtx) ->
+    create_deferred(FileCtx, user_ctx:new(?ROOT_SESS_ID), false, true).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Create regular file on storage if it hasn't been created yet
-%% (its creation has been delayed).
+%% (its creation has been deferred).
 %% @end
 %%--------------------------------------------------------------------
--spec create_delayed(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
+-spec create_deferred(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
     {file_location:doc(), file_ctx:ctx()} | {error, cancelled}.
-create_delayed(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
+create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
     {#document{
         key = FileLocationId,
         value = #file_location{storage_file_created = StorageFileCreated}
@@ -150,7 +150,7 @@ create_delayed(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
                         true ->
                             Ans;
                         _ ->
-                            {ok, FileCtx3} = sd_utils:generic_create_delayed(UserCtx, FileCtx2, VerifyDeletionLink),
+                            {ok, FileCtx3} = sd_utils:generic_create_deferred(UserCtx, FileCtx2, VerifyDeletionLink),
                             {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
                             {ok, Doc} = location_and_link_utils:mark_location_created(FileUuid,
                                 FileLocationId, StorageFileId),
@@ -172,8 +172,8 @@ create_delayed(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
 %% Creates file (regular or directory !!!) on storage.
 %% @end
 %%--------------------------------------------------------------------
--spec generic_create_delayed(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> {ok, file_ctx:ctx()}.
-generic_create_delayed(UserCtx, FileCtx, VerifyDeletionLink) ->
+-spec generic_create_deferred(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> {ok, file_ctx:ctx()}.
+generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
     {ShouldChown, FileCtx2} = should_chown(UserCtx, FileCtx),
     SessId = case ShouldChown of
         true -> ?ROOT_SESS_ID;
@@ -193,14 +193,14 @@ generic_create_delayed(UserCtx, FileCtx, VerifyDeletionLink) ->
             {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
              case file_ctx:is_root_dir_const(ParentCtx) of
                  true -> ok;
-                 false -> files_to_chown:chown_or_delay(ParentCtx)
+                 false -> files_to_chown:chown_or_defer(ParentCtx)
              end,
             create_storage_file(SDHandle, FileCtx4);
         {ok, FileCtx4} ->
             {Storage, FileCtx5} = file_ctx:get_storage(FileCtx4),
             Helper = storage:get_helper(Storage),
             HelperName = helper:get_name(Helper),
-            case HelperName =:= ?S3_HELPER_NAME andalso helper:is_sync_supported_on(Helper) of
+            case HelperName =:= ?S3_HELPER_NAME andalso helper:is_sync_supported(Helper) of
                 true ->
                     % pretend that parent directories has been created
                     % this should only happen on synced S3 storage
@@ -216,7 +216,7 @@ generic_create_delayed(UserCtx, FileCtx, VerifyDeletionLink) ->
         {ok, FinalCtx}  ->
             case ShouldChown of
                 true ->
-                    {ok, files_to_chown:chown_or_delay(FinalCtx)};
+                    {ok, files_to_chown:chown_or_defer(FinalCtx)};
                 _ ->
                     {ok, FinalCtx}
             end;
@@ -272,10 +272,10 @@ rmdir(DirCtx, UserCtx) ->
         {SDHandle, FileCtx2} ->
             case storage_driver:rmdir(SDHandle) of
                 ok ->
-                    dir_location:delete(FileUuid),
+                    dir_location:mark_deleted_from_storage(FileUuid),
                     {ok, FileCtx2};
                 {error, ?ENOENT} ->
-                    dir_location:delete(FileUuid),
+                    dir_location:mark_deleted_from_storage(FileUuid),
                     {ok, FileCtx2};
                 {error, ?ENOTEMPTY} = Error ->
                     ?debug("sd_utils:rmdir failed with ~p", [Error]),
@@ -377,7 +377,6 @@ create_missing_parent_dir(UserCtx, FileCtx) ->
     {ok, file_ctx:ctx()} | {error, term()}.
 mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ShouldChown, FileCtx2} = should_chown(UserCtx, FileCtx),
     SessId = case ShouldChown of
         true -> ?ROOT_SESS_ID;
@@ -386,23 +385,24 @@ mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
     {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
     Result = case storage_driver:mkdir(SDHandle, Mode, false) of
         ok ->
-            case dir_location:mark_dir_created_on_storage(FileUuid, SpaceId) of
-                {ok, _} -> ok;
+            {StorageId, FileCtx4} = file_ctx:get_storage_id(FileCtx3),
+            case dir_location:mark_dir_created_on_storage(FileUuid, StorageId) of
+                ok -> {ok, FileCtx4};
                 % helpers on ceph and s3 always return ok on mkdir operation
                 % so we have to handle situation when doc is already in db
-                {error, already_exists} -> ok
+                {error, already_exists} -> {ok, FileCtx4}
             end;
         {error, ?EEXIST} ->
-            ok;
+            {ok, FileCtx3};
         OtherError ->
             OtherError
     end,
 
     case {Result, ShouldChown} of
-        {ok, true} ->
-            {ok, files_to_chown:chown_or_delay(FileCtx3)};
-        {ok, false} ->
-            {ok, FileCtx};
+        {{ok, FinalCtx}, true} ->
+            {ok, files_to_chown:chown_or_defer(FinalCtx)};
+        {{ok, FinalCtx}, false} ->
+            {ok, FinalCtx};
         {Error, _} ->
             Error
     end.
@@ -422,6 +422,8 @@ handle_eexists(VerifyDeletionLink, UserCtx, SDHandle, FileCtx) ->
         ?DIRECTORY_TYPE -> handle_conflicting_directory(FileCtx2)
     end.
 
+-spec handle_conflicting_file(boolean(), user_ctx:ctx(), storage_driver:handle(), file_ctx:ctx()) ->
+    {ok, file_ctx:ctx()}.
 handle_conflicting_file(_VerifyDeletionLink, _UserCtx, SDHandle, FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, StorageFileId} = create_storage_file_with_suffix(SDHandle, file_meta:get_mode(FileDoc)),
@@ -517,6 +519,6 @@ mark_parent_dirs_created_on_storage([]) ->
     ok;
 mark_parent_dirs_created_on_storage([DirCtx | RestCtxs]) ->
     Uuid = file_ctx:get_uuid_const(DirCtx),
-    SpaceId = file_ctx:get_space_id_const(DirCtx),
-    dir_location:mark_dir_created_on_storage(Uuid, SpaceId),
+    {StorageId, _} = file_ctx:get_storage_id(DirCtx),
+    dir_location:mark_dir_created_on_storage(Uuid, StorageId),
     mark_parent_dirs_created_on_storage(RestCtxs).

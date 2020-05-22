@@ -358,14 +358,7 @@
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
     shares = [] :: [od_share:id()],
     deleted = false :: boolean(),
-    parent_uuid :: undefined | file_meta:uuid(),
-
-    % Below fields are set by storage_sync.
-    % They are used to override display gid, only in
-    % the syncing provider, with the gid that file
-    % belongs to on synced storage.
-    synced_storage :: undefined | storage:id(),
-    synced_gid :: undefined | luma:gid()
+    parent_uuid :: undefined | file_meta:uuid()
 }).
 
 -record(storage_config, {
@@ -550,7 +543,12 @@
     },
     last_rename :: undefined | replica_changes:last_rename(),
     storage_file_created = false :: boolean(),
-    last_replication_timestamp :: non_neg_integer() | undefined
+    last_replication_timestamp :: non_neg_integer() | undefined,
+    % synced_gid field is set by storage_sync, only on POSIX-compatible storages.
+    % It is used to override display gid, only in
+    % the syncing provider, with the gid that file
+    % belongs to on synced storage.
+    synced_gid :: undefined | luma:gid()
 }).
 
 %% Model for storing file's blocks
@@ -561,7 +559,9 @@
 
 %% Model for storing dir's location data
 -record(dir_location, {
-    storage_file_created = false :: boolean()
+    storage_file_created = false :: boolean(),
+    storage_id :: undefined | storage:id(),
+    synced_gid :: undefined | luma:gid()
 }).
 
 %% Model that stores configuration of storage_sync mechanism

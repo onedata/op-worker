@@ -192,7 +192,7 @@ rename_into_different_place_within_space(UserCtx, SourceFileCtx, TargetParentFil
     TargetName, SourceFileType, TargetFileType, TargetFileCtx) ->
     {Storage, SourceFileCtx2} = file_ctx:get_storage(SourceFileCtx),
     Helper = storage:get_helper(Storage),
-    case helper:is_rename_supported_on(Helper) of
+    case helper:is_rename_supported(Helper) of
         true ->
             rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx2,
                 TargetParentFileCtx, TargetName, SourceFileType, TargetFileType,

@@ -30,11 +30,11 @@
     counting_file_open_and_release_test/1,
     invalidating_session_open_files_test/1,
     init_should_clear_open_files/1,
-    init_should_clear_delayed_open_files/1,
+    init_should_clear_deferred_open_files/1,
     open_file_deletion_request/1,
-    delayed_open_file_deletion_request/1,
+    deferred_open_file_deletion_request/1,
     deletion_of_not_open_file/1,
-    deletion_of_not_open_delayed_file/1,
+    deletion_of_not_open_deferred_file/1,
     file_should_not_be_listed_after_deletion/1,
     file_stat_should_return_enoent_after_deletion/1,
     file_open_should_return_enoent_after_deletion/1,
@@ -50,11 +50,11 @@
     counting_file_open_and_release_test,
     invalidating_session_open_files_test,
     init_should_clear_open_files,
-    init_should_clear_delayed_open_files,
+    init_should_clear_deferred_open_files,
     open_file_deletion_request,
-    delayed_open_file_deletion_request,
+    deferred_open_file_deletion_request,
     deletion_of_not_open_file,
-    deletion_of_not_open_delayed_file,
+    deletion_of_not_open_deferred_file,
     file_should_not_be_listed_after_deletion,
     file_stat_should_return_enoent_after_deletion,
     file_open_should_return_enoent_after_deletion,
@@ -179,13 +179,13 @@ invalidating_session_open_files_test(Config) ->
 init_should_clear_open_files(Config) ->
     init_should_clear_open_files_test_base(Config, false).
 
-init_should_clear_delayed_open_files(Config) ->
+init_should_clear_deferred_open_files(Config) ->
     init_should_clear_open_files_test_base(Config, true).
 
-init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
+init_should_clear_open_files_test_base(Config, DeferredFileCreation) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    FileGuid = create_test_file(Config, Worker, SessId, DelayedFileCreation),
+    FileGuid = create_test_file(Config, Worker, SessId, DeferredFileCreation),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     FileCtx2 = file_ctx:new_by_guid(file_id:pack_guid(<<"file_uuid2">>, <<"spaceid">>)),
     FileCtx3 = file_ctx:new_by_guid(file_id:pack_guid(<<"file_uuid3">>, <<"spaceid">>)),
@@ -210,7 +210,7 @@ init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
     ?assertEqual(0, length(ClearedOpenFiles)),
 
     test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
-    case DelayedFileCreation of
+    case DeferredFileCreation of
         true -> ok;
         false ->
             test_utils:mock_assert_num_calls(Worker, storage_driver, unlink, 2, 1)
@@ -219,13 +219,13 @@ init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
 open_file_deletion_request(Config) ->
     open_file_deletion_request_test_base(Config, false).
 
-delayed_open_file_deletion_request(Config) ->
+deferred_open_file_deletion_request(Config) ->
     open_file_deletion_request_test_base(Config, true).
 
-open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
+open_file_deletion_request_test_base(Config, DeferredFileCreation) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    FileGuid = create_test_file(Config, Worker, SessId, DelayedFileCreation),
+    FileGuid = create_test_file(Config, Worker, SessId, DeferredFileCreation),
     FileCtx = file_ctx:new_by_guid(FileGuid),
     UserCtx = rpc:call(Worker, user_ctx, new, [<<"user1">>]),
     FileCtx2 = rpc:call(Worker, fslogic_delete, delete_parent_link, [FileCtx, UserCtx]),
@@ -234,7 +234,7 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
-    case DelayedFileCreation of
+    case DeferredFileCreation of
         true -> ok;
         false ->
             test_utils:mock_assert_num_calls(Worker, storage_driver, unlink, 2, 1)
@@ -243,14 +243,14 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
 deletion_of_not_open_file(Config) ->
     deletion_of_not_open_file_test_base(Config, false).
 
-deletion_of_not_open_delayed_file(Config) ->
+deletion_of_not_open_deferred_file(Config) ->
     deletion_of_not_open_file_test_base(Config, true).
 
-deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
+deletion_of_not_open_file_test_base(Config, DeferredFileCreation) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
-    FileGuid = create_test_file(Config, Worker, SessId, DelayedFileCreation),
+    FileGuid = create_test_file(Config, Worker, SessId, DeferredFileCreation),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     FileCtx = file_ctx:new_by_guid(FileGuid),
 
@@ -259,7 +259,7 @@ deletion_of_not_open_file_test_base(Config, DelayedFileCreation) ->
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete, 1, 1),
-    case DelayedFileCreation of
+    case DeferredFileCreation of
         true -> ok;
         false ->
             test_utils:mock_assert_num_calls(Worker, storage_driver, unlink, 2, 1)
@@ -473,11 +473,11 @@ init_per_testcase(remove_file_on_ceph_using_client, Config) ->
     lfm_proxy:init(ConfigWithSessionInfo);
 init_per_testcase(Case, Config) when
     Case =:= init_should_clear_open_files;
-    Case =:= init_should_clear_delayed_open_files;
+    Case =:= init_should_clear_deferred_open_files;
     Case =:= open_file_deletion_request;
-    Case =:= delayed_open_file_deletion_request;
+    Case =:= deferred_open_file_deletion_request;
     Case =:= deletion_of_not_open_file;
-    Case =:= deletion_of_not_open_delayed_file;
+    Case =:= deletion_of_not_open_deferred_file;
     Case =:= file_should_not_be_listed_after_deletion;
     Case =:= file_stat_should_return_enoent_after_deletion;
     Case =:= file_open_should_return_enoent_after_deletion;
@@ -521,11 +521,11 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(Case, Config) when
     Case =:= init_should_clear_open_files;
-    Case =:= init_should_clear_delayed_open_files;
+    Case =:= init_should_clear_deferred_open_files;
     Case =:= open_file_deletion_request;
-    Case =:= delayed_open_file_deletion_request;
+    Case =:= deferred_open_file_deletion_request;
     Case =:= deletion_of_not_open_file;
-    Case =:= deletion_of_not_open_delayed_file;
+    Case =:= deletion_of_not_open_deferred_file;
     Case =:= file_should_not_be_listed_after_deletion;
     Case =:= file_stat_should_return_enoent_after_deletion;
     Case =:= file_open_should_return_enoent_after_deletion;
@@ -558,12 +558,12 @@ init_session(Worker, Nonce) ->
         Worker, Nonce, ?SUB(user, <<"u1">>), undefined, self()
     ).
 
-create_test_file(Config, Worker, SessId, DelayedFileCreation) ->
+create_test_file(Config, Worker, SessId, DeferredFileCreation) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     File = filename:join(["/", SpaceName, "file0"]),
 
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, File, 8#770)),
-    case DelayedFileCreation of
+    case DeferredFileCreation of
         true -> ok;
         false ->
             {ok, Handle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, read),
