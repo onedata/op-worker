@@ -75,10 +75,11 @@ set_file_rdf_metadata_test(Config) ->
 
     GetExpCallResultFun = fun(_TestCtx) -> ok end,
 
-    DataSpec = #data_spec{
+    DataSpec = api_test_utils:add_bad_file_id_and_path_error_values(#data_spec{
         required = [<<"metadata">>],
         correct_values = #{<<"metadata">> => [?RDF_METADATA_1, ?RDF_METADATA_2]}
-    },
+    }, ?SPACE_2, undefined),
+
     VerifyEnvFun = fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
             ?assertMatch({error, ?ENODATA}, get_rdf(TestNode, FileGuid, Config), ?ATTEMPTS),
@@ -122,10 +123,11 @@ set_shared_file_rdf_metadata_test(Config) ->
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_NOT_SUPPORTED end,
 
-    DataSpec = #data_spec{
+    DataSpec = api_test_utils:add_bad_file_id_and_path_error_values(#data_spec{
         required = [<<"metadata">>],
         correct_values = #{<<"metadata">> => [?RDF_METADATA_1, ?RDF_METADATA_2]}
-    },
+    }, ?SPACE_2, ShareId),
+
     VerifyEnvFun = fun(_, #api_test_ctx{node = TestNode}) ->
         ?assertMatch({error, ?ENODATA}, get_rdf(TestNode, FileGuid, Config), ?ATTEMPTS),
         true
@@ -197,7 +199,7 @@ set_file_json_metadata_test(Config) ->
 
     ExampleJson = #{<<"attr1">> => [0, 1, <<"val">>]},
 
-    DataSpec = #data_spec{
+    DataSpec = api_test_utils:add_bad_file_id_and_path_error_values(#data_spec{
         required = [<<"metadata">>],
         optional = QsParams = [<<"filter_type">>, <<"filter">>],
         correct_values = #{
@@ -228,7 +230,8 @@ set_file_json_metadata_test(Config) ->
             {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
             {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
         ]
-    },
+    }, ?SPACE_2, undefined),
+
     GetRequestFilterArg = fun(#api_test_ctx{data = Data}) ->
         FilterType = maps:get(<<"filter_type">>, Data, undefined),
         Filter = maps:get(<<"filter">>, Data, undefined),
@@ -337,13 +340,14 @@ set_file_primitive_json_metadata_test(Config) ->
 
     GetExpCallResultFun = fun(_TestCtx) -> ok end,
 
-    DataSpec = #data_spec{
+    DataSpec = api_test_utils:add_bad_file_id_and_path_error_values(#data_spec{
         required = [<<"metadata">>],
         correct_values = #{<<"metadata">> => [
             <<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>,
             <<"null">>, <<"\"string\"">>
         ]}
-    },
+    }, ?SPACE_2, undefined),
+
     VerifyEnvFun = fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
             ?assertMatch({error, ?ENODATA}, get_json(TestNode, FileGuid, Config), ?ATTEMPTS),
@@ -388,10 +392,10 @@ set_shared_file_json_metadata_test(Config) ->
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_NOT_SUPPORTED end,
 
-    DataSpec = #data_spec{
+    DataSpec = api_test_utils:add_bad_file_id_and_path_error_values(#data_spec{
         required = [<<"metadata">>],
         correct_values = #{<<"metadata">> => [?JSON_METADATA_4, ?JSON_METADATA_5]}
-    },
+    }, ?SPACE_2, ShareId),
     VerifyEnvFun = fun(_, #api_test_ctx{node = TestNode}) ->
         ?assertMatch({error, ?ENODATA}, get_json(TestNode, FileGuid, Config), ?ATTEMPTS),
         true
@@ -461,7 +465,7 @@ set_file_xattrs_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     {FileType, FilePath, FileGuid, _} = create_random_file(P1, P2, ?SPACE_2, false, Config),
 
-    DataSpec = #data_spec{
+    DataSpec = api_test_utils:add_bad_file_id_and_path_error_values(#data_spec{
         required = [<<"metadata">>],
         correct_values = #{<<"metadata">> => [
             % Tests setting multiple xattrs at once
@@ -481,7 +485,8 @@ set_file_xattrs_test(Config) ->
             {<<"metadata">>, #{<<"cdmi_attr">> => <<"val">>}, ?ERROR_POSIX(?EPERM)},
             {<<"metadata">>, #{<<"onedata_attr">> => <<"val">>}, ?ERROR_POSIX(?EPERM)}
         ]
-    },
+    }, ?SPACE_2, undefined),
+
     GetExpCallResultFun = fun(#api_test_ctx{client = Client, data = #{<<"metadata">> := Xattrs}}) ->
         case {Client, maps:is_key(?ACL_KEY, Xattrs)} of
             {?USER_IN_SPACE_2_AUTH, true} ->
@@ -527,7 +532,7 @@ set_shared_file_xattrs_test(Config) ->
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_NOT_SUPPORTED end,
 
-    DataSpec = #data_spec{
+    DataSpec = api_test_utils:add_bad_file_id_and_path_error_values(#data_spec{
         required = [<<"metadata">>],
         correct_values = #{<<"metadata">> => [
             % Tests setting multiple xattrs at once
@@ -540,7 +545,8 @@ set_shared_file_xattrs_test(Config) ->
             #{?JSON_METADATA_KEY => ?JSON_METADATA_4},
             #{?RDF_METADATA_KEY => ?RDF_METADATA_1}
         ]}
-    },
+    }, ?SPACE_2, ShareId),
+
     VerifyEnvFun = fun(_, #api_test_ctx{node = TestNode}) ->
         assert_no_xattrs_set(TestNode, FileGuid, Config),
         true
@@ -758,7 +764,7 @@ set_metadata_test_base(
                 },
                 #scenario_template{
                     name = <<"Set ", MetadataType/binary, " metadata for shared ", FileType/binary, " using gs private api">>,
-                    type = gs,
+                    type = gs_with_shared_guid_and_aspect_private,
                     prepare_args_fun = create_prepare_set_metadata_gs_args_fun(MetadataType, FileShareGuid, private),
                     validate_result_fun = fun(_, Result) ->
                         ?assertEqual(?ERROR_UNAUTHORIZED, Result)
@@ -772,34 +778,31 @@ set_metadata_test_base(
 
 %% @private
 create_prepare_new_id_set_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    create_prepare_set_metadata_rest_args_fun(
-        MetadataType,
-        ?NEW_ID_METADATA_REST_PATH(FileObjectId, MetadataType),
-        QsParams
-    ).
+    create_prepare_set_metadata_rest_args_fun(new_id, MetadataType, FileObjectId, QsParams).
 
 
 %% @private
 create_prepare_deprecated_path_set_metadata_rest_args_fun(MetadataType, FilePath, QsParams) ->
-    create_prepare_set_metadata_rest_args_fun(
-        MetadataType,
-        ?DEPRECATED_PATH_METADATA_REST_PATH(FilePath, MetadataType),
-        QsParams
-    ).
+    create_prepare_set_metadata_rest_args_fun(deprecated_path, MetadataType, FilePath, QsParams).
 
 
 %% @private
 create_prepare_deprecated_id_set_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    create_prepare_set_metadata_rest_args_fun(
-        MetadataType,
-        ?DEPRECATED_ID_METADATA_REST_PATH(FileObjectId, MetadataType),
-        QsParams
-    ).
+    create_prepare_set_metadata_rest_args_fun(deprecated_id, MetadataType, FileObjectId, QsParams).
 
 
 %% @private
-create_prepare_set_metadata_rest_args_fun(MetadataType, RestPath, QsParams) ->
+create_prepare_set_metadata_rest_args_fun(Endpoint, MetadataType, ValidId, QsParams) ->
     fun(#api_test_ctx{data = Data}) ->
+        Id = case maps:find(bad_id, Data) of
+            {ok, BadId} -> BadId;
+            error -> ValidId
+        end,
+        RestPath = case Endpoint of
+            new_id -> ?NEW_ID_METADATA_REST_PATH(Id, MetadataType);
+            deprecated_path -> ?DEPRECATED_PATH_METADATA_REST_PATH(Id, MetadataType);
+            deprecated_id -> ?DEPRECATED_ID_METADATA_REST_PATH(Id, MetadataType)
+        end,
         #rest_args{
             method = put,
             headers = case MetadataType of
@@ -832,10 +835,14 @@ create_prepare_set_metadata_gs_args_fun(MetadataType, FileGuid, Scope) ->
             <<"xattrs">> ->
                 {xattrs, Data0}
         end,
+        {GriId, Data3} = case maps:take(bad_id, Data1) of
+            {BadId, Data2} -> {BadId, Data2};
+            error -> {FileGuid, Data1}
+        end,
         #gs_args{
             operation = create,
-            gri = #gri{type = op_file, id = FileGuid, aspect = Aspect, scope = Scope},
-            data = Data1
+            gri = #gri{type = op_file, id = GriId, aspect = Aspect, scope = Scope},
+            data = Data3
         }
     end.
 
