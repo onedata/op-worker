@@ -32,6 +32,10 @@
     rest_not_supported |
     % Standard graph sync scenario
     gs |
+    % Gs scenario with gri.scope == private and gri.id == SharedGuid.
+    % Such requests should be rejected at auth steps resulting in
+    % ?ERROR_UNAUTHORIZED.
+    gs_with_shared_guid_and_aspect_private |
     % Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
     % of test case due to for example invalid aspect.
     gs_not_supported.

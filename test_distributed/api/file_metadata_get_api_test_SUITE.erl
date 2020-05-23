@@ -16,6 +16,7 @@
 -include("file_metadata_api_test_utils.hrl").
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("test_utils/initializer.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -129,7 +130,7 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
         create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
         _Providers = ?config(op_worker_nodes, Config),
         ClientSpec,
-        _DataSpec = undefined,
+        _DataSpec = add_bad_file_id_and_path_error_values(undefined, ?SPACE_2, ShareId),
         _QsParams = [],
         Config
     ).
@@ -192,7 +193,7 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
         share_mode -> ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config);
         normal_mode -> ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config)
     end,
-    DataSpec = #data_spec{
+    DataSpec = add_bad_file_id_and_path_error_values(#data_spec{
         optional = QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
         correct_values = #{
             <<"inherited">> => [true, false],
@@ -209,11 +210,12 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
 
             % Below differences between error returned by rest and gs are results of sending
             % parameters via qs in REST, so they lost their original type and are cast to binary
+            {<<"filter_type">>, 100, {rest_with_file_path, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
             {<<"filter_type">>, 100, {rest, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
             {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
             {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
         ]
-    },
+    }, ?SPACE_2, ShareId),
 
     get_metadata_test_base(
         <<"json">>,
@@ -426,17 +428,17 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
         share_mode -> ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config);
         normal_mode -> ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config)
     end,
-    DataSpec = #data_spec{
+    DataSpec = add_bad_file_id_and_path_error_values(#data_spec{
         optional = QsParams = [<<"attribute">>, <<"inherited">>, <<"show_internal">>],
         correct_values = #{
             <<"attribute">> => [
+                NotSetXattrKey,
                 % Xattr name with prefixes 'cdmi_' and 'onedata_' should be forbidden
                 % with exception of those listed in ?ALL_XATTRS_KEYS. Nonetheless that is
                 % checked not in middleware but in lfm and depends on whether request will
                 % arrive there. That is why, depending where request was rejected, different
                 % error than ?EPERM may be returned
-                <<"cdmi_attr">>, <<"onedata_attr">>,
-                NotSetXattrKey
+                <<"cdmi_attr">>, <<"onedata_attr">>
                 | ?ALL_XATTRS_KEYS
             ],
             <<"inherited">> => [true, false],
@@ -449,7 +451,7 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
             {<<"show_internal">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)},
             {<<"show_internal">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)}
         ]
-    },
+    }, ?SPACE_2, ShareId),
 
     get_metadata_test_base(
         <<"xattrs">>,
@@ -820,7 +822,7 @@ get_metadata_test_base(
                 },
                 #scenario_template{
                     name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using gs private api">>,
-                    type = gs,
+                    type = gs_with_shared_guid_and_aspect_private,
                     prepare_args_fun = create_prepare_get_metadata_gs_args_fun(MetadataType, FileShareGuid, private),
                     validate_result_fun = fun(_, Result) ->
                         ?assertEqual(?ERROR_UNAUTHORIZED, Result)
@@ -833,45 +835,103 @@ get_metadata_test_base(
 
 
 %% @private
+add_bad_file_id_and_path_error_values(DataSpec, SpaceId, ShareId) ->
+    InvalidGuid = <<"InvalidGuid">>,
+    {ok, InvalidObjectId} = file_id:guid_to_objectid(InvalidGuid),
+    InvalidIdExpError = ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>),
+
+    % Request with guid properly formed but from invalid/nonexistent parts
+    % should pass sanitization step and fail only on later steps
+    NonExistentFileAndSpaceGuid = file_id:pack_share_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID, ShareId),
+    {ok, NonExistentFileAndSpaceObjectId} = file_id:guid_to_objectid(NonExistentFileAndSpaceGuid),
+    NonExistentFileAndSpaceExpError = case ShareId of
+        undefined ->
+            % For authenticated users it should fail on authorization step
+            % (checks if user belongs to space)
+            ?ERROR_FORBIDDEN;
+        _ ->
+            % For share request it should fail on validation step
+            % (checks if space is supported by provider)
+            {error_fun, fun(#api_test_ctx{node = Node}) ->
+                ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(Node))
+            end}
+    end,
+
+    % Request with properly formed guid with valid and supported space
+    % but invalid file_uuid should pass all checks and be forwarded to
+    % internal logic (ids are not checks for validity like e.g. length).
+    % Then due to failed file doc fetch (nonexistent file_uuid) ?ENOENT
+    % should be returned.
+    NonExistentFileGuid = file_id:pack_share_guid(<<"InvalidUuid">>, SpaceId, ShareId),
+    {ok, NonExistentFileObjectId} = file_id:guid_to_objectid(NonExistentFileGuid),
+    NonExistentFileExpError = ?ERROR_POSIX(?ENOENT),
+
+    BadFileIdAndPathValues = [
+        % Errors thrown by rest_handler, which failed to convert file path/cdmi_id to guid
+        {bad_id, <<"/NonExistentPath">>, {rest_with_file_path, ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>)}},
+        {bad_id, <<"InvalidObjectId">>, {rest, ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>)}},
+
+        % Errors thrown by middleware and internal logic
+        {bad_id, InvalidObjectId, {rest, InvalidIdExpError}},
+        {bad_id, NonExistentFileAndSpaceObjectId, {rest, NonExistentFileAndSpaceExpError}},
+        {bad_id, NonExistentFileObjectId, {rest, NonExistentFileExpError}},
+
+        {bad_id, InvalidGuid, {gs, InvalidIdExpError}},
+        {bad_id, NonExistentFileAndSpaceGuid, {gs, NonExistentFileAndSpaceExpError}},
+        {bad_id, NonExistentFileGuid, {gs, NonExistentFileExpError}}
+    ],
+    case DataSpec of
+        undefined ->
+            #data_spec{bad_values = BadFileIdAndPathValues};
+        #data_spec{bad_values = BadValues} ->
+            DataSpec#data_spec{bad_values = BadFileIdAndPathValues ++ BadValues}
+    end.
+
+
+%% @private
 create_prepare_new_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    create_prepare_get_metadata_rest_args_fun(
-        ?NEW_ID_METADATA_REST_PATH(FileObjectId, MetadataType),
-        QsParams
-    ).
+    create_prepare_get_metadata_rest_args_fun(new_id, MetadataType, FileObjectId, QsParams).
 
 
 %% @private
 create_prepare_deprecated_path_get_metadata_rest_args_fun(MetadataType, FilePath, QsParams) ->
-    create_prepare_get_metadata_rest_args_fun(
-        ?DEPRECATED_PATH_METADATA_REST_PATH(FilePath, MetadataType),
-        QsParams
-    ).
+    create_prepare_get_metadata_rest_args_fun(deprecated_path, MetadataType, FilePath, QsParams).
 
 
 %% @private
 create_prepare_deprecated_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    create_prepare_get_metadata_rest_args_fun(
-        ?DEPRECATED_ID_METADATA_REST_PATH(FileObjectId, MetadataType),
-        QsParams
-    ).
+    create_prepare_get_metadata_rest_args_fun(deprecated_id, MetadataType, FileObjectId, QsParams).
 
 
 %% @private
-create_prepare_get_metadata_rest_args_fun(RestPath, QsParams) ->
-    fun(#api_test_ctx{data = Data}) ->
+create_prepare_get_metadata_rest_args_fun(Endpoint, MetadataType, ValidId, QsParams) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        Data1 = utils:ensure_defined(Data0, undefined, #{}),
+
+        Id = case maps:find(bad_id, Data1) of
+            {ok, BadId} -> BadId;
+            error -> ValidId
+        end,
+        Path = case Endpoint of
+            new_id -> ?NEW_ID_METADATA_REST_PATH(Id, MetadataType);
+            deprecated_path -> ?DEPRECATED_PATH_METADATA_REST_PATH(Id, MetadataType);
+            deprecated_id -> ?DEPRECATED_ID_METADATA_REST_PATH(Id, MetadataType)
+        end,
         #rest_args{
             method = get,
-            path = http_utils:append_url_parameters(
-                RestPath,
-                maps:with(QsParams, utils:ensure_defined(Data, undefined, #{}))
-            )
+            path = http_utils:append_url_parameters(Path, maps:with(QsParams, Data1))
         }
     end.
 
 
 %% @private
 create_prepare_get_metadata_gs_args_fun(MetadataType, FileGuid, Scope) ->
-    fun(#api_test_ctx{data = Data}) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {GriId, Data1} = case maps:take(bad_id, utils:ensure_defined(Data0, undefined, #{})) of
+            {BadId, Data2} when map_size(Data2) == 0 -> {BadId, undefined};
+            {BadId, Data2} -> {BadId, Data2};
+            error -> {FileGuid, Data0}
+        end,
         Aspect = case MetadataType of
             <<"json">> -> json_metadata;
             <<"rdf">> -> rdf_metadata;
@@ -879,8 +939,8 @@ create_prepare_get_metadata_gs_args_fun(MetadataType, FileGuid, Scope) ->
         end,
         #gs_args{
             operation = get,
-            gri = #gri{type = op_file, id = FileGuid, aspect = Aspect, scope = Scope},
-            data = Data
+            gri = #gri{type = op_file, id = GriId, aspect = Aspect, scope = Scope},
+            data = Data1
         }
     end.
 

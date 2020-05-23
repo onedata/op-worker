@@ -25,6 +25,7 @@
 -include_lib("ctool/include/global_definitions.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([
@@ -1092,27 +1093,40 @@ group_logic_mock_setup(Workers, Groups, _Users) ->
 space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvesters, CustomStorages) ->
     test_utils:mock_new(Workers, space_logic),
 
-    GetSpaceFun = fun(_, SpaceId) ->
-        SpaceName = proplists:get_value(SpaceId, Spaces),
-        UserIds = proplists:get_value(SpaceId, Users, []),
-        EffUsers = maps:from_list(lists:map(fun(UID) ->
-            {UID, node_get_mocked_space_user_privileges(SpaceId, UID)}
-        end, UserIds)),
-        Storages = proplists:get_value(SpaceId, SpacesToStorages,
-            maps:from_list([{St, 1000000000} || St <- CustomStorages])),
-        {ok, #document{key = SpaceId, value = #od_space{
-            name = SpaceName,
-            providers = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
-                maps:update_with(ProviderId, fun(PrevSupport) -> PrevSupport + Support end, Support, Acc)
-            end, #{}, Storages),
-            harvesters = proplists:get_value(SpaceId, SpacesHarvesters, []),
-            eff_users = EffUsers,
-            eff_groups = #{},
-            storages = maps:fold(fun({StorageName, _Provider}, Support, Acc) ->
-                % StorageName is the same as Id
-                Acc#{StorageName => Support}
-            end, #{}, Storages)
-        }}}
+    GetSpaceFun = fun
+        % Special value returning empty space doc - needed because no one ever
+        % thought that someone may want to test not supported/nonexistent space
+        % and so all mocks depends on that assumption... pdk
+        (_, ?NOT_SUPPORTED_SPACE_ID) ->
+            {ok, #document{key = ?NOT_SUPPORTED_SPACE_ID, value = #od_space{
+                name = ?NOT_SUPPORTED_SPACE_ID,
+                providers = #{},
+                harvesters = [],
+                eff_users = #{},
+                eff_groups = #{},
+                storages = #{}
+            }}};
+        (_, SpaceId) ->
+            SpaceName = proplists:get_value(SpaceId, Spaces),
+            UserIds = proplists:get_value(SpaceId, Users, []),
+            EffUsers = maps:from_list(lists:map(fun(UID) ->
+                {UID, node_get_mocked_space_user_privileges(SpaceId, UID)}
+            end, UserIds)),
+            Storages = proplists:get_value(SpaceId, SpacesToStorages,
+                maps:from_list([{St, 1000000000} || St <- CustomStorages])),
+            {ok, #document{key = SpaceId, value = #od_space{
+                name = SpaceName,
+                providers = maps:fold(fun({_StorageName, ProviderId}, Support, Acc) ->
+                    maps:update_with(ProviderId, fun(PrevSupport) -> PrevSupport + Support end, Support, Acc)
+                end, #{}, Storages),
+                harvesters = proplists:get_value(SpaceId, SpacesHarvesters, []),
+                eff_users = EffUsers,
+                eff_groups = #{},
+                storages = maps:fold(fun({StorageName, _Provider}, Support, Acc) ->
+                    % StorageName is the same as Id
+                    Acc#{StorageName => Support}
+                end, #{}, Storages)
+            }}}
     end,
 
     test_utils:mock_expect(Workers, space_logic, get, GetSpaceFun),
