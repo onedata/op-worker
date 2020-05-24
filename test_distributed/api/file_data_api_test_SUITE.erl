@@ -30,107 +30,433 @@
 ]).
 
 -export([
-    get_children_test/1,
+    get_dir_children_test/1,
+    get_shared_dir_children_test/1,
+    get_file_children_test/1,
+    get_user_root_dir_children_test/1,
+    get_dir_children_on_provider_not_supporting_space_test/1,
+
     get_attrs_test/1,
     set_mode_test/1
 ]).
 
 all() ->
     ?ALL([
-        get_children_test,
+        get_dir_children_test,
+        get_shared_dir_children_test,
+        get_file_children_test,
+        get_user_root_dir_children_test,
+        get_dir_children_on_provider_not_supporting_space_test,
+
         get_attrs_test,
         set_mode_test
     ]).
 
 
 %%%===================================================================
-%%% Test functions
+%%% List/Get children test functions
 %%%===================================================================
 
 
-get_children_test(Config) ->
-    [Provider2, Provider1] = Providers = ?config(op_worker_nodes, Config),
-    Provider2DomainBin = ?GET_DOMAIN_BIN(Provider2),
+get_dir_children_test(Config) ->
+    {DirPath, DirGuid, _ShareId, Files} = create_get_children_tests_env(Config, normal_mode),
+    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"List normal dir using /data/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(DirObjectId),
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                        validate_listed_files(Response, rest, undefined, Data, Files)
+                    end
+                },
+                #scenario_template{
+                    name = <<"List normal dir using /files/ rest endpoint">>,
+                    type = rest_with_file_path,
+                    prepare_args_fun = create_prepare_deprecated_path_get_children_rest_args_fun(DirPath),
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                        validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
+                    end
+                },
+                #scenario_template{
+                    name = <<"List normal dir using /files-id/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(DirObjectId),
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                        validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
+                    end
+                },
+                #scenario_template{
+                    name = <<"List normal dir using gs api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_children_gs_args_fun(DirGuid, private),
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
+                        validate_listed_files(Result, gs, undefined, Data, Files)
+                    end
+                }
+            ],
+            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
+                get_children_data_spec(), ?SPACE_2, undefined
+            )
+        }
+    ])).
+
+
+get_shared_dir_children_test(Config) ->
+    {_DirPath, DirGuid, ShareId, Files} = create_get_children_tests_env(Config, share_mode),
+    ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
+    {ok, ShareDirObjectId} = file_id:guid_to_objectid(ShareDirGuid),
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"List shared dir using /data/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(ShareDirObjectId),
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                        validate_listed_files(Response, rest, ShareId, Data, Files)
+                    end
+                },
+                % Old endpoint returns "id" and "path" - for now get_path is forbidden
+                % for shares so this method returns ?ERROR_NOT_SUPPORTED in case of
+                % listing share dir
+                #scenario_template{
+                    name = <<"List shared dir using /files-id/ rest endpoint">>,
+                    type = rest_not_supported,
+                    prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(ShareDirObjectId),
+                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, Response}) ->
+                        ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
+                    end
+                },
+                #scenario_template{
+                    name = <<"List shared dir using gs api with public scope">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_children_gs_args_fun(ShareDirGuid, public),
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
+                        validate_listed_files(Result, gs, ShareId, Data, Files)
+                    end
+                },
+                % 'private' scope is forbidden for shares even if user would be able to
+                % list children using normal guid
+                #scenario_template{
+                    name = <<"List shared dir using gs api with private scope">>,
+                    type = gs_with_shared_guid_and_aspect_private,
+                    prepare_args_fun = create_prepare_get_children_gs_args_fun(ShareDirGuid, private),
+                    validate_result_fun = fun(_TestCaseCtx, Result) ->
+                        ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+                    end
+                }
+            ],
+            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
+                get_children_data_spec(), ?SPACE_2, ShareId
+            )
+        }
+    ])).
+
+
+%% @private
+create_get_children_tests_env(Config, TestMode) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    DirName = ?RANDOM_FILE_NAME(),
+    DirPath = filename:join(["/", ?SPACE_2, DirName]),
+    {ok, DirGuid} = lfm_proxy:mkdir(P2, SessIdP2, DirPath, 8#777),
+
+    ShareId = case TestMode of
+        normal_mode ->
+            undefined;
+        share_mode ->
+            {ok, ShId} = lfm_proxy:create_share(P2, SessIdP2, {guid, DirGuid}, <<"share">>),
+            ShId
+    end,
+
+    Files = [{FileGuid1, _FileName1, _FilePath1} | _] = lists:map(fun(Num) ->
+        FileName = <<"file", Num>>,
+        {ok, FileGuid} = lfm_proxy:create(P2, SessIdP2, DirGuid, FileName, 8#777),
+        {FileGuid, FileName, filename:join([DirPath, FileName])}
+    end, [$0, $1, $2, $3, $4]),
+
+    api_test_utils:wait_for_file_sync(P1, SessIdP1, FileGuid1),
+
+    {DirPath, DirGuid, ShareId, Files}.
+
+
+get_file_children_test(Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    FileName = <<"get_file_children_test">>,
+    FilePath = filename:join(["/", ?SPACE_2, FileName]),
+    {ok, FileGuid} = lfm_proxy:create(P2, SessIdP2, FilePath, 8#777),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    api_test_utils:wait_for_file_sync(P1, SessIdP1, FileGuid),
+
+    % Listing file result in returning this file info only - index/limit parameters are ignored.
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"List file using /data/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(FileObjectId),
+                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
+                        ?assertEqual(#{<<"children">> => [#{
+                            <<"id">> => FileObjectId,
+                            <<"name">> => FileName
+                        }]}, Response)
+                    end
+                },
+                #scenario_template{
+                    name = <<"List file using /files/ rest endpoint">>,
+                    type = rest_with_file_path,
+                    prepare_args_fun = create_prepare_deprecated_path_get_children_rest_args_fun(FilePath),
+                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
+                        ?assertEqual(
+                            [#{<<"id">> => FileObjectId, <<"path">> => FilePath}],
+                            Response
+                        )
+                    end
+                },
+                #scenario_template{
+                    name = <<"List file using /files-id/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(FileObjectId),
+                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
+                        ?assertEqual(
+                            [#{<<"id">> => FileObjectId, <<"path">> => FilePath}],
+                            Response
+                        )
+                    end
+                },
+                #scenario_template{
+                    name = <<"List file using gs api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_children_gs_args_fun(FileGuid, private),
+                    validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
+                        ?assertEqual(#{<<"children">> => [FileGuid]}, Result)
+                    end
+                }
+            ],
+            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
+                get_children_data_spec(), ?SPACE_2, undefined
+            )
+        }
+    ])).
+
+
+get_user_root_dir_children_test(Config) ->
+    Providers = ?config(op_worker_nodes, Config),
 
     Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_1),
-    {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
-
     Space2Guid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_2),
 
     Spaces = [
         {Space1Guid, ?SPACE_1, <<"/", ?SPACE_1/binary>>},
         {Space2Guid, ?SPACE_2, <<"/", ?SPACE_2/binary>>}
     ],
-
-    GetSessionFun = fun(Node) ->
-        ?config({session_id, {?USER_IN_BOTH_SPACES, ?GET_DOMAIN(Node)}}, Config)
-    end,
-
     UserInBothSpacesRootDirGuid = fslogic_uuid:user_root_dir_guid(?USER_IN_BOTH_SPACES),
     {ok, UserInBothSpacesRootDirObjectId} = file_id:guid_to_objectid(UserInBothSpacesRootDirGuid),
 
-    UserSessId = GetSessionFun(Provider2),
+    DataSpec = get_children_data_spec(),
 
-    DirName = ?SCENARIO_NAME,
-    DirPath = filename:join(["/", ?SPACE_2, DirName]),
-    {ok, DirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, DirPath, 8#777),
-    {ok, DirObjectId} = file_id:guid_to_objectid(DirGuid),
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = [?USER_IN_BOTH_SPACES_AUTH],
+                unauthorized = [?NOBODY],
+                forbidden = [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH],
+                supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(Config)
+            },
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"List user root dir using /data/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(UserInBothSpacesRootDirObjectId),
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                        validate_listed_files(Response, rest, undefined, Data, Spaces)
+                    end
+                },
+                #scenario_template{
+                    name = <<"List user root dir using /files-id/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(UserInBothSpacesRootDirObjectId),
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                        validate_listed_files(Response, deprecated_rest, undefined, Data, Spaces)
+                    end
+                },
+                #scenario_template{
+                    name = <<"List user root dir using gs api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_children_gs_args_fun(UserInBothSpacesRootDirGuid, private),
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
+                        validate_listed_files(Result, gs, undefined, Data, Spaces)
+                    end
+                }
+            ],
+            data_spec = DataSpec
+        },
+        % Special case - listing files using path '/' works for all users but
+        % returns only their own spaces
+        #scenario_spec{
+            name = <<"List user root dir using /files/ rest endpoint">>,
+            type = rest_with_file_path,
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
+                unauthorized = [?NOBODY],
+                forbidden = [],
+                supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(Config)
+            },
+            prepare_args_fun = create_prepare_deprecated_path_get_children_rest_args_fun(<<"/">>),
+            validate_result_fun = fun(#api_test_ctx{client = Client, data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                ClientSpaces = case Client of
+                    ?USER_IN_SPACE_1_AUTH ->
+                        [{Space1Guid, ?SPACE_1, <<"/", ?SPACE_1/binary>>}];
+                    ?USER_IN_SPACE_2_AUTH ->
+                        [{Space2Guid, ?SPACE_2, <<"/", ?SPACE_2/binary>>}];
+                    ?USER_IN_BOTH_SPACES_AUTH ->
+                        Spaces
+                end,
+                validate_listed_files(Response, deprecated_rest, undefined, Data, ClientSpaces)
+            end,
+            data_spec = DataSpec
+        }
+    ])).
 
-    {ok, ShareId} = lfm_proxy:create_share(Provider2, UserSessId, {guid, DirGuid}, <<"share">>),
-    ShareDirGuid = file_id:guid_to_share_guid(DirGuid, ShareId),
-    {ok, ShareDirObjectId} = file_id:guid_to_objectid(ShareDirGuid),
 
-    Files = [{FileGuid1, FileName1, FilePath1} | _] = lists:map(fun(Num) ->
-        FileName = <<"file", Num>>,
-        {ok, FileGuid} = lfm_proxy:create(Provider2, UserSessId, DirGuid, FileName, 8#777),
-        {FileGuid, FileName, filename:join([DirPath, FileName])}
-    end, [$0, $1, $2, $3, $4]),
-    {ok, FileObjectId1} = file_id:guid_to_objectid(FileGuid1),
+get_dir_children_on_provider_not_supporting_space_test(Config) ->
+    [P2, _P1] = Providers = ?config(op_worker_nodes, Config),
+    Provider2DomainBin = ?GET_DOMAIN_BIN(P2),
 
-    % Wait for metadata sync between providers
-    ?assertMatch(
-        {ok, _},
-        lfm_proxy:stat(Provider1, GetSessionFun(Provider1), {guid, FileGuid1}),
-        ?ATTEMPTS
-    ),
+    Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_1),
+    {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
 
-    SupportedClientsPerNode = #{
-        Provider1 => [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        Provider2 => [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
-    },
+    ValidateRestListedFilesOnProvidersNotSupportingSpace = fun(ExpSuccessResult) -> fun
+        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
+            Node == P2,
+            Client == ?USER_IN_BOTH_SPACES_AUTH
+        ->
+            ?assertEqual(?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)), Response);
+        (_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
+            ?assertEqual(ExpSuccessResult, Response)
+    end end,
 
-    ClientSpecForSpace1Listing = #client_spec{
-        correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [?NOBODY],
-        forbidden = [?USER_IN_SPACE_2_AUTH],
-        supported_clients_per_node = SupportedClientsPerNode
-    },
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"List dir on provider not supporting user using /data/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(Space1ObjectId),
+                    validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace(#{<<"children">> => []})
+                },
+                #scenario_template{
+                    name = <<"List dir on provider not supporting user using /files/ rest endpoint">>,
+                    type = rest_with_file_path,
+                    prepare_args_fun = create_prepare_deprecated_path_get_children_rest_args_fun(<<"/", ?SPACE_1/binary>>),
+                    validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace([])
+                },
+                #scenario_template{
+                    name = <<"List dir on provider not supporting user using /files-id/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(Space1ObjectId),
+                    validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace([])
+                },
+                #scenario_template{
+                    name = <<"List dir on provider not supporting user using gs api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_children_gs_args_fun(Space1Guid, private),
+                    validate_result_fun = fun
+                        (#api_test_ctx{node = Node, client = Client}, Result) when
+                            Node == P2,
+                            Client == ?USER_IN_BOTH_SPACES_AUTH
+                            ->
+                            ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
+                        (_TestCaseCtx, {ok, Result}) ->
+                            ?assertEqual(#{<<"children">> => []}, Result)
+                    end
+                }
+            ],
+            data_spec = get_children_data_spec()
+        }
+    ])).
 
-    ClientSpecForSpace2Listing = #client_spec{
-        correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [?NOBODY],
-        forbidden = [?USER_IN_SPACE_1_AUTH],
-        supported_clients_per_node = SupportedClientsPerNode
-    },
 
-    ClientSpecForUserInBothSpacesUserRootDirListing = #client_spec{
-        correct = [?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [?NOBODY],
-        forbidden = [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH],
-        supported_clients_per_node = SupportedClientsPerNode
-    },
+%% @private
+create_prepare_new_id_get_children_rest_args_fun(FileObjectId) ->
+    create_prepare_get_children_rest_args_fun(new_id, FileObjectId).
 
-    % Special case -> any user can make requests for shares but if request is
-    % being made using credentials by user not supported on specific provider
-    % ?ERROR_USER_NOT_SUPPORTED will be returned
-    ClientSpecForShareListing = #client_spec{
-        correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [],
-        forbidden = [],
-        supported_clients_per_node = SupportedClientsPerNode
-    },
 
-    ParamsSpec = #data_spec{
+%% @private
+create_prepare_deprecated_path_get_children_rest_args_fun(FilePath) ->
+    create_prepare_get_children_rest_args_fun(deprecated_path, FilePath).
+
+
+%% @private
+create_prepare_deprecated_id_get_children_rest_args_fun(FileObjectId) ->
+    create_prepare_get_children_rest_args_fun(deprecated_id, FileObjectId).
+
+
+%% @private
+create_prepare_get_children_rest_args_fun(Endpoint, ValidId) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        Data1 = utils:ensure_defined(Data0, undefined, #{}),
+
+        Id = case maps:find(bad_id, Data1) of
+            {ok, BadId} -> BadId;
+            error -> ValidId
+        end,
+        RestPath = case Endpoint of
+            new_id -> <<"data/", Id/binary, "/children">>;
+            deprecated_path -> <<"files", Id/binary>>;
+            deprecated_id -> <<"files-id/", Id/binary>>
+        end,
+        #rest_args{
+            method = get,
+            path = http_utils:append_url_parameters(
+                RestPath,
+                maps:with([<<"limit">>, <<"offset">>], Data1)
+            )
+        }
+    end.
+
+
+%% @private
+create_prepare_get_children_gs_args_fun(FileGuid, Scope) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {GriId, Data1} = case maps:take(bad_id, utils:ensure_defined(Data0, undefined, #{})) of
+            {BadId, Data2} when map_size(Data2) == 0 -> {BadId, undefined};
+            {BadId, Data2} -> {BadId, Data2};
+            error -> {FileGuid, Data0}
+        end,
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = GriId, aspect = children, scope = Scope},
+            data = Data1
+        }
+    end.
+
+
+%% @private
+get_children_data_spec() ->
+    #data_spec{
         optional = [<<"limit">>, <<"offset">>],
         correct_values = #{
             <<"limit">> => [1, 100],
@@ -143,327 +469,12 @@ get_children_test(Config) ->
             {<<"limit">>, 1001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
             {<<"offset">>, <<"abc">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
         ]
-    },
+    }.
 
-    ConstructPrepareRestArgsFun = fun(FileId) ->
-        fun(#api_test_ctx{data = Data}) ->
-            #rest_args{
-                method = get,
-                path = http_utils:append_url_parameters(
-                    <<"data/", FileId/binary, "/children">>,
-                    maps:with([<<"limit">>, <<"offset">>], Data)
-                )
-            }
-        end
-    end,
-    ConstructPrepareDeprecatedFilePathRestArgsFun = fun(FilePath) ->
-        fun(#api_test_ctx{data = Data}) ->
-            #rest_args{
-                method = get,
-                path = http_utils:append_url_parameters(
-                    <<"files", FilePath/binary>>,
-                    maps:with([<<"limit">>, <<"offset">>], Data)
-                )
-            }
-        end
-    end,
-    ConstructPrepareDeprecatedFileIdRestArgsFun = fun(Fileid) ->
-        fun(#api_test_ctx{data = Data}) ->
-            #rest_args{
-                method = get,
-                path = http_utils:append_url_parameters(
-                    <<"files-id/", Fileid/binary>>,
-                    maps:with([<<"limit">>, <<"offset">>], Data)
-                )
-            }
-        end
-    end,
-    ConstructPrepareGsArgsFun = fun(FileId, Scope) ->
-        fun(#api_test_ctx{data = Data}) ->
-            #gs_args{
-                operation = get,
-                gri = #gri{type = op_file, id = FileId, aspect = children, scope = Scope},
-                data = Data
-            }
-        end
-    end,
 
-    ValidateRestListedFilesOnProvidersNotSupportingSpace = fun(ExpSuccessResult) -> fun
-        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
-            Node == Provider2,
-            Client == ?USER_IN_BOTH_SPACES_AUTH
-        ->
-            ?assertEqual(?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)), Response);
-        (_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
-            ?assertEqual(ExpSuccessResult, Response)
-    end end,
-
-    ?assert(api_test_runner:run_tests(Config, [
-
-        %% TEST LISTING NORMAL DIR
-
-        #scenario_spec{
-            name = <<"List normal dir using /data/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace2Listing,
-            prepare_args_fun = ConstructPrepareRestArgsFun(DirObjectId),
-            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
-                validate_listed_files(Response, rest, undefined, Data, Files)
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List normal dir using /files/ rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace2Listing,
-            prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(DirPath),
-            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
-                validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List normal dir using /files-id/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace2Listing,
-            prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(DirObjectId),
-            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
-                validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List normal dir using gs api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace2Listing,
-            prepare_args_fun = ConstructPrepareGsArgsFun(DirGuid, private),
-            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
-                validate_listed_files(Result, gs, undefined, Data, Files)
-            end,
-            data_spec = ParamsSpec
-        },
-
-        %% TEST LISTING SHARE DIR
-
-        #scenario_spec{
-            name = <<"List shared dir using /data/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForShareListing,
-            prepare_args_fun = ConstructPrepareRestArgsFun(ShareDirObjectId),
-            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
-                validate_listed_files(Response, rest, ShareId, Data, Files)
-            end,
-            data_spec = ParamsSpec
-        },
-        % Old endpoint returns "id" and "path" - for now get_path is forbidden
-        % for shares so this method returns ?ERROR_NOT_SUPPORTED in case of
-        % listing share dir
-        #scenario_spec{
-            name = <<"List shared dir using /files-id/ rest endpoint">>,
-            type = rest_not_supported,
-            target_nodes = Providers,
-            client_spec = ClientSpecForShareListing,
-            prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(ShareDirObjectId),
-            validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, Response}) ->
-                ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List shared dir using gs api with public scope">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpecForShareListing,
-            prepare_args_fun = ConstructPrepareGsArgsFun(ShareDirGuid, public),
-            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
-                validate_listed_files(Result, gs, ShareId, Data, Files)
-            end,
-            data_spec = ParamsSpec
-        },
-        % 'private' scope is forbidden for shares even if user would be able to
-        % list children using normal guid
-        #scenario_spec{
-            name = <<"List shared dir using gs api with private scope">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpecForShareListing,
-            prepare_args_fun = ConstructPrepareGsArgsFun(ShareDirGuid, private),
-            validate_result_fun = fun(_TestCaseCtx, Result) ->
-                ?assertEqual(?ERROR_UNAUTHORIZED, Result)
-            end,
-            data_spec = ParamsSpec
-        }
-
-        %% TEST LISTING FILE
-
-        #scenario_spec{
-            name = <<"List file using /data/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace2Listing,
-            prepare_args_fun = ConstructPrepareRestArgsFun(FileObjectId1),
-            validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
-                ?assertEqual(#{<<"children">> => [#{
-                    <<"id">> => FileObjectId1,
-                    <<"name">> => FileName1
-                }]}, Response)
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List file using /files/ rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace2Listing,
-            prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(FilePath1),
-            validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
-                ?assertEqual(
-                    [#{<<"id">> => FileObjectId1, <<"path">> => FilePath1}],
-                    Response
-                )
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List file using /files-id/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace2Listing,
-            prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(FileObjectId1),
-            validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
-                ?assertEqual(
-                    [#{<<"id">> => FileObjectId1, <<"path">> => FilePath1}],
-                    Response
-                )
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List file using gs api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace2Listing,
-            prepare_args_fun = ConstructPrepareGsArgsFun(FileGuid1, private),
-            validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
-                ?assertEqual(#{<<"children">> => [FileGuid1]}, Result)
-            end,
-            data_spec = ParamsSpec
-        },
-
-        % LISTING USER ROOT DIR SHOULD LIST ALL SPACES ALSO THOSE NOT SUPPORTED LOCALLY
-
-        #scenario_spec{
-            name = <<"List user root dir using /data/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
-            prepare_args_fun = ConstructPrepareRestArgsFun(UserInBothSpacesRootDirObjectId),
-            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
-                validate_listed_files(Response, rest, undefined, Data, Spaces)
-            end,
-            data_spec = ParamsSpec
-        },
-        % Special case - listing files using path '/' works for all users but
-        % returns only user spaces
-        #scenario_spec{
-            name = <<"List user root dir using /files/ rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = Providers,
-            client_spec = #client_spec{
-                correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-                unauthorized = [?NOBODY],
-                forbidden = [],
-                supported_clients_per_node = SupportedClientsPerNode
-            },
-            prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(<<"/">>),
-            validate_result_fun = fun(#api_test_ctx{client = Client, data = Data}, {ok, ?HTTP_200_OK, Response}) ->
-                ClientSpaces = case Client of
-                    ?USER_IN_SPACE_1_AUTH ->
-                        [{Space1Guid, ?SPACE_1, <<"/", ?SPACE_1/binary>>}];
-                    ?USER_IN_SPACE_2_AUTH ->
-                        [{Space2Guid, ?SPACE_2, <<"/", ?SPACE_2/binary>>}];
-                    ?USER_IN_BOTH_SPACES_AUTH ->
-                        Spaces
-                end,
-                validate_listed_files(Response, deprecated_rest, undefined, Data, ClientSpaces)
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List user root dir using /files-id/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
-            prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(UserInBothSpacesRootDirObjectId),
-            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
-                validate_listed_files(Response, deprecated_rest, undefined, Data, Spaces)
-            end,
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List user root dir using gs api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpecForUserInBothSpacesUserRootDirListing,
-            prepare_args_fun = ConstructPrepareGsArgsFun(UserInBothSpacesRootDirGuid, private),
-            validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
-                validate_listed_files(Result, gs, undefined, Data, Spaces)
-            end,
-            data_spec = ParamsSpec
-        },
-
-        %% TEST LISTING ON PROVIDERS NOT SUPPORTING SPACE
-
-        #scenario_spec{
-            name = <<"List dir on provider not supporting user using /data/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace1Listing,
-            prepare_args_fun = ConstructPrepareRestArgsFun(Space1ObjectId),
-            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace(#{<<"children">> => []}),
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List dir on provider not supporting user using /files/ rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace1Listing,
-            prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(<<"/", ?SPACE_1/binary>>),
-            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace([]),
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List dir on provider not supporting user using /files-id/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace1Listing,
-            prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(Space1ObjectId),
-            validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace([]),
-            data_spec = ParamsSpec
-        },
-        #scenario_spec{
-            name = <<"List dir on provider not supporting user using gs api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace1Listing,
-            prepare_args_fun = ConstructPrepareGsArgsFun(Space1Guid, private),
-            validate_result_fun = fun
-                (#api_test_ctx{node = Node, client = Client}, Result) when
-                    Node == Provider2,
-                    Client == ?USER_IN_BOTH_SPACES_AUTH
-                ->
-                    ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
-                (_TestCaseCtx, {ok, Result}) ->
-                    ?assertEqual(#{<<"children">> => []}, Result)
-            end,
-            data_spec = ParamsSpec
-        }
-    ])).
+%%%===================================================================
+%%% Test functions
+%%%===================================================================
 
 
 get_attrs_test(Config) ->
