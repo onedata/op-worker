@@ -36,7 +36,10 @@
     get_user_root_dir_children_test/1,
     get_dir_children_on_provider_not_supporting_space_test/1,
 
-    get_attrs_test/1,
+    get_file_attrs_test/1,
+    get_shared_file_attrs_test/1,
+    get_attrs_on_provider_not_supporting_space_test/1,
+
     set_mode_test/1
 ]).
 
@@ -48,7 +51,10 @@ all() ->
         get_user_root_dir_children_test,
         get_dir_children_on_provider_not_supporting_space_test,
 
-        get_attrs_test,
+        get_file_attrs_test,
+        get_shared_file_attrs_test,
+        get_attrs_on_provider_not_supporting_space_test,
+
         set_mode_test
     ]).
 
@@ -455,6 +461,56 @@ create_prepare_get_children_gs_args_fun(FileGuid, Scope) ->
 
 
 %% @private
+-spec validate_listed_files(
+    ListedChildren :: term(),
+    Format :: gs | rest | deprecated_rest,
+    ShareId :: undefined | od_share:id(),
+    Params :: map(),
+    AllFiles :: [{file_id:file_guid(), Name :: binary(), Path :: binary()}]
+) ->
+    ok | no_return().
+validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
+    Limit = maps:get(<<"limit">>, Params, 1000),
+    Offset = maps:get(<<"offset">>, Params, 0),
+
+    ExpFiles1 = case Offset >= length(AllFiles) of
+        true ->
+            [];
+        false ->
+            lists:sublist(AllFiles, Offset+1, Limit)
+    end,
+
+    ExpFiles2 = lists:map(fun({Guid, Name, Path}) ->
+        {file_id:guid_to_share_guid(Guid, ShareId), Name, Path}
+    end, ExpFiles1),
+
+    ExpFiles3 = case Format of
+        gs ->
+            #{<<"children">> => lists:map(fun({Guid, _Name, _Path}) ->
+                Guid
+            end, ExpFiles2)};
+        rest ->
+            #{<<"children">> => lists:map(fun({Guid, Name, _Path}) ->
+                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+                #{
+                    <<"id">> => ObjectId,
+                    <<"name">> => Name
+                }
+            end, ExpFiles2)};
+        deprecated_rest ->
+            lists:map(fun({Guid, _Name, Path}) ->
+                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+                #{
+                    <<"id">> => ObjectId,
+                    <<"path">> => Path
+                }
+            end, ExpFiles2)
+    end,
+
+    ?assertEqual(ExpFiles3, ListedChildren).
+
+
+%% @private
 get_children_data_spec() ->
     #data_spec{
         optional = [<<"limit">>, <<"offset">>],
@@ -473,51 +529,347 @@ get_children_data_spec() ->
 
 
 %%%===================================================================
-%%% Test functions
+%%% Get attrs test functions
 %%%===================================================================
 
 
-get_attrs_test(Config) ->
-    [Provider2, Provider1] = Providers = ?config(op_worker_nodes, Config),
+get_file_attrs_test(Config) ->
+    [P2, P1] = Providers =  ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
-    GetSessionFun = fun(Node) ->
-        ?config({session_id, {?USER_IN_BOTH_SPACES, ?GET_DOMAIN(Node)}}, Config)
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
+    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    {ok, FileAttrs} = ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileGuid}), ?ATTEMPTS),
+    JsonAttrs = attrs_to_json(undefined, FileAttrs),
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get attrs from ", FileType/binary, " using /data/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_new_id_get_attrs_rest_args_fun(FileObjectId),
+                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined)
+                },
+                #scenario_template{
+                    name = <<"Get attrs from ", FileType/binary, " using /files/ rest endpoint">>,
+                    type = rest_with_file_path,
+                    prepare_args_fun = create_prepare_deprecated_path_get_attrs_rest_args_fun(FilePath),
+                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined)
+                },
+                #scenario_template{
+                    name = <<"Get attrs from ", FileType/binary, " using /files-id/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_deprecated_id_get_attrs_rest_args_fun(FileObjectId),
+                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined)
+                },
+                #scenario_template{
+                    name = <<"Get attrs from ", FileType/binary, " using gs api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_attrs_gs_args_fun(FileGuid, private),
+                    validate_result_fun = create_validate_get_attrs_gs_call_fun(JsonAttrs, undefined)
+                }
+            ],
+            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
+                get_attrs_data_spec(normal_mode), ?SPACE_2, undefined
+            )
+        }
+    ])).
+
+
+get_shared_file_attrs_test(Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
+    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    {ok, FileGuid} = api_test_utils:create_file(FileType, P2, SessIdP2, FilePath),
+
+    {ok, ShareId1} = lfm_proxy:create_share(P2, SessIdP2, {guid, FileGuid}, <<"share1">>),
+    {ok, ShareId2} = lfm_proxy:create_share(P2, SessIdP2, {guid, FileGuid}, <<"share2">>),
+
+    ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId1),
+    {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
+
+    {ok, FileAttrs} = ?assertMatch(
+        {ok, #file_attr{shares = [ShareId2, ShareId1]}},
+        lfm_proxy:stat(P1, SessIdP1, {guid, FileGuid}),
+        ?ATTEMPTS
+    ),
+    JsonAttrs = attrs_to_json(ShareId1, FileAttrs),
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get attrs from shared ", FileType/binary, " using /data/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_new_id_get_attrs_rest_args_fun(ShareObjectId),
+                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId1)
+                },
+                #scenario_template{
+                    name = <<"Get attrs from shared ", FileType/binary, " using /files-id/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_deprecated_id_get_attrs_rest_args_fun(ShareObjectId),
+                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId1)
+                },
+                #scenario_template{
+                    name = <<"Get attrs from shared ", FileType/binary, " using gs public api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_attrs_gs_args_fun(ShareGuid, public),
+                    validate_result_fun = create_validate_get_attrs_gs_call_fun(JsonAttrs, ShareId1)
+                }
+            ],
+            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
+                get_attrs_data_spec(share_mode), ?SPACE_2, ShareId1
+            )
+        },
+        #scenario_spec{
+            name = <<"Get attrs from shared ", FileType/binary, " using private gs api">>,
+            type = gs_with_shared_guid_and_aspect_private,
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
+            prepare_args_fun = create_prepare_get_attrs_gs_args_fun(ShareGuid, private),
+            validate_result_fun = fun(_, Result) ->
+                ?assertEqual(?ERROR_UNAUTHORIZED, Result)
+            end,
+            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
+                get_attrs_data_spec(normal_mode), ?SPACE_2, ShareId1
+            )
+        }
+    ])).
+
+
+get_attrs_on_provider_not_supporting_space_test(Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+
+    Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_1),
+    {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
+    {ok, Attrs} = lfm_proxy:stat(P1, SessIdP1, {guid, Space1Guid}),
+    JsonAttrs = attrs_to_json(undefined, Attrs),
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_new_id_get_attrs_rest_args_fun(Space1ObjectId),
+                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined, P2)
+                },
+                #scenario_template{
+                    name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /files/ rest endpoint">>,
+                    type = rest_with_file_path,
+                    prepare_args_fun = create_prepare_deprecated_path_get_attrs_rest_args_fun(<<"/", ?SPACE_1/binary>>),
+                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined, P2)
+                },
+                #scenario_template{
+                    name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_deprecated_id_get_attrs_rest_args_fun(Space1ObjectId),
+                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined, P2)
+                },
+                #scenario_template{
+                    name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using gs api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_attrs_gs_args_fun(Space1Guid, private),
+                    validate_result_fun = create_validate_get_attrs_gs_call_fun(JsonAttrs, undefined, P2)
+                }
+            ],
+            data_spec = get_attrs_data_spec(normal_mode)
+        }
+    ])).
+
+
+%% @private
+-spec attrs_to_json(od_share:id(), #file_attr{}) -> map().
+attrs_to_json(ShareId, #file_attr{
+    guid = Guid,
+    name = Name,
+    mode = Mode,
+    uid = Uid,
+    gid = Gid,
+    atime = ATime,
+    mtime = MTime,
+    ctime = CTime,
+    type = Type,
+    size = Size,
+    shares = Shares,
+    provider_id = ProviderId,
+    owner_id = OwnerId
+}) ->
+    PublicAttrs = #{
+        <<"name">> => Name,
+        <<"atime">> => ATime,
+        <<"mtime">> => MTime,
+        <<"ctime">> => CTime,
+        <<"type">> => case Type of
+            ?REGULAR_FILE_TYPE -> <<"reg">>;
+            ?DIRECTORY_TYPE -> <<"dir">>;
+            ?SYMLINK_TYPE -> <<"lnk">>
+        end,
+        <<"size">> => Size
+    },
+
+    case ShareId of
+        undefined ->
+            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+
+            PublicAttrs#{
+                <<"file_id">> => ObjectId,
+                <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
+                <<"storage_user_id">> => Uid,
+                <<"storage_group_id">> => Gid,
+                <<"shares">> => Shares,
+                <<"provider_id">> => ProviderId,
+                <<"owner_id">> => OwnerId
+            };
+        _ ->
+            ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
+            {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
+
+            PublicAttrs#{
+                <<"file_id">> => ShareObjectId,
+                <<"mode">> => <<"0", (integer_to_binary(2#111 band Mode, 8))/binary>>,
+                <<"storage_user_id">> => ?SHARE_UID,
+                <<"storage_group_id">> => ?SHARE_GID,
+                <<"shares">> => case lists:member(ShareId, Shares) of
+                    true -> [ShareId];
+                    false -> []
+                end,
+                <<"provider_id">> => <<"unknown">>,
+                <<"owner_id">> => <<"unknown">>
+            }
+    end.
+
+
+%% @private
+create_prepare_new_id_get_attrs_rest_args_fun(FileObjectId) ->
+    create_prepare_get_attrs_rest_args_fun(new_id, FileObjectId).
+
+
+%% @private
+create_prepare_deprecated_path_get_attrs_rest_args_fun(FilePath) ->
+    create_prepare_get_attrs_rest_args_fun(deprecated_path, FilePath).
+
+
+%% @private
+create_prepare_deprecated_id_get_attrs_rest_args_fun(FileObjectId) ->
+    create_prepare_get_attrs_rest_args_fun(deprecated_id, FileObjectId).
+
+
+%% @private
+create_prepare_get_attrs_rest_args_fun(Endpoint, ValidId) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        Data1 = utils:ensure_defined(Data0, undefined, #{}),
+
+        Id = case maps:find(bad_id, Data1) of
+            {ok, BadId} -> BadId;
+            error -> ValidId
+        end,
+        RestPath = case Endpoint of
+            new_id -> <<"data/", Id/binary>>;
+            deprecated_path -> <<"metadata/attrs", Id/binary>>;
+            deprecated_id -> <<"metadata-id/attrs/", Id/binary>>
+        end,
+        #rest_args{
+            method = get,
+            path = http_utils:append_url_parameters(
+                RestPath,
+                maps:with([<<"attribute">>], Data1)
+            )
+        }
+    end.
+
+
+%% @private
+create_prepare_get_attrs_gs_args_fun(FileGuid, Scope) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {GriId, Data1} = case maps:take(bad_id, utils:ensure_defined(Data0, undefined, #{})) of
+            {BadId, Data2} when map_size(Data2) == 0 -> {BadId, undefined};
+            {BadId, Data2} -> {BadId, Data2};
+            error -> {FileGuid, Data0}
+        end,
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = GriId, aspect = attrs, scope = Scope},
+            data = Data1
+        }
+    end.
+
+
+%% @private
+create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId) ->
+    create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId, undefined).
+
+
+%% @private
+create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId, ProviderNotSupportingSpace) ->
+    fun
+        (#api_test_ctx{node = TestNode}, {ok, RespCode, RespBody}) when TestNode == ProviderNotSupportingSpace ->
+            ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
+            ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderDomain)),
+            ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody});
+        (TestCtx, {ok, RespCode, RespBody}) ->
+            case get_attrs_exp_result(TestCtx, JsonAttrs, ShareId) of
+                {ok, ExpAttrs} ->
+                    ?assertEqual({?HTTP_200_OK, ExpAttrs}, {RespCode, RespBody});
+                {error, _} = Error ->
+                    ExpRestError = {errors:to_http_code(Error), ?REST_ERROR(Error)},
+                    ?assertEqual(ExpRestError, {RespCode, RespBody})
+            end
+    end.
+
+
+%% @private
+create_validate_get_attrs_gs_call_fun(JsonAttrs, ShareId) ->
+    create_validate_get_attrs_gs_call_fun(JsonAttrs, ShareId, undefined).
+
+
+%% @private
+create_validate_get_attrs_gs_call_fun(JsonAttrs, ShareId, ProviderNotSupportingSpace) ->
+    fun
+        (#api_test_ctx{node = TestNode}, Result) when TestNode == ProviderNotSupportingSpace ->
+            ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
+            ExpError = ?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderDomain),
+            ?assertEqual(ExpError, Result);
+        (TestCtx, Result) ->
+            case get_attrs_exp_result(TestCtx, JsonAttrs, ShareId) of
+                {ok, ExpAttrs} ->
+                    ?assertEqual({ok, #{<<"attributes">> => ExpAttrs}}, Result);
+                {error, _} = ExpError ->
+                    ?assertEqual(ExpError, Result)
+            end
+    end.
+
+
+get_attrs_exp_result(#api_test_ctx{data = Data}, JsonAttrs, ShareId) ->
+    RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of
+        undefined ->
+            case ShareId of
+                undefined -> ?PRIVATE_BASIC_ATTRIBUTES;
+                _ -> ?PUBLIC_BASIC_ATTRIBUTES
+            end;
+        Attr ->
+            [Attr]
     end,
+    {ok, maps:with(RequestedAttributes, JsonAttrs)}.
 
-    UserSessId = GetSessionFun(Provider2),
 
-    RootDirPath = filename:join(["/", ?SPACE_2, ?SCENARIO_NAME]),
-    {ok, _RootDirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, RootDirPath, 8#777),
-
-    DirPath = filename:join([RootDirPath, <<"dir">>]),
-    {ok, DirGuid} = lfm_proxy:mkdir(Provider2, UserSessId, DirPath, 8#777),
-
-    RegularFilePath = filename:join([RootDirPath, <<"file">>]),
-    {ok, RegularFileGuid} = lfm_proxy:create(Provider2, UserSessId, RegularFilePath, 8#777),
-
-    SupportedClientsPerNode = #{
-        Provider1 => [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        Provider2 => [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH]
-    },
-
-    ClientSpecForSpace2Scenarios = #client_spec{
-        correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [?NOBODY],
-        forbidden = [?USER_IN_SPACE_1_AUTH],
-        supported_clients_per_node = SupportedClientsPerNode
-    },
-
-    % Special case -> any user can make requests for shares but if request is
-    % being made using credentials by user not supported on specific provider
-    % ?ERROR_USER_NOT_SUPPORTED will be returned
-    ClientSpecForShareScenarios = #client_spec{
-        correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [],
-        forbidden = [],
-        supported_clients_per_node = SupportedClientsPerNode
-    },
-
-    PrivateDataSpec = #data_spec{
+get_attrs_data_spec(normal_mode) ->
+    #data_spec{
         optional = [<<"attribute">>],
         correct_values = #{<<"attribute">> => ?PRIVATE_BASIC_ATTRIBUTES},
         bad_values = [
@@ -525,8 +877,9 @@ get_attrs_test(Config) ->
             {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_BINARY(<<"attribute">>)}},
             {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)}
         ]
-    },
-    PublicDataSpec = #data_spec{
+    };
+get_attrs_data_spec(share_mode) ->
+    #data_spec{
         optional = [<<"attribute">>],
         correct_values = #{<<"attribute">> => ?PUBLIC_BASIC_ATTRIBUTES},
         bad_values = [
@@ -535,263 +888,12 @@ get_attrs_test(Config) ->
             {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)},
             {<<"attribute">>, <<"owner_id">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)}
         ]
-    },
+    }.
 
-    GetExpectedResultFun = fun(#api_test_ctx{data = Data}, ShareId, JsonAttrs) ->
-        RequestedAttributes = case maps:get(<<"attribute">>, Data, undefined) of
-            undefined ->
-                case ShareId of
-                    undefined -> ?PRIVATE_BASIC_ATTRIBUTES;
-                    _ -> ?PUBLIC_BASIC_ATTRIBUTES
-                end;
-            Attr ->
-                [Attr]
-        end,
-        {ok, maps:with(RequestedAttributes, JsonAttrs)}
-    end,
-    ConstructValidateSuccessfulRestResultFun = fun(ShareId, JsonAttrsInNormalMode) ->
-        fun(TestCtx, {ok, RespCode, RespBody}) ->
-            {ExpCode, ExpBody} = case GetExpectedResultFun(TestCtx, ShareId, JsonAttrsInNormalMode) of
-                {ok, ExpResult} ->
-                    {?HTTP_200_OK, ExpResult};
-                {error, _} = ExpError ->
-                    {errors:to_http_code(ExpError), ?REST_ERROR(ExpError)}
-            end,
-            ?assertEqual({ExpCode, ExpBody}, {RespCode, RespBody})
-        end
-    end,
-    ConstructValidateSuccessfulGsResultFun = fun(ShareId, JsonAttrsInNormalMode) ->
-        fun(TestCtx, Result) ->
-            case GetExpectedResultFun(TestCtx, ShareId, JsonAttrsInNormalMode) of
-                {ok, ExpResult} ->
-                    ?assertEqual({ok, #{<<"attributes">> => ExpResult}}, Result);
-                {error, _} = ExpError ->
-                    ?assertEqual(ExpError, Result)
-            end
-        end
-    end,
 
-    ConstructPrepareRestArgsFun = fun(FileId) ->
-        fun(#api_test_ctx{data = Data}) ->
-            #rest_args{
-                method = get,
-                path = http_utils:append_url_parameters(
-                    <<"data/", FileId/binary>>,
-                    maps:with([<<"attribute">>], Data)
-                )
-            }
-        end
-    end,
-    ConstructPrepareDeprecatedFilePathRestArgsFun = fun(FilePath) ->
-        fun(#api_test_ctx{data = Data}) ->
-            #rest_args{
-                method = get,
-                path = http_utils:append_url_parameters(
-                    <<"metadata/attrs", FilePath/binary>>,
-                    maps:with([<<"attribute">>], Data)
-                )
-            }
-        end
-    end,
-    ConstructPrepareDeprecatedFileIdRestArgsFun = fun(Fileid) ->
-        fun(#api_test_ctx{data = Data}) ->
-            #rest_args{
-                method = get,
-                path = http_utils:append_url_parameters(
-                    <<"metadata-id/attrs/", Fileid/binary>>,
-                    maps:with([<<"attribute">>], Data)
-                )
-            }
-        end
-    end,
-    ConstructPrepareGsArgsFun = fun(FileId, Scope) ->
-        fun(#api_test_ctx{data = Data}) ->
-            #gs_args{
-                operation = get,
-                gri = #gri{type = op_file, id = FileId, aspect = attrs, scope = Scope},
-                data = Data
-            }
-        end
-    end,
-
-    lists:foreach(fun({FileType, FilePath, FileGuid}) ->
-        {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-
-        {ok, ShareId1} = lfm_proxy:create_share(Provider2, UserSessId, {guid, FileGuid}, <<"share1">>),
-        {ok, ShareId2} = lfm_proxy:create_share(Provider2, UserSessId, {guid, FileGuid}, <<"share2">>),
-
-        ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId1),
-        {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
-
-        {ok, FileAttrs} = ?assertMatch(
-            {ok, #file_attr{shares = [ShareId2, ShareId1]}},
-            lfm_proxy:stat(Provider1, GetSessionFun(Provider1), {guid, FileGuid}),
-            ?ATTEMPTS
-        ),
-        JsonAttrsInNormalMode = attrs_to_json(undefined, FileAttrs),
-        JsonAttrsInShareMode = attrs_to_json(ShareId1, FileAttrs),
-
-        ?assert(api_test_runner:run_tests(Config, [
-
-            %% TEST GET ATTRS FOR FILE IN NORMAL MODE
-
-            #scenario_spec{
-                name = <<"Get attrs from ", FileType/binary, " using /data/ rest endpoint">>,
-                type = rest,
-                target_nodes = Providers,
-                client_spec = ClientSpecForSpace2Scenarios,
-                prepare_args_fun = ConstructPrepareRestArgsFun(FileObjectId),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, JsonAttrsInNormalMode),
-                data_spec = PrivateDataSpec
-            },
-            #scenario_spec{
-                name = <<"Get attrs from ", FileType/binary, " using /files/ rest endpoint">>,
-                type = rest_with_file_path,
-                target_nodes = Providers,
-                client_spec = ClientSpecForSpace2Scenarios,
-                prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(FilePath),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, JsonAttrsInNormalMode),
-                data_spec = PrivateDataSpec
-            },
-            #scenario_spec{
-                name = <<"Get attrs from ", FileType/binary, " using /files-id/ rest endpoint">>,
-                type = rest,
-                target_nodes = Providers,
-                client_spec = ClientSpecForSpace2Scenarios,
-                prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(FileObjectId),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(undefined, JsonAttrsInNormalMode),
-                data_spec = PrivateDataSpec
-            },
-            #scenario_spec{
-                name = <<"Get attrs from ", FileType/binary, " using gs api">>,
-                type = gs,
-                target_nodes = Providers,
-                client_spec = ClientSpecForSpace2Scenarios,
-                prepare_args_fun = ConstructPrepareGsArgsFun(FileGuid, private),
-                validate_result_fun = ConstructValidateSuccessfulGsResultFun(undefined, JsonAttrsInNormalMode),
-                data_spec = PrivateDataSpec
-            },
-
-            %% TEST GET ATTRS FOR SHARED FILE
-
-            #scenario_spec{
-                name = <<"Get attrs from shared ", FileType/binary, " using /data/ rest endpoint">>,
-                type = rest,
-                target_nodes = Providers,
-                client_spec = ClientSpecForShareScenarios,
-                prepare_args_fun = ConstructPrepareRestArgsFun(ShareObjectId),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId1, JsonAttrsInShareMode),
-                data_spec = PublicDataSpec
-            },
-            #scenario_spec{
-                name = <<"Get attrs from shared ", FileType/binary, " using /files-id/ rest endpoint">>,
-                type = rest,
-                target_nodes = Providers,
-                client_spec = ClientSpecForShareScenarios,
-                prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(ShareObjectId),
-                validate_result_fun = ConstructValidateSuccessfulRestResultFun(ShareId1, JsonAttrsInShareMode),
-                data_spec = PublicDataSpec
-            },
-            #scenario_spec{
-                name = <<"Get attrs from shared ", FileType/binary, " using gs public api">>,
-                type = gs,
-                target_nodes = Providers,
-                client_spec = ClientSpecForShareScenarios,
-                prepare_args_fun = ConstructPrepareGsArgsFun(ShareGuid, public),
-                validate_result_fun = ConstructValidateSuccessfulGsResultFun(ShareId1, JsonAttrsInShareMode),
-                data_spec = PublicDataSpec
-            },
-            #scenario_spec{
-                name = <<"Get attrs from shared ", FileType/binary, " using private gs api">>,
-                type = gs,
-                target_nodes = Providers,
-                client_spec = ClientSpecForShareScenarios,
-                prepare_args_fun = ConstructPrepareGsArgsFun(ShareGuid, private),
-                validate_result_fun = fun(_, Result) ->
-                    ?assertEqual(?ERROR_UNAUTHORIZED, Result)
-                end,
-                data_spec = PrivateDataSpec
-            }
-        ]))
-    end, [
-        {<<"dir">>, DirPath, DirGuid},
-        {<<"file">>, RegularFilePath, RegularFileGuid}
-    ]),
-
-    %% TEST GET ATTRS FOR FILE ON PROVIDER NOT SUPPORTING USER
-
-    Provider2DomainBin = ?GET_DOMAIN_BIN(Provider2),
-
-    ClientSpecForSpace1Scenarios = #client_spec{
-        correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
-        unauthorized = [?NOBODY],
-        forbidden = [?USER_IN_SPACE_2_AUTH],
-        supported_clients_per_node = SupportedClientsPerNode
-    },
-
-    Space1Guid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_1),
-    {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
-    {ok, Space1Attrs} = lfm_proxy:stat(Provider1, GetSessionFun(Provider1), {guid, Space1Guid}),
-    Space1JsonAttrs = attrs_to_json(undefined, Space1Attrs),
-
-    ValidateRestGetMetadataOnProvidersNotSupportingUserFun = fun
-        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
-            Node == Provider2,
-            Client == ?USER_IN_BOTH_SPACES_AUTH
-        ->
-            ?assertEqual(?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)), Response);
-        (TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
-            {ok, ExpAttrs} = GetExpectedResultFun(TestCaseCtx, undefined, Space1JsonAttrs),
-            ?assertEqual(ExpAttrs, Response)
-    end,
-
-    ?assert(api_test_runner:run_tests(Config, [
-        #scenario_spec{
-            name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace1Scenarios,
-            prepare_args_fun = ConstructPrepareRestArgsFun(Space1ObjectId),
-            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun,
-            data_spec = PrivateDataSpec
-        },
-        #scenario_spec{
-            name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /files/ rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace1Scenarios,
-            prepare_args_fun = ConstructPrepareDeprecatedFilePathRestArgsFun(<<"/", ?SPACE_1/binary>>),
-            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun,
-            data_spec = PrivateDataSpec
-        },
-        #scenario_spec{
-            name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
-            type = rest,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace1Scenarios,
-            prepare_args_fun = ConstructPrepareDeprecatedFileIdRestArgsFun(Space1ObjectId),
-            validate_result_fun = ValidateRestGetMetadataOnProvidersNotSupportingUserFun,
-            data_spec = PrivateDataSpec
-        },
-        #scenario_spec{
-            name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using gs api">>,
-            type = gs,
-            target_nodes = Providers,
-            client_spec = ClientSpecForSpace1Scenarios,
-            prepare_args_fun = ConstructPrepareGsArgsFun(Space1Guid, private),
-            validate_result_fun = fun
-                (#api_test_ctx{node = Node, client = Client}, Result) when
-                    Node == Provider2,
-                    Client == ?USER_IN_BOTH_SPACES_AUTH
-                ->
-                    ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result);
-                (TestCaseCtx, {ok, Result}) ->
-                    {ok, ExpAttrs} = GetExpectedResultFun(TestCaseCtx, undefined, Space1JsonAttrs),
-                    ?assertEqual(#{<<"attributes">> => ExpAttrs}, Result)
-            end,
-            data_spec = PrivateDataSpec
-        }
-    ])).
+%%%===================================================================
+%%% Set mode test functions
+%%%===================================================================
 
 
 set_mode_test(Config) ->
@@ -1174,120 +1276,3 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     initializer:unmock_share_logic(Config),
     lfm_proxy:teardown(Config).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec validate_listed_files(
-    ListedChildren :: term(),
-    Format :: gs | rest | deprecated_rest,
-    ShareId :: undefined | od_share:id(),
-    Params :: map(),
-    AllFiles :: [{file_id:file_guid(), Name :: binary(), Path :: binary()}]
-) ->
-    ok | no_return().
-validate_listed_files(ListedChildren, Format, ShareId, Params, AllFiles) ->
-    Limit = maps:get(<<"limit">>, Params, 1000),
-    Offset = maps:get(<<"offset">>, Params, 0),
-
-    ExpFiles1 = case Offset >= length(AllFiles) of
-        true ->
-            [];
-        false ->
-            lists:sublist(AllFiles, Offset+1, Limit)
-    end,
-
-    ExpFiles2 = lists:map(fun({Guid, Name, Path}) ->
-        {file_id:guid_to_share_guid(Guid, ShareId), Name, Path}
-    end, ExpFiles1),
-
-    ExpFiles3 = case Format of
-        gs ->
-            #{<<"children">> => lists:map(fun({Guid, _Name, _Path}) ->
-                Guid
-            end, ExpFiles2)};
-        rest ->
-            #{<<"children">> => lists:map(fun({Guid, Name, _Path}) ->
-                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                #{
-                    <<"id">> => ObjectId,
-                    <<"name">> => Name
-                }
-            end, ExpFiles2)};
-        deprecated_rest ->
-            lists:map(fun({Guid, _Name, Path}) ->
-                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                #{
-                    <<"id">> => ObjectId,
-                    <<"path">> => Path
-                }
-            end, ExpFiles2)
-    end,
-
-    ?assertEqual(ExpFiles3, ListedChildren).
-
-
-%% @private
--spec attrs_to_json(od_share:id(), #file_attr{}) -> map().
-attrs_to_json(ShareId, #file_attr{
-    guid = Guid,
-    name = Name,
-    mode = Mode,
-    uid = Uid,
-    gid = Gid,
-    atime = ATime,
-    mtime = MTime,
-    ctime = CTime,
-    type = Type,
-    size = Size,
-    shares = Shares,
-    provider_id = ProviderId,
-    owner_id = OwnerId
-}) ->
-    PublicAttrs = #{
-        <<"name">> => Name,
-        <<"atime">> => ATime,
-        <<"mtime">> => MTime,
-        <<"ctime">> => CTime,
-        <<"type">> => case Type of
-            ?REGULAR_FILE_TYPE -> <<"reg">>;
-            ?DIRECTORY_TYPE -> <<"dir">>;
-            ?SYMLINK_TYPE -> <<"lnk">>
-        end,
-        <<"size">> => Size
-    },
-
-    case ShareId of
-        undefined ->
-            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-
-            PublicAttrs#{
-                <<"file_id">> => ObjectId,
-                <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
-                <<"storage_user_id">> => Uid,
-                <<"storage_group_id">> => Gid,
-                <<"shares">> => Shares,
-                <<"provider_id">> => ProviderId,
-                <<"owner_id">> => OwnerId
-            };
-        _ ->
-            ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
-            {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
-
-            PublicAttrs#{
-                <<"file_id">> => ShareObjectId,
-                <<"mode">> => <<"0", (integer_to_binary(2#111 band Mode, 8))/binary>>,
-                <<"storage_user_id">> => ?SHARE_UID,
-                <<"storage_group_id">> => ?SHARE_GID,
-                <<"shares">> => case lists:member(ShareId, Shares) of
-                    true -> [ShareId];
-                    false -> []
-                end,
-                <<"provider_id">> => <<"unknown">>,
-                <<"owner_id">> => <<"unknown">>
-            }
-    end.
