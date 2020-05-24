@@ -387,7 +387,7 @@ assert_local_documents_cleaned_up(Worker) ->
     ModelsToCheck = AllModels
         -- [storage_config, provider_auth, % Models not connected with space support
             file_meta, times, %% These documents without scope are related to user root dir, which is not cleaned up during unsupport
-            dbsync_state, %% @TODO VFS-6135 check after dbsync is stopped in space unsupport
+            dbsync_state,
             file_local_blocks %% @TODO VFS-6275 check after file_local_blocks cleanup is properly implemented
         ],
     assert_documents_cleaned_up(Worker, <<>>, ModelsToCheck).
