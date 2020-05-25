@@ -4,6 +4,10 @@
 CHANGELOG
 ---------
 
+### 19.02.3
+
+* Fix handling of remote helper params
+
 ### 19.02.2
 
 VFS-6081 sync handles recreating file with different type
