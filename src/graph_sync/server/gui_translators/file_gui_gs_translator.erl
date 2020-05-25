@@ -111,11 +111,14 @@ translate_file_details(#file_details{
         _ ->
             {<<"file">>, SizeAttr}
     end,
-    IsRootDir = case file_id:guid_to_share_id(FileGuid) of
+    {IsRootDir, Index} = case file_id:guid_to_share_id(FileGuid) of
         undefined ->
-            fslogic_uuid:is_space_dir_guid(FileGuid);
+            case fslogic_uuid:is_space_dir_guid(FileGuid) of
+                true -> {true, FileName};
+                false -> {false, StartId}
+            end;
         ShareId ->
-            lists:member(ShareId, Shares)
+            {lists:member(ShareId, Shares), StartId}
     end,
     ParentId = case IsRootDir of
         true -> null;
@@ -125,13 +128,14 @@ translate_file_details(#file_details{
         <<"hasMetadata">> => HasMetadata,
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
-        <<"index">> => StartId,
+        <<"index">> => Index,
         <<"posixPermissions">> => PosixPerms,
         <<"parentId">> => ParentId,
         <<"mtime">> => MTime,
         <<"type">> => Type,
         <<"size">> => Size,
-        <<"shares">> => Shares
+        <<"shares">> => Shares,
+        <<"activePermissionsType">> => ActivePermissionsType
     },
     case Scope of
         public ->
@@ -141,7 +145,6 @@ translate_file_details(#file_details{
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId,
                 <<"hasDirectQos">> => HasDirectQos,
-                <<"hasEffQos">> => HasEffQos,
-                <<"activePermissionsType">> => ActivePermissionsType
+                <<"hasEffQos">> => HasEffQos
             }
     end.
