@@ -6,9 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% The main module responsible for Local User Mapping (aka LUMA).
+%%% This is API module for Local User Mapping database (aka LUMA DB) .
 %%% It contains functions that should be used for mapping onedata users
 %%% to storage users and the other way round.
+%%%
+%%% LUMA DB consists of 4 tables, represented by modules implementing
+%%% luma_db_table behaviour:
+%%%  * luma_storage_users,
+%%%  * luma_spaces_defaults,
+%%%  * luma_onedata_users,
+%%%  * luma_onedata_groups.
+%%%
 %%%
 %%% There are 3 modes of LUMA that can be configured for a specific storage:
 %%%  * NO_LUMA - no luma service, default mappings are used
@@ -40,38 +48,38 @@
 %%%    which are returned in getattr response. They are used to present
 %%%    file owners in the result of ls operation in Oneclient.
 %%%
-%%% Credentials are cached in 2 models:
-%%%  * luma_users_cache - this model is used for storing
+%%% Credentials are stored in 2 tables:
+%%%  * luma_storage_users - this model is used for storing
 %%%    storage_credentials() for a pair (storage:id(), od_user:id()).
 %%     It also stores display_uid which is a component of
 %%     display_credentials().
-%%%  * luma_spaces_cache - this model is used for storing 2 pairs of
+%%%  * luma_spaces_defaults - this model is used for storing 2 pairs of
 %%%    POSIX credentials (UID & GID) for a given space support
 %%%    identified by pair (storage:id(), od_space:id()).
-%%%    First of them is called default (default_uid, default_gid) and
+%%%    First of them is called display (display_uid, display_gid) and is
+%%%    used to store default display credentials.
+%%%    Second one is called storage (storage_uid, storage_gid) and
 %%%    is used only on POSIX compatible storages (described below
 %%%    in the section considering acquiring of credentials on POSIX
 %%%    compatible storages).
-%%%    Second one is called display (display_uid, display_gid) and is
-%%%    used to store default display credentials.
 %%%
-%%%    Please see luma_spaces_cache.erl and luma_users_cache.erl for
-%%%    more info (i.e. how caches are filled according to LUMA mode
+%%%    Please see luma_spaces_defaults.erl and luma_storage_users.erl for
+%%%    more info (i.e. how tables are filled according to LUMA mode
 %%%    for given storage).
 %%%
 %%% On each type of storage, display_credentials() have the
 %%% following structure:
-%%% {#luma_user.display_uid, #luma_space.display_gid}
+%%% {#luma_storage_user.display_uid, #luma_space_defaults.display_gid}
 %%%
 %%% storage_credentials() are composed differently depending on
-%%% the storage type (whether its POSIX-compatible).
+%%% the storage type (whether it is POSIX-compatible).
 %%%
 %%% On POSIX incompatible storages, storage_credentials() are
-%%% basically #luma_user.storage_credentials field.
+%%% basically #luma_storage_user.storage_credentials field.
 %%%
 %%% On POSIX compatible storages,
 %%% (currently POSIX, GLUSTERFS, NULLDEVICE) only uid field is stored
-%%% in #luma_user.storage_credentials. That is because we treat all
+%%% in #luma_storage_user.storage_credentials. That is because we treat all
 %%% space members as a space group. That means, that when accessing
 %%% a file, group permissions are checked for all members of the space.
 %%% For consistency, it is vital to ensure, that all files created in
@@ -80,8 +88,8 @@
 %%% Due to above reasons, storage_credentials() on POSIX compatible
 %%% storages are constructed in the following way:
 %%% #{
-%%%     <<"uid">> => maps:get(<<"uid">>, #luma_user.storage_credentials),
-%%%     <<"gid">> => #luma_space.default_gid
+%%%     <<"uid">> => maps:get(<<"uid">>, #luma_storage_user.storage_credentials),
+%%%     <<"gid">> => #luma_space_defaults.default_gid
 %%% }
 %%%
 %%%-------------------------------------------------------------------
@@ -91,11 +99,12 @@
 %%% It is used to map storage users/groups to users/groups in onedata.
 %%%
 %%% If EMBEDDED_LUMA mode is set for given storage, mappings should
-%%% be set in the luma_reverse_cache model using REST API.
+%%% be set in the luma_onedata_users and luma_onedata_groups tables
+%%% using REST API.
 %%%
 %%% If EXTERNAL_LUMA mode is set for given storage, external 3rd party
 %%% server is queried for mappings and mappings are stored in
-%%% luma_reverse_cache model
+%%% luma_onedata_users and luma_onedata_groups tables.
 %%%
 %%% There are 3 operations implemented:
 %%%  * map_uid_to_onedata_user - which allows to map storage owner
@@ -167,8 +176,8 @@
 
 %% Management API functions
 -export([
-    clear_all/1,
-    clear_all/2,
+    clear_db/1,
+    clear_db/2,
     add_helper_specific_fields/4
 ]).
 
@@ -303,15 +312,15 @@ map_acl_group_to_onedata_group(AclGroup, StorageId) ->
 %%% Management API functions
 %%%===================================================================
 
--spec clear_all(storage:id()) -> ok | {error, term()}.
-clear_all(StorageId) ->
+-spec clear_db(storage:id()) -> ok | {error, term()}.
+clear_db(StorageId) ->
     luma_storage_users:clear_all(StorageId),
     luma_spaces_defaults:clear_all(StorageId),
     luma_onedata_users:clear_all(StorageId),
     luma_onedata_groups:clear_all(StorageId).
 
--spec clear_all(storage:id(), od_space:id()) -> ok | {error, term()}.
-clear_all(StorageId, SpaceId) ->
+-spec clear_db(storage:id(), od_space:id()) -> ok | {error, term()}.
+clear_db(StorageId, SpaceId) ->
     luma_spaces_defaults:delete(StorageId, SpaceId).
 
 
@@ -341,7 +350,7 @@ map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
             true ->
                 map_space_owner_to_storage_credentials(StorageData, SpaceId);
             false ->
-                map_normal_user_to_storage_credentials(UserId, StorageData, SpaceId)
+                map_onedata_user_to_storage_credentials(UserId, StorageData, SpaceId)
         end
     catch
         Error2:Reason ->
@@ -447,9 +456,9 @@ map_space_owner_to_storage_credentials(Storage, SpaceId) ->
             {ok, helper:get_admin_ctx(Helper)}
     end.
 
--spec map_normal_user_to_storage_credentials(od_user:id(), storage:data(), od_space:id()) ->
+-spec map_onedata_user_to_storage_credentials(od_user:id(), storage:data(), od_space:id()) ->
     {ok, storage_credentials()} | {error, term()}.
-map_normal_user_to_storage_credentials(UserId, Storage, SpaceId) ->
+map_onedata_user_to_storage_credentials(UserId, Storage, SpaceId) ->
     case luma_storage_users:get(Storage, UserId) of
         {ok, LumaUser} ->
             StorageCredentials = luma_storage_user:get_storage_credentials(LumaUser),
@@ -457,7 +466,7 @@ map_normal_user_to_storage_credentials(UserId, Storage, SpaceId) ->
                 true ->
                     {ok, SpaceDefaults} = luma_spaces_defaults:get(Storage, SpaceId),
                     Uid = binary_to_integer(maps:get(<<"uid">>, StorageCredentials)),
-                    % cache reverse mapping
+                    % store reverse mapping
                     luma_onedata_users:store_uid_mapping(Storage, Uid, UserId),
                     DefaultGid = luma_space_defaults:get_storage_gid(SpaceDefaults),
                     {ok, StorageCredentials#{<<"gid">> => integer_to_binary(DefaultGid)}};

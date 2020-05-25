@@ -77,7 +77,7 @@ get_display_uid(#luma_storage_user{display_uid = DisplayUid}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_display_uid_defined(od_user:id(), external_luma:storage_user(), storage:id() | storage:data()) ->
-    luma:user_mapping().
+    external_luma:storage_user().
 ensure_display_uid_defined(UserId, StorageUserMap, Storage) ->
     case maps:get(<<"displayUid">>, StorageUserMap, undefined) =:= undefined of
         true ->

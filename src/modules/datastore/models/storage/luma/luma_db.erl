@@ -6,7 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% This module is a generic datastore model that is used by all
+%%% modules associated with LUMA DB that implement
+%%% luma_db_table behaviour.
+%%%
+%%% Ids of documents of this model are results of hashing 3 keys:
+%%%  - storage:id(),
+%%%  - table() - name of the module that implements luma_db_table behaviour
+%%%  - db_key() - internal key in the table
+%%%
+%%% Single document of this model stores custom record (db_record())
+%%% of one of the modules implementing luma_db_table behaviour.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_db).
@@ -16,7 +26,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([get/3, store/4, remove/3, clear_all/2]).
+-export([get/3, store/4, delete/3, clear_all/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -48,15 +58,18 @@
 -define(BATCH_SIZE, 1000).
 
 %%%===================================================================
-%%% luma_db callbacks definitions
-%%%===================================================================
-
--callback acquire(storage:data(), db_key()) -> {ok, db_record()} | {error, term()}.
-
-%%%===================================================================
 %%% API functions
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% This function returns record associated with Key from table Table
+%% associated with Storage.
+%% First, it checks whether record is already in the db.
+%% If it's missing, it calls acquire/2 callback that must
+%% be implemented by modules implementing luma_db_table behaviour.
+%% @end
+%%--------------------------------------------------------------------
 -spec get(storage(), db_key(), table()) -> {ok, db_record()} | {error, term()}.
 get(Storage, Key, Table) ->
     Id = id(Storage, Table, Key),
@@ -67,10 +80,16 @@ get(Storage, Key, Table) ->
             acquire_and_store(Storage, Key, Table)
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% This function stores record associated with Key in table Table
+%% associated with Storage.
+%% @end
+%%--------------------------------------------------------------------
 -spec store(storage(), db_key(), table(), db_record()) -> ok | {error, term()}.
-store(Storage, Key, Table, Entry) ->
+store(Storage, Key, Table, Record) ->
     Id = id(Storage, Table, Key),
-    Doc = new_doc(Id, Storage, Table, Entry),
+    Doc = new_doc(Id, Storage, Table, Record),
     case ?extract_ok(datastore_model:create(?CTX, Doc)) of
         ok ->
             luma_db_links:add_link(Table, Storage, Key, Id),
@@ -79,11 +98,23 @@ store(Storage, Key, Table, Entry) ->
             ok
     end.
 
--spec remove(storage(), db_key(), table()) -> ok.
-remove(Storage, Key, Table) ->
+%%--------------------------------------------------------------------
+%% @doc
+%% This function deletes single record associated with Key, that is
+%% stored in table Table associated with StorageId.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete(storage(), db_key(), table()) -> ok.
+delete(Storage, Key, Table) ->
     Id = id(Storage, Table, Key),
     delete_doc_and_link(Id, storage:get_id(Storage), Key, Table).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% This function deletes all records stored in table Table associated
+%% with StorageId.
+%% @end
+%%--------------------------------------------------------------------
 -spec clear_all(storage:id(), table()) -> ok.
 clear_all(StorageId, Table) ->
     clear_all(StorageId, Table, undefined, ?BATCH_SIZE).
@@ -102,20 +133,20 @@ acquire_and_store(Storage, Key, TableModule) ->
     % ensure Storage is a document
     {ok, StorageData} = storage:get(Storage),
     case TableModule:acquire(StorageData, Key) of
-        {ok, Entry} ->
-            store(Storage, Key, TableModule, Entry),
-            {ok, Entry};
+        {ok, Record} ->
+            store(Storage, Key, TableModule, Record),
+            {ok, Record};
         Error ->
             Error
     end.
 
 -spec new_doc(doc_id(), storage(), table(), db_record()) -> doc().
-new_doc(Id, Storage, Table, Entry) ->
+new_doc(Id, Storage, Table, Record) ->
     #document{
         key = Id,
         value = #luma_db{
             table = Table,
-            record = Entry,
+            record = Record,
             storage_id = storage:get_id(Storage)
         }
     }.
@@ -137,21 +168,13 @@ clear_all(StorageId, Table, Token, Limit) ->
             ok
     end.
 
--spec delete_doc_and_link(doc_id(), storage:id(), db_key(), table()) -> ok | {error, term()}.
+-spec delete_doc_and_link(doc_id(), storage:id(), db_key(), table()) -> ok.
 delete_doc_and_link(DocId, StorageId, Key, Table) ->
-    case delete(DocId) of
-        ok ->
-            luma_db_links:delete_link(Table, StorageId, Key);
-        {error, _} = Error ->
-            Error
-    end.
-
--spec delete(doc_id()) -> ok.
-delete(Id) ->
-    case datastore_model:delete(?CTX, Id) of
+    case datastore_model:delete(?CTX, DocId) of
         ok -> ok;
         {error, not_found} -> ok
-    end.
+    end,
+    luma_db_links:delete_link(Table, StorageId, Key).
 
 %%%===================================================================
 %%% datastore_model callbacks

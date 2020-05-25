@@ -6,15 +6,15 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is used for storing LUMA mappings for users.
-%%% Mappings are used to associate
-%%% onedata users with specific storage users.
-%%% Documents of this model are stored per StorageId.
-%%% Each documents consists of map #{od_user:id() => luma_user:entry()},
+%%% This module implements LUMA DB table that associates Onedata user with
+%%% credentials on storage, represented by #luma_storege_user record.
+%%% Mappings are used to associate onedata users with specific storage users.
+%%%
+%%% A separate table is created for each storage
 %%% so the mappings are actually associated with pair (storage:id(), od_user:id()).
 %%%
-%%% For more info in luma_user:entry() structure please see
-%%% luma_user.erl module.
+%%% For more info in luma_storage_user:user() structure please see
+%%% luma_storage_user.erl module.
 %%%
 %%% Mappings may be set in 3 ways:
 %%%  * filled by default algorithm in case NO_LUMA mode is set for given
@@ -34,7 +34,7 @@
 -module(luma_storage_users).
 -author("Jakub Kudzia").
 
--behaviour(luma_db).
+-behaviour(luma_db_table).
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -67,7 +67,7 @@ clear_all(StorageId) ->
     luma_db:clear_all(StorageId, ?MODULE).
 
 %%%===================================================================
-%%% luma_db callbacks
+%%% luma_db_table_callbacks
 %%%===================================================================
 
 -spec acquire(storage:data(), key()) ->

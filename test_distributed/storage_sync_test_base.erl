@@ -29,7 +29,7 @@
 %% util functions
 -export([disable_storage_sync/1,
     add_synced_storages/1, clean_synced_storage/2, storage_path/4, create_init_file/2,
-    enable_import/3, enable_update/3, clean_luma_cache/1,
+    enable_import/3, enable_update/3, clean_luma_db/1,
     clean_space/1, verify_file_deleted/4, cleanup_storage_sync_monitoring_model/2,
     assertImportTimes/2, assertImportTimes/3, assertUpdateTimes/2, assertUpdateTimes/3, assertUpdateTimes/4,
     disable_update/1, disable_import/1, assertNoImportInProgress/3,
@@ -5580,10 +5580,10 @@ verify_file_deleted(Worker, FileGuid, Master, Attempts) ->
             Master ! {deleting_failed, FileGuid}
     end.
 
-clean_luma_cache(Worker) ->
+clean_luma_db(Worker) ->
     {ok, StorageIds} = rpc:call(Worker, provider_logic, get_storage_ids, []),
     lists:foreach(fun(StorageId) ->
-        ok = rpc:call(Worker, luma, clear_all, [StorageId])
+        ok = rpc:call(Worker, luma, clear_db, [StorageId])
     end, StorageIds).
 
 
@@ -6315,7 +6315,7 @@ end_per_testcase(should_not_sync_file_during_replication, Config, Readonly) ->
 end_per_testcase(_Case, Config, Readonly) ->
     Workers = [W1 | _] = ?config(op_worker_nodes, Config),
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
-    clean_luma_cache(W1),
+    clean_luma_db(W1),
     disable_storage_sync(Config),
     clean_traverse_tasks(W1),
     clean_space(Config),

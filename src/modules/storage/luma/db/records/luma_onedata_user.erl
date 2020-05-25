@@ -6,17 +6,23 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This is a helper module for luma_storage_users module.
-%%% It encapsulates #luma_storage_user{} record.
+%%% This is a helper module for luma_onedata_users module.
+%%% It encapsulates #luma_onedata_user{} record.
+%%% It allows to uniquely identify a Onedata user.
 %%%
-%%% This record has 2 fields:
-%%%  * storage_credentials - this is context of user (helpers:user_ctx())
-%%%    passed to helper to perform operations on storage as a given user.
-%%%  * display_uid - this field is used to display owner of a file (UID)
-%%%    in Oneclient.
+%%% This record has 3 fields:
+%%%   *  onedata_user_id  - which stores od_user:id(),
+%%%   *  idp - which stores id of an external identity provider,
+%%%   *  subject_id -  which stores id of the user, understood by
+%%%      the idp.
+%%% 
+%%% If onedata_user_id is missing, a call to Onezone is performed to
+%%% compute it basing on idp and subject_id.
+%%%
+%%% idp and subject_id may be undefined.
 %%%
 %%% For more info please read the docs of luma.erl and
-%%% luma_storage_users.erl modules.
+%%% luma_onedata_users.erl modules.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_onedata_user).
@@ -44,7 +50,7 @@
 %%% API functions
 %%%===================================================================
 
--spec new(luma:onedata_user_map() | od_user:id()) -> user().
+-spec new(external_reverse_luma:onedata_user() | od_user:id()) -> user().
 new(OnedataUserMap = #{<<"mappingScheme">> := ?ONEDATA_USER_SCHEME}) ->
     #luma_onedata_user{
         onedata_user_id = maps:get(<<"onedataUserId">>, OnedataUserMap)

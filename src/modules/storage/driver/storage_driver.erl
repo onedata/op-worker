@@ -93,7 +93,7 @@ new_handle(SessionId, SpaceId, FileUuid, StorageId, StorageFileId, ShareId) ->
         file_uuid = FileUuid,
         session_id = SessionId,
         space_id = SpaceId,
-        storage_id = StorageId, % todo jk maybe we should store storage_doc here?
+        storage_id = StorageId,
         share_id = ShareId
     }.
 

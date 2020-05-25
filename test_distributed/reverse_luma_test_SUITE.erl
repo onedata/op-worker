@@ -253,7 +253,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    luma_test_utils:invalidate_cache_for_all_storages(Worker),
+    luma_test_utils:clear_luma_db_for_all_storages(Worker),
     ok = test_utils:mock_unload(Worker, [storage_file_ctx]).
 
 

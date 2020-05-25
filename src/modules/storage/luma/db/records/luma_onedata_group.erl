@@ -6,17 +6,23 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This is a helper module for luma_storage_groups module.
-%%% It encapsulates #luma_storage_group{} record.
+%%% This is a helper module for luma_onedata_groups module.
+%%% It encapsulates #luma_onedata_group{} record.
+%%% It allows to uniquely identify a Onedata group.
 %%%
-%%% This record has 2 fields:
-%%%  * storage_credentials - this is context of group (helpers:group_ctx())
-%%%    passed to helper to perform operations on storage as a given group.
-%%%  * display_uid - this field is used to display owner of a file (UID)
-%%%    in Oneclient.
+%%% This record has 3 fields:
+%%%   *  onedata_group_id  - which stores od_group:id(),
+%%%   *  idp - which stores id of an external identity provider,
+%%%   *  idp_entitlement which stores id of the group, understood by
+%%%      the idp.
+%%%
+%%% If onedata_group_id is missing, a call to Onezone is performed to
+%%% compute it basing on idp and idp_entitlement.
+%%%
+%%% idp and idp_entitlement may be undefined.
 %%%
 %%% For more info please read the docs of luma.erl and
-%%% luma_storage_groups.erl modules.
+%%% luma_onedata_groups.erl modules.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_onedata_group).
@@ -44,7 +50,7 @@
 %%% API functions
 %%%===================================================================
 
--spec new(luma:onedata_group_map() | od_group:id()) -> group().
+-spec new(external_reverse_luma:onedata_group() | od_group:id()) -> group().
 new(OnedataGroupMap = #{<<"mappingScheme">> := ?ONEDATA_GROUP_SCHEME}) ->
     #luma_onedata_group{
         onedata_group_id = maps:get(<<"onedataGroupId">>, OnedataGroupMap)

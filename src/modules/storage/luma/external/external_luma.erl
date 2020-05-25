@@ -63,7 +63,9 @@
 %% }
 -type storage_user() :: json_utils:json_map().
 
-%% Expected result of mapping space to default/display credentials for space
+%% Expected result of fetching default posix/default display credentials 
+%% for space is expressed in the form of the following map.
+
 %% #{
 %%     <<"uid">> => non_neg_integer(),
 %%     <<"gid">> => non_neg_integer()

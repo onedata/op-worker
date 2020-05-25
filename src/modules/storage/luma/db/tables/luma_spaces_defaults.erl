@@ -6,19 +6,20 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is used for storing defaults (for spaces) that are used in
-%%% LUMA mappings for users.
-%%% Documents of this model are stored per StorageId.
-%%% Each documents consists of map #{key() => luma_space:entry()},
-%%% so the mappings are actually associated with
-%%% pair (storage:id(), key()).
+%%% This module implements LUMA DB table that associates space with
+%%% default credentials used in LUMA DB mappings for users.
+%%% The default credentials are represented by #luma_space_default record.
 %%%
-%%% For more info on luma_space:entry() structure please see
-%%% luma_space.erl module.
+%%% A separate table is created for each storage
+%%% so the mappings are actually associated with
+%%% pair (storage:id(), od_space:id()).
+%%%
+%%% For more info on luma_space_defaults:defaults() structure please see
+%%% luma_space_defaults.erl module.
 %%%
 %%% Mappings may be set in 3 ways:
 %%%  * filled by default algorithm in case NO_LUMA mode is set for given
-%%%    storage (see luma_space:ensure_all_fields_defined/4 function)
+%%%    storage (see luma_space_defaults:ensure_all_fields_defined/3 function)
 %%%  * preconfigured using REST API in case EMBEDDED_LUMA
 %%%    is set for given storage
 %%%  * cached after querying external, 3rd party LUMA server in case
@@ -30,7 +31,7 @@
 -module(luma_spaces_defaults).
 -author("Jakub Kudzia").
 
--behaviour(luma_db).
+-behaviour(luma_db_table).
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -39,7 +40,7 @@
 %% API
 -export([get/2, delete/2, clear_all/1]).
 
-%% luma_db callbacks
+%% luma_db_table_callbacks
 -export([acquire/2]).
 
 -type key() :: od_space:id().
@@ -62,10 +63,10 @@ clear_all(StorageId) ->
 
 -spec delete(storage:id(), key()) -> ok.
 delete(StorageId, SpaceId) ->
-    luma_db:remove(StorageId, SpaceId, ?MODULE).
+    luma_db:delete(StorageId, SpaceId, ?MODULE).
 
 %%%===================================================================
-%%% luma_db callbacks
+%%% luma_db_table_callbacks
 %%%===================================================================
 
 -spec acquire(storage:data(), key()) -> {ok, record()}.

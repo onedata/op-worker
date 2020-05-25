@@ -52,6 +52,7 @@
 %% }
 -type onedata_group() :: json_utils:json_map().
 
+-export_type([onedata_user/0, onedata_group/0]).
 
 %%%===================================================================
 %%% API functions

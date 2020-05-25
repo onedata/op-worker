@@ -6,11 +6,16 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-% TODO update
-%%% This module is used for storing reverse LUMA mappings.
-%%% Mappings are used by storage_sync mechanism to associate
-%%% storage users/groups with specific users/groups in onedata.
-%%% Documents of this model are stored per StorageId.
+%%% This module implements LUMA DB table that associates storage user
+%%% with Onedata user, represented by #luma_onedata_user record.
+%%% Tha mappings are used by storage_sync in 2 cases:
+%%%  1) to associate synchronized file owners (represented as UID)
+%%%     with corresponding Onedata user,
+%%%  2) to associate synchronized ACLs, set for specific, named user,
+%%%     with corresponding Onedata user.
+%%%
+%%% A separate table is created for each storage
+%%% so the mappings are actually associated with pair (storage:id(), luma:uid() | luma:acl_who()).
 %%%
 %%% Mappings may be set in 2 ways:
 %%%  * preconfigured using REST API in case EMBEDDED_LUMA
@@ -24,7 +29,7 @@
 -module(luma_onedata_users).
 -author("Jakub Kudzia").
 
--behaviour(luma_db).
+-behaviour(luma_db_table).
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -38,7 +43,7 @@
     clear_all/1
 ]).
 
-%% luma_db callbacks
+%% luma_db_table_callbacks
 -export([acquire/2]).
 
 -define(UID, uid).
@@ -79,7 +84,7 @@ clear_all(StorageId) ->
     luma_db:clear_all(StorageId, ?MODULE).
 
 %%%===================================================================
-%%% luma_db callbacks
+%%% luma_db_table_callbacks
 %%%===================================================================
 
 -spec acquire(storage:data(), key()) ->

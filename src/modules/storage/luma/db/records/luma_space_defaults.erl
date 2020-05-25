@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This is a helper module for luma_spaces_cache module.
-%%% It encapsulates #luma_space{} record, which stores
+%%% This is a helper module for luma_spaces_defaults module.
+%%% It encapsulates #luma_space_defaults{} record, which stores
 %%% POSIX-compatible credentials for given space.
 %%%
 %%% This record has 4 fields:
@@ -21,7 +21,7 @@
 %%%                  for ALL users in given space
 
 %%% For more info please read the docs of luma.erl and
-%%% luma_spaces_cache.erl modules.
+%%% luma_spaces_defaults.erl modules.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_space_defaults).
@@ -33,8 +33,11 @@
 -export([new/4, get_storage_uid/1, get_storage_gid/1, get_display_uid/1, get_display_gid/1]).
 
 -record(luma_space_defaults, {
+    % default display credentials that will be used to display file owners in Oneclient
     display_uid :: undefined | luma:uid(),
     display_gid :: undefined | luma:gid(),
+    % default storage credentials that will be used only for spaces supported by
+    % POSIX-compatible storages
     storage_uid :: undefined | luma:uid(),
     storage_gid :: undefined | luma:gid()
 }).
@@ -46,8 +49,8 @@
 %%% API functions
 %%%===================================================================
 
--spec new(luma:space_mapping(), luma:space_mapping(), od_space:id(), storage:data()) ->
-    defaults().
+-spec new(external_luma:posix_compatible_credentials(), external_luma:posix_compatible_credentials(),
+    od_space:id(), storage:data()) -> defaults().
 new(DefaultPosixCredentials, DisplayCredentials, SpaceId, Storage) ->
     LumaSpace0 = #luma_space_defaults{
         storage_uid = maps:get(<<"uid">>, DefaultPosixCredentials, undefined),
@@ -55,7 +58,7 @@ new(DefaultPosixCredentials, DisplayCredentials, SpaceId, Storage) ->
         display_uid = maps:get(<<"uid">>, DisplayCredentials, undefined),
         display_gid = maps:get(<<"gid">>, DisplayCredentials, undefined)
     },
-    ensure_required_fields_defined(LumaSpace0, SpaceId, Storage, storage:is_posix_compatible(Storage)).
+    ensure_required_fields_defined(LumaSpace0, SpaceId, Storage).
 
 -spec get_storage_uid(defaults()) -> luma:uid().
 get_storage_uid(#luma_space_defaults{storage_uid = StorageUid}) ->
@@ -81,11 +84,14 @@ get_display_gid(#luma_space_defaults{display_gid = DisplayGid}) ->
 %%% Internal functions
 %%%===================================================================
 
--spec ensure_required_fields_defined(defaults(), od_space:id(), storage:data(), IsPosix :: boolean()) -> defaults().
-ensure_required_fields_defined(LumaSpace, SpaceId, Storage, true) ->
-    ensure_required_fields_on_posix_are_defined(LumaSpace, SpaceId, Storage);
-ensure_required_fields_defined(LumaSpace, SpaceId, _Storage, false) ->
-    ensure_required_fields_on_non_posix_are_defined(LumaSpace, SpaceId).
+-spec ensure_required_fields_defined(defaults(), od_space:id(), storage:data()) -> defaults().
+ensure_required_fields_defined(LumaSpace, SpaceId, Storage) ->
+    case storage:is_posix_compatible(Storage) of
+        true ->
+            ensure_required_fields_on_posix_are_defined(LumaSpace, SpaceId, Storage);
+        false ->
+            ensure_required_fields_on_non_posix_are_defined(LumaSpace, SpaceId)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

@@ -6,7 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% This module allows listing luma_db documents using links.
+%%% For each storage, there might be 4 types of links forests, one
+%%% for each luma_db:table().
+%%% The links from this model are not synchronized, each provider operates
+%%% only on local tree.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_db_links).
@@ -58,7 +62,7 @@ delete_link(ForestType, StorageId, Key) ->
     end.
 
 
--spec list(forest_type(), storage:id(), undefined | token(), limit) ->
+-spec list(forest_type(), storage:id(), undefined | token(), limit()) ->
     {{ok, [{key(), doc_id()}]}, token()} | {error, term()}.
 list(ForestType, StorageId, Token, Limit) ->
     Token2 = utils:ensure_defined(Token, undefined, #link_token{}),
@@ -87,7 +91,7 @@ forest_key(ForestType, Storage) ->
     forest_type(), storage:id(),
     Callback :: fun((key(), doc_id(), AccIn :: term()) -> Acc :: term()),
     Acc0 :: term(), datastore_model:fold_opts()) ->
-    {ok, Acc :: term()} | {error, term()}.
+    {{ok, Acc :: term()}, token()} | {error, term()}.
 for_each_link(ForestType, StorageId, Callback, Acc0, Options) ->
     TreeId = oneprovider:get_id(),
     ForestKey = forest_key(ForestType, StorageId),

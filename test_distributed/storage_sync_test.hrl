@@ -70,17 +70,7 @@
 -define(TEST_UID, 2000).
 -define(TEST_GID, 2000).
 
--define(TEST_URL, <<"http://127.0.0.1:5000">>).
-
 -define(VERIFY_POOL, verify_pool).
-
--define(DEFAULT_TIMEOUT, timer:minutes(5)).
-
--define(LUMA_CONFIG, ?LUMA_CONFIG(?DEFAULT_TIMEOUT)).
--define(LUMA_CONFIG(CacheTimeout), #luma_config{
-    url = ?TEST_URL,
-    api_key = <<"test_api_key">>
-}).
 
 -define(assertMonitoring(Worker, ExpectedSSM, SpaceId, Attempts),
     storage_sync_test_base:assert_monitoring_state(Worker, ExpectedSSM, SpaceId, Attempts)).

@@ -204,7 +204,7 @@ storage_is_imported_storage(StorageId) ->
 
 -spec invalidate_luma_cache(storage:id()) -> ok.
 invalidate_luma_cache(StorageId) ->
-    luma:clear_all(StorageId).
+    luma:clear_db(StorageId).
 
 
 -spec new_helper(helper:name(), helper:args(), helper:user_ctx(), Insecure :: boolean(),
