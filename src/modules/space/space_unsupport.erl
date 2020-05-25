@@ -306,5 +306,4 @@ cleanup_local_documents(SpaceId, StorageId) ->
     autocleaning_api:delete_config(SpaceId),
     storage_sync:clean_up(SpaceId, StorageId),
     space_quota:delete(SpaceId),
-    dbsync_state:delete(SpaceId),
     luma:clear_db(StorageId, SpaceId).

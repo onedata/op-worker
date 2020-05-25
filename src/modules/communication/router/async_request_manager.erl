@@ -317,10 +317,10 @@ handle_info(heartbeat, #state{
     withheld_heartbeats = WH
 } = State) ->
     NewState = case session_connections:list(SessionId) of
-        {ok, Cons} ->
+        {ok, EffSessId, Cons} ->
             State#state{
-                pending_requests = check_workers_status(PR, Cons, true),
-                withheld_heartbeats = check_workers_status(WH, Cons, false),
+                pending_requests = check_workers_status(PR, EffSessId, Cons, true),
+                withheld_heartbeats = check_workers_status(WH, EffSessId, Cons, false),
                 heartbeat_timer = undefined
             };
         Error ->
@@ -510,20 +510,20 @@ call_async_request_manager(AsyncReqManager, Msg) ->
 %% between response and heartbeats.
 %% @end
 %%--------------------------------------------------------------------
--spec check_workers_status(Workers, [pid()], boolean()) -> Workers when
+-spec check_workers_status(Workers, session:id(), [pid()], boolean()) -> Workers when
     Workers :: #{req_id() => pid() | {pid(), not_alive}}.
-check_workers_status(Workers, Cons, SendHeartbeats) ->
+check_workers_status(Workers, EffSessId, Cons, SendHeartbeats) ->
     maps:fold(
         fun
             ({_Ref, MsgId} = ReqId, {Pid, not_alive}, Acc) ->
                 ?error("Async Request Manager: process ~p handling request ~p died",
                     [Pid, ReqId]
                 ),
-                connection_api:send_via_any(?ERROR_MSG(MsgId), Cons),
+                connection_api:send_via_any(?ERROR_MSG(MsgId), EffSessId, Cons),
                 Acc;
             ({_Ref, MsgId} = ReqId, Pid, Acc) ->
                 SendHeartbeats andalso connection_api:send_via_any(
-                    ?HEARTBEAT_MSG(MsgId), Cons
+                    ?HEARTBEAT_MSG(MsgId), EffSessId, Cons
                 ),
                 case rpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
                     true ->

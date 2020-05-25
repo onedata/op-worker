@@ -56,6 +56,7 @@ all() ->
 %% reuses it despite of node on which request is processed.
 session_manager_session_creation_and_reuse_test(Config) ->
     [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+    Self = self(),
 
     Nonce1 = <<"nonce_1">>,
     Nonce2 = <<"nonce_2">>,
@@ -65,12 +66,12 @@ session_manager_session_creation_and_reuse_test(Config) ->
     [SessId1, SessId2] = lists:map(fun({Nonce, Iden, Workers}) ->
         Answers = [{ok, SessId} | _] = utils:pmap(fun(Worker) ->
             fuse_test_utils:reuse_or_create_fuse_session(
-                Worker, Nonce, Iden, undefined, self()
+                Worker, Nonce, Iden, undefined, Self
             )
         end, Workers),
 
         % Check connections have been added to session
-        {ok, Cons} = ?assertMatch({ok, _},
+        {ok, _EffSessId, Cons} = ?assertMatch({ok, _, _},
             rpc:call(Worker1, session_connections, list, [SessId]), 10),
         ?assertEqual(length(Answers), length(Cons)),
         SessId
@@ -219,8 +220,13 @@ session_getters_test(Config) ->
             [Inner] -> ?assert(is_pid(Inner));
             _ -> ?assert(is_pid(Result))
         end
-    end, [{session, get_event_manager}, {session, get_sequencer_manager},
-        {session_connections, list}]),
+    end, [{session, get_event_manager}, {session, get_sequencer_manager}]),
+
+    {ok, _, [Conn]} = ?assertMatch(
+        {ok, SessId, [_]},
+        rpc:call(Worker, session_connections, list, [SessId])
+    ),
+    ?assert(is_pid(Conn)),
 
     Answer = rpc:call(Worker, session, get_session_supervisor_and_node, [SessId]),
     ?assertMatch({ok, {_, _}}, Answer),
