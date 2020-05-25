@@ -307,4 +307,4 @@ cleanup_local_documents(SpaceId, StorageId) ->
     storage_sync:clean_up(SpaceId, StorageId),
     space_quota:delete(SpaceId),
     dbsync_state:delete(SpaceId),
-    luma:invalidate_cache(StorageId, SpaceId).
+    luma:clear_all(StorageId, SpaceId).

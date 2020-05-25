@@ -382,24 +382,10 @@
     api_key :: luma_config:api_key()
 }).
 
-%% Model that stores local user mappings.
-%% Documents are stored per storage (document's key is a StorageId).
--record(luma_users_cache, {
-   users = #{} :: #{od_user:id() => luma_user:entry()}
-}).
-
-%% Model that stores default local user mapping for spaces supported by given storage.
-%% Documents are stored per storage (document's key is a StorageId).
--record(luma_spaces_cache, {
-    spaces = #{} :: #{od_space:id() => luma_space:entry()}
-}).
-
-%% Model that stores reverse local user mappings.
-%% Documents are stored per storage (document's key is a StorageId).
--record(luma_reverse_cache, {
-    users = #{} :: #{luma:uid() => od_user:id()},
-    acl_users = #{} :: #{luma:acl_who() => od_user:id()},
-    acl_groups = #{} ::  #{luma:acl_who() => od_group:id()}
+-record(luma_db, {
+    table :: luma_db:table(),
+    record :: luma_db:db_record(),
+    storage_id :: storage:id()
 }).
 
 %% Model that maps space to storage

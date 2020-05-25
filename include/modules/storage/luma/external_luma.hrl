@@ -36,5 +36,12 @@
     str_utils:format_bin("~s/~s", [luma_config:get_url(LumaConfig), Path])
 ).
 
+%% Mapping user schemes
+-define(ONEDATA_USER_SCHEME, <<"onedataUser">>).
+-define(IDP_USER_SCHEME, <<"idpUser">>).
+
+%% Mapping group schemes
+-define(ONEDATA_GROUP_SCHEME, <<"onedataGroup">>).
+-define(IDP_ENTITLEMENT_SCHEME, <<"idpEntitlement">>).
 
 -endif.

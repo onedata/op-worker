@@ -80,9 +80,7 @@ get_models() -> [
     qos_status,
     space_unsupport_job,
     cleanup_traverse_status,
-    luma_users_cache,
-    luma_spaces_cache,
-    luma_reverse_cache,
+    luma_db,
 
     %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
     space_storage,

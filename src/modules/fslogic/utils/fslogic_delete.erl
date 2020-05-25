@@ -180,7 +180,6 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 FileCtx4 = delete_shares_and_update_parent_timestamps(UserCtx, FileCtx3),
                 {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
                 FileCtx6 = delete_storage_sync_info(FileCtx5),
-                FileUuid = file_ctx:get_uuid_const(FileCtx6),
                 % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
                 ok = delete_location(FileCtx),
                 ok = file_meta:delete(FileDoc),
@@ -194,7 +193,6 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 ok;
             ?TWO_STEP_DEL_FIN(DocsDeletionScope) ->
                 {FileDoc, FileCtx4} = file_ctx:get_file_doc_including_deleted(FileCtx3),
-                FileUuid = file_ctx:get_uuid_const(FileCtx4),
                 ok = delete_location(FileCtx),
                 file_meta:delete_without_link(FileDoc), % do not match, document may not exist
                 case DocsDeletionScope of
@@ -207,7 +205,6 @@ remove_file(FileCtx, UserCtx, RemoveStorageFile, DeleteMode) ->
                 maybe_try_to_delete_parent(FileCtx5, UserCtx, RemoveStorageFileResult, DocsDeletionScope);
             ?SINGLE_STEP_DEL(?LOCAL_DOCS) ->
                 FileCtx4 = delete_storage_sync_info(FileCtx3),
-                FileUuid = file_ctx:get_uuid_const(FileCtx4),
                 ok = delete_location(FileCtx),
                 remove_local_associated_documents(FileCtx4),
                 maybe_try_to_delete_parent(FileCtx4, UserCtx, RemoveStorageFileResult, ?LOCAL_DOCS)

@@ -61,16 +61,16 @@
 %%     <<"storageCredentials">> => helpers:user_ctx(),
 %%     <<"displayUid">> => integer() // optional
 %% }
--type user_mapping_response() :: json_utils:json_map().
+-type storage_user() :: json_utils:json_map().
 
 %% Expected result of mapping space to default/display credentials for space
 %% #{
 %%     <<"uid">> => non_neg_integer(),
 %%     <<"gid">> => non_neg_integer()
 %% }
--type space_mapping_response() :: json_utils:json_map().
+-type posix_compatible_credentials() :: json_utils:json_map().
 
--export_type([space_mapping_response/0]).
+-export_type([storage_user/0, posix_compatible_credentials/0]).
 
 %%%===================================================================
 %%% API functions
@@ -82,12 +82,12 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec map_onedata_user_to_credentials(od_user:id(), storage:data()) ->
-    {ok, user_mapping_response()} | {error, Reason :: term()}.
+    {ok, storage_user()} | {error, Reason :: term()}.
 map_onedata_user_to_credentials(UserId, Storage) ->
     Body = prepare_user_request_body(UserId, Storage),
     case luma_utils:do_luma_request(?ONEDATA_USER_TO_CREDENTIALS_PATH, Body, Storage) of
         {ok, ?HTTP_200_OK, _RespHeaders, RespBody} ->
-            sanitize_user_mapping(RespBody, Storage);
+            sanitize_user_mapping_response(RespBody, Storage);
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, RespBody} ->
             ?error("Mapping user ~p to storage credentials on storage ~p not found.~n"
             "Request to external LUMA service returned ~p.",
@@ -106,7 +106,7 @@ map_onedata_user_to_credentials(UserId, Storage) ->
 
 
 -spec fetch_default_posix_credentials(od_space:id(), storage:data()) ->
-    {ok, space_mapping_response()} | {error, term()}.
+    {ok, posix_compatible_credentials()} | {error, term()}.
 fetch_default_posix_credentials(SpaceId, Storage) ->
     Body = #{
         <<"storageId">> => storage:get_id(Storage),
@@ -114,7 +114,7 @@ fetch_default_posix_credentials(SpaceId, Storage) ->
     },
     case luma_utils:do_luma_request(?DEFAULT_POSIX_CREDENTIALS_PATH, Body, Storage) of
         {ok, ?HTTP_200_OK, _RespHeaders, RespBody} ->
-            sanitize_space_mapping(RespBody);
+            sanitize_space_defaults_response(RespBody);
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
             {error, not_found};
         {ok, Code, _RespHeaders, RespBody} ->
@@ -129,7 +129,7 @@ fetch_default_posix_credentials(SpaceId, Storage) ->
     end.
 
 -spec fetch_default_display_credentials(od_space:id(), storage:data()) ->
-    {ok, space_mapping_response()} | {error, term()}.
+    {ok, posix_compatible_credentials()} | {error, term()}.
 fetch_default_display_credentials(SpaceId, Storage) ->
     Body = #{
         <<"storageId">> => storage:get_id(Storage),
@@ -137,7 +137,7 @@ fetch_default_display_credentials(SpaceId, Storage) ->
     },
     case luma_utils:do_luma_request(?ONECLIENT_DISPLAY_OVERRIDE_PATH, Body, Storage) of
         {ok, ?HTTP_200_OK, _RespHeaders, RespBody} ->
-            sanitize_space_mapping(RespBody);
+            sanitize_space_defaults_response(RespBody);
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
             {error, not_found};
         {ok, Code, _RespHeaders, RespBody} ->
@@ -194,8 +194,8 @@ get_idp_identities(AdditionalUserDetails) ->
     end, maps:get(<<"linkedAccounts">>, AdditionalUserDetails, [])).
 
 
--spec sanitize_user_mapping(binary(), storage:data()) -> {ok, user_mapping_response()} | {error, term()}.
-sanitize_user_mapping(Response, Storage) ->
+-spec sanitize_user_mapping_response(binary(), storage:data()) -> {ok, storage_user()} | {error, term()}.
+sanitize_user_mapping_response(Response, Storage) ->
     try
         DecodedResponse = json_utils:decode(Response),
         UserEntry = middleware_sanitizer:sanitize_data(DecodedResponse, #{
@@ -209,8 +209,8 @@ sanitize_user_mapping(Response, Storage) ->
             {error, external_luma_error}
     end.
 
--spec sanitize_space_mapping(binary()) -> {ok, space_mapping_response()} | {error, term()}.
-sanitize_space_mapping(Response) ->
+-spec sanitize_space_defaults_response(binary()) -> {ok, posix_compatible_credentials()} | {error, term()}.
+sanitize_space_defaults_response(Response) ->
     try
         DecodedResponse = json_utils:decode(Response),
         SpaceCredentials = middleware_sanitizer:sanitize_data(DecodedResponse, #{

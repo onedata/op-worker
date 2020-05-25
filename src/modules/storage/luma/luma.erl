@@ -167,21 +167,21 @@
 
 %% Management API functions
 -export([
-    invalidate_cache/1,
-    invalidate_cache/2,
+    clear_all/1,
+    clear_all/2,
     add_helper_specific_fields/4
 ]).
 
 -type uid() :: non_neg_integer().
 -type gid() :: non_neg_integer().
+-type acl_who() :: binary().
 -type display_credentials() :: {uid(), gid()}.
 -type storage_credentials() :: helper:user_ctx().
--type space_mapping_response() :: external_luma:space_mapping_response().
 
--type acl_who() :: binary().
-
--export_type([uid/0, gid/0, storage_credentials/0, display_credentials/0,
-    space_mapping_response/0, acl_who/0]).
+-export_type([
+    uid/0, gid/0, acl_who/0,
+    storage_credentials/0, display_credentials/0
+]).
 
 %%%===================================================================
 %%% LUMA functions
@@ -239,7 +239,12 @@ map_uid_to_onedata_user(Uid, SpaceId, StorageId) ->
     {ok, Storage} = storage:get(StorageId),
     case storage:is_luma_enabled(Storage) andalso is_reverse_luma_supported(Storage) of
         true ->
-            luma_reverse_cache:map_uid_to_onedata_user(Storage, Uid);
+            case luma_onedata_users:map_uid_to_onedata_user(Storage, Uid) of
+                {ok, OnedataUser} ->
+                    {ok, luma_onedata_user:get_user_id(OnedataUser)};
+                Error ->
+                    Error
+            end;
         false ->
             {ok, ?SPACE_OWNER_ID(SpaceId)}
     end.
@@ -257,7 +262,12 @@ map_acl_user_to_onedata_user(AclUser, StorageId) ->
     {ok, Storage} = storage:get(StorageId),
     case {storage:is_luma_enabled(Storage), is_reverse_luma_supported(Storage)} of
         {true, true} ->
-            luma_reverse_cache:map_acl_user_to_onedata_user(Storage, AclUser);
+            case luma_onedata_users:map_acl_user_to_onedata_user(Storage, AclUser) of
+                {ok, OnedataUser} ->
+                    {ok, luma_onedata_user:get_user_id(OnedataUser)};
+                Error ->
+                    Error
+            end;
         {_, false} ->
             {error, reverse_luma_not_supported};
         {false, _} ->
@@ -277,7 +287,12 @@ map_acl_group_to_onedata_group(AclGroup, StorageId) ->
     {ok, Storage} = storage:get(StorageId),
     case {storage:is_luma_enabled(Storage), is_reverse_luma_supported(Storage)} of
         {true, true} ->
-            luma_reverse_cache:map_acl_group_to_onedata_group(Storage, AclGroup);
+            case luma_onedata_groups:map_acl_group_to_onedata_group(Storage, AclGroup) of
+                {ok, OnedataGroup} ->
+                    {ok, luma_onedata_group:get_group_id(OnedataGroup)};
+                Error ->
+                    Error
+            end;
         {_, false} ->
             {error, reverse_luma_not_supported};
         {false, _} ->
@@ -288,15 +303,16 @@ map_acl_group_to_onedata_group(AclGroup, StorageId) ->
 %%% Management API functions
 %%%===================================================================
 
--spec invalidate_cache(storage:id()) -> ok | {error, term()}.
-invalidate_cache(StorageId) ->
-    luma_users_cache:delete(StorageId),
-    luma_spaces_cache:delete(StorageId),
-    luma_reverse_cache:delete(StorageId).
+-spec clear_all(storage:id()) -> ok | {error, term()}.
+clear_all(StorageId) ->
+    luma_storage_users:clear_all(StorageId),
+    luma_spaces_defaults:clear_all(StorageId),
+    luma_onedata_users:clear_all(StorageId),
+    luma_onedata_groups:clear_all(StorageId).
 
--spec invalidate_cache(storage:id(), od_space:id()) -> ok | {error, term()}.
-invalidate_cache(StorageId, SpaceId) ->
-    luma_spaces_cache:delete(StorageId, SpaceId).
+-spec clear_all(storage:id(), od_space:id()) -> ok | {error, term()}.
+clear_all(StorageId, SpaceId) ->
+    luma_spaces_defaults:delete(StorageId, SpaceId).
 
 
 -spec add_helper_specific_fields(od_user:id(), session:id(), luma:storage_credentials(),
@@ -419,9 +435,9 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCredentials = #{
 map_space_owner_to_storage_credentials(Storage, SpaceId) ->
     case storage:is_posix_compatible(Storage) of
         true ->
-            {ok, SpacePosixCredentials} = luma_spaces_cache:get(Storage, SpaceId),
-            DefaultUid = luma_space:get_default_uid(SpacePosixCredentials),
-            DefaultGid = luma_space:get_default_gid(SpacePosixCredentials),
+            {ok, SpaceDefaults} = luma_spaces_defaults:get(Storage, SpaceId),
+            DefaultUid = luma_space_defaults:get_storage_uid(SpaceDefaults),
+            DefaultGid = luma_space_defaults:get_storage_gid(SpaceDefaults),
             {ok, #{
                 <<"uid">> => integer_to_binary(DefaultUid),
                 <<"gid">> => integer_to_binary(DefaultGid)
@@ -434,16 +450,16 @@ map_space_owner_to_storage_credentials(Storage, SpaceId) ->
 -spec map_normal_user_to_storage_credentials(od_user:id(), storage:data(), od_space:id()) ->
     {ok, storage_credentials()} | {error, term()}.
 map_normal_user_to_storage_credentials(UserId, Storage, SpaceId) ->
-    case luma_users_cache:get(Storage, UserId) of
+    case luma_storage_users:get(Storage, UserId) of
         {ok, LumaUser} ->
-            StorageCredentials = luma_user:get_storage_credentials(LumaUser),
+            StorageCredentials = luma_storage_user:get_storage_credentials(LumaUser),
             case storage:is_posix_compatible(Storage) of
                 true ->
-                    {ok, SpacePosixCredentials} = luma_spaces_cache:get(Storage, SpaceId),
+                    {ok, SpaceDefaults} = luma_spaces_defaults:get(Storage, SpaceId),
                     Uid = binary_to_integer(maps:get(<<"uid">>, StorageCredentials)),
                     % cache reverse mapping
-                    luma_reverse_cache:cache_uid_mapping(Storage, Uid, UserId),
-                    DefaultGid = luma_space:get_default_gid(SpacePosixCredentials),
+                    luma_onedata_users:store_uid_mapping(Storage, Uid, UserId),
+                    DefaultGid = luma_space_defaults:get_storage_gid(SpaceDefaults),
                     {ok, StorageCredentials#{<<"gid">> => integer_to_binary(DefaultGid)}};
                 false ->
                     {ok, StorageCredentials}
@@ -455,19 +471,19 @@ map_normal_user_to_storage_credentials(UserId, Storage, SpaceId) ->
 -spec map_space_owner_to_display_credentials(storage:id() | storage:data(), od_space:id()) ->
     {ok, display_credentials()}.
 map_space_owner_to_display_credentials(Storage, SpaceId) ->
-    {ok, SpacePosixCredentials} = luma_spaces_cache:get(Storage, SpaceId),
-    DisplayUid = luma_space:get_display_uid(SpacePosixCredentials),
-    DisplayGid = luma_space:get_display_gid(SpacePosixCredentials),
+    {ok, SpaceDefaults} = luma_spaces_defaults:get(Storage, SpaceId),
+    DisplayUid = luma_space_defaults:get_display_uid(SpaceDefaults),
+    DisplayGid = luma_space_defaults:get_display_gid(SpaceDefaults),
     {ok, {DisplayUid, DisplayGid}}.
 
 -spec map_normal_user_to_display_credentials(od_user:id(), storage:id() | storage:data(), od_space:id()) ->
     {ok, display_credentials()} | {error, term()}.
 map_normal_user_to_display_credentials(OwnerId, Storage, SpaceId) ->
-    case luma_users_cache:get(Storage, OwnerId) of
+    case luma_storage_users:get(Storage, OwnerId) of
         {ok, LumaUser} ->
-            {ok, SpacePosixCredentials} = luma_spaces_cache:get(Storage, SpaceId),
-            DisplayUid = luma_user:get_display_uid(LumaUser),
-            DisplayGid = luma_space:get_display_gid(SpacePosixCredentials),
+            {ok, SpaceDefaults} = luma_spaces_defaults:get(Storage, SpaceId),
+            DisplayUid = luma_storage_user:get_display_uid(LumaUser),
+            DisplayGid = luma_space_defaults:get_display_gid(SpaceDefaults),
             {ok, {DisplayUid, DisplayGid}};
         Error ->
             Error

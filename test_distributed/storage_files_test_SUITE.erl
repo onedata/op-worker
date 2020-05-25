@@ -1065,8 +1065,8 @@ clean_mapping_caches(Worker) ->
     {ok, SpaceIds} = get_supported_spaces(Worker),
     lists:foreach(fun(SpaceId) ->
         {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Worker, SpaceId),
-        rpc:call(Worker, luma_users_cache, delete, [StorageId]),
-        rpc:call(Worker, luma_spaces_cache, delete, [StorageId])
+        rpc:call(Worker, luma_storage_users, clear_all, [StorageId]),
+        rpc:call(Worker, luma_spaces_defaults, clear_all, [StorageId])
     end, SpaceIds).
 
 

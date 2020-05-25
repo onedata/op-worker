@@ -37,7 +37,7 @@
 %%      <<"idp">> => binary(),
 %%      <<"subjectId">> => binary()
 %% }
--type user_mapping_response() :: json_utils:json_map().
+-type onedata_user() :: json_utils:json_map().
 
 %% Group mapping response expected format is represented as a map:
 %% #{
@@ -50,15 +50,7 @@
 %%      <<"idp">> => binary(),
 %%      <<"idpEntitlement">> => binary()
 %% }
--type group_mapping_response() :: json_utils:json_map().
-
-%% Mapping user schemes
--define(ONEDATA_USER_SCHEME, <<"onedataUser">>).
--define(IDP_USER_SCHEME, <<"idpUser">>).
-
-%% Mapping group schemes
--define(ONEDATA_GROUP_SCHEME, <<"onedataGroup">>).
--define(IDP_ENTITLEMENT_SCHEME, <<"idpEntitlement">>).
+-type onedata_group() :: json_utils:json_map().
 
 
 %%%===================================================================
@@ -72,7 +64,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec map_uid_to_onedata_user(luma:uid(), storage:data()) ->
-    {ok, od_user:id()} | {error, term()}.
+    {ok, onedata_user()} | {error, term()}.
 map_uid_to_onedata_user(Uid, Storage) ->
     Body =  #{
         <<"uid">> => Uid,
@@ -98,7 +90,8 @@ map_uid_to_onedata_user(Uid, Storage) ->
 %% with given Uid and Gid on storage named StorageId.
 %% @end
 %%--------------------------------------------------------------------
--spec map_acl_user_to_onedata_user(binary(), storage:data()) -> {ok, od_user:id()} | {error, term()}.
+-spec map_acl_user_to_onedata_user(binary(), storage:data()) ->
+    {ok, onedata_user()} | {error, term()}.
 map_acl_user_to_onedata_user(AclUser, Storage) ->
     Body = #{
         <<"aclUser">> => AclUser,
@@ -124,7 +117,8 @@ map_acl_user_to_onedata_user(AclUser, Storage) ->
 %% with given Gid on storage named StorageId
 %% @end
 %%--------------------------------------------------------------------
--spec map_acl_group_to_onedata_group(binary(), storage:data()) -> {ok, od_user:id()} |  {error, term()}.
+-spec map_acl_group_to_onedata_group(binary(), storage:data()) ->
+    {ok, onedata_group()} | {error, term()}.
 map_acl_group_to_onedata_group(AclGroup, Storage) ->
     Body = #{
         <<"aclGroup">> => AclGroup,
@@ -148,16 +142,16 @@ map_acl_group_to_onedata_group(AclGroup, Storage) ->
 %%% Internal functions
 %%%===================================================================
 
--spec sanitize_user_mapping(binary()) -> {ok, od_user:id()} | {error, term()}.
+-spec sanitize_user_mapping(binary()) -> {ok, onedata_user()} | {error, term()}.
 sanitize_user_mapping(Response) ->
     DecodedResponse = json_utils:decode(Response),
     try
-        case maps:get(<<"mappingScheme">>, DecodedResponse, undefined) of
-            ?IDP_USER_SCHEME ->
-                sanitize_idp_user_scheme(DecodedResponse);
-            ?ONEDATA_USER_SCHEME ->
-                sanitize_onedata_user_scheme(DecodedResponse)
-        end
+        MappingScheme = maps:get(<<"mappingScheme">>, DecodedResponse),
+        SanitizedData = case MappingScheme of
+            ?IDP_USER_SCHEME -> sanitize_idp_user_scheme(DecodedResponse);
+            ?ONEDATA_USER_SCHEME -> sanitize_onedata_user_scheme(DecodedResponse)
+        end,
+        {ok, SanitizedData#{<<"mappingScheme">> => MappingScheme}}
     catch
         Error:Reason ->
             ?error_stacktrace("Parsing external reverse LUMA user mapping response failed due to ~p:~p.",
@@ -165,37 +159,33 @@ sanitize_user_mapping(Response) ->
             {error, external_luma_error}
     end.
 
--spec sanitize_idp_user_scheme(user_mapping_response()) -> {ok, od_user:id()} | {error, term()}.
+-spec sanitize_idp_user_scheme(onedata_user()) -> onedata_user().
 sanitize_idp_user_scheme(Response) ->
-    SanitizedResponse = middleware_sanitizer:sanitize_data(Response, #{
+    middleware_sanitizer:sanitize_data(Response, #{
        required => #{
            <<"idp">> => {binary, non_empty},
            <<"subjectId">> => {binary, non_empty}
        }
-    }),
-    Idp = maps:get(<<"idp">>, SanitizedResponse),
-    SubjectId = maps:get(<<"subjectId">>, SanitizedResponse),
-    provider_logic:map_idp_user_to_onedata(Idp, SubjectId).
+    }).
 
 
--spec sanitize_onedata_user_scheme(user_mapping_response()) -> {ok, od_user:id()}.
+-spec sanitize_onedata_user_scheme(onedata_user()) -> onedata_user().
 sanitize_onedata_user_scheme(Response) ->
-    SanitizedResponse = middleware_sanitizer:sanitize_data(Response, #{
+    middleware_sanitizer:sanitize_data(Response, #{
         required => #{<<"onedataUserId">> => {binary, non_empty}}
-    }),
-    {ok, maps:get(<<"onedataUserId">>, SanitizedResponse)}.
+    }).
 
 
--spec sanitize_group_mapping(binary()) -> {ok, od_group:id()} | {error, term()}.
+-spec sanitize_group_mapping(binary()) -> {ok, onedata_group()} | {error, term()}.
 sanitize_group_mapping(Response) ->
     DecodedResponse = json_utils:decode(Response),
     try
-        case maps:get(<<"mappingScheme">>, DecodedResponse, undefined) of
-            ?IDP_ENTITLEMENT_SCHEME ->
-                sanitize_idp_group_scheme(DecodedResponse);
-            ?ONEDATA_GROUP_SCHEME ->
-                sanitize_onedata_group_scheme(DecodedResponse)
-        end
+        MappingScheme = maps:get(<<"mappingScheme">>, DecodedResponse),
+        SanitizedData = case MappingScheme of
+            ?IDP_ENTITLEMENT_SCHEME -> sanitize_idp_group_scheme(DecodedResponse);
+            ?ONEDATA_GROUP_SCHEME -> sanitize_onedata_group_scheme(DecodedResponse)
+        end,
+        {ok, SanitizedData#{<<"mappingScheme">> => MappingScheme}}
     catch
         Error:Reason ->
             ?error_stacktrace("Parsing external reverse LUMA group mapping response failed due to ~p:~p.",
@@ -204,22 +194,18 @@ sanitize_group_mapping(Response) ->
     end.
 
 
--spec sanitize_idp_group_scheme(group_mapping_response()) -> {ok, od_group:id()} | {error, term()}.
+-spec sanitize_idp_group_scheme(onedata_group()) -> onedata_group().
 sanitize_idp_group_scheme(Response) ->
-    SanitizedResponse = middleware_sanitizer:sanitize_data(Response, #{
+    middleware_sanitizer:sanitize_data(Response, #{
         required => #{
             <<"idp">> => {binary, non_empty},
             <<"idpEntitlement">> => {binary, non_empty}
         }
-    }),
-    Idp = maps:get(<<"idp">>, SanitizedResponse),
-    IdpEntitlement = maps:get(<<"idpEntitlement">>, SanitizedResponse),
-    provider_logic:map_idp_group_to_onedata(Idp, IdpEntitlement).
+    }).
 
 
--spec sanitize_onedata_group_scheme(group_mapping_response()) -> {ok, od_group:id()}.
+-spec sanitize_onedata_group_scheme(onedata_group()) -> onedata_group().
 sanitize_onedata_group_scheme(Response) ->
-    SanitizedResponse = middleware_sanitizer:sanitize_data(Response, #{
+    middleware_sanitizer:sanitize_data(Response, #{
         required => #{<<"onedataGroupId">> => {binary, non_empty}}
-    }),
-    {ok, maps:get(<<"onedataGroupId">>, SanitizedResponse)}.
+    }).
