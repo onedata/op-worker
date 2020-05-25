@@ -17,6 +17,7 @@
 %% API
 -export([
     prepare_base_test_config/1,
+    disable_panel_healthcheck/1,
     kill_node/2,
     start_node/2
 ]).
@@ -79,6 +80,44 @@ prepare_base_test_config(Config) ->
     ]).
 
 
+-spec disable_panel_healthcheck(test_config:config()) -> ok.
+disable_panel_healthcheck(Config) ->
+    lists:foreach(fun(PanelNode) ->
+        Ctx = rpc:call(PanelNode, service, get_ctx, [op_worker]),
+        ok = rpc:call(PanelNode, service, deregister_healthcheck, [op_worker, Ctx])
+    end, ?config(op_panel_nodes, Config)).
+
+
+-spec kill_node(test_config:config(), node()) -> ok.
+kill_node(Config, Node) ->
+    OnenvScript = test_config:get_onenv_script_path(Config),
+    Pod = test_config:get_custom(Config, [pods, Node]),
+    Service = get_service(Node),
+    GetPidCommand = [
+        "ps", "-eo", "'%p,%a'", 
+        "|", "grep", "beam.*rel/" ++ Service, 
+        "|", "head", "-n", "1", 
+        "|", "cut", "-d", "','", "-f" , "1"
+    ],
+    PidToKill = ?assertMatch([_ | _], string:trim(utils:cmd([OnenvScript, "exec", Pod] ++ GetPidCommand))),
+    [] = utils:cmd([OnenvScript, "exec", Pod, "kill", "-s", "SIGKILL", PidToKill]),
+    ok.
+
+
+-spec start_node(test_config:config(), node()) -> ok.
+start_node(Config, Node) ->
+    OnenvScript = test_config:get_onenv_script_path(Config),
+    Service = get_service(Node),
+    ScriptPath = test_config:get_custom(Config, list_to_atom(Service ++ "_script")),
+    Pod = test_config:get_custom(Config, [pods, Node]),
+    [] = utils:cmd([OnenvScript, "exec", Pod, ScriptPath, "start"]),
+    ok.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %% @private
 -spec setup_user_session(UserId :: binary(), OzwNode :: node(), OpwNode :: node()) ->
     {ok, SessId :: binary()}.
@@ -95,34 +134,6 @@ setup_user_session(UserId, OzwNode, OpwNode) ->
             [SerializedAccessToken, undefined, undefined, undefined, allow_data_access_caveats]),
     
     rpc:call(OpwNode, session_manager, reuse_or_create_fuse_session, [Nonce, Identity, Credentials]).
-
-
--spec kill_node(test_config:config(), node()) -> ok.
-kill_node(Config, Node) ->
-    OnenvScript = test_config:get_onenv_script_path(Config),
-    Pod = test_config:get_custom(Config, [pods, Node]),
-    Service = get_service(Node),
-    GetPidCommand = [
-        "ps", "-eo", "'%p,%a'", 
-        "|", "grep", "beam.*rel/" ++ Service, 
-        "|", "head", "-n", "1", 
-        "|", "cut", "-d", "','", "-f" , "1"
-    ],
-    PidToKill = ?assertMatch([_ | _], string:trim(utils:cmd([OnenvScript, "exec_custom", Pod] ++ GetPidCommand))),
-    ct:print("Pid to kill: ~p", [PidToKill]),
-    [] = utils:cmd([OnenvScript, "exec_custom", Pod, "kill", "-s", "SIGKILL", PidToKill]),
-    ok.
-
-
--spec start_node(test_config:config(), node()) -> ok.
-start_node(Config, Node) ->
-    OnenvScript = test_config:get_onenv_script_path(Config),
-    Service = get_service(Node),
-    ScriptPath = test_config:get_custom(Config, list_to_atom(Service ++ "_script")),
-    Pod = test_config:get_custom(Config, [pods, Node]),
-    [] = utils:cmd([OnenvScript, "exec_custom", Pod, ScriptPath, "start"]),
-    ok.
-
 
 %% @private
 -spec get_service(node()) -> test_config:service_as_list().

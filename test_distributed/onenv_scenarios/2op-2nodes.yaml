@@ -57,15 +57,6 @@ onedataCli: false
 # Determines if oneclients should start.
 oneclients: false
 
-# Oneclient image to use.
-oneclientImage: "docker.onedata.org/oneclient-dev:ID-73dfaf09ea"
-
-# Onedata rest client image to use.
-onedataCliImage: "onedata/rest-cli:18.02.0-rc13-fast-1"
-
-# Luma image to use.
-lumaImage: "docker.onedata.org/luma:ID-8e2da56615"
-
 # When enabled, onezoneImage and oneproviderImage will be pulled before every
 # deployment. If disabled, they will only be pulled if not existent.
 forceImagePull: false
