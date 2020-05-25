@@ -17,6 +17,7 @@
 
 -include("global_definitions.hrl").
 -include("http/gui_paths.hrl").
+-include("http/rest.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -72,7 +73,7 @@ handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:consume(FileDownloadCode) of
         false ->
-            cowboy_req:reply(?HTTP_401_UNAUTHORIZED, ?CONN_CLOSE_HEADERS, Req);
+            send_error_response(?ERROR_UNAUTHORIZED, Req);
         {true, SessionId, FileId} ->
             Req2 = gui_cors:allow_origin(oneprovider:get_oz_url(), Req),
             Req3 = gui_cors:allow_frame_origin(oneprovider:get_oz_url(), Req2),
@@ -94,32 +95,28 @@ handle(<<"GET">>, Req) ->
 -spec handle_http_download(cowboy_req:req(), session:id(), fslogic_worker:file_guid()) ->
     cowboy_req:req().
 handle_http_download(Req, SessionId, FileId) ->
-    try
-        {ok, FileHandle} = lfm:open(SessionId, {guid, FileId}, read),
-        try
-            {ok, #file_attr{
-                size = Size, name = FileName
-            }} = lfm:stat(SessionId, {guid, FileId}),
-            Headers = attachment_headers(FileName),
-            % Reply with attachment headers and a streaming function
-            Req2 = cowboy_req:stream_reply(?HTTP_200_OK, Headers#{
-                ?HDR_CONTENT_LENGTH => integer_to_binary(Size)
-            }, Req),
-            stream_file(Req2, FileHandle, Size)
-        catch
-            Type2:Reason2 ->
-                {ok, UserId2} = session:get_user_id(SessionId),
-                ?error_stacktrace("Error while processing file download "
-                "for user ~p - ~p:~p", [UserId2, Type2, Reason2]),
-                lfm:release(FileHandle), % release if possible
-                cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req)
-        end
-    catch
-        Type:Reason ->
-            {ok, UserId} = session:get_user_id(SessionId),
-            ?error_stacktrace("Error while processing file download "
-            "for user ~p - ~p:~p", [UserId, Type, Reason]),
-            cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, ?CONN_CLOSE_HEADERS, Req)
+    case lfm:open(SessionId, {guid, FileId}, read) of
+        {ok, FileHandle} ->
+            try
+                {ok, #file_attr{
+                    size = Size, name = FileName
+                }} = lfm:stat(SessionId, {guid, FileId}),
+                Headers = attachment_headers(FileName),
+                % Reply with attachment headers and a streaming function
+                Req2 = cowboy_req:stream_reply(?HTTP_200_OK, Headers#{
+                    ?HDR_CONTENT_LENGTH => integer_to_binary(Size)
+                }, Req),
+                stream_file(Req2, FileHandle, Size)
+            catch
+                Type:Reason ->
+                    {ok, UserId2} = session:get_user_id(SessionId),
+                    ?error_stacktrace("Error while processing file download "
+                    "for user ~p - ~p:~p", [UserId2, Type, Reason]),
+                    lfm:release(FileHandle), % release if possible
+                    send_error_response(Reason, Req)
+            end;
+        {error, Errno} ->
+            send_error_response(?ERROR_POSIX(Errno), Req)
     end.
 
 
@@ -202,3 +199,16 @@ attachment_headers(FileName) ->
         %% @todo VFS-2073 - check if needed
         %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
     }.
+
+
+%% @private
+-spec send_error_response(errors:error(), cowboy_req:req()) -> cowboy_req:req().
+send_error_response(Error, Req) ->
+    ErrorResp = rest_translator:error_response(Error),
+
+    cowboy_req:reply(
+        ErrorResp#rest_resp.code,
+        maps:merge(ErrorResp#rest_resp.headers, ?CONN_CLOSE_HEADERS),
+        json_utils:encode(ErrorResp#rest_resp.body),
+        Req
+    ).
