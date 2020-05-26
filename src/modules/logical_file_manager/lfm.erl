@@ -363,6 +363,7 @@ schedule_view_transfer(
 %%--------------------------------------------------------------------
 %% @doc
 %% Schedules file replication to given provider.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
@@ -376,6 +377,7 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Schedules file replication to given provider.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replication_by_view(session:id(), TargetProviderId :: oneprovider:id(),
@@ -392,6 +394,7 @@ schedule_replication_by_view(SessId, TargetProviderId, Callback, SpaceId,
 %% @doc
 %% Schedules file replica eviction on given provider, migrates unique data
 %% to provider given as MigrateProviderId.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction(session:id(), fslogic_worker:file_guid_or_path(),
@@ -406,6 +409,7 @@ schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) -
 %% @doc
 %% Schedules file replica eviction on given provider, migrates unique data
 %% to provider given as MigrateProviderId.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction_by_view(session:id(), oneprovider:id(),

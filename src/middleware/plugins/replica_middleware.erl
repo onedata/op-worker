@@ -6,6 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
+%%% TODO VFS-6365 remove deprecated replicas endpoints
+%%%
 %%% This module handles middleware operations (create, get, update, delete)
 %%% corresponding to file aspects such as:
 %%% - distribution,

@@ -31,6 +31,7 @@
 %% Returns the id of the created transfer doc wrapped in
 %% 'scheduled_transfer' provider response. Resolves file path
 %% based on file guid.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction(user_ctx:ctx(), file_ctx:ctx(),

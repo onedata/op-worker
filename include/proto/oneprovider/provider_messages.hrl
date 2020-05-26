@@ -81,6 +81,7 @@
     callback :: transfer:callback()
 }).
 
+%% TODO VFS-6365 remove deprecated replicas endpoints
 -record(schedule_file_replication, {
     % meaning of fields in this record is explained in datastore_models.hrl
     % in definition of transfer record
@@ -91,6 +92,7 @@
     query_view_params :: transfer:query_view_params()
 }).
 
+%% TODO VFS-6365 remove deprecated replicas endpoints
 -record(schedule_replica_invalidation, {
     % meaning of fields in this record is explained in datastore_models.hrl
     % in definition of transfer record
