@@ -20,8 +20,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 -type type_constraint() ::
-    any | boolean | integer | binary | list_of_binaries |
-    json | gri | page_token | qos_expression.
+    any | boolean | integer | atom | binary | list_of_binaries |
+    json | gri | page_token | cdmi_id.
 -type value_constraint() ::
     any |
     non_empty |
@@ -186,6 +186,19 @@ sanitize_param(TypeConstraint, ValueConstraint, Param, RawValue) ->
 check_type(any, _Param, Term) ->
     Term;
 
+check_type(atom, _Key, Atom) when is_atom(Atom) ->
+    Atom;
+check_type(atom, _Key, Binary) when is_binary(Binary) ->
+    try
+        binary_to_existing_atom(Binary, utf8)
+    catch _:_ ->
+        % return empty atom so it can fail on value verification
+        % (atoms can always have only predefined values)
+        ''
+    end;
+check_type(atom, Key, _) ->
+    throw(?ERROR_BAD_VALUE_ATOM(Key));
+
 check_type(binary, _Param, Binary) when is_binary(Binary) ->
     Binary;
 check_type(binary, _Param, Atom) when is_atom(Atom) ->
@@ -256,6 +269,16 @@ check_type(json, _Param, JSON) when is_map(JSON) ->
     JSON;
 check_type(json, Param, _) ->
     throw(?ERROR_BAD_VALUE_JSON(Param));
+
+check_type(cdmi_id, Key, Binary) when is_binary(Binary) ->
+    try
+        {ok, FileGuid} = file_id:objectid_to_guid(Binary),
+        FileGuid
+    catch _:_ ->
+        ?ERROR_BAD_VALUE_IDENTIFIER(Key)
+    end;
+check_type(cdmi_id, Key, _) ->
+    throw(?ERROR_BAD_VALUE_IDENTIFIER(Key));
 
 check_type(TypeConstraint, Param, _) ->
     ?error("Unknown type constraint: ~p for param: ~p", [

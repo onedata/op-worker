@@ -52,6 +52,7 @@
 %% Functions operating on directories or files
 -export([mv/3, mv/4, cp/3, cp/4, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
 -export([
+    schedule_file_transfer/5, schedule_view_transfer/7,
     schedule_file_replication/4, schedule_replica_eviction/4,
     schedule_replication_by_view/6, schedule_replica_eviction_by_view/6
 ]).
@@ -317,6 +318,47 @@ get_file_guid(SessId, FilePath) ->
     ok | error_reply().
 unlink(SessId, FileEntry, Silent) ->
     ?run(fun() -> lfm_files:unlink(SessId, FileEntry, Silent) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules file transfer and returns its ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_file_transfer(
+    session:id(),
+    file_id:file_guid(),
+    ReplicatingProviderId :: undefined | od_provider:id(),
+    EvictingProviderId :: undefined | od_provider:id(),
+    transfer:callback()
+) ->
+    {ok, transfer:id()} | lfm:error_reply().
+schedule_file_transfer(SessId, FileGuid, ReplicatingProviderId, EvictingProviderId, Callback) ->
+    ?run(fun() -> lfm_files:schedule_file_transfer(
+        SessId, FileGuid, ReplicatingProviderId, EvictingProviderId, Callback
+    ) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules transfer by view and returns its ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_view_transfer(
+    session:id(),
+    od_space:id(),
+    transfer:view_name(), transfer:query_view_params(),
+    ReplicatingProviderId :: undefined | od_provider:id(),
+    EvictingProviderId :: undefined | od_provider:id(),
+    transfer:callback()
+) ->
+    {ok, transfer:id()} | lfm:error_reply().
+schedule_view_transfer(
+    SessId, SpaceId, ViewName, QueryViewParams,
+    ReplicatingProviderId, EvictingProviderId, Callback
+) ->
+    ?run(fun() -> lfm_files:schedule_view_transfer(
+        SessId, SpaceId, ViewName, QueryViewParams,
+        ReplicatingProviderId, EvictingProviderId, Callback
+    ) end).
 
 %%--------------------------------------------------------------------
 %% @doc
