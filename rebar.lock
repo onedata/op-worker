@@ -36,7 +36,7 @@
   2},
  {<<"ctool">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/ctool.git",
-       {ref,"1b69e21d5ae847f1e4a51af683c4995cea6326e5"}},
+       {ref,"c5e1c22ac7c51b5764e407b9aef8d4f35d36b5e9"}},
   0},
  {<<"edown">>,
   {git,"git://github.com/uwiger/edown.git",
@@ -174,7 +174,8 @@
  {<<"worker_pool">>,
   {git,"https://github.com/inaka/worker_pool",
        {ref,"ae5aa2e5819f7cce3aa3fbc50d39743de3515cdc"}},
-  1}]}.
+  1},
+ {<<"yamerl">>,{pkg,<<"yamerl">>,<<"0.7.0">>},0}]}.
 [
 {pkg_hash,[
  {<<"backoff">>, <<"83B72ED2108BA1EE8F7D1C22E0B4A00CFE3593A67DBC792799E8CCE9F42F796B">>},
@@ -192,5 +193,6 @@
  {<<"recon">>, <<"2BCAD0CF621FB277CABBB6413159CD3AA30265C2DEE42C968697988B30108604">>},
  {<<"ssl_verify_fun">>, <<"28A4D65B7F59893BC2C7DE786DEC1E1555BD742D336043FE644AE956C3497FBE">>},
  {<<"stacktrace_compat">>, <<"8AD31C32C9A0EADB1EB298F04DC8B0C8D79BCC6233A638B02791FFCA4F331275">>},
- {<<"uuid">>, <<"D596C8DD01A4AE48B9D8D51832CCC8F8302BF67ACD01336AEC3FCFAE6B9D2BC2">>}]}
+ {<<"uuid">>, <<"D596C8DD01A4AE48B9D8D51832CCC8F8302BF67ACD01336AEC3FCFAE6B9D2BC2">>},
+ {<<"yamerl">>, <<"E51DBA652DCE74C20A88294130B48051EBBBB0BE7D76F22DE064F0F3CCF0AAF5">>}]}
 ].
