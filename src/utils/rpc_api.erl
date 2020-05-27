@@ -34,7 +34,7 @@
     storage_exists/1,
     storage_describe/1,
     storage_is_imported_storage/1,
-    invalidate_luma_cache/1,
+    luma_clear_db/1,
     new_helper/5,
     new_luma_config/2,
     verify_storage_on_all_nodes/1,
@@ -202,8 +202,8 @@ storage_describe(StorageId) ->
 storage_is_imported_storage(StorageId) ->
     storage:is_imported_storage(StorageId).
 
--spec invalidate_luma_cache(storage:id()) -> ok.
-invalidate_luma_cache(StorageId) ->
+-spec luma_clear_db(storage:id()) -> ok.
+luma_clear_db(StorageId) ->
     luma:clear_db(StorageId).
 
 
