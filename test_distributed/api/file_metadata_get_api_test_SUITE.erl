@@ -695,11 +695,11 @@ create_validate_get_metadata_rest_call_fun(GetExpResultFun) ->
 %% @private
 create_validate_get_metadata_rest_call_fun(GetExpResultFun, ProviderNotSupportingSpace) ->
     fun
-        (#api_test_ctx{node = TestNode}, {ok, RespCode, RespBody}) when TestNode == ProviderNotSupportingSpace ->
+        (#api_test_ctx{node = TestNode}, {ok, RespCode, _RespHeaders, RespBody}) when TestNode == ProviderNotSupportingSpace ->
             ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
             ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderDomain)),
             ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody});
-        (TestCtx, {ok, RespCode, RespBody}) ->
+        (TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
             case GetExpResultFun(TestCtx) of
                 {ok, ExpMetadata} ->
                     ?assertEqual({?HTTP_200_OK, ExpMetadata}, {RespCode, RespBody});

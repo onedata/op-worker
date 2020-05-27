@@ -308,7 +308,10 @@ check_value(json, non_empty, Param, Map) when map_size(Map) == 0 ->
 check_value(_, non_empty, _Param, _) ->
     ok;
 
-check_value(binary, guid, Param, Value) ->
+check_value(Type, guid, Param, Value) when
+    Type == binary;
+    Type == cdmi_id
+->
     try
         {_, _, _} = file_id:unpack_share_guid(Value),
         ok

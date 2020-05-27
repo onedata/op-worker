@@ -649,7 +649,7 @@ get_xattr(Node, FileGuid, XattrKey, Config) ->
 
 %% @private
 create_validate_set_metadata_rest_call_fun(GetExpResultFun) ->
-    fun(TestCtx, {ok, RespCode, RespBody}) ->
+    fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         case GetExpResultFun(TestCtx) of
             ok ->
                 ?assertEqual({?HTTP_204_NO_CONTENT, #{}}, {RespCode, RespBody});

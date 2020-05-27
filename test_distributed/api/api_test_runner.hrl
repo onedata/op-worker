@@ -51,7 +51,8 @@
 -record(client_spec, {
     correct = [] :: [aai:auth()],
     unauthorized = [] :: [aai:auth()],
-    forbidden = [] :: [aai:auth()],
+    forbidden_not_in_space = [] :: [aai:auth()],
+    forbidden_in_space = [] :: [aai:auth()],
     supported_clients_per_node :: #{node() => [aai:auth()]}
 }).
 -type client_spec() :: #client_spec{}.
@@ -82,6 +83,7 @@
 -type gs_args() :: #gs_args{}.
 
 -record(api_test_ctx, {
+    scenario :: scenario_type(),
     node :: node(),
     client :: aai:auth(),
     env :: api_test_env(),
@@ -183,13 +185,13 @@ end)()).
 -define(CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(__CONFIG), #client_spec{
     correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [?NOBODY],
-    forbidden = [?USER_IN_SPACE_2_AUTH],
+    forbidden_not_in_space = [?USER_IN_SPACE_2_AUTH],
     supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
 }).
 -define(CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(__CONFIG), #client_spec{
     correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [?NOBODY],
-    forbidden = [?USER_IN_SPACE_1_AUTH],
+    forbidden_not_in_space = [?USER_IN_SPACE_1_AUTH],
     supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
 }).
 % Special case -> any user can make requests for shares but if request is
@@ -198,7 +200,7 @@ end)()).
 -define(CLIENT_SPEC_FOR_SHARE_SCENARIOS(__CONFIG), #client_spec{
     correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [],
-    forbidden = [],
+    forbidden_not_in_space = [],
     supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
 }).
 

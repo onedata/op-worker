@@ -46,6 +46,7 @@
 %%--------------------------------------------------------------------
 -spec operation_supported(middleware:operation(), gri:aspect(),
     middleware:scope()) -> boolean().
+operation_supported(create, instance, private) -> true;
 operation_supported(create, rerun, private) -> true;
 
 operation_supported(get, instance, private) -> true;

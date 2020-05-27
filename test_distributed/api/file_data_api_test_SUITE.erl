@@ -81,7 +81,7 @@ get_dir_children_test(Config) ->
                     name = <<"List normal dir using /data/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(DirObjectId),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, rest, undefined, Data, Files)
                     end
                 },
@@ -89,7 +89,7 @@ get_dir_children_test(Config) ->
                     name = <<"List normal dir using /files/ rest endpoint">>,
                     type = rest_with_file_path,
                     prepare_args_fun = create_prepare_deprecated_path_get_children_rest_args_fun(DirPath),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
                     end
                 },
@@ -97,7 +97,7 @@ get_dir_children_test(Config) ->
                     name = <<"List normal dir using /files-id/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(DirObjectId),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
                     end
                 },
@@ -131,7 +131,7 @@ get_shared_dir_children_test(Config) ->
                     name = <<"List shared dir using /data/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(ShareDirObjectId),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, rest, ShareId, Data, Files)
                     end
                 },
@@ -142,7 +142,7 @@ get_shared_dir_children_test(Config) ->
                     name = <<"List shared dir using /files-id/ rest endpoint">>,
                     type = rest_not_supported,
                     prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(ShareDirObjectId),
-                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, Response}) ->
+                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, _, Response}) ->
                         ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
                     end
                 },
@@ -223,7 +223,7 @@ get_file_children_test(Config) ->
                     name = <<"List file using /data/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(FileObjectId),
-                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
+                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
                         ?assertEqual(#{<<"children">> => [#{
                             <<"id">> => FileObjectId,
                             <<"name">> => FileName
@@ -234,7 +234,7 @@ get_file_children_test(Config) ->
                     name = <<"List file using /files/ rest endpoint">>,
                     type = rest_with_file_path,
                     prepare_args_fun = create_prepare_deprecated_path_get_children_rest_args_fun(FilePath),
-                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
+                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
                         ?assertEqual(
                             [#{<<"id">> => FileObjectId, <<"path">> => FilePath}],
                             Response
@@ -245,7 +245,7 @@ get_file_children_test(Config) ->
                     name = <<"List file using /files-id/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(FileObjectId),
-                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
+                    validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
                         ?assertEqual(
                             [#{<<"id">> => FileObjectId, <<"path">> => FilePath}],
                             Response
@@ -289,7 +289,7 @@ get_user_root_dir_children_test(Config) ->
             client_spec = #client_spec{
                 correct = [?USER_IN_BOTH_SPACES_AUTH],
                 unauthorized = [?NOBODY],
-                forbidden = [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH],
+                forbidden_not_in_space = [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH],
                 supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(Config)
             },
             scenario_templates = [
@@ -297,7 +297,7 @@ get_user_root_dir_children_test(Config) ->
                     name = <<"List user root dir using /data/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(UserInBothSpacesRootDirObjectId),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, rest, undefined, Data, Spaces)
                     end
                 },
@@ -305,7 +305,7 @@ get_user_root_dir_children_test(Config) ->
                     name = <<"List user root dir using /files-id/ rest endpoint">>,
                     type = rest,
                     prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(UserInBothSpacesRootDirObjectId),
-                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+                    validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, deprecated_rest, undefined, Data, Spaces)
                     end
                 },
@@ -329,11 +329,11 @@ get_user_root_dir_children_test(Config) ->
             client_spec = #client_spec{
                 correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
                 unauthorized = [?NOBODY],
-                forbidden = [],
+                forbidden_not_in_space = [],
                 supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(Config)
             },
             prepare_args_fun = create_prepare_deprecated_path_get_children_rest_args_fun(<<"/">>),
-            validate_result_fun = fun(#api_test_ctx{client = Client, data = Data}, {ok, ?HTTP_200_OK, Response}) ->
+            validate_result_fun = fun(#api_test_ctx{client = Client, data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                 ClientSpaces = case Client of
                     ?USER_IN_SPACE_1_AUTH ->
                         [{Space1Guid, ?SPACE_1, <<"/", ?SPACE_1/binary>>}];
@@ -357,12 +357,12 @@ get_dir_children_on_provider_not_supporting_space_test(Config) ->
     {ok, Space1ObjectId} = file_id:guid_to_objectid(Space1Guid),
 
     ValidateRestListedFilesOnProvidersNotSupportingSpace = fun(ExpSuccessResult) -> fun
-        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, Response}) when
+        (#api_test_ctx{node = Node, client = Client}, {ok, ?HTTP_400_BAD_REQUEST, _, Response}) when
             Node == P2,
             Client == ?USER_IN_BOTH_SPACES_AUTH
         ->
             ?assertEqual(?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)), Response);
-        (_TestCaseCtx, {ok, ?HTTP_200_OK, Response}) ->
+        (_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
             ?assertEqual(ExpSuccessResult, Response)
     end end,
 
@@ -822,11 +822,11 @@ create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId) ->
 %% @private
 create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId, ProviderNotSupportingSpace) ->
     fun
-        (#api_test_ctx{node = TestNode}, {ok, RespCode, RespBody}) when TestNode == ProviderNotSupportingSpace ->
+        (#api_test_ctx{node = TestNode}, {ok, RespCode, _RespHeaders, RespBody}) when TestNode == ProviderNotSupportingSpace ->
             ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
             ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderDomain)),
             ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody});
-        (TestCtx, {ok, RespCode, RespBody}) ->
+        (TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
             case get_attrs_exp_result(TestCtx, JsonAttrs, ShareId) of
                 {ok, ExpAttrs} ->
                     ?assertEqual({?HTTP_200_OK, ExpAttrs}, {RespCode, RespBody});
@@ -920,7 +920,7 @@ set_file_mode_test(Config) ->
         (#api_test_ctx{client = ?USER_IN_BOTH_SPACES_AUTH}) -> ok;
         (_) -> ?ERROR_POSIX(?EACCES)
     end,
-    ValidateRestSuccessfulCallFun =  fun(TestCtx, {ok, RespCode, RespBody}) ->
+    ValidateRestSuccessfulCallFun =  fun(TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         {ExpCode, ExpBody} = case GetExpectedResultFun(TestCtx) of
             ok ->
                 {?HTTP_204_NO_CONTENT, #{}};
@@ -1012,7 +1012,7 @@ set_shared_file_mode_test(Config) ->
 
     api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
 
-    ValidateRestOperationNotSupportedFun = fun(_, {ok, ?HTTP_400_BAD_REQUEST, Response}) ->
+    ValidateRestOperationNotSupportedFun = fun(_, {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, Response}) ->
         ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
     end,
     GetMode = fun(Node) ->
@@ -1089,10 +1089,11 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
 
     Provider2DomainBin = ?GET_DOMAIN_BIN(P2),
 
-    ValidateRestSetMetadataOnProvidersNotSupportingUserFun = fun(_TestCtx, {ok, RespCode, RespBody}) ->
-        ExpCode = ?HTTP_400_BAD_REQUEST,
-        ExpBody = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)),
-        ?assertEqual({ExpCode, ExpBody}, {RespCode, RespBody})
+    ValidateRestSetMetadataOnProvidersNotSupportingUserFun = fun
+        (_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+            ExpCode = ?HTTP_400_BAD_REQUEST,
+            ExpBody = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin)),
+            ?assertEqual({ExpCode, ExpBody}, {RespCode, RespBody})
     end,
 
     ?assert(api_test_runner:run_tests(Config, [
