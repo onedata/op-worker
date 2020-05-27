@@ -830,9 +830,13 @@ check_fs_stats_on_different_providers(Config) ->
     P1SupportSize = 10000,
     P2StorageId = <<"/mnt/st2">>,
     P2SupportSize = 50000,
+    ProviderToStorage = #{
+        P1 => {P1StorageId, P1SupportSize},
+        P2 => {P2StorageId, P2SupportSize}
+    },
 
     % create file on provider1
-    [F1, F2] = lists:map(fun(Node) ->
+    [F1, F2] = Files = lists:map(fun(Node) ->
         SessId = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(Node)}}, Config),
         FileName = generator:gen_name(),
         FilePath = <<SpaceRootDir/binary, FileName/binary>>,
@@ -840,59 +844,56 @@ check_fs_stats_on_different_providers(Config) ->
         FileGuid
     end, [P1, P2]),
 
-    AssertEqualFSSTatsFun = fun(Node, FileGuid, StorageId, SupportSize, Occupied) ->
+    AssertEqualFSSTatsFun = fun(Node, Occupied) ->
         SessId = GetSessId(Node),
+        {StorageId, SupportSize} = maps:get(Node, ProviderToStorage),
 
-        ?assertEqual(
-            {ok, #fs_stats{space_id = SpaceId, storage_stats = [
-                #storage_stats{
-                    storage_id = StorageId,
-                    size = SupportSize,
-                    occupied = Occupied
-                }
-            ]}},
-            lfm_proxy:get_fs_stats(Node, SessId, {guid, FileGuid}),
-            ?ATTEMPTS
-        )
+        lists:foreach(fun(FileGuid) ->
+            ?assertEqual(
+                {ok, #fs_stats{space_id = SpaceId, storage_stats = [
+                    #storage_stats{
+                        storage_id = StorageId,
+                        size = SupportSize,
+                        occupied = Occupied
+                    }
+                ]}},
+                lfm_proxy:get_fs_stats(Node, SessId, {guid, FileGuid}),
+                ?ATTEMPTS
+            )
+        end, Files)
+    end,
+    WriteToFileFun = fun({Node, FileGuid, Offset, BytesNum}) ->
+        Content = crypto:strong_rand_bytes(BytesNum),
+        {ok, Handle} = lfm_proxy:open(Node, GetSessId(Node), {guid, FileGuid}, write),
+        {ok, _} = lfm_proxy:write(Node, Handle, Offset, Content),
+        ok = lfm_proxy:close(Node, Handle),
+        Content
     end,
 
     % Assert empty storages at the beginning of test
-    AssertEqualFSSTatsFun(P1, F1, P1StorageId, P1SupportSize, 0),
-    AssertEqualFSSTatsFun(P2, F2, P2StorageId, P2SupportSize, 0),
+    AssertEqualFSSTatsFun(P1, 0),
+    AssertEqualFSSTatsFun(P2, 0),
 
     % Write to files and assert that quota was updated
-    lists:foreach(fun({Node, FileGuid, BytesToWrite}) ->
-        {ok, Handle} = lfm_proxy:open(Node, GetSessId(Node), {guid, FileGuid}, write),
-        {ok, _} = lfm_proxy:write(Node, Handle, 0, crypto:strong_rand_bytes(BytesToWrite)),
-        ok = lfm_proxy:close(Node, Handle)
-    end, [{P1, F1, 50}, {P2, F2, 80}]),
-
-    timer:sleep(timer:seconds(10)),
-
-    AssertEqualFSSTatsFun(P1, F1, P1StorageId, P1SupportSize, 50),
-    AssertEqualFSSTatsFun(P2, F2, P2StorageId, P2SupportSize, 80),
+    lists:foreach(WriteToFileFun, [{P1, F1, 0, 50}, {P2, F2, 0, 80}]),
+    AssertEqualFSSTatsFun(P1, 50),
+    AssertEqualFSSTatsFun(P2, 80),
 
     % Write to file on P2 and assert that only its quota was updated
-    {ok, WriteHandle} = lfm_proxy:open(P2, GetSessId(P2), {guid, F1}, write),
-    {ok, _} = lfm_proxy:write(P2, WriteHandle, 100, crypto:strong_rand_bytes(40)),
-    ok = lfm_proxy:close(P2, WriteHandle),
-
-    timer:sleep(timer:seconds(10)),
-
-    AssertEqualFSSTatsFun(P1, F1, P1StorageId, P1SupportSize, 50),
-    AssertEqualFSSTatsFun(P2, F2, P2StorageId, P2SupportSize, 120),
+    WrittenContent = WriteToFileFun({P2, F1, 100, 40}),
+    AssertEqualFSSTatsFun(P1, 50),
+    AssertEqualFSSTatsFun(P2, 120),
 
     % Read file on P1 (force rtransfer) and assert that its quota was updated
+    ExpReadContent = binary:part(WrittenContent, 0, 20),
     {ok, ReadHandle} = lfm_proxy:open(P1, GetSessId(P1), {guid, F1}, read),
-    {ok, _} = lfm_proxy:read(P1, ReadHandle, 100, 20),
+    ?assertMatch({ok, ExpReadContent}, lfm_proxy:read(P1, ReadHandle, 100, 20), ?ATTEMPTS),
     ok = lfm_proxy:close(P1, ReadHandle),
-
-    timer:sleep(timer:seconds(10)),
 
     % Quota should be updated not by read 20 bytes but by 40. That is due to
     % rtransfer fetching larger blocks at once (not only requested bytes)
-    AssertEqualFSSTatsFun(P1, F1, P1StorageId, P1SupportSize, 90),
-    AssertEqualFSSTatsFun(P2, F2, P2StorageId, P2SupportSize, 120).
+    AssertEqualFSSTatsFun(P1, 90),
+    AssertEqualFSSTatsFun(P2, 120).
 
 
 %%%===================================================================
