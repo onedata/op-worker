@@ -7,7 +7,8 @@ sourcesRoot: ".."
 
 # Sources are expected to be found in CWD (from where the 'up' script was run) or one dir above.
 # On bamboo all required sources will be pulled automatically.
-# NOTE: Cluster manager in Onezone and Oneprovider will be started from the same sources.
+# NOTE: Cluster manager in Onezone and Oneprovider will be started from the same sources 
+# (by default cluster_manager provided as op_worker dependency will be used).
 sources:
   onezone:
     node-1:
