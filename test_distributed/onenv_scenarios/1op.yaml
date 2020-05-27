@@ -5,9 +5,9 @@ scenario: "scenario-1oz-1op"
 # cwd or absolute path)
 sourcesRoot: ".."
 
-# Determines if onedata components should be started from pre-compiled sources
-# or pre-installed packages inside dockers. When enabled, sources are expected
-# to be found in CWD (from where the 'up' script was run) or one dir above.
+# Sources are expected to be found in CWD (from where the 'up' script was run) or one dir above.
+# On bamboo all required sources will be pulled automatically.
+# NOTE: Cluster manager in Onezone and Oneprovider will be started from the same sources.
 sources:
   onezone:
     node-1:
