@@ -19,7 +19,8 @@
     is_eff_space_member/2,
     assert_space_supported_locally/1, assert_space_supported_by/2,
     assert_file_exists/2,
-    decode_object_id/2
+    decode_object_id/2,
+    qos_fulfillment_to_status/1
 ]).
 
 
@@ -62,10 +63,16 @@ assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
     end.
 
 
--spec decode_object_id(file_id:objectid(), binary()) -> 
+-spec decode_object_id(file_id:objectid(), binary() | atom()) -> 
     file_id:file_guid() | no_return().
 decode_object_id(ObjectId, Key) ->
     case catch file_id:objectid_to_guid(ObjectId) of
         {ok, Guid} -> Guid;
         _Error -> throw(?ERROR_BAD_VALUE_IDENTIFIER(Key))
     end.
+
+
+-spec qos_fulfillment_to_status(qos_status:fulfilled()) -> binary().
+qos_fulfillment_to_status(true) -> <<"fulfilled">>;
+qos_fulfillment_to_status(false) -> <<"pending">>;
+qos_fulfillment_to_status(impossible) -> <<"impossible">>.

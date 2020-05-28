@@ -326,7 +326,7 @@ validate_result_fun_rest(get) ->
 validate_result_fun_rest(qos_summary) ->
     fun(#api_test_ctx{env = #{qos := QosEntryId}}, {ok, RespCode, RespBody}) ->
         ?assertEqual(200, RespCode),
-        ?assertMatch(#{<<"entries">> := #{QosEntryId := <<"impossible">>}, <<"fulfilled">> := <<"impossible">>}, RespBody),
+        ?assertMatch(#{<<"entries">> := #{QosEntryId := <<"impossible">>}, <<"status">> := <<"impossible">>}, RespBody),
         ok
     end.
 
@@ -354,7 +354,7 @@ validate_result_fun_gs(get) ->
 
 validate_result_fun_gs(qos_summary) ->
     fun(#api_test_ctx{env = #{qos := QosEntryId}}, {ok, Result}) ->
-        ?assertMatch(#{<<"entries">> := #{QosEntryId := <<"impossible">>}, <<"fulfilled">> := <<"impossible">>}, Result),
+        ?assertMatch(#{<<"entries">> := #{QosEntryId := <<"impossible">>}}, Result),
         ok
     end.
 

@@ -241,5 +241,5 @@ entry_to_details(QosEntry, Status, SpaceId) ->
         <<"expressionRpn">> => ExpressionInRpn,
         <<"replicasNum">> => ReplicasNum,
         <<"fileId">> => QosRootFileObjectId,
-        <<"fulfilled">> => Status
+        <<"status">> => middleware_utils:qos_fulfillment_to_status(Status)
     }.
