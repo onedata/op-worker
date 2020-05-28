@@ -17,6 +17,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("test_utils/initializer.hrl").
+-include("../transfers_test_mechanism.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
@@ -32,12 +33,14 @@
 ]).
 
 -export([
-    create_file_replication/1
+    create_file_replication/1,
+    create_view_replication/1
 ]).
 
 all() ->
     ?ALL([
-        create_file_replication
+        create_file_replication,
+        create_view_replication
     ]).
 
 
@@ -72,6 +75,8 @@ all() ->
     {<<"dataSourceType">>, <<"data">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"dataSourceType">>, ?DATA_SOURCE_TYPES)}
 ]).
 
+-define(BYTES_NUM, 20).
+
 
 %%%===================================================================
 %%% Replication test functions
@@ -90,7 +95,7 @@ create_file_replication(Config) ->
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
             setup_fun = create_setup_file_replication_env(P1, P2, ?USER_IN_SPACE_2, Config),
-            verify_fun = create_verify_replication_env(P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            verify_fun = create_verify_transfer_env(replication, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Replicate file using gs transfer api">>,
@@ -127,7 +132,7 @@ create_file_replication(Config) ->
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
             setup_fun = create_setup_file_replication_env(P1, P2, ?USER_IN_SPACE_2, Config),
-            verify_fun = create_verify_replication_env(P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            verify_fun = create_verify_transfer_env(replication, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Replicate file using /replicas/ rest endpoint">>,
@@ -165,12 +170,110 @@ create_file_replication(Config) ->
     ])).
 
 
+create_view_replication(Config) ->
+    [P2, _P1] = ?config(op_worker_nodes, Config),
+
+    RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS],
+
+    TransferDataSpec = #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>,
+            <<"replicatingProviderId">>,
+            <<"spaceId">>, <<"viewName">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"replication">>],
+            <<"dataSourceType">> => [<<"view">>],
+            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
+            <<"spaceId">> => [?SPACE_2],
+            <<"viewName">> => [?PLACEHOLDER],
+            <<"callback">> => [<<"https://localhost">>]
+        },
+        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
+            {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
+            {<<"replicatingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
+        ]
+    },
+
+    ReplicaDataSpec = #data_spec{
+        required = [<<"provider_id">>, <<"space_id">>],
+        optional = [<<"url">>],
+        correct_values = #{
+            <<"provider_id">> => [?GET_DOMAIN_BIN(P2)],
+            <<"space_id">> => [?SPACE_2],
+            <<"url">> => [<<"https://localhost">>]
+        },
+        bad_values = [
+            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
+            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"url">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"url">>)}}
+        ]
+    },
+
+    create_view_transfer(Config, replication, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+
+
+create_view_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPrivs) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+
+    set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
+    set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
+            setup_fun = create_setup_view_transfer_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
+            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = str_utils:format("Transfer (~p) view using gs transfer api", [Type]),
+                    type = gs,
+                    prepare_args_fun = create_prepare_transfer_create_instance_gs_args_fun(private),
+                    validate_result_fun = fun validate_transfer_gs_call_result/2
+                }
+            ],
+            data_spec = TransferDataSpec
+        },
+
+        %% TEST DEPRECATED REPLICAS ENDPOINTS
+
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
+            setup_fun = create_setup_view_transfer_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
+            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = str_utils:format("Transfer (~p) view using /replicas-view/ rest endpoint", [Type]),
+                    type = rest,
+                    prepare_args_fun = create_prepare_replica_rest_args_fun(Type),
+                    validate_result_fun = fun validate_transfer_rest_call_result/2
+                },
+                #scenario_template{
+                    name = str_utils:format("Transfer (~p) view using op_replica gs api", [Type]),
+                    type = gs,
+                    prepare_args_fun = create_prepare_replica_gs_args_fun(Type, private),
+                    validate_result_fun = fun validate_transfer_gs_call_result/2
+                }
+            ],
+            data_spec = ReplicaDataSpec
+        }
+    ])).
+
+
 create_setup_file_replication_env(SrcNode, DstNode, UserId, Config) ->
     fun() ->
         SessId1 = ?SESS_ID(UserId, SrcNode, Config),
         SessId2 = ?SESS_ID(UserId, DstNode, Config),
 
-        RootFileType = api_test_utils:randomly_choose_file_type_for_test(),
+        FilesToBeLeftAlone = lists:map(fun(_) ->
+            create_file(SrcNode, SessId1, filename:join(["/", ?SPACE_2]))
+        end, lists:seq(1, 3)),
+
+        RootFileType = api_test_utils:randomly_choose_file_type_for_test(false),
         RootFilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
         {ok, RootFileGuid} = api_test_utils:create_file(
             RootFileType, SrcNode, SessId1, RootFilePath, 8#777
@@ -229,25 +332,10 @@ create_setup_file_replication_env(SrcNode, DstNode, UserId, Config) ->
                 failed_files => 0,
                 files_evicted => 0
             },
-            files => Files,
+            files_to_transfer => Files,
+            other_files => FilesToBeLeftAlone,
             file_size => BytesNum
         }
-    end.
-
-
-%% @private
-create_verify_replication_env(Node, UserId, SrcProvider, DstProvider, Config) ->
-    SessId = ?SESS_ID(UserId, Node, Config),
-
-    fun
-        (expected_failure, #api_test_ctx{env = #{file_size := FileSize, files := Files}}) ->
-            % Files data should remain only on SrcProvider
-            assert_distribution(Node, SessId, FileSize, [SrcProvider], Files),
-            true;
-        (expected_success, #api_test_ctx{env = #{file_size := FileSize, files := Files}}) ->
-            % Files data should be copied to TargetProvider
-            assert_distribution(Node, SessId, FileSize, [SrcProvider, DstProvider], Files),
-            true
     end.
 
 
@@ -279,6 +367,91 @@ add_file_id_bad_values(DataSpec, SpaceId, ShareId) ->
             #data_spec{bad_values = BadFileIdValues};
         #data_spec{bad_values = BadValues} ->
             DataSpec#data_spec{bad_values = BadFileIdValues ++ BadValues}
+    end.
+
+
+%% @private
+create_setup_view_transfer_env(Type, SrcNode, DstNode, UserId, Config) ->
+    fun() ->
+        SessId1 = ?SESS_ID(UserId, SrcNode, Config),
+        SessId2 = ?SESS_ID(UserId, DstNode, Config),
+
+        {ViewName, Xattr} = create_view(Type, SrcNode, DstNode),
+        RootDirPath = filename:join(["/", ?SPACE_2]),
+
+        FilesToBeLeftAlone = lists:map(fun(_) ->
+            create_file(SrcNode, SessId1, RootDirPath)
+        end, lists:seq(1, 3)),
+
+        FilesToTransferNum = 3,
+        FilesToTransfer = lists:map(fun(_) ->
+            FileGuid = create_file(SrcNode, SessId1, RootDirPath),
+            ?assertMatch(ok, lfm_proxy:set_xattr(SrcNode, SessId1, {guid, FileGuid}, Xattr)),
+            FileGuid
+        end, lists:seq(1, FilesToTransferNum)),
+
+        sync_files_between_nodes(Type, SrcNode, SessId1, DstNode, SessId2, FilesToTransfer),
+
+        ObjectIds = api_test_utils:guids_to_object_ids(FilesToTransfer),
+        QueryViewParams = [{key, Xattr#xattr.value}],
+
+        ExpTransfer = case Type of
+            replication ->
+                ?assertViewQuery(ObjectIds, DstNode, ?SPACE_2, ViewName,  QueryViewParams),
+
+                #{
+                    replication_status => completed,
+                    eviction_status => skipped,
+                    replicating_provider => transfers_test_utils:provider_id(DstNode),
+                    evicting_provider => undefined,
+                    files_to_process => 1 + FilesToTransferNum,
+                    files_processed => 1 + FilesToTransferNum,
+                    files_replicated => FilesToTransferNum,
+                    bytes_replicated => FilesToTransferNum * ?BYTES_NUM,
+                    files_evicted => 0
+                };
+            eviction ->
+                ?assertViewQuery(ObjectIds, SrcNode, ?SPACE_2, ViewName,  QueryViewParams),
+
+                #{
+                    replication_status => skipped,
+                    eviction_status => completed,
+                    replicating_provider => undefined,
+                    evicting_provider => transfers_test_utils:provider_id(SrcNode),
+                    files_to_process => 1 + FilesToTransferNum,
+                    files_processed => 1 + FilesToTransferNum,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted => FilesToTransferNum
+                };
+            migration ->
+                ?assertViewQuery(ObjectIds, SrcNode, ?SPACE_2, ViewName,  QueryViewParams),
+                ?assertViewQuery(ObjectIds, DstNode, ?SPACE_2, ViewName,  QueryViewParams),
+
+                #{
+                    replication_status => completed,
+                    eviction_status => completed,
+                    replicating_provider => transfers_test_utils:provider_id(DstNode),
+                    evicting_provider => transfers_test_utils:provider_id(SrcNode),
+                    files_to_process => 1 + 2 * FilesToTransferNum,
+                    files_processed => 1 + 2 * FilesToTransferNum,
+                    files_replicated => FilesToTransferNum,
+                    bytes_replicated => FilesToTransferNum * ?BYTES_NUM,
+                    files_evicted => FilesToTransferNum
+                }
+        end,
+
+        #{
+            view_name => ViewName,
+            exp_transfer => ExpTransfer#{
+                space_id => ?SPACE_2,
+                file_uuid => fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_2),
+                path => RootDirPath,
+                failed_files => 0
+            },
+            files_to_transfer => FilesToTransfer,
+            other_files => FilesToBeLeftAlone
+        }
     end.
 
 
@@ -400,6 +573,63 @@ validate_transfer_call_result(TransferId, #api_test_ctx{
     ).
 
 
+%% @private
+create_verify_transfer_env(replication, Node, UserId, SrcProvider, DstProvider, Config) ->
+    create_verify_replication_env(Node, UserId, SrcProvider, DstProvider, Config);
+create_verify_transfer_env(eviction, Node, UserId, SrcProvider, DstProvider, Config) ->
+    create_verify_eviction_env(Node, UserId, SrcProvider, DstProvider, Config);
+create_verify_transfer_env(migration, Node, UserId, SrcProvider, DstProvider, Config) ->
+    create_verify_migration_env(Node, UserId, SrcProvider, DstProvider, Config).
+
+
+%% @private
+create_verify_replication_env(Node, UserId, SrcProvider, DstProvider, Config) ->
+    SessId = ?SESS_ID(UserId, Node, Config),
+
+    fun
+        (expected_failure, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+            Files = FilesToTransfer ++ OtherFiles,
+            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider], Files),
+            true;
+        (expected_success, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider], OtherFiles),
+            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider, DstProvider], FilesToTransfer),
+            true
+    end.
+
+
+%% @private
+create_verify_eviction_env(Node, UserId, SrcProvider, DstProvider, Config) ->
+    SessId = ?SESS_ID(UserId, Node, Config),
+
+    fun
+        (expected_failure, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+            Files = FilesToTransfer ++ OtherFiles,
+            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider, DstProvider], Files),
+            true;
+        (expected_success, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider, DstProvider], OtherFiles),
+            assert_distribution(Node, SessId, ?BYTES_NUM, [DstProvider], FilesToTransfer),
+            true
+    end.
+
+
+%% @private
+create_verify_migration_env(Node, UserId, SrcProvider, DstProvider, Config) ->
+    SessId = ?SESS_ID(UserId, Node, Config),
+
+    fun
+        (expected_failure, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+            Files = FilesToTransfer ++ OtherFiles,
+            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider], Files),
+            true;
+        (expected_success, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider], OtherFiles),
+            assert_distribution(Node, SessId, ?BYTES_NUM, [DstProvider], FilesToTransfer),
+            true
+    end.
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -470,12 +700,71 @@ set_space_privileges(Nodes, SpaceId, UserId, Privileges) ->
 
 
 %% @private
+create_file(Node, SessId, ParentPath) ->
+    FilePath = filename:join([ParentPath, ?RANDOM_FILE_NAME()]),
+    {ok, FileGuid} = api_test_utils:create_file(
+        <<"file">>, Node, SessId, FilePath, 8#777
+    ),
+    fill_file_with_dummy_data(Node, SessId, FileGuid, ?BYTES_NUM),
+    FileGuid.
+
+
+%% @private
 fill_file_with_dummy_data(Node, SessId, FileGuid, BytesNum) ->
     Content = crypto:strong_rand_bytes(BytesNum),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {guid, FileGuid}, write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, 0, Content)),
     ?assertMatch(ok, lfm_proxy:close(Node, Handle)),
     Content.
+
+
+% Wait for metadata sync between providers and if requested transfer is `eviction`
+% copy files to DstNode beforehand (eviction doesn't work if data replicas don't
+% exist on other providers)
+sync_files_between_nodes(eviction, SrcNode, SrcNodeSessId, DstNode, DstNodeSessId, Files) ->
+    lists:foreach(fun(Guid) ->
+        ExpContent = read_file(SrcNode, SrcNodeSessId, Guid),
+        % Read file on DstNode to force rtransfer
+        ?assertMatch(ExpContent, read_file(DstNode, DstNodeSessId, Guid), ?ATTEMPTS)
+    end, Files);
+sync_files_between_nodes(_TransferType, _SrcNode, _SrcNodeSessId, DstNode, DstNodeSessId, Files) ->
+    lists:foreach(fun(Guid) ->
+        api_test_utils:wait_for_file_sync(DstNode, DstNodeSessId, Guid)
+    end, Files).
+
+
+%% @private
+read_file(Node, SessId, FileGuid) ->
+    {ok, ReadHandle} = lfm_proxy:open(Node, SessId, {guid, FileGuid}, read),
+    {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, ?BYTES_NUM),
+    ok = lfm_proxy:close(Node, ReadHandle),
+    Content.
+
+
+%% @private
+create_view(TransferType, SrcNode, DstNode) ->
+    XattrName = transfers_test_utils:random_job_name(?FUNCTION_NAME),
+    ViewName = transfers_test_utils:random_view_name(?FUNCTION_NAME),
+    MapFunction = transfers_test_utils:test_map_function(XattrName),
+    case TransferType of
+        replication ->
+            transfers_test_utils:create_view(
+                DstNode, ?SPACE_2, ViewName, MapFunction, [],
+                [transfers_test_utils:provider_id(DstNode)]
+            );
+        eviction ->
+            transfers_test_utils:create_view(
+                SrcNode, ?SPACE_2, ViewName, MapFunction, [],
+                [transfers_test_utils:provider_id(SrcNode)]
+            );
+        migration ->
+            transfers_test_utils:create_view(
+                DstNode, ?SPACE_2, ViewName, MapFunction, [],
+                [transfers_test_utils:provider_id(SrcNode), transfers_test_utils:provider_id(DstNode)]
+            )
+    end,
+
+    {ViewName, #xattr{name = XattrName, value = 1}}.
 
 
 %% @private

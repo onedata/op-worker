@@ -17,11 +17,16 @@
 
 -export([
     randomly_choose_file_type_for_test/0,
+    randomly_choose_file_type_for_test/1,
     create_file/4, create_file/5,
     wait_for_file_sync/3,
+    guids_to_object_ids/1,
 
     add_bad_file_id_and_path_error_values/3
 ]).
+
+
+-define(ATTEMPTS, 30).
 
 
 %%%===================================================================
@@ -30,8 +35,12 @@
 
 
 randomly_choose_file_type_for_test() ->
+    randomly_choose_file_type_for_test(true).
+
+
+randomly_choose_file_type_for_test(LogSelectedFileType) ->
     FileType = ?RANDOM_FILE_TYPE(),
-    ct:pal("Choosen file type for test: ~s", [FileType]),
+    LogSelectedFileType andalso ct:pal("Choosen file type for test: ~s", [FileType]),
     FileType.
 
 
@@ -49,6 +58,13 @@ create_file(<<"dir">>, Node, SessId, Path, Mode) ->
 wait_for_file_sync(Node, SessId, FileGuid) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(Node, SessId, {guid, FileGuid}), ?ATTEMPTS),
     ok.
+
+
+guids_to_object_ids(Guids) ->
+    lists:map(fun(Guid) ->
+        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+        ObjectId
+    end, Guids).
 
 
 -spec add_bad_file_id_and_path_error_values(undefined | data_spec(), od_space:id(),
