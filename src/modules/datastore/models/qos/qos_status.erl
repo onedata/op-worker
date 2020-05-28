@@ -88,7 +88,7 @@
 % Describes whether link should be added upon successful function execution
 -type link_strategy() :: add_link | no_link.
 
--type fulfilled() :: boolean().
+-type fulfilled() :: boolean() | impossible.
 -export_type([fulfilled/0]).
 
 -define(CTX, #{
@@ -116,10 +116,13 @@ check_fulfillment(FileCtx, QosEntryId) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
     
-    (not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId)) orelse 
-        (qos_entry:is_possible(QosDoc) andalso 
-            is_file_reconciled(FileCtx1, QosDoc) andalso
-            are_traverses_finished_for_file(FileCtx1, QosDoc)).
+    case qos_entry:is_possible(QosDoc) of
+        false -> impossible;
+        true ->
+            (not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId)) orelse
+                is_file_reconciled(FileCtx1, QosDoc) andalso
+                are_traverses_finished_for_file(FileCtx1, QosDoc)
+    end.
 
 
 -spec report_traverse_start(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.

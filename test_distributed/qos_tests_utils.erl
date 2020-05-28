@@ -241,11 +241,11 @@ wait_for_qos_fulfillment_in_parallel(Config, QosToWaitForList, QosNameIdMapping,
         LookupExpectedQosEntry = lists:filter(fun(Entry) ->
             Entry#expected_qos_entry.qos_name == QosName
         end, ExpectedQosEntries),
-        ExpectedIsPossible = case LookupExpectedQosEntry of
+        ExpectedFulfillmentStatus = case LookupExpectedQosEntry of
             [ExpectedQosEntry] ->
                 case ExpectedQosEntry#expected_qos_entry.possibility_check of
                     {possible, _} -> true;
-                    {impossible, _} -> false
+                    {impossible, _} -> impossible
                 end;
             [] ->
                 true
@@ -253,13 +253,13 @@ wait_for_qos_fulfillment_in_parallel(Config, QosToWaitForList, QosNameIdMapping,
 
         % wait for QoS fulfillment on different worker nodes
         utils:pmap(fun(Worker) ->
-            wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, ExpectedIsPossible)
+            wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, ExpectedFulfillmentStatus)
         end, WorkerList)
     end, QosToWaitForList),
 
     ?assert(lists:all(fun(Result) -> Result =:= ok end, lists:flatten(Results))).
 
-wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, ExpectedIsPossible) ->
+wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, ExpectedFulfillmentStatus) ->
     SessId = ?SESS_ID(Config, Worker),
     Fun = fun() ->
         ErrMsg = case rpc:call(Worker, lfm_qos, get_qos_entry, [SessId, QosEntryId]) of
@@ -267,7 +267,7 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
                 possibility_check = PossibilityCheck,
                 traverse_reqs = TraversReqs
             }} ->
-                case ExpectedIsPossible of
+                case ExpectedFulfillmentStatus of
                     true ->
                         str_utils:format(
                             "QoS is not fulfilled while it should be. ~n"
@@ -277,7 +277,7 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
                             "TraverseReqs: ~p ~n",
                             [Worker, QosName, PossibilityCheck, TraversReqs]
                         );
-                    false ->
+                    impossible ->
                         str_utils:format(
                             "QoS is fulfilled while it shouldn't be. ~n"
                             "Worker: ~p ~n"
@@ -294,7 +294,7 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
         end,
         {lfm_proxy:check_qos_fulfilled(Worker, SessId, QosEntryId), ErrMsg}
     end,
-    assert_match_with_err_msg(Fun, {ok, ExpectedIsPossible}, 3 * ?ATTEMPTS, 1000).
+    assert_match_with_err_msg(Fun, {ok, ExpectedFulfillmentStatus}, 3 * ?ATTEMPTS, 1000).
 
 
 map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->

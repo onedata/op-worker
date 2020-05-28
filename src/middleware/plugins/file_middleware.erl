@@ -618,7 +618,11 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, 
             {ok, #{
                 <<"entries">> => QosEntriesWithStatus,
                 <<"assignedEntries">> => AssignedEntries,
-                <<"fulfilled">> => lists:all(fun(Status) -> Status end, maps:values(QosEntriesWithStatus))
+                <<"fulfilled">> => lists:foldl(
+                    fun (_, impossible) -> impossible;
+                        (impossible, _) -> impossible;
+                        (Fulfilled, Acc) -> Fulfilled and Acc
+                    end, true, maps:values(QosEntriesWithStatus))
             }};
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND;
