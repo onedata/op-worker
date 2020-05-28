@@ -116,65 +116,114 @@ space_directory_mode_and_owner_test(Config) ->
             ?SPACE_ID3 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?MOUNT_DIR_OWNER
+                    expected_owner => ?OWNER(3000, 3000),
+                    expected_display_owner => ?OWNER(3333, 3333)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?MOUNT_DIR_OWNER
+                    expected_owner => ?OWNER(3000, 3000),
+                    expected_display_owner => ?OWNER(3333, 3333)
                 },
                 #{
                     user => ?ROOT_USER_ID,
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?MOUNT_DIR_OWNER
+                    expected_owner => ?OWNER(3000, 3000),
+                    expected_display_owner => ?OWNER(3333, 3333)
                 }
             ],
             ?SPACE_ID4 => [
                 #{
                     user => ?USER1,
                     expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?OWNER(4444, 4444)
+                    expected_display_owner => ?MOUNT_DIR_OWNER
                 },
                 #{
                     user => ?USER2,
                     expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?OWNER(4444, 4444)
+                    expected_display_owner => ?MOUNT_DIR_OWNER
                 },
                 #{
                     user => ?ROOT_USER_ID,
                     expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?OWNER(4444, 4444)
+                    expected_display_owner => ?MOUNT_DIR_OWNER
                 }
             ],
             ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?GEN_SPACE_OWNER(?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_display_owner => ?OWNER(5555, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_display_owner => ?GEN_SPACE_OWNER(?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_display_owner => ?OWNER(5555, 5555)
                 },
                 #{
                     user => ?ROOT_USER_ID,
-                    expected_display_owner => ?GEN_SPACE_OWNER(?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_display_owner => ?OWNER(5555, 5555)
                 }
             ],
             ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
+                    expected_owner => ?MOUNT_DIR_OWNER,
                     expected_display_owner => ?OWNER(6666, 6666)
                 },
                 #{
                     user => ?USER2,
+                    expected_owner => ?MOUNT_DIR_OWNER,
                     expected_display_owner => ?OWNER(6666, 6666)
                 },
                 #{
                     user => ?ROOT_USER_ID,
+                    expected_owner => ?MOUNT_DIR_OWNER,
                     expected_display_owner => ?OWNER(6666, 6666)
                 }
+            ],
+            ?SPACE_ID7 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?GEN_SPACE_OWNER(?SPACE_ID7)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?GEN_SPACE_OWNER(?SPACE_ID7)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_display_owner => ?GEN_SPACE_OWNER(?SPACE_ID7)
+                }
+            ],
+            ?SPACE_ID8 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?OWNER(8888, 8888)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?OWNER(8888, 8888)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_display_owner => ?OWNER(8888, 8888)
+                }
+            ],
+            ?SPACE_ID9 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?OWNER(9999, 9999)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?OWNER(9999, 9999)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_display_owner => ?OWNER(9999, 9999)
+                }
             ]
+
         }}).
 
 regular_file_mode_and_owner_test(Config) ->
@@ -219,6 +268,23 @@ regular_file_mode_and_owner_test(Config) ->
             ?SPACE_ID3 => [
                 #{
                     user => ?USER1,
+                    expected_owner => ?OWNER(3001, 3000),
+                    expected_display_owner => ?OWNER(3331, 3333)
+                },
+                #{
+                    user => ?USER2,
+                    expected_owner => ?OWNER(3002, 3000),
+                    expected_display_owner => ?OWNER(3002, 3333)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_owner => ?ROOT_OWNER,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID4 => [
+                #{
+                    user => ?USER1,
                     expected_owner => ?GEN_OWNER(?USER1),
                     expected_display_owner => ?GEN_OWNER(?USER1)
                 },
@@ -233,16 +299,16 @@ regular_file_mode_and_owner_test(Config) ->
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID4 => [
+            ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(4001),
-                    expected_display_owner => ?OWNER(4441, 4444)
+                    expected_owner => ?MOUNT_DIR_OWNER(5001),
+                    expected_display_owner => ?OWNER(5551, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(4002),
-                    expected_display_owner => ?OWNER(4002, 4444)
+                    expected_owner => ?MOUNT_DIR_OWNER(5002),
+                    expected_display_owner => ?OWNER(5002, 5555)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -250,28 +316,59 @@ regular_file_mode_and_owner_test(Config) ->
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID5 => [
+            ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?GEN_OWNER(?USER1, ?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER(6001),
+                    expected_display_owner => ?OWNER(6661, 6666)
                 },
                 #{
                     user => ?USER2,
-                    expected_display_owner => ?GEN_OWNER(?USER2, ?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER(6002),
+                    expected_display_owner => ?OWNER(6002, 6666)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_owner => ?ROOT_OWNER,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID7 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?GEN_OWNER(?USER1, ?SPACE_ID7)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?GEN_OWNER(?USER2, ?SPACE_ID7)
                 },
                 #{
                     user => ?ROOT_USER_ID,
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID6 => [
+            ?SPACE_ID8 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?OWNER(6661, 6666)
+                    expected_display_owner => ?OWNER(8881, 8888)
                 },
                 #{
                     user => ?USER2,
-                    expected_display_owner => ?OWNER(?UID(?USER2), 6666)
+                    expected_display_owner => ?OWNER(?UID(?USER2), 8888)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID9 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?OWNER(9991, 9999)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?OWNER(?UID(?USER2), 9999)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -325,6 +422,23 @@ regular_file_custom_mode_and_owner_test(Config) ->
             ?SPACE_ID3 => [
                 #{
                     user => ?USER1,
+                    expected_owner => ?OWNER(3001, 3000),
+                    expected_display_owner => ?OWNER(3331, 3333)
+                },
+                #{
+                    user => ?USER2,
+                    expected_owner => ?OWNER(3002, 3000),
+                    expected_display_owner => ?OWNER(3002, 3333)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_owner => ?ROOT_OWNER,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID4 => [
+                #{
+                    user => ?USER1,
                     expected_owner => ?GEN_OWNER(?USER1),
                     expected_display_owner => ?GEN_OWNER(?USER1)
                 },
@@ -339,16 +453,16 @@ regular_file_custom_mode_and_owner_test(Config) ->
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID4 => [
+            ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(4001),
-                    expected_display_owner => ?OWNER(4441, 4444)
+                    expected_owner => ?MOUNT_DIR_OWNER(5001),
+                    expected_display_owner => ?OWNER(5551, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(4002),
-                    expected_display_owner => ?OWNER(4002, 4444)
+                    expected_owner => ?MOUNT_DIR_OWNER(5002),
+                    expected_display_owner => ?OWNER(5002, 5555)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -356,28 +470,59 @@ regular_file_custom_mode_and_owner_test(Config) ->
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID5 => [
+            ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?GEN_OWNER(?USER1, ?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER(6001),
+                    expected_display_owner => ?OWNER(6661, 6666)
                 },
                 #{
                     user => ?USER2,
-                    expected_display_owner => ?GEN_OWNER(?USER2, ?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER(6002),
+                    expected_display_owner => ?OWNER(6002, 6666)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_owner => ?ROOT_OWNER,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID7 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?GEN_OWNER(?USER1, ?SPACE_ID7)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?GEN_OWNER(?USER2, ?SPACE_ID7)
                 },
                 #{
                     user => ?ROOT_USER_ID,
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID6 => [
+            ?SPACE_ID8 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?OWNER(6661, 6666)
+                    expected_display_owner => ?OWNER(8881, 8888)
                 },
                 #{
                     user => ?USER2,
-                    expected_display_owner => ?OWNER(?UID(?USER2), 6666)
+                    expected_display_owner => ?OWNER(?UID(?USER2), 8888)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID9 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?OWNER(9991, 9999)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?OWNER(?UID(?USER2), 9999)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -401,17 +546,17 @@ regular_file_unknown_owner_test(Config) ->
                     expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
                 }
             ],
-            ?SPACE_ID3 => [
+            ?SPACE_ID4 => [
                 #{
                     expected_owner => ?MOUNT_DIR_OWNER,
                     expected_owner2 => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER)),
                     expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
                 }
             ],
-            ?SPACE_ID5 => [
+            ?SPACE_ID7 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?GEN_OWNER(?UNKNOWN_USER, ?SPACE_ID5)
+                    expected_display_owner => ?GEN_OWNER(?UNKNOWN_USER, ?SPACE_ID7)
                 }
             ]
 
@@ -461,6 +606,23 @@ directory_mode_and_owner_test(Config) ->
             ?SPACE_ID3 => [
                 #{
                     user => ?USER1,
+                    expected_owner => ?OWNER(3001, 3000),
+                    expected_display_owner => ?OWNER(3331, 3333)
+                },
+                #{
+                    user => ?USER2,
+                    expected_owner => ?OWNER(3002, 3000),
+                    expected_display_owner => ?OWNER(3002, 3333)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_owner => ?ROOT_OWNER,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID4 => [
+                #{
+                    user => ?USER1,
                     expected_owner => ?GEN_OWNER(?USER1),
                     expected_display_owner => ?GEN_OWNER(?USER1)
                 },
@@ -475,16 +637,16 @@ directory_mode_and_owner_test(Config) ->
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID4 => [
+            ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(4001),
-                    expected_display_owner => ?OWNER(4441, 4444)
+                    expected_owner => ?MOUNT_DIR_OWNER(5001),
+                    expected_display_owner => ?OWNER(5551, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(4002),
-                    expected_display_owner => ?OWNER(4002, 4444)
+                    expected_owner => ?MOUNT_DIR_OWNER(5002),
+                    expected_display_owner => ?OWNER(5002, 5555)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -492,34 +654,66 @@ directory_mode_and_owner_test(Config) ->
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID5 => [
+            ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?GEN_OWNER(?USER1, ?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER(6001),
+                    expected_display_owner => ?OWNER(6661, 6666)
                 },
                 #{
                     user => ?USER2,
-                    expected_display_owner => ?GEN_OWNER(?USER2, ?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER(6002),
+                    expected_display_owner => ?OWNER(6002, 6666)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_owner => ?ROOT_OWNER,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID7 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?GEN_OWNER(?USER1, ?SPACE_ID7)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?GEN_OWNER(?USER2, ?SPACE_ID7)
                 },
                 #{
                     user => ?ROOT_USER_ID,
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID6 => [
+            ?SPACE_ID8 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?OWNER(6661, 6666)
+                    expected_display_owner => ?OWNER(8881, 8888)
                 },
                 #{
                     user => ?USER2,
-                    expected_display_owner => ?OWNER(?UID(?USER2), 6666)
+                    expected_display_owner => ?OWNER(?UID(?USER2), 8888)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID9 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?OWNER(9991, 9999)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?OWNER(?UID(?USER2), 9999)
                 },
                 #{
                     user => ?ROOT_USER_ID,
                     expected_display_owner => ?ROOT_OWNER
                 }
             ]
+
 
         },
         generic_test_args = #{dir_perms => ?DEFAULT_DIR_PERMS}
@@ -567,6 +761,23 @@ directory_custom_mode_and_owner_test(Config) ->
             ?SPACE_ID3 => [
                 #{
                     user => ?USER1,
+                    expected_owner => ?OWNER(3001, 3000),
+                    expected_display_owner => ?OWNER(3331, 3333)
+                },
+                #{
+                    user => ?USER2,
+                    expected_owner => ?OWNER(3002, 3000),
+                    expected_display_owner => ?OWNER(3002, 3333)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_owner => ?ROOT_OWNER,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID4 => [
+                #{
+                    user => ?USER1,
                     expected_owner => ?GEN_OWNER(?USER1),
                     expected_display_owner => ?GEN_OWNER(?USER1)
                 },
@@ -581,16 +792,16 @@ directory_custom_mode_and_owner_test(Config) ->
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID4 => [
+            ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(4001),
-                    expected_display_owner => ?OWNER(4441, 4444)
+                    expected_owner => ?MOUNT_DIR_OWNER(5001),
+                    expected_display_owner => ?OWNER(5551, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(4002),
-                    expected_display_owner => ?OWNER(4002, 4444)
+                    expected_owner => ?MOUNT_DIR_OWNER(5002),
+                    expected_display_owner => ?OWNER(5002, 5555)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -598,35 +809,65 @@ directory_custom_mode_and_owner_test(Config) ->
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID5 => [
+            ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?GEN_OWNER(?USER1, ?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER(6001),
+                    expected_display_owner => ?OWNER(6661, 6666)
                 },
                 #{
                     user => ?USER2,
-                    expected_display_owner => ?GEN_OWNER(?USER2, ?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER(6002),
+                    expected_display_owner => ?OWNER(6002, 6666)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_owner => ?ROOT_OWNER,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID7 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?GEN_OWNER(?USER1, ?SPACE_ID7)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?GEN_OWNER(?USER2, ?SPACE_ID7)
                 },
                 #{
                     user => ?ROOT_USER_ID,
                     expected_display_owner => ?ROOT_OWNER
                 }
             ],
-            ?SPACE_ID6 => [
+            ?SPACE_ID8 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?OWNER(6661, 6666)
+                    expected_display_owner => ?OWNER(8881, 8888)
                 },
                 #{
                     user => ?USER2,
-                    expected_display_owner => ?OWNER(?UID(?USER2), 6666)
+                    expected_display_owner => ?OWNER(?UID(?USER2), 8888)
+                },
+                #{
+                    user => ?ROOT_USER_ID,
+                    expected_display_owner => ?ROOT_OWNER
+                }
+            ],
+            ?SPACE_ID9 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?OWNER(9991, 9999)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?OWNER(?UID(?USER2), 9999)
                 },
                 #{
                     user => ?ROOT_USER_ID,
                     expected_display_owner => ?ROOT_OWNER
                 }
             ]
-
         },
         generic_test_args = #{dir_perms => 8#777}
     }).
@@ -643,17 +884,17 @@ directory_with_unknown_owner_test(Config) ->
                     expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
                 }
             ],
-            ?SPACE_ID3 => [
+            ?SPACE_ID4 => [
                 #{
                     expected_owner => ?MOUNT_DIR_OWNER,
                     expected_owner2 => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER)),
                     expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
                 }
             ],
-            ?SPACE_ID5 => [
+            ?SPACE_ID7 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?GEN_OWNER(?UNKNOWN_USER, ?SPACE_ID5)
+                    expected_display_owner => ?GEN_OWNER(?UNKNOWN_USER, ?SPACE_ID7)
                 }
             ]
 
@@ -695,6 +936,18 @@ rename_file_test(Config) ->
             ?SPACE_ID3 => [
                 #{
                     user => ?USER1,
+                    expected_owner => ?OWNER(3001, 3000),
+                    expected_display_owner => ?OWNER(3331, 3333)
+                },
+                #{
+                    user => ?USER2,
+                    expected_owner => ?OWNER(3002, 3000),
+                    expected_display_owner => ?OWNER(3002, 3333)
+                }
+            ],
+            ?SPACE_ID4 => [
+                #{
+                    user => ?USER1,
                     expected_owner => ?GEN_OWNER(?USER1),
                     expected_display_owner => ?GEN_OWNER(?USER1)
                 },
@@ -704,39 +957,60 @@ rename_file_test(Config) ->
                     expected_display_owner => ?GEN_OWNER(?USER2)
                 }
             ],
-            ?SPACE_ID4 => [
-                #{
-                    user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(4001),
-                    expected_display_owner => ?OWNER(4441, 4444)
-                },
-                #{
-                    user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(4002),
-                    expected_display_owner => ?OWNER(4002, 4444)
-                }
-            ],
             ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_display_owner => ?GEN_OWNER(?USER1, ?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER(5001),
+                    expected_display_owner => ?OWNER(5551, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_display_owner => ?GEN_OWNER(?USER2, ?SPACE_ID5)
+                    expected_owner => ?MOUNT_DIR_OWNER(5002),
+                    expected_display_owner => ?OWNER(5002, 5555)
                 }
             ],
             ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
+                    expected_owner => ?MOUNT_DIR_OWNER(6001),
                     expected_display_owner => ?OWNER(6661, 6666)
                 },
                 #{
                     user => ?USER2,
-                    expected_display_owner => ?OWNER(?UID(?USER2), 6666)
+                    expected_owner => ?MOUNT_DIR_OWNER(6002),
+                    expected_display_owner => ?OWNER(6002, 6666)
+                }
+            ],
+            ?SPACE_ID7 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?GEN_OWNER(?USER1, ?SPACE_ID7)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?GEN_OWNER(?USER2, ?SPACE_ID7)
+                }
+            ],
+            ?SPACE_ID8 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?OWNER(8881, 8888)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?OWNER(?UID(?USER2), 8888)
+                }
+            ],
+            ?SPACE_ID9 => [
+                #{
+                    user => ?USER1,
+                    expected_display_owner => ?OWNER(9991, 9999)
+                },
+                #{
+                    user => ?USER2,
+                    expected_display_owner => ?OWNER(?UID(?USER2), 9999)
                 }
             ]
-
         },
         generic_test_args = #{file_perms => ?DEFAULT_FILE_PERMS, dir_perms => ?DEFAULT_DIR_PERMS}
     }).
@@ -747,9 +1021,12 @@ creating_file_should_result_in_eacces_when_mapping_is_not_found(Config) ->
         test_fun = fun mapping_not_found_test_base/4,
         custom_test_setups = #{
             ?SPACE_ID2 => [#{user => ?USER3}, #{user => ?USER4}],
-            ?SPACE_ID4 => [#{user => ?USER3}, #{user => ?USER4}],
-            ?SPACE_ID6 => [#{user => ?USER3}, #{user => ?USER4}],
-            ?SPACE_ID7 => [#{user => ?USER1}]
+            ?SPACE_ID3 => [#{user => ?USER3}],
+            ?SPACE_ID5 => [#{user => ?USER3}, #{user => ?USER4}],
+            ?SPACE_ID6 => [#{user => ?USER3}],
+            ?SPACE_ID8 => [#{user => ?USER3}, #{user => ?USER4}],
+            ?SPACE_ID9 => [#{user => ?USER3}],
+            ?SPACE_ID10 => [#{user => ?USER1}]
         }
     }).
 
@@ -999,7 +1276,6 @@ init_per_testcase(Config) ->
 
 init_per_testcase(default, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
-    clean_mapping_caches(W1),
     mock_stat_on_space_mount_dir(W1),
     lfm_proxy:init(Config);
 init_per_testcase(_Case, Config) ->
@@ -1014,6 +1290,7 @@ end_per_testcase(default, Config) ->
     clean_spaces(Workers),
     lists:foreach(fun(W) -> clean_posix_storage_mountpoints(W) end, Workers),
     test_utils:mock_unload(hd(Workers), storage_file_ctx),
+    clear_luma_db(hd(Workers)),
     lfm_proxy:teardown(Config);
 end_per_testcase(_Case, _Config) ->
     ok.
@@ -1061,13 +1338,10 @@ clean_posix_storage_mountpoints(Worker) ->
     end, SpaceIds),
     clean_posix_storage_mountpoints(Worker, SpacesAndSupportingPosixStorageIds).
 
-clean_mapping_caches(Worker) ->
-    {ok, SpaceIds} = get_supported_spaces(Worker),
-    lists:foreach(fun(SpaceId) ->
-        {ok, StorageId} = storage_test_utils:get_supporting_storage_id(Worker, SpaceId),
-        rpc:call(Worker, luma_storage_users, clear_all, [StorageId]),
-        rpc:call(Worker, luma_spaces_defaults, clear_all, [StorageId])
-    end, SpaceIds).
+clear_luma_db(Worker) ->
+    lists:foreach(fun(StorageId) ->
+        ok = rpc:call(Worker, luma, clear_db, [StorageId])
+    end, ?AUTO_LUMA_FEED_STORAGES ++ ?EXTERNAL_LUMA_FEED_STORAGES).
 
 
 is_supporting_storage_posix_compatible(Worker, SpaceId) ->

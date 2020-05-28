@@ -29,18 +29,31 @@
                     "name": "/mnt/st4"
                 },
                 {
+                    "type": "posix",
+                    "name": "/mnt/st5"
+                },
+                {
+                    "type": "posix",
+                    "name": "/mnt/st6"
+                },
+                {
                     "type": "s3",
-                    "name": "s3_no_luma",
+                    "name": "s3_auto_luma_7",
                     "bucket": "onedata"
                 },
                 {
                     "type": "s3",
-                    "name": "s3_luma",
+                    "name": "s3_external_luma_8",
+                    "bucket": "onedata"
+                },
+                {
+                    "type": "s3",
+                    "name": "s3_local_luma_9",
                     "bucket": "onedata"
                 },
                 {
                     "type": "posix",
-                    "name": "/mnt/st7"
+                    "name": "/mnt/st10"
                 }
             ],
             "users": [],
@@ -128,14 +141,14 @@
                 "displayed_name": "space_name3",
                 "users": [
                     "user1",
-                    "user2"
+                    "user2",
+                    "user3"
                 ],
                 "groups": [],
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st3",
-                        "supported_size": 10737418240,
-                        "imported_storage": true
+                        "supported_size": 10737418240
                     }
                 }
             },
@@ -143,9 +156,7 @@
                 "displayed_name": "space_name4",
                 "users": [
                     "user1",
-                    "user2",
-                    "user3",
-                    "user4"
+                    "user2"
                 ],
                 "groups": [],
                 "providers": {
@@ -160,13 +171,16 @@
                 "displayed_name": "space_name5",
                 "users": [
                     "user1",
-                    "user2"
+                    "user2",
+                    "user3",
+                    "user4"
                 ],
                 "groups": [],
                 "providers": {
                     "p1": {
-                        "storage": "s3_no_luma",
-                        "supported_size": 10737418240
+                        "storage": "/mnt/st5",
+                        "supported_size": 10737418240,
+                        "imported_storage": true
                     }
                 }
             },
@@ -175,19 +189,33 @@
                 "users": [
                     "user1",
                     "user2",
-                    "user3",
-                    "user4"
+                    "user3"
                 ],
                 "groups": [],
                 "providers": {
                     "p1": {
-                        "storage": "s3_luma",
-                        "supported_size": 10737418240
+                        "storage": "/mnt/st6",
+                        "supported_size": 10737418240,
+                        "imported_storage": true
                     }
                 }
             },
             "space7": {
-                "displayed_name": "space_name6",
+                "displayed_name": "space_name7",
+                "users": [
+                    "user1",
+                    "user2"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "s3_auto_luma_7",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space8": {
+                "displayed_name": "space_name8",
                 "users": [
                     "user1",
                     "user2",
@@ -197,7 +225,38 @@
                 "groups": [],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st7",
+                        "storage": "s3_external_luma_8",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space9": {
+                "displayed_name": "space_name9",
+                "users": [
+                    "user1",
+                    "user2",
+                    "user3"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "s3_local_luma_9",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space10": {
+                "displayed_name": "space_name10",
+                "users": [
+                    "user1",
+                    "user2",
+                    "user3",
+                    "user4"
+                ],
+                "groups": [],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st10",
                         "supported_size": 10737418240
                     }
                 }
@@ -206,25 +265,33 @@
         "storages": {
             "p1": {
                 "/mnt/st2": {
-                    "luma": true
+                    "luma": "external"
                 },
                 "/mnt/st3": {
-                    "imported_storage": true
+                    "luma": "local"
                 },
-                "/mnt/st4": {
-                    "luma": true,
-                    "imported_storage": true
+                "/mnt/st5": {
+                    "luma": "external"
                 },
-                "s3_luma": {
-                    "luma": true
+                "/mnt/st6": {
+                    "luma": "local"
                 },
-                "/mnt/st7": {
-                    "luma": true
+                "s3_external_luma_8": {
+                    "luma": "external"
+                },
+                "s3_local_luma_9": {
+                    "luma": "local"
+                },
+                "/mnt/st10": {
+                    "luma": "external"
                 }
             }
         },
         "luma_configs": {
-            "p1": "luma.json"
+            "p1": {
+                "external_feed_config_path": "external_feed_luma.json",
+                "local_feed_config_path": "local_feed_luma.json"
+            }
         }
     }
 }

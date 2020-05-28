@@ -1,0 +1,91 @@
+{
+    "/mnt/st3": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 3001
+                },
+                "displayUid": 3331
+            },
+            "user2": {
+                "storageCredentials": {
+                    "uid": 3002
+                }
+            }
+        },
+        "spacesDefaults": {
+            "space3": {
+                "posix": {
+                    "uid": 3000,
+                    "gid": 3000
+                },
+                "display": {
+                    "uid": 3333,
+                    "gid": 3333
+                }
+            }
+        }
+    },
+    "/mnt/st6": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 6001
+                },
+                "displayUid": 6661
+            },
+            "user2": {
+                "storageCredentials": {
+                    "uid": 6002
+                }
+            }
+        },
+        "spacesDefaults": {
+            "space6": {
+                "posix": {
+                    "uid": 6000,
+                    "gid": 6000
+                },
+                "display": {
+                    "uid": 6666,
+                    "gid": 6666
+                }
+            }
+        }
+    },
+    "s3_local_luma_9": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey",
+                    "secretKey": "SecretKey"
+                },
+                "displayUid": 9991
+            },
+            "user2": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey",
+                    "secretKey": "SecretKey"
+                }
+            }
+        },
+        "spacesDefaults": {
+            "space9": {
+                "display": {
+                    "uid": 9999,
+                    "gid": 9999
+                }
+            }
+        }
+    },
+    "/mnt/st10": {
+        "storageUsers": {},
+        "spacesDefaults": {
+            "space10": {
+                "posix": {
+                    "gid": 10000
+                }
+            }
+        }
+    }
+}

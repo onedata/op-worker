@@ -77,7 +77,9 @@
             }
         },
         "luma_configs": {
-            "p1": "luma.json"
+            "p1": {
+                "external_feed_config_path": "external_feed_luma.json"
+            }
         }
     }
 }

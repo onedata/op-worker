@@ -20,37 +20,38 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% export for ct
--export([all/0, init_per_testcase/2, end_per_testcase/2, init_per_suite/1, end_per_suite/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([init_per_testcase/1, init_per_testcase/2, end_per_testcase/1, end_per_testcase/2]).
 
 -export([
-    map_uid_to_onedata_user_on_storage_without_luma/1,
-    map_acl_user_to_onedata_user_should_fail_on_storage_without_luma/1,
-    map_acl_group_to_onedata_group_should_fail_on_storage_without_luma/1,
-    map_uid_to_onedata_user_on_storage_with_ext_luma/1,
-    map_uid_to_onedata_user_using_idp_on_storage_with_ext_luma/1,
-    map_uid_to_onedata_user_failure_ext_luma/1,
-    map_acl_user_to_onedata_user_on_storage_with_ext_luma/1,
-    map_acl_user_to_onedata_user_using_idp_on_storage_with_ext_luma/1,
-    map_acl_user_to_onedata_user_failure_ext_luma/1,
-    map_acl_group_to_onedata_group_on_storage_with_ext_luma/1,
-    map_acl_group_to_onedata_group_using_idp_on_storage_with_ext_luma/1,
-    map_acl_group_to_onedata_group_failure_ext_luma/1
+    map_uid_to_onedata_user_on_storage_with_auto_feed_luma/1,
+    map_acl_user_to_onedata_user_should_fail_on_storage_with_auto_feed_luma/1,
+    map_acl_group_to_onedata_group_should_fail_on_storage_with_auto_feed_luma/1,
+    map_uid_to_onedata_user_on_storage_with_user_defined_luma/1,
+    map_uid_to_onedata_user_using_idp_on_storage_with_user_defined_luma/1,
+    map_uid_to_onedata_user_failure_external_feed_luma/1,
+    map_acl_user_to_onedata_user_on_storage_with_user_defined_luma/1,
+    map_acl_user_to_onedata_user_using_idp_on_storage_with_user_defined_luma/1,
+    map_acl_user_to_onedata_user_failure_external_feed_luma/1,
+    map_acl_group_to_onedata_group_on_storage_with_user_defined_luma/1,
+    map_acl_group_to_onedata_group_using_idp_on_storage_with_user_defined_luma/1,
+    map_acl_group_to_onedata_group_failure_external_feed_luma/1
 ]).
 
 all() ->
     ?ALL([
-        map_uid_to_onedata_user_on_storage_without_luma,
-        map_acl_user_to_onedata_user_should_fail_on_storage_without_luma,
-        map_acl_group_to_onedata_group_should_fail_on_storage_without_luma,
-        map_uid_to_onedata_user_on_storage_with_ext_luma,
-        map_uid_to_onedata_user_using_idp_on_storage_with_ext_luma,
-        map_uid_to_onedata_user_failure_ext_luma,
-        map_acl_user_to_onedata_user_on_storage_with_ext_luma,
-        map_acl_user_to_onedata_user_using_idp_on_storage_with_ext_luma,
-        map_acl_user_to_onedata_user_failure_ext_luma,
-        map_acl_group_to_onedata_group_on_storage_with_ext_luma,
-        map_acl_group_to_onedata_group_using_idp_on_storage_with_ext_luma,
-        map_acl_group_to_onedata_group_failure_ext_luma
+        map_uid_to_onedata_user_on_storage_with_auto_feed_luma,
+        map_acl_user_to_onedata_user_should_fail_on_storage_with_auto_feed_luma,
+        map_acl_group_to_onedata_group_should_fail_on_storage_with_auto_feed_luma,
+        map_uid_to_onedata_user_on_storage_with_user_defined_luma,
+        map_uid_to_onedata_user_using_idp_on_storage_with_user_defined_luma,
+        map_uid_to_onedata_user_failure_external_feed_luma,
+        map_acl_user_to_onedata_user_on_storage_with_user_defined_luma,
+        map_acl_user_to_onedata_user_using_idp_on_storage_with_user_defined_luma,
+        map_acl_user_to_onedata_user_failure_external_feed_luma,
+        map_acl_group_to_onedata_group_on_storage_with_user_defined_luma,
+        map_acl_group_to_onedata_group_using_idp_on_storage_with_user_defined_luma,
+        map_acl_group_to_onedata_group_failure_external_feed_luma
     ]).
 
 -define(IDP, <<"idp">>).
@@ -73,89 +74,89 @@ all() ->
 %%% Test functions
 %%%===================================================================
 
-map_uid_to_onedata_user_on_storage_without_luma(Config) ->
-    ?RUN(Config, ?NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_uid_to_onedata_user_on_storage_without_luma_base/2
+map_uid_to_onedata_user_on_storage_with_auto_feed_luma(Config) ->
+    ?RUN(Config, ?AUTO_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_uid_to_onedata_user_on_storage_with_auto_feed_luma_base/2
     ).
 
-map_acl_user_to_onedata_user_should_fail_on_storage_without_luma(Config) ->
-    ?RUN(Config, ?NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_acl_user_to_onedata_user_should_fail_on_storage_without_luma_base/2
+map_acl_user_to_onedata_user_should_fail_on_storage_with_auto_feed_luma(Config) ->
+    ?RUN(Config, ?AUTO_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_user_to_onedata_user_should_fail_on_storage_with_auto_feed_luma_base/2
     ).
 
-map_acl_group_to_onedata_group_should_fail_on_storage_without_luma(Config) ->
-    ?RUN(Config, ?NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_acl_group_to_onedata_group_should_fail_on_storage_without_luma_base/2
+map_acl_group_to_onedata_group_should_fail_on_storage_with_auto_feed_luma(Config) ->
+    ?RUN(Config, ?AUTO_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_group_to_onedata_group_should_fail_on_storage_with_auto_feed_luma_base/2
     ).
 
-map_uid_to_onedata_user_on_storage_with_ext_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_uid_to_onedata_user_on_storage_with_ext_luma_base/2
+map_uid_to_onedata_user_on_storage_with_user_defined_luma(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_uid_to_onedata_user_on_storage_with_user_defined_luma_base/2
     ).
 
-map_uid_to_onedata_user_using_idp_on_storage_with_ext_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_uid_to_onedata_user_using_idp_on_storage_with_ext_luma_base/2
+map_uid_to_onedata_user_using_idp_on_storage_with_user_defined_luma(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_uid_to_onedata_user_using_idp_on_storage_with_user_defined_luma_base/2
     ).
 
-map_uid_to_onedata_user_failure_ext_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_uid_to_onedata_user_failure_ext_luma_base/2
+map_uid_to_onedata_user_failure_external_feed_luma(Config) ->
+    ?RUN(Config, ?EXTERNAL_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_uid_to_onedata_user_failure_external_feed_luma_base/2
     ).
 
-map_acl_user_to_onedata_user_on_storage_with_ext_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_acl_user_to_onedata_user_on_storage_with_ext_luma_base/2
+map_acl_user_to_onedata_user_on_storage_with_user_defined_luma(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_user_to_onedata_user_on_storage_with_user_defined_luma_base/2
     ).
 
-map_acl_user_to_onedata_user_using_idp_on_storage_with_ext_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_acl_user_to_onedata_user_using_idp_on_storage_with_ext_luma_base/2
+map_acl_user_to_onedata_user_using_idp_on_storage_with_user_defined_luma(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_user_to_onedata_user_using_idp_on_storage_with_user_defined_luma_base/2
     ).
 
-map_acl_user_to_onedata_user_failure_ext_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_acl_user_to_onedata_user_failure_ext_luma_base/2
+map_acl_user_to_onedata_user_failure_external_feed_luma(Config) ->
+    ?RUN(Config, ?EXTERNAL_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_user_to_onedata_user_failure_external_feed_luma_base/2
     ).
 
-map_acl_group_to_onedata_group_on_storage_with_ext_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_acl_group_to_onedata_group_on_storage_with_ext_luma_base/2
+map_acl_group_to_onedata_group_on_storage_with_user_defined_luma(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_group_to_onedata_group_on_storage_with_user_defined_luma_base/2
     ).
 
-map_acl_group_to_onedata_group_using_idp_on_storage_with_ext_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_acl_group_to_onedata_group_using_idp_on_storage_with_ext_luma_base/2
+map_acl_group_to_onedata_group_using_idp_on_storage_with_user_defined_luma(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_group_to_onedata_group_using_idp_on_storage_with_user_defined_luma_base/2
     ).
 
-map_acl_group_to_onedata_group_failure_ext_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_acl_group_to_onedata_group_failure_ext_luma_base/2
+map_acl_group_to_onedata_group_failure_external_feed_luma(Config) ->
+    ?RUN(Config, ?EXTERNAL_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_acl_group_to_onedata_group_failure_external_feed_luma_base/2
     ).
 
 %%%===================================================================
 %%% Test base functions
 %%%===================================================================
 
-map_uid_to_onedata_user_on_storage_without_luma_base(Config, StorageLumaConfig) ->
+map_uid_to_onedata_user_on_storage_with_auto_feed_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({ok, ?SPACE_OWNER_ID(?SPACE_ID)},
         luma_test_utils:map_uid_to_onedata_user(Worker, ?UID0, ?SPACE_ID, Storage)).
 
-map_acl_user_to_onedata_user_should_fail_on_storage_without_luma_base(Config, StorageLumaConfig) ->
+map_acl_user_to_onedata_user_should_fail_on_storage_with_auto_feed_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({error, luma_disabled},
         luma_test_utils:map_acl_user_to_onedata_user(Worker, ?ACL_USER0, Storage)).
 
-map_acl_group_to_onedata_group_should_fail_on_storage_without_luma_base(Config, StorageLumaConfig) ->
+map_acl_group_to_onedata_group_should_fail_on_storage_with_auto_feed_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({error, luma_disabled},
         luma_test_utils:map_acl_group_to_onedata_group(Worker, ?ACL_GROUP0, Storage)).
 
-map_uid_to_onedata_user_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
+map_uid_to_onedata_user_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({ok, ?USER_ID},
@@ -167,7 +168,7 @@ map_uid_to_onedata_user_on_storage_with_ext_luma_base(Config, StorageLumaConfig)
     ?assertMatch({ok, {?UID0, ?SPACE_MOUNT_GID}},
         luma_test_utils:map_to_display_creds(Worker, ?USER_ID, ?SPACE_ID, Storage)).
 
-map_uid_to_onedata_user_using_idp_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
+map_uid_to_onedata_user_using_idp_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({ok, ?USER_ID2},
@@ -179,7 +180,7 @@ map_uid_to_onedata_user_using_idp_on_storage_with_ext_luma_base(Config, StorageL
     ?assertMatch({ok, {?UID1, ?SPACE_MOUNT_GID}},
         luma_test_utils:map_to_display_creds(Worker, ?USER_ID2, ?SPACE_ID, Storage)).
 
-map_uid_to_onedata_user_failure_ext_luma_base(Config, StorageLumaConfig) ->
+map_uid_to_onedata_user_failure_external_feed_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     lists:foreach(fun(Uid) ->
@@ -187,19 +188,19 @@ map_uid_to_onedata_user_failure_ext_luma_base(Config, StorageLumaConfig) ->
             luma_test_utils:map_uid_to_onedata_user(Worker, Uid, ?SPACE_ID, Storage))
     end, ?ERR_UIDS).
 
-map_acl_user_to_onedata_user_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
+map_acl_user_to_onedata_user_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({ok, ?USER_ID},
         luma_test_utils:map_acl_user_to_onedata_user(Worker, ?ACL_USER0, Storage)).
 
-map_acl_user_to_onedata_user_using_idp_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
+map_acl_user_to_onedata_user_using_idp_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({ok, ?USER_ID2},
         luma_test_utils:map_acl_user_to_onedata_user(Worker, ?ACL_USER1, Storage)).
 
-map_acl_user_to_onedata_user_failure_ext_luma_base(Config, StorageLumaConfig) ->
+map_acl_user_to_onedata_user_failure_external_feed_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     lists:foreach(fun(AclUser) ->
@@ -207,19 +208,19 @@ map_acl_user_to_onedata_user_failure_ext_luma_base(Config, StorageLumaConfig) ->
             luma_test_utils:map_acl_user_to_onedata_user(Worker, AclUser, Storage))
     end, ?ERR_ACL_USERS).
 
-map_acl_group_to_onedata_group_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
+map_acl_group_to_onedata_group_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({ok, ?GROUP_ID},
         luma_test_utils:map_acl_group_to_onedata_group(Worker, ?ACL_GROUP0, Storage)).
 
-map_acl_group_to_onedata_group_using_idp_on_storage_with_ext_luma_base(Config, StorageLumaConfig) ->
+map_acl_group_to_onedata_group_using_idp_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({ok, ?GROUP_ID2},
         luma_test_utils:map_acl_group_to_onedata_group(Worker, ?ACL_GROUP1, Storage)).
 
-map_acl_group_to_onedata_group_failure_ext_luma_base(Config, StorageLumaConfig) ->
+map_acl_group_to_onedata_group_failure_external_feed_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     lists:foreach(fun(AclGroup) ->
@@ -244,17 +245,28 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config).
 
-init_per_testcase(_Case, Config) ->
+init_per_testcase(Config) ->
+    init_per_testcase(default, Config).
+
+init_per_testcase(default, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     mock_map_idp_user_to_onedata(Worker),
     mock_map_idp_group_to_onedata(Worker),
+    luma_test_utils:setup_local_feed_luma(Worker, Config, <<"local_feed_luma.json">>),
     luma_test_utils:mock_stat_on_space_mount_dir(Worker),
+    Config;
+init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(_Case, Config) ->
+end_per_testcase(Config) ->
+    end_per_testcase(default, Config).
+
+end_per_testcase(default, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     luma_test_utils:clear_luma_db_for_all_storages(Worker),
-    ok = test_utils:mock_unload(Worker, [storage_file_ctx]).
+    ok = test_utils:mock_unload(Worker, [storage_file_ctx]);
+end_per_testcase(_Case, Config) ->
+    Config.
 
 
 %%%===================================================================

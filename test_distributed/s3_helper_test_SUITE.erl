@@ -242,11 +242,11 @@ new_helper(Config) ->
         #{
             <<"hostname">> => atom_to_binary(?config(host_name, S3Config), utf8),
             <<"bucketName">> => ?S3_BUCKET_NAME,
-            <<"scheme">> => <<"http">>
+            <<"scheme">> => <<"http">>,
+            <<"storagePathType">> => ?FLAT_STORAGE_PATH,
+            <<"skipStorageDetection">> => <<"false">>
         },
-        UserCtx,
-        false,
-        ?FLAT_STORAGE_PATH
+        UserCtx
     ),
 
     spawn(Node, fun() ->

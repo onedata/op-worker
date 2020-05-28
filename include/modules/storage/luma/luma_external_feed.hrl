@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This header file contains definitions of macros used in
-%%% external_luma and reverse_external_luma modules.
+%%% luma_external_feed.erl module
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -36,13 +36,5 @@
 -define(LUMA_URL(LumaConfig, Path),
     str_utils:format_bin("~s/~s", [luma_config:get_url(LumaConfig), Path])
 ).
-
-%% Mapping user schemes
--define(ONEDATA_USER_SCHEME, <<"onedataUser">>).
--define(IDP_USER_SCHEME, <<"idpUser">>).
-
-%% Mapping group schemes
--define(ONEDATA_GROUP_SCHEME, <<"onedataGroup">>).
--define(IDP_ENTITLEMENT_SCHEME, <<"idpEntitlement">>).
 
 -endif.

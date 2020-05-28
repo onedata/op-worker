@@ -47,12 +47,14 @@
 -define(SPACE_GID1, 1).
 
 %% mocked UID and GID of space mountpoint
--define(SPACE_MOUNT_UID, 2).
--define(SPACE_MOUNT_GID, 2).
+-define(SPACE_MOUNT_UID, 100).
+-define(SPACE_MOUNT_GID, 100).
 
 %% default space display owner
 -define(SPACE_DISPLAY_UID1, 10).
 -define(SPACE_DISPLAY_GID1, 10).
+-define(SPACE_DISPLAY_UID2, 20).
+-define(SPACE_DISPLAY_GID2, 20).
 
 %% UID and display UID macros
 -define(BASE_UID, 1000).
@@ -60,6 +62,7 @@
 -define(UID0, ?UID(0)).
 -define(UID1, ?UID(1)).
 -define(DISPLAY_UID0, 1111).
+-define(DISPLAY_UID1, 2222).
 
 -define(POSIX_ID_RANGE, {100000, 2000000}).
 -define(POSIX_CREDS_TO_TUPLE(UserCtx), begin
@@ -69,36 +72,39 @@ end).
 
 -define(ROOT_DISPLAY_CREDS, {?ROOT_UID, ?ROOT_GID}).
 
--define(EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
-    luma_test_utils:new_posix_user_ctx(?SPACE_DISPLAY_UID1, ?SPACE_DISPLAY_GID1)).
--define(DEFAULT_NO_LUMA_DISPLAY_CREDENTIALS, luma_test_utils:new_posix_user_ctx(
-    luma_utils:generate_posix_identifier(?SPACE_OWNER_ID(?SPACE_ID), ?POSIX_ID_RANGE),
-    luma_utils:generate_posix_identifier(?SPACE_ID, ?POSIX_ID_RANGE)
+-define(AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS, luma_test_utils:new_posix_user_ctx(
+    luma_auto_feed:generate_posix_identifier(?SPACE_OWNER_ID(?SPACE_ID), ?POSIX_ID_RANGE),
+    luma_auto_feed:generate_posix_identifier(?SPACE_ID, ?POSIX_ID_RANGE)
 )).
+-define(EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    luma_test_utils:new_posix_user_ctx(?SPACE_DISPLAY_UID1, ?SPACE_DISPLAY_GID1)).
+-define(LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    luma_test_utils:new_posix_user_ctx(?SPACE_DISPLAY_UID2, ?SPACE_DISPLAY_GID2)).
 
--define(NO_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX, {
-    luma_utils:generate_posix_identifier(?USER_ID, ?POSIX_ID_RANGE),
-    luma_utils:generate_posix_identifier(?SPACE_ID, ?POSIX_ID_RANGE)
+-define(AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX, {
+    luma_auto_feed:generate_posix_identifier(?USER_ID, ?POSIX_ID_RANGE),
+    luma_auto_feed:generate_posix_identifier(?SPACE_ID, ?POSIX_ID_RANGE)
 }).
-
--define(NO_LUMA_USER_DISPLAY_CREDENTIALS_POSIX, {
-    luma_utils:generate_posix_identifier(?USER_ID, ?POSIX_ID_RANGE),
+-define(AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_POSIX, {
+    luma_auto_feed:generate_posix_identifier(?USER_ID, ?POSIX_ID_RANGE),
     ?SPACE_MOUNT_GID
 }).
 
--define(EXT_LUMA_USER_DISPLAY_CREDS, {
+-define(EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS, {
     ?DISPLAY_UID0,
     ?SPACE_DISPLAY_GID1
+}).
+-define(LOCAL_FEED_LUMA_USER_DISPLAY_CREDS, {
+    ?DISPLAY_UID1,
+    ?SPACE_DISPLAY_GID2
 }).
 
 %%%===================================================================
 %%% LUMA macros
 %%%===================================================================
 
--define(LUMA_CONFIG, #luma_config{
-    url = <<"http://127.0.0.1:5000">>,
-    api_key = <<"test_api_key">>
-}).
+-define(LUMA_CONFIG(LumaMode), luma_config:new(LumaMode)).
+
 %%%===================================================================
 %%% Posix helper and storage macros
 %%%===================================================================
@@ -107,24 +113,33 @@ end).
 -define(POSIX_USER_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?UID0, ?SPACE_GID1)).
 -define(POSIX_GENERATED_USER_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?GEN_UID(?USER_ID), ?SPACE_MOUNT_GID)).
 -define(POSIX_MOUNT_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
--define(POSIX_EXT_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
+-define(POSIX_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
+-define(POSIX_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_posix_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
 
 % Macros used to define posix compatible ownerships (UID, GID)
--define(GEN_UID(UserId), luma_utils:generate_posix_identifier(UserId, ?UID_RANGE)).
+-define(GEN_UID(UserId), luma_auto_feed:generate_posix_identifier(UserId, ?UID_RANGE)).
 
 -define(UID_RANGE, {100000, 2000000}).
 
--define(POSIX_STORAGE_ID, <<"posixStorageId">>).
--define(POSIX_HELPER,
-    ?STRIP_OK(helper:new_helper(?POSIX_HELPER_NAME,
-    #{<<"mountPoint">> => <<"mountPoint">>}, ?POSIX_ADMIN_CREDENTIALS, false,
-    ?CANONICAL_STORAGE_PATH))
-).
+-define(POSIX_STORAGE_ID_AUTO_FEED_LUMA, <<"posixStorageIdAutoFeedLuma">>).
+-define(POSIX_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"posixStorageIdExternalFeedLuma">>).
+-define(POSIX_STORAGE_ID_LOCAL_FEED_LUMA, <<"posixStorageIdLocalFeedLuma">>).
 
--define(POSIX_STORAGE_DOC(LumaConfig),
-    ?STORAGE_RECORD(?POSIX_STORAGE_ID, <<"POSIX">>, ?POSIX_HELPER, LumaConfig)).
--define(POSIX_STORAGE_DOC_EXT_LUMA, ?POSIX_STORAGE_DOC(?LUMA_CONFIG)).
--define(POSIX_STORAGE_DOC_NO_LUMA, ?POSIX_STORAGE_DOC(undefined)).
+-define(POSIX_HELPER, ?STRIP_OK(helper:new_helper(
+        ?POSIX_HELPER_NAME,
+        #{
+            <<"mountPoint">> => <<"mountPoint">>,
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
+            <<"skipStorageDetection">> => <<"false">>
+        },
+        ?POSIX_ADMIN_CREDENTIALS
+))).
+
+-define(POSIX_STORAGE_DOC(Id, LumaMode),
+    ?STORAGE_RECORD(Id, <<"POSIX">>, ?POSIX_HELPER, LumaMode)).
+-define(POSIX_STORAGE_DOC_AUTO_FEED_LUMA, ?POSIX_STORAGE_DOC(?POSIX_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
+-define(POSIX_STORAGE_DOC_EXTERNAL_FEED_LUMA, ?POSIX_STORAGE_DOC(?POSIX_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED)).
+-define(POSIX_STORAGE_DOC_LOCAL_FEED_LUMA, ?POSIX_STORAGE_DOC(?POSIX_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED)).
 
 %%%===================================================================
 %%% CEPH helper and storage macros
@@ -133,23 +148,30 @@ end).
 -define(CEPH_ADMIN_CREDENTIALS, luma_test_utils:new_ceph_user_ctx(<<"ADMIN">>, <<"ADMIN_KEY">>)).
 -define(CEPH_USER_CREDENTIALS, luma_test_utils:new_ceph_user_ctx(<<"USER">>, <<"USER_KEY">>)).
 
--define(CEPH_STORAGE_ID, <<"cephStorageId">>).
+-define(CEPH_STORAGE_ID_AUTO_FEED_LUMA, <<"cephStorageIdAutoFeedLuma">>).
+-define(CEPH_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"cephStorageIdExternalFeedLuma">>).
+-define(CEPH_STORAGE_ID_LOCAL_FEED_LUMA, <<"cephStorageIdLocalFeedLuma">>).
 
--define(CEPH_HELPER(Insecure), ?STRIP_OK(helper:new_helper(?CEPH_HELPER_NAME,
-    #{<<"monitorHostname">> => <<"monitorHostname">>,
+-define(CEPH_HELPER, ?STRIP_OK(helper:new_helper(?CEPH_HELPER_NAME,
+    #{
+        <<"monitorHostname">> => <<"monitorHostname">>,
         <<"clusterName">> => <<"clusterName">>,
-        <<"poolName">> => <<"poolName">>},
-    ?CEPH_ADMIN_CREDENTIALS, Insecure, ?FLAT_STORAGE_PATH)
-)).
+        <<"poolName">> => <<"poolName">>,
+        <<"storagePathType">> => ?FLAT_STORAGE_PATH,
+        <<"skipStorageDetection">> => <<"false">>
+    },
+    ?CEPH_ADMIN_CREDENTIALS
+))).
 
--define(CEPH_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_RECORD(?CEPH_STORAGE_ID, <<"CEPH">>,
-        ?CEPH_HELPER(Insecure), LumaConfig)
+-define(CEPH_STORAGE_DOC(Id, LumaMode),
+    ?STORAGE_RECORD(Id, <<"CEPH">>, ?CEPH_HELPER, LumaMode)
 ).
--define(CEPH_STORAGE_DOC_EXT_LUMA,
-    ?CEPH_STORAGE_DOC(false, ?LUMA_CONFIG)).
--define(CEPH_STORAGE_DOC_NO_LUMA,
-    ?CEPH_STORAGE_DOC(true, undefined)).
+-define(CEPH_STORAGE_DOC_AUTO_FEED_LUMA,
+    ?CEPH_STORAGE_DOC(?CEPH_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
+-define(CEPH_STORAGE_DOC_EXTERNAL_FEED_LUMA,
+    ?CEPH_STORAGE_DOC(?CEPH_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED)).
+-define(CEPH_STORAGE_DOC_LOCAL_FEED_LUMA,
+    ?CEPH_STORAGE_DOC(?CEPH_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED)).
 
 %%%===================================================================
 %%% S3 helper and storage macros
@@ -160,21 +182,30 @@ end).
 -define(S3_USER_CREDENTIALS,
      luma_test_utils:new_s3_user_ctx(<<"USER_ACCESS_KEY">>, <<"USER_SECRET_KEY">>)).
 
--define(S3_STORAGE_ID, <<"s3StorageId">>).
+-define(S3_STORAGE_ID_AUTO_FEED_LUMA, <<"s3StorageIdAutoFeedLuma">>).
+-define(S3_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"s3StorageIdExternalFeedLuma">>).
+-define(S3_STORAGE_ID_LOCAL_FEED_LUMA, <<"s3StorageIdLocalFeedLuma">>).
 
--define(S3_HELPER(Insecure), ?STRIP_OK(helper:new_helper(?S3_HELPER_NAME,
-    #{<<"scheme">> => <<"https">>, <<"hostname">> => <<"hostname">>,
-        <<"bucketName">> => <<"bucketName">>},
-    ?S3_ADMIN_CREDENTIALS, Insecure, ?FLAT_STORAGE_PATH)
-)).
+-define(S3_HELPER, ?STRIP_OK(helper:new_helper(?S3_HELPER_NAME,
+    #{
+        <<"scheme">> => <<"https">>,
+        <<"hostname">> => <<"hostname">>,
+        <<"bucketName">> => <<"bucketName">>,
+        <<"storagePathType">> => ?FLAT_STORAGE_PATH,
+        <<"skipStorageDetection">> => <<"false">>
+    },
+    ?S3_ADMIN_CREDENTIALS
+))).
 
--define(S3_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_RECORD(?S3_STORAGE_ID, <<"S3">>, ?S3_HELPER(Insecure), LumaConfig)
+-define(S3_STORAGE_DOC(Id, LumaMode),
+    ?STORAGE_RECORD(Id, <<"S3">>, ?S3_HELPER, LumaMode)
 ).
--define(S3_STORAGE_DOC_EXT_LUMA,
-    ?S3_STORAGE_DOC(false, ?LUMA_CONFIG)).
--define(S3_STORAGE_DOC_NO_LUMA,
-    ?S3_STORAGE_DOC(true, undefined)).
+-define(S3_STORAGE_DOC_AUTO_FEED_LUMA,
+    ?S3_STORAGE_DOC(?S3_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
+-define(S3_STORAGE_DOC_EXTERNAL_FEED_LUMA,
+    ?S3_STORAGE_DOC(?S3_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED)).
+-define(S3_STORAGE_DOC_LOCAL_FEED_LUMA,
+    ?S3_STORAGE_DOC(?S3_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED)).
 
 %%%===================================================================
 %%% SWIFT helper and storage macros
@@ -185,22 +216,29 @@ end).
 -define(SWIFT_USER_CREDENTIALS,
      luma_test_utils:new_swift_user_ctx(<<"USER">>, <<"USER_PASSWD">>)).
 
--define(SWIFT_STORAGE_ID, <<"swiftStorageId">>).
+-define(SWIFT_STORAGE_ID_AUTO_FEED_LUMA, <<"swiftStorageIdAutoFeedLuma">>).
+-define(SWIFT_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"swiftStorageIdExternalFeedLuma">>).
+-define(SWIFT_STORAGE_ID_LOCAL_FEED_LUMA, <<"swiftStorageIdLocalFeedLuma">>).
 
--define(SWIFT_HELPER(Insecure), ?STRIP_OK(helper:new_helper(?SWIFT_HELPER_NAME,
+-define(SWIFT_HELPER, ?STRIP_OK(helper:new_helper(?SWIFT_HELPER_NAME,
     #{<<"authUrl">> => <<"authUrl">>,
         <<"containerName">> => <<"containerName">>,
-        <<"tenantName">> => <<"tenantName">>},
-    ?SWIFT_ADMIN_CREDENTIALS, Insecure, ?FLAT_STORAGE_PATH)
-)).
+        <<"tenantName">> => <<"tenantName">>,
+        <<"storagePathType">> => ?FLAT_STORAGE_PATH,
+        <<"skipStorageDetection">> => <<"false">>
+    },
+    ?SWIFT_ADMIN_CREDENTIALS
+))).
 
--define(SWIFT_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_RECORD(?SWIFT_STORAGE_ID, <<"SWIFT">>, ?SWIFT_HELPER(Insecure), LumaConfig)
+-define(SWIFT_STORAGE_DOC(Id, LumaMode),
+    ?STORAGE_RECORD(Id, <<"SWIFT">>, ?SWIFT_HELPER, LumaMode)
 ).
--define(SWIFT_STORAGE_DOC_EXT_LUMA,
-    ?SWIFT_STORAGE_DOC(false, ?LUMA_CONFIG)).
--define(SWIFT_STORAGE_DOC_NO_LUMA,
-    ?SWIFT_STORAGE_DOC(true, undefined)).
+-define(SWIFT_STORAGE_DOC_AUTO_FEED_LUMA,
+    ?SWIFT_STORAGE_DOC(?SWIFT_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
+-define(SWIFT_STORAGE_DOC_EXTERNAL_FEED_LUMA,
+    ?SWIFT_STORAGE_DOC(?SWIFT_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED)).
+-define(SWIFT_STORAGE_DOC_LOCAL_FEED_LUMA,
+    ?SWIFT_STORAGE_DOC(?SWIFT_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED)).
 
 %%%===================================================================
 %%% CEPHRADOS helper and storage macros
@@ -211,23 +249,30 @@ end).
 -define(CEPHRADOS_USER_CREDENTIALS,
      luma_test_utils:new_cephrados_user_ctx(<<"USER">>, <<"USER_KEY">>)).
 
--define(CEPHRADOS_STORAGE_ID, <<"cephradosStorageId">>).
+-define(CEPHRADOS_STORAGE_ID_AUTO_FEED_LUMA, <<"cephradosStorageIdAutoFeedLuma">>).
+-define(CEPHRADOS_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"cephradosStorageIdExternalFeedLuma">>).
+-define(CEPHRADOS_STORAGE_ID_LOCAL_FEED_LUMA, <<"cephradosStorageIdLocalFeedLuma">>).
 
--define(CEPHRADOS_HELPER(Insecure), ?STRIP_OK(helper:new_helper(?CEPHRADOS_HELPER_NAME,
-    #{<<"monitorHostname">> => <<"monitorHostname">>,
+-define(CEPHRADOS_HELPER, ?STRIP_OK(helper:new_helper(?CEPHRADOS_HELPER_NAME,
+    #{
+        <<"monitorHostname">> => <<"monitorHostname">>,
         <<"clusterName">> => <<"clusterName">>,
-        <<"poolName">> => <<"poolName">>},
-    ?CEPHRADOS_ADMIN_CREDENTIALS, Insecure, ?FLAT_STORAGE_PATH)
-)).
+        <<"poolName">> => <<"poolName">>,
+        <<"storagePathType">> => ?FLAT_STORAGE_PATH,
+        <<"skipStorageDetection">> => <<"false">>
+    },
+    ?CEPHRADOS_ADMIN_CREDENTIALS
+))).
 
--define(CEPHRADOS_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_RECORD(?CEPHRADOS_STORAGE_ID, <<"CEPHRADOS">>,
-        ?CEPHRADOS_HELPER(Insecure), LumaConfig)
+-define(CEPHRADOS_STORAGE_DOC(Id, LumaMode),
+    ?STORAGE_RECORD(Id, <<"CEPHRADOS">>, ?CEPHRADOS_HELPER, LumaMode)
 ).
--define(CEPHRADOS_STORAGE_DOC_EXT_LUMA,
-    ?CEPHRADOS_STORAGE_DOC(false, ?LUMA_CONFIG)).
--define(CEPHRADOS_STORAGE_DOC_NO_LUMA,
-    ?CEPHRADOS_STORAGE_DOC(true, undefined)).
+-define(CEPHRADOS_STORAGE_DOC_AUTO_FEED_LUMA,
+    ?CEPHRADOS_STORAGE_DOC(?CEPHRADOS_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
+-define(CEPHRADOS_STORAGE_DOC_EXTERNAL_FEED_LUMA,
+    ?CEPHRADOS_STORAGE_DOC(?CEPHRADOS_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED)).
+-define(CEPHRADOS_STORAGE_DOC_LOCAL_FEED_LUMA,
+    ?CEPHRADOS_STORAGE_DOC(?CEPHRADOS_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED)).
 
 %%%===================================================================
 %%% GLUSTERFS helper and storage macros
@@ -237,24 +282,36 @@ end).
 -define(GLUSTERFS_USER_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?UID0, ?SPACE_GID1)).
 -define(GLUSTERFS_GENERATED_USER_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?GEN_UID(?USER_ID), ?SPACE_MOUNT_GID)).
 -define(GLUSTERFS_MOUNT_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
--define(GLUSTERFS_EXT_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
+-define(GLUSTERFS_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
+-define(GLUSTERFS_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_glusterfs_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
 
--define(GLUSTERFS_STORAGE_ID, <<"glusterfsStorageId">>).
 
--define(GLUSTERFS_HELPER(Insecure), ?STRIP_OK(helper:new_helper(
+-define(GLUSTERFS_STORAGE_ID_AUTO_FEED_LUMA, <<"glusterfsStorageIdAutoFeedLuma">>).
+-define(GLUSTERFS_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"glusterfsStorageIdExternalFeedLuma">>).
+-define(GLUSTERFS_STORAGE_ID_LOCAL_FEED_LUMA, <<"glusterfsStorageIdLocalFeedLuma">>).
+
+-define(GLUSTERFS_HELPER, ?STRIP_OK(helper:new_helper(
     ?GLUSTERFS_HELPER_NAME,
-    #{<<"volume">> => <<"volume">>, <<"hostname">> => <<"hostname">>},
-    ?GLUSTERFS_ADMIN_CREDENTIALS, Insecure, ?FLAT_STORAGE_PATH)
-)).
+    #{
+        <<"volume">> => <<"volume">>,
+        <<"hostname">> => <<"hostname">>,
+        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
+        <<"skipStorageDetection">> => <<"false">>
+    },
+    ?GLUSTERFS_ADMIN_CREDENTIALS
+))).
 
--define(GLUSTERFS_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_RECORD(?GLUSTERFS_STORAGE_ID, <<"GLUSTERFS">>,
-        ?GLUSTERFS_HELPER(Insecure), LumaConfig)
+-define(GLUSTERFS_STORAGE_DOC(Id, LumaMode),
+    ?STORAGE_RECORD(Id, <<"GLUSTERFS">>, ?GLUSTERFS_HELPER, LumaMode)
 ).
--define(GLUSTERFS_STORAGE_DOC_EXT_LUMA,
-    ?GLUSTERFS_STORAGE_DOC(false, ?LUMA_CONFIG)).
--define(GLUSTERFS_STORAGE_DOC_NO_LUMA,
-    ?GLUSTERFS_STORAGE_DOC(true, undefined)).
+
+-define(GLUSTERFS_STORAGE_DOC_AUTO_FEED_LUMA,
+    ?GLUSTERFS_STORAGE_DOC(?GLUSTERFS_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
+-define(GLUSTERFS_STORAGE_DOC_EXTERNAL_FEED_LUMA,
+    ?GLUSTERFS_STORAGE_DOC(?GLUSTERFS_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED)).
+-define(GLUSTERFS_STORAGE_DOC_LOCAL_FEED_LUMA,
+    ?GLUSTERFS_STORAGE_DOC(?GLUSTERFS_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED)).
+
 
 %%%===================================================================
 %%% NULLDEVICE helper and storage macros
@@ -264,23 +321,31 @@ end).
 -define(NULLDEVICE_USER_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?UID0, ?SPACE_GID1)).
 -define(NULLDEVICE_GENERATED_USER_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?GEN_UID(?USER_ID), ?SPACE_MOUNT_GID)).
 -define(NULLDEVICE_MOUNT_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?SPACE_MOUNT_UID, ?SPACE_MOUNT_GID)).
--define(NULLDEVICE_EXT_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
+-define(NULLDEVICE_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
+-define(NULLDEVICE_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS, luma_test_utils:new_nulldevice_user_ctx(?SPACE_UID1, ?SPACE_GID1)).
 
--define(NULLDEVICE_STORAGE_ID, <<"nulldeviceStorageId">>).
+-define(NULLDEVICE_STORAGE_ID_AUTO_FEED_LUMA, <<"nulldeviceStorageIdAutoFeedLuma">>).
+-define(NULLDEVICE_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"nulldeviceStorageIdExternalFeedLuma">>).
+-define(NULLDEVICE_STORAGE_ID_LOCAL_FEED_LUMA, <<"nulldeviceStorageIdLocalFeedLuma">>).
 
--define(NULLDEVICE_HELPER(Insecure), ?STRIP_OK(helper:new_helper(
-    ?NULL_DEVICE_HELPER_NAME, #{},
-    ?NULLDEVICE_ADMIN_CREDENTIALS, Insecure, ?FLAT_STORAGE_PATH))).
+-define(NULLDEVICE_HELPER, ?STRIP_OK(helper:new_helper(
+    ?NULL_DEVICE_HELPER_NAME, #{
+        <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
+        <<"skipStorageDetection">> => <<"false">>
+    },
+    ?NULLDEVICE_ADMIN_CREDENTIALS
+))).
 
--define(NULLDEVICE_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_RECORD(?NULLDEVICE_STORAGE_ID, <<"NULLDEVICE">>,
-        ?NULLDEVICE_HELPER(Insecure), LumaConfig)
+-define(NULLDEVICE_STORAGE_DOC(Id, LumaMode),
+    ?STORAGE_RECORD(Id, <<"NULLDEVICE">>, ?NULLDEVICE_HELPER, LumaMode)
 ).
--define(NULLDEVICE_STORAGE_DOC_EXT_LUMA,
-    ?NULLDEVICE_STORAGE_DOC(false, ?LUMA_CONFIG)).
--define(NULLDEVICE_STORAGE_DOC_NO_LUMA,
-    ?NULLDEVICE_STORAGE_DOC(true, undefined)).
 
+-define(NULLDEVICE_STORAGE_DOC_AUTO_FEED_LUMA,
+    ?NULLDEVICE_STORAGE_DOC(?NULLDEVICE_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED)).
+-define(NULLDEVICE_STORAGE_DOC_EXTERNAL_FEED_LUMA,
+    ?NULLDEVICE_STORAGE_DOC(?NULLDEVICE_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED)).
+-define(NULLDEVICE_STORAGE_DOC_LOCAL_FEED_LUMA,
+    ?NULLDEVICE_STORAGE_DOC(?NULLDEVICE_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED)).
 
 %%%===================================================================
 %%% WEBDAV helper and storage macros
@@ -343,322 +408,505 @@ end).
     }
 ).
 
--define(WEBDAV_NONE_STORAGE_ID, <<"webdavNoneStorageId">>).
--define(WEBDAV_BASIC_STORAGE_ID, <<"webdavBasicStorageId">>).
--define(WEBDAV_TOKEN_STORAGE_ID, <<"webdavTokenStorageId">>).
--define(WEBDAV_OAUTH2_STORAGE_ID, <<"webdavOauth2StorageId">>).
+-define(WEBDAV_NONE_STORAGE_ID_AUTO_FEED_LUMA, <<"webdavNoneStorageIdAutoFeedLuma">>).
+-define(WEBDAV_NONE_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"webdavNoneStorageIdExternalFeedLuma">>).
+-define(WEBDAV_NONE_STORAGE_ID_LOCAL_FEED_LUMA, <<"webdavNoneStorageIdLocalFeedLuma">>).
+-define(WEBDAV_BASIC_STORAGE_ID_AUTO_FEED_LUMA, <<"webdavBasicStorageIdAutoFeedLuma">>).
+-define(WEBDAV_BASIC_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"webdavBasicStorageIdExternalFeedLuma">>).
+-define(WEBDAV_BASIC_STORAGE_ID_LOCAL_FEED_LUMA, <<"webdavBasicStorageIdLocalFeedLuma">>).
+-define(WEBDAV_TOKEN_STORAGE_ID_AUTO_FEED_LUMA, <<"webdavTokenStorageIdAutoFeedLuma">>).
+-define(WEBDAV_TOKEN_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"webdavTokenStorageIdExternalFeedLuma">>).
+-define(WEBDAV_TOKEN_STORAGE_ID_LOCAL_FEED_LUMA, <<"webdavTokenStorageIdLocalFeedLuma">>).
+-define(WEBDAV_OAUTH2_STORAGE_ID_AUTO_FEED_LUMA, <<"webdavOauth2StorageIdAutoFeedLuma">>).
+-define(WEBDAV_OAUTH2_STORAGE_ID_EXTERNAL_FEED_LUMA, <<"webdavOauth2StorageIdExternalFeedLuma">>).
+-define(WEBDAV_OAUTH2_STORAGE_ID_LOCAL_FEED_LUMA, <<"webdavOauth2StorageIdLocalFeedLuma">>).
 
 
--define(WEBDAV_HELPER(Insecure, AdminCtx), ?STRIP_OK(helper:new_helper(
+-define(WEBDAV_HELPER(AdminCtx), ?STRIP_OK(helper:new_helper(
     ?WEBDAV_HELPER_NAME,
-    #{<<"endpoint">> => <<"endpoint">>, <<"oauth2IdP">> => ?OAUTH2_IDP},
-    AdminCtx, Insecure, ?FLAT_STORAGE_PATH)
-)).
--define(WEBDAV_BASIC_HELPER(Insecure),
-    ?WEBDAV_HELPER(Insecure, ?WEBDAV_BASIC_ADMIN_CREDENTIALS)).
--define(WEBDAV_TOKEN_HELPER(Insecure),
-    ?WEBDAV_HELPER(Insecure, ?WEBDAV_TOKEN_ADMIN_CREDENTIALS)).
--define(WEBDAV_NONE_HELPER(Insecure),
-    ?WEBDAV_HELPER(Insecure, ?WEBDAV_NONE_CTX)).
--define(WEBDAV_OAUTH2_HELPER(Insecure),
-    ?WEBDAV_HELPER(Insecure, ?WEBDAV_OAUTH2_ADMIN_CREDENTIALS)).
+    #{
+        <<"endpoint">> => <<"endpoint">>,
+        <<"oauth2IdP">> => ?OAUTH2_IDP,
+        <<"storagePathType">> => ?FLAT_STORAGE_PATH,
+        <<"skipStorageDetection">> => <<"false">>
+    },
+    AdminCtx
+))).
+-define(WEBDAV_BASIC_HELPER,
+    ?WEBDAV_HELPER(?WEBDAV_BASIC_ADMIN_CREDENTIALS)).
+-define(WEBDAV_TOKEN_HELPER,
+    ?WEBDAV_HELPER(?WEBDAV_TOKEN_ADMIN_CREDENTIALS)).
+-define(WEBDAV_NONE_HELPER,
+    ?WEBDAV_HELPER(?WEBDAV_NONE_CTX)).
+-define(WEBDAV_OAUTH2_HELPER,
+    ?WEBDAV_HELPER(?WEBDAV_OAUTH2_ADMIN_CREDENTIALS)).
 
-
--define(WEBDAV_STORAGE_DOC(StorageId, LumaConfig, Helper),
-    ?STORAGE_RECORD(StorageId, <<"WEBDAV">>, Helper, LumaConfig)
+-define(WEBDAV_STORAGE_DOC(StorageId, LumaMode, Helper),
+    ?STORAGE_RECORD(StorageId, <<"WEBDAV">>, Helper, LumaMode)
 ).
--define(WEBDAV_BASIC_STORAGE_DOC_EXT_LUMA,
-    ?WEBDAV_STORAGE_DOC(?WEBDAV_BASIC_STORAGE_ID, ?LUMA_CONFIG, ?WEBDAV_BASIC_HELPER(false))).
--define(WEBDAV_BASIC_STORAGE_DOC_NO_LUMA,
-    ?WEBDAV_STORAGE_DOC(?WEBDAV_BASIC_STORAGE_ID, undefined, ?WEBDAV_BASIC_HELPER(true))).
--define(WEBDAV_TOKEN_STORAGE_DOC_EXT_LUMA,
-    ?WEBDAV_STORAGE_DOC(?WEBDAV_TOKEN_STORAGE_ID, ?LUMA_CONFIG, ?WEBDAV_TOKEN_HELPER(false))).
--define(WEBDAV_TOKEN_STORAGE_DOC_NO_LUMA,
-    ?WEBDAV_STORAGE_DOC(?WEBDAV_TOKEN_STORAGE_ID, undefined, ?WEBDAV_TOKEN_HELPER(true))).
--define(WEBDAV_NONE_STORAGE_DOC_EXT_LUMA,
-    ?WEBDAV_STORAGE_DOC(?WEBDAV_NONE_STORAGE_ID, ?LUMA_CONFIG, ?WEBDAV_NONE_HELPER(false))).
--define(WEBDAV_NONE_STORAGE_DOC_NO_LUMA,
-    ?WEBDAV_STORAGE_DOC(?WEBDAV_NONE_STORAGE_ID, undefined, ?WEBDAV_NONE_HELPER(true))).
--define(WEBDAV_OAUTH2_STORAGE_DOC_EXT_LUMA,
-    ?WEBDAV_STORAGE_DOC(?WEBDAV_OAUTH2_STORAGE_ID, ?LUMA_CONFIG, ?WEBDAV_OAUTH2_HELPER(false))).
--define(WEBDAV_OAUTH2_STORAGE_DOC_NO_LUMA,
-    ?WEBDAV_STORAGE_DOC(?WEBDAV_OAUTH2_STORAGE_ID, undefined, ?WEBDAV_OAUTH2_HELPER(true))).
+
+-define(WEBDAV_NONE_STORAGE_DOC_AUTO_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_NONE_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED,?WEBDAV_NONE_HELPER)).
+-define(WEBDAV_NONE_STORAGE_DOC_EXTERNAL_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_NONE_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED,?WEBDAV_NONE_HELPER)).
+-define(WEBDAV_NONE_STORAGE_DOC_LOCAL_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_NONE_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED,?WEBDAV_NONE_HELPER)).
+
+-define(WEBDAV_BASIC_STORAGE_DOC_AUTO_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_BASIC_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED,?WEBDAV_BASIC_HELPER)).
+-define(WEBDAV_BASIC_STORAGE_DOC_EXTERNAL_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_BASIC_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED,?WEBDAV_BASIC_HELPER)).
+-define(WEBDAV_BASIC_STORAGE_DOC_LOCAL_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_BASIC_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED,?WEBDAV_BASIC_HELPER)).
+
+-define(WEBDAV_TOKEN_STORAGE_DOC_AUTO_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_TOKEN_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED,?WEBDAV_TOKEN_HELPER)).
+-define(WEBDAV_TOKEN_STORAGE_DOC_EXTERNAL_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_TOKEN_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED,?WEBDAV_TOKEN_HELPER)).
+-define(WEBDAV_TOKEN_STORAGE_DOC_LOCAL_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_TOKEN_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED,?WEBDAV_TOKEN_HELPER)).
+
+
+-define(WEBDAV_OAUTH2_STORAGE_DOC_AUTO_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_OAUTH2_STORAGE_ID_AUTO_FEED_LUMA, ?AUTO_FEED,?WEBDAV_OAUTH2_HELPER)).
+-define(WEBDAV_OAUTH2_STORAGE_DOC_EXTERNAL_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_OAUTH2_STORAGE_ID_EXTERNAL_FEED_LUMA, ?EXTERNAL_FEED,?WEBDAV_OAUTH2_HELPER)).
+-define(WEBDAV_OAUTH2_STORAGE_DOC_LOCAL_FEED_LUMA,
+    ?WEBDAV_STORAGE_DOC(?WEBDAV_OAUTH2_STORAGE_ID_LOCAL_FEED_LUMA, ?LOCAL_FEED,?WEBDAV_OAUTH2_HELPER)).
 
 %%%===================================================================
-%%% storage macros
+%%% storage test configs
 %%%===================================================================
 
--define(STORAGE_RECORD(Id, Name, Helper, LumaConfig), #document{
+-define(STORAGE_RECORD(Id, Name, Helper, LumaMode), #document{
     key = Id,
     value = #storage_config{
         helper = Helper,
-        readonly = false,
         imported_storage = false,
-        luma_config = LumaConfig
+        luma_config = ?LUMA_CONFIG(LumaMode)
     }
 }).
 
--define(EXT_LUMA_POSIX_STORAGE_CONFIG, #{
-    name => "POSIX storage with external LUMA",
+-define(ALL_STORAGE_CONFIGS, (
+        ?USER_DEFINED_LUMA_STORAGE_CONFIGS ++ ?AUTO_FEED_LUMA_STORAGE_CONFIGS
+)).
+
+-define(USER_DEFINED_LUMA_STORAGE_CONFIGS,(
+    ?EXTERNAL_FEED_LUMA_STORAGE_CONFIGS ++
+    ?LOCAL_FEED_LUMA_STORAGE_CONFIGS
+)).
+
+-define(POSIX_COMPATIBLE_STORAGE_CONFIGS, (
+    ?AUTO_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS ++
+    ?EXTERNAL_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS ++
+    ?LOCAL_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS
+)).
+
+-define(USER_DEFINED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS, (
+    ?EXTERNAL_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS ++
+    ?LOCAL_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS
+)).
+
+-define(USER_DEFINED_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS, (
+        ?EXTERNAL_FEED_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS ++
+        ?LOCAL_FEED_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS
+)).
+
+-define(POSIX_INCOMPATIBLE_STORAGE_CONFIGS,
+    (?ALL_STORAGE_CONFIGS -- ?POSIX_COMPATIBLE_STORAGE_CONFIGS)).
+
+%%%===================================================================
+%%% storage test configs with external LUMA
+%%%===================================================================
+
+-define(EXTERNAL_FEED_LUMA_POSIX_STORAGE_CONFIG, #{
+    name => "POSIX storage with external feed for LUMA DB",
     admin_credentials => ?POSIX_ADMIN_CREDENTIALS,
     user_credentials => ?POSIX_USER_CREDENTIALS,
-    default_credentials => ?POSIX_EXT_LUMA_DEFAULT_CREDENTIALS,
-    display_credentials => ?EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
-    user_display_credentials => ?EXT_LUMA_USER_DISPLAY_CREDS,
-    storage_record => ?POSIX_STORAGE_DOC_EXT_LUMA
+    default_credentials => ?POSIX_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS,
+    display_credentials => ?EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_display_credentials => ?EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?POSIX_STORAGE_DOC_EXTERNAL_FEED_LUMA
 }).
 
--define(EXT_LUMA_CEPH_STORAGE_CONFIG, #{
-    name => "CEPH storage with external LUMA",
+-define(EXTERNAL_FEED_LUMA_CEPH_STORAGE_CONFIG, #{
+    name => "CEPH storage with external feed for LUMA DB",
     admin_credentials => ?CEPH_ADMIN_CREDENTIALS,
-    display_credentials => ?EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    display_credentials => ?EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
     user_credentials => ?CEPH_USER_CREDENTIALS,
-    user_display_credentials => ?EXT_LUMA_USER_DISPLAY_CREDS,
-    storage_record => ?CEPH_STORAGE_DOC_EXT_LUMA
+    user_display_credentials => ?EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?CEPH_STORAGE_DOC_EXTERNAL_FEED_LUMA
 }).
 
--define(EXT_LUMA_S3_STORAGE_CONFIG, #{
-    name => "S3 storage with external LUMA",
+-define(EXTERNAL_FEED_LUMA_S3_STORAGE_CONFIG, #{
+    name => "S3 storage with external feed for LUMA DB",
     admin_credentials => ?S3_ADMIN_CREDENTIALS,
-    display_credentials => ?EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    display_credentials => ?EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
     user_credentials => ?S3_USER_CREDENTIALS,
-    user_display_credentials => ?EXT_LUMA_USER_DISPLAY_CREDS,
-    storage_record => ?S3_STORAGE_DOC_EXT_LUMA
+    user_display_credentials => ?EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?S3_STORAGE_DOC_EXTERNAL_FEED_LUMA
 }).
 
--define(EXT_LUMA_SWIFT_STORAGE_CONFIG, #{
-    name => "SWIFT storage with external LUMA",
+-define(EXTERNAL_FEED_LUMA_SWIFT_STORAGE_CONFIG, #{
+    name => "SWIFT storage with external feed for LUMA DB",
     admin_credentials => ?SWIFT_ADMIN_CREDENTIALS,
-    display_credentials => ?EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    display_credentials => ?EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
     user_credentials => ?SWIFT_USER_CREDENTIALS,
-    user_display_credentials => ?EXT_LUMA_USER_DISPLAY_CREDS,
-    storage_record => ?SWIFT_STORAGE_DOC_EXT_LUMA
+    user_display_credentials => ?EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?SWIFT_STORAGE_DOC_EXTERNAL_FEED_LUMA
 }).
 
--define(EXT_LUMA_CEPHRADOS_STORAGE_CONFIG, #{
-    name => "CEPHRADOS storage with external LUMA",
+-define(EXTERNAL_FEED_LUMA_CEPHRADOS_STORAGE_CONFIG, #{
+    name => "CEPHRADOS storage with external feed for LUMA DB",
     admin_credentials => ?CEPHRADOS_ADMIN_CREDENTIALS,
-    display_credentials => ?EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    display_credentials => ?EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
     user_credentials => ?CEPHRADOS_USER_CREDENTIALS,
-    user_display_credentials => ?EXT_LUMA_USER_DISPLAY_CREDS,
-    storage_record => ?CEPHRADOS_STORAGE_DOC_EXT_LUMA
+    user_display_credentials => ?EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?CEPHRADOS_STORAGE_DOC_EXTERNAL_FEED_LUMA
 }).
 
--define(EXT_LUMA_GLUSTERFS_STORAGE_CONFIG, #{
-    name => "GLUSTERFS storage with external LUMA",
+-define(EXTERNAL_FEED_LUMA_GLUSTERFS_STORAGE_CONFIG, #{
+    name => "GLUSTERFS storage with external feed for LUMA DB",
     admin_credentials => ?GLUSTERFS_ADMIN_CREDENTIALS,
-    default_credentials => ?GLUSTERFS_EXT_LUMA_DEFAULT_CREDENTIALS,
-    display_credentials => ?EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    default_credentials => ?GLUSTERFS_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS,
+    display_credentials => ?EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
     user_credentials => ?GLUSTERFS_USER_CREDENTIALS,
-    user_display_credentials => ?EXT_LUMA_USER_DISPLAY_CREDS,
-    storage_record => ?GLUSTERFS_STORAGE_DOC_EXT_LUMA
+    user_display_credentials => ?EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?GLUSTERFS_STORAGE_DOC_EXTERNAL_FEED_LUMA
 }).
 
--define(EXT_LUMA_NULLDEVICE_STORAGE_CONFIG, #{
-    name => "NULLDEVICE storage with external LUMA",
+-define(EXTERNAL_FEED_LUMA_NULLDEVICE_STORAGE_CONFIG, #{
+    name => "NULLDEVICE storage with external feed for LUMA DB",
     admin_credentials => ?NULLDEVICE_ADMIN_CREDENTIALS,
-    default_credentials => ?NULLDEVICE_EXT_LUMA_DEFAULT_CREDENTIALS,
-    display_credentials => ?EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    default_credentials => ?NULLDEVICE_EXTERNAL_FEED_LUMA_DEFAULT_CREDENTIALS,
+    display_credentials => ?EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
     user_credentials => ?NULLDEVICE_USER_CREDENTIALS,
-    user_display_credentials => ?EXT_LUMA_USER_DISPLAY_CREDS,
-    storage_record => ?NULLDEVICE_STORAGE_DOC_EXT_LUMA
+    user_display_credentials => ?EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?NULLDEVICE_STORAGE_DOC_EXTERNAL_FEED_LUMA
 }).
 
--define(EXT_LUMA_WEBDAV_BASIC_STORAGE_CONFIG, #{
-    name => "WEBDAV_BASIC storage with external LUMA",
+-define(EXTERNAL_FEED_LUMA_WEBDAV_BASIC_STORAGE_CONFIG, #{
+    name => "WEBDAV_BASIC storage with external feed for LUMA DB",
     admin_credentials => ?WEBDAV_BASIC_ADMIN_CREDENTIALS,
-    display_credentials => ?EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    display_credentials => ?EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
     user_credentials => ?WEBDAV_BASIC_USER_CREDENTIALS,
-    user_display_credentials => ?EXT_LUMA_USER_DISPLAY_CREDS,
-    storage_record => ?WEBDAV_BASIC_STORAGE_DOC_EXT_LUMA
+    user_display_credentials => ?EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?WEBDAV_BASIC_STORAGE_DOC_EXTERNAL_FEED_LUMA
 }).
 
--define(EXT_LUMA_WEBDAV_TOKEN_STORAGE_CONFIG, #{
-    name => "WEBDAV_TOKEN storage with external LUMA",
+-define(EXTERNAL_FEED_LUMA_WEBDAV_TOKEN_STORAGE_CONFIG, #{
+    name => "WEBDAV_TOKEN storage with external feed for LUMA DB",
     admin_credentials => ?WEBDAV_TOKEN_ADMIN_CREDENTIALS,
-    display_credentials => ?EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    display_credentials => ?EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
     user_credentials => ?WEBDAV_TOKEN_USER_CREDENTIALS,
-    user_display_credentials => ?EXT_LUMA_USER_DISPLAY_CREDS,
-    storage_record => ?WEBDAV_TOKEN_STORAGE_DOC_EXT_LUMA
+    user_display_credentials => ?EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?WEBDAV_TOKEN_STORAGE_DOC_EXTERNAL_FEED_LUMA
 }).
 
--define(EXT_LUMA_WEBDAV_NONE_STORAGE_CONFIG, #{
-    name => "WEBDAV_NONE storage with external LUMA",
+-define(EXTERNAL_FEED_LUMA_WEBDAV_NONE_STORAGE_CONFIG, #{
+    name => "WEBDAV_NONE storage with external feed for LUMA DB",
     admin_credentials => ?WEBDAV_NONE_CTX,
-    display_credentials => ?EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    display_credentials => ?EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
     user_credentials => ?WEBDAV_NONE_CTX,
-    user_display_credentials => ?EXT_LUMA_USER_DISPLAY_CREDS,
-    storage_record => ?WEBDAV_NONE_STORAGE_DOC_EXT_LUMA
+    user_display_credentials => ?EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?WEBDAV_NONE_STORAGE_DOC_EXTERNAL_FEED_LUMA
 }).
 
--define(EXT_LUMA_WEBDAV_OAUTH2_STORAGE_CONFIG, #{
-    name => "WEBDAV_OAUTH2 storage with external LUMA",
+-define(EXTERNAL_FEED_LUMA_WEBDAV_OAUTH2_STORAGE_CONFIG, #{
+    name => "WEBDAV_OAUTH2 storage with external feed for LUMA DB",
     admin_credentials => ?EXPECTED_WEBDAV_OAUTH2_ADMIN_CREDENTIALS,
-    display_credentials => ?EXT_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    display_credentials => ?EXTERNAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
     user_credentials => ?EXPECTED_WEBDAV_OAUTH2_USER_CREDENTIALS,
-    user_display_credentials => ?EXT_LUMA_USER_DISPLAY_CREDS,
-    storage_record => ?WEBDAV_OAUTH2_STORAGE_DOC_EXT_LUMA
+    user_display_credentials => ?EXTERNAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?WEBDAV_OAUTH2_STORAGE_DOC_EXTERNAL_FEED_LUMA
 }).
 
 
--define(EXT_LUMA_STORAGE_CONFIGS, [
-    ?EXT_LUMA_POSIX_STORAGE_CONFIG,
-    ?EXT_LUMA_CEPH_STORAGE_CONFIG,
-    ?EXT_LUMA_CEPHRADOS_STORAGE_CONFIG,
-    ?EXT_LUMA_S3_STORAGE_CONFIG,
-    ?EXT_LUMA_SWIFT_STORAGE_CONFIG,
-    ?EXT_LUMA_GLUSTERFS_STORAGE_CONFIG,
-    ?EXT_LUMA_NULLDEVICE_STORAGE_CONFIG,
-    ?EXT_LUMA_WEBDAV_BASIC_STORAGE_CONFIG,
-    ?EXT_LUMA_WEBDAV_TOKEN_STORAGE_CONFIG,
-    ?EXT_LUMA_WEBDAV_NONE_STORAGE_CONFIG,
-    ?EXT_LUMA_WEBDAV_OAUTH2_STORAGE_CONFIG
+-define(EXTERNAL_FEED_LUMA_STORAGE_CONFIGS, [
+    ?EXTERNAL_FEED_LUMA_POSIX_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_CEPH_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_CEPHRADOS_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_S3_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_SWIFT_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_GLUSTERFS_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_NULLDEVICE_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_WEBDAV_BASIC_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_WEBDAV_TOKEN_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_WEBDAV_NONE_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_WEBDAV_OAUTH2_STORAGE_CONFIG
 ]).
 
--define(NO_LUMA_POSIX_STORAGE_CONFIG, #{
-    name => "POSIX storage without LUMA",
+-define(EXTERNAL_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS, [
+    ?EXTERNAL_FEED_LUMA_POSIX_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_NULLDEVICE_STORAGE_CONFIG,
+    ?EXTERNAL_FEED_LUMA_GLUSTERFS_STORAGE_CONFIG
+]).
+
+-define(EXTERNAL_FEED_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS,
+    (?EXTERNAL_FEED_LUMA_STORAGE_CONFIGS -- ?EXTERNAL_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS)
+).
+
+%%%===================================================================
+%%% storage test configs with NO LUMA
+%%%===================================================================
+
+-define(AUTO_FEED_LUMA_POSIX_STORAGE_CONFIG, #{
+    name => "POSIX storage with auto feed for LUMA DB",
     admin_credentials => ?POSIX_ADMIN_CREDENTIALS,
     default_credentials => ?POSIX_MOUNT_CREDENTIALS,
     user_credentials => ?POSIX_GENERATED_USER_CREDENTIALS,
     display_credentials => ?POSIX_MOUNT_CREDENTIALS,
-    user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_POSIX,
-    storage_record => ?POSIX_STORAGE_DOC_NO_LUMA
+    user_display_credentials => ?AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_POSIX,
+    storage_record => ?POSIX_STORAGE_DOC_AUTO_FEED_LUMA
 }).
 
--define(NO_LUMA_CEPH_STORAGE_CONFIG, #{
-    name => "CEPH storage without LUMA",
+-define(AUTO_FEED_LUMA_CEPH_STORAGE_CONFIG, #{
+    name => "CEPH storage with auto feed for LUMA DB",
     admin_credentials => ?CEPH_ADMIN_CREDENTIALS,
     user_credentials => ?CEPH_USER_CREDENTIALS,
-    display_credentials => ?DEFAULT_NO_LUMA_DISPLAY_CREDENTIALS,
-    user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
-    storage_record => ?CEPH_STORAGE_DOC_NO_LUMA
+    display_credentials => ?AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_display_credentials => ?AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
+    storage_record => ?CEPH_STORAGE_DOC_AUTO_FEED_LUMA
 }).
 
--define(NO_LUMA_S3_STORAGE_CONFIG, #{
-    name => "S3 storage without LUMA",
+-define(AUTO_FEED_LUMA_S3_STORAGE_CONFIG, #{
+    name => "S3 storage with auto feed for LUMA DB",
     admin_credentials => ?S3_ADMIN_CREDENTIALS,
     user_credentials => ?S3_USER_CREDENTIALS,
-    display_credentials => ?DEFAULT_NO_LUMA_DISPLAY_CREDENTIALS,
-    user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
-    storage_record => ?S3_STORAGE_DOC_NO_LUMA
+    display_credentials => ?AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_display_credentials => ?AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
+    storage_record => ?S3_STORAGE_DOC_AUTO_FEED_LUMA
 }).
 
--define(NO_LUMA_SWIFT_STORAGE_CONFIG, #{
-    name => "SWIFT storage without LUMA",
+-define(AUTO_FEED_LUMA_SWIFT_STORAGE_CONFIG, #{
+    name => "SWIFT storage with auto feed for LUMA DB",
     admin_credentials => ?SWIFT_ADMIN_CREDENTIALS,
     user_credentials => ?SWIFT_USER_CREDENTIALS,
-    display_credentials => ?DEFAULT_NO_LUMA_DISPLAY_CREDENTIALS,
-    user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
-    storage_record => ?SWIFT_STORAGE_DOC_NO_LUMA
+    display_credentials => ?AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_display_credentials => ?AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
+    storage_record => ?SWIFT_STORAGE_DOC_AUTO_FEED_LUMA
 }).
 
--define(NO_LUMA_CEPHRADOS_STORAGE_CONFIG, #{
-    name => "CEPHRADOS storage without LUMA",
+-define(AUTO_FEED_LUMA_CEPHRADOS_STORAGE_CONFIG, #{
+    name => "CEPHRADOS storage with auto feed for LUMA DB",
     admin_credentials => ?CEPHRADOS_ADMIN_CREDENTIALS,
     user_credentials => ?CEPHRADOS_USER_CREDENTIALS,
-    display_credentials => ?DEFAULT_NO_LUMA_DISPLAY_CREDENTIALS,
-    user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
-    storage_record => ?CEPHRADOS_STORAGE_DOC_NO_LUMA
+    display_credentials => ?AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_display_credentials => ?AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
+    storage_record => ?CEPHRADOS_STORAGE_DOC_AUTO_FEED_LUMA
 }).
 
--define(NO_LUMA_GLUSTERFS_STORAGE_CONFIG, #{
-    name => "GLUSTERFS storage without LUMA",
+-define(AUTO_FEED_LUMA_GLUSTERFS_STORAGE_CONFIG, #{
+    name => "GLUSTERFS storage with auto feed for LUMA DB",
     admin_credentials => ?GLUSTERFS_ADMIN_CREDENTIALS,
     user_credentials => ?GLUSTERFS_GENERATED_USER_CREDENTIALS,
     default_credentials => ?GLUSTERFS_MOUNT_CREDENTIALS,
     display_credentials => ?GLUSTERFS_MOUNT_CREDENTIALS,
-    user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_POSIX,
-    storage_record => ?GLUSTERFS_STORAGE_DOC_NO_LUMA
+    user_display_credentials => ?AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_POSIX,
+    storage_record => ?GLUSTERFS_STORAGE_DOC_AUTO_FEED_LUMA
 }).
 
--define(NO_LUMA_NULLDEVICE_STORAGE_CONFIG, #{
-    name => "NULLDEVICE storage without LUMA",
+-define(AUTO_FEED_LUMA_NULLDEVICE_STORAGE_CONFIG, #{
+    name => "NULLDEVICE storage with auto feed for LUMA DB",
     admin_credentials => ?NULLDEVICE_ADMIN_CREDENTIALS,
     user_credentials => ?NULLDEVICE_GENERATED_USER_CREDENTIALS,
     default_credentials => ?NULLDEVICE_MOUNT_CREDENTIALS,
     display_credentials => ?NULLDEVICE_MOUNT_CREDENTIALS,
-    user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_POSIX,
-    storage_record => ?NULLDEVICE_STORAGE_DOC_NO_LUMA
+    user_display_credentials => ?AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_POSIX,
+    storage_record => ?NULLDEVICE_STORAGE_DOC_AUTO_FEED_LUMA
 }).
 
--define(NO_LUMA_WEBDAV_BASIC_STORAGE_CONFIG, #{
-    name => "WEBDAV_BASIC storage without LUMA",
+-define(AUTO_FEED_LUMA_WEBDAV_BASIC_STORAGE_CONFIG, #{
+    name => "WEBDAV_BASIC storage with auto feed for LUMA DB",
     admin_credentials => ?WEBDAV_BASIC_ADMIN_CREDENTIALS,
     user_credentials => ?WEBDAV_BASIC_USER_CREDENTIALS,
-    display_credentials => ?DEFAULT_NO_LUMA_DISPLAY_CREDENTIALS,
-    user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
-    storage_record => ?WEBDAV_BASIC_STORAGE_DOC_NO_LUMA
+    display_credentials => ?AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_display_credentials => ?AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
+    storage_record => ?WEBDAV_BASIC_STORAGE_DOC_AUTO_FEED_LUMA
 }).
 
--define(NO_LUMA_WEBDAV_TOKEN_STORAGE_CONFIG, #{
-    name => "WEBDAV_TOKEN storage without LUMA",
+-define(AUTO_FEED_LUMA_WEBDAV_TOKEN_STORAGE_CONFIG, #{
+    name => "WEBDAV_TOKEN storage with auto feed for LUMA DB",
     admin_credentials => ?WEBDAV_TOKEN_ADMIN_CREDENTIALS,
     user_credentials => ?WEBDAV_TOKEN_USER_CREDENTIALS,
-    display_credentials => ?DEFAULT_NO_LUMA_DISPLAY_CREDENTIALS,
-    user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
-    storage_record => ?WEBDAV_TOKEN_STORAGE_DOC_NO_LUMA
+    display_credentials => ?AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_display_credentials => ?AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
+    storage_record => ?WEBDAV_TOKEN_STORAGE_DOC_AUTO_FEED_LUMA
 }).
 
--define(NO_LUMA_WEBDAV_NONE_STORAGE_CONFIG, #{
-    name => "WEBDAV_NONE storage without LUMA",
+-define(AUTO_FEED_LUMA_WEBDAV_NONE_STORAGE_CONFIG, #{
+    name => "WEBDAV_NONE storage with auto feed for LUMA DB",
     admin_credentials => ?WEBDAV_NONE_CTX,
     user_credentials => ?WEBDAV_NONE_CTX,
-    display_credentials => ?DEFAULT_NO_LUMA_DISPLAY_CREDENTIALS,
-    user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
-    storage_record => ?WEBDAV_NONE_STORAGE_DOC_NO_LUMA
+    display_credentials => ?AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_display_credentials => ?AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
+    storage_record => ?WEBDAV_NONE_STORAGE_DOC_AUTO_FEED_LUMA
 }).
 
--define(NO_LUMA_WEBDAV_OAUTH2_STORAGE_CONFIG, #{
-    name => "WEBDAV_OAUTH2 storage without LUMA",
+-define(AUTO_FEED_LUMA_WEBDAV_OAUTH2_STORAGE_CONFIG, #{
+    name => "WEBDAV_OAUTH2 storage with auto feed for LUMA DB",
     admin_credentials => ?EXPECTED_WEBDAV_OAUTH2_ADMIN_CREDENTIALS,
     user_credentials => ?EXPECTED_WEBDAV_OAUTH2_USER_CREDENTIALS,
-    display_credentials => ?DEFAULT_NO_LUMA_DISPLAY_CREDENTIALS,
-    user_display_credentials => ?NO_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
-    storage_record => ?WEBDAV_OAUTH2_STORAGE_DOC_NO_LUMA
+    display_credentials => ?AUTO_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_display_credentials => ?AUTO_FEED_LUMA_USER_DISPLAY_CREDENTIALS_NON_POSIX,
+    storage_record => ?WEBDAV_OAUTH2_STORAGE_DOC_AUTO_FEED_LUMA
 }).
 
--define(NO_LUMA_STORAGE_CONFIGS, [
-    ?NO_LUMA_POSIX_STORAGE_CONFIG,
-    ?NO_LUMA_CEPH_STORAGE_CONFIG,
-    ?NO_LUMA_S3_STORAGE_CONFIG,
-    ?NO_LUMA_SWIFT_STORAGE_CONFIG,
-    ?NO_LUMA_CEPHRADOS_STORAGE_CONFIG,
-    ?NO_LUMA_GLUSTERFS_STORAGE_CONFIG,
-    ?NO_LUMA_NULLDEVICE_STORAGE_CONFIG,
-    ?NO_LUMA_WEBDAV_BASIC_STORAGE_CONFIG,
-    ?NO_LUMA_WEBDAV_TOKEN_STORAGE_CONFIG,
-    ?NO_LUMA_WEBDAV_NONE_STORAGE_CONFIG,
-    ?NO_LUMA_WEBDAV_OAUTH2_STORAGE_CONFIG
+-define(AUTO_FEED_LUMA_STORAGE_CONFIGS, [
+    ?AUTO_FEED_LUMA_POSIX_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_CEPH_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_S3_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_SWIFT_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_CEPHRADOS_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_GLUSTERFS_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_NULLDEVICE_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_WEBDAV_BASIC_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_WEBDAV_TOKEN_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_WEBDAV_NONE_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_WEBDAV_OAUTH2_STORAGE_CONFIG
 ]).
 
--define(ALL_STORAGE_CONFIGS,
-    (?EXT_LUMA_STORAGE_CONFIGS ++ ?NO_LUMA_STORAGE_CONFIGS)).
 
--define(NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS, [
-    ?NO_LUMA_POSIX_STORAGE_CONFIG,
-    ?NO_LUMA_NULLDEVICE_STORAGE_CONFIG,
-    ?NO_LUMA_GLUSTERFS_STORAGE_CONFIG
+-define(AUTO_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS, [
+    ?AUTO_FEED_LUMA_POSIX_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_NULLDEVICE_STORAGE_CONFIG,
+    ?AUTO_FEED_LUMA_GLUSTERFS_STORAGE_CONFIG
 ]).
 
--define(EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS, [
-    ?EXT_LUMA_POSIX_STORAGE_CONFIG,
-    ?EXT_LUMA_NULLDEVICE_STORAGE_CONFIG,
-    ?EXT_LUMA_GLUSTERFS_STORAGE_CONFIG
-]).
-
--define(EXT_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS,
-    (?EXT_LUMA_STORAGE_CONFIGS -- ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS)
+-define(AUTO_FEED_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS,
+    (?AUTO_FEED_LUMA_STORAGE_CONFIGS -- ?AUTO_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS)
 ).
 
--define(NO_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS,
-    (?NO_LUMA_STORAGE_CONFIGS -- ?NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS)
+%%%===================================================================
+%%% storage test configs with LOCAL FEED LUMA
+%%%===================================================================
+
+-define(LOCAL_FEED_LUMA_POSIX_STORAGE_CONFIG, #{
+    name => "POSIX storage with local feed for LUMA DB",
+    admin_credentials => ?POSIX_ADMIN_CREDENTIALS,
+    user_credentials => ?POSIX_USER_CREDENTIALS,
+    default_credentials => ?POSIX_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS,
+    display_credentials => ?LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_display_credentials => ?LOCAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?POSIX_STORAGE_DOC_LOCAL_FEED_LUMA
+}).
+
+-define(LOCAL_FEED_LUMA_CEPH_STORAGE_CONFIG, #{
+    name => "CEPH storage with local feed for LUMA DB",
+    admin_credentials => ?CEPH_ADMIN_CREDENTIALS,
+    display_credentials => ?LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_credentials => ?CEPH_USER_CREDENTIALS,
+    user_display_credentials => ?LOCAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?CEPH_STORAGE_DOC_LOCAL_FEED_LUMA
+}).
+
+-define(LOCAL_FEED_LUMA_S3_STORAGE_CONFIG, #{
+    name => "S3 storage with local feed for LUMA DB",
+    admin_credentials => ?S3_ADMIN_CREDENTIALS,
+    display_credentials => ?LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_credentials => ?S3_USER_CREDENTIALS,
+    user_display_credentials => ?LOCAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?S3_STORAGE_DOC_LOCAL_FEED_LUMA
+}).
+
+-define(LOCAL_FEED_LUMA_SWIFT_STORAGE_CONFIG, #{
+    name => "SWIFT storage with local feed for LUMA DB",
+    admin_credentials => ?SWIFT_ADMIN_CREDENTIALS,
+    display_credentials => ?LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_credentials => ?SWIFT_USER_CREDENTIALS,
+    user_display_credentials => ?LOCAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?SWIFT_STORAGE_DOC_LOCAL_FEED_LUMA
+}).
+
+-define(LOCAL_FEED_LUMA_CEPHRADOS_STORAGE_CONFIG, #{
+    name => "CEPHRADOS storage with local feed for LUMA DB",
+    admin_credentials => ?CEPHRADOS_ADMIN_CREDENTIALS,
+    display_credentials => ?LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_credentials => ?CEPHRADOS_USER_CREDENTIALS,
+    user_display_credentials => ?LOCAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?CEPHRADOS_STORAGE_DOC_LOCAL_FEED_LUMA
+}).
+
+-define(LOCAL_FEED_LUMA_GLUSTERFS_STORAGE_CONFIG, #{
+    name => "GLUSTERFS storage with local feed for LUMA DB",
+    admin_credentials => ?GLUSTERFS_ADMIN_CREDENTIALS,
+    default_credentials => ?GLUSTERFS_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS,
+    display_credentials => ?LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_credentials => ?GLUSTERFS_USER_CREDENTIALS,
+    user_display_credentials => ?LOCAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?GLUSTERFS_STORAGE_DOC_LOCAL_FEED_LUMA
+}).
+
+-define(LOCAL_FEED_LUMA_NULLDEVICE_STORAGE_CONFIG, #{
+    name => "NULLDEVICE storage with local feed for LUMA DB",
+    admin_credentials => ?NULLDEVICE_ADMIN_CREDENTIALS,
+    default_credentials => ?NULLDEVICE_LOCAL_FEED_LUMA_DEFAULT_CREDENTIALS,
+    display_credentials => ?LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_credentials => ?NULLDEVICE_USER_CREDENTIALS,
+    user_display_credentials => ?LOCAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?NULLDEVICE_STORAGE_DOC_LOCAL_FEED_LUMA
+}).
+
+-define(LOCAL_FEED_LUMA_WEBDAV_BASIC_STORAGE_CONFIG, #{
+    name => "WEBDAV_BASIC storage with local feed for LUMA DB",
+    admin_credentials => ?WEBDAV_BASIC_ADMIN_CREDENTIALS,
+    display_credentials => ?LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_credentials => ?WEBDAV_BASIC_USER_CREDENTIALS,
+    user_display_credentials => ?LOCAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?WEBDAV_BASIC_STORAGE_DOC_LOCAL_FEED_LUMA
+}).
+
+-define(LOCAL_FEED_LUMA_WEBDAV_TOKEN_STORAGE_CONFIG, #{
+    name => "WEBDAV_TOKEN storage with local feed for LUMA DB",
+    admin_credentials => ?WEBDAV_TOKEN_ADMIN_CREDENTIALS,
+    display_credentials => ?LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_credentials => ?WEBDAV_TOKEN_USER_CREDENTIALS,
+    user_display_credentials => ?LOCAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?WEBDAV_TOKEN_STORAGE_DOC_LOCAL_FEED_LUMA
+}).
+
+-define(LOCAL_FEED_LUMA_WEBDAV_NONE_STORAGE_CONFIG, #{
+    name => "WEBDAV_NONE storage with local feed for LUMA DB",
+    admin_credentials => ?WEBDAV_NONE_CTX,
+    display_credentials => ?LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_credentials => ?WEBDAV_NONE_CTX,
+    user_display_credentials => ?LOCAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?WEBDAV_NONE_STORAGE_DOC_LOCAL_FEED_LUMA
+}).
+
+-define(LOCAL_FEED_LUMA_WEBDAV_OAUTH2_STORAGE_CONFIG, #{
+    name => "WEBDAV_OAUTH2 storage with local feed for LUMA DB",
+    admin_credentials => ?EXPECTED_WEBDAV_OAUTH2_ADMIN_CREDENTIALS,
+    display_credentials => ?LOCAL_FEED_LUMA_DEFAULT_DISPLAY_CREDENTIALS,
+    user_credentials => ?EXPECTED_WEBDAV_OAUTH2_USER_CREDENTIALS,
+    user_display_credentials => ?LOCAL_FEED_LUMA_USER_DISPLAY_CREDS,
+    storage_record => ?WEBDAV_OAUTH2_STORAGE_DOC_LOCAL_FEED_LUMA
+}).
+
+-define(LOCAL_FEED_LUMA_STORAGE_CONFIGS, [
+    ?LOCAL_FEED_LUMA_POSIX_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_CEPH_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_S3_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_SWIFT_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_CEPHRADOS_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_GLUSTERFS_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_NULLDEVICE_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_WEBDAV_BASIC_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_WEBDAV_TOKEN_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_WEBDAV_NONE_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_WEBDAV_OAUTH2_STORAGE_CONFIG
+]).
+
+
+-define(LOCAL_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS, [
+    ?LOCAL_FEED_LUMA_POSIX_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_NULLDEVICE_STORAGE_CONFIG,
+    ?LOCAL_FEED_LUMA_GLUSTERFS_STORAGE_CONFIG
+]).
+
+-define(LOCAL_FEED_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS,
+    (?LOCAL_FEED_LUMA_STORAGE_CONFIGS -- ?LOCAL_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS)
 ).
-
--define(POSIX_COMPATIBLE_STORAGE_CONFIGS,
-    (?NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS ++ ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS)).
-
--define(POSIX_INCOMPATIBLE_STORAGE_CONFIGS,
-    (?ALL_STORAGE_CONFIGS -- ?POSIX_COMPATIBLE_STORAGE_CONFIGS)).
 
 
 -endif.

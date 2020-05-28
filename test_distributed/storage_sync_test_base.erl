@@ -306,7 +306,7 @@ create_directory_import_check_user_id_test(Config, MountSpaceInRoot) ->
         gid = ?TEST_GID
     }}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
-    GeneratedUid = rpc:call(W2, luma_utils, generate_uid, [?USER1]),
+    GeneratedUid = rpc:call(W2, luma_auto_feed, generate_uid, [?USER1]),
 
     StorageW2 = get_supporting_storage(W2, ?SPACE_ID),
     StorageSDHandleW2 = sd_test_utils:get_storage_mountpoint_handle(W1, ?SPACE_ID, StorageW2),
@@ -677,7 +677,7 @@ create_file_import_check_user_id_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
-    GeneratedUid = rpc:call(W1, luma_utils, generate_uid, [?USER1]),
+    GeneratedUid = rpc:call(W1, luma_auto_feed, generate_uid, [?USER1]),
     StorageW2 = get_supporting_storage(W2, ?SPACE_ID),
     StorageSDHandleW2 = sd_test_utils:get_storage_mountpoint_handle(W1, ?SPACE_ID, StorageW2),
     {ok, #statbuf{st_gid = MountGid2}} = sd_test_utils:stat(W2, StorageSDHandleW2),

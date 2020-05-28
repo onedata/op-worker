@@ -1,0 +1,113 @@
+{
+    "posixStorageIdLocalFeedLuma": {
+        "onedataUsers": {
+            "uids": {
+                "1000": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "1001": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                }
+            },
+            "aclUsers": {
+                "user0@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "user1@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                }
+            }
+        },
+        "onedataGroups": {
+            "group0@nfs.domain.org": {
+                "mappingScheme": "onedataGroup",
+                "onedataGroupId": "group1"
+            },
+            "group1@nfs.domain.org": {
+                "mappingScheme": "idpEntitlement",
+                "idp": "idp",
+                "idpEntitlement": "entitlementId"
+            }
+        }
+    },
+    "glusterfsStorageIdLocalFeedLuma": {
+        "onedataUsers": {
+            "uids": {
+                "1000": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "1001": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                }
+            },
+            "aclUsers": {
+                "user0@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "user1@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                }
+            }
+        },
+        "onedataGroups": {
+            "group0@nfs.domain.org": {
+                "mappingScheme": "onedataGroup",
+                "onedataGroupId": "group1"
+            },
+            "group1@nfs.domain.org": {
+                "mappingScheme": "idpEntitlement",
+                "idp": "idp",
+                "idpEntitlement": "entitlementId"
+            }
+        }
+    },
+    "nulldeviceStorageIdLocalFeedLuma": {
+        "onedataUsers": {
+            "uids": {
+                "1000": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "1001": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                }
+            },
+            "aclUsers": {
+                "user0@nfs.domain.org": {
+                    "mappingScheme": "onedataUser",
+                    "onedataUserId": "user1"
+                },
+                "user1@nfs.domain.org": {
+                    "mappingScheme": "idpUser",
+                    "idp": "idp",
+                    "subjectId": "subjectId"
+                }
+            }
+        },
+        "onedataGroups": {
+            "group0@nfs.domain.org": {
+                "mappingScheme": "onedataGroup",
+                "onedataGroupId": "group1"
+            },
+            "group1@nfs.domain.org": {
+                "mappingScheme": "idpEntitlement",
+                "idp": "idp",
+                "idpEntitlement": "entitlementId"
+            }
+        }
+    }
+}

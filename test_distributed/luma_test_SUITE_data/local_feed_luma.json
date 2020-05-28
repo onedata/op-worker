@@ -1,0 +1,221 @@
+{
+    "posixStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": "1000"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "posix": {
+                    "uid": 1,
+                    "gid": 1
+                },
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
+    "cephStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "username": "USER",
+                    "key": "USER_KEY"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
+    "s3StorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "accessKey": "USER_ACCESS_KEY",
+                    "secretKey": "USER_SECRET_KEY"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
+    "swiftStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "username": "USER",
+                    "password": "USER_PASSWD"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
+    "cephradosStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "username": "USER",
+                    "key": "USER_KEY"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
+    "glusterfsStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": "1000"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "posix": {
+                    "uid": 1,
+                    "gid": 1
+                },
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
+    "nulldeviceStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": "1000"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "posix": {
+                    "uid": 1,
+                    "gid": 1
+                },
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
+    "webdavNoneStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "credentialsType": "none"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
+    "webdavBasicStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "credentialsType": "basic",
+                    "credentials": "user:password"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
+    "webdavTokenStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "credentialsType": "token",
+                    "credentials": "USER_TOKEN"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
+    "webdavOauth2StorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "credentialsType": "oauth2",
+                    "credentials": "USER_OAUTH2",
+                    "accessToken": "IDP_USER_TOKEN",
+                    "accessTokenTTL": "3600"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    }
+}

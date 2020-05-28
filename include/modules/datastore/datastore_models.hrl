@@ -15,6 +15,7 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/events/subscriptions.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
+-include("modules/storage/storage.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
@@ -361,8 +362,7 @@
 
 -record(storage_config, {
     helper :: helpers:helper(),
-    readonly = false :: boolean(),
-    luma_config :: undefined | luma_config:config(),
+    luma_config :: storage:luma_config(),
     imported_storage = false :: boolean()
 }).
 
@@ -375,15 +375,12 @@
     luma_config = undefined :: undefined | luma_config:config()
 }).
 
--record(luma_config, {
-    url :: luma_config:url(),
-    api_key :: luma_config:api_key()
-}).
 
 -record(luma_db, {
     table :: luma_db:table(),
     record :: luma_db:db_record(),
-    storage_id :: storage:id()
+    storage_id :: storage:id(),
+    feed :: luma:feed()
 }).
 
 %% Model that maps space to storage

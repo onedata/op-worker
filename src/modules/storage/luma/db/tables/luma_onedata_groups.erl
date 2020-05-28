@@ -33,11 +33,15 @@
 %% API
 -export([
     map_acl_group_to_onedata_group/2,
-    clear_all/1
+    store/3,
+    delete/2,
+    clear_all/1,
+    get_and_describe/2
 ]).
 
 -type key() :: luma:acl_who().
 -type record() :: luma_onedata_group:group().
+-type storage() :: storage:id() | storage:data().
 
 -export_type([key/0, record/0]).
 
@@ -48,24 +52,53 @@
 -spec map_acl_group_to_onedata_group(storage:data(), key()) ->
     {ok, record()} | {error, term()}.
 map_acl_group_to_onedata_group(Storage, AclGroup) ->
-    luma_db:get(Storage, AclGroup, ?MODULE, fun() ->
+    luma_db:get_or_acquire(Storage, AclGroup, ?MODULE, fun() ->
         acquire(Storage, AclGroup)
     end).
+
+-spec store(storage(), key(), luma_onedata_group:group_map()) -> ok | {error, term()}.
+store(Storage, AclGroup, OnedataGroupMap) ->
+    case luma_sanitizer:sanitize_onedata_group(OnedataGroupMap) of
+        {ok, OnedataGroupMap2} ->
+            Record = luma_onedata_group:new(OnedataGroupMap2),
+            luma_db:store(Storage, AclGroup, ?MODULE, Record, ?LOCAL_FEED);
+        Error ->
+            Error
+    end.
+
+-spec delete(storage:id(), key()) -> ok.
+delete(StorageId, GroupId) ->
+    luma_db:delete(StorageId, GroupId, ?MODULE).
 
 -spec clear_all(storage:id()) -> ok | {error, term()}.
 clear_all(StorageId) ->
     luma_db:clear_all(StorageId, ?MODULE).
+
+-spec get_and_describe(storage(), key()) ->
+    {ok, json_utils:json_map()} | {error, term()}.
+get_and_describe(Storage, AclGroup) ->
+    luma_db:get_and_describe(Storage, AclGroup, ?MODULE).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 -spec acquire(storage:data(), key()) ->
-    {ok, record()} | {error, term()}.
+    {ok, record(), luma:feed()} | {error, term()}.
 acquire(Storage, AclGroup) ->
-    case external_reverse_luma:map_acl_group_to_onedata_group(AclGroup, Storage) of
+    case storage:get_luma_feed(Storage) of
+        ?EXTERNAL_FEED ->
+            acquire_from_external_feed(Storage, AclGroup);
+        _ ->
+            {error, not_found}
+    end.
+
+-spec acquire_from_external_feed(storage:data(), key()) ->
+    {ok, record(), luma:feed()} | {error, term()}.
+acquire_from_external_feed(Storage, AclGroup) ->
+    case luma_external_feed:map_acl_group_to_onedata_group(AclGroup, Storage) of
         {ok, OnedataGroupMap} ->
-            {ok, luma_onedata_group:new(OnedataGroupMap)};
+            {ok, luma_onedata_group:new(OnedataGroupMap), ?EXTERNAL_FEED};
         Error ->
             Error
     end.

@@ -231,7 +231,7 @@ init_per_testcase(Case, Config) when
 
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(W, [helpers_reload, helpers, external_luma]),
+    ok = test_utils:mock_unload(W, [helpers_reload, helpers, luma_external_feed]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?SESSION(W, Config)]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?ROOT_SESS_ID]),
     Config.
@@ -246,8 +246,8 @@ end_per_suite(Config) ->
 %%%===================================================================
 
 mock_luma(Worker) ->
-    ok = test_utils:mock_new(Worker, external_luma),
-    ok = test_utils:mock_expect(Worker, external_luma, map_onedata_user_to_credentials, fun(_, _) ->
+    ok = test_utils:mock_new(Worker, luma_external_feed),
+    ok = test_utils:mock_expect(Worker, luma_external_feed, map_onedata_user_to_credentials, fun(_, _) ->
         {ok, #{
             <<"storageCredentials">> => #{
                 <<"credentialsType">> => <<"oauth2">>,
@@ -269,8 +269,8 @@ enable_webdav_test_mode_insecure_storage(Worker, StorageId) ->
 
 enable_webdav_test_mode(Worker, StorageId, Insecure) ->
     LumaConfig = case Insecure of
-        true -> undefined;
-        false -> #luma_config{}
+        true -> luma_config:new(?AUTO_FEED);
+        false -> luma_config:new(?EXTERNAL_FEED)
     end,
 
     UpdateHelperFun = fun(#helper{args = Args, admin_ctx = AdminCtx}  = Helper) ->
@@ -285,8 +285,7 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
                 <<"onedataAccessToken">> => ?ONEDATA_ACCESS_TOKEN,
                 <<"adminId">> => ?ADMIN_ID,
                 <<"credentials">> => <<"ADMIN">>
-            },
-            insecure = Insecure
+            }
         }}
     end,
     rpc:call(Worker, storage, update_helper, [StorageId, UpdateHelperFun]),

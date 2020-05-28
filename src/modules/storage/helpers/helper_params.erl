@@ -170,43 +170,55 @@ default_admin_ctx(_) ->
 %% @private
 -spec expected_helper_args(name()) ->
     [field() | optional_field()].
-expected_helper_args(?CEPH_HELPER_NAME) -> [
+expected_helper_args(HelperName) ->
+    expected_custom_helper_args(HelperName) ++ expected_generic_helper_args().
+
+%% @private
+-spec expected_custom_helper_args(name()) ->
+    [field() | optional_field()].
+expected_custom_helper_args(?CEPH_HELPER_NAME) -> [
+    <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>];
+expected_custom_helper_args(?CEPHRADOS_HELPER_NAME) -> [
     <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>,
-    {optional, <<"timeout">>}];
-expected_helper_args(?CEPHRADOS_HELPER_NAME) -> [
-    <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>,
-    {optional, <<"timeout">>}, {optional, <<"blockSize">>}];
-expected_helper_args(?POSIX_HELPER_NAME) -> [
-    <<"mountPoint">>,
-    {optional, <<"timeout">>}];
-expected_helper_args(?S3_HELPER_NAME) -> [
+    {optional, <<"blockSize">>}];
+expected_custom_helper_args(?POSIX_HELPER_NAME) -> [
+    <<"mountPoint">>];
+expected_custom_helper_args(?S3_HELPER_NAME) -> [
     <<"hostname">>, <<"bucketName">>, <<"scheme">>,
-    {optional, <<"timeout">>}, {optional, <<"signatureVersion">>},
+    {optional, <<"signatureVersion">>},
     {optional, <<"maximumCanonicalObjectSize">>},
     {optional, <<"fileMode">>}, {optional, <<"dirMode">>},
     {optional, <<"blockSize">>}];
-expected_helper_args(?SWIFT_HELPER_NAME) -> [
+expected_custom_helper_args(?SWIFT_HELPER_NAME) -> [
     <<"authUrl">>, <<"containerName">>, <<"tenantName">>,
-    {optional, <<"timeout">>}, {optional, <<"blockSize">>}];
-expected_helper_args(?GLUSTERFS_HELPER_NAME) -> [
+    {optional, <<"blockSize">>}];
+expected_custom_helper_args(?GLUSTERFS_HELPER_NAME) -> [
     <<"volume">>, <<"hostname">>,
     {optional, <<"port">>}, {optional, <<"mountPoint">>},
     {optional, <<"transport">>}, {optional, <<"xlatorOptions">>},
-    {optional, <<"timeout">>}, {optional, <<"blockSize">>}];
-expected_helper_args(?WEBDAV_HELPER_NAME) -> [
+    {optional, <<"blockSize">>}];
+expected_custom_helper_args(?WEBDAV_HELPER_NAME) -> [
     <<"endpoint">>,
     {optional, <<"oauth2IdP">>},
-    {optional, <<"timeout">>}, {optional, <<"verifyServerCertificate">>},
+    {optional, <<"verifyServerCertificate">>},
     {optional, <<"authorizationHeader">>}, {optional, <<"rangeWriteSupport">>},
     {optional, <<"connectionPoolSize">>}, {optional, <<"maximumUploadSize">>},
     {optional, <<"fileMode">>}, {optional, <<"dirMode">>}];
-expected_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
-    {optional, <<"timeout">>}, {optional, <<"latencyMin">>},
-    {optional, <<"latencyMax">>}, {optional, <<"timeoutProbability">>},
+expected_custom_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
+    {optional, <<"latencyMin">>},
+    {optional, <<"latencyMax">>},
+    {optional, <<"timeoutProbability">>},
     {optional, <<"filter">>},
     {optional, <<"simulatedFilesystemParameters">>},
     {optional, <<"simulatedFilesystemGrowSpeed">>}].
 
+
+-spec expected_generic_helper_args() -> [field() | optional_field()].
+expected_generic_helper_args() -> [
+    <<"storagePathType">>,
+    {optional, <<"skipStorageDetection">>},
+    {optional, <<"timeout">>}
+].
 
 %%--------------------------------------------------------------------
 %% @private

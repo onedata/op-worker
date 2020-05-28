@@ -23,9 +23,21 @@
 
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/storage/luma/luma.hrl").
 
 %% API
--export([get/4, store/4, delete/3, clear_all/2]).
+-export([
+    get/3,
+    get_or_acquire/4,
+    store/5,
+    store/6,
+    update/4,
+    update_or_store/6,
+    delete/3,
+    clear_all/2,
+    get_and_describe/3,
+    delete_if_auto_feed/3
+]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -43,16 +55,36 @@
 -export_type([doc_id/0]).
 
 % Modules that implement LUMA DB tables.
--type table() :: luma_storage_users | luma_spaces_defaults | luma_onedata_users | luma_onedata_groups.
 % @formatter:off
--type db_key() :: luma_storage_users:key() | luma_spaces_defaults:key() |
-                  luma_onedata_users:key() | luma_onedata_groups:key().
--type db_record() :: luma_storage_users:record() | luma_spaces_defaults:record() |
-                     luma_onedata_users:record() | luma_onedata_groups:record().
--type db_acquire_fun() :: fun(() -> {ok, db_record()} | {error, term()}).
+-type table() ::
+    luma_storage_users |
+    luma_spaces_display_defaults |
+    luma_spaces_posix_storage_defaults |
+    luma_onedata_users |
+    luma_onedata_groups.
+
+-type db_key() :: luma_storage_users:key() |
+                  luma_spaces_display_defaults:key() |
+                  luma_spaces_posix_storage_defaults:key() |
+                  luma_onedata_users:key() |
+                  luma_onedata_groups:key().
+
+-type db_record() :: luma_storage_users:record() |
+                     luma_spaces_display_defaults:record() |
+                     luma_spaces_posix_storage_defaults:record() |
+                     luma_onedata_users:record() |
+                     luma_onedata_groups:record().
+
+-type db_acquire_fun() :: fun(() -> {ok, db_record(), luma:feed()} | {error, term()}).
+-type db_diff() :: luma_storage_user:user_map() |
+                   luma_posix_credentials:credentials_map()  |
+                   luma_onedata_user:user_map() |
+                   luma_onedata_group:group_map().
+
+-type db_pred() :: fun((db_record()) -> boolean()).
 % @formatter:on
 
--export_type([db_key/0, db_record/0, table/0, db_acquire_fun/0]).
+-export_type([db_key/0, db_record/0, table/0, db_acquire_fun/0, db_diff/0]).
 
 -type storage() :: storage:id() | storage:data().
 -define(BATCH_SIZE, 1000).
@@ -60,6 +92,18 @@
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+
+-spec get(storage(), db_key(), table()) ->
+    {ok, db_record()} | {error, term()}.
+get(Storage, Key, Table) ->
+    Id = id(Storage, Table, Key),
+    case datastore_model:get(?CTX, Id) of
+        {ok, #document{value = #luma_db{record = Record}}} ->
+            {ok, Record};
+        {error, _} = Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -70,34 +114,99 @@
 %% it has returned successfully.
 %% @end
 %%--------------------------------------------------------------------
--spec get(storage(), db_key(), table(), db_acquire_fun()) ->
+-spec get_or_acquire(storage(), db_key(), table(), db_acquire_fun()) ->
     {ok, db_record()} | {error, term()}.
-get(Storage, Key, Table, AcquireFun) ->
-    Id = id(Storage, Table, Key),
-    case datastore_model:get(?CTX, Id) of
-        {ok, #document{value = #luma_db{record = Record}}} ->
+get_or_acquire(Storage, Key, Table, AcquireFun) ->
+    case get(Storage, Key, Table) of
+        {ok, Record} ->
             {ok, Record};
         {error, not_found} ->
-            acquire_and_store(AcquireFun, Storage, Key, Table)
+%%            case storage:is_not_local_luma_feed(Storage) of
+%%                true ->
+                    acquire_and_store(AcquireFun, Storage, Key, Table)
+%%                false ->
+%%                    {error, not_found}
+%%            end
     end.
+
+-spec store(storage(), db_key(), table(), db_record(), luma:feed()) ->
+    ok | {error, term()}.
+store(Storage, Key, Table, Record, Feed) ->
+    store(Storage, Key, Table, Record, Feed, true).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% This function stores record associated with Key in table Table
 %% associated with Storage.
+%% If Force == true datastore_model:save will be used to store document.
+%% otherwise datastore_model:create will be used.
 %% @end
 %%--------------------------------------------------------------------
--spec store(storage(), db_key(), table(), db_record()) -> ok | {error, term()}.
-store(Storage, Key, Table, Record) ->
+-spec store(storage(), db_key(), table(), db_record(), luma:feed(), Force :: boolean()) ->
+    ok | {error, term()}.
+store(Storage, Key, Table, Record, Feed, Force) ->
     Id = id(Storage, Table, Key),
-    Doc = new_doc(Id, Storage, Table, Record),
-    case ?extract_ok(datastore_model:create(?CTX, Doc)) of
+    Doc = new_doc(Id, Storage, Table, Record, Feed),
+    case store_internal(Doc, Force) of
         ok ->
             luma_db_links:add_link(Table, Storage, Key, Id),
             ok;
-        {error, already_exists} ->
-            ok
+        {error, _} = Error ->
+            Error
     end.
+
+
+-spec store_internal(doc(), Force :: boolean()) -> ok | {error, term()}.
+store_internal(Doc, true) ->
+    ?extract_ok(datastore_model:save(?CTX, Doc));
+store_internal(Doc, false) ->
+    ?extract_ok(datastore_model:create(?CTX, Doc)).
+
+
+-spec update(storage(), db_key(), table(), db_diff()) -> {ok, db_record()} | {error, term()}.
+update(Storage, Key, Table, Diff) ->
+    Id = id(Storage, Table, Key),
+    UpdateFun = fun(LumaDb = #luma_db{record = Record}) ->
+        case luma_db_record:update(Record, Diff) of
+            {ok, Record2} ->
+                {ok, LumaDb#luma_db{record = Record2}};
+            Error ->
+                Error
+        end
+    end,
+    case datastore_model:update(?CTX, Id, UpdateFun) of
+        {ok, #document{value = #luma_db{record = Record}}} ->
+            {ok, Record};
+        Error ->
+            Error
+    end.
+
+
+-spec update_or_store(storage(), db_key(), table(), db_diff(), db_record(), luma:feed()) ->
+    ok | {error, term()}.
+update_or_store(Storage, Key, Table, Diff, DefaultRecord, Feed) ->
+    Id = id(Storage, Table, Key),
+    UpdateFun = fun(LumaDb = #luma_db{record = Record}) ->
+        case luma_db_record:update(Record, Diff) of
+            {ok, Record2} ->
+                {ok, LumaDb#luma_db{record = Record2}};
+            Error ->
+                Error
+        end
+    end,
+    Default = #luma_db{
+        storage_id = storage:get_id(Storage),
+        table = Table,
+        record = DefaultRecord,
+        feed = Feed
+    },
+    case ?extract_ok(datastore_model:update(?CTX, Id, UpdateFun, Default)) of
+        ok ->
+            luma_db_links:add_link(Table, Storage, Key, Id);
+        Error ->
+            Error
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -105,10 +214,22 @@ store(Storage, Key, Table, Record) ->
 %% stored in table Table associated with StorageId.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(storage(), db_key(), table()) -> ok.
-delete(Storage, Key, Table) ->
-    Id = id(Storage, Table, Key),
-    delete_doc_and_link(Id, storage:get_id(Storage), Key, Table).
+-spec delete(storage:id(), db_key(), table()) -> ok.
+delete(StorageId, Key, Table) ->
+    Id = id(StorageId, Table, Key),
+    delete_doc_and_link(Id, StorageId, Key, Table).
+
+%%--------------------------------------------------------------------
+%% @doc
+% WRITEME
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_if_auto_feed(storage:id(), db_key(), table()) -> ok.
+delete_if_auto_feed(StorageId, Key, Table) ->
+    Id = id(StorageId, Table, Key),
+    delete_doc_and_link(Id, StorageId, Key, Table, fun(#luma_db{feed = Feed}) ->
+        Feed =:= ?AUTO_FEED
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -119,6 +240,17 @@ delete(Storage, Key, Table) ->
 -spec clear_all(storage:id(), table()) -> ok.
 clear_all(StorageId, Table) ->
     clear_all(StorageId, Table, undefined, ?BATCH_SIZE).
+
+
+-spec get_and_describe(storage(), db_key(), table()) ->
+    {ok, json_utils:json_map()} | {error, term()}.
+get_and_describe(Storage, Key, Table) ->
+    case get(Storage, Key, Table) of
+        {ok, Record} ->
+            {ok, luma_db_record:to_json(Record)};
+        {error, _} = Error ->
+            Error
+    end.
 
 %%%===================================================================
 %%% Internal functions
@@ -134,21 +266,22 @@ id(Storage, Table, Key) ->
 acquire_and_store(AcquireFun, Storage, Key, TableModule) ->
     % ensure Storage is a document
     case AcquireFun() of
-        {ok, Record} ->
-            store(Storage, Key, TableModule, Record),
+        {ok, Record, Feed} ->
+            store(Storage, Key, TableModule, Record, Feed),
             {ok, Record};
         Error ->
             Error
     end.
 
--spec new_doc(doc_id(), storage(), table(), db_record()) -> doc().
-new_doc(Id, Storage, Table, Record) ->
+-spec new_doc(doc_id(), storage(), table(), db_record(), luma:feed()) -> doc().
+new_doc(Id, Storage, Table, Record, Feed) ->
     #document{
         key = Id,
         value = #luma_db{
             table = Table,
             record = Record,
-            storage_id = storage:get_id(Storage)
+            storage_id = storage:get_id(Storage),
+            feed = Feed
         }
     }.
 
@@ -171,11 +304,27 @@ clear_all(StorageId, Table, Token, Limit) ->
 
 -spec delete_doc_and_link(doc_id(), storage:id(), db_key(), table()) -> ok.
 delete_doc_and_link(DocId, StorageId, Key, Table) ->
-    case datastore_model:delete(?CTX, DocId) of
-        ok -> ok;
-        {error, not_found} -> ok
-    end,
+    ok  = delete(DocId),
     luma_db_links:delete_link(Table, StorageId, Key).
+
+-spec delete_doc_and_link(doc_id(), storage:id(), db_key(), table(), db_pred()) -> ok.
+delete_doc_and_link(DocId, StorageId, Key, Table, Pred) ->
+    case delete(DocId, Pred) of
+        ok ->
+            luma_db_links:delete_link(Table, StorageId, Key);
+        {error, {not_satisfied, _}} ->
+            ok
+    end.
+
+delete(DocId) ->
+    delete(DocId, fun(_) -> true end).
+
+delete(DocId, Pred) ->
+    case datastore_model:delete(?CTX, DocId, Pred) of
+        ok -> ok;
+        {error, not_found} -> ok;
+        Error -> Error
+    end.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -201,5 +350,6 @@ get_record_struct(1) ->
     {record, [
         {table, atom},
         {record, {custom, json, {luma_db_record, encode, decode}}},
-        {storage_id, string}
+        {storage_id, string},
+        {feed, atom}
     ]}.

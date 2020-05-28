@@ -49,18 +49,15 @@ upgrade_from_19_02_x_storages(Config) ->
     SpaceId = <<"space_id1">>,
 
     St = <<"storage1">>,
-    Helper = #helper{
-        name = <<"HelperName">>,
-        args = #{},
-        admin_ctx = #{},
-        insecure = false,
-        extended_direct_io = true,
-        storage_path_type = <<"storage_path_type">>
+    Helper = {helper,
+        <<"HelperName">>,
+        #{}, % args
+        #{}, % admin_ctx
+        false, % insecure
+        true, % extended_direct_io
+        <<"storage_path_type">> % storage_path_type
     },
-    LumaConfig = #luma_config{
-        url = <<"https://example.com">>,
-        api_key = <<"api_key">>
-    },
+    LumaConfig = luma_config:new_with_external_feed(<<"https://example.com">>, <<"api_key">>),
     Storage = #storage{
         name = St,
         helpers = [Helper],
@@ -69,7 +66,6 @@ upgrade_from_19_02_x_storages(Config) ->
     },
     ExpectedStorageConfig = #storage_config{
         helper = Helper,
-        readonly = false,
         luma_config = LumaConfig,
         imported_storage = false
     },

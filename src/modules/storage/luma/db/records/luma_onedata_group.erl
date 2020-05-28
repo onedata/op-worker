@@ -31,7 +31,7 @@
 -behaviour(luma_db_record).
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/storage/luma/external_luma.hrl").
+-include("modules/storage/luma/luma.hrl").
 
 %% API
 -export([new/1, get_group_id/1]).
@@ -42,23 +42,36 @@
 -record(luma_onedata_group, {
     onedata_group_id :: od_group:id(),
     idp :: undefined | idp(),
-    idp_entitlement :: undefined | idp_entitlement()
+    idp_entitlement :: undefined | idp_entitlement(),
+    mapping_scheme :: binary() % ?ONEDATA_GROUP_SCHEME | ?IDP_ENTITLEMENT_SCHEME,
 }).
 
 -type group() ::  #luma_onedata_group{}.
 -type idp() ::  binary().
 -type idp_entitlement() ::  idp_entitlement().
+-type group_map() :: json_utils:json_map().
+%% #{
+%%      <<"mappingScheme">> => ?ONEDATA_GROUP_SCHEME | ?IDP_ENTITLEMENT_SCHEME,
+%%
+%%      % in case of ?ONEDATA_GROUP_SCHEME
+%%      <<"onedataGroupId">> => binary()
+%%
+%%      % in case of ?IDP_ENTITLEMENT_SCHEME
+%%      <<"idp">> => binary(),
+%%      <<"idpEntitlement">> => binary()
+%% }
 
--export_type([group/0]).
+-export_type([group/0, group_map/0]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec new(external_reverse_luma:onedata_group() | od_group:id()) -> group().
+-spec new(group_map() | od_group:id()) -> group().
 new(OnedataGroupMap = #{<<"mappingScheme">> := ?ONEDATA_GROUP_SCHEME}) ->
     #luma_onedata_group{
-        onedata_group_id = maps:get(<<"onedataGroupId">>, OnedataGroupMap)
+        onedata_group_id = maps:get(<<"onedataGroupId">>, OnedataGroupMap),
+        mapping_scheme = ?ONEDATA_GROUP_SCHEME
     };
 new(OnedataGroupMap = #{<<"mappingScheme">> := ?IDP_ENTITLEMENT_SCHEME}) ->
     Idp = maps:get(<<"idp">>, OnedataGroupMap),
@@ -67,10 +80,14 @@ new(OnedataGroupMap = #{<<"mappingScheme">> := ?IDP_ENTITLEMENT_SCHEME}) ->
     #luma_onedata_group{
         onedata_group_id = GroupId,
         idp = Idp,
-        idp_entitlement = IdpEntitlement
+        idp_entitlement = IdpEntitlement,
+        mapping_scheme = ?IDP_ENTITLEMENT_SCHEME
     };
 new(GroupId) when is_binary(GroupId) ->
-    #luma_onedata_group{onedata_group_id = GroupId}.
+    #luma_onedata_group{
+        onedata_group_id = GroupId,
+        mapping_scheme = ?ONEDATA_GROUP_SCHEME
+    }.
 
 -spec get_group_id(group()) -> od_group:id().
 get_group_id(#luma_onedata_group{onedata_group_id = OnedataGroupId}) ->
@@ -80,22 +97,25 @@ get_group_id(#luma_onedata_group{onedata_group_id = OnedataGroupId}) ->
 %%% luma_db_record callbacks
 %%%===================================================================
 
--spec to_json(group()) -> json_utils:json_map().
+-spec to_json(group()) -> group_map().
 to_json(#luma_onedata_group{
     onedata_group_id = OnedataGroupId,
     idp = Idp,
-    idp_entitlement = IdpEntitlement
+    idp_entitlement = IdpEntitlement,
+    mapping_scheme = MappingScheme
 }) ->
     #{
-        <<"onedata_group_id">> => OnedataGroupId,
+        <<"onedataGroupId">> => OnedataGroupId,
         <<"idp">> => utils:undefined_to_null(Idp),
-        <<"idp_entitlement">> => utils:undefined_to_null(IdpEntitlement)
+        <<"idpEntitlement">> => utils:undefined_to_null(IdpEntitlement),
+        <<"mappingScheme">> => MappingScheme
     }.
 
--spec from_json(json_utils:json_map()) -> group().
+-spec from_json(group_map()) -> group().
 from_json(GroupJson) ->
     #luma_onedata_group{
-        onedata_group_id = maps:get(<<"onedata_group_id">>, GroupJson),
+        onedata_group_id = maps:get(<<"onedataGroupId">>, GroupJson),
         idp = utils:null_to_undefined(maps:get(<<"idp">>, GroupJson, undefined)),
-        idp_entitlement = utils:null_to_undefined(maps:get(<<"idp_entitlement">>, GroupJson, undefined))
+        idp_entitlement = utils:null_to_undefined(maps:get(<<"idpEntitlement">>, GroupJson, undefined)),
+        mapping_scheme = maps:get(<<"mappingScheme">>, GroupJson)
     }.

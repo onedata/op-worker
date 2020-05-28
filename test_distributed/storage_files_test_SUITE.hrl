@@ -24,13 +24,24 @@
 -define(SPACE_ID5, <<"space5">>).
 -define(SPACE_ID6, <<"space6">>).
 -define(SPACE_ID7, <<"space7">>).
+-define(SPACE_ID8, <<"space8">>).
+-define(SPACE_ID9, <<"space9">>).
+-define(SPACE_ID10, <<"space10">>).
 
--define(STORAGE_ID1, <<"/mnt/st1">>). % posix storage without LUMA
--define(STORAGE_ID2, <<"/mnt/st2">>). % posix storage with LUMA
--define(STORAGE_ID3, <<"/mnt/st3">>). % synced (mount_in_root) posix storage without LUMA
--define(STORAGE_ID4, <<"/mnt/st4">>). % synced (mount_in_root) posix storage with LUMA
--define(STORAGE_ID5, <<"s3_no_luma">>). % s3 storage without LUMA
--define(STORAGE_ID6, <<"s3_luma">>). % s3 storage with LUMA
+-define(STORAGE_ID1, <<"/mnt/st1">>). % posix storage with auto feed LUMA
+-define(STORAGE_ID2, <<"/mnt/st2">>). % posix storage with external feed LUMA
+-define(STORAGE_ID3, <<"/mnt/st3">>). % posix storage with local feed LUMA
+
+-define(STORAGE_ID4, <<"/mnt/st4">>). % synced (mount_in_root) posix storage with auto feed LUMA
+-define(STORAGE_ID5, <<"/mnt/st5">>). % synced (mount_in_root) posix storage with external feed LUMA
+-define(STORAGE_ID6, <<"/mnt/st6">>). % synced (mount_in_root) posix storage with local feed LUMA
+
+-define(STORAGE_ID7, <<"s3_auto_luma_7">>). % s3 storage with auto feed LUMA
+-define(STORAGE_ID8, <<"s3_external_luma_8">>). % s3 storage with external feed LUMA
+-define(STORAGE_ID9, <<"s3_local_luma_9">>). % s3 storage with local feed LUMA
+
+-define(AUTO_LUMA_FEED_STORAGES, [?STORAGE_ID1, ?STORAGE_ID4, ?STORAGE_ID7]).
+-define(EXTERNAL_LUMA_FEED_STORAGES, [?STORAGE_ID2, ?STORAGE_ID5, ?STORAGE_ID8]).
 
 -define(SPACE_NAME(SpaceId, Config), ?config(SpaceId, ?config(spaces, Config))).
 -define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
@@ -59,8 +70,8 @@
 -define(DEFAULT_DIR_MODE, ?DIR_MODE(?DEFAULT_DIR_PERMS)).
 
 % Macros used to define posix compatible ownerships (UID, GID)
--define(UID(UserId), luma_utils:generate_posix_identifier(UserId, ?UID_RANGE)).
--define(GID(SpaceId), luma_utils:generate_posix_identifier(SpaceId, ?GID_RANGE)).
+-define(UID(UserId), luma_auto_feed:generate_posix_identifier(UserId, ?UID_RANGE)).
+-define(GID(SpaceId), luma_auto_feed:generate_posix_identifier(SpaceId, ?GID_RANGE)).
 
 -define(UID_RANGE, {100000, 2000000}).
 -define(GID_RANGE, {100000, 2000000}).

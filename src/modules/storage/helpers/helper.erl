@@ -22,13 +22,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([new_helper/5]).
--export([update_args/2, update_admin_ctx/2, update_insecure/2]).
+-export([new_helper/3]).
+-export([update_args/2, update_admin_ctx/2]).
 -export([get_name/1, get_args/1, get_admin_ctx/1, get_redacted_admin_ctx/1,
-    is_insecure/1, get_params/2, get_proxy_params/2, get_timeout/1,
+    get_params/2, get_proxy_params/2, get_timeout/1,
     get_storage_path_type/1]).
 -export([is_posix_compatible/1, is_rename_supported/1,
-    is_sync_supported/1, is_nfs4_acl_supported/1]).
+    is_sync_supported/1, is_nfs4_acl_supported/1, is_storage_detection_skipped/1]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1, get_type/1]).
 
@@ -45,9 +45,8 @@
 %%% API
 %%%===================================================================
 
--spec new_helper(name(), args(), user_ctx(), Insecure :: boolean(),
-    storage_path_type()) -> {ok, helpers:helper()}.
-new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
+-spec new_helper(name(), args(), user_ctx()) -> {ok, helpers:helper()}.
+new_helper(HelperName, Args, AdminCtx) ->
     BaseAdminCtx = helper_params:default_admin_ctx(HelperName),
     FullAdminCtx = maps:merge(BaseAdminCtx, AdminCtx),
     ok = helper_params:validate_args(HelperName, Args),
@@ -55,26 +54,8 @@ new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
     {ok, #helper{
         name = HelperName,
         args = Args,
-        admin_ctx = FullAdminCtx,
-        insecure = Insecure andalso allow_insecure(HelperName),
-        extended_direct_io = extended_direct_io(HelperName),
-        storage_path_type = StoragePathType
+        admin_ctx = FullAdminCtx
     }}.
-
-
-%% @private
--spec extended_direct_io(name()) -> boolean().
-extended_direct_io(?POSIX_HELPER_NAME) -> false;
-extended_direct_io(_) -> true.
-
-
-%% @private
--spec allow_insecure(name()) -> boolean().
-allow_insecure(?POSIX_HELPER_NAME) -> false;
-allow_insecure(?GLUSTERFS_HELPER_NAME) -> false;
-allow_insecure(?NULL_DEVICE_HELPER_NAME) -> false;
-allow_insecure(_) -> true.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -110,17 +91,6 @@ update_admin_ctx(#helper{admin_ctx = OldCtx} = Helper, Changes) ->
     end.
 
 
--spec update_insecure(helpers:helper(), NewInsecure :: boolean()) ->
-    {ok, helpers:helper()} | {error, Reason :: term()}.
-update_insecure(#helper{name = Name} = Helper, NewInsecure) ->
-    case {allow_insecure(Name), NewInsecure} of
-        {false, true} ->
-            {error, {invalid_field_value, <<"insecure">>, NewInsecure}};
-        {_, _} ->
-            {ok, Helper#helper{insecure = NewInsecure}}
-    end.
-
-
 %%%===================================================================
 %%% Getters
 %%% Functions for extracting info from helper records
@@ -131,10 +101,8 @@ update_insecure(#helper{name = Name} = Helper, NewInsecure) ->
 %% Returns helper name.
 %% @end
 %%--------------------------------------------------------------------
--spec get_name(helpers:helper() | params()) -> name().
+-spec get_name(helpers:helper()) -> name().
 get_name(#helper{name = Name}) ->
-    Name;
-get_name(#helper_params{helper_name = Name}) ->
     Name.
 
 %%--------------------------------------------------------------------
@@ -142,11 +110,9 @@ get_name(#helper_params{helper_name = Name}) ->
 %% Returns helper arguments.
 %% @end
 %%--------------------------------------------------------------------
--spec get_args(helpers:helper() | params()) -> args().
+-spec get_args(helpers:helper()) -> args().
 get_args(#helper{args = Args}) ->
-    Args;
-get_args(#helper_params{helper_args = Args}) ->
-    maps:from_list([{K, V} || #helper_arg{key = K, value = V} <- Args]).
+    Args.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -172,21 +138,13 @@ get_redacted_admin_ctx(Helper) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns helper insecure status.
-%% @end
-%%--------------------------------------------------------------------
--spec is_insecure(helpers:helper()) -> boolean().
-is_insecure(#helper{insecure = Insecure}) ->
-    Insecure.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns helper storage path type.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_storage_path_type(helpers:helper()) -> helper:storage_path_type().
-get_storage_path_type(#helper{storage_path_type = StoragePathType}) ->
-    StoragePathType.
+get_storage_path_type(#helper{args = Args}) ->
+    maps:get(<<"storagePathType">>, Args).
+
 
 -spec get_type(helpers:helper()) -> helper:type().
 get_type(#helper{name = ?POSIX_HELPER_NAME}) -> ?BLOCK_STORAGE;
@@ -204,13 +162,11 @@ get_type(#helper{name = ?SWIFT_HELPER_NAME}) -> ?OBJECT_STORAGE.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_params(helpers:helper(), user_ctx()) -> params().
-get_params(#helper{name = Name, extended_direct_io = DS} = Helper, UserCtx) ->
+get_params(#helper{name = Name} = Helper, UserCtx) ->
     {ok, Args} = get_args_with_user_ctx(Helper, UserCtx),
     #helper_params{
         helper_name = Name,
-        helper_args = [#helper_arg{key = Key, value = Value}
-            || {Key, Value} <- maps:to_list(Args)],
-        extended_direct_io = DS
+        helper_args = [#helper_arg{key = Key, value = Value} || {Key, Value} <- maps:to_list(Args)]
     }.
 
 %%--------------------------------------------------------------------
@@ -228,8 +184,7 @@ get_proxy_params(Helper, StorageId) ->
         helper_args = [
             #helper_arg{key = <<"storageId">>, value = StorageId},
             #helper_arg{key = <<"timeout">>, value = TimeoutValue}
-        ],
-        extended_direct_io = false
+        ]
     }.
 
 %%--------------------------------------------------------------------
@@ -250,6 +205,13 @@ get_timeout(#helper{args = Args}) ->
             get_timeout(undefined)
     end.
 
+-spec is_storage_detection_skipped(helpers:helper()) -> boolean().
+is_storage_detection_skipped(#helper{args = Args}) ->
+    case maps:get(<<"skipStorageDetection">>, Args, false) of
+        false -> false;
+        <<"false">> -> false;
+        <<"true">> -> true
+    end.
 
 -spec is_posix_compatible(helpers:helper() | name()) -> boolean().
 is_posix_compatible(?POSIX_HELPER_NAME) -> true;
@@ -265,8 +227,7 @@ is_sync_supported(#helper{name = ?NULL_DEVICE_HELPER_NAME}) -> true;
 is_sync_supported(#helper{name = ?WEBDAV_HELPER_NAME}) -> true;
 is_sync_supported(#helper{
     name = ?S3_HELPER_NAME,
-    storage_path_type = ?CANONICAL_STORAGE_PATH,
-    args = Args
+    args = Args = #{<<"storagePathType">> := ?CANONICAL_STORAGE_PATH}
 }) ->
     <<"0">> =:= maps:get(<<"blockSize">>, Args, undefined);
 is_sync_supported(_) -> false.
