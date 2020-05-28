@@ -222,7 +222,6 @@ delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
 -spec fetch_qos_entry(aai:auth(), qos_entry:id()) ->
     {ok, {qos_entry:record(), middleware:revision()}} | ?ERROR_NOT_FOUND.
 fetch_qos_entry(_Auth, QosEntryId) ->
-    % fixme explain 
     case lfm:get_qos_entry(?ROOT_SESS_ID, QosEntryId) of
         {ok, QosEntry} ->
             {ok, {QosEntry, 1}};

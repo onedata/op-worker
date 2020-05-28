@@ -141,16 +141,8 @@
             }
         },
         "storages": {
-            "p1": {"/mnt/st1": {
-                "qos_parameters" : {
-                    "country" : "PL"
-                }
-            }},
-            "p2": {"/mnt/st2": {
-                "qos_parameters" : {
-                    "country" : "other"
-                }
-            }}
+            "p1": {"/mnt/st1": {}},
+            "p2": {"/mnt/st2": {}}
         }
     }
 }

@@ -57,19 +57,19 @@ create_qos_test(Config) ->
             target_nodes = [P1, P2],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
             setup_fun = SetupFun,
-            verify_fun = create_verify_fun(Config),
+            verify_fun = verify_fun(Config, create),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Create QoS using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = prepare_rest_args_fun(create),
-                    validate_result_fun = create_validate_rest_result_fun()
+                    prepare_args_fun = prepare_args_fun_rest(create),
+                    validate_result_fun = validate_result_fun_rest(create)
                 },
                 #scenario_template{
                     name = <<"Create QoS using gs endpoint">>,
                     type = gs,
-                    prepare_args_fun = prepare_gs_args_fun(create),
-                    validate_result_fun = create_validate_gs_result_fun()
+                    prepare_args_fun = prepare_args_fun_gs(create),
+                    validate_result_fun = validate_result_fun_gs(create)
                 }
             ],
             data_spec = #data_spec{
@@ -119,14 +119,14 @@ get_qos_test(Config) ->
                 #scenario_template{
                     name = <<"Get QoS using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = prepare_rest_args_fun(get),
-                    validate_result_fun = get_validate_rest_result_fun()
+                    prepare_args_fun = prepare_args_fun_rest(get),
+                    validate_result_fun = validate_result_fun_rest(get)
                 },
                 #scenario_template{
                     name = <<"Get QoS using gs endpoint">>,
                     type = gs,
-                    prepare_args_fun = prepare_gs_args_fun(get),
-                    validate_result_fun = get_validate_gs_result_fun()
+                    prepare_args_fun = prepare_args_fun_gs(get),
+                    validate_result_fun = validate_result_fun_gs(get)
                 }
             ],
             data_spec = undefined
@@ -146,19 +146,19 @@ delete_qos_test(Config) ->
         #suite_spec{
             target_nodes = [P1, P2],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
-            verify_fun = delete_verify_fun(Config),
+            verify_fun = verify_fun(Config, delete),
             setup_fun = setup_fun(Config, Guid),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Delete QoS using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = prepare_rest_args_fun(delete),
+                    prepare_args_fun = prepare_args_fun_rest(delete),
                     validate_result_fun = fun(_, {ok, 204, #{}}) -> ok end
                 },
                 #scenario_template{
                     name = <<"Delete QoS using gs endpoint">>,
                     type = gs,
-                    prepare_args_fun = prepare_gs_args_fun(delete),
+                    prepare_args_fun = prepare_args_fun_gs(delete),
                     validate_result_fun = fun(_, {ok, undefined}) -> ok end
                 }
             ],
@@ -186,58 +186,27 @@ get_qos_summary_test(Config) ->
             setup_fun = fun() -> #{qos => QosEntryId, guid =>Guid} end,
             scenario_templates = [
                 #scenario_template{
-                    name = <<"Get effective QoS using rest endpoint">>,
+                    name = <<"Get QoS summary using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = prepare_rest_args_fun(get_effective),
-                    validate_result_fun = get_qos_summary_validate_rest_result_fun()
+                    prepare_args_fun = prepare_args_fun_rest(qos_summary),
+                    validate_result_fun = validate_result_fun_rest(qos_summary)
                 },
                 #scenario_template{
-                    name = <<"Get effective QoS using gs endpoint">>,
+                    name = <<"Get QoS summary using gs endpoint">>,
                     type = gs,
-                    prepare_args_fun = prepare_gs_args_fun(get_effective),
-                    validate_result_fun = get_qos_summary_validate_gs_result_fun()
+                    prepare_args_fun = prepare_args_fun_gs(qos_summary),
+                    validate_result_fun = validate_result_fun_gs(qos_summary)
                 }
             ],
             data_spec = undefined
         }
     ])),
     ok.
-    
 
 
-create_verify_fun(Config) ->
-    [P2, P1] = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
-    fun (expected_success, #api_test_ctx{data = Data, env = #{guid := Guid, qos := QosEntryId}}) ->
-            Uuid = file_id:guid_to_uuid(Guid),
-            ReplicasNum = maps:get(<<"replicasNum">>, Data, 1),
-            Expression = maps:get(<<"expression">>, Data),
-            ExpressionRpn = qos_expression:ensure_rpn(Expression),
-            {ok, EntryP2} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
-            {ok, EntryP1} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
-            ?assertEqual(EntryP1#qos_entry{traverse_reqs = #{}}, EntryP2#qos_entry{traverse_reqs = #{}}),
-            ?assertMatch(#qos_entry{file_uuid = Uuid, expression = ExpressionRpn, replicas_num = ReplicasNum}, EntryP1),
-            true;
-        (expected_failure, #api_test_ctx{env = #{guid := Guid}}) ->
-            ?assertMatch({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P1, SessIdP1, {guid, Guid})),
-            ?assertMatch({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P2, SessIdP2, {guid, Guid})),
-            true
-    end.
-
-delete_verify_fun(Config) ->
-    [P2, P1] = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
-    fun (expected_success, #api_test_ctx{env = #{qos := QosEntryId}}) -> 
-            ?assertEqual({error, not_found}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
-            ?assertEqual({error, not_found}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
-            true;
-        (expected_failure, #api_test_ctx{env = #{qos := QosEntryId}}) ->
-            ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
-            ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
-            true
-    end.
+%%%===================================================================
+%%% Setup functions
+%%%===================================================================
 
 setup_fun(Config, Guid) ->
     fun() ->
@@ -257,7 +226,12 @@ setup_fun(Config, Guid) ->
         }
     end.
 
-prepare_rest_args_fun(create) ->
+
+%%%===================================================================
+%%% Prepare args functions
+%%%===================================================================
+
+prepare_args_fun_rest(create) ->
     fun(#api_test_ctx{data = Data, env = #{guid := Guid}}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         Data1 = case maps:get(<<"fileId">>, Data) of
@@ -271,7 +245,8 @@ prepare_rest_args_fun(create) ->
             headers = #{<<"content-type">> => <<"application/json">>}
         } 
     end;
-prepare_rest_args_fun(get_effective) ->
+
+prepare_args_fun_rest(qos_summary) ->
     fun(#api_test_ctx{env = #{guid := Guid}}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         #rest_args{
@@ -279,13 +254,17 @@ prepare_rest_args_fun(get_effective) ->
             path = <<"data/", ObjectId/binary, "/qos_summary">>
         } 
     end;
-prepare_rest_args_fun(Method) ->
-    fun(#api_test_ctx{env = #{qos := QosEntryId}}) -> #rest_args{
-        method = Method,
-        path = <<"qos_entry/", QosEntryId/binary>>
-    } end.
 
-prepare_gs_args_fun(create) ->
+prepare_args_fun_rest(Method) ->
+    fun(#api_test_ctx{env = #{qos := QosEntryId}}) -> 
+        #rest_args{
+            method = Method,
+            path = <<"qos_entry/", QosEntryId/binary>>
+        } 
+    end.
+
+
+prepare_args_fun_gs(create) ->
     fun(#api_test_ctx{data = Data, env = #{guid := Guid}}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         Data1 = case maps:get(<<"fileId">>, Data) of
@@ -298,31 +277,36 @@ prepare_gs_args_fun(create) ->
             data = Data1
         } 
     end;
-prepare_gs_args_fun(get_effective) ->
-    fun(#api_test_ctx{env = #{guid := Guid}}) -> #gs_args{
-        operation = get,
-        gri = #gri{type = op_file, id = Guid, aspect = file_qos_summary, scope = private}
-    } end;
-prepare_gs_args_fun(Method) ->
-    fun(#api_test_ctx{env = #{qos := QosEntryId}}) -> #gs_args{
-        operation = Method,
-        gri = #gri{type = op_qos, id = QosEntryId, aspect = instance, scope = private}
-    } end.
 
-create_validate_rest_result_fun() ->
+prepare_args_fun_gs(qos_summary) ->
+    fun(#api_test_ctx{env = #{guid := Guid}}) -> 
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = Guid, aspect = file_qos_summary, scope = private}
+        } 
+    end;
+
+prepare_args_fun_gs(Method) ->
+    fun(#api_test_ctx{env = #{qos := QosEntryId}}) -> 
+        #gs_args{
+            operation = Method,
+            gri = #gri{type = op_qos, id = QosEntryId, aspect = instance, scope = private}
+        } 
+    end.
+
+
+%%%===================================================================
+%%% Validate result functions
+%%%===================================================================
+
+validate_result_fun_rest(create) ->
     fun(#api_test_ctx{env = Env} = ApiTestCtx, {ok, RespCode, RespBody}) ->
         ?assertEqual(201, RespCode),
         QosEntryId = maps:get(<<"qosEntryId">>, RespBody),
         {ok, ApiTestCtx#api_test_ctx{env = Env#{qos => QosEntryId}}}
-    end.
+    end;
 
-create_validate_gs_result_fun() ->
-    fun(#api_test_ctx{env = Env} = ApiTestCtx, {ok, Result}) ->
-        #gri{id = QosEntryId} = ?assertMatch(#gri{type = op_qos}, gri:deserialize(maps:get(<<"gri">>, Result))),
-        {ok, ApiTestCtx#api_test_ctx{env = Env#{qos => QosEntryId}}}
-    end.
-
-get_validate_rest_result_fun() ->
+validate_result_fun_rest(get) ->
     fun(#api_test_ctx{env = Env}, {ok, RespCode, RespBody}) ->
         #{
             guid := Guid,
@@ -337,9 +321,23 @@ get_validate_rest_result_fun() ->
         ?assertEqual(ReplicasNum, maps:get(<<"replicasNum">>, RespBody)),
         ?assertEqual(QosEntryId, maps:get(<<"qosEntryId">>, RespBody)),
         ok
+    end;
+
+validate_result_fun_rest(qos_summary) ->
+    fun(#api_test_ctx{env = #{qos := QosEntryId}}, {ok, RespCode, RespBody}) ->
+        ?assertEqual(200, RespCode),
+        ?assertMatch(#{<<"entries">> := #{QosEntryId := <<"impossible">>}, <<"fulfilled">> := <<"impossible">>}, RespBody),
+        ok
     end.
 
-get_validate_gs_result_fun() ->
+
+validate_result_fun_gs(create) ->
+    fun(#api_test_ctx{env = Env} = ApiTestCtx, {ok, Result}) ->
+        #gri{id = QosEntryId} = ?assertMatch(#gri{type = op_qos}, gri:deserialize(maps:get(<<"gri">>, Result))),
+        {ok, ApiTestCtx#api_test_ctx{env = Env#{qos => QosEntryId}}}
+    end;
+
+validate_result_fun_gs(get) ->
     fun(#api_test_ctx{env = Env}, {ok, Result}) ->
         #{
             guid := Guid,
@@ -352,26 +350,57 @@ get_validate_gs_result_fun() ->
         ?assertEqual(ReplicasNum, maps:get(<<"replicasNum">>, Result)),
         ?assertMatch(#gri{type = op_qos, id = QosEntryId}, gri:deserialize(maps:get(<<"gri">>, Result))),
         ok
-    end.
+    end;
 
-get_qos_summary_validate_rest_result_fun() ->
-    fun(#api_test_ctx{env = #{qos := QosEntryId}}, {ok, RespCode, RespBody}) ->
-        ?assertEqual(200, RespCode),
-        ?assertMatch(#{<<"entries">> := #{QosEntryId := false}, <<"fulfilled">> := false}, RespBody),
-        ok
-    end.
-
-get_qos_summary_validate_gs_result_fun() ->
+validate_result_fun_gs(qos_summary) ->
     fun(#api_test_ctx{env = #{qos := QosEntryId}}, {ok, Result}) ->
-        ?assertMatch(#{<<"entries">> := #{QosEntryId := false}, <<"fulfilled">> := false}, Result),
+        ?assertMatch(#{<<"entries">> := #{QosEntryId := <<"impossible">>}, <<"fulfilled">> := <<"impossible">>}, Result),
         ok
+    end.
+
+
+%%%===================================================================
+%%% Verify env functions
+%%%===================================================================
+
+verify_fun(Config, create) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+    fun (expected_success, #api_test_ctx{data = Data, env = #{guid := Guid, qos := QosEntryId}}) ->
+        Uuid = file_id:guid_to_uuid(Guid),
+        ReplicasNum = maps:get(<<"replicasNum">>, Data, 1),
+        Expression = maps:get(<<"expression">>, Data),
+        ExpressionRpn = qos_expression:ensure_rpn(Expression),
+        {ok, EntryP2} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
+        {ok, EntryP1} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
+        ?assertEqual(EntryP1#qos_entry{traverse_reqs = #{}}, EntryP2#qos_entry{traverse_reqs = #{}}),
+        ?assertMatch(#qos_entry{file_uuid = Uuid, expression = ExpressionRpn, replicas_num = ReplicasNum}, EntryP1),
+        true;
+        (expected_failure, #api_test_ctx{env = #{guid := Guid}}) ->
+            ?assertMatch({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P1, SessIdP1, {guid, Guid})),
+            ?assertMatch({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P2, SessIdP2, {guid, Guid})),
+            true
+    end;
+
+verify_fun(Config, delete) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+    fun (expected_success, #api_test_ctx{env = #{qos := QosEntryId}}) ->
+        ?assertEqual({error, not_found}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
+        ?assertEqual({error, not_found}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
+        true;
+        (expected_failure, #api_test_ctx{env = #{qos := QosEntryId}}) ->
+            ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
+            ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
+            true
     end.
 
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
-
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
