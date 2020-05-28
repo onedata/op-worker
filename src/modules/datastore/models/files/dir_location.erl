@@ -15,7 +15,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([mark_dir_created_on_storage/2, mark_dir_created_on_storage/3,
+-export([mark_dir_created_on_storage/1, mark_dir_synced_from_storage/2,
     mark_deleted_from_storage/1,
     is_storage_file_created/1, get_synced_gid/1, get/1,
     delete/1]).
@@ -35,24 +35,24 @@
 %%% API
 %%%===================================================================
 
--spec mark_dir_created_on_storage(key(), storage:id()) -> {ok | error, term()}.
-mark_dir_created_on_storage(FileUuid, StorageId) ->
-    mark_dir_created_on_storage(FileUuid, StorageId, undefined).
+-spec mark_dir_created_on_storage(key()) -> {ok | error, term()}.
+mark_dir_created_on_storage(FileUuid) ->
+    Diff = fun(DirLocation) ->
+        {ok, DirLocation#dir_location{storage_file_created = true}}
+    end,
+    ?extract_ok(datastore_model:update(?CTX, FileUuid, Diff, Diff(#dir_location{}))).
 
--spec mark_dir_created_on_storage(key(), storage:id(), luma:gid() | undefined) ->
-    ok |{error, term()}.
-mark_dir_created_on_storage(FileUuid, StorageId, SyncedGid) ->
-    Default = #dir_location{
-        storage_file_created = true,
-        storage_id = StorageId,
-        synced_gid = SyncedGid
+-spec mark_dir_synced_from_storage(key(), luma:gid() | undefined) ->
+    ok | {error, term()}.
+mark_dir_synced_from_storage(FileUuid, SyncedGid) ->
+    Doc = #document{
+        key = FileUuid,
+        value = #dir_location{
+            storage_file_created = true,
+            synced_gid = SyncedGid
+        }
     },
-    ?extract_ok(datastore_model:update(?CTX, FileUuid, fun(DirLocation) ->
-        {ok, DirLocation#dir_location{
-            storage_file_created = true, 
-            storage_id = StorageId
-        }}
-    end, Default)).
+    ?extract_ok(datastore_model:create(?CTX, Doc)).
 
 
 -spec mark_deleted_from_storage(key()) -> ok | {error, term()}.
@@ -124,7 +124,6 @@ get_record_struct(1) ->
 get_record_struct(2) ->
     {record, [
         {storage_file_created, boolean},
-        {storage_id, string},
         {synced_gid, integer}
     ]}.
 
@@ -136,4 +135,4 @@ get_record_struct(2) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, StorageFileCreated}) ->
-    {2, {?MODULE, StorageFileCreated, undefined, undefined}}.
+    {2, {?MODULE, StorageFileCreated, undefined}}.

@@ -61,8 +61,8 @@ new(OnedataUserMap = #{<<"mappingScheme">> := ?IDP_USER_SCHEME}) ->
     {ok, UserId} = provider_logic:map_idp_user_to_onedata(Idp, SubjectId),
     #luma_onedata_user{
         onedata_user_id = UserId,
-        idp = maps:get(<<"idp">>, OnedataUserMap),
-        subject_id = maps:get(<<"subjectId">>, OnedataUserMap)
+        idp = Idp,
+        subject_id = SubjectId
     };
 new(UserId) when is_binary(UserId) ->
     #luma_onedata_user{onedata_user_id = UserId}.

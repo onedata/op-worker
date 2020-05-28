@@ -131,7 +131,7 @@
 %%% It is possible that synced files have different GIDs. We do not try
 %%% to map them to onedata groups model as it's not compatible with POSIX
 %%% groups model.
-%%% It is encouraged that admin of the legacy storage that it to be synced
+%%% It is encouraged that admin of the legacy storage that is to be synced
 %%% should ensure that the file structure is compliant with Onedata model
 %%% (all files in the space should have the same group owner).
 %%% If such "preparation" is not performed we must accept that even if

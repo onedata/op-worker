@@ -61,8 +61,8 @@ new(OnedataGroupMap = #{<<"mappingScheme">> := ?IDP_ENTITLEMENT_SCHEME}) ->
     {ok, GroupId} = provider_logic:map_idp_group_to_onedata(Idp, IdpEntitlement),
     #luma_onedata_group{
         onedata_group_id = GroupId,
-        idp = maps:get(<<"idp">>, OnedataGroupMap),
-        idp_entitlement = maps:get(<<"idpEntitlement">>, OnedataGroupMap)
+        idp = Idp,
+        idp_entitlement = IdpEntitlement
     };
 new(GroupId) when is_binary(GroupId) ->
     #luma_onedata_group{onedata_group_id = GroupId}.

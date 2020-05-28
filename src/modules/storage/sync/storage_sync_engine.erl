@@ -542,7 +542,6 @@ create_location(FileUuid, StorageFileCtx, OwnerId) ->
 
 -spec create_dir_location(file_meta:uuid(), storage_file_ctx:ctx()) -> {ok, storage_file_ctx:ctx()}.
 create_dir_location(FileUuid, StorageFileCtx) ->
-    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
     Helper = storage:get_helper(Storage),
     {SyncedGid, StorageFileCtx4} = case helper:is_posix_compatible(Helper) of
@@ -552,7 +551,7 @@ create_dir_location(FileUuid, StorageFileCtx) ->
         false ->
             {undefined, StorageFileCtx2}
     end,
-    ok = dir_location:mark_dir_created_on_storage(FileUuid, StorageId, SyncedGid),
+    ok = dir_location:mark_dir_synced_from_storage(FileUuid, SyncedGid),
     {ok, StorageFileCtx4}.
 
 

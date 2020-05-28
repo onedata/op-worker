@@ -19,7 +19,7 @@
 %%%                  for virtual SpaceOwner
 %%%  * display_gid - this field is used as gid field in luma:display_credentials()
 %%%                  for ALL users in given space
-
+%%%
 %%% For more info please read the docs of luma.erl and
 %%% luma_spaces_defaults.erl modules.
 %%% @end

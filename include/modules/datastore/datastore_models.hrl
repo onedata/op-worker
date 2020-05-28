@@ -546,7 +546,10 @@
 %% Model for storing dir's location data
 -record(dir_location, {
     storage_file_created = false :: boolean(),
-    storage_id :: undefined | storage:id(),
+    % synced_gid field is set by storage_sync, only on POSIX-compatible storages.
+    % It is used to override display gid, only in
+    % the syncing provider, with the gid that file
+    % belongs to on synced storage.
     synced_gid :: undefined | luma:gid()
 }).
 

@@ -385,12 +385,11 @@ mkdir_and_maybe_chown(UserCtx, FileCtx, Mode) ->
     {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
     Result = case storage_driver:mkdir(SDHandle, Mode, false) of
         ok ->
-            {StorageId, FileCtx4} = file_ctx:get_storage_id(FileCtx3),
-            case dir_location:mark_dir_created_on_storage(FileUuid, StorageId) of
-                ok -> {ok, FileCtx4};
+            case dir_location:mark_dir_created_on_storage(FileUuid) of
+                ok -> {ok, FileCtx3};
                 % helpers on ceph and s3 always return ok on mkdir operation
                 % so we have to handle situation when doc is already in db
-                {error, already_exists} -> {ok, FileCtx4}
+                {error, already_exists} -> {ok, FileCtx3}
             end;
         {error, ?EEXIST} ->
             {ok, FileCtx3};
@@ -519,6 +518,5 @@ mark_parent_dirs_created_on_storage([]) ->
     ok;
 mark_parent_dirs_created_on_storage([DirCtx | RestCtxs]) ->
     Uuid = file_ctx:get_uuid_const(DirCtx),
-    {StorageId, _} = file_ctx:get_storage_id(DirCtx),
-    dir_location:mark_dir_created_on_storage(Uuid, StorageId),
+    dir_location:mark_dir_created_on_storage(Uuid),
     mark_parent_dirs_created_on_storage(RestCtxs).
