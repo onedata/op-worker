@@ -106,7 +106,7 @@ create_file_replication(Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = create_setup_file_replication_env(P1, P2, ?USER_IN_SPACE_2, Config),
+            setup_fun = create_setup_file_replication_env(replication, P1, P2, ?USER_IN_SPACE_2, Config),
             verify_fun = create_verify_transfer_env(replication, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
@@ -143,7 +143,7 @@ create_file_replication(Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = create_setup_file_replication_env(P1, P2, ?USER_IN_SPACE_2, Config),
+            setup_fun = create_setup_file_replication_env(replication, P1, P2, ?USER_IN_SPACE_2, Config),
             verify_fun = create_verify_transfer_env(replication, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
@@ -182,77 +182,50 @@ create_file_replication(Config) ->
     ])).
 
 
-create_setup_file_replication_env(SrcNode, DstNode, UserId, Config) ->
+create_setup_file_replication_env(TransferType, SrcNode, DstNode, UserId, Config) ->
     fun() ->
         SessId1 = ?SESS_ID(UserId, SrcNode, Config),
         SessId2 = ?SESS_ID(UserId, DstNode, Config),
-
-        FilesToBeLeftAlone = lists:map(fun(_) ->
-            create_file(SrcNode, SessId1, filename:join(["/", ?SPACE_2]))
-        end, lists:seq(1, 3)),
 
         RootFileType = api_test_utils:randomly_choose_file_type_for_test(false),
         RootFilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
         {ok, RootFileGuid} = api_test_utils:create_file(
             RootFileType, SrcNode, SessId1, RootFilePath, 8#777
         ),
-
-        BytesNum = 20,
-        {Files, ExpTransfer} = case RootFileType of
-            <<"file">> ->
-                fill_file_with_dummy_data(SrcNode, SessId1, RootFileGuid, BytesNum),
-                Guids = [RootFileGuid],
-                TransferStats = #{
-                    files_to_process => 1,
-                    files_processed => 1,
-                    files_replicated => 1,
-                    bytes_replicated => BytesNum
-                },
-                {Guids, TransferStats};
-            <<"dir">> ->
-                SubFilesNum = 5,
-                SubFilesGuids = lists:map(fun(_) ->
-                    FilePath = filename:join([RootFilePath, ?RANDOM_FILE_NAME()]),
-                    {ok, FileGuid} = api_test_utils:create_file(
-                        <<"file">>, SrcNode, SessId1, FilePath, 8#777
-                    ),
-                    fill_file_with_dummy_data(SrcNode, SessId1, FileGuid, BytesNum),
-                    FileGuid
-                end, lists:seq(1, SubFilesNum)),
-                TransferStats = #{
-                    files_to_process => SubFilesNum + 1,
-                    files_processed => SubFilesNum + 1,
-                    files_replicated => SubFilesNum,
-                    bytes_replicated => SubFilesNum * BytesNum
-
-                },
-                {SubFilesGuids, TransferStats}
-        end,
-
-        lists:foreach(fun(Guid) ->
-            api_test_utils:wait_for_file_sync(DstNode, SessId2, Guid)
-        end, Files),
-
         {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
+
+        FilesToTransfer = case RootFileType of
+            <<"file">> ->
+                fill_file_with_dummy_data(SrcNode, SessId1, RootFileGuid, ?BYTES_NUM),
+                [RootFileGuid];
+            <<"dir">> ->
+                lists:map(fun(_) ->
+                    create_file(SrcNode, SessId1, RootFilePath)
+                end, lists:seq(1, 5))
+        end,
+        OtherFiles = [create_file(SrcNode, SessId1, filename:join(["/", ?SPACE_2]))],
+
+        sync_files_between_nodes(
+            TransferType, SrcNode, SessId1, DstNode, SessId2,
+            OtherFiles ++ FilesToTransfer
+        ),
+
+        ExpTransfer = get_exp_transfer_stats(
+            TransferType, RootFileType, SrcNode, DstNode, length(FilesToTransfer)
+        ),
+
         #{
             root_file_guid => RootFileGuid,
-            root_file_cdmi_id => RootFileObjectId,
-            root_file_type => RootFileType,
             root_file_path => RootFilePath,
+            root_file_cdmi_id => RootFileObjectId,
             exp_transfer => ExpTransfer#{
                 space_id => ?SPACE_2,
                 file_uuid => file_id:guid_to_uuid(RootFileGuid),
                 path => RootFilePath,
-                replication_status => completed,
-                eviction_status => skipped,
-                replicating_provider => transfers_test_utils:provider_id(DstNode),
-                evicting_provider => undefined,
-                failed_files => 0,
-                files_evicted => 0
+                failed_files => 0
             },
-            files_to_transfer => Files,
-            other_files => FilesToBeLeftAlone,
-            file_size => BytesNum
+            files_to_transfer => FilesToTransfer,
+            other_files => OtherFiles
         }
     end.
 
@@ -454,6 +427,71 @@ create_view_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPr
     ])).
 
 
+%% @private
+create_setup_view_transfer_env(TransferType, SrcNode, DstNode, UserId, Config) ->
+    fun() ->
+        SessId1 = ?SESS_ID(UserId, SrcNode, Config),
+        SessId2 = ?SESS_ID(UserId, DstNode, Config),
+
+        FilesToTransferNum = 3,
+        RootDirPath = filename:join(["/", ?SPACE_2]),
+        {ViewName, Xattr} = create_view(TransferType, SrcNode, DstNode),
+
+        FilesToTransfer = lists:map(fun(_) ->
+            FileGuid = create_file(SrcNode, SessId1, RootDirPath),
+            ?assertMatch(ok, lfm_proxy:set_xattr(SrcNode, SessId1, {guid, FileGuid}, Xattr)),
+            FileGuid
+        end, lists:seq(1, FilesToTransferNum)),
+
+        OtherFiles = [create_file(SrcNode, SessId1, RootDirPath)],
+
+        sync_files_between_nodes(
+            TransferType, SrcNode, SessId1, DstNode, SessId2,
+            OtherFiles ++ FilesToTransfer
+        ),
+
+        ObjectIds = api_test_utils:guids_to_object_ids(FilesToTransfer),
+        QueryViewParams = [{key, Xattr#xattr.value}],
+
+        case TransferType of
+            replication ->
+                % Wait until FilesToTransfer are all indexed by view on DstNode.
+                % Otherwise some of them could be omitted from replication.
+                ?assertViewQuery(ObjectIds, DstNode, ?SPACE_2, ViewName,  QueryViewParams);
+            eviction ->
+                % Wait until file_distribution containing entries for both nodes
+                % and all FilesToTransfer are indexed by view on SrcNode.
+                % Otherwise some of them could be omitted from eviction (if data
+                % replicas don't exist on other providers it is skipped).
+                assert_distribution(
+                    SrcNode, SessId1, OtherFiles ++ FilesToTransfer,
+                    [{SrcNode, ?BYTES_NUM}, {DstNode, ?BYTES_NUM}]
+                ),
+                ?assertViewQuery(ObjectIds, SrcNode, ?SPACE_2, ViewName,  QueryViewParams);
+            migration ->
+                % Wait until FilesToTransfer are all indexed by view on SrcNode and DstNode.
+                % Otherwise some of them could be omitted from replication/eviction.
+                ?assertViewQuery(ObjectIds, SrcNode, ?SPACE_2, ViewName,  QueryViewParams),
+                ?assertViewQuery(ObjectIds, DstNode, ?SPACE_2, ViewName,  QueryViewParams)
+        end,
+        ExpTransfer = get_exp_transfer_stats(
+            TransferType, <<"dir">>, SrcNode, DstNode, length(FilesToTransfer)
+        ),
+
+        #{
+            view_name => ViewName,
+            exp_transfer => ExpTransfer#{
+                space_id => ?SPACE_2,
+                file_uuid => fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_2),
+                path => RootDirPath,
+                failed_files => 0
+            },
+            files_to_transfer => FilesToTransfer,
+            other_files => OtherFiles
+        }
+    end.
+
+
 %%%===================================================================
 %%% Common transfer helper functions
 %%%===================================================================
@@ -482,92 +520,6 @@ add_file_id_bad_values(DataSpec, SpaceId, ShareId) ->
             #data_spec{bad_values = BadFileIdValues};
         #data_spec{bad_values = BadValues} ->
             DataSpec#data_spec{bad_values = BadFileIdValues ++ BadValues}
-    end.
-
-
-%% @private
-create_setup_view_transfer_env(Type, SrcNode, DstNode, UserId, Config) ->
-    fun() ->
-        SessId1 = ?SESS_ID(UserId, SrcNode, Config),
-        SessId2 = ?SESS_ID(UserId, DstNode, Config),
-
-        {ViewName, Xattr} = create_view(Type, SrcNode, DstNode),
-        RootDirPath = filename:join(["/", ?SPACE_2]),
-
-        FilesToBeLeftAlone = lists:map(fun(_) ->
-            create_file(SrcNode, SessId1, RootDirPath)
-        end, lists:seq(1, 3)),
-
-        FilesToTransferNum = 3,
-        FilesToTransfer = lists:map(fun(_) ->
-            FileGuid = create_file(SrcNode, SessId1, RootDirPath),
-            ?assertMatch(ok, lfm_proxy:set_xattr(SrcNode, SessId1, {guid, FileGuid}, Xattr)),
-            FileGuid
-        end, lists:seq(1, FilesToTransferNum)),
-
-        sync_files_between_nodes(Type, SrcNode, SessId1, DstNode, SessId2, FilesToTransfer),
-
-        ObjectIds = api_test_utils:guids_to_object_ids(FilesToTransfer),
-        QueryViewParams = [{key, Xattr#xattr.value}],
-
-        ExpTransfer = case Type of
-            replication ->
-                ?assertViewQuery(ObjectIds, DstNode, ?SPACE_2, ViewName,  QueryViewParams),
-
-                #{
-                    replication_status => completed,
-                    eviction_status => skipped,
-                    replicating_provider => transfers_test_utils:provider_id(DstNode),
-                    evicting_provider => undefined,
-                    files_to_process => 1 + FilesToTransferNum,
-                    files_processed => 1 + FilesToTransferNum,
-                    files_replicated => FilesToTransferNum,
-                    bytes_replicated => FilesToTransferNum * ?BYTES_NUM,
-                    files_evicted => 0
-                };
-            eviction ->
-                ?assertViewQuery(ObjectIds, SrcNode, ?SPACE_2, ViewName,  QueryViewParams),
-                timer:sleep(timer:seconds(5)),
-
-                #{
-                    replication_status => skipped,
-                    eviction_status => completed,
-                    replicating_provider => undefined,
-                    evicting_provider => transfers_test_utils:provider_id(SrcNode),
-                    files_to_process => 1 + FilesToTransferNum,
-                    files_processed => 1 + FilesToTransferNum,
-                    files_replicated => 0,
-                    bytes_replicated => 0,
-                    files_evicted => FilesToTransferNum
-                };
-            migration ->
-                ?assertViewQuery(ObjectIds, SrcNode, ?SPACE_2, ViewName,  QueryViewParams),
-                ?assertViewQuery(ObjectIds, DstNode, ?SPACE_2, ViewName,  QueryViewParams),
-
-                #{
-                    replication_status => completed,
-                    eviction_status => completed,
-                    replicating_provider => transfers_test_utils:provider_id(DstNode),
-                    evicting_provider => transfers_test_utils:provider_id(SrcNode),
-                    files_to_process => 2 * (1 + FilesToTransferNum),
-                    files_processed => 2 * (1 + FilesToTransferNum),
-                    files_replicated => FilesToTransferNum,
-                    bytes_replicated => FilesToTransferNum * ?BYTES_NUM,
-                    files_evicted => FilesToTransferNum
-                }
-        end,
-
-        #{
-            view_name => ViewName,
-            exp_transfer => ExpTransfer#{
-                space_id => ?SPACE_2,
-                file_uuid => fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_2),
-                path => RootDirPath,
-                failed_files => 0
-            },
-            files_to_transfer => FilesToTransfer,
-            other_files => FilesToBeLeftAlone
-        }
     end.
 
 
@@ -650,6 +602,81 @@ create_prepare_replica_gs_args_fun(Type, Scope) ->
             data = Data3
         }
     end.
+
+
+%% @private
+get_exp_transfer_stats(replication, <<"file">>, _SrcNode, DstNode, _FilesToTransferNum) ->
+    #{
+        replication_status => completed,
+        eviction_status => skipped,
+        replicating_provider => transfers_test_utils:provider_id(DstNode),
+        evicting_provider => undefined,
+        files_to_process => 1,
+        files_processed => 1,
+        files_replicated => 1,
+        bytes_replicated => ?BYTES_NUM,
+        files_evicted => 0
+    };
+get_exp_transfer_stats(eviction, <<"file">>, SrcNode, _DstNode, _FilesToTransferNum) ->
+    #{
+        replication_status => skipped,
+        eviction_status => completed,
+        replicating_provider => undefined,
+        evicting_provider => transfers_test_utils:provider_id(SrcNode),
+        files_to_process => 1,
+        files_processed => 1,
+        files_replicated => 0,
+        bytes_replicated => 0,
+        files_evicted => 1
+    };
+get_exp_transfer_stats(migration, <<"file">>, SrcNode, DstNode, _FilesToTransferNum) ->
+    #{
+        replication_status => completed,
+        eviction_status => completed,
+        replicating_provider => transfers_test_utils:provider_id(DstNode),
+        evicting_provider => transfers_test_utils:provider_id(SrcNode),
+        files_to_process => 2,
+        files_processed => 2,
+        files_replicated => 1,
+        bytes_replicated => ?BYTES_NUM,
+        files_evicted => 1
+    };
+get_exp_transfer_stats(replication, <<"dir">>, _SrcNode, DstNode, FilesToTransferNum) ->
+    #{
+        replication_status => completed,
+        eviction_status => skipped,
+        replicating_provider => transfers_test_utils:provider_id(DstNode),
+        evicting_provider => undefined,
+        files_to_process => 1 + FilesToTransferNum,
+        files_processed => 1 + FilesToTransferNum,
+        files_replicated => FilesToTransferNum,
+        bytes_replicated => FilesToTransferNum * ?BYTES_NUM,
+        files_evicted => 0
+    };
+get_exp_transfer_stats(eviction, <<"dir">>, SrcNode, _DstNode, FilesToTransferNum) ->
+    #{
+        replication_status => skipped,
+        eviction_status => completed,
+        replicating_provider => undefined,
+        evicting_provider => transfers_test_utils:provider_id(SrcNode),
+        files_to_process => 1 + FilesToTransferNum,
+        files_processed => 1 + FilesToTransferNum,
+        files_replicated => 0,
+        bytes_replicated => 0,
+        files_evicted => FilesToTransferNum
+    };
+get_exp_transfer_stats(migration, <<"dir">>, SrcNode, DstNode, FilesToTransferNum) ->
+    #{
+        replication_status => completed,
+        eviction_status => completed,
+        replicating_provider => transfers_test_utils:provider_id(DstNode),
+        evicting_provider => transfers_test_utils:provider_id(SrcNode),
+        files_to_process => 2 * (1 + FilesToTransferNum),
+        files_processed => 2 * (1 + FilesToTransferNum),
+        files_replicated => FilesToTransferNum,
+        bytes_replicated => FilesToTransferNum * ?BYTES_NUM,
+        files_evicted => FilesToTransferNum
+    }.
 
 
 %% @private
@@ -748,14 +775,16 @@ create_verify_eviction_env(Node, UserId, SrcProvider, DstProvider, Config) ->
 
     fun
         (expected_failure, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
-            assert_distribution(Node, SessId, OtherFiles, [{SrcProvider, ?BYTES_NUM}]),
             assert_distribution(
-                Node, SessId, FilesToTransfer,
+                Node, SessId, OtherFiles ++ FilesToTransfer,
                 [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
             ),
             true;
         (expected_success, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
-            assert_distribution(Node, SessId, OtherFiles, [{SrcProvider, ?BYTES_NUM}]),
+            assert_distribution(
+                Node, SessId, OtherFiles,
+                [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
+            ),
             assert_distribution(
                 Node, SessId, FilesToTransfer,
                 [{SrcProvider, 0}, {DstProvider, ?BYTES_NUM}]
