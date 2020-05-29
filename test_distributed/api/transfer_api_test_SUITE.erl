@@ -25,6 +25,11 @@
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("inets/include/httpd.hrl").
+
+
+%% httpd callback
+-export([do/1]).
 
 -export([
     all/0,
@@ -36,7 +41,8 @@
     create_file_replication/1,
 
     create_view_replication/1,
-    create_view_eviction/1
+    create_view_eviction/1,
+    create_view_migration/1
 ]).
 
 all() ->
@@ -44,18 +50,13 @@ all() ->
         create_file_replication,
 
         create_view_replication,
-        create_view_eviction
+        create_view_eviction,
+        create_view_migration
     ]).
 
 
 -define(TRANSFER_TYPES, [<<"replication">>, <<"eviction">>, <<"migration">>]).
 -define(DATA_SOURCE_TYPES, [<<"file">>, <<"view">>]).
-
--define(FILE_DISTRIBUTION(__FILE_SIZE, __PROVIDER), #{
-    <<"blocks">> => [[0, __FILE_SIZE]],
-    <<"providerId">> => transfers_test_utils:provider_id(__PROVIDER),
-    <<"totalBlocksSize">> => __FILE_SIZE
-}).
 
 -define(CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(__CONFIG), #client_spec{
     correct = [?USER_IN_BOTH_SPACES_AUTH],
@@ -81,6 +82,12 @@ all() ->
 
 -define(BYTES_NUM, 20).
 
+-define(HTTP_SERVER_PORT, 8080).
+-define(TRANSFER_MONITORING_PATH, "/transfer_monitoring").
+
+-define(TEST_PROCESS, test_process).
+-define(CALLBACK_CALL_TIME(__TIME), {callback_call_time, __TIME}).
+
 
 %%%===================================================================
 %%% Replication test functions
@@ -90,6 +97,7 @@ all() ->
 create_file_replication(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
 
+    Callback = get_callback_url(),
     RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION],
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
@@ -120,7 +128,7 @@ create_file_replication(Config) ->
                     <<"dataSourceType">> => [<<"file">>],
                     <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
                     <<"fileId">> => [?PLACEHOLDER],
-                    <<"callback">> => [<<"https://localhost">>]
+                    <<"callback">> => [Callback]
                 },
                 bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
                     {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
@@ -162,7 +170,7 @@ create_file_replication(Config) ->
                 optional = [<<"url">>],
                 correct_values = #{
                     <<"provider_id">> => [?GET_DOMAIN_BIN(P2)],
-                    <<"url">> => [<<"https://localhost">>]
+                    <<"url">> => [Callback]
                 },
                 bad_values = [
                     {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
@@ -257,6 +265,7 @@ create_setup_file_replication_env(SrcNode, DstNode, UserId, Config) ->
 create_view_replication(Config) ->
     [P2, _P1] = ?config(op_worker_nodes, Config),
 
+    Callback = get_callback_url(),
     RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS],
 
     TransferDataSpec = #data_spec{
@@ -272,7 +281,7 @@ create_view_replication(Config) ->
             <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
             <<"spaceId">> => [?SPACE_2],
             <<"viewName">> => [?PLACEHOLDER],
-            <<"callback">> => [<<"https://localhost">>]
+            <<"callback">> => [Callback]
         },
         bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
             {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
@@ -287,7 +296,7 @@ create_view_replication(Config) ->
         correct_values = #{
             <<"provider_id">> => [?GET_DOMAIN_BIN(P2)],
             <<"space_id">> => [?SPACE_2],
-            <<"url">> => [<<"https://localhost">>]
+            <<"url">> => [Callback]
         },
         bad_values = [
             {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
@@ -302,6 +311,7 @@ create_view_replication(Config) ->
 create_view_eviction(Config) ->
     [_P2, P1] = ?config(op_worker_nodes, Config),
 
+    Callback = get_callback_url(),
     RequiredPrivs = [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
 
     TransferDataSpec = #data_spec{
@@ -317,7 +327,7 @@ create_view_eviction(Config) ->
             <<"evictingProviderId">> => [?GET_DOMAIN_BIN(P1)],
             <<"spaceId">> => [?SPACE_2],
             <<"viewName">> => [?PLACEHOLDER],
-            <<"callback">> => [<<"https://localhost">>]
+            <<"callback">> => [Callback]
         },
         bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
             {<<"evictingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"evictingProviderId">>)},
@@ -328,20 +338,70 @@ create_view_eviction(Config) ->
 
     ReplicaDataSpec = #data_spec{
         required = [<<"provider_id">>, <<"space_id">>],
-        optional = [<<"url">>],
         correct_values = #{
             <<"provider_id">> => [?GET_DOMAIN_BIN(P1)],
-            <<"space_id">> => [?SPACE_2],
-            <<"url">> => [<<"https://localhost">>]
+            <<"space_id">> => [?SPACE_2]
         },
         bad_values = [
             {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
-            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"url">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"url">>)}}
+            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
         ]
     },
 
     create_view_transfer(Config, eviction, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+
+
+create_view_migration(Config) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
+
+    Callback = get_callback_url(),
+    RequiredPrivs = [
+        ?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION,
+        ?SPACE_QUERY_VIEWS
+    ],
+
+    TransferDataSpec = #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>,
+            <<"evictingProviderId">>,
+            <<"replicatingProviderId">>,
+            <<"spaceId">>, <<"viewName">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"migration">>],
+            <<"dataSourceType">> => [<<"view">>],
+            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
+            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(P1)],
+            <<"spaceId">> => [?SPACE_2],
+            <<"viewName">> => [?PLACEHOLDER],
+            <<"callback">> => [Callback]
+        },
+        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
+            {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
+            {<<"replicatingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"evictingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"evictingProviderId">>)},
+            {<<"evictingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
+        ]
+    },
+
+    ReplicaDataSpec = #data_spec{
+        required = [<<"provider_id">>, <<"migration_provider_id">>, <<"space_id">>],
+        correct_values = #{
+            <<"migration_provider_id">> => [?GET_DOMAIN_BIN(P2)],
+            <<"provider_id">> => [?GET_DOMAIN_BIN(P1)],
+            <<"space_id">> => [?SPACE_2]
+        },
+        bad_values = [
+            {<<"migration_provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"migration_provider_id">>)}},
+            {<<"migration_provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
+            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
+        ]
+    },
+
+    create_view_transfer(Config, migration, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
 
 
 %% @private
@@ -467,6 +527,7 @@ create_setup_view_transfer_env(Type, SrcNode, DstNode, UserId, Config) ->
                 };
             eviction ->
                 ?assertViewQuery(ObjectIds, SrcNode, ?SPACE_2, ViewName,  QueryViewParams),
+                timer:sleep(timer:seconds(5)),
 
                 #{
                     replication_status => skipped,
@@ -488,8 +549,8 @@ create_setup_view_transfer_env(Type, SrcNode, DstNode, UserId, Config) ->
                     eviction_status => completed,
                     replicating_provider => transfers_test_utils:provider_id(DstNode),
                     evicting_provider => transfers_test_utils:provider_id(SrcNode),
-                    files_to_process => 1 + 2 * FilesToTransferNum,
-                    files_processed => 1 + 2 * FilesToTransferNum,
+                    files_to_process => 2 * (1 + FilesToTransferNum),
+                    files_processed => 2 * (1 + FilesToTransferNum),
                     files_replicated => FilesToTransferNum,
                     bytes_replicated => FilesToTransferNum * ?BYTES_NUM,
                     files_evicted => FilesToTransferNum
@@ -615,17 +676,42 @@ validate_transfer_gs_call_result(TestCtx, Result) ->
 
 %% @private
 validate_transfer_call_result(TransferId, #api_test_ctx{
-    env = #{exp_transfer := ExpTransfer},
     node = TestNode,
-    client = ?USER(UserId)}
-) ->
-    transfers_test_utils:assert_transfer_state(
-        TestNode, TransferId, ExpTransfer#{
-            user_id => UserId,
-            scheduling_provider => transfers_test_utils:provider_id(TestNode)
-        },
-        ?ATTEMPTS
-    ).
+    client = ?USER(UserId),
+    data = Data,
+    env = #{exp_transfer := ExpTransferStats}
+}) ->
+    ExpTransfer = ExpTransferStats#{
+        user_id => UserId,
+        scheduling_provider => transfers_test_utils:provider_id(TestNode)
+    },
+
+    % Await transfer end and assert proper transfer stats
+    transfers_test_utils:assert_transfer_state(TestNode, TransferId, ExpTransfer, ?ATTEMPTS),
+
+    % If callback/url was supplied await feedback about transfer end
+    % and assert that it came right after transfer ended - satisfy predicate:
+    % CallTime - 10 < #transfer.finish_time <= CallTime
+    case maps:is_key(<<"callback">>, Data) orelse maps:is_key(<<"url">>, Data) of
+        true ->
+            receive
+                ?CALLBACK_CALL_TIME(CallTime) ->
+                    ct:pal("ASDASDASDASD"),
+                    transfers_test_utils:assert_transfer_state(
+                        TestNode, TransferId, ExpTransfer#{
+                            finish_time => fun(FinishTime) ->
+                                FinishTime > CallTime - 10 andalso FinishTime =< CallTime
+                            end
+                        },
+                        1
+                    )
+            after 5000 ->
+                ct:pal("Expected callback call never occured"),
+                ?assert(false)
+            end;
+        false ->
+            ok
+    end.
 
 
 %% @private
@@ -726,12 +812,14 @@ init_per_suite(Config) ->
         initializer:mock_auth_manager(NewConfig3, _CheckIfUserIsSupported = true),
         application:start(ssl),
         hackney:start(),
+        start_http_server(),
         NewConfig3
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 
 end_per_suite(Config) ->
+    stop_http_server(),
     hackney:stop(),
     application:stop(ssl),
     initializer:clean_test_users_and_spaces_no_validate(Config),
@@ -746,6 +834,14 @@ init_per_testcase(_Case, Config) ->
     code:add_pathz("/home/cyfrinet/Desktop/develop/op-worker/test_distributed"),
     ct:pal("QWEASD:~p", [code:load_file(transfers_test_utils)]),
 
+    % For http server to send msg about transfer callback call it is necessary
+    % to register test process (every test is carried by different process)
+    case whereis(?TEST_PROCESS) of
+        undefined -> ok;
+        _ -> unregister(?TEST_PROCESS)
+    end,
+    register(?TEST_PROCESS, self()),
+
     lfm_proxy:init(Config).
 
 
@@ -755,8 +851,43 @@ end_per_testcase(_Case, Config) ->
 
 
 %%%===================================================================
+%%% HTTP server used for transfer callback
+%%%===================================================================
+
+
+start_http_server() ->
+    inets:start(),
+    {ok, _} = inets:start(httpd, [
+        {port, ?HTTP_SERVER_PORT},
+        {server_name, "httpd_test"},
+        {server_root, "/tmp"},
+        {document_root, "/tmp"},
+        {modules, [?MODULE]}
+    ]).
+
+
+stop_http_server() ->
+    inets:stop().
+
+
+do(#mod{method = "GET", request_uri = ?TRANSFER_MONITORING_PATH}) ->
+    CallTime = time_utils:system_time_millis() div 1000,
+    ?TEST_PROCESS ! ?CALLBACK_CALL_TIME(CallTime),
+
+    done.
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+get_callback_url() ->
+    {ok, IpAddressBin} = ip_utils:to_binary(initializer:local_ip_v4()),
+    PortBin = integer_to_binary(?HTTP_SERVER_PORT),
+
+    <<"http://", IpAddressBin/binary, ":" , PortBin/binary, ?TRANSFER_MONITORING_PATH>>.
 
 
 %% @private
@@ -838,7 +969,14 @@ create_view(TransferType, SrcNode, DstNode) ->
 %% @private
 assert_distribution(Node, SessId, Files, ExpSizePerProvider) ->
     ExpDistribution = lists:sort(lists:map(fun({Provider, ExpSize}) ->
-        ?FILE_DISTRIBUTION(ExpSize, Provider)
+        #{
+            <<"blocks">> => case ExpSize of
+                0 -> [];
+                _ -> [[0, ExpSize]]
+            end,
+            <<"providerId">> => transfers_test_utils:provider_id(Provider),
+            <<"totalBlocksSize">> => ExpSize
+        }
     end, ExpSizePerProvider)),
 
     FetchDistributionFun = fun(Guid) ->

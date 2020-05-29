@@ -76,7 +76,7 @@ data_spec(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}
             AlwaysRequired#{<<"replicatingProviderId">> => {binary, non_empty}};
         <<"eviction">> ->
             AlwaysRequired#{<<"evictingProviderId">> => {binary, non_empty}};
-        <<"replication">> ->
+        <<"migration">> ->
             AlwaysRequired#{
                 <<"replicatingProviderId">> => {binary, non_empty},
                 <<"evictingProviderId">> => {binary, non_empty}

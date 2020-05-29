@@ -1646,7 +1646,6 @@ init_qos_bounded_cache(Config) ->
     lists:foreach(fun(Result) -> ?assertMatch(ok, Result) end, Results).
 
 
-%% @private
 local_ip_v4() ->
     {ok, Addrs} = inet:getifaddrs(),
     hd([
