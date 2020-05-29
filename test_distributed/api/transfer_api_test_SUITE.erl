@@ -34,13 +34,17 @@
 
 -export([
     create_file_replication/1,
-    create_view_replication/1
+
+    create_view_replication/1,
+    create_view_eviction/1
 ]).
 
 all() ->
     ?ALL([
         create_file_replication,
-        create_view_replication
+
+        create_view_replication,
+        create_view_eviction
     ]).
 
 
@@ -170,100 +174,6 @@ create_file_replication(Config) ->
     ])).
 
 
-create_view_replication(Config) ->
-    [P2, _P1] = ?config(op_worker_nodes, Config),
-
-    RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS],
-
-    TransferDataSpec = #data_spec{
-        required = [
-            <<"type">>, <<"dataSourceType">>,
-            <<"replicatingProviderId">>,
-            <<"spaceId">>, <<"viewName">>
-        ],
-        optional = [<<"callback">>],
-        correct_values = #{
-            <<"type">> => [<<"replication">>],
-            <<"dataSourceType">> => [<<"view">>],
-            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
-            <<"spaceId">> => [?SPACE_2],
-            <<"viewName">> => [?PLACEHOLDER],
-            <<"callback">> => [<<"https://localhost">>]
-        },
-        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
-            {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
-            {<<"replicatingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
-        ]
-    },
-
-    ReplicaDataSpec = #data_spec{
-        required = [<<"provider_id">>, <<"space_id">>],
-        optional = [<<"url">>],
-        correct_values = #{
-            <<"provider_id">> => [?GET_DOMAIN_BIN(P2)],
-            <<"space_id">> => [?SPACE_2],
-            <<"url">> => [<<"https://localhost">>]
-        },
-        bad_values = [
-            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
-            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"url">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"url">>)}}
-        ]
-    },
-
-    create_view_transfer(Config, replication, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
-
-
-create_view_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPrivs) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-
-    set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
-    set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
-
-    ?assert(api_test_runner:run_tests(Config, [
-        #suite_spec{
-            target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = create_setup_view_transfer_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
-            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
-            scenario_templates = [
-                #scenario_template{
-                    name = str_utils:format("Transfer (~p) view using gs transfer api", [Type]),
-                    type = gs,
-                    prepare_args_fun = create_prepare_transfer_create_instance_gs_args_fun(private),
-                    validate_result_fun = fun validate_transfer_gs_call_result/2
-                }
-            ],
-            data_spec = TransferDataSpec
-        },
-
-        %% TEST DEPRECATED REPLICAS ENDPOINTS
-
-        #suite_spec{
-            target_nodes = Providers,
-            client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = create_setup_view_transfer_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
-            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
-            scenario_templates = [
-                #scenario_template{
-                    name = str_utils:format("Transfer (~p) view using /replicas-view/ rest endpoint", [Type]),
-                    type = rest,
-                    prepare_args_fun = create_prepare_replica_rest_args_fun(Type),
-                    validate_result_fun = fun validate_transfer_rest_call_result/2
-                },
-                #scenario_template{
-                    name = str_utils:format("Transfer (~p) view using op_replica gs api", [Type]),
-                    type = gs,
-                    prepare_args_fun = create_prepare_replica_gs_args_fun(Type, private),
-                    validate_result_fun = fun validate_transfer_gs_call_result/2
-                }
-            ],
-            data_spec = ReplicaDataSpec
-        }
-    ])).
-
-
 create_setup_file_replication_env(SrcNode, DstNode, UserId, Config) ->
     fun() ->
         SessId1 = ?SESS_ID(UserId, SrcNode, Config),
@@ -337,6 +247,151 @@ create_setup_file_replication_env(SrcNode, DstNode, UserId, Config) ->
             file_size => BytesNum
         }
     end.
+
+
+%%%===================================================================
+%%% Transfer view test functions
+%%%===================================================================
+
+
+create_view_replication(Config) ->
+    [P2, _P1] = ?config(op_worker_nodes, Config),
+
+    RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS],
+
+    TransferDataSpec = #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>,
+            <<"replicatingProviderId">>,
+            <<"spaceId">>, <<"viewName">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"replication">>],
+            <<"dataSourceType">> => [<<"view">>],
+            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
+            <<"spaceId">> => [?SPACE_2],
+            <<"viewName">> => [?PLACEHOLDER],
+            <<"callback">> => [<<"https://localhost">>]
+        },
+        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
+            {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
+            {<<"replicatingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
+        ]
+    },
+
+    ReplicaDataSpec = #data_spec{
+        required = [<<"provider_id">>, <<"space_id">>],
+        optional = [<<"url">>],
+        correct_values = #{
+            <<"provider_id">> => [?GET_DOMAIN_BIN(P2)],
+            <<"space_id">> => [?SPACE_2],
+            <<"url">> => [<<"https://localhost">>]
+        },
+        bad_values = [
+            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
+            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"url">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"url">>)}}
+        ]
+    },
+
+    create_view_transfer(Config, replication, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+
+
+create_view_eviction(Config) ->
+    [_P2, P1] = ?config(op_worker_nodes, Config),
+
+    RequiredPrivs = [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
+
+    TransferDataSpec = #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>,
+            <<"evictingProviderId">>,
+            <<"spaceId">>, <<"viewName">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"eviction">>],
+            <<"dataSourceType">> => [<<"view">>],
+            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(P1)],
+            <<"spaceId">> => [?SPACE_2],
+            <<"viewName">> => [?PLACEHOLDER],
+            <<"callback">> => [<<"https://localhost">>]
+        },
+        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
+            {<<"evictingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"evictingProviderId">>)},
+            {<<"evictingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
+        ]
+    },
+
+    ReplicaDataSpec = #data_spec{
+        required = [<<"provider_id">>, <<"space_id">>],
+        optional = [<<"url">>],
+        correct_values = #{
+            <<"provider_id">> => [?GET_DOMAIN_BIN(P1)],
+            <<"space_id">> => [?SPACE_2],
+            <<"url">> => [<<"https://localhost">>]
+        },
+        bad_values = [
+            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
+            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"url">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"url">>)}}
+        ]
+    },
+
+    create_view_transfer(Config, eviction, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+
+
+%% @private
+create_view_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPrivs) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+
+    set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
+    set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
+            setup_fun = create_setup_view_transfer_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
+            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = str_utils:format("Transfer (~p) view using gs transfer api", [Type]),
+                    type = gs,
+                    prepare_args_fun = create_prepare_transfer_create_instance_gs_args_fun(private),
+                    validate_result_fun = fun validate_transfer_gs_call_result/2
+                }
+            ],
+            data_spec = TransferDataSpec
+        },
+
+        %% TEST DEPRECATED REPLICAS ENDPOINTS
+
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
+            setup_fun = create_setup_view_transfer_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
+            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = str_utils:format("Transfer (~p) view using /replicas-view/ rest endpoint", [Type]),
+                    type = rest,
+                    prepare_args_fun = create_prepare_replica_rest_args_fun(Type),
+                    validate_result_fun = fun validate_transfer_rest_call_result/2
+                },
+                #scenario_template{
+                    name = str_utils:format("Transfer (~p) view using op_replica gs api", [Type]),
+                    type = gs,
+                    prepare_args_fun = create_prepare_replica_gs_args_fun(Type, private),
+                    validate_result_fun = fun validate_transfer_gs_call_result/2
+                }
+            ],
+            data_spec = ReplicaDataSpec
+        }
+    ])).
 
 
 %%%===================================================================
@@ -529,7 +584,7 @@ create_prepare_replica_gs_args_fun(Type, Scope) ->
             error -> {ValidId, Data0}
         end,
         #gs_args{
-            operation = create,
+            operation = Operation,
             gri = #gri{type = op_replica, id = GriId, aspect = Aspect, scope = Scope},
             data = Data3
         }
@@ -589,11 +644,14 @@ create_verify_replication_env(Node, UserId, SrcProvider, DstProvider, Config) ->
     fun
         (expected_failure, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
             Files = FilesToTransfer ++ OtherFiles,
-            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider], Files),
+            assert_distribution(Node, SessId, Files, [{SrcProvider, ?BYTES_NUM}]),
             true;
         (expected_success, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
-            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider], OtherFiles),
-            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider, DstProvider], FilesToTransfer),
+            assert_distribution(Node, SessId, OtherFiles, [{SrcProvider, ?BYTES_NUM}]),
+            assert_distribution(
+                Node, SessId, FilesToTransfer,
+                [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
+            ),
             true
     end.
 
@@ -604,12 +662,18 @@ create_verify_eviction_env(Node, UserId, SrcProvider, DstProvider, Config) ->
 
     fun
         (expected_failure, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
-            Files = FilesToTransfer ++ OtherFiles,
-            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider, DstProvider], Files),
+            assert_distribution(Node, SessId, OtherFiles, [{SrcProvider, ?BYTES_NUM}]),
+            assert_distribution(
+                Node, SessId, FilesToTransfer,
+                [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
+            ),
             true;
         (expected_success, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
-            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider, DstProvider], OtherFiles),
-            assert_distribution(Node, SessId, ?BYTES_NUM, [DstProvider], FilesToTransfer),
+            assert_distribution(Node, SessId, OtherFiles, [{SrcProvider, ?BYTES_NUM}]),
+            assert_distribution(
+                Node, SessId, FilesToTransfer,
+                [{SrcProvider, 0}, {DstProvider, ?BYTES_NUM}]
+            ),
             true
     end.
 
@@ -621,11 +685,14 @@ create_verify_migration_env(Node, UserId, SrcProvider, DstProvider, Config) ->
     fun
         (expected_failure, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
             Files = FilesToTransfer ++ OtherFiles,
-            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider], Files),
+            assert_distribution(Node, SessId, Files, [{SrcProvider, ?BYTES_NUM}]),
             true;
         (expected_success, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
-            assert_distribution(Node, SessId, ?BYTES_NUM, [SrcProvider], OtherFiles),
-            assert_distribution(Node, SessId, ?BYTES_NUM, [DstProvider], FilesToTransfer),
+            assert_distribution(Node, SessId, OtherFiles, [{SrcProvider, ?BYTES_NUM}]),
+            assert_distribution(
+                Node, SessId, FilesToTransfer,
+                [{SrcProvider, 0}, {DstProvider, ?BYTES_NUM}]
+            ),
             true
     end.
 
@@ -725,6 +792,7 @@ sync_files_between_nodes(eviction, SrcNode, SrcNodeSessId, DstNode, DstNodeSessI
     lists:foreach(fun(Guid) ->
         ExpContent = read_file(SrcNode, SrcNodeSessId, Guid),
         % Read file on DstNode to force rtransfer
+        api_test_utils:wait_for_file_sync(DstNode, DstNodeSessId, Guid),
         ?assertMatch(ExpContent, read_file(DstNode, DstNodeSessId, Guid), ?ATTEMPTS)
     end, Files);
 sync_files_between_nodes(_TransferType, _SrcNode, _SrcNodeSessId, DstNode, DstNodeSessId, Files) ->
@@ -768,13 +836,18 @@ create_view(TransferType, SrcNode, DstNode) ->
 
 
 %% @private
-assert_distribution(Node, SessId, ExpSize, ExpProviders, Files) ->
+assert_distribution(Node, SessId, Files, ExpSizePerProvider) ->
+    ExpDistribution = lists:sort(lists:map(fun({Provider, ExpSize}) ->
+        ?FILE_DISTRIBUTION(ExpSize, Provider)
+    end, ExpSizePerProvider)),
+
+    FetchDistributionFun = fun(Guid) ->
+        {ok, Distribution} = lfm_proxy:get_file_distribution(Node, SessId, {guid, Guid}),
+        lists:sort(Distribution)
+    end,
+
     lists:foreach(fun(FileGuid) ->
-        ExpDistribution = [?FILE_DISTRIBUTION(ExpSize, Provider) || Provider <- ExpProviders],
-        ?assertEqual(
-            {ok, ExpDistribution},
-            lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid})
-        )
+        ?assertEqual(ExpDistribution, FetchDistributionFun(FileGuid), ?ATTEMPTS)
     end, Files).
 
 
