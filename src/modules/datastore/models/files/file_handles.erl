@@ -18,8 +18,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([delete/1, exists/1, list/0]).
--export([register_open/4, register_release/3, mark_to_remove/1,
+-export([delete/1, exists/1, list_local/0]).
+-export([register_open/4, register_release/3, mark_to_remove/2, is_removed/1,
     invalidate_session_entry/2, is_used_by_session/2, get_creation_handle/1]).
 
 %% datastore_model callbacks
@@ -32,8 +32,9 @@
 % Handle created during file creation.
 % Read/write with this handle should be allowed even if file permissions forbid them.
 -type creation_handle() :: file_req:handle_id().
+-type removal_status() :: ?NOT_REMOVED | ?LOCAL_REMOVE | ?REMOTE_REMOVE.
 
--export_type([creation_handle/0]).
+-export_type([creation_handle/0, removal_status/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -66,26 +67,18 @@ exists(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of all records.
+%% Returns list of all records connected to node.
 %% @end
 %%--------------------------------------------------------------------
--spec list() -> {ok, [doc()]} | {error, term()}.
-list() ->
-    {AnsList, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(), datastore_model, fold,
-        [?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []]),
-    case BadNodes of
-        [] ->
-            lists:foldl(fun
-                ({ok, List}, {ok, Acc}) ->
-                    {ok, List ++ Acc};
-                (Error, {ok, _}) ->
-                    Error;
-                (_, Error) ->
-                    Error
-            end, {ok, []}, AnsList);
-        _ ->
-            {error, {bad_nodes, BadNodes}}
-    end.
+-spec list_local() -> {ok, [doc()]} | {error, term()}.
+list_local() ->
+    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
+
+-spec is_removed(record() | doc()) -> boolean().
+is_removed(#document{value = FileHandles}) ->
+    is_removed(FileHandles);
+is_removed(#file_handles{removal_status = RemovalStatus}) ->
+    RemovalStatus =/= ?NOT_REMOVED.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -99,7 +92,7 @@ register_open(FileCtx, SessId, Count, CreateHandleID) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
     Diff = fun
-        (#file_handles{is_removed = true}) ->
+        (#file_handles{removal_status = RemovalStatus}) when RemovalStatus =/= ?NOT_REMOVED ->
             {error, removed};
         (Handle = #file_handles{descriptors = Fds}) ->
             FdCount = maps:get(SessId, Fds, 0),
@@ -161,13 +154,13 @@ register_open(FileCtx, SessId, Count, CreateHandleID) ->
 register_release(FileCtx, SessId, Count) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    Diff = fun(Handle = #file_handles{is_removed = Removed, descriptors = Fds}) ->
+    Diff = fun(Handle = #file_handles{removal_status = RemovalStatus, descriptors = Fds}) ->
         FdCount = maps:get(SessId, Fds, 0),
         case Count =:= infinity orelse FdCount =< Count of
             true ->
                 Fds2 = maps:remove(SessId, Fds),
-                case {Removed, maps:size(Fds2)} of
-                    {true, 0} -> {error, removed};
+                case {RemovalStatus =/= ?NOT_REMOVED, maps:size(Fds2)} of
+                    {true, 0} -> {error, {removed, RemovalStatus}};
                     _ -> {ok, Handle#file_handles{descriptors = Fds2}}
                 end;
             false ->
@@ -192,9 +185,9 @@ register_release(FileCtx, SessId, Count) ->
                 {error, {not_satisfied, _}} -> ok;
                 {error, Reason} -> {error, Reason}
             end;
-        {error, removed} ->
+        {error, {removed, RemovalStatus}} ->
             session_open_files:deregister(SessId, FileGuid),
-            fslogic_delete:handle_release_of_deleted_file(FileCtx),
+            fslogic_delete:handle_release_of_deleted_file(FileCtx, RemovalStatus),
             datastore_model:delete(?CTX, FileUuid);
         {error, not_found} ->
             ok;
@@ -207,10 +200,10 @@ register_release(FileCtx, SessId, Count) ->
 %% Marks files as removed.
 %% @end
 %%--------------------------------------------------------------------
--spec mark_to_remove(file_ctx:ctx()) -> ok | {error, term()}.
-mark_to_remove(FileCtx) ->
+-spec mark_to_remove(file_ctx:ctx(), removal_status()) -> ok | {error, term()}.
+mark_to_remove(FileCtx, RemovalStatus) ->
     Diff = fun(Handle = #file_handles{}) ->
-        {ok, Handle#file_handles{is_removed = true}}
+        {ok, Handle#file_handles{removal_status = RemovalStatus}}
     end,
     case datastore_model:update(?CTX, file_ctx:get_uuid_const(FileCtx), Diff) of
         {ok, _} -> ok;
@@ -279,7 +272,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -303,6 +296,14 @@ get_record_struct(3) ->
         {is_removed, boolean},
         {descriptors, #{string => integer}},
         {creation_handle, binary}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        % Field is_removed was replaced by removal_status
+        % Its type was changed from boolean to atom.
+        {removal_status, atom},
+        {descriptors, #{string => integer}},
+        {creation_handle, binary}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -315,4 +316,10 @@ get_record_struct(3) ->
 upgrade_record(1, {?MODULE, IsRemoved, Descriptors}) ->
     {2, {?MODULE, IsRemoved, Descriptors}};
 upgrade_record(2, {?MODULE, IsRemoved, Descriptors}) ->
-    {3, {?MODULE, IsRemoved, Descriptors, undefined}}.
+    {3, {?MODULE, IsRemoved, Descriptors, undefined}};
+upgrade_record(3, {?MODULE, IsRemoved, Descriptors, CreationHandle}) ->
+    RemovalStatus = case IsRemoved of
+        false -> ?NOT_REMOVED;
+        true -> ?LOCAL_REMOVE
+    end,
+    {4, {?MODULE, RemovalStatus, Descriptors, CreationHandle}}.

@@ -151,6 +151,8 @@ all() ->
 -define(HARVEST_METADATA(SpaceId, Destination, Batch, ExpProviderId),
     {?HARVEST_METADATA, SpaceId, Destination, Batch, ExpProviderId}).
 
+%% NOTE!!!
+%% This assert assumes that list ExpBatch is sorted in the order of increasing sequences
 -define(assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId),
     ?assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, ?ATTEMPTS)).
 -define(assertReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout),
@@ -186,25 +188,27 @@ all() ->
     ?assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, ?ATTEMPTS)).
 -define(assertNotReceivedHarvestMetadata(ExpSpaceId, ExpDestination, ExpBatch, ExpProviderId, Timeout),
     (
-        (fun(__SpaceId, __Destination, __Batch, __ProviderId, __Timeout) ->
+        (fun AssertFun(__SpaceId, __Destination, __Batch, __ProviderId, __Timeout) ->
+            Start = time_utils:system_time_seconds(),
             __TimeoutInMillis = timer:seconds(__Timeout),
             receive
-                ?HARVEST_METADATA(
+                __HM = ?HARVEST_METADATA(
                     __SpaceId,
                     __Destination,
                     __ReceivedBatch,
                     __ProviderId
                 ) ->
+                    ElapsedTime = time_utils:system_time_seconds() - Start,
                     case subtract_batches(__Batch, __ReceivedBatch) of
                         __Batch ->
-                            ok;
+                            AssertFun(__SpaceId, __Destination, __Batch, __ProviderId, max(__Timeout - ElapsedTime, 0));
                         _ ->
                             __Args = [
                                 {module, ?MODULE},
-                                {line, ?LINE},
-                                {expected, {__SpaceId, __Destination, __ReceivedBatch, ExpProviderId, __Timeout}},
-                                {value, timeout}],
-                            ct:print("assertNotReceivedHarvestMetadata_failed: ~lp~n", [__Args]),
+                                {line, ?LINE}
+                            ],
+                            ct:print("assertNotReceivedHarvestMetadata_failed: ~lp~n"
+                                "Unexpectedly received: ~p~n", [__Args, __HM]),
                             erlang:error({assertNotReceivedHarvestMetadata_failed, __Args})
                     end
             after
@@ -1135,11 +1139,24 @@ sort_workers(Config) ->
 get_main_harvesting_stream_pid(Node, SpaceId) ->
     rpc:call(Node, global, whereis_name, [?MAIN_HARVESTING_STREAM(SpaceId)]).
 
-subtract_batches(L1, []) ->
-    L1;
-subtract_batches([], _L2) ->
+
+subtract_batches(ExpectedBatch, ReceivedBatch) ->
+    % Entries in ExpectedBatch and ReceivedBatch may not
+    % be in the same order.
+    % This may happen due to race when saving changes to DB.
+    % Changes may be persisted in different order than they were performed on memory.
+    subtract_sorted_batches(sort_batch(ExpectedBatch), sort_batch(ReceivedBatch)).
+
+sort_batch(Batch) ->
+    lists:sort(fun
+        (#{<<"fileId">> := FileId1}, #{<<"fileId">> := FileId2}) -> FileId1 =< FileId2
+    end, Batch).
+
+subtract_sorted_batches(B1, []) ->
+    B1;
+subtract_sorted_batches([], _B2) ->
     [];
-subtract_batches([#{
+subtract_sorted_batches([#{
     <<"fileId">> := FileId,
     <<"operation">> := <<"submit">>,
     <<"payload">> := Payload
@@ -1148,8 +1165,8 @@ subtract_batches([#{
     <<"operation">> := <<"submit">>,
     <<"payload">> := Payload
 } | T2]) ->
-    subtract_batches(T, T2);
-subtract_batches([#{
+    subtract_sorted_batches(T, T2);
+subtract_sorted_batches([#{
     <<"fileId">> := FileId,
     <<"operation">> := <<"delete">>
 } | T], [#{
@@ -1157,7 +1174,5 @@ subtract_batches([#{
     <<"operation">> := <<"delete">>
 } | T2]) ->
     subtract_batches(T, T2);
-subtract_batches(L1, [_H | T2]) ->
-    subtract_batches(L1, T2);
-subtract_batches(L1, _L2) ->
-    L1.
+subtract_sorted_batches(B1, [_H | T2]) ->
+    subtract_batches(B1, T2).

@@ -114,11 +114,11 @@ counting_file_open_and_release_test(Config) ->
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
     %% Release of file marked to remove should trigger call to file deletion worker.
-    ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx])),
+    ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx, ?LOCAL_REMOVE])),
     ?assertEqual(ok, rpc:call(Worker, file_handles, register_release,
         [FileCtx, SessId, 1])),
 
-    test_utils:mock_assert_num_calls(Worker, fslogic_delete, handle_release_of_deleted_file, 1, 1).
+    test_utils:mock_assert_num_calls(Worker, fslogic_delete, handle_release_of_deleted_file, 2, 1).
 
 invalidating_session_open_files_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -160,10 +160,10 @@ invalidating_session_open_files_test(Config) ->
         [FileCtx, SessId1, 30, undefined])),
     ?assertEqual(true, rpc:call(Worker, file_handles, exists, [?FILE_UUID])),
 
-    ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx])),
+    ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx, ?LOCAL_REMOVE])),
     ?assertEqual(ok, rpc:call(Worker, session, delete, [SessId1])),
 
-    test_utils:mock_assert_num_calls(Worker, fslogic_delete, handle_release_of_deleted_file, 1, 1),
+    test_utils:mock_assert_num_calls(Worker, fslogic_delete, handle_release_of_deleted_file, 2, 1),
 
     %% Invalidating session when file or session entry not exists should not fail.
 
@@ -198,15 +198,15 @@ init_should_clear_open_files_test_base(Config, DelayedFileCreation) ->
         [FileCtx3, SessId, 30, undefined])),
 
     %% One file should be also removed.
-    ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx])),
+    ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx, ?LOCAL_REMOVE])),
 
-    {ok, OpenFiles} = rpc:call(Worker, file_handles, list, []),
+    {ok, OpenFiles} = rpc:call(Worker, file_handles, list_local, []),
 
     ?assertEqual(3, length(OpenFiles)),
 
     ?assertMatch(ok, rpc:call(Worker, fslogic_delete, cleanup_opened_files, [])),
 
-    {ok, ClearedOpenFiles} = rpc:call(Worker, file_handles, list, []),
+    {ok, ClearedOpenFiles} = rpc:call(Worker, file_handles, list_local, []),
     ?assertEqual(0, length(ClearedOpenFiles)),
 
     test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
@@ -230,7 +230,7 @@ open_file_deletion_request_test_base(Config, DelayedFileCreation) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [<<"user1">>]),
     FileCtx2 = rpc:call(Worker, fslogic_delete, delete_parent_link, [FileCtx, UserCtx]),
 
-    ?assertEqual(ok, rpc:call(Worker, fslogic_delete, handle_release_of_deleted_file, [FileCtx2])),
+    ?assertEqual(ok, rpc:call(Worker, fslogic_delete, handle_release_of_deleted_file, [FileCtx2, ?LOCAL_REMOVE])),
 
     test_utils:mock_assert_num_calls(Worker, rename_req, rename, 4, 0),
     test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
@@ -454,7 +454,7 @@ init_per_testcase(Case, Config) when
         [passthrough]),
 
     test_utils:mock_expect(Worker, fslogic_delete, handle_release_of_deleted_file,
-        fun(FileCtx) ->
+        fun(FileCtx, _RemovalStatus) ->
             true = file_ctx:is_file_ctx_const(FileCtx),
             ?FILE_UUID = file_ctx:get_uuid_const(FileCtx),
             ok
@@ -544,7 +544,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    {ok, OpenFiles} = rpc:call(Worker, file_handles, list, []),
+    {ok, OpenFiles} = rpc:call(Worker, file_handles, list_local, []),
     lists:foreach(fun(#document{key = Key}) ->
         rpc:call(Worker, file_handles, delete, [Key])
     end, OpenFiles).
