@@ -39,6 +39,7 @@
 
 -export([
     create_file_replication/1,
+    create_file_eviction/1,
 
     create_view_replication/1,
     create_view_eviction/1,
@@ -48,6 +49,7 @@
 all() ->
     ?ALL([
         create_file_replication,
+        create_file_eviction,
 
         create_view_replication,
         create_view_eviction,
@@ -90,15 +92,96 @@ all() ->
 
 
 %%%===================================================================
-%%% Replication test functions
+%%% File transfer test functions
 %%%===================================================================
 
 
 create_file_replication(Config) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    [P2, _P1] = ?config(op_worker_nodes, Config),
 
     Callback = get_callback_url(),
     RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION],
+
+    TransferDataSpec = #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>,
+            <<"replicatingProviderId">>,
+            <<"fileId">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"replication">>],
+            <<"dataSourceType">> => [<<"file">>],
+            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
+            <<"fileId">> => [?PLACEHOLDER],
+            <<"callback">> => [Callback]
+        },
+        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
+            {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
+            {<<"replicatingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
+        ]
+    },
+    ReplicaDataSpec = #data_spec{
+        required = [<<"provider_id">>],
+        optional = [<<"url">>],
+        correct_values = #{
+            <<"provider_id">> => [?GET_DOMAIN_BIN(P2)],
+            <<"url">> => [Callback]
+        },
+        bad_values = [
+            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
+            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"url">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"url">>)}}
+        ]
+    },
+
+    create_file_transfer(Config, replication, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+
+
+create_file_eviction(Config) ->
+    [_P2, P1] = ?config(op_worker_nodes, Config),
+
+    Callback = get_callback_url(),
+    RequiredPrivs = [?SPACE_SCHEDULE_EVICTION],
+
+    TransferDataSpec = #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>,
+            <<"evictingProviderId">>,
+            <<"fileId">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"eviction">>],
+            <<"dataSourceType">> => [<<"file">>],
+            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(P1)],
+            <<"fileId">> => [?PLACEHOLDER],
+            <<"callback">> => [Callback]
+        },
+        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
+            {<<"evictingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"evictingProviderId">>)},
+            {<<"evictingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
+        ]
+    },
+    ReplicaDataSpec = #data_spec{
+        required = [<<"provider_id">>],
+        correct_values = #{
+            <<"provider_id">> => [?GET_DOMAIN_BIN(P1)]
+        },
+        bad_values = [
+            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
+            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
+        ]
+    },
+
+    create_file_transfer(Config, eviction, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+
+
+create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPrivs) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
@@ -106,36 +189,17 @@ create_file_replication(Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = create_setup_file_replication_env(replication, P1, P2, ?USER_IN_SPACE_2, Config),
-            verify_fun = create_verify_transfer_env(replication, P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            setup_fun = create_setup_file_replication_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
+            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
-                    name = <<"Replicate file using gs transfer api">>,
+                    name = str_utils:format("Transfer (~p) file using gs transfer api", [Type]),
                     type = gs,
                     prepare_args_fun = create_prepare_transfer_create_instance_gs_args_fun(private),
                     validate_result_fun = fun validate_transfer_gs_call_result/2
                 }
             ],
-            data_spec = add_file_id_bad_values(#data_spec{
-                required = [
-                    <<"type">>, <<"dataSourceType">>,
-                    <<"replicatingProviderId">>,
-                    <<"fileId">>
-                ],
-                optional = [<<"callback">>],
-                correct_values = #{
-                    <<"type">> => [<<"replication">>],
-                    <<"dataSourceType">> => [<<"file">>],
-                    <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
-                    <<"fileId">> => [?PLACEHOLDER],
-                    <<"callback">> => [Callback]
-                },
-                bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
-                    {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
-                    {<<"replicatingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-                    {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
-                ]
-            }, ?SPACE_2, undefined)
+            data_spec = add_file_id_bad_values(TransferDataSpec, ?SPACE_2, undefined)
         },
 
         %% TEST DEPRECATED REPLICAS ENDPOINTS
@@ -143,41 +207,31 @@ create_file_replication(Config) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = create_setup_file_replication_env(replication, P1, P2, ?USER_IN_SPACE_2, Config),
-            verify_fun = create_verify_transfer_env(replication, P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            setup_fun = create_setup_file_replication_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
+            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
-                    name = <<"Replicate file using /replicas/ rest endpoint">>,
+                    name = str_utils:format("Transfer (~p) file using /replicas/ rest endpoint", [Type]),
                     type = rest_with_file_path,
-                    prepare_args_fun = create_prepare_replica_rest_args_fun(replication),
+                    prepare_args_fun = create_prepare_replica_rest_args_fun(Type),
                     validate_result_fun = fun validate_transfer_rest_call_result/2
                 },
                 #scenario_template{
-                    name = <<"Replicate file using /replicas-id/ rest endpoint">>,
+                    name = str_utils:format("Transfer (~p) file using /replicas-id/ rest endpoint", [Type]),
                     type = rest,
-                    prepare_args_fun = create_prepare_replica_rest_args_fun(replication),
+                    prepare_args_fun = create_prepare_replica_rest_args_fun(Type),
                     validate_result_fun = fun validate_transfer_rest_call_result/2
                 },
                 #scenario_template{
-                    name = <<"Replicate file using op_replica gs api">>,
+                    name = str_utils:format("Transfer (~p) file using op_replica gs api", [Type]),
                     type = gs,
-                    prepare_args_fun = create_prepare_replica_gs_args_fun(replication, private),
+                    prepare_args_fun = create_prepare_replica_gs_args_fun(Type, private),
                     validate_result_fun = fun validate_transfer_gs_call_result/2
                 }
             ],
-            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(#data_spec{
-                required = [<<"provider_id">>],
-                optional = [<<"url">>],
-                correct_values = #{
-                    <<"provider_id">> => [?GET_DOMAIN_BIN(P2)],
-                    <<"url">> => [Callback]
-                },
-                bad_values = [
-                    {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
-                    {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-                    {<<"url">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"url">>)}}
-                ]
-            }, ?SPACE_2, undefined)
+            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
+                ReplicaDataSpec, ?SPACE_2, undefined
+            )
         }
     ])).
 
@@ -231,7 +285,7 @@ create_setup_file_replication_env(TransferType, SrcNode, DstNode, UserId, Config
 
 
 %%%===================================================================
-%%% Transfer view test functions
+%%% View transfer test functions
 %%%===================================================================
 
 
@@ -455,18 +509,12 @@ create_setup_view_transfer_env(TransferType, SrcNode, DstNode, UserId, Config) -
 
         case TransferType of
             replication ->
-                % Wait until FilesToTransfer are all indexed by view on DstNode.
+                % Wait until all FilesToTransfer are indexed by view on DstNode.
                 % Otherwise some of them could be omitted from replication.
                 ?assertViewQuery(ObjectIds, DstNode, ?SPACE_2, ViewName,  QueryViewParams);
             eviction ->
-                % Wait until file_distribution containing entries for both nodes
-                % and all FilesToTransfer are indexed by view on SrcNode.
-                % Otherwise some of them could be omitted from eviction (if data
-                % replicas don't exist on other providers it is skipped).
-                assert_distribution(
-                    SrcNode, SessId1, OtherFiles ++ FilesToTransfer,
-                    [{SrcNode, ?BYTES_NUM}, {DstNode, ?BYTES_NUM}]
-                ),
+                % Wait until all FilesToTransfer are indexed by view on SrcNode.
+                % Otherwise some of them could be omitted from eviction.
                 ?assertViewQuery(ObjectIds, SrcNode, ?SPACE_2, ViewName,  QueryViewParams);
             migration ->
                 % Wait until FilesToTransfer are all indexed by view on SrcNode and DstNode.
@@ -954,7 +1002,13 @@ sync_files_between_nodes(eviction, SrcNode, SrcNodeSessId, DstNode, DstNodeSessI
         % Read file on DstNode to force rtransfer
         api_test_utils:wait_for_file_sync(DstNode, DstNodeSessId, Guid),
         ?assertMatch(ExpContent, read_file(DstNode, DstNodeSessId, Guid), ?ATTEMPTS)
-    end, Files);
+    end, Files),
+    % Wait until file_distribution contains entries for both nodes
+    % Otherwise some of them could be omitted from eviction (if data
+    % replicas don't exist on other providers it is skipped).
+    assert_distribution(
+        SrcNode, SrcNodeSessId, Files, [{SrcNode, ?BYTES_NUM}, {DstNode, ?BYTES_NUM}]
+    );
 sync_files_between_nodes(_TransferType, _SrcNode, _SrcNodeSessId, DstNode, DstNodeSessId, Files) ->
     lists:foreach(fun(Guid) ->
         api_test_utils:wait_for_file_sync(DstNode, DstNodeSessId, Guid)
