@@ -41,7 +41,6 @@
     get_attrs_on_provider_not_supporting_space_test/1,
 
     set_file_mode_test/1,
-    set_shared_file_mode_test/1,
     set_mode_on_provider_not_supporting_space_test/1
 ]).
 
@@ -58,7 +57,6 @@ all() ->
         get_attrs_on_provider_not_supporting_space_test,
 
         set_file_mode_test,
-        set_shared_file_mode_test,
         set_mode_on_provider_not_supporting_space_test
     ]).
 
@@ -113,8 +111,8 @@ get_dir_children_test(Config) ->
                     end
                 }
             ],
-            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
-                get_children_data_spec(), ?SPACE_2, undefined
+            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+                DirGuid, undefined, get_children_data_spec()
             )
         }
     ])).
@@ -168,8 +166,8 @@ get_shared_dir_children_test(Config) ->
                     end
                 }
             ],
-            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
-                get_children_data_spec(), ?SPACE_2, ShareId
+            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+                DirGuid, ShareId, get_children_data_spec()
             )
         }
     ])).
@@ -264,8 +262,8 @@ get_file_children_test(Config) ->
                     end
                 }
             ],
-            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
-                get_children_data_spec(), ?SPACE_2, undefined
+            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+                FileGuid, undefined, get_children_data_spec()
             )
         }
     ])).
@@ -430,12 +428,9 @@ create_prepare_deprecated_id_get_children_rest_args_fun(FileObjectId) ->
 %% @private
 create_prepare_get_children_rest_args_fun(Endpoint, ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        Data1 = utils:ensure_defined(Data0, undefined, #{}),
+        Data1 = api_test_utils:ensure_defined(Data0, #{}),
+        {Id, Data2} = api_test_utils:maybe_substitute_id(ValidId, Data1),
 
-        Id = case maps:find(bad_id, Data1) of
-            {ok, BadId} -> BadId;
-            error -> ValidId
-        end,
         RestPath = case Endpoint of
             new_id -> <<"data/", Id/binary, "/children">>;
             deprecated_path -> <<"files", Id/binary>>;
@@ -445,7 +440,7 @@ create_prepare_get_children_rest_args_fun(Endpoint, ValidId) ->
             method = get,
             path = http_utils:append_url_parameters(
                 RestPath,
-                maps:with([<<"limit">>, <<"offset">>], Data1)
+                maps:with([<<"limit">>, <<"offset">>], Data2)
             )
         }
     end.
@@ -454,11 +449,8 @@ create_prepare_get_children_rest_args_fun(Endpoint, ValidId) ->
 %% @private
 create_prepare_get_children_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = case maps:take(bad_id, utils:ensure_defined(Data0, undefined, #{})) of
-            {BadId, Data2} when map_size(Data2) == 0 -> {BadId, undefined};
-            {BadId, Data2} -> {BadId, Data2};
-            error -> {FileGuid, Data0}
-        end,
+        {GriId, Data1} = api_test_utils:maybe_substitute_id(FileGuid, Data0),
+
         #gs_args{
             operation = get,
             gri = #gri{type = op_file, id = GriId, aspect = children, scope = Scope},
@@ -583,8 +575,8 @@ get_file_attrs_test(Config) ->
                     validate_result_fun = create_validate_get_attrs_gs_call_fun(JsonAttrs, undefined)
                 }
             ],
-            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
-                get_attrs_data_spec(normal_mode), ?SPACE_2, undefined
+            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+                FileGuid, undefined, get_attrs_data_spec(normal_mode)
             )
         }
     ])).
@@ -636,8 +628,8 @@ get_shared_file_attrs_test(Config) ->
                     validate_result_fun = create_validate_get_attrs_gs_call_fun(JsonAttrs, ShareId1)
                 }
             ],
-            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
-                get_attrs_data_spec(share_mode), ?SPACE_2, ShareId1
+            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+                FileGuid, ShareId1, get_attrs_data_spec(share_mode)
             )
         },
         #scenario_spec{
@@ -649,8 +641,8 @@ get_shared_file_attrs_test(Config) ->
             validate_result_fun = fun(_, Result) ->
                 ?assertEqual(?ERROR_UNAUTHORIZED, Result)
             end,
-            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
-                get_attrs_data_spec(normal_mode), ?SPACE_2, ShareId1
+            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+                FileGuid, ShareId1, get_attrs_data_spec(normal_mode)
             )
         }
     ])).
@@ -780,12 +772,9 @@ create_prepare_deprecated_id_get_attrs_rest_args_fun(FileObjectId) ->
 %% @private
 create_prepare_get_attrs_rest_args_fun(Endpoint, ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        Data1 = utils:ensure_defined(Data0, undefined, #{}),
+        Data1 = api_test_utils:ensure_defined(Data0, #{}),
+        {Id, Data2} = api_test_utils:maybe_substitute_id(ValidId, Data1),
 
-        Id = case maps:find(bad_id, Data1) of
-            {ok, BadId} -> BadId;
-            error -> ValidId
-        end,
         RestPath = case Endpoint of
             new_id -> <<"data/", Id/binary>>;
             deprecated_path -> <<"metadata/attrs", Id/binary>>;
@@ -795,7 +784,7 @@ create_prepare_get_attrs_rest_args_fun(Endpoint, ValidId) ->
             method = get,
             path = http_utils:append_url_parameters(
                 RestPath,
-                maps:with([<<"attribute">>], Data1)
+                maps:with([<<"attribute">>], Data2)
             )
         }
     end.
@@ -804,11 +793,8 @@ create_prepare_get_attrs_rest_args_fun(Endpoint, ValidId) ->
 %% @private
 create_prepare_get_attrs_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = case maps:take(bad_id, utils:ensure_defined(Data0, undefined, #{})) of
-            {BadId, Data2} when map_size(Data2) == 0 -> {BadId, undefined};
-            {BadId, Data2} -> {BadId, Data2};
-            error -> {FileGuid, Data0}
-        end,
+        {GriId, Data1} = api_test_utils:maybe_substitute_id(FileGuid, Data0),
+
         #gs_args{
             operation = get,
             gri = #gri{type = op_file, id = GriId, aspect = attrs, scope = Scope},
@@ -908,16 +894,15 @@ set_file_mode_test(Config) ->
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
 
-    GetSessionFun = fun(Node) ->
-        ?config({session_id, {?USER_IN_BOTH_SPACES, ?GET_DOMAIN(Node)}}, Config)
-    end,
-
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
 
     api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+
+    ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     GetExpectedResultFun = fun
         (#api_test_ctx{client = ?USER_IN_BOTH_SPACES_AUTH}) -> ok;
@@ -935,7 +920,7 @@ set_file_mode_test(Config) ->
     GetMode = fun(Node) ->
         {ok, #file_attr{mode = Mode}} = ?assertMatch(
             {ok, _},
-            lfm_proxy:stat(Node, GetSessionFun(Node), {guid, FileGuid})
+            lfm_proxy:stat(Node, ?SESS_ID(?USER_IN_BOTH_SPACES, Node, Config), {guid, FileGuid})
         ),
         Mode
     end,
@@ -989,84 +974,21 @@ set_file_mode_test(Config) ->
                     end
                 }
             ],
-            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
-                set_mode_data_spec(), ?SPACE_2, undefined
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                FileGuid, ShareId, set_mode_data_spec()
             )
-        }
-    ])).
+        },
 
-
-set_shared_file_mode_test(Config) ->
-    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
-    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
-
-    GetSessionFun = fun(Node) ->
-        ?config({session_id, {?USER_IN_BOTH_SPACES, ?GET_DOMAIN(Node)}}, Config)
-    end,
-
-    FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
-
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
-    ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-    {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
-
-    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
-
-    ValidateRestOperationNotSupportedFun = fun(_, {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, Response}) ->
-        ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
-    end,
-    GetMode = fun(Node) ->
-        {ok, #file_attr{mode = Mode}} = ?assertMatch(
-            {ok, _},
-            lfm_proxy:stat(Node, GetSessionFun(Node), {guid, FileGuid})
-        ),
-        Mode
-    end,
-
-    ?assert(api_test_runner:run_tests(Config, [
-        #suite_spec{
+        #scenario_spec{
+            name = <<"Set mode for shared ", FileType/binary, " using gs public api">>,
+            type = gs_not_supported,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
-            verify_fun = fun(_, #api_test_ctx{node = Node}) ->
-                ?assertMatch(8#777, GetMode(Node)),
-                true
+            prepare_args_fun = create_prepare_set_mode_gs_args_fun(ShareGuid, public),
+            validate_result_fun = fun(_TestCaseCtx, Result) ->
+                ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
             end,
-            scenario_templates = [
-                #scenario_template{
-                    name = <<"Set mode for shared ", FileType/binary, " using /data/ rest endpoint">>,
-                    type = rest_not_supported,
-                    prepare_args_fun = create_prepare_new_id_set_mode_rest_args_fun(ShareObjectId),
-                    validate_result_fun = ValidateRestOperationNotSupportedFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for shared ", FileType/binary, " using /files-id/ rest endpoint">>,
-                    type = rest_not_supported,
-                    prepare_args_fun = create_prepare_deprecated_id_set_mode_rest_args_fun(ShareObjectId),
-                    validate_result_fun = ValidateRestOperationNotSupportedFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for shared ", FileType/binary, " using gs public api">>,
-                    type = gs_not_supported,
-                    prepare_args_fun = create_prepare_set_mode_gs_args_fun(ShareGuid, public),
-                    validate_result_fun = fun(_TestCaseCtx, Result) ->
-                        ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
-                    end
-                },
-                #scenario_template{
-                    name = <<"Set mode for shared ", FileType/binary, " using private gs api">>,
-                    type = gs_with_shared_guid_and_aspect_private,
-                    prepare_args_fun = create_prepare_set_mode_gs_args_fun(ShareGuid, private),
-                    validate_result_fun = fun(_, Result) ->
-                        ?assertEqual(?ERROR_UNAUTHORIZED, Result)
-                    end
-                }
-            ],
-            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
-                set_mode_data_spec(), ?SPACE_2, ShareId
-            )
+            data_spec = set_mode_data_spec()
         }
     ])).
 
@@ -1158,15 +1080,14 @@ create_prepare_deprecated_id_set_mode_rest_args_fun(FileObjectId) ->
 %% @private
 create_prepare_set_mode_rest_args_fun(Endpoint, ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = case maps:take(bad_id, Data0) of
-            {BadId, Data2} -> {BadId, Data2};
-            error -> {ValidId, Data0}
-        end,
+        {Id, Data1} = api_test_utils:maybe_substitute_id(ValidId, Data0),
+
         RestPath = case Endpoint of
             new_id -> <<"data/", Id/binary>>;
             deprecated_path -> <<"metadata/attrs", Id/binary>>;
             deprecated_id -> <<"metadata-id/attrs/", Id/binary>>
         end,
+
         #rest_args{
             method = put,
             path = http_utils:append_url_parameters(
@@ -1182,10 +1103,8 @@ create_prepare_set_mode_rest_args_fun(Endpoint, ValidId) ->
 %% @private
 create_prepare_set_mode_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = case maps:take(bad_id, Data0) of
-            {BadId, Data2} -> {BadId, Data2};
-            error -> {FileGuid, Data0}
-        end,
+        {GriId, Data1} = api_test_utils:maybe_substitute_id(FileGuid, Data0),
+
         #gs_args{
             operation = create,
             gri = #gri{type = op_file, id = GriId, aspect = attrs, scope = Scope},
