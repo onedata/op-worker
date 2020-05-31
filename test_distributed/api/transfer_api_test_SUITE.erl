@@ -40,6 +40,7 @@
 -export([
     create_file_replication/1,
     create_file_eviction/1,
+    create_file_migration/1,
 
     create_view_replication/1,
     create_view_eviction/1,
@@ -50,6 +51,7 @@ all() ->
     ?ALL([
         create_file_replication,
         create_file_eviction,
+        create_file_migration,
 
         create_view_replication,
         create_view_eviction,
@@ -177,6 +179,52 @@ create_file_eviction(Config) ->
     },
 
     create_file_transfer(Config, eviction, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+
+
+create_file_migration(Config) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
+
+    Callback = get_callback_url(),
+    RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION],
+
+    TransferDataSpec = #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>,
+            <<"replicatingProviderId">>, <<"evictingProviderId">>,
+            <<"fileId">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"migration">>],
+            <<"dataSourceType">> => [<<"file">>],
+            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
+            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(P1)],
+            <<"fileId">> => [?PLACEHOLDER],
+            <<"callback">> => [Callback]
+        },
+        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
+            {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
+            {<<"replicatingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"evictingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"evictingProviderId">>)},
+            {<<"evictingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
+        ]
+    },
+    ReplicaDataSpec = #data_spec{
+        required = [<<"provider_id">>, <<"migration_provider_id">>],
+        correct_values = #{
+            <<"provider_id">> => [?GET_DOMAIN_BIN(P1)],
+            <<"migration_provider_id">> => [?GET_DOMAIN_BIN(P2)]
+        },
+        bad_values = [
+            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
+            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
+            {<<"migration_provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"migration_provider_id">>)}},
+            {<<"migration_provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
+        ]
+    },
+
+    create_file_transfer(Config, migration, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
 
 
 create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPrivs) ->
