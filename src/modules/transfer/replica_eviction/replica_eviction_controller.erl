@@ -178,7 +178,7 @@ handle_cast(replica_eviction_completed, State = #state{
     status = active
 }) ->
     {ok, _} = replica_eviction_status:handle_completed(TransferId),
-    notify_callback(Callback),
+    notify_callback(Callback, TransferId),
     {stop, normal, State};
 
 handle_cast({replica_eviction_aborting, Reason}, State = #state{
@@ -267,11 +267,13 @@ code_change(_OldVsn, State, _Extra) ->
 %% Notifies callback about successful replica eviction
 %% @end
 %%--------------------------------------------------------------------
--spec notify_callback(transfer:callback()) -> ok.
-notify_callback(undefined) -> ok;
-notify_callback(<<>>) -> ok;
-notify_callback(Callback) ->
-    {ok, _, _, _} = http_client:get(Callback).
+-spec notify_callback(transfer:callback(), transfer:id()) -> ok.
+notify_callback(undefined, _TransferId) -> ok;
+notify_callback(<<>>, _TransferId) -> ok;
+notify_callback(Callback, TransferId) ->
+    {ok, _, _, _} = http_client:post(Callback, #{}, json_utils:encode(#{
+        <<"transferId">> => TransferId
+    })).
 
 
 %%--------------------------------------------------------------------

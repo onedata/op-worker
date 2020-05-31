@@ -97,10 +97,10 @@ all() ->
 -define(BYTES_NUM, 20).
 
 -define(HTTP_SERVER_PORT, 8080).
--define(TRANSFER_MONITORING_PATH, "/transfer_monitoring").
+-define(ENDED_TRANSFERS_PATH, "/ended_transfers").
 
 -define(TEST_PROCESS, test_process).
--define(CALLBACK_CALL_TIME(__TIME), {callback_call_time, __TIME}).
+-define(CALLBACK_CALL_TIME(__TRANSFER_ID, __TIME), {callback_call_time, __TRANSFER_ID, __TIME}).
 
 
 %%%===================================================================
@@ -837,7 +837,7 @@ validate_transfer_call_result(TransferId, #api_test_ctx{
     case maps:is_key(<<"callback">>, Data) orelse maps:is_key(<<"url">>, Data) of
         true ->
             receive
-                ?CALLBACK_CALL_TIME(CallTime) ->
+                ?CALLBACK_CALL_TIME(TransferId, CallTime) ->
                     ct:pal("ASDASDASDASD"),
                     transfers_test_utils:assert_transfer_state(
                         TestNode, TransferId, ExpTransfer#{
@@ -1014,9 +1014,10 @@ stop_http_server() ->
     inets:stop().
 
 
-do(#mod{method = "GET", request_uri = ?TRANSFER_MONITORING_PATH}) ->
+do(#mod{method = "POST", request_uri = ?ENDED_TRANSFERS_PATH, entity_body = Body}) ->
+    #{<<"transferId">> := TransferId} = json_utils:decode(Body),
     CallTime = time_utils:system_time_millis() div 1000,
-    ?TEST_PROCESS ! ?CALLBACK_CALL_TIME(CallTime),
+    ?TEST_PROCESS ! ?CALLBACK_CALL_TIME(TransferId, CallTime),
 
     done.
 
@@ -1031,7 +1032,7 @@ get_callback_url() ->
     {ok, IpAddressBin} = ip_utils:to_binary(initializer:local_ip_v4()),
     PortBin = integer_to_binary(?HTTP_SERVER_PORT),
 
-    <<"http://", IpAddressBin/binary, ":" , PortBin/binary, ?TRANSFER_MONITORING_PATH>>.
+    <<"http://", IpAddressBin/binary, ":" , PortBin/binary, ?ENDED_TRANSFERS_PATH>>.
 
 
 %% @private

@@ -256,7 +256,7 @@ handle_active(TransferId, Callback, EvictSourceReplica) ->
             handle_active(TransferId, Callback, EvictSourceReplica);
         replication_completed ->
             {ok, _} = replication_status:handle_completed(TransferId),
-            notify_callback(Callback, EvictSourceReplica);
+            notify_callback(Callback, EvictSourceReplica, TransferId);
         {replication_aborting, Reason} ->
             {ok, _} = replication_status:handle_aborting(TransferId),
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
@@ -293,13 +293,15 @@ handle_aborting(TransferId) ->
 %% Notifies callback about successful replication
 %% @end
 %%--------------------------------------------------------------------
--spec notify_callback(transfer:callback(),
-    EvictSourceReplica :: boolean()) -> ok.
-notify_callback(_Callback, true) -> ok;
-notify_callback(undefined, false) -> ok;
-notify_callback(<<>>, false) -> ok;
-notify_callback(Callback, false) ->
-    {ok, _, _, _} = http_client:get(Callback).
+-spec notify_callback(transfer:callback(), EvictSourceReplica :: boolean(),
+    transfer:id()) -> ok.
+notify_callback(_Callback, true, _TransferId) -> ok;
+notify_callback(undefined, false, _TransferId) -> ok;
+notify_callback(<<>>, false, _TransferId) -> ok;
+notify_callback(Callback, false, TransferId) ->
+    {ok, _, _, _} = http_client:post(Callback, #{}, json_utils:encode(#{
+        <<"transferId">> => TransferId
+    })).
 
 
 %%--------------------------------------------------------------------
