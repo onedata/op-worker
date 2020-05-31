@@ -20,16 +20,22 @@
     randomly_choose_file_type_for_test/1,
     create_file/4, create_file/5,
     wait_for_file_sync/3,
-    guids_to_object_ids/1,
-    ensure_defined/2,
 
-    add_bad_file_id_and_path_error_values/3
+    fill_file_with_dummy_data/4,
+    read_file/4,
+
+    guids_to_object_ids/1,
+    ensure_defined/2
 ]).
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
     add_file_id_errors_for_operations_not_available_in_share_mode/3,
     maybe_substitute_id/2
 ]).
+
+-type file_type() :: binary(). % <<"file">> | <<"dir">>
+
+-export_type([file_type/0]).
 
 
 -define(ATTEMPTS, 30).
@@ -40,20 +46,26 @@
 %%%===================================================================
 
 
+-spec randomly_choose_file_type_for_test() -> file_type().
 randomly_choose_file_type_for_test() ->
     randomly_choose_file_type_for_test(true).
 
 
+-spec randomly_choose_file_type_for_test(boolean()) -> file_type().
 randomly_choose_file_type_for_test(LogSelectedFileType) ->
     FileType = ?RANDOM_FILE_TYPE(),
     LogSelectedFileType andalso ct:pal("Choosen file type for test: ~s", [FileType]),
     FileType.
 
 
+-spec create_file(file_type(), node(), session:id(), file_meta:path()) ->
+    {ok, file_id:file_guid()} | {error, term()}.
 create_file(FileType, Node, SessId, Path) ->
     create_file(FileType, Node, SessId, Path, 8#777).
 
 
+-spec create_file(file_type(), node(), session:id(), file_meta:path(), file_meta:mode()) ->
+    {ok, file_id:file_guid()} | {error, term()}.
 create_file(<<"file">>, Node, SessId, Path, Mode) ->
     lfm_proxy:create(Node, SessId, Path, Mode);
 create_file(<<"dir">>, Node, SessId, Path, Mode) ->
@@ -66,6 +78,26 @@ wait_for_file_sync(Node, SessId, FileGuid) ->
     ok.
 
 
+-spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid(), non_neg_integer()) ->
+    WrittenContent :: binary().
+fill_file_with_dummy_data(Node, SessId, FileGuid, BytesNum) ->
+    Content = crypto:strong_rand_bytes(BytesNum),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {guid, FileGuid}, write)),
+    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, 0, Content)),
+    ?assertMatch(ok, lfm_proxy:close(Node, Handle)),
+    Content.
+
+
+-spec read_file(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
+    Content :: binary().
+read_file(Node, SessId, FileGuid, Size) ->
+    {ok, ReadHandle} = lfm_proxy:open(Node, SessId, {guid, FileGuid}, read),
+    {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, Size),
+    ok = lfm_proxy:close(Node, ReadHandle),
+    Content.
+
+
+-spec guids_to_object_ids([file_id:file_guid()]) -> [file_id:objectid()].
 guids_to_object_ids(Guids) ->
     lists:map(fun(Guid) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
@@ -73,46 +105,9 @@ guids_to_object_ids(Guids) ->
     end, Guids).
 
 
--spec add_bad_file_id_and_path_error_values(undefined | data_spec(), od_space:id(),
-    undefined | od_share:id()) -> data_spec().
-add_bad_file_id_and_path_error_values(DataSpec, SpaceId, ShareId) ->
-    InvalidFileIdErrors = get_invalid_file_id_errors(),
-
-    NonExistentSpaceGuid = file_id:pack_share_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID, ShareId),
-    {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
-    NonExistentSpaceExpError = case ShareId of
-        undefined ->
-            % For authenticated users it should fail on authorization step
-            % (checks if user belongs to space)
-            ?ERROR_FORBIDDEN;
-        _ ->
-            % For share request it should fail on validation step
-            % (checks if space is supported by provider)
-            {error_fun, fun(#api_test_ctx{node = Node}) ->
-                ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(Node))
-            end}
-    end,
-
-    NonExistentFileGuid = file_id:pack_share_guid(<<"InvalidUuid">>, SpaceId, ShareId),
-    {ok, NonExistentFileObjectId} = file_id:guid_to_objectid(NonExistentFileGuid),
-
-    BadFileIdErrors = InvalidFileIdErrors ++ [
-        {bad_id, NonExistentSpaceObjectId, {rest, NonExistentSpaceExpError}},
-        {bad_id, NonExistentSpaceGuid, {gs, NonExistentSpaceExpError}},
-
-        % Errors thrown by internal logic (all middleware checks were passed)
-        {bad_id, NonExistentFileObjectId, {rest, ?ERROR_POSIX(?ENOENT)}},
-        {bad_id, NonExistentFileGuid, {gs, ?ERROR_POSIX(?ENOENT)}}
-    ],
-
-    case DataSpec of
-        undefined ->
-            #data_spec{bad_values = BadFileIdErrors};
-        #data_spec{bad_values = BadValues} ->
-            DataSpec#data_spec{bad_values = BadFileIdErrors ++ BadValues}
-    end.
-
-
+-spec ensure_defined
+    (undefined, DefaultValue) -> DefaultValue when DefaultValue :: term();
+    (Value, DefaultValue :: term()) -> Value when Value :: term().
 ensure_defined(undefined, DefaultValue) -> DefaultValue;
 ensure_defined(Value, _DefaultValue) -> Value.
 
@@ -130,6 +125,8 @@ ensure_defined(Value, _DefaultValue) -> Value.
 %% before making test call.
 %% @end
 %%--------------------------------------------------------------------
+-spec add_file_id_errors_for_operations_available_in_share_mode(file_id:file_guid(),
+    undefined | od_share:id(), undefined | data_spec()) -> data_spec().
 add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, DataSpec) ->
     InvalidFileIdErrors = get_invalid_file_id_errors(),
 
@@ -183,6 +180,8 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
 %% before making test call.
 %% @end
 %%--------------------------------------------------------------------
+-spec add_file_id_errors_for_operations_not_available_in_share_mode(file_id:file_guid(),
+    od_share:id(), undefined | data_spec()) -> data_spec().
 add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId, DataSpec) ->
     InvalidFileIdErrors = get_invalid_file_id_errors(),
 

@@ -68,7 +68,7 @@ all() ->
 
 set_file_rdf_metadata_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P2, ?SPACE_2, true, Config),
+    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P2, ?SPACE_2, Config),
 
     GetExpCallResultFun = fun(_TestCtx) -> ok end,
 
@@ -117,7 +117,7 @@ set_file_rdf_metadata_test(Config) ->
 
 set_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P1, ?SPACE_1, true, Config),
+    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P1, ?SPACE_1, Config),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(P2)) end,
 
@@ -163,7 +163,7 @@ remove_rdf(Node, FileGuid, Config) ->
 
 set_file_json_metadata_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P2, ?SPACE_2, true, Config),
+    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P2, ?SPACE_2, Config),
 
     ExampleJson = #{<<"attr1">> => [0, 1, <<"val">>]},
 
@@ -306,7 +306,7 @@ set_file_json_metadata_test(Config) ->
 
 set_file_primitive_json_metadata_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P2, ?SPACE_2, true, Config),
+    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P2, ?SPACE_2, Config),
 
     GetExpCallResultFun = fun(_TestCtx) -> ok end,
 
@@ -360,7 +360,7 @@ set_file_primitive_json_metadata_test(Config) ->
 
 set_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P1, ?SPACE_1, true, Config),
+    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P1, ?SPACE_1, Config),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(P2)) end,
 
@@ -406,7 +406,7 @@ remove_json(Node, FileGuid, Config) ->
 
 set_file_xattrs_test(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P2, ?SPACE_2, true, Config),
+    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P2, ?SPACE_2, Config),
 
     DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
         FileGuid, ShareId, #data_spec{
@@ -473,7 +473,7 @@ set_file_xattrs_test(Config) ->
 
 set_file_xattrs_on_provider_not_supporting_space_test(Config) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P1, ?SPACE_1, true, Config),
+    {FileType, FilePath, FileGuid, ShareId} = create_random_file(P1, P1, ?SPACE_1, Config),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(P2)) end,
 
@@ -773,25 +773,16 @@ end_per_testcase(_Case, Config) ->
 
 
 %% @private
--spec create_random_file(node(), node(), od_space:name(), boolean(), proplists:proplist()) ->
+-spec create_random_file(node(), node(), od_space:name(), proplists:proplist()) ->
     {binary(), file_meta:path(), file_id:file_guid(), undefined | od_share:id()}.
-create_random_file(CreationNode, AssertionNode, SpaceName, CreateShare, Config) ->
+create_random_file(CreationNode, AssertionNode, SpaceName, Config) ->
     CreationNodeSessId = ?USER_IN_BOTH_SPACES_SESS_ID(CreationNode, Config),
     AssertionNodeSessId = ?USER_IN_BOTH_SPACES_SESS_ID(AssertionNode, Config),
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", SpaceName, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, CreationNode, CreationNodeSessId, FilePath),
-    ShareId = case CreateShare of
-        true ->
-            {ok, Id} = ?assertMatch(
-                {ok, _},
-                lfm_proxy:create_share(CreationNode, CreationNodeSessId, {guid, FileGuid}, <<"share">>)
-            ),
-            Id;
-        false ->
-            undefined
-    end,
+    {ok, ShareId} = lfm_proxy:create_share(CreationNode, CreationNodeSessId, {guid, FileGuid}, <<"share">>),
 
     api_test_utils:wait_for_file_sync(AssertionNode, AssertionNodeSessId, FileGuid),
 

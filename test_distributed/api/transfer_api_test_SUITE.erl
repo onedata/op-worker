@@ -181,6 +181,14 @@ create_file_eviction(Config) ->
 
 create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPrivs) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?SESS_ID(?USER_IN_SPACE_2, P1, Config),
+    SessIdP2 = ?SESS_ID(?USER_IN_SPACE_2, P2, Config),
+
+    % Shared file will be used to assert that shared file transfer will be forbidden
+    % (it will be added to '#data_spec.bad_values')
+    FileGuid = create_file(P1, SessIdP1, filename:join(["/", ?SPACE_2])),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
+    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
 
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
@@ -189,8 +197,8 @@ create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPr
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = create_setup_file_replication_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
-            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            setup_fun = create_setup_file_replication_env_fun(Type, P1, P2, ?USER_IN_SPACE_2, Config),
+            verify_fun = create_verify_transfer_env_fun(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) file using gs transfer api", [Type]),
@@ -207,8 +215,8 @@ create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPr
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = create_setup_file_replication_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
-            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            setup_fun = create_setup_file_replication_env_fun(Type, P1, P2, ?USER_IN_SPACE_2, Config),
+            verify_fun = create_verify_transfer_env_fun(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) file using /replicas/ rest endpoint", [Type]),
@@ -229,14 +237,23 @@ create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPr
                     validate_result_fun = fun validate_transfer_gs_call_result/2
                 }
             ],
-            data_spec = api_test_utils:add_bad_file_id_and_path_error_values(
-                ReplicaDataSpec, ?SPACE_2, undefined
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                FileGuid, ShareId, ReplicaDataSpec
             )
         }
     ])).
 
 
-create_setup_file_replication_env(TransferType, SrcNode, DstNode, UserId, Config) ->
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates either single file or directory with 5 files (random select) and
+%% awaits metadata synchronization between nodes. In case of 'eviction' also
+%% copies data so that it would exist on all nodes.
+%% FileGuid to transfer and expected transfer stats are saved in returned map.
+%% @end
+%%--------------------------------------------------------------------
+create_setup_file_replication_env_fun(TransferType, SrcNode, DstNode, UserId, Config) ->
     fun() ->
         SessId1 = ?SESS_ID(UserId, SrcNode, Config),
         SessId2 = ?SESS_ID(UserId, DstNode, Config),
@@ -250,7 +267,7 @@ create_setup_file_replication_env(TransferType, SrcNode, DstNode, UserId, Config
 
         FilesToTransfer = case RootFileType of
             <<"file">> ->
-                fill_file_with_dummy_data(SrcNode, SessId1, RootFileGuid, ?BYTES_NUM),
+                api_test_utils:fill_file_with_dummy_data(SrcNode, SessId1, RootFileGuid, ?BYTES_NUM),
                 [RootFileGuid];
             <<"dir">> ->
                 lists:map(fun(_) ->
@@ -281,6 +298,32 @@ create_setup_file_replication_env(TransferType, SrcNode, DstNode, UserId, Config
             files_to_transfer => FilesToTransfer,
             other_files => OtherFiles
         }
+    end.
+
+
+%% @private
+-spec add_file_id_bad_values(undefined | data_spec(), od_space:id(), undefined | od_share:id()) ->
+    data_spec().
+add_file_id_bad_values(DataSpec, SpaceId, ShareId) ->
+    {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
+
+    NonExistentFileAndSpaceGuid = file_id:pack_share_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID, ShareId),
+    {ok, NonExistentFileAndSpaceObjectId} = file_id:guid_to_objectid(NonExistentFileAndSpaceGuid),
+
+    NonExistentFileGuid = file_id:pack_share_guid(<<"InvalidUuid">>, SpaceId, ShareId),
+    {ok, NonExistentFileObjectId} = file_id:guid_to_objectid(NonExistentFileGuid),
+
+    BadFileIdValues = [
+        {<<"fileId">>, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
+        {<<"fileId">>, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
+        {<<"fileId">>, NonExistentFileAndSpaceObjectId, ?ERROR_FORBIDDEN},
+        {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)}
+    ],
+    case DataSpec of
+        undefined ->
+            #data_spec{bad_values = BadFileIdValues};
+        #data_spec{bad_values = BadValues} ->
+            DataSpec#data_spec{bad_values = BadFileIdValues ++ BadValues}
     end.
 
 
@@ -442,8 +485,8 @@ create_view_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPr
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = create_setup_view_transfer_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
-            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            setup_fun = create_setup_view_transfer_env_fun(Type, P1, P2, ?USER_IN_SPACE_2, Config),
+            verify_fun = create_verify_transfer_env_fun(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) view using gs transfer api", [Type]),
@@ -460,8 +503,8 @@ create_view_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPr
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = create_setup_view_transfer_env(Type, P1, P2, ?USER_IN_SPACE_2, Config),
-            verify_fun = create_verify_transfer_env(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
+            setup_fun = create_setup_view_transfer_env_fun(Type, P1, P2, ?USER_IN_SPACE_2, Config),
+            verify_fun = create_verify_transfer_env_fun(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) view using /replicas-view/ rest endpoint", [Type]),
@@ -481,8 +524,14 @@ create_view_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPr
     ])).
 
 
+%%--------------------------------------------------------------------
 %% @private
-create_setup_view_transfer_env(TransferType, SrcNode, DstNode, UserId, Config) ->
+%% @doc
+%% Creates view with 3 files to transfer. ViewName and expected transfer
+%% stats are saved in returned map.
+%% @end
+%%--------------------------------------------------------------------
+create_setup_view_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Config) ->
     fun() ->
         SessId1 = ?SESS_ID(UserId, SrcNode, Config),
         SessId2 = ?SESS_ID(UserId, DstNode, Config),
@@ -546,32 +595,6 @@ create_setup_view_transfer_env(TransferType, SrcNode, DstNode, UserId, Config) -
 
 
 %% @private
--spec add_file_id_bad_values(undefined | data_spec(), od_space:id(), undefined | od_share:id()) ->
-    data_spec().
-add_file_id_bad_values(DataSpec, SpaceId, ShareId) ->
-    {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
-
-    NonExistentFileAndSpaceGuid = file_id:pack_share_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID, ShareId),
-    {ok, NonExistentFileAndSpaceObjectId} = file_id:guid_to_objectid(NonExistentFileAndSpaceGuid),
-
-    NonExistentFileGuid = file_id:pack_share_guid(<<"InvalidUuid">>, SpaceId, ShareId),
-    {ok, NonExistentFileObjectId} = file_id:guid_to_objectid(NonExistentFileGuid),
-
-    BadFileIdValues = [
-        {<<"fileId">>, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
-        {<<"fileId">>, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
-        {<<"fileId">>, NonExistentFileAndSpaceObjectId, ?ERROR_FORBIDDEN},
-        {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)}
-    ],
-    case DataSpec of
-        undefined ->
-            #data_spec{bad_values = BadFileIdValues};
-        #data_spec{bad_values = BadValues} ->
-            DataSpec#data_spec{bad_values = BadFileIdValues ++ BadValues}
-    end.
-
-
-%% @private
 create_prepare_transfer_create_instance_gs_args_fun(Scope) ->
     fun(#api_test_ctx{env = Env, data = Data0}) ->
         Data1 = case Env of
@@ -596,17 +619,15 @@ create_prepare_replica_rest_args_fun(Type) ->
     end,
 
     fun(#api_test_ctx{scenario = Scenario, env = Env, data = Data0}) ->
-        {InvalidId, Data2} = case maps:take(bad_id, ensure_defined(Data0, #{})) of
-            {BadId, Data1} -> {BadId, Data1};
-            error -> {undefined, Data0}
-        end,
+        Data1 = api_test_utils:ensure_defined(Data0, #{}),
+        {InvalidId, Data2} = api_test_utils:maybe_substitute_id(undefined, Data1),
         RestPath = case Env of
             #{root_file_path := FilePath} when Scenario =:= rest_with_file_path  ->
-                <<"replicas", (ensure_defined(InvalidId, FilePath))/binary>>;
+                <<"replicas", (api_test_utils:ensure_defined(InvalidId, FilePath))/binary>>;
             #{root_file_cdmi_id := FileObjectId} ->
-                <<"replicas-id/", (ensure_defined(InvalidId, FileObjectId))/binary>>;
+                <<"replicas-id/", (api_test_utils:ensure_defined(InvalidId, FileObjectId))/binary>>;
             #{view_name := ViewName} ->
-                <<"replicas-view/", (ensure_defined(InvalidId, ViewName))/binary>>
+                <<"replicas-view/", (api_test_utils:ensure_defined(InvalidId, ViewName))/binary>>
         end,
         {Body, Data4} = case maps:take(<<"url">>, Data2) of
             {Url, Data3} ->
@@ -639,15 +660,12 @@ create_prepare_replica_gs_args_fun(Type, Scope) ->
             #{view_name := ViewName} when Operation == delete ->
                 {ViewName, evict_by_view}
         end,
-        {GriId, Data3} = case maps:take(bad_id, ensure_defined(Data0, #{})) of
-            {BadId, Data1} when map_size(Data1) == 0 -> {BadId, undefined};
-            {BadId, Data1} -> {BadId, Data1};
-            error -> {ValidId, Data0}
-        end,
+        {GriId, Data1} = api_test_utils:maybe_substitute_id(ValidId, Data0),
+
         #gs_args{
             operation = Operation,
             gri = #gri{type = op_replica, id = GriId, aspect = Aspect, scope = Scope},
-            data = Data3
+            data = Data1
         }
     end.
 
@@ -790,16 +808,16 @@ validate_transfer_call_result(TransferId, #api_test_ctx{
 
 
 %% @private
-create_verify_transfer_env(replication, Node, UserId, SrcProvider, DstProvider, Config) ->
-    create_verify_replication_env(Node, UserId, SrcProvider, DstProvider, Config);
-create_verify_transfer_env(eviction, Node, UserId, SrcProvider, DstProvider, Config) ->
-    create_verify_eviction_env(Node, UserId, SrcProvider, DstProvider, Config);
-create_verify_transfer_env(migration, Node, UserId, SrcProvider, DstProvider, Config) ->
-    create_verify_migration_env(Node, UserId, SrcProvider, DstProvider, Config).
+create_verify_transfer_env_fun(replication, Node, UserId, SrcProvider, DstProvider, Config) ->
+    create_verify_replication_env_fun(Node, UserId, SrcProvider, DstProvider, Config);
+create_verify_transfer_env_fun(eviction, Node, UserId, SrcProvider, DstProvider, Config) ->
+    create_verify_eviction_env_fun(Node, UserId, SrcProvider, DstProvider, Config);
+create_verify_transfer_env_fun(migration, Node, UserId, SrcProvider, DstProvider, Config) ->
+    create_verify_migration_env_fun(Node, UserId, SrcProvider, DstProvider, Config).
 
 
 %% @private
-create_verify_replication_env(Node, UserId, SrcProvider, DstProvider, Config) ->
+create_verify_replication_env_fun(Node, UserId, SrcProvider, DstProvider, Config) ->
     SessId = ?SESS_ID(UserId, Node, Config),
 
     fun
@@ -818,7 +836,7 @@ create_verify_replication_env(Node, UserId, SrcProvider, DstProvider, Config) ->
 
 
 %% @private
-create_verify_eviction_env(Node, UserId, SrcProvider, DstProvider, Config) ->
+create_verify_eviction_env_fun(Node, UserId, SrcProvider, DstProvider, Config) ->
     SessId = ?SESS_ID(UserId, Node, Config),
 
     fun
@@ -842,7 +860,7 @@ create_verify_eviction_env(Node, UserId, SrcProvider, DstProvider, Config) ->
 
 
 %% @private
-create_verify_migration_env(Node, UserId, SrcProvider, DstProvider, Config) ->
+create_verify_migration_env_fun(Node, UserId, SrcProvider, DstProvider, Config) ->
     SessId = ?SESS_ID(UserId, Node, Config),
 
     fun
@@ -907,7 +925,7 @@ init_per_testcase(_Case, Config) ->
     initializer:mock_share_logic(Config),
     ct:timetrap({minutes, 10}),
 
-    % TODO better loading modules from /test_distributes
+    % TODO better loading modules from /test_distributed
     code:add_pathz("/home/cyfrinet/Desktop/develop/op-worker/test_distributed"),
     ct:pal("QWEASD:~p", [code:load_file(transfers_test_utils)]),
 
@@ -980,17 +998,8 @@ create_file(Node, SessId, ParentPath) ->
     {ok, FileGuid} = api_test_utils:create_file(
         <<"file">>, Node, SessId, FilePath, 8#777
     ),
-    fill_file_with_dummy_data(Node, SessId, FileGuid, ?BYTES_NUM),
+    api_test_utils:fill_file_with_dummy_data(Node, SessId, FileGuid, ?BYTES_NUM),
     FileGuid.
-
-
-%% @private
-fill_file_with_dummy_data(Node, SessId, FileGuid, BytesNum) ->
-    Content = crypto:strong_rand_bytes(BytesNum),
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {guid, FileGuid}, write)),
-    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, 0, Content)),
-    ?assertMatch(ok, lfm_proxy:close(Node, Handle)),
-    Content.
 
 
 % Wait for metadata sync between providers and if requested transfer is `eviction`
@@ -998,10 +1007,14 @@ fill_file_with_dummy_data(Node, SessId, FileGuid, BytesNum) ->
 % exist on other providers)
 sync_files_between_nodes(eviction, SrcNode, SrcNodeSessId, DstNode, DstNodeSessId, Files) ->
     lists:foreach(fun(Guid) ->
-        ExpContent = read_file(SrcNode, SrcNodeSessId, Guid),
+        ExpContent = api_test_utils:read_file(SrcNode, SrcNodeSessId, Guid, ?BYTES_NUM),
         % Read file on DstNode to force rtransfer
         api_test_utils:wait_for_file_sync(DstNode, DstNodeSessId, Guid),
-        ?assertMatch(ExpContent, read_file(DstNode, DstNodeSessId, Guid), ?ATTEMPTS)
+        ?assertMatch(
+            ExpContent,
+            api_test_utils:read_file(DstNode, DstNodeSessId, Guid, ?BYTES_NUM),
+            ?ATTEMPTS
+        )
     end, Files),
     % Wait until file_distribution contains entries for both nodes
     % Otherwise some of them could be omitted from eviction (if data
@@ -1013,14 +1026,6 @@ sync_files_between_nodes(_TransferType, _SrcNode, _SrcNodeSessId, DstNode, DstNo
     lists:foreach(fun(Guid) ->
         api_test_utils:wait_for_file_sync(DstNode, DstNodeSessId, Guid)
     end, Files).
-
-
-%% @private
-read_file(Node, SessId, FileGuid) ->
-    {ok, ReadHandle} = lfm_proxy:open(Node, SessId, {guid, FileGuid}, read),
-    {ok, Content} = lfm_proxy:read(Node, ReadHandle, 0, ?BYTES_NUM),
-    ok = lfm_proxy:close(Node, ReadHandle),
-    Content.
 
 
 %% @private
@@ -1080,8 +1085,3 @@ replace_placeholder_value(Key, Value, Data) ->
         _ ->
             Data
     end.
-
-
-%% @private
-ensure_defined(undefined, DefaultValue) -> DefaultValue;
-ensure_defined(Value, _DefaultValue) -> Value.

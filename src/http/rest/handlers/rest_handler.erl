@@ -285,8 +285,14 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
         {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
-    ScopeBinding = case Tp of
-        op_file ->
+    IsShareFileRequest = case {Tp, AspectBinding} of
+        {op_file, _} -> true;
+        {op_replica, instance} -> true;
+        {op_replica, distribution} -> true;
+        _ -> false
+    end,
+    ScopeBinding = case IsShareFileRequest of
+        true ->
             % REST endpoints requiring $FILE_ID in URL accepts both normal
             % guids and share guids. In case of share ones scope must be
             % changed to 'public'.
@@ -294,7 +300,7 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
                 true -> public;
                 false -> Sc
             end;
-        _ ->
+        false ->
             Sc
     end,
 
