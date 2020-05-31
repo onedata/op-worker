@@ -102,7 +102,6 @@ create_file_replication(Config) ->
     [P2, _P1] = ?config(op_worker_nodes, Config),
 
     Callback = get_callback_url(),
-    RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION],
 
     TransferDataSpec = #data_spec{
         required = [
@@ -138,14 +137,13 @@ create_file_replication(Config) ->
         ]
     },
 
-    create_file_transfer(Config, replication, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+    create_file_transfer(Config, replication, TransferDataSpec, ReplicaDataSpec).
 
 
 create_file_eviction(Config) ->
     [_P2, P1] = ?config(op_worker_nodes, Config),
 
     Callback = get_callback_url(),
-    RequiredPrivs = [?SPACE_SCHEDULE_EVICTION],
 
     TransferDataSpec = #data_spec{
         required = [
@@ -178,14 +176,13 @@ create_file_eviction(Config) ->
         ]
     },
 
-    create_file_transfer(Config, eviction, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+    create_file_transfer(Config, eviction, TransferDataSpec, ReplicaDataSpec).
 
 
 create_file_migration(Config) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
 
     Callback = get_callback_url(),
-    RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION],
 
     TransferDataSpec = #data_spec{
         required = [
@@ -224,10 +221,10 @@ create_file_migration(Config) ->
         ]
     },
 
-    create_file_transfer(Config, migration, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+    create_file_transfer(Config, migration, TransferDataSpec, ReplicaDataSpec).
 
 
-create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPrivs) ->
+create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?SESS_ID(?USER_IN_SPACE_2, P1, Config),
     SessIdP2 = ?SESS_ID(?USER_IN_SPACE_2, P2, Config),
@@ -238,6 +235,7 @@ create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPr
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
     api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
 
+    RequiredPrivs = file_transfer_required_privs(Type),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
@@ -255,7 +253,7 @@ create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPr
                     validate_result_fun = fun validate_transfer_gs_call_result/2
                 }
             ],
-            data_spec = add_file_id_bad_values(TransferDataSpec, ?SPACE_2, undefined)
+            data_spec = add_file_id_bad_values(TransferDataSpec, FileGuid, ?SPACE_2, ShareId)
         },
 
         %% TEST DEPRECATED REPLICAS ENDPOINTS
@@ -350,22 +348,46 @@ create_setup_file_replication_env_fun(TransferType, SrcNode, DstNode, UserId, Co
 
 
 %% @private
--spec add_file_id_bad_values(undefined | data_spec(), od_space:id(), undefined | od_share:id()) ->
-    data_spec().
-add_file_id_bad_values(DataSpec, SpaceId, ShareId) ->
+file_transfer_required_privs(replication) ->
+    [?SPACE_SCHEDULE_REPLICATION];
+file_transfer_required_privs(eviction) ->
+    [?SPACE_SCHEDULE_EVICTION];
+file_transfer_required_privs(migration) ->
+    [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION].
+
+
+%% @private
+-spec add_file_id_bad_values(undefined | data_spec(), file_id:file_guid(), od_space:id(),
+    od_share:id()) -> data_spec().
+add_file_id_bad_values(DataSpec, FileGuid, SpaceId, ShareId) ->
     {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
 
-    NonExistentFileAndSpaceGuid = file_id:pack_share_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID, ShareId),
-    {ok, NonExistentFileAndSpaceObjectId} = file_id:guid_to_objectid(NonExistentFileAndSpaceGuid),
+    NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
+    {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
 
-    NonExistentFileGuid = file_id:pack_share_guid(<<"InvalidUuid">>, SpaceId, ShareId),
+    NonExistentSpaceShareGuid = file_id:guid_to_share_guid(NonExistentSpaceGuid, ShareId),
+    {ok, NonExistentSpaceShareObjectId} = file_id:guid_to_objectid(NonExistentSpaceShareGuid),
+
+    NonExistentFileGuid = file_id:pack_guid(<<"InvalidUuid">>, SpaceId),
     {ok, NonExistentFileObjectId} = file_id:guid_to_objectid(NonExistentFileGuid),
+
+    NonExistentFileShareGuid = file_id:guid_to_share_guid(NonExistentFileGuid, ShareId),
+    {ok, NonExistentFileShareObjectId} = file_id:guid_to_objectid(NonExistentFileShareGuid),
+
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+    {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
 
     BadFileIdValues = [
         {<<"fileId">>, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
         {<<"fileId">>, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
-        {<<"fileId">>, NonExistentFileAndSpaceObjectId, ?ERROR_FORBIDDEN},
-        {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)}
+
+        {<<"fileId">>, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
+        {<<"fileId">>, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
+
+        {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
+        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_FORBIDDEN},
+
+        {<<"fileId">>, ShareFileObjectId, ?ERROR_FORBIDDEN}
     ],
     case DataSpec of
         undefined ->

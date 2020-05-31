@@ -161,7 +161,13 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #
     {SpaceId, ViewPrivileges} = case maps:get(<<"dataSourceType">>, Data) of
         file ->
             FileGuid = maps:get(<<"fileId">>, Data),
-            {file_id:guid_to_space_id(FileGuid), []};
+            case file_id:is_share_guid(FileGuid) of
+                true ->
+                    % Transferring shared file is forbidden
+                    throw(?ERROR_FORBIDDEN);
+                false ->
+                    {file_id:guid_to_space_id(FileGuid), []}
+            end;
         view ->
             {maps:get(<<"spaceId">>, Data), [?SPACE_QUERY_VIEWS]}
     end,
