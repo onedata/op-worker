@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains tests concerning transfer create basic API (REST + gs).
+%%% This file contains tests concerning transfer create API (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
--module(transfer_api_test_SUITE).
+-module(transfer_create_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("api_test_runner.hrl").
@@ -84,6 +84,16 @@ all() ->
     {<<"dataSourceType">>, <<"data">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"dataSourceType">>, ?DATA_SOURCE_TYPES)}
 ]).
 
+-define(PROVIDER_ID_REPLICA_ERRORS(__KEY), [
+    {__KEY, 100, {gs, ?ERROR_BAD_VALUE_BINARY(__KEY)}},
+    {__KEY, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
+]).
+-define(PROVIDER_ID_TRANSFER_ERRORS(__KEY), [
+    {__KEY, 100, ?ERROR_BAD_VALUE_BINARY(__KEY)},
+    {__KEY, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
+]).
+-define(CALLBACK_ERRORS(__KEY), [{__KEY, 100, __KEY}]).
+
 -define(BYTES_NUM, 20).
 
 -define(HTTP_SERVER_PORT, 8080).
@@ -99,132 +109,18 @@ all() ->
 
 
 create_file_replication(Config) ->
-    [P2, _P1] = ?config(op_worker_nodes, Config),
-
-    Callback = get_callback_url(),
-
-    TransferDataSpec = #data_spec{
-        required = [
-            <<"type">>, <<"dataSourceType">>,
-            <<"replicatingProviderId">>,
-            <<"fileId">>
-        ],
-        optional = [<<"callback">>],
-        correct_values = #{
-            <<"type">> => [<<"replication">>],
-            <<"dataSourceType">> => [<<"file">>],
-            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
-            <<"fileId">> => [?PLACEHOLDER],
-            <<"callback">> => [Callback]
-        },
-        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
-            {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
-            {<<"replicatingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
-        ]
-    },
-    ReplicaDataSpec = #data_spec{
-        required = [<<"provider_id">>],
-        optional = [<<"url">>],
-        correct_values = #{
-            <<"provider_id">> => [?GET_DOMAIN_BIN(P2)],
-            <<"url">> => [Callback]
-        },
-        bad_values = [
-            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
-            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"url">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"url">>)}}
-        ]
-    },
-
-    create_file_transfer(Config, replication, TransferDataSpec, ReplicaDataSpec).
+    create_file_transfer(Config, replication).
 
 
 create_file_eviction(Config) ->
-    [_P2, P1] = ?config(op_worker_nodes, Config),
-
-    Callback = get_callback_url(),
-
-    TransferDataSpec = #data_spec{
-        required = [
-            <<"type">>, <<"dataSourceType">>,
-            <<"evictingProviderId">>,
-            <<"fileId">>
-        ],
-        optional = [<<"callback">>],
-        correct_values = #{
-            <<"type">> => [<<"eviction">>],
-            <<"dataSourceType">> => [<<"file">>],
-            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(P1)],
-            <<"fileId">> => [?PLACEHOLDER],
-            <<"callback">> => [Callback]
-        },
-        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
-            {<<"evictingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"evictingProviderId">>)},
-            {<<"evictingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
-        ]
-    },
-    ReplicaDataSpec = #data_spec{
-        required = [<<"provider_id">>],
-        correct_values = #{
-            <<"provider_id">> => [?GET_DOMAIN_BIN(P1)]
-        },
-        bad_values = [
-            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
-            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
-        ]
-    },
-
-    create_file_transfer(Config, eviction, TransferDataSpec, ReplicaDataSpec).
+    create_file_transfer(Config, eviction).
 
 
 create_file_migration(Config) ->
-    [P2, P1] = ?config(op_worker_nodes, Config),
-
-    Callback = get_callback_url(),
-
-    TransferDataSpec = #data_spec{
-        required = [
-            <<"type">>, <<"dataSourceType">>,
-            <<"replicatingProviderId">>, <<"evictingProviderId">>,
-            <<"fileId">>
-        ],
-        optional = [<<"callback">>],
-        correct_values = #{
-            <<"type">> => [<<"migration">>],
-            <<"dataSourceType">> => [<<"file">>],
-            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
-            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(P1)],
-            <<"fileId">> => [?PLACEHOLDER],
-            <<"callback">> => [Callback]
-        },
-        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
-            {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
-            {<<"replicatingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"evictingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"evictingProviderId">>)},
-            {<<"evictingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
-        ]
-    },
-    ReplicaDataSpec = #data_spec{
-        required = [<<"provider_id">>, <<"migration_provider_id">>],
-        correct_values = #{
-            <<"provider_id">> => [?GET_DOMAIN_BIN(P1)],
-            <<"migration_provider_id">> => [?GET_DOMAIN_BIN(P2)]
-        },
-        bad_values = [
-            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
-            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"migration_provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"migration_provider_id">>)}},
-            {<<"migration_provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
-        ]
-    },
-
-    create_file_transfer(Config, migration, TransferDataSpec, ReplicaDataSpec).
+    create_file_transfer(Config, migration).
 
 
-create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec) ->
+create_file_transfer(Config, Type) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
     SessIdP1 = ?SESS_ID(?USER_IN_SPACE_2, P1, Config),
     SessIdP2 = ?SESS_ID(?USER_IN_SPACE_2, P2, Config),
@@ -253,7 +149,7 @@ create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec) ->
                     validate_result_fun = fun validate_transfer_gs_call_result/2
                 }
             ],
-            data_spec = add_file_id_bad_values(TransferDataSpec, FileGuid, ?SPACE_2, ShareId)
+            data_spec = get_file_transfer_op_transfer_spec(Type, P1, P2, FileGuid, ShareId)
         },
 
         %% TEST DEPRECATED REPLICAS ENDPOINTS
@@ -283,9 +179,7 @@ create_file_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec) ->
                     validate_result_fun = fun validate_transfer_gs_call_result/2
                 }
             ],
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-                FileGuid, ShareId, ReplicaDataSpec
-            )
+            data_spec = get_file_transfer_op_replica_spec(Type, P1, P2, FileGuid, ShareId)
         }
     ])).
 
@@ -357,9 +251,115 @@ file_transfer_required_privs(migration) ->
 
 
 %% @private
--spec add_file_id_bad_values(undefined | data_spec(), file_id:file_guid(), od_space:id(),
-    od_share:id()) -> data_spec().
-add_file_id_bad_values(DataSpec, FileGuid, SpaceId, ShareId) ->
+get_file_transfer_op_replica_spec(replication, _SrcNode, DstNode, FileGuid, ShareId) ->
+    api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+        FileGuid, ShareId, #data_spec{
+            required = [<<"provider_id">>],
+            optional = [<<"url">>],
+            correct_values = #{
+                <<"provider_id">> => [?GET_DOMAIN_BIN(DstNode)],
+                <<"url">> => [get_callback_url()]
+            },
+            bad_values = ?PROVIDER_ID_REPLICA_ERRORS(<<"provider_id">>) ++ [
+                {<<"url">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"url">>)}}
+            ]
+        }
+    );
+get_file_transfer_op_replica_spec(eviction, SrcNode, _DstNode, FileGuid, ShareId) ->
+    api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+        FileGuid, ShareId, #data_spec{
+            required = [<<"provider_id">>],
+            correct_values = #{
+                <<"provider_id">> => [?GET_DOMAIN_BIN(SrcNode)]
+            },
+            bad_values = ?PROVIDER_ID_REPLICA_ERRORS(<<"provider_id">>)
+        }
+    );
+get_file_transfer_op_replica_spec(migration, SrcNode, DstNode, FileGuid, ShareId) ->
+    api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+        FileGuid, ShareId, #data_spec{
+            required = [<<"provider_id">>, <<"migration_provider_id">>],
+            correct_values = #{
+                <<"provider_id">> => [?GET_DOMAIN_BIN(SrcNode)],
+                <<"migration_provider_id">> => [?GET_DOMAIN_BIN(DstNode)]
+            },
+            bad_values = lists:flatten([
+                ?PROVIDER_ID_REPLICA_ERRORS(<<"provider_id">>),
+                ?PROVIDER_ID_REPLICA_ERRORS(<<"migration_provider_id">>)
+            ])
+        }
+    ).
+
+
+%% @private
+get_file_transfer_op_transfer_spec(replication, _SrcNode, DstNode, FileGuid, ShareId) ->
+    add_file_id_bad_values(FileGuid, ?SPACE_2, ShareId, #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>, <<"fileId">>,
+            <<"replicatingProviderId">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"replication">>],
+            <<"dataSourceType">> => [<<"file">>],
+            <<"fileId">> => [?PLACEHOLDER],
+            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(DstNode)],
+            <<"callback">> => [get_callback_url()]
+        },
+        bad_values = lists:flatten([
+            ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES,
+            ?PROVIDER_ID_TRANSFER_ERRORS(<<"replicatingProviderId">>),
+            ?CALLBACK_ERRORS(<<"callback">>)
+        ])
+    });
+get_file_transfer_op_transfer_spec(eviction, SrcNode, _DstNode, FileGuid, ShareId) ->
+    add_file_id_bad_values(FileGuid, ?SPACE_2, ShareId, #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>, <<"fileId">>,
+            <<"evictingProviderId">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"eviction">>],
+            <<"dataSourceType">> => [<<"file">>],
+            <<"fileId">> => [?PLACEHOLDER],
+            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(SrcNode)],
+            <<"callback">> => [get_callback_url()]
+        },
+        bad_values = lists:flatten([
+            ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES,
+            ?PROVIDER_ID_TRANSFER_ERRORS(<<"evictingProviderId">>),
+            ?CALLBACK_ERRORS(<<"callback">>)
+        ])
+    });
+get_file_transfer_op_transfer_spec(migration, SrcNode, DstNode, FileGuid, ShareId) ->
+    add_file_id_bad_values(FileGuid, ?SPACE_2, ShareId, #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>, <<"fileId">>,
+            <<"replicatingProviderId">>, <<"evictingProviderId">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"migration">>],
+            <<"dataSourceType">> => [<<"file">>],
+            <<"fileId">> => [?PLACEHOLDER],
+            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(DstNode)],
+            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(SrcNode)],
+            <<"callback">> => [get_callback_url()]
+        },
+        bad_values = lists:flatten([
+            ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES,
+            ?PROVIDER_ID_TRANSFER_ERRORS(<<"replicatingProviderId">>),
+            ?PROVIDER_ID_TRANSFER_ERRORS(<<"evictingProviderId">>),
+            ?CALLBACK_ERRORS(<<"callback">>)
+        ])
+    }).
+
+
+%% @private
+-spec add_file_id_bad_values(file_id:file_guid(), od_space:id(), od_share:id(), data_spec()) ->
+    data_spec().
+add_file_id_bad_values(FileGuid, SpaceId, ShareId, #data_spec{bad_values = BadValues} = DataSpec) ->
     {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
 
     NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
@@ -389,12 +389,7 @@ add_file_id_bad_values(DataSpec, FileGuid, SpaceId, ShareId) ->
 
         {<<"fileId">>, ShareFileObjectId, ?ERROR_FORBIDDEN}
     ],
-    case DataSpec of
-        undefined ->
-            #data_spec{bad_values = BadFileIdValues};
-        #data_spec{bad_values = BadValues} ->
-            DataSpec#data_spec{bad_values = BadFileIdValues ++ BadValues}
-    end.
+    DataSpec#data_spec{bad_values = BadFileIdValues ++ BadValues}.
 
 
 %%%===================================================================
@@ -403,151 +398,22 @@ add_file_id_bad_values(DataSpec, FileGuid, SpaceId, ShareId) ->
 
 
 create_view_replication(Config) ->
-    [P2, _P1] = ?config(op_worker_nodes, Config),
-
-    Callback = get_callback_url(),
-    RequiredPrivs = [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS],
-
-    TransferDataSpec = #data_spec{
-        required = [
-            <<"type">>, <<"dataSourceType">>,
-            <<"replicatingProviderId">>,
-            <<"spaceId">>, <<"viewName">>
-        ],
-        optional = [<<"callback">>],
-        correct_values = #{
-            <<"type">> => [<<"replication">>],
-            <<"dataSourceType">> => [<<"view">>],
-            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
-            <<"spaceId">> => [?SPACE_2],
-            <<"viewName">> => [?PLACEHOLDER],
-            <<"callback">> => [Callback]
-        },
-        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
-            {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
-            {<<"replicatingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
-        ]
-    },
-
-    ReplicaDataSpec = #data_spec{
-        required = [<<"provider_id">>, <<"space_id">>],
-        optional = [<<"url">>],
-        correct_values = #{
-            <<"provider_id">> => [?GET_DOMAIN_BIN(P2)],
-            <<"space_id">> => [?SPACE_2],
-            <<"url">> => [Callback]
-        },
-        bad_values = [
-            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
-            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"url">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"url">>)}}
-        ]
-    },
-
-    create_view_transfer(Config, replication, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+    create_view_transfer(Config, replication).
 
 
 create_view_eviction(Config) ->
-    [_P2, P1] = ?config(op_worker_nodes, Config),
-
-    Callback = get_callback_url(),
-    RequiredPrivs = [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS],
-
-    TransferDataSpec = #data_spec{
-        required = [
-            <<"type">>, <<"dataSourceType">>,
-            <<"evictingProviderId">>,
-            <<"spaceId">>, <<"viewName">>
-        ],
-        optional = [<<"callback">>],
-        correct_values = #{
-            <<"type">> => [<<"eviction">>],
-            <<"dataSourceType">> => [<<"view">>],
-            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(P1)],
-            <<"spaceId">> => [?SPACE_2],
-            <<"viewName">> => [?PLACEHOLDER],
-            <<"callback">> => [Callback]
-        },
-        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
-            {<<"evictingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"evictingProviderId">>)},
-            {<<"evictingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
-        ]
-    },
-
-    ReplicaDataSpec = #data_spec{
-        required = [<<"provider_id">>, <<"space_id">>],
-        correct_values = #{
-            <<"provider_id">> => [?GET_DOMAIN_BIN(P1)],
-            <<"space_id">> => [?SPACE_2]
-        },
-        bad_values = [
-            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
-            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
-        ]
-    },
-
-    create_view_transfer(Config, eviction, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+    create_view_transfer(Config, eviction).
 
 
 create_view_migration(Config) ->
-    [P2, P1] = ?config(op_worker_nodes, Config),
-
-    Callback = get_callback_url(),
-    RequiredPrivs = [
-        ?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION,
-        ?SPACE_QUERY_VIEWS
-    ],
-
-    TransferDataSpec = #data_spec{
-        required = [
-            <<"type">>, <<"dataSourceType">>,
-            <<"evictingProviderId">>,
-            <<"replicatingProviderId">>,
-            <<"spaceId">>, <<"viewName">>
-        ],
-        optional = [<<"callback">>],
-        correct_values = #{
-            <<"type">> => [<<"migration">>],
-            <<"dataSourceType">> => [<<"view">>],
-            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(P2)],
-            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(P1)],
-            <<"spaceId">> => [?SPACE_2],
-            <<"viewName">> => [?PLACEHOLDER],
-            <<"callback">> => [Callback]
-        },
-        bad_values = ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES ++ [
-            {<<"replicatingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"replicatingProviderId">>)},
-            {<<"replicatingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"evictingProviderId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"evictingProviderId">>)},
-            {<<"evictingProviderId">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"callback">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"callback">>)}
-        ]
-    },
-
-    ReplicaDataSpec = #data_spec{
-        required = [<<"provider_id">>, <<"migration_provider_id">>, <<"space_id">>],
-        correct_values = #{
-            <<"migration_provider_id">> => [?GET_DOMAIN_BIN(P2)],
-            <<"provider_id">> => [?GET_DOMAIN_BIN(P1)],
-            <<"space_id">> => [?SPACE_2]
-        },
-        bad_values = [
-            {<<"migration_provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"migration_provider_id">>)}},
-            {<<"migration_provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)},
-            {<<"provider_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"provider_id">>)}},
-            {<<"provider_id">>, <<"NonExistingProvider">>, ?ERROR_SPACE_NOT_SUPPORTED_BY(<<"NonExistingProvider">>)}
-        ]
-    },
-
-    create_view_transfer(Config, migration, TransferDataSpec, ReplicaDataSpec, RequiredPrivs).
+    create_view_transfer(Config, migration).
 
 
 %% @private
-create_view_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPrivs) ->
+create_view_transfer(Config, Type) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
 
+    RequiredPrivs = view_transfer_required_privs(Type),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
@@ -565,7 +431,7 @@ create_view_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPr
                     validate_result_fun = fun validate_transfer_gs_call_result/2
                 }
             ],
-            data_spec = TransferDataSpec
+            data_spec = get_view_transfer_op_transfer_spec(Type, P1, P2)
         },
 
         %% TEST DEPRECATED REPLICAS ENDPOINTS
@@ -589,7 +455,7 @@ create_view_transfer(Config, Type, TransferDataSpec, ReplicaDataSpec, RequiredPr
                     validate_result_fun = fun validate_transfer_gs_call_result/2
                 }
             ],
-            data_spec = ReplicaDataSpec
+            data_spec = get_view_transfer_op_replica_spec(Type, P1, P2)
         }
     ])).
 
@@ -657,6 +523,119 @@ create_setup_view_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Confi
             other_files => OtherFiles
         }
     end.
+
+
+%% @private
+view_transfer_required_privs(replication) ->
+    [?SPACE_SCHEDULE_REPLICATION, ?SPACE_QUERY_VIEWS];
+view_transfer_required_privs(eviction) ->
+    [?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS];
+view_transfer_required_privs(migration) ->
+    [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION, ?SPACE_QUERY_VIEWS].
+
+
+%% @private
+get_view_transfer_op_replica_spec(replication, _SrcNode, DstNode) ->
+    #data_spec{
+        required = [<<"provider_id">>],
+        optional = [<<"url">>],
+        correct_values = #{
+            <<"provider_id">> => [?GET_DOMAIN_BIN(DstNode)],
+            <<"url">> => [get_callback_url()]
+        },
+        bad_values = ?PROVIDER_ID_REPLICA_ERRORS(<<"provider_id">>) ++ [
+            {<<"url">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"url">>)}}
+        ]
+    };
+get_view_transfer_op_replica_spec(eviction, SrcNode, _DstNode) ->
+    #data_spec{
+        required = [<<"provider_id">>],
+        correct_values = #{
+            <<"provider_id">> => [?GET_DOMAIN_BIN(SrcNode)]
+        },
+        bad_values = ?PROVIDER_ID_REPLICA_ERRORS(<<"provider_id">>)
+    };
+get_view_transfer_op_replica_spec(migration, SrcNode, DstNode) ->
+    #data_spec{
+        required = [<<"provider_id">>, <<"migration_provider_id">>, <<"space_id">>],
+        correct_values = #{
+            <<"provider_id">> => [?GET_DOMAIN_BIN(SrcNode)],
+            <<"migration_provider_id">> => [?GET_DOMAIN_BIN(DstNode)],
+            <<"space_id">> => [?SPACE_2]
+        },
+        bad_values = lists:flatten([
+            ?PROVIDER_ID_REPLICA_ERRORS(<<"provider_id">>),
+            ?PROVIDER_ID_REPLICA_ERRORS(<<"migration_provider_id">>)
+        ])
+    }.
+
+
+%% @private
+get_view_transfer_op_transfer_spec(replication, _SrcNode, DstNode) ->
+    #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>, <<"spaceId">>, <<"viewName">>,
+            <<"replicatingProviderId">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"replication">>],
+            <<"dataSourceType">> => [<<"view">>],
+            <<"spaceId">> => [?SPACE_2],
+            <<"viewName">> => [?PLACEHOLDER],
+            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(DstNode)],
+            <<"callback">> => [get_callback_url()]
+        },
+        bad_values = lists:flatten([
+            ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES,
+            ?PROVIDER_ID_TRANSFER_ERRORS(<<"replicatingProviderId">>),
+            ?CALLBACK_ERRORS(<<"callback">>)
+        ])
+    };
+get_view_transfer_op_transfer_spec(eviction, SrcNode, _DstNode) ->
+    #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>, <<"spaceId">>, <<"viewName">>,
+            <<"evictingProviderId">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"eviction">>],
+            <<"dataSourceType">> => [<<"view">>],
+            <<"spaceId">> => [?SPACE_2],
+            <<"viewName">> => [?PLACEHOLDER],
+            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(SrcNode)],
+            <<"callback">> => [get_callback_url()]
+        },
+        bad_values = lists:flatten([
+            ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES,
+            ?PROVIDER_ID_TRANSFER_ERRORS(<<"evictingProviderId">>),
+            ?CALLBACK_ERRORS(<<"callback">>)
+        ])
+    };
+get_view_transfer_op_transfer_spec(migration, SrcNode, DstNode) ->
+    #data_spec{
+        required = [
+            <<"type">>, <<"dataSourceType">>, <<"spaceId">>, <<"viewName">>,
+            <<"replicatingProviderId">>, <<"evictingProviderId">>
+        ],
+        optional = [<<"callback">>],
+        correct_values = #{
+            <<"type">> => [<<"migration">>],
+            <<"dataSourceType">> => [<<"view">>],
+            <<"spaceId">> => [?SPACE_2],
+            <<"viewName">> => [?PLACEHOLDER],
+            <<"replicatingProviderId">> => [?GET_DOMAIN_BIN(DstNode)],
+            <<"evictingProviderId">> => [?GET_DOMAIN_BIN(SrcNode)],
+            <<"callback">> => [get_callback_url()]
+        },
+        bad_values = lists:flatten([
+            ?TYPE_AND_DATA_SOURCE_TYPE_BAD_VALUES,
+            ?PROVIDER_ID_TRANSFER_ERRORS(<<"replicatingProviderId">>),
+            ?PROVIDER_ID_TRANSFER_ERRORS(<<"evictingProviderId">>),
+            ?CALLBACK_ERRORS(<<"callback">>)
+        ])
+    }.
 
 
 %%%===================================================================
