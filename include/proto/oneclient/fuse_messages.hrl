@@ -202,9 +202,13 @@
     file_content :: binary()
 }).
 
+-record(get_fs_stats, {
+    file_id :: file_id:file_guid()
+}).
+
 -type fuse_request_type() ::
     #resolve_guid{} | #get_helper_params{} | #create_storage_test_file{} |
-    #verify_storage_test_file{} | #file_request{}.
+    #verify_storage_test_file{} | #file_request{} | #get_fs_stats{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request_type()
@@ -286,12 +290,23 @@
     names :: [custom_metadata:name()]
 }).
 
+-record(storage_stats, {
+    storage_id :: storage:id(),
+    size :: non_neg_integer(),
+    occupied :: non_neg_integer()
+}).
+
+-record(fs_stats, {
+    space_id :: od_space:id(),
+    storage_stats :: [#storage_stats{}]
+}).
+
 -type fuse_response_type() ::
     #file_attr{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
     #file_children_attrs{} | #file_location_changed{} | #file_opened_extended{} |
-    #file_details{} | #file_children_details{} |
+    #file_details{} | #file_children_details{} | #fs_stats{} |
     undefined.
 
 -record(fuse_response, {

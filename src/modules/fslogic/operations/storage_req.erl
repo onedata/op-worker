@@ -78,7 +78,7 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
             % SessionId =:= ?ROOT_SESS_ID or UserId =:= ?ROOT_USER_ID
             % This should never happen as client cannot pass root credentials
             #fuse_response{status = #status{code = ?EACCES}};
-        {?FORCE_DIRECT_HELPER_MODE, false} ->
+        {?FORCE_DIRECT_HELPER_MODE, false} when Helper =/= undefined ->
             case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
                 {ok, ClientStorageUserCtx} ->
                     HelperParams = helper:get_params(Helper, ClientStorageUserCtx),

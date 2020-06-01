@@ -19,7 +19,7 @@
 %% API
 -export([init/1, init/2, teardown/1]).
 -export([
-    stat/3, get_details/3,
+    stat/3, get_fs_stats/3, get_details/3,
     resolve_guid/3, get_file_path/3,
     get_parent/3,
     check_perms/4,
@@ -139,6 +139,12 @@ teardown(Config) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
 stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_guid(Worker, FileKey))).
+
+
+-spec get_fs_stats(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
+    {ok, lfm_attrs:fs_stats()} | lfm:error_reply().
+get_fs_stats(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_fs_stats(SessId, uuid_to_guid(Worker, FileKey))).
 
 
 -spec get_details(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->

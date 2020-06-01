@@ -26,7 +26,9 @@
     get_file_details/2, get_file_details_insecure/3,
 
     get_child_attr/3, chmod/3, update_times/5,
-    chmod_attrs_only_insecure/2
+    chmod_attrs_only_insecure/2,
+
+    get_fs_stats/2
 ]).
 
 -type name_conflicts_resolution_policy() ::
@@ -200,6 +202,19 @@ update_times(UserCtx, FileCtx0, ATime, MTime, CTime) ->
         [traverse_ancestors, {owner, 'or', ?write_attributes}]
     ),
     update_times_insecure(UserCtx, FileCtx1, ATime, MTime, CTime).
+
+
+%%--------------------------------------------------------------------
+%% @equiv get_fs_stats/2 with permission checks
+%% @end
+%%--------------------------------------------------------------------
+-spec get_fs_stats(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_fs_stats(UserCtx, FileCtx0) ->
+    FileCtx1 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx0, [traverse_ancestors]
+    ),
+    get_fs_stats_insecure(UserCtx, FileCtx1).
 
 
 %%%===================================================================
@@ -445,3 +460,27 @@ has_metadata(FileCtx) ->
         (<<?ONEDATA_PREFIX_STR, _/binary>>) -> false;
         (_) -> true
     end, XattrList).
+
+
+%% @private
+-spec get_fs_stats_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
+    fslogic_worker:fuse_response().
+get_fs_stats_insecure(_UserCtx, FileCtx) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+
+    %% @TODO VFS-5497 Calc size/occupied for all supporting storages
+    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+    {ok, SupportSize} = provider_logic:get_support_size(SpaceId),
+    Occupied = space_quota:current_size(SpaceId),
+
+    #fuse_response{
+        status = #status{code = ?OK},
+        fuse_response = #fs_stats{
+            space_id = SpaceId,
+            storage_stats = [#storage_stats{
+                storage_id = StorageId,
+                size = SupportSize,
+                occupied = Occupied
+            }]
+        }
+    }.
