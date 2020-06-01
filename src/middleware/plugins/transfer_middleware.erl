@@ -95,7 +95,7 @@ data_spec(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}
             },
             ViewOptional = AlwaysOptional#{
                 <<"queryViewParams">> => {json, fun(QueryViewParams) ->
-                    view_utils:sanitize_query_options(QueryViewParams)
+                    {true, view_utils:sanitize_query_options(QueryViewParams)}
                 end}
             },
             {ViewRequired, ViewOptional};
