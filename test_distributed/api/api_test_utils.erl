@@ -22,6 +22,7 @@
     wait_for_file_sync/3,
 
     fill_file_with_dummy_data/4,
+    fill_file_with_dummy_data/5,
     read_file/4,
 
     guids_to_object_ids/1,
@@ -78,12 +79,19 @@ wait_for_file_sync(Node, SessId, FileGuid) ->
     ok.
 
 
--spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid(), non_neg_integer()) ->
+-spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
     WrittenContent :: binary().
-fill_file_with_dummy_data(Node, SessId, FileGuid, BytesNum) ->
-    Content = crypto:strong_rand_bytes(BytesNum),
+fill_file_with_dummy_data(Node, SessId, FileGuid, Size) ->
+    fill_file_with_dummy_data(Node, SessId, FileGuid, 0, Size).
+
+
+-spec fill_file_with_dummy_data(node(), session:id(), file_id:file_guid(),
+    Offset :: non_neg_integer(), Size :: non_neg_integer()) -> WrittenContent :: binary().
+fill_file_with_dummy_data(Node, SessId, FileGuid, Offset, Size) ->
+    Content = crypto:strong_rand_bytes(Size),
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Node, SessId, {guid, FileGuid}, write)),
-    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, 0, Content)),
+    ?assertMatch({ok, _}, lfm_proxy:write(Node, Handle, Offset, Content)),
+    ?assertMatch(ok, lfm_proxy:fsync(Node, Handle)),
     ?assertMatch(ok, lfm_proxy:close(Node, Handle)),
     Content.
 

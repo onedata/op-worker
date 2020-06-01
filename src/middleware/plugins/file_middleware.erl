@@ -323,6 +323,7 @@ get_operation_supported(json_metadata, private) -> true;
 get_operation_supported(json_metadata, public) -> true;
 get_operation_supported(rdf_metadata, private) -> true;
 get_operation_supported(rdf_metadata, public) -> true;
+get_operation_supported(distribution, private) -> true;
 get_operation_supported(acl, private) -> true;
 get_operation_supported(shares, private) -> true;
 get_operation_supported(transfers, private) -> true;
@@ -396,17 +397,13 @@ data_spec_get(#gri{aspect = json_metadata}) -> #{
     }
 };
 
-data_spec_get(#gri{aspect = rdf_metadata}) -> #{
-    required => #{id => {binary, guid}}
-};
-
-data_spec_get(#gri{aspect = acl}) -> #{
-    required => #{id => {binary, guid}}
-};
-
-data_spec_get(#gri{aspect = shares}) -> #{
-    required => #{id => {binary, guid}}
-};
+data_spec_get(#gri{aspect = As}) when
+    As =:= rdf_metadata;
+    As =:= distribution;
+    As =:= acl;
+    As =:= shares
+->
+    #{required => #{id => {binary, guid}}};
 
 data_spec_get(#gri{aspect = transfers}) -> #{
     required => #{id => {binary, guid}},
@@ -445,6 +442,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
+    As =:= distribution;
     As =:= acl;
     As =:= shares;
     As =:= download_url
@@ -471,6 +469,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
+    As =:= distribution;
     As =:= acl;
     As =:= shares;
     As =:= transfers;
@@ -608,6 +607,9 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) -
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     ?check(lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}));
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
+    ?check(lfm:get_file_distribution(Auth#auth.session_id, {guid, FileGuid}));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
     case lfm:stat(Auth#auth.session_id, {guid, FileGuid}) of

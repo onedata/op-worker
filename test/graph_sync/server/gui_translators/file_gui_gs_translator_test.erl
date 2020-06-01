@@ -9,7 +9,7 @@
 %%% Unit tests for file_distribution_data_backend module.
 %%% @end
 %%%--------------------------------------------------------------------
--module(replica_gui_gs_translator_test).
+-module(file_gui_gs_translator_test).
 -author("Lukasz Opiola").
 
 -ifdef(TEST).
@@ -31,7 +31,7 @@ run_test_cases(CaseNum) ->
         FileSize ->
             Blocks = test_case(CaseNum, blocks),
             Expected = test_case(CaseNum, expect),
-            ?assertEqual(Expected, replica_gui_gs_translator:interpolate_chunks(Blocks, FileSize)),
+            ?assertEqual(Expected, file_gui_gs_translator:interpolate_chunks(Blocks, FileSize)),
             run_test_cases(CaseNum + 1)
     end.
 

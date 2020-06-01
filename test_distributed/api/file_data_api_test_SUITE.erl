@@ -41,7 +41,10 @@
     get_attrs_on_provider_not_supporting_space_test/1,
 
     set_file_mode_test/1,
-    set_mode_on_provider_not_supporting_space_test/1
+    set_mode_on_provider_not_supporting_space_test/1,
+
+    get_file_distribution_test/1,
+    get_dir_distribution_test/1
 ]).
 
 all() ->
@@ -57,7 +60,10 @@ all() ->
         get_attrs_on_provider_not_supporting_space_test,
 
         set_file_mode_test,
-        set_mode_on_provider_not_supporting_space_test
+        set_mode_on_provider_not_supporting_space_test,
+
+        get_file_distribution_test,
+        get_dir_distribution_test
     ]).
 
 
@@ -1122,6 +1128,210 @@ set_mode_data_spec() ->
             {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)}
         ]
     }.
+
+
+%%%===================================================================
+%%% Get file distribution test functions
+%%%===================================================================
+
+
+get_file_distribution_test(Config) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    FileType = <<"file">>,
+    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, <<"share">>),
+    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+
+    api_test_utils:fill_file_with_dummy_data(P1, SessIdP1, FileGuid, 0, 20),
+    ExpDist1 = [#{
+        <<"providerId">> => ?GET_DOMAIN_BIN(P1),
+        <<"blocks">> => [[0, 20]],
+        <<"totalBlocksSize">> => 20
+    }],
+    wait_for_file_location_sync(P2, SessIdP2, FileGuid, ExpDist1),
+    get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDist1, Config),
+
+    % Write another block to file on P2 and check returned distribution
+
+    api_test_utils:fill_file_with_dummy_data(P2, SessIdP2, FileGuid, 30, 20),
+    ExpDist2 = [
+        #{
+            <<"providerId">> => ?GET_DOMAIN_BIN(P1),
+            <<"blocks">> => [[0, 20]],
+            <<"totalBlocksSize">> => 20
+        },
+        #{
+            <<"providerId">> => ?GET_DOMAIN_BIN(P2),
+            <<"blocks">> => [[30, 20]],
+            <<"totalBlocksSize">> => 20
+        }
+    ],
+    wait_for_file_location_sync(P1, SessIdP1, FileGuid, ExpDist2),
+    get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDist2, Config).
+
+
+get_dir_distribution_test(Config) ->
+    [P2, P1] = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    FileType = <<"dir">>,
+    DirPath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    {ok, DirGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, DirPath, 8#777),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, DirGuid}, <<"share">>),
+    api_test_utils:wait_for_file_sync(P2, SessIdP2, DirGuid),
+
+    ExpDist1 = [],
+    wait_for_file_location_sync(P2, SessIdP2, DirGuid, ExpDist1),
+    get_distribution_test_base(FileType, DirPath, DirGuid, ShareId, ExpDist1, Config),
+
+    % Create file in dir and assert that dir distribution hasn't changed
+
+    {ok, FileGuid} = api_test_utils:create_file(
+        <<"file">>, P2, SessIdP2,
+        filename:join([DirPath, ?RANDOM_FILE_NAME()]),
+        8#777
+    ),
+    api_test_utils:fill_file_with_dummy_data(P2, SessIdP2, FileGuid, 30, 20),
+
+    ExpDist2 = [],
+    wait_for_file_location_sync(P1, SessIdP1, DirGuid, ExpDist2),
+    get_distribution_test_base(FileType, DirPath, DirGuid, ShareId, ExpDist2, Config).
+
+
+%% @private
+wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
+    ?assertMatch(
+        {ok, ExpDistribution},
+        lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}),
+        ?ATTEMPTS
+    ).
+
+
+%% @private
+get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistribution, Config) ->
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+
+    ValidateRestSuccessfulCallFun =  fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+        ?assertEqual({?HTTP_200_OK, ExpDistribution}, {RespCode, RespBody})
+    end,
+
+    ExpGsDistribution = file_gui_gs_translator:translate_distribution(ExpDistribution),
+
+    CreateValidateGsSuccessfulCallFun = fun(Type) ->
+        ExpGsResponse = ExpGsDistribution#{
+            <<"gri">> => gri:serialize(#gri{
+                type = Type,
+                id = FileGuid,
+                aspect = distribution,
+                scope = private
+            }),
+            <<"revision">> => 1
+        },
+        fun(_TestCtx, Result) ->
+            ?assertEqual({ok, ExpGsResponse}, Result)
+        end
+    end,
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get distribution for ", FileType/binary, " using /data/FileId/distribution rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_get_distribution_rest_args_fun(FileObjectId),
+                    validate_result_fun = ValidateRestSuccessfulCallFun
+                },
+                #scenario_template{
+                    name = <<"Get distribution for ", FileType/binary, " using op_file gs api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_distribution_gs_args_fun(FileGuid, private),
+                    validate_result_fun = CreateValidateGsSuccessfulCallFun(op_file)
+                },
+
+                %% TEST DEPRECATED REPLICA ENDPOINTS
+
+                #scenario_template{
+                    name = <<"Get distribution for ", FileType/binary, " using /replicas/ rest endpoint">>,
+                    type = rest_with_file_path,
+                    prepare_args_fun = create_prepare_get_replicas_rest_args_fun(path, FilePath),
+                    validate_result_fun = ValidateRestSuccessfulCallFun
+                },
+                #scenario_template{
+                    name = <<"Get distribution for ", FileType/binary, " using /replicas-id/ rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_get_replicas_rest_args_fun(id, FileObjectId),
+                    validate_result_fun = ValidateRestSuccessfulCallFun
+                },
+                #scenario_template{
+                    name = <<"Get distribution for ", FileType/binary, " using op_replica gs api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_replicas_gs_args_fun(FileGuid, private),
+                    validate_result_fun = CreateValidateGsSuccessfulCallFun(op_replica)
+                }
+            ],
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                FileGuid, ShareId, undefined
+            )
+        }
+    ])).
+
+
+%% @private
+create_prepare_get_distribution_rest_args_fun(ValidId) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {Id, _} = api_test_utils:maybe_substitute_id(ValidId, Data),
+
+        #rest_args{
+            method = get,
+            path = <<"data/", Id/binary, "/distribution">>
+        }
+    end.
+
+
+%% @private
+create_prepare_get_distribution_gs_args_fun(FileGuid, Scope) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {GriId, _} = api_test_utils:maybe_substitute_id(FileGuid, Data),
+
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = GriId, aspect = distribution, scope = Scope}
+        }
+    end.
+
+
+%% @private
+create_prepare_get_replicas_rest_args_fun(Endpoint, ValidId) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {Id, _} = api_test_utils:maybe_substitute_id(ValidId, Data),
+
+        #rest_args{
+            method = get,
+            path = case Endpoint of
+                id -> <<"replicas-id/", Id/binary>>;
+                path -> <<"replicas", Id/binary>>
+            end
+        }
+    end.
+
+
+%% @private
+create_prepare_get_replicas_gs_args_fun(FileGuid, Scope) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {GriId, _} = api_test_utils:maybe_substitute_id(FileGuid, Data),
+
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_replica, id = GriId, aspect = distribution, scope = Scope}
+        }
+    end.
 
 
 %%%===================================================================
