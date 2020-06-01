@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This file contains tests concerning file metadata basic API (REST + gs).
+%%% This file contains tests concerning file metadata get basic API (REST + gs).
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_metadata_api_test_SUITE).
+-module(file_metadata_get_api_test_SUITE).
 -author("Bartosz Walkowicz").
 
 -include("api_test_utils.hrl").

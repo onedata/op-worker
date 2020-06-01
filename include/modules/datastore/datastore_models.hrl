@@ -14,6 +14,7 @@
 
 -include("modules/datastore/qos.hrl").
 -include("modules/events/subscriptions.hrl").
+-include("modules/fslogic/fslogic_delete.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
@@ -501,7 +502,7 @@
 
 %% Model for storing file's blocks
 -record(file_local_blocks, {
-    last :: boolean(),
+    last = true :: boolean(),
     blocks = [] :: fslogic_blocks:blocks()
 }).
 
@@ -636,7 +637,9 @@
 
 %% Model that stores file handles
 -record(file_handles, {
-    is_removed = false :: boolean(),
+    % this field informs whether file was deleted and
+    % whether removal was performed locally or in remote provider
+    removal_status = ?NOT_REMOVED :: file_handles:removal_status(),
     descriptors = #{} :: file_descriptors(),
     creation_handle :: file_handles:creation_handle()
 }).
