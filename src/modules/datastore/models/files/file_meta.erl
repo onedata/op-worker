@@ -252,7 +252,7 @@ get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
         value = #file_meta{
             name = ?GLOBAL_ROOT_DIR_NAME,
             is_scope = true,
-            mode = 8#111,
+            mode = ?DEFAULT_DIR_PERMS,
             owner = ?ROOT_USER_ID,
             parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }

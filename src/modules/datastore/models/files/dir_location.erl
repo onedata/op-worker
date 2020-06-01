@@ -40,7 +40,8 @@ mark_dir_created_on_storage(FileUuid) ->
     Diff = fun(DirLocation) ->
         {ok, DirLocation#dir_location{storage_file_created = true}}
     end,
-    ?extract_ok(datastore_model:update(?CTX, FileUuid, Diff, Diff(#dir_location{}))).
+    {ok, Default} = Diff(#dir_location{}),
+    ?extract_ok(datastore_model:update(?CTX, FileUuid, Diff, Default)).
 
 -spec mark_dir_synced_from_storage(key(), luma:gid() | undefined) ->
     ok | {error, term()}.

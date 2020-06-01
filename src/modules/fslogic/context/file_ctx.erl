@@ -821,16 +821,23 @@ get_storage_id(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_storage(ctx()) -> {storage:data() | undefined, ctx()}.
 get_storage(FileCtx = #file_ctx{storage = undefined}) ->
-    SpaceId = get_space_id_const(FileCtx),
-    case space_logic:get_local_storage_ids(SpaceId) of
-        {ok, []} ->
+    case file_ctx:is_root_dir_const(FileCtx) of
+        true ->
             {undefined, FileCtx};
-        {ok, [StorageId | _]} ->
-            Storage2 = case storage:get(StorageId) of
-                {ok, Storage} -> Storage;
-                {error, not_found} -> undefined
-            end,
-            {Storage2, FileCtx#file_ctx{storage = Storage2}}
+        false ->
+            SpaceId = get_space_id_const(FileCtx),
+            case space_logic:get_local_storage_ids(SpaceId) of
+                {ok, []} ->
+                    {undefined, FileCtx};
+                {ok, [StorageId | _]} ->
+                    Storage2 = case storage:get(StorageId) of
+                        {ok, Storage} -> Storage;
+                        {error, not_found} -> undefined
+                    end,
+                    {Storage2, FileCtx#file_ctx{storage = Storage2}};
+                {error, _} ->
+                    {undefined, FileCtx}
+            end
     end;
 get_storage(FileCtx = #file_ctx{storage = Storage}) ->
     {Storage, FileCtx}.
