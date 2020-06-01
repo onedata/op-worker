@@ -15,6 +15,7 @@
 -include("api_test_runner.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
@@ -153,7 +154,7 @@ delete_qos_test(Config) ->
                     name = <<"Delete QoS using rest endpoint">>,
                     type = rest,
                     prepare_args_fun = prepare_args_fun_rest(delete),
-                    validate_result_fun = fun(_, {ok, 204, #{}}) -> ok end
+                    validate_result_fun = fun(_, {ok, ?HTTP_204_NO_CONTENT, #{}}) -> ok end
                 },
                 #scenario_template{
                     name = <<"Delete QoS using gs endpoint">>,
@@ -174,16 +175,19 @@ get_qos_summary_test(Config) ->
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-    {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
-    {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, Guid}, [<<"key=value">>], 3),
-    % wait for qos entry to be dbsynced to other provider
-    ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
+    {ok, DirGuid} = api_test_utils:create_file(<<"dir">>, P1, SessIdP1, FilePath),
+    {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, filename:join(FilePath, ?RANDOM_FILE_NAME())),
+    {ok, QosEntryIdInherited} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, DirGuid}, [<<"key=value">>], 8),
+    {ok, QosEntryIdDirect} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, Guid}, [<<"key=value">>], 3),
+    % wait for qos entries to be dbsynced to other provider
+    ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryIdInherited), 20),
+    ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryIdDirect), 20),
     
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = [P1, P2],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
-            setup_fun = fun() -> #{qos => QosEntryId, guid =>Guid} end,
+            setup_fun = fun() -> #{qos => [QosEntryIdInherited, QosEntryIdDirect], guid =>Guid} end,
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get QoS summary using rest endpoint">>,
@@ -233,15 +237,10 @@ setup_fun(Config, Guid) ->
 
 prepare_args_fun_rest(create) ->
     fun(#api_test_ctx{data = Data, env = #{guid := Guid}}) ->
-        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        Data1 = case maps:get(<<"fileId">>, Data) of
-            objectId -> Data#{<<"fileId">> => ObjectId};
-            _ -> Data
-        end,
         #rest_args{
             method = post,
             path = <<"qos_entry">>,
-            body = json_utils:encode(Data1),
+            body = json_utils:encode(maybe_inject_object_id(Data, Guid)),
             headers = #{<<"content-type">> => <<"application/json">>}
         } 
     end;
@@ -266,15 +265,10 @@ prepare_args_fun_rest(Method) ->
 
 prepare_args_fun_gs(create) ->
     fun(#api_test_ctx{data = Data, env = #{guid := Guid}}) ->
-        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        Data1 = case maps:get(<<"fileId">>, Data) of
-            objectId -> Data#{<<"fileId">> => ObjectId};
-            _ -> Data
-        end,
         #gs_args{
             operation = create,
             gri = #gri{type = op_qos, aspect = instance, scope = private},
-            data = Data1
+            data = maybe_inject_object_id(Data, Guid)
         } 
     end;
 
@@ -301,7 +295,7 @@ prepare_args_fun_gs(Method) ->
 
 validate_result_fun_rest(create) ->
     fun(#api_test_ctx{env = Env} = ApiTestCtx, {ok, RespCode, RespBody}) ->
-        ?assertEqual(201, RespCode),
+        ?assertEqual(?HTTP_201_CREATED, RespCode),
         QosEntryId = maps:get(<<"qosEntryId">>, RespBody),
         {ok, ApiTestCtx#api_test_ctx{env = Env#{qos => QosEntryId}}}
     end;
@@ -315,7 +309,7 @@ validate_result_fun_rest(get) ->
             expression_rpn := ExpressionRpn
         } = Env,
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        ?assertEqual(200, RespCode),
+        ?assertEqual(?HTTP_200_OK, RespCode),
         ?assertEqual(ObjectId, maps:get(<<"fileId">>, RespBody)),
         ?assertEqual(qos_expression:rpn_to_infix(ExpressionRpn), {ok, maps:get(<<"expression">>, RespBody)}),
         ?assertEqual(ReplicasNum, maps:get(<<"replicasNum">>, RespBody)),
@@ -324,9 +318,15 @@ validate_result_fun_rest(get) ->
     end;
 
 validate_result_fun_rest(qos_summary) ->
-    fun(#api_test_ctx{env = #{qos := QosEntryId}}, {ok, RespCode, RespBody}) ->
-        ?assertEqual(200, RespCode),
-        ?assertMatch(#{<<"entries">> := #{QosEntryId := <<"impossible">>}, <<"status">> := <<"impossible">>}, RespBody),
+    fun(#api_test_ctx{env = #{qos := [QosEntryIdInherited, QosEntryIdDirect]}}, {ok, RespCode, RespBody}) ->
+        ?assertEqual(?HTTP_200_OK, RespCode),
+        ?assertMatch(#{
+            <<"entries">> := #{
+                QosEntryIdDirect := <<"impossible">>,
+                QosEntryIdInherited := <<"impossible">>
+            }, 
+            <<"status">> := <<"impossible">>
+        }, RespBody),
         ok
     end.
 
@@ -353,8 +353,13 @@ validate_result_fun_gs(get) ->
     end;
 
 validate_result_fun_gs(qos_summary) ->
-    fun(#api_test_ctx{env = #{qos := QosEntryId}}, {ok, Result}) ->
-        ?assertMatch(#{<<"entries">> := #{QosEntryId := <<"impossible">>}}, Result),
+    fun(#api_test_ctx{env = #{qos := [QosEntryIdInherited, QosEntryIdDirect]}}, {ok, Result}) ->
+        ?assertMatch(#{
+            <<"entries">> := #{
+                QosEntryIdDirect := <<"impossible">>,
+                QosEntryIdInherited := <<"impossible">>
+            }
+        }, Result),
         ok
     end.
 
@@ -368,18 +373,18 @@ verify_fun(Config, create) ->
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
     fun (expected_success, #api_test_ctx{data = Data, env = #{guid := Guid, qos := QosEntryId}}) ->
-        Uuid = file_id:guid_to_uuid(Guid),
-        ReplicasNum = maps:get(<<"replicasNum">>, Data, 1),
-        Expression = maps:get(<<"expression">>, Data),
-        ExpressionRpn = qos_expression:ensure_rpn(Expression),
-        {ok, EntryP2} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
-        {ok, EntryP1} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
-        ?assertEqual(EntryP1#qos_entry{traverse_reqs = #{}}, EntryP2#qos_entry{traverse_reqs = #{}}),
-        ?assertMatch(#qos_entry{file_uuid = Uuid, expression = ExpressionRpn, replicas_num = ReplicasNum}, EntryP1),
-        true;
+            Uuid = file_id:guid_to_uuid(Guid),
+            ReplicasNum = maps:get(<<"replicasNum">>, Data, 1),
+            Expression = maps:get(<<"expression">>, Data),
+            ExpressionRpn = qos_expression:ensure_rpn(Expression),
+            {ok, EntryP2} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
+            {ok, EntryP1} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
+            ?assertEqual(EntryP1#qos_entry{traverse_reqs = #{}}, EntryP2#qos_entry{traverse_reqs = #{}}),
+            ?assertMatch(#qos_entry{file_uuid = Uuid, expression = ExpressionRpn, replicas_num = ReplicasNum}, EntryP1),
+            true;
         (expected_failure, #api_test_ctx{env = #{guid := Guid}}) ->
-            ?assertMatch({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P1, SessIdP1, {guid, Guid})),
-            ?assertMatch({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P2, SessIdP2, {guid, Guid})),
+            ?assertEqual({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P1, SessIdP1, {guid, Guid})),
+            ?assertEqual({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P2, SessIdP2, {guid, Guid})),
             true
     end;
 
@@ -397,6 +402,16 @@ verify_fun(Config, delete) ->
             true
     end.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+maybe_inject_object_id(Data, Guid) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    case maps:get(<<"fileId">>, Data) of
+        objectId -> Data#{<<"fileId">> => ObjectId};
+        _ -> Data
+    end.
 
 %%%===================================================================
 %%% SetUp and TearDown functions

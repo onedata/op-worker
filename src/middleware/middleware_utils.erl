@@ -19,8 +19,7 @@
     is_eff_space_member/2,
     assert_space_supported_locally/1, assert_space_supported_by/2,
     assert_file_exists/2,
-    decode_object_id/2,
-    qos_fulfillment_to_status/1
+    decode_object_id/2
 ]).
 
 
@@ -70,9 +69,3 @@ decode_object_id(ObjectId, Key) ->
         {ok, Guid} -> Guid;
         _Error -> throw(?ERROR_BAD_VALUE_IDENTIFIER(Key))
     end.
-
-
--spec qos_fulfillment_to_status(qos_status:fulfilled()) -> binary().
-qos_fulfillment_to_status(true) -> <<"fulfilled">>;
-qos_fulfillment_to_status(false) -> <<"pending">>;
-qos_fulfillment_to_status(impossible) -> <<"impossible">>.

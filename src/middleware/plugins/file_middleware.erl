@@ -617,10 +617,10 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, 
         {ok, {QosEntriesWithStatus, AssignedEntries}} ->
             {ok, #{
                 <<"entries">> => maps:map(fun(_QosEntryId, Fulfilled) -> 
-                    middleware_utils:qos_fulfillment_to_status(Fulfilled) 
+                    qos_middleware:fulfillment_to_status(Fulfilled) 
                 end, QosEntriesWithStatus),
                 <<"assignedEntries">> => AssignedEntries,
-                <<"status">> => middleware_utils:qos_fulfillment_to_status(lists:foldl(
+                <<"status">> => qos_middleware:fulfillment_to_status(lists:foldl(
                     fun (_, impossible) -> impossible;
                         (impossible, _) -> impossible;
                         (Fulfilled, Acc) -> Fulfilled and Acc

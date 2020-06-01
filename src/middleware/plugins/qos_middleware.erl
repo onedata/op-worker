@@ -30,6 +30,7 @@
 ]).
 -export([create/1, get/2, update/1, delete/1]).
 
+-export([fulfillment_to_status/1]).
 
 %%%===================================================================
 %%% API
@@ -214,6 +215,11 @@ delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
     ?check(lfm:remove_qos_entry(Auth#auth.session_id, QosEntryId)).
 
 
+-spec fulfillment_to_status(qos_status:fulfilled()) -> binary().
+fulfillment_to_status(true) -> <<"fulfilled">>;
+fulfillment_to_status(false) -> <<"pending">>;
+fulfillment_to_status(impossible) -> <<"impossible">>.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -241,5 +247,5 @@ entry_to_details(QosEntry, Status, SpaceId) ->
         <<"expressionRpn">> => ExpressionInRpn,
         <<"replicasNum">> => ReplicasNum,
         <<"fileId">> => QosRootFileObjectId,
-        <<"status">> => middleware_utils:qos_fulfillment_to_status(Status)
+        <<"status">> => fulfillment_to_status(Status)
     }.
