@@ -72,7 +72,7 @@ get_helper_params(UserCtx, StorageId, SpaceId, HelperMode) ->
     {ok, Storage} = storage:get(StorageId),
     Helper = storage:get_helper(Storage),
     case HelperMode of
-        ?FORCE_DIRECT_HELPER_MODE ->
+        ?FORCE_DIRECT_HELPER_MODE when Helper =/= undefined ->
             SessionId = user_ctx:get_session_id(UserCtx),
             UserId = user_ctx:get_user_id(UserCtx),
             case luma:get_client_user_ctx(SessionId, UserId, SpaceId, Storage) of
