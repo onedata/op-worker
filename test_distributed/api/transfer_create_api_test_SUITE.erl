@@ -143,6 +143,12 @@ create_file_transfer(Config, Type) ->
             verify_fun = create_verify_transfer_env_fun(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
+                    name = str_utils:format("Transfer (~p) view using /transfers rest endpoint", [Type]),
+                    type = rest,
+                    prepare_args_fun = create_prepare_transfer_rest_args_fun(),
+                    validate_result_fun = fun validate_transfer_rest_call_result/2
+                },
+                #scenario_template{
                     name = str_utils:format("Transfer (~p) file using gs transfer api", [Type]),
                     type = gs,
                     prepare_args_fun = create_prepare_transfer_create_instance_gs_args_fun(private),
@@ -425,7 +431,13 @@ create_view_transfer(Config, Type) ->
             verify_fun = create_verify_transfer_env_fun(Type, P2, ?USER_IN_SPACE_2, P1, P2, Config),
             scenario_templates = [
                 #scenario_template{
-                    name = str_utils:format("Transfer (~p) view using gs transfer api", [Type]),
+                    name = str_utils:format("Transfer (~p) view using /transfers rest endpoint", [Type]),
+                    type = rest,
+                    prepare_args_fun = create_prepare_transfer_rest_args_fun(),
+                    validate_result_fun = fun validate_transfer_rest_call_result/2
+                },
+                #scenario_template{
+                    name = str_utils:format("Transfer (~p) view using gs transfer gs api", [Type]),
                     type = gs,
                     prepare_args_fun = create_prepare_transfer_create_instance_gs_args_fun(private),
                     validate_result_fun = fun validate_transfer_gs_call_result/2
@@ -537,10 +549,11 @@ view_transfer_required_privs(migration) ->
 %% @private
 get_view_transfer_op_replica_spec(replication, _SrcNode, DstNode) ->
     #data_spec{
-        required = [<<"provider_id">>],
+        required = [<<"provider_id">>, <<"space_id">>],
         optional = [<<"url">>],
         correct_values = #{
             <<"provider_id">> => [?GET_DOMAIN_BIN(DstNode)],
+            <<"space_id">> => [?SPACE_2],
             <<"url">> => [get_callback_url()]
         },
         bad_values = ?PROVIDER_ID_REPLICA_ERRORS(<<"provider_id">>) ++ [
@@ -549,9 +562,10 @@ get_view_transfer_op_replica_spec(replication, _SrcNode, DstNode) ->
     };
 get_view_transfer_op_replica_spec(eviction, SrcNode, _DstNode) ->
     #data_spec{
-        required = [<<"provider_id">>],
+        required = [<<"provider_id">>, <<"space_id">>],
         correct_values = #{
-            <<"provider_id">> => [?GET_DOMAIN_BIN(SrcNode)]
+            <<"provider_id">> => [?GET_DOMAIN_BIN(SrcNode)],
+            <<"space_id">> => [?SPACE_2]
         },
         bad_values = ?PROVIDER_ID_REPLICA_ERRORS(<<"provider_id">>)
     };
@@ -644,19 +658,35 @@ get_view_transfer_op_transfer_spec(migration, SrcNode, DstNode) ->
 
 
 %% @private
+create_prepare_transfer_rest_args_fun() ->
+    fun(#api_test_ctx{env = Env, data = Data}) ->
+        #rest_args{
+            method = post,
+            path = <<"transfers">>,
+            headers = #{<<"content-type">> => <<"application/json">>},
+            body = json_utils:encode(substitute_transfer_data_source(Env, Data))
+        }
+    end.
+
+
+%% @private
 create_prepare_transfer_create_instance_gs_args_fun(Scope) ->
-    fun(#api_test_ctx{env = Env, data = Data0}) ->
-        Data1 = case Env of
-            #{root_file_cdmi_id := FileObjectId} ->
-                replace_placeholder_value(<<"fileId">>, FileObjectId, Data0);
-            #{view_name := ViewName} ->
-                replace_placeholder_value(<<"viewName">>, ViewName, Data0)
-        end,
+    fun(#api_test_ctx{env = Env, data = Data}) ->
         #gs_args{
             operation = create,
             gri = #gri{type = op_transfer, aspect = instance, scope = Scope},
-            data = Data1
+            data = substitute_transfer_data_source(Env, Data)
         }
+    end.
+
+
+%% @private
+substitute_transfer_data_source(Env, Data) ->
+    case Env of
+        #{root_file_cdmi_id := FileObjectId} ->
+            replace_placeholder_value(<<"fileId">>, FileObjectId, Data);
+        #{view_name := ViewName} ->
+            replace_placeholder_value(<<"viewName">>, ViewName, Data)
     end.
 
 

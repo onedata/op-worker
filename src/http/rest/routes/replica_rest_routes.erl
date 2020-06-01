@@ -71,7 +71,7 @@ routes() -> [
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_replica, 
-            id = ?OBJECTID_BINDING(id),
+            id = ?OBJECTID_BINDING(id), 
             aspect = instance, 
             scope = private
         }
@@ -82,7 +82,7 @@ routes() -> [
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_replica, 
-            id = ?OBJECTID_BINDING(id),
+            id = ?OBJECTID_BINDING(id), 
             aspect = distribution, 
             scope = private
         }
@@ -95,7 +95,7 @@ routes() -> [
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_replica, 
-            id = ?OBJECTID_BINDING(id),
+            id = ?OBJECTID_BINDING(id), 
             aspect = instance, 
             scope = private
         }

@@ -32,7 +32,10 @@
 -spec create_response(gri:gri(), middleware:auth_hint(),
     middleware:data_format(), Result :: term() | {gri:gri(), term()} |
     {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
-create_response(#gri{aspect = rerun}, _, value, TransferId) ->
+create_response(#gri{aspect = As}, _, value, TransferId) when
+    As =:= instance;
+    As =:= rerun
+->
     PathTokens = [<<"transfers">>, TransferId],
     ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId}).
 
