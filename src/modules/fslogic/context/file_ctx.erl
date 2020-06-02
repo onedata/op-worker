@@ -71,7 +71,7 @@
 
 %% Functions that do not modify context but does not have _const suffix and return context.
 % TODO VFS-6119 missing _const suffix in function name
--export([get_local_file_location_doc/1, get_local_file_location_doc/2, get_dir_location_doc/1]).
+-export([get_local_file_location_doc/1, get_local_file_location_doc/2]).
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
@@ -966,23 +966,6 @@ get_local_file_location_doc(FileCtx, GetDocOpts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns local dir location doc.
-%% @end
-%%--------------------------------------------------------------------
--spec get_dir_location_doc(ctx()) ->
-    {dir_location:doc() | undefined, ctx()}.
-get_dir_location_doc(FileCtx) ->
-    % TODO VFS-6119 missing _const suffix in function name
-    FileUuid = get_uuid_const(FileCtx),
-    case dir_location:get(FileUuid) of
-        {ok, Location} ->
-            {Location, FileCtx};
-        {error, not_found} ->
-            {undefined, FileCtx}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns file location IDs.
 %% @end
 %%--------------------------------------------------------------------
@@ -1070,11 +1053,19 @@ get_active_perms_type_from_doc(#document{value = #file_meta{}}, FileCtx) ->
 is_storage_file_created(FileCtx) ->
     case is_dir(FileCtx) of
         {true, FileCtx2} ->
-            {DirLocation, _} = get_dir_location_doc(FileCtx2),
-            {dir_location:is_storage_file_created(DirLocation), FileCtx2};
+            case get_dir_location_doc_const(FileCtx2) of
+                undefined ->
+                    {false, FileCtx2};
+                DirLocation ->
+                    {dir_location:is_storage_file_created(DirLocation), FileCtx2}
+            end;
         {false, FileCtx2} ->
-            {FileLocation, _} = get_local_file_location_doc(FileCtx2, false),
-            {file_location:is_storage_file_created(FileLocation), FileCtx2}
+            case get_local_file_location_doc(FileCtx2, false) of
+                {undefined, _} ->
+                    {false, FileCtx2};
+                {FileLocation, _} ->
+                    {file_location:is_storage_file_created(FileLocation), FileCtx2}
+            end
     end.
 
 
@@ -1447,13 +1438,39 @@ list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
             []
     end.
 
+-spec get_dir_location_doc_const(ctx()) -> dir_location:doc() | undefined.
+get_dir_location_doc_const(FileCtx) ->
+    FileUuid = get_uuid_const(FileCtx),
+    case dir_location:get(FileUuid) of
+        {ok, Location} ->
+            Location;
+        {error, not_found} ->
+            undefined
+    end.
+
 -spec get_synced_gid(ctx()) -> {luma:gid() | undefined, ctx()}.
 get_synced_gid(FileCtx) ->
     case is_dir(FileCtx) of
         {true, FileCtx2} ->
-            {DirLocation, _} = get_dir_location_doc(FileCtx2),
-            {dir_location:get_synced_gid(DirLocation), FileCtx2};
+            {get_dir_synced_gid_const(FileCtx), FileCtx2};
         {false, FileCtx2} ->
-            {FileLocation, _} = get_local_file_location_doc(FileCtx2, skip_local_blocks),
-            {file_location:get_synced_gid(FileLocation), FileCtx2}
+            {get_file_synced_gid_const(FileCtx2), FileCtx2}
+    end.
+
+-spec get_file_synced_gid_const(ctx()) -> luma:gid() | undefined.
+get_file_synced_gid_const(FileCtx) ->
+    case get_local_file_location_doc(FileCtx, skip_local_blocks) of
+        {undefined, _} ->
+            undefined;
+        {FileLocation, _} ->
+            file_location:get_synced_gid(FileLocation)
+    end.
+
+-spec get_dir_synced_gid_const(ctx()) -> luma:gid() | undefined.
+get_dir_synced_gid_const(FileCtx) ->
+    case get_dir_location_doc_const(FileCtx) of
+        undefined ->
+            undefined;
+        DirLocation ->
+            dir_location:get_synced_gid(DirLocation)
     end.

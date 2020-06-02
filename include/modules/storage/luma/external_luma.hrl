@@ -21,11 +21,12 @@
 -define(STORAGE_ACCESS_ALL_PATH, ?TO_PATH([?STORAGE_ACCESS_PATH, <<"all">>])).
 -define(STORAGE_ACCESS_POSIX_PATH, ?TO_PATH([?STORAGE_ACCESS_PATH, <<"posix_compatible">>])).
 -define(STORAGE_SYNC_POSIX_PATH, ?TO_PATH([<<"storage_sync">>, <<"posix_compatible">>])).
+-define(ONECLIENT_DISPLAY_CREDENTIALS, <<"oneclient_display_credentials">>).
 
 %% LUMA endpoints
 -define(ONEDATA_USER_TO_CREDENTIALS_PATH, ?TO_PATH([?STORAGE_ACCESS_ALL_PATH, <<"onedata_user_to_credentials">>])).
 -define(DEFAULT_POSIX_CREDENTIALS_PATH, ?TO_PATH([?STORAGE_ACCESS_POSIX_PATH, <<"default_credentials">>])).
--define(ONECLIENT_DISPLAY_OVERRIDE_PATH, <<"oneclient_display_credentials/all/default">>).
+-define(ONECLIENT_DISPLAY_CREDENTIALS_PATH, ?TO_PATH([?ONECLIENT_DISPLAY_CREDENTIALS, <<"all">>, <<"default">>])).
 
 %% Reverse LUMA endpoints
 -define(UID_TO_ONEDATA_USER_PATH, ?TO_PATH([?STORAGE_SYNC_POSIX_PATH, <<"uid_to_onedata_user">>])).

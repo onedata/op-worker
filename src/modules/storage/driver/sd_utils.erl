@@ -427,6 +427,11 @@ handle_conflicting_file(_VerifyDeletionLink, _UserCtx, SDHandle, FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, StorageFileId} = create_storage_file_with_suffix(SDHandle, file_meta:get_mode(FileDoc)),
     {ok, file_ctx:set_file_id(FileCtx2, StorageFileId)}.
+
+
+-spec handle_conflicting_directory(file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
+handle_conflicting_directory(FileCtx) ->
+    % TODO VFS-5271 - handle conflicting directories
     %%    case VerifyDeletionLink of
     %%        false ->
     %%            {ok, StorageFileId} = create_storage_file_with_suffix(SDHandle, Mode),
@@ -439,14 +444,10 @@ handle_conflicting_file(_VerifyDeletionLink, _UserCtx, SDHandle, FileCtx) ->
     %%                    % Try once again to prevent races
     %%                    storage_driver:create(SDHandle, Mode);
     %%                {ok, _FileUuid} ->
-    %%                    {ok, StorageFileId} = create_storage_file_with_suffix(SDHandle, Mode),
+    %%                    {ok, StorageFileId} = create_storage_file_with_suffwix(SDHandle, Mode),
     %%                    {ok, file_ctx:set_file_id(FileCtx3, StorageFileId)}
     %%            end
     %%    end.
-
--spec handle_conflicting_directory(file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
-handle_conflicting_directory(FileCtx) ->
-    % TODO VFS-5271 - handle conflicting directories
     {ok, FileCtx}.
 
 %%-------------------------------------------------------------------
@@ -500,16 +501,12 @@ get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, ParentCtxs) ->
         true ->
             ParentCtxs;
         false ->
-            case file_ctx:get_dir_location_doc(DirCtx) of
-                {DirLocation, DirCtx2} ->
-                    case dir_location:is_storage_file_created(DirLocation) of
-                        true ->
-                            ParentCtxs;
-                        false ->
-                            {ParentCtx, DirCtx3} = file_ctx:get_parent(DirCtx2, UserCtx),
-                            get_parent_dirs_not_created_on_storage(ParentCtx, UserCtx, [DirCtx3 | ParentCtxs])
-                    end
-
+            case file_ctx:is_storage_file_created(DirCtx) of
+                {true, _DirCtx2} ->
+                    ParentCtxs;
+                {false, DirCtx2} ->
+                    {ParentCtx, DirCtx3} = file_ctx:get_parent(DirCtx2, UserCtx),
+                    get_parent_dirs_not_created_on_storage(ParentCtx, UserCtx, [DirCtx3 | ParentCtxs])
             end
     end.
 

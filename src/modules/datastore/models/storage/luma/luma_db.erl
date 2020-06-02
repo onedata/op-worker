@@ -7,16 +7,15 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is a generic datastore model that is used by all
-%%% modules associated with LUMA DB that implement
-%%% luma_db_table behaviour.
+%%% modules that implement LUMA DB tables.
 %%%
 %%% Ids of documents of this model are results of hashing 3 keys:
 %%%  - storage:id(),
-%%%  - table() - name of the module that implements luma_db_table behaviour
+%%%  - table() - name of the module that implements LUMA DB table
 %%%  - db_key() - internal key in the table
 %%%
 %%% Single document of this model stores custom record (db_record())
-%%% of one of the modules implementing luma_db_table behaviour.
+%%% of one of the modules implementing LUMA DB table.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_db).
@@ -26,7 +25,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([get/3, store/4, delete/3, clear_all/2]).
+-export([get/4, store/4, delete/3, clear_all/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -43,16 +42,17 @@
 
 -export_type([doc_id/0]).
 
-% Definitions of luma_db behaviour types
+% Modules that implement LUMA DB tables.
 -type table() :: luma_storage_users | luma_spaces_defaults | luma_onedata_users | luma_onedata_groups.
 % @formatter:off
 -type db_key() :: luma_storage_users:key() | luma_spaces_defaults:key() |
                   luma_onedata_users:key() | luma_onedata_groups:key().
 -type db_record() :: luma_storage_users:record() | luma_spaces_defaults:record() |
                      luma_onedata_users:record() | luma_onedata_groups:record().
+-type db_acquire_fun() :: fun(() -> {ok, db_record()} | {error, term()}).
 % @formatter:on
 
--export_type([db_key/0, db_record/0, table/0]).
+-export_type([db_key/0, db_record/0, table/0, db_acquire_fun/0]).
 
 -type storage() :: storage:id() | storage:data().
 -define(BATCH_SIZE, 1000).
@@ -66,18 +66,19 @@
 %% This function returns record associated with Key from table Table
 %% associated with Storage.
 %% First, it checks whether record is already in the db.
-%% If it's missing, it calls acquire/2 callback that must
-%% be implemented by modules implementing luma_db_table behaviour.
+%% If it's missing, it calls AcquireFun and stores the result if
+%% it has returned successfully.
 %% @end
 %%--------------------------------------------------------------------
--spec get(storage(), db_key(), table()) -> {ok, db_record()} | {error, term()}.
-get(Storage, Key, Table) ->
+-spec get(storage(), db_key(), table(), db_acquire_fun()) ->
+    {ok, db_record()} | {error, term()}.
+get(Storage, Key, Table, AcquireFun) ->
     Id = id(Storage, Table, Key),
     case datastore_model:get(?CTX, Id) of
         {ok, #document{value = #luma_db{record = Record}}} ->
             {ok, Record};
         {error, not_found} ->
-            acquire_and_store(Storage, Key, Table)
+            acquire_and_store(AcquireFun, Storage, Key, Table)
     end.
 
 %%--------------------------------------------------------------------
@@ -128,11 +129,11 @@ id(Storage, Table, Key) ->
     StorageId = storage:get_id(Storage),
     datastore_key:new_from_digest([StorageId, atom_to_binary(Table, utf8), Key]).
 
--spec acquire_and_store(storage(), db_key(), table()) -> {ok, db_record()} | {error, term()}.
-acquire_and_store(Storage, Key, TableModule) ->
+-spec acquire_and_store(db_acquire_fun() ,storage(), db_key(), table()) ->
+    {ok, db_record()} | {error, term()}.
+acquire_and_store(AcquireFun, Storage, Key, TableModule) ->
     % ensure Storage is a document
-    {ok, StorageData} = storage:get(Storage),
-    case TableModule:acquire(StorageData, Key) of
+    case AcquireFun() of
         {ok, Record} ->
             store(Storage, Key, TableModule, Record),
             {ok, Record};
@@ -199,6 +200,6 @@ get_ctx() ->
 get_record_struct(1) ->
     {record, [
         {table, atom},
-        {record, term},
+        {record, {custom, json, {luma_db_record, encode, decode}}},
         {storage_id, string}
     ]}.

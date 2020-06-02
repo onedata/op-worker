@@ -35,7 +35,7 @@
 %%% API
 %%%===================================================================
 
--spec mark_dir_created_on_storage(key()) -> {ok | error, term()}.
+-spec mark_dir_created_on_storage(key()) -> ok | {error, term()}.
 mark_dir_created_on_storage(FileUuid) ->
     Diff = fun(DirLocation) ->
         {ok, DirLocation#dir_location{storage_file_created = true}}
@@ -68,18 +68,14 @@ get(Key)  ->
     datastore_model:get(?CTX, Key).
 
 
--spec is_storage_file_created(doc() | dir_location() | undefined) -> boolean().
-is_storage_file_created(undefined) ->
-    false;
+-spec is_storage_file_created(doc() | dir_location()) -> boolean().
 is_storage_file_created(#dir_location{storage_file_created = StorageFileCreated}) ->
     StorageFileCreated;
 is_storage_file_created(#document{value = DirLocation}) ->
     is_storage_file_created(DirLocation).
 
 
--spec get_synced_gid(doc() | dir_location() | undefined) -> luma:gid() | undefined.
-get_synced_gid(undefined) ->
-    undefined;
+-spec get_synced_gid(doc() | dir_location()) -> luma:gid() | undefined.
 get_synced_gid(#document{value = DirLocation}) ->
     get_synced_gid(DirLocation);
 get_synced_gid(#dir_location{synced_gid = SyncedGid}) ->

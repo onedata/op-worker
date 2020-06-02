@@ -29,8 +29,6 @@
 -module(luma_onedata_users).
 -author("Jakub Kudzia").
 
--behaviour(luma_db_table).
-
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -42,9 +40,6 @@
     store_uid_mapping/3,
     clear_all/1
 ]).
-
-%% luma_db_table_callbacks
--export([acquire/2]).
 
 -define(UID, uid).
 -define(ACL, acl).
@@ -67,12 +62,16 @@
 -spec map_uid_to_onedata_user(storage:data(), luma:uid()) ->
     {ok, record()} | {error, term()}.
 map_uid_to_onedata_user(Storage, Uid) ->
-   luma_db:get(Storage, ?KEY(Uid, ?UID), ?MODULE).
+   luma_db:get(Storage, ?KEY(Uid, ?UID), ?MODULE, fun() ->
+       acquire_uid_mapping(Storage, Uid)
+    end).
 
 -spec map_acl_user_to_onedata_user(storage:data(), luma:acl_who()) ->
     {ok, record()} | {error, term()}.
 map_acl_user_to_onedata_user(Storage, AclUser) ->
-    luma_db:get(Storage, ?KEY(AclUser, ?ACL), ?MODULE).
+    luma_db:get(Storage, ?KEY(AclUser, ?ACL), ?MODULE, fun() ->
+        acquire_acl_mapping(Storage, AclUser)
+    end).
 
 -spec store_uid_mapping(storage:data(), luma:uid(), od_user:id()) -> ok.
 store_uid_mapping(Storage, Uid, UserId) ->
@@ -84,18 +83,6 @@ clear_all(StorageId) ->
     luma_db:clear_all(StorageId, ?MODULE).
 
 %%%===================================================================
-%%% luma_db_table_callbacks
-%%%===================================================================
-
--spec acquire(storage:data(), key()) ->
-    {ok, record()} | {error, term()}.
-acquire(Storage, Key) ->
-    case decode_key(Key) of
-        {Uid, ?UID} -> acquire_uid_mapping(Uid, Storage);
-        {AclUser, ?ACL} -> acquire_acl_mapping(AclUser, Storage)
-    end.
-
-%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -105,16 +92,9 @@ encode_key(Uid, ?UID) ->
 encode_key(AclUser, ?ACL) ->
     <<?ACL_PREFIX/binary, ?SEPARATOR/binary, AclUser/binary>>.
 
--spec decode_key(key()) -> {internal_key(), key_type()}.
-decode_key(Key) ->
-    case binary:split(Key, ?SEPARATOR, [global]) of
-        [?UID_PREFIX, UidBin] -> {binary_to_integer(UidBin), ?UID};
-        [?ACL_PREFIX, AclUser] -> {AclUser, ?ACL}
-    end.
-
--spec acquire_uid_mapping(luma:uid(), storage:data()) ->
+-spec acquire_uid_mapping(storage:data(), luma:uid()) ->
     {ok, record()} | {error, term()}.
-acquire_uid_mapping(Uid, Storage) ->
+acquire_uid_mapping(Storage, Uid) ->
     case external_reverse_luma:map_uid_to_onedata_user(Uid, Storage) of
         {ok, OnedataUserMap} ->
             OnedataUser = luma_onedata_user:new(OnedataUserMap),
@@ -126,9 +106,9 @@ acquire_uid_mapping(Uid, Storage) ->
             Error
     end.
 
--spec acquire_acl_mapping(luma:acl_who(), storage:data()) ->
+-spec acquire_acl_mapping(storage:data(), luma:acl_who()) ->
     {ok, record()} | {error, term()}.
-acquire_acl_mapping(AclUser, Storage) ->
+acquire_acl_mapping(Storage, AclUser) ->
     case external_reverse_luma:map_acl_user_to_onedata_user(AclUser, Storage) of
         {ok, OnedataUserMap} ->
             {ok, luma_onedata_user:new(OnedataUserMap)};

@@ -1038,17 +1038,6 @@ user_logic_mock_setup(Workers, Users) ->
         GetUserFun(private, Client, UserId)
     end),
 
-    test_utils:mock_expect(Workers, user_logic, exists, fun(UserId) ->
-        user_logic:exists(?ROOT_SESS_ID, UserId)
-    end),
-
-    test_utils:mock_expect(Workers, user_logic, exists, fun(Client, UserId) ->
-        case GetUserFun(shared, Client, UserId) of
-            {ok, _} -> true;
-            _ -> false
-        end
-    end),
-
     test_utils:mock_expect(Workers, user_logic, get_full_name, fun(UserId) ->
         {ok, #document{value = #od_user{full_name = FullName}}} = GetUserFun(protected, ?ROOT_SESS_ID, UserId),
         {ok, FullName}

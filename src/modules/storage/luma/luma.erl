@@ -10,8 +10,7 @@
 %%% It contains functions that should be used for mapping onedata users
 %%% to storage users and the other way round.
 %%%
-%%% LUMA DB consists of 4 tables, represented by modules implementing
-%%% luma_db_table behaviour:
+%%% LUMA DB consists of 4 tables, represented by the following modules:
 %%%  * luma_storage_users,
 %%%  * luma_spaces_defaults,
 %%%  * luma_onedata_users,
@@ -218,7 +217,7 @@ map_to_display_credentials(?ROOT_USER_ID, _SpaceId, _Storage) ->
     {ok, {?ROOT_UID, ?ROOT_GID}};
 map_to_display_credentials(OwnerId, SpaceId, undefined) ->
     % unsupported space;
-    {ok, {luma_utils:generate_uid(OwnerId), luma_utils:generate_gid(SpaceId)}};
+    {ok, luma_utils:generate_posix_credentials(OwnerId, SpaceId)};
 map_to_display_credentials(OwnerId, SpaceId, Storage) ->
     try
         case fslogic_uuid:is_space_owner(OwnerId) of

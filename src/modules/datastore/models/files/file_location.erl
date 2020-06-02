@@ -103,11 +103,6 @@ create_and_update_quota(Doc = #document{value = #file_location{
     end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Increases version in version_vector and save document.
-%% @end
-%%--------------------------------------------------------------------
 -spec save_and_bump_version(doc(), od_user:id()) -> {ok, doc()} | {error, term()}.
 save_and_bump_version(FileLocationDoc, UserId) ->
     fslogic_location_cache:save_location(
@@ -207,9 +202,7 @@ delete_and_update_quota(Key) ->
     datastore_model:delete(?CTX, Key).
 
 
--spec is_storage_file_created(doc() | record() | undefined) -> boolean().
-is_storage_file_created(undefined) ->
-    false;
+-spec is_storage_file_created(doc() | record()) -> boolean().
 is_storage_file_created(#file_location{storage_file_created = StorageFileCreated}) ->
     StorageFileCreated;
 is_storage_file_created(#document{value=FileLocation}) ->
@@ -230,9 +223,7 @@ get_last_replication_timestamp(FL = #file_location{}) ->
     FL#file_location.last_replication_timestamp.
 
 
--spec get_synced_gid(undefined | doc() | record()) -> luma:gid() | undefined.
-get_synced_gid(undefined) ->
-    undefined;
+-spec get_synced_gid(doc() | record()) -> luma:gid() | undefined.
 get_synced_gid(#document{value = FL}) ->
     get_synced_gid(FL);
 get_synced_gid(#file_location{synced_gid = SyncedGid}) ->

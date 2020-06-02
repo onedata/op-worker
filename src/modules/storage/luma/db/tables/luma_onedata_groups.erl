@@ -26,8 +26,6 @@
 -module(luma_onedata_groups).
 -author("Jakub Kudzia").
 
--behaviour(luma_db_table).
-
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -37,9 +35,6 @@
     map_acl_group_to_onedata_group/2,
     clear_all/1
 ]).
-
-%% luma_db_table_callbacks
--export([acquire/2]).
 
 -type key() :: luma:acl_who().
 -type record() :: luma_onedata_group:group().
@@ -53,14 +48,16 @@
 -spec map_acl_group_to_onedata_group(storage:data(), key()) ->
     {ok, record()} | {error, term()}.
 map_acl_group_to_onedata_group(Storage, AclGroup) ->
-    luma_db:get(Storage, AclGroup, ?MODULE).
+    luma_db:get(Storage, AclGroup, ?MODULE, fun() ->
+        acquire(Storage, AclGroup)
+    end).
 
 -spec clear_all(storage:id()) -> ok | {error, term()}.
 clear_all(StorageId) ->
     luma_db:clear_all(StorageId, ?MODULE).
 
 %%%===================================================================
-%%% luma_db_table_callbacks
+%%% Internal functions
 %%%===================================================================
 
 -spec acquire(storage:data(), key()) ->

@@ -137,7 +137,7 @@ fetch_default_display_credentials(SpaceId, Storage) ->
         <<"storageId">> => storage:get_id(Storage),
         <<"spaceId">> => SpaceId
     },
-    case luma_utils:do_luma_request(?ONECLIENT_DISPLAY_OVERRIDE_PATH, Body, Storage) of
+    case luma_utils:do_luma_request(?ONECLIENT_DISPLAY_CREDENTIALS_PATH, Body, Storage) of
         {ok, ?HTTP_200_OK, _RespHeaders, RespBody} ->
             sanitize_space_defaults_response(RespBody);
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->

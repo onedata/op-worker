@@ -19,7 +19,7 @@
 
 
 %% API
--export([generate_uid/1, generate_gid/1, do_luma_request/3]).
+-export([generate_uid/1, generate_gid/1, do_luma_request/3, generate_posix_credentials/2]).
 
 %% Exported CT tests
 -export([generate_posix_identifier/2, http_client_post/3]).
@@ -38,6 +38,10 @@ generate_uid(UserId) ->
 generate_gid(SpaceId) ->
     {ok, GidRange} = application:get_env(?APP_NAME, gid_range),
     generate_posix_identifier(SpaceId, GidRange).
+
+-spec generate_posix_credentials(od_user:id(), od_space:id()) -> {luma:uid(), luma:gid()}.
+generate_posix_credentials(UserId, SpaceId) ->
+    {generate_uid(UserId), generate_gid(SpaceId)}.
 
 -spec do_luma_request(binary(), map(), storage:data()) -> http_client:response().
 do_luma_request(Endpoint, Body, Storage) ->

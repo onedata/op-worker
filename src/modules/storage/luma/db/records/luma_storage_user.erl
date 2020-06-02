@@ -10,9 +10,9 @@
 %%% It encapsulates #luma_storage_user{} record.
 %%%
 %%% This record has 2 fields:
-%%%  * storage_credentials - this is context of user (helpers:user_ctx())
+%%%  * storage_credentials - context of user (helpers:user_ctx())
 %%%    passed to helper to perform operations on storage as a given user.
-%%%  * display_uid - this field is used to display owner of a file (UID)
+%%%  * display_uid - field used to display owner of a file (UID)
 %%%    in Oneclient.
 %%%
 %%% For more info please read the docs of luma.erl and
@@ -22,10 +22,15 @@
 -module(luma_storage_user).
 -author("Jakub Kudzia").
 
+-behaviour(luma_db_record).
+
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([new/3, new_posix_user/1, get_storage_credentials/1, get_display_uid/1]).
+%% luma_db_record callbacks
+-export([to_json/1, from_json/1]).
+
 
 -record(luma_storage_user, {
     % credentials used to perform operations on behalf of the user on storage
@@ -92,3 +97,25 @@ ensure_display_uid_defined(UserId, StorageUserMap, Storage) ->
         false ->
             StorageUserMap
     end.
+
+
+%%%===================================================================
+%%% luma_db_record callbacks
+%%%===================================================================
+
+-spec to_json(user()) -> json_utils:json_map().
+to_json(#luma_storage_user{
+    storage_credentials = StorageCredentials,
+    display_uid = DisplayUid
+}) ->
+    #{
+        <<"storage_credentials">> => StorageCredentials,
+        <<"display_uid">> => utils:undefined_to_null(DisplayUid)
+    }.
+
+-spec from_json(json_utils:json_map()) -> user().
+from_json(UserJson) ->
+    #luma_storage_user{
+        storage_credentials = maps:get(<<"storage_credentials">>, UserJson),
+        display_uid = utils:null_to_undefined(maps:get(<<"display_uid">>, UserJson, undefined))
+    }.

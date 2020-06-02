@@ -11,14 +11,13 @@
 %%% POSIX-compatible credentials for given space.
 %%%
 %%% This record has 4 fields:
-%%%  * storage_uid - this field is used as uid field in luma:storage_credentials()
-%%%                  on POSIX-compatible storages for virtual SpaceOwner
-%%%  * storage_gid - this field is used as gid field in luma:storage_credentials()
-%%%                  on POSIX-compatible storages for ALL users in given space
-%%%  * display_uid - this field is used as uid field in luma:display_credentials()
-%%%                  for virtual SpaceOwner
-%%%  * display_gid - this field is used as gid field in luma:display_credentials()
-%%%                  for ALL users in given space
+%%%  * storage_uid - uid field in luma:storage_credentials() on POSIX-compatible
+%%%                  storages for virtual SpaceOwner
+%%%  * storage_gid - gid field in luma:storage_credentials() on POSIX-compatible
+%%%                  storages for ALL users in given space
+%%%  * display_uid - uid field in luma:display_credentials() for virtual SpaceOwner
+%%%  * display_gid - gid field in luma:display_credentials() for ALL users in
+%%%                  given space
 %%%
 %%% For more info please read the docs of luma.erl and
 %%% luma_spaces_defaults.erl modules.
@@ -27,10 +26,15 @@
 -module(luma_space_defaults).
 -author("Jakub Kudzia").
 
+-behaviour(luma_db_record).
+
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([new/4, get_storage_uid/1, get_storage_gid/1, get_display_uid/1, get_display_gid/1]).
+
+%% luma_db_record callbacks
+-export([to_json/1, from_json/1]).
 
 -record(luma_space_defaults, {
     % default display credentials that will be used to display file owners in Oneclient
@@ -148,7 +152,7 @@ ensure_required_fields_on_non_posix_are_defined(LS = #luma_space_defaults{
     display_gid = DisplayGid
 }, SpaceId) ->
     % at least one of display_ fields is undefined
-    {FallbackUid, FallbackGid} = generate_credentials(SpaceId),
+    {FallbackUid, FallbackGid} = generate_fallback_display_credentials(SpaceId),
     LS#luma_space_defaults{
         display_uid = ensure_defined(DisplayUid, FallbackUid),
         display_gid = ensure_defined(DisplayGid, FallbackGid)
@@ -171,19 +175,45 @@ get_mountpoint_credentials(Storage, SpaceId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function returns fallback credentials for POSIX incompatible
-%% storages, it generates UID and GID.
+%% This function returns fallback display credentials for POSIX incompatible
+%% storages.
 %% UID is generated using id of virtual SpaceOwner as hashing base.
 %% GID is generated using SpaceId as hashing base
 %% @end
 %%--------------------------------------------------------------------
--spec generate_credentials(od_space:id()) -> {luma:uid(), luma:gid()}.
-generate_credentials(SpaceId) ->
-    Uid = luma_utils:generate_uid(?SPACE_OWNER_ID(SpaceId)),
-    Gid = luma_utils:generate_gid(SpaceId),
-    {Uid, Gid}.
+-spec generate_fallback_display_credentials(od_space:id()) -> luma:display_credentials().
+generate_fallback_display_credentials(SpaceId) ->
+    luma_utils:generate_posix_credentials(?SPACE_OWNER_ID(SpaceId), SpaceId).
 
 
 -spec ensure_defined(term(), term()) -> term().
 ensure_defined(Value, Default) ->
     utils:ensure_defined(Value, undefined, Default).
+
+
+%%%===================================================================
+%%% luma_db_record callbacks
+%%%===================================================================
+
+-spec to_json(defaults()) -> json_utils:json_map().
+to_json(#luma_space_defaults{
+    display_uid = DisplayUid,
+    display_gid = DisplayGid,
+    storage_uid = StorageUid,
+    storage_gid = StorageGid
+}) ->
+    #{
+        <<"display_uid">> => utils:undefined_to_null(DisplayUid),
+        <<"display_gid">> => utils:undefined_to_null(DisplayGid),
+        <<"storage_uid">> => utils:undefined_to_null(StorageUid),
+        <<"storage_gid">> => utils:undefined_to_null(StorageGid)
+    }.
+
+-spec from_json(json_utils:json_map()) -> defaults().
+from_json(DefaultsJson) ->
+    #luma_space_defaults{
+        display_uid = utils:null_to_undefined(maps:get(<<"display_uid">>, DefaultsJson, undefined)),
+        display_gid = utils:null_to_undefined(maps:get(<<"display_gid">>, DefaultsJson, undefined)),
+        storage_uid = utils:null_to_undefined(maps:get(<<"storage_uid">>, DefaultsJson, undefined)),
+        storage_gid = utils:null_to_undefined(maps:get(<<"storage_gid">>, DefaultsJson, undefined))
+    }.

@@ -11,9 +11,9 @@
 %%% It allows to uniquely identify a Onedata group.
 %%%
 %%% This record has 3 fields:
-%%%   *  onedata_group_id  - which stores od_group:id(),
-%%%   *  idp - which stores id of an external identity provider,
-%%%   *  idp_entitlement which stores id of the group, understood by
+%%%   *  onedata_group_id - which stores od_group:id(),
+%%%   *  idp - id of an external identity provider,
+%%%   *  idp_entitlement - id of the group, understood by
 %%%      the idp.
 %%%
 %%% If onedata_group_id is missing, a call to Onezone is performed to
@@ -28,11 +28,16 @@
 -module(luma_onedata_group).
 -author("Jakub Kudzia").
 
+-behaviour(luma_db_record).
+
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/luma/external_luma.hrl").
 
 %% API
 -export([new/1, get_group_id/1]).
+
+%% luma_db_record callbacks
+-export([to_json/1, from_json/1]).
 
 -record(luma_onedata_group, {
     onedata_group_id :: od_group:id(),
@@ -70,3 +75,27 @@ new(GroupId) when is_binary(GroupId) ->
 -spec get_group_id(group()) -> od_group:id().
 get_group_id(#luma_onedata_group{onedata_group_id = OnedataGroupId}) ->
     OnedataGroupId.
+
+%%%===================================================================
+%%% luma_db_record callbacks
+%%%===================================================================
+
+-spec to_json(group()) -> json_utils:json_map().
+to_json(#luma_onedata_group{
+    onedata_group_id = OnedataGroupId,
+    idp = Idp,
+    idp_entitlement = IdpEntitlement
+}) ->
+    #{
+        <<"onedata_group_id">> => OnedataGroupId,
+        <<"idp">> => utils:undefined_to_null(Idp),
+        <<"idp_entitlement">> => utils:undefined_to_null(IdpEntitlement)
+    }.
+
+-spec from_json(json_utils:json_map()) -> group().
+from_json(GroupJson) ->
+    #luma_onedata_group{
+        onedata_group_id = maps:get(<<"onedata_group_id">>, GroupJson),
+        idp = utils:null_to_undefined(maps:get(<<"idp">>, GroupJson, undefined)),
+        idp_entitlement = utils:null_to_undefined(maps:get(<<"idp_entitlement">>, GroupJson, undefined))
+    }.

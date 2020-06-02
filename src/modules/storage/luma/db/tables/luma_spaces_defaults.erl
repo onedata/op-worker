@@ -31,17 +31,12 @@
 -module(luma_spaces_defaults).
 -author("Jakub Kudzia").
 
--behaviour(luma_db_table).
-
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% API
 -export([get/2, delete/2, clear_all/1]).
-
-%% luma_db_table_callbacks
--export([acquire/2]).
 
 -type key() :: od_space:id().
 -type record() :: luma_space_defaults:defaults().
@@ -55,7 +50,9 @@
 
 -spec get(storage(), key()) -> {ok, record()} | {error, term()}.
 get(Storage, SpaceId) ->
-   luma_db:get(Storage, SpaceId, ?MODULE).
+    luma_db:get(Storage, SpaceId, ?MODULE, fun() ->
+        acquire(Storage, SpaceId)
+    end).
 
 -spec clear_all(storage:id()) -> ok | {error, term()}.
 clear_all(StorageId) ->
@@ -66,7 +63,7 @@ delete(StorageId, SpaceId) ->
     luma_db:delete(StorageId, SpaceId, ?MODULE).
 
 %%%===================================================================
-%%% luma_db_table_callbacks
+%%% Internal functions
 %%%===================================================================
 
 -spec acquire(storage:data(), key()) -> {ok, record()}.
@@ -91,9 +88,6 @@ acquire(Storage, SpaceId) ->
     end,
     {ok, luma_space_defaults:new(DefaultPosixCredentials, DisplayCredentials, SpaceId, Storage)}.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 -spec fetch_default_posix_credentials(storage:data(), key()) ->
     {ok, external_luma:posix_compatible_credentials()} | {error, term()}.

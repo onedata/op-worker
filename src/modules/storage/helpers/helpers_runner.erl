@@ -7,7 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for performing operations on helpers.
-%%% It is possible to hook custom (for specific helper) error handling here.
+%%% It also contains error handling logic which may depend on helper
+%%% type.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helpers_runner).

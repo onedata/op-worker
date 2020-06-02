@@ -98,7 +98,7 @@ chown_or_defer_on_posix_compatible_storage(FileCtx) ->
         true ->
             chown_file(FileCtx2, OwnerUserId);
         false ->
-            case user_logic:exists(OwnerUserId) of
+            case provider_logic:has_eff_user(OwnerUserId) of
                 true ->
                     chown_file(FileCtx2, OwnerUserId);
                 false ->

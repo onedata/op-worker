@@ -34,13 +34,11 @@
 -module(luma_storage_users).
 -author("Jakub Kudzia").
 
--behaviour(luma_db_table).
-
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get/2, store_posix_compatible_mapping/3, acquire/2, clear_all/1]).
+-export([get/2, store_posix_compatible_mapping/3, clear_all/1]).
 
 -type key() :: od_user:id().
 -type record() :: luma_storage_user:user().
@@ -55,7 +53,9 @@
 -spec get(storage(), key()) ->
     {ok, record()} | {error, term()}.
 get(Storage, UserId) ->
-    luma_db:get(Storage, UserId, ?MODULE).
+    luma_db:get(Storage, UserId, ?MODULE, fun() ->
+        acquire(Storage, UserId)
+    end).
 
 -spec store_posix_compatible_mapping(storage:data(), key(), luma:uid()) -> ok.
 store_posix_compatible_mapping(Storage, UserId, Uid) ->
@@ -67,7 +67,7 @@ clear_all(StorageId) ->
     luma_db:clear_all(StorageId, ?MODULE).
 
 %%%===================================================================
-%%% luma_db_table_callbacks
+%%% Internal functions
 %%%===================================================================
 
 -spec acquire(storage:data(), key()) ->
@@ -78,10 +78,6 @@ acquire(Storage, UserId) ->
         false -> acquire_default_mapping(Storage, UserId)
     end.
 
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 -spec acquire_mapping_from_external_luma(storage:data(), key()) ->
     {ok, record()} | {error, term()}.
