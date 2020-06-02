@@ -30,7 +30,8 @@
                  source_ids := [oneprovider:id()]}.
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
--type future() :: {ok, clproto_message_id:id()} | {error, term()}.
+-type get_future() :: pid().
+-type communicator_future() :: {ok, clproto_message_id:id()} | {error, term()}.
 
 
 %%%===================================================================
@@ -78,7 +79,7 @@ handle(#get_remote_document{
 %% Implementation of {@link remote_driver:get_async/2}.
 %% @end
 %%--------------------------------------------------------------------
--spec get_async(ctx(), key()) -> future().
+-spec get_async(ctx(), key()) -> get_future().
 get_async(#{
     model := Model,
     routing_key := RoutingKey,
@@ -95,7 +96,12 @@ get_async(#{
                     key = Key,
                     routing_key = RoutingKey
                 },
-                communicator:send_to_provider(SessId, Msg, self())
+
+                Master = self(),
+                spawn(fun() ->
+                    CommunicatorFuture = communicator:send_to_provider(SessId, Msg, self()),
+                    Master ! {communicator_future, CommunicatorFuture}
+                end)
         end
     catch
         _:Reason ->
@@ -108,10 +114,22 @@ get_async(#{
 %% Implementation of {@link remote_driver:wait/1}.
 %% @end
 %%--------------------------------------------------------------------
--spec wait(future()) -> {ok, doc()} | {error, term()}.
-wait({ok, MsgId}) ->
+-spec wait(get_future()) -> {ok, doc()} | {error, term()}.
+wait(_Pid) ->
     Timeout = application:get_env(op_worker, datastore_remote_driver_timeout,
         timer:minutes(1)),
+    receive
+        {communicator_future, CommunicatorFuture} -> wait_for_other_provider(CommunicatorFuture, Timeout)
+    after
+        Timeout -> {error, timeout}
+    end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec wait_for_other_provider(communicator_future(), non_neg_integer()) -> {ok, doc()} | {error, term()}.
+wait_for_other_provider({ok, MsgId}, Timeout) ->
     receive
         #server_message{
             message_id = MsgId,
@@ -139,5 +157,5 @@ wait({ok, MsgId}) ->
         % TODO VFS-4025 - multiprovider communication
         Timeout -> {error, timeout}
     end;
-wait({error, Reason}) ->
+wait_for_other_provider({error, Reason}, _Timeout) ->
     {error, Reason}.

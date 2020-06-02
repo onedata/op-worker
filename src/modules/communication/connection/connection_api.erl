@@ -116,6 +116,7 @@ log_sending_msg_error(SessionId, _Msg, {error, no_connections}) ->
     ?debug("Failed to send msg to ~p due to lack of available "
            "connections", [SessionId]);
 log_sending_msg_error(SessionId, Msg, Error) ->
+    % xxxxx !!!!!
     ?error("Failed to send msg ~s to peer ~p due to: ~p", [
         clproto_utils:msg_to_string(Msg), SessionId, Error
     ]).
