@@ -138,13 +138,13 @@ sanitize_query_options([{<<"keys">>, Keys} | Rest], Options) ->
 sanitize_query_options([{<<"limit">>, Limit} | Rest], Options) ->
     sanitize_query_options(
         Rest,
-        [{limit, sanitize_integer(<<"limit">>, Limit, 1)} | Options]
+        [{limit, sanitize_pos_integer(<<"limit">>, Limit, 1)} | Options]
     );
 
 sanitize_query_options([{<<"skip">>, Skip} | Rest], Options) ->
     sanitize_query_options(
         Rest,
-        [{skip, sanitize_integer(<<"skip">>, Skip, 1)} | Options]
+        [{skip, sanitize_pos_integer(<<"skip">>, Skip, 1)} | Options]
     );
 
 sanitize_query_options([{<<"stale">>, <<"ok">>} | Rest], Options) ->
@@ -189,19 +189,19 @@ sanitize_query_options([_ | Rest], Options) ->
 
 
 %% @private
--spec sanitize_integer(binary(), Value :: term(), Threshold :: integer()) ->
-    {Key, SanitizedValue :: integer()} | no_return() when Key :: binary().
-sanitize_integer(Key, Value, Threshold) when is_integer(Value) ->
+-spec sanitize_pos_integer(Key :: binary(), Value :: term(), Threshold :: pos_integer()) ->
+    pos_integer() | no_return().
+sanitize_pos_integer(Key, Value, Threshold) when is_integer(Value) ->
     case Value >= Threshold of
         true ->
             Value;
         false ->
             throw(?ERROR_BAD_VALUE_TOO_LOW(Key, Threshold))
     end;
-sanitize_integer(Key, Value, Threshold) ->
+sanitize_pos_integer(Key, Value, Threshold) ->
     try
         IntValue = binary_to_integer(Value),
-        sanitize_integer(Key, IntValue, Threshold)
+        sanitize_pos_integer(Key, IntValue, Threshold)
     catch _:_ ->
         throw(?ERROR_BAD_VALUE_INTEGER(Key))
     end.

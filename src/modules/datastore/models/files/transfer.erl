@@ -38,6 +38,8 @@
     is_ongoing/1, is_replication_ongoing/1, is_eviction_ongoing/1,
     is_ended/1, is_replication_ended/1, is_eviction_ended/1,
 
+    replication_status/1, eviction_status/1, overall_status/1,
+
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
     increment_files_evicted_and_processed_counters/1,
     increment_files_failed_and_processed_counters/1,
@@ -405,6 +407,43 @@ is_eviction_ended(#transfer{eviction_status = cancelled}) -> true;
 is_eviction_ended(#transfer{eviction_status = skipped}) -> true;
 is_eviction_ended(#transfer{eviction_status = failed}) -> true;
 is_eviction_ended(#transfer{eviction_status = _}) -> false.
+
+
+-spec replication_status(transfer()) -> status().
+replication_status(#transfer{replication_status = Status}) -> Status.
+
+
+-spec eviction_status(transfer()) -> status().
+eviction_status(#transfer{eviction_status = Status}) -> Status.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns overall status of given transfer. Replaces active status with
+%% 'replicating' for replication and 'evicting' for eviction.
+%% In case of migration 'evicting' indicates that the replication itself has
+%% finished, but source replica eviction is still in progress.
+%% @end
+%%--------------------------------------------------------------------
+-spec overall_status(transfer:transfer()) -> transfer:status() | evicting | replicating.
+overall_status(T = #transfer{
+    replication_status = completed,
+    replicating_provider = P1,
+    evicting_provider = P2
+}) when is_binary(P1) andalso is_binary(P2) ->
+    case T#transfer.eviction_status of
+        scheduled -> evicting;
+        enqueued -> evicting;
+        active -> evicting;
+        Status -> Status
+    end;
+overall_status(T = #transfer{replication_status = skipped}) ->
+    case T#transfer.eviction_status of
+        active -> evicting;
+        Status -> Status
+    end;
+overall_status(#transfer{replication_status = active}) -> replicating;
+overall_status(#transfer{replication_status = Status}) -> Status.
 
 
 -spec increment_files_to_process_counter(undefined | id(), non_neg_integer()) ->

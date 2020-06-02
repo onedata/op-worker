@@ -337,7 +337,7 @@ get(#op_req{gri = #gri{aspect = progress}}, #transfer{
     files_evicted = FilesEvicted
 } = Transfer) ->
     {ok, #{
-        <<"status">> => get_status(Transfer),
+        <<"status">> => transfer:overall_status(Transfer),
         <<"timestamp">> => get_last_update(Transfer),
         <<"replicatedBytes">> => BytesReplicated,
         <<"replicatedFiles">> => FilesReplicated,
@@ -468,37 +468,6 @@ assert_view_exists_on_provider(SpaceId, ViewName, ProviderId) ->
         false ->
             throw(?ERROR_VIEW_NOT_EXISTS_ON(ProviderId))
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns status of given transfer. Replaces active status with 'replicating'
-%% for replication and 'evicting' for eviction.
-%% In case of migration 'evicting' indicates that the replication itself has
-%% finished, but source replica eviction is still in progress.
-%% @end
-%%--------------------------------------------------------------------
--spec get_status(transfer:transfer()) ->
-    transfer:status() | evicting | replicating.
-get_status(T = #transfer{
-    replication_status = completed,
-    replicating_provider = P1,
-    evicting_provider = P2
-}) when is_binary(P1) andalso is_binary(P2) ->
-    case T#transfer.eviction_status of
-        scheduled -> evicting;
-        enqueued -> evicting;
-        active -> evicting;
-        Status -> Status
-    end;
-get_status(T = #transfer{replication_status = skipped}) ->
-    case T#transfer.eviction_status of
-        active -> evicting;
-        Status -> Status
-    end;
-get_status(#transfer{replication_status = active}) -> replicating;
-get_status(#transfer{replication_status = Status}) -> Status.
 
 
 -spec get_last_update(#transfer{}) -> non_neg_integer().
