@@ -475,7 +475,7 @@ init_stream(State = #{last_seq := Since, space_id := SpaceId}) ->
     Pid = self(),
 
     % TODO VFS-5570
-    % TODO - maybe restart stream in case of node failure
+    % TODO VFS-6389 - maybe restart stream in case of node failure
     Node = datastore_key:responsible_node(SpaceId),
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream,
         [<<"onedata">>, SpaceId, fun(Feed) ->

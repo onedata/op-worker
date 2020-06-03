@@ -120,7 +120,6 @@ verify_storage_on_all_nodes(Helper) ->
     {ok, AdminCtx} = luma:get_admin_ctx(?ROOT_USER_ID, Helper),
     {ok, AdminCtx2} = luma:add_helper_specific_fields(?ROOT_USER_ID,
         ?ROOT_SESS_ID, AdminCtx, Helper),
-
     [Node | Nodes] = consistent_hashing:get_all_nodes(),
     FileId = generate_file_id(),
     case create_test_file(Node, Helper, AdminCtx2, FileId) of

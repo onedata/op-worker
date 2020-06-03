@@ -29,16 +29,6 @@
 all() ->
     ?ALL([failure_test]).
 
-% Szukamy:
-% consistent_hashing:get_all_nodes()
-% datastore_key:responsible_node
-% consistent_hashing:get_assigned_node
-% worker_proxy:
-
-% responsible node powinien zwracac slave jesli master jest walniety
-% Trzeba ogranac co robic z lokalnymi kopiami
-% MW_CHECK
-
 %%%===================================================================
 %%% Test functions
 %%%===================================================================

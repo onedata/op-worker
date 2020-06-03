@@ -29,7 +29,7 @@
 -export([on_cluster_ready/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
--export([node_down/2, node_up/2]).
+-export([node_down/2, node_up/2, node_ready/2]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
@@ -261,5 +261,23 @@ node_up(RecoveredNode, IsRecoveredNodeMaster) ->
         true ->
             oneprovider:set_oz_domain(RecoveredNode),
             provider_auth:backup_to_file(RecoveredNode),
-            replica_synchronizer:cancel_and_terminate_slaves()
+            replica_synchronizer:cancel_and_terminate_slaves();
+        false ->
+            ok
+    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback used to customize behavior when other node recovers after failure.
+%% It is called after all workers and listeners have been restarted.
+%% Second argument informs if recovered node is master (see ha_datastore.hrl) for current node.
+%% @end
+%%--------------------------------------------------------------------
+-spec node_ready(node(), boolean()) -> ok.
+node_ready(_RecoveredNode, IsRecoveredNodeMaster) ->
+    case IsRecoveredNodeMaster of
+        true ->
+            qos_bounded_cache:ensure_exists_for_all_spaces();
+        false ->
+            ok
     end.

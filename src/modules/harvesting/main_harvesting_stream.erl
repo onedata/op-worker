@@ -181,6 +181,8 @@ handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
 
+-spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
+    State :: harvesting_stream:state()) -> ok.
 terminate(_Reason, #hs_state{space_id = SpaceId}) ->
     ok = internal_services_manager:report_service_stop(?MODULE, SpaceId, SpaceId),
     ok.
@@ -334,6 +336,7 @@ on_harvesting_doc_not_found(State) ->
 %%% Permanent services API
 %%%===================================================================
 
+-spec start_service(od_space:id()) -> ok | abort.
 start_service(SpaceId) ->
     case harvesting_stream_sup:start_main_stream(SpaceId) of
         ok -> ok;
@@ -342,6 +345,7 @@ start_service(SpaceId) ->
         {error, {normal, _}} -> abort
     end.
 
+-spec stop_service(od_space:id()) -> ok.
 stop_service(SpaceId) ->
     gen_server2:call({global, ?MAIN_HARVESTING_STREAM(SpaceId)}, ?TERMINATE, infinity).
 

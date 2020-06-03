@@ -56,7 +56,7 @@
     start/3,
     restart/3,
     cancel_cleaning/2,
-    sync_cancel_cleaning/2,
+    cancel_cleaning_sync/2,
     notify_files_to_process/5,
     notify_finished_traverse/2,
     notify_processed_file/3,
@@ -299,7 +299,7 @@ start_service(SpaceId, AutocleaningRunId, AutocleaningRun, AutocleaningConfig) -
     ServiceOptions = #{
         start_function => start_internal,
         start_function_args => [SpaceId, AutocleaningRunId, AutocleaningRun, AutocleaningConfig],
-        stop_function => sync_cancel_cleaning,
+        stop_function => cancel_cleaning_sync,
         stop_function_args => [SpaceId, AutocleaningRunId]
     },
     internal_services_manager:start_service(?MODULE, SpaceId, ServiceOptions).
@@ -313,13 +313,22 @@ start_internal(SpaceId, AutocleaningRunId, AutocleaningRun, AutocleaningConfig) 
         _ -> abort
     end.
 
-sync_cancel_cleaning(SpaceId, AutocleaningRunId) ->
+-spec cancel_cleaning(od_space:id(), run_id()) -> ok.
+cancel_cleaning(SpaceId, AutocleaningRunId) ->
+    gen_server2:cast(?SERVER(SpaceId), #message{
+        type = #cancel_cleaning{},
+        run_id = AutocleaningRunId
+    }).
+
+-spec cancel_cleaning_sync(od_space:id(), run_id()) -> ok.
+cancel_cleaning_sync(SpaceId, AutocleaningRunId) ->
     gen_server2:cast(?SERVER(SpaceId), #message{
         type = #cancel_cleaning{report_to = self()},
         run_id = AutocleaningRunId
     }),
     wait_for_terminate(SpaceId).
 
+-spec wait_for_terminate(od_space:id()) -> ok.
 wait_for_terminate(SpaceId) ->
     receive
         {controller_terminated, SpaceId} -> ok
@@ -335,13 +344,6 @@ wait_for_terminate(SpaceId) ->
                     end
             end
     end.
-
--spec cancel_cleaning(od_space:id(), run_id()) -> ok.
-cancel_cleaning(SpaceId, AutocleaningRunId) ->
-    gen_server2:cast(?SERVER(SpaceId), #message{
-        type = #cancel_cleaning{},
-        run_id = AutocleaningRunId
-    }).
 
 -spec notify_released_file(od_space:id(), run_id(), non_neg_integer(), batch_no()) -> ok.
 notify_released_file(SpaceId, ARId, ReleasedBytes, BatchNo) ->

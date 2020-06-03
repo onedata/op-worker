@@ -300,7 +300,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec(start(od_space:id()) -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start(SpaceId) ->
-    % MW_CHECK - wystarczy go ubic i uruchomi sie sam na wlasciwym node
+    % TODO VFS-6389 - kill after master node recovery
     Node = datastore_key:responsible_node(SpaceId),
     rpc:call(Node, gen_server2, start, [?SERVER(SpaceId), ?MODULE, [SpaceId], []]).
 

@@ -75,7 +75,6 @@ ensure_exists_for_all_spaces() ->
 %%--------------------------------------------------------------------
 -spec ensure_exists_on_all_nodes(od_space:id()) -> ok.
 ensure_exists_on_all_nodes(SpaceId) ->
-    % MW check - zainicjalizowac po wstaniu node'a
     Nodes = consistent_hashing:get_all_nodes(),
     {Res, BadNodes} = rpc:multicall(Nodes, ?MODULE, ensure_exists, [SpaceId]),
 

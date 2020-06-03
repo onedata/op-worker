@@ -124,7 +124,6 @@
 %%--------------------------------------------------------------------
 -spec init_paths_caches(od_space:id() | all) -> ok.
 init_paths_caches(Space) ->
-    % MW - check - zainicjowac po restarcie node'a
     lists:foreach(fun(Node) ->
         rpc:call(Node, erlang, send_after, [0, fslogic_worker, {sync_timer, ?INIT_PATHS_CACHES(Space)}])
     end, consistent_hashing:get_all_nodes()).

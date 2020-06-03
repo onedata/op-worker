@@ -111,6 +111,8 @@ handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
 
+-spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
+    State :: harvesting_stream:state()) -> ok.
 terminate(_Reason, _State) ->
     ok.
 

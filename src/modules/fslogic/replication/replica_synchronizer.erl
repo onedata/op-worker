@@ -498,8 +498,7 @@ init_or_return_existing(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     {Pid, _} = gproc:reg_or_locate({n, l, FileUuid}),
     ok = proc_lib:init_ack({ok, Pid}),
-    % TODO - sprawdzic czy jestesmy na wlasciwym node i jak nie to wywalic blad
-    % moze robic to tylko jak jestesmy w stanie po restarcie
+    % TODO VFS-6389 - check race with node changing
     case self() of
         Pid ->
             {ok, State, Timeout} = init(FileCtx),
@@ -1580,6 +1579,7 @@ wait_for_terminate(Pid) ->
             ok
     end.
 
+-spec wait_for_slave_check(pid() | [pid()]) -> ok.
 wait_for_slave_check([]) ->
     ok;
 wait_for_slave_check([Pid | Pids]) ->

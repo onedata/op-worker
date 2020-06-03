@@ -1280,7 +1280,7 @@ end_per_testcase(_, Config) ->
         lists:foreach(fun({_Id, Child, _Type, _Modules}) ->
             catch gen_server2:call(Child, ?TERMINATE, timer:seconds(30))
         end, Children),
-        % TODO - dlaczego terminate_child nie zamyka ladnie stream'ow
+        % TODO VFS-6389 - check why terminate_child does not close streams
         ok = rpc:call(Node, supervisor, terminate_child, [harvesting_worker_sup, harvesting_stream_sup]),
         {ok, _} = rpc:call(Node, supervisor, restart_child, [harvesting_worker_sup, harvesting_stream_sup])
     end, Nodes),
