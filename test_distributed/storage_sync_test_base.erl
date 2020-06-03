@@ -5498,7 +5498,7 @@ clean_space(Config) ->
     ?assertMatch({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS).
 
 close_opened_files(Worker, SessionId) ->
-    {ok, Handles} = rpc:call(Worker, file_handles, list_local, []),
+    {ok, Handles} = rpc:call(Worker, file_handles, list, []),
     lists:foreach(fun(#document{key = Uuid}) ->
         Guid = file_id:pack_guid(Uuid, ?SPACE_ID),
         FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [Guid]),
