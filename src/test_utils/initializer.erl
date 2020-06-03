@@ -1175,10 +1175,6 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
 
     test_utils:mock_expect(Workers, space_logic, get_harvesters, fun(SpaceId) ->
         {ok, proplists:get_value(SpaceId, SpacesHarvesters, [])}
-    end),
-    
-    test_utils:mock_expect(Workers, space_logic, report_provider_sync_progress, fun(_SpaceId, _) ->
-        ok
     end).
 
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],
