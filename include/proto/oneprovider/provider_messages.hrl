@@ -67,7 +67,6 @@
     % in definition of transfer record
     replicating_provider_id :: undefined | oneprovider:id(),
     evicting_provider_id :: undefined | oneprovider:id(),
-    block = undefined :: undefined | #file_block{},
     callback :: transfer:callback()
 }).
 

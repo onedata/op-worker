@@ -235,13 +235,15 @@ add_file_id_bad_values(FileGuid, SpaceId, ShareId, #data_spec{bad_values = BadVa
         {<<"fileId">>, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
         {<<"fileId">>, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
 
+        % user has no privileges in non existent space and so he should receive ?ERROR_FORBIDDEN
         {<<"fileId">>, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
         {<<"fileId">>, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
 
         {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
-        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_FORBIDDEN},
+        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?ENOENT)},
 
-        {<<"fileId">>, ShareFileObjectId, ?ERROR_FORBIDDEN}
+        % transferring shared file is forbidden - it should result in ?EACCES
+        {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EACCES)}
     ],
     DataSpec#data_spec{bad_values = BadFileIdValues ++ BadValues}.
 
@@ -753,7 +755,7 @@ end_per_suite(Config) ->
 
 init_per_testcase(_Case, Config) ->
     initializer:mock_share_logic(Config),
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({minutes, 30}),
 
     % For http server to send msg about transfer callback call it is necessary
     % to register test process (every test is carried by different process)

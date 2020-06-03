@@ -544,7 +544,6 @@ handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
 handle_provider_request(UserCtx, #schedule_file_transfer{
     replicating_provider_id = ReplicatingProviderId,
     evicting_provider_id = EvictingProviderId,
-    block = _Block,
     callback = Callback
 }, FileCtx) ->
     transfer_req:schedule_file_transfer(
