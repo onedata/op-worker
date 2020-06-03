@@ -38,7 +38,7 @@
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
--export([report_dbsync_state/2]).
+-export([report_provider_sync_progress/2]).
 -export([on_space_supported/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
@@ -340,12 +340,12 @@ get_harvesters(SpaceId) ->
     end.
 
 
--spec report_dbsync_state(od_space:id(), space_support:seq_per_provider()) -> ok | errors:error().
-report_dbsync_state(SpaceId, SeqPerProvider) ->
+-spec report_provider_sync_progress(od_space:id(), provider_sync_progress:stats()) -> ok | errors:error().
+report_provider_sync_progress(SpaceId, ProviderSyncProgress) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
-        gri = #gri{type = od_space, id = SpaceId, aspect = {dbsync_state, oneprovider:get_id()}},
-        data = #{<<"seqPerProvider">> => SeqPerProvider}
+        gri = #gri{type = space_stats, id = SpaceId, aspect = {provider_sync_progress, oneprovider:get_id()}},
+        data = #{<<"providerSyncProgress">> => provider_sync_progress:to_json(ProviderSyncProgress)}
     }).
 
 

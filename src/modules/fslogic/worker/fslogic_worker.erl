@@ -435,7 +435,9 @@ handle_fuse_request(UserCtx, #verify_storage_test_file{
         Error ->
             session:set_direct_io(Session, SpaceId, false),
             Error
-    end.
+    end;
+handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
+    attr_req:get_fs_stats(UserCtx, FileCtx).
 
 %%--------------------------------------------------------------------
 %% @private

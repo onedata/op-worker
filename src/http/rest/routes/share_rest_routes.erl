@@ -43,7 +43,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove a specific share
+    %% Remove share
     {<<"/shares/:shid">>, rest_handler, #rest_req{
         method = 'DELETE',
         b_gri = #b_gri{

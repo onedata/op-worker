@@ -114,8 +114,8 @@
 
     harvesters = [] :: [od_harvester:id()],
 
-    support_parameters = #{} :: space_support:parameters_per_provider(),
-    support_state = #{} :: space_support:support_state_per_provider(),
+    support_parameters_per_provider = #{} :: support_parameters:per_provider(),
+    support_stage_per_provider = #{} :: support_stage:per_provider(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -399,7 +399,7 @@
     task_id :: traverse:id(),
     space_id :: od_space:id(),
     storage_id :: storage:id(),
-    % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id). 
+    % Id of task that was created in slave job (e.g. QoS entry id or cleanup traverse id).
     % It is persisted so when slave job is restarted no additional task is created.
     subtask_id = undefined :: space_unsupport:subtask_id() | undefined,
     % Id of process waiting to be notified of task finish.
@@ -407,7 +407,7 @@
     slave_job_pid  = undefined :: pid() | undefined
 }).
 
-%% Model that holds information necessary to tell whether whole subtree 
+%% Model that holds information necessary to tell whether whole subtree
 %% of a directory was traversed so this directory can be cleaned up.
 -record(cleanup_traverse_status, {
     % number of children listed but not yet traversed

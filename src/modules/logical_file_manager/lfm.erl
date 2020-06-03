@@ -64,7 +64,7 @@
 -export([set_perms/3, check_perms/3, set_acl/3, get_acl/2, remove_acl/2]).
 %% Functions concerning file attributes
 -export([
-    stat/2, get_details/2,
+    stat/2, get_fs_stats/2, get_details/2,
     get_xattr/4, set_xattr/3, set_xattr/5, remove_xattr/3, list_xattr/4,
     update_times/5
 ]).
@@ -591,6 +591,16 @@ remove_acl(SessId, FileKey) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
     ?run(fun() -> lfm_attrs:stat(SessId, FileKey) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns fs_stats() containing support e.g. size and occupied size.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_fs_stats(session:id(), file_key()) ->
+    {ok, lfm_attrs:fs_stats()} | error_reply().
+get_fs_stats(SessId, FileKey) ->
+    ?run(fun() -> lfm_attrs:get_fs_stats(SessId, FileKey) end).
 
 %%--------------------------------------------------------------------
 %% @doc

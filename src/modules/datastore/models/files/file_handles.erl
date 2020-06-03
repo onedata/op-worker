@@ -67,7 +67,7 @@ exists(Key) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns list of all records connected to node.
+%% Returns list of all records.
 %% @end
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [doc()]} | {error, term()}.

@@ -276,6 +276,24 @@
                         "storage": "/mnt/st2"
                     }
                 }
+            },
+            "space9": {
+                "displayed_name": "space9",
+                "users": [
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "cephrados",
+                        "supported_size": 10000
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 50000
+                    }
+                }
             }
         }
     }
