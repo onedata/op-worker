@@ -344,12 +344,12 @@ create_view_transfer_required_privs(migration) ->
 
 %% @private
 op_replica_spec(replication, DataSourceType, _SrcNode, DstNode) ->
-    {Required, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
+    {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_replica, DataSourceType
     ),
     #data_spec{
         required = [<<"provider_id">> | Required],
-        optional = [<<"url">>],
+        optional = [<<"url">> | Optional],
         correct_values = CorrectValues#{
             <<"provider_id">> => [?GET_DOMAIN_BIN(DstNode)],
             <<"url">> => [get_callback_url()]
@@ -361,11 +361,12 @@ op_replica_spec(replication, DataSourceType, _SrcNode, DstNode) ->
         ])
     };
 op_replica_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
-    {Required, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
+    {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_replica, DataSourceType
     ),
     #data_spec{
         required = [<<"provider_id">> | Required],
+        optional =  Optional,
         correct_values = CorrectValues#{
             <<"provider_id">> => [?GET_DOMAIN_BIN(SrcNode)]
         },
@@ -375,11 +376,12 @@ op_replica_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
         ])
     };
 op_replica_spec(migration, DataSourceType, SrcNode, DstNode) ->
-    {Required, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
+    {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_replica, DataSourceType
     ),
     #data_spec{
         required = [<<"provider_id">>, <<"migration_provider_id">> | Required],
+        optional =  Optional,
         correct_values = CorrectValues#{
             <<"provider_id">> => [?GET_DOMAIN_BIN(SrcNode)],
             <<"migration_provider_id">> => [?GET_DOMAIN_BIN(DstNode)]
@@ -394,7 +396,7 @@ op_replica_spec(migration, DataSourceType, SrcNode, DstNode) ->
 
 %% @private
 op_transfer_spec(replication, DataSourceType, _SrcNode, DstNode) ->
-    {Required, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
+    {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_transfer, DataSourceType
     ),
     #data_spec{
@@ -402,7 +404,7 @@ op_transfer_spec(replication, DataSourceType, _SrcNode, DstNode) ->
             <<"type">>, <<"dataSourceType">>, <<"replicatingProviderId">>
             | Required
         ],
-        optional = [<<"callback">>],
+        optional = [<<"callback">> | Optional],
         correct_values = CorrectValues#{
             <<"type">> => [<<"replication">>],
             <<"dataSourceType">> => [DataSourceType],
@@ -417,7 +419,7 @@ op_transfer_spec(replication, DataSourceType, _SrcNode, DstNode) ->
         ])
     };
 op_transfer_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
-    {Required, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
+    {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_transfer, DataSourceType
     ),
     #data_spec{
@@ -425,7 +427,7 @@ op_transfer_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
             <<"type">>, <<"dataSourceType">>, <<"evictingProviderId">>
             | Required
         ],
-        optional = [<<"callback">>],
+        optional = [<<"callback">> | Optional],
         correct_values = CorrectValues#{
             <<"type">> => [<<"eviction">>],
             <<"dataSourceType">> => [DataSourceType],
@@ -440,7 +442,7 @@ op_transfer_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
         ])
     };
 op_transfer_spec(migration, DataSourceType, SrcNode, DstNode) ->
-    {Required, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
+    {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_transfer, DataSourceType
     ),
     #data_spec{
@@ -449,7 +451,7 @@ op_transfer_spec(migration, DataSourceType, SrcNode, DstNode) ->
             <<"replicatingProviderId">>, <<"evictingProviderId">>
             | Required
         ],
-        optional = [<<"callback">>],
+        optional = [<<"callback">> | Optional],
         correct_values = CorrectValues#{
             <<"type">> => [<<"migration">>],
             <<"dataSourceType">> => [DataSourceType],
@@ -472,16 +474,21 @@ op_transfer_spec(migration, DataSourceType, SrcNode, DstNode) ->
     Middleware :: op_transfer | op_replica, DataSourceType :: binary()
 ) -> {
     RequiredParams :: [binary()],
+    OptionalParams :: [binary()],
     CorrectValues :: #{Key :: binary() => Values :: [term()]},
     BadValues :: [{Key :: binary(), Value :: term(), errors:error()}]
 }.
 get_data_source_dependent_data_spec_aspects(op_transfer, <<"file">>) ->
-    {[<<"fileId">>], #{<<"fileId">> => [?PLACEHOLDER]}, []};
+    {[<<"fileId">>], [], #{<<"fileId">> => [?PLACEHOLDER]}, []};
 get_data_source_dependent_data_spec_aspects(op_transfer, <<"view">>) ->
     RequiredParams = [<<"spaceId">>, <<"viewName">>],
+    OptionalParams = [<<"queryViewParams">>],
     CorrectValues = #{
         <<"spaceId">> => [?SPACE_2],
-        <<"viewName">> => [?PLACEHOLDER]
+        <<"viewName">> => [?PLACEHOLDER],
+        % Below value will not affect test (view has only up to 5 files) and checks only
+        % that server accepts it - view transfers with query options should have distinct suite
+        <<"queryViewParams">> => [#{<<"limit">> => 100}]
     },
     BadValues = [
         {<<"spaceId">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"spaceId">>)},
@@ -499,12 +506,18 @@ get_data_source_dependent_data_spec_aspects(op_transfer, <<"view">>) ->
         {<<"queryViewParams">>, #{<<"stale">> => <<"fresh">>},
             ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])}
     ],
-    {RequiredParams, CorrectValues, BadValues};
+    {RequiredParams, OptionalParams, CorrectValues, BadValues};
 get_data_source_dependent_data_spec_aspects(op_replica, <<"file">>) ->
-    {[], #{}, []};
+    {[], [], #{}, []};
 get_data_source_dependent_data_spec_aspects(op_replica, <<"view">>) ->
     RequiredParams = [<<"space_id">>],
-    CorrectValues = #{<<"space_id">> => [?SPACE_2]},
+    OptionalParams = [<<"limit">>],
+    CorrectValues = #{
+        <<"space_id">> => [?SPACE_2],
+        % Below value will not affect test (view has only up to 5 files) and checks only
+        % that server accepts it - view transfers with query options should have distinct suite
+        <<"limit">> => [100]
+    },
     BadValues = [
         {<<"space_id">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"space_id">>)}},
         {<<"space_id">>, <<"NonExistingSpace">>, ?ERROR_FORBIDDEN},
@@ -521,7 +534,7 @@ get_data_source_dependent_data_spec_aspects(op_replica, <<"view">>) ->
         {<<"stale">>, <<"fresh">>,
             ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"stale">>, [<<"ok">>, <<"update_after">>, <<"false">>])}
     ],
-    {RequiredParams, CorrectValues, BadValues}.
+    {RequiredParams, OptionalParams, CorrectValues, BadValues}.
 
 
 %% @private
@@ -564,7 +577,9 @@ create_prepare_replica_rest_args_fun(Type) ->
         _ -> delete
     end,
 
-    fun(#api_test_ctx{scenario = Scenario, env = Env, data = Data0}) ->
+    fun(#api_test_ctx{scenario = Scenario, env = Env, node = Node, data = Data0}) ->
+        ProviderId = transfers_test_utils:provider_id(Node),
+
         Data1 = api_test_utils:ensure_defined(Data0, #{}),
         {InvalidId, Data2} = api_test_utils:maybe_substitute_id(undefined, Data1),
         RestPath = case Env of
@@ -581,9 +596,16 @@ create_prepare_replica_rest_args_fun(Type) ->
             error ->
                 {<<>>, Data2}
         end,
+        % In case of op_replica api if 'provider_id' is optional - if it is not present
+        % then by default provider receiving request will substitute its id
+        Data5 = case maps:get(<<"provider_id">>, Data4, undefined) == ProviderId of
+            true -> maps:remove(<<"provider_id">>, Data4);
+            false -> Data4
+        end,
+
         #rest_args{
             method = Method,
-            path = http_utils:append_url_parameters(RestPath, Data4),
+            path = http_utils:append_url_parameters(RestPath, Data5),
             headers = #{<<"content-type">> => <<"application/json">>},
             body = Body
         }
@@ -597,7 +619,9 @@ create_prepare_replica_gs_args_fun(Type, Scope) ->
         _ -> delete
     end,
 
-    fun(#api_test_ctx{env = Env, data = Data0}) ->
+    fun(#api_test_ctx{env = Env, node = Node, data = Data0}) ->
+        ProviderId = transfers_test_utils:provider_id(Node),
+
         {ValidId, Aspect} = case Env of
             #{root_file_guid := FileGuid} ->
                 {FileGuid, instance};
@@ -608,10 +632,16 @@ create_prepare_replica_gs_args_fun(Type, Scope) ->
         end,
         {GriId, Data1} = api_test_utils:maybe_substitute_id(ValidId, Data0),
 
+        % In case of op_replica api if 'provider_id' is optional - if it is not present
+        % then by default provider receiving request will substitute its id
+        Data2 = case maps:get(<<"provider_id">>, Data1, undefined) == ProviderId of
+            true -> maps:remove(<<"provider_id">>, Data1);
+            false -> Data1
+        end,
         #gs_args{
             operation = Operation,
             gri = #gri{type = op_replica, id = GriId, aspect = Aspect, scope = Scope},
-            data = Data1
+            data = Data2
         }
     end.
 
@@ -661,7 +691,6 @@ validate_transfer_call_result(TransferId, #api_test_ctx{
         true ->
             receive
                 ?CALLBACK_CALL_TIME(TransferId, CallTime) ->
-                    ct:pal("ASDASDASDASD"),
                     transfers_test_utils:assert_transfer_state(
                         TestNode, TransferId, ExpTransfer#{
                             finish_time => fun(FinishTime) ->
