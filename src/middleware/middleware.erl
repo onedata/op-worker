@@ -171,24 +171,11 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 
 %% @private
 -spec switch_context_if_shared_file_request(req()) -> req().
-switch_context_if_shared_file_request(#op_req{gri = #gri{type = op_file, id = undefined}} = OpReq) ->
-    OpReq;
-switch_context_if_shared_file_request(#op_req{gri = #gri{
-    type = Type,
-    id = FileGuid,
-    aspect = Aspect
-}} = OpReq) when
-    Type =:= op_file;
-    (Type =:= op_replica andalso Aspect =:= instance);
-    (Type =:= op_replica andalso Aspect =:= distribution)
-->
-    % Every request concerning shared files must be carried with guest auth
-    case file_id:is_share_guid(FileGuid) of
+switch_context_if_shared_file_request(#op_req{gri = #gri{type = Tp, aspect = As, id = Id}} = OpReq) ->
+    case middleware_utils:is_shared_file_request(Tp, As, Id) of
         true -> OpReq#op_req{auth = ?GUEST};
         false -> OpReq
-    end;
-switch_context_if_shared_file_request(OpReq) ->
-    OpReq.
+    end.
 
 
 %% @private

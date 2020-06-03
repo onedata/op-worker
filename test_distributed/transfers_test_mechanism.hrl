@@ -5,8 +5,6 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% TODO VFS-6385 Split and reorganize test includes
-%%%
 %%% Definitions of records and macros used in transfers tests.
 %%% @end
 %%%-------------------------------------------------------------------

@@ -281,34 +281,19 @@ send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
     gri:gri().
 resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) ->
     IdBinding = resolve_bindings(SessionId, Id, Req),
-    AspectBinding = case As of
+    AsBinding = case As of
         {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
-    IsShareFileRequest = case {Tp, AspectBinding} of
-        {op_file, _} -> true;
-        {op_replica, instance} -> true;
-        {op_replica, distribution} -> true;
-        _ -> false
+    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, IdBinding) of
+        true -> public;
+        false -> Sc
     end,
-    ScopeBinding = case IsShareFileRequest of
-        true ->
-            % REST endpoints requiring $FILE_ID in URL accepts both normal
-            % guids and share guids. In case of share ones scope must be
-            % changed to 'public'.
-            case file_id:is_share_guid(IdBinding) of
-                true -> public;
-                false -> Sc
-            end;
-        false ->
-            Sc
-    end,
-
     #gri{
         type = Tp,
         id = IdBinding,
-        aspect = AspectBinding,
-        scope = ScopeBinding
+        aspect = AsBinding,
+        scope = ScBinding
     }.
 
 

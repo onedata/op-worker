@@ -18,7 +18,7 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
--include("test_utils/transfers_test_mechanism.hrl").
+-include("transfers_test_mechanism.hrl").
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 

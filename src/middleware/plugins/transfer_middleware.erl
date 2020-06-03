@@ -87,7 +87,11 @@ data_spec(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}
     end,
     {AllRequired, AllOptional} = case maps:get(<<"dataSourceType">>, Data, undefined) of
         <<"file">> ->
-            {RequiredDependingOnType#{<<"fileId">> => {cdmi_id, guid}}, AlwaysOptional};
+            {RequiredDependingOnType#{
+                <<"fileId">> => {binary, fun(ObjectId) ->
+                    middleware_utils:decode_object_id(ObjectId, <<"fileId">>)
+                end}
+            }, AlwaysOptional};
         <<"view">> ->
             ViewRequired = RequiredDependingOnType#{
                 <<"spaceId">> => {binary, non_empty},

@@ -15,6 +15,8 @@
 -include("api_test_runner.hrl").
 -include("test_utils/initializer.hrl").
 
+-export([load_module_from_test_distributed_dir/2]).
+
 -export([
     randomly_choose_file_type_for_test/0,
     randomly_choose_file_type_for_test/1,
@@ -45,6 +47,34 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+%%% TODO VFS-6385 Reorganize and fix includes and loading modules from other dirs in tests
+-spec load_module_from_test_distributed_dir(proplists:proplist(), module()) ->
+    ok.
+load_module_from_test_distributed_dir(Config, ModuleName) ->
+    DataDir = ?config(data_dir, Config),
+    ProjectRoot = filename:join(lists:takewhile(fun(Token) ->
+        Token /= "test_distributed"
+    end, filename:split(DataDir))),
+    TestsRootDir = filename:join([ProjectRoot, "test_distributed"]),
+
+    code:add_pathz(TestsRootDir),
+
+    CompileOpts = [
+        verbose,report_errors,report_warnings,
+        {i, TestsRootDir},
+        {i, filename:join([TestsRootDir, "..", "include"])},
+        {i, filename:join([TestsRootDir, "..", "_build", "default", "lib"])}
+    ],
+    case compile:file(filename:join(TestsRootDir, ModuleName), CompileOpts) of
+        {ok, ModuleName} ->
+            code:purge(ModuleName),
+            code:load_file(ModuleName),
+            ok;
+        _ ->
+            ct:fail("Couldn't load module: ~p", [ModuleName])
+    end.
 
 
 -spec randomly_choose_file_type_for_test() -> file_type().

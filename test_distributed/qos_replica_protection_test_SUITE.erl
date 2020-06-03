@@ -11,7 +11,7 @@
 -module(qos_replica_protection_test_SUITE).
 -author("Michal Stanisz").
 
--include("test_utils/transfers_test_mechanism.hrl").
+-include("transfers_test_mechanism.hrl").
 -include("qos_tests_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 

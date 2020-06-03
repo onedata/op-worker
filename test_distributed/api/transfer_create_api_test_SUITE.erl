@@ -17,7 +17,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("test_utils/initializer.hrl").
--include("test_utils/transfers_test_mechanism.hrl").
+-include("../transfers_test_mechanism.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
@@ -716,6 +716,8 @@ validate_transfer_call_result(TransferId, #api_test_ctx{
 
 
 init_per_suite(Config) ->
+    api_test_utils:load_module_from_test_distributed_dir(Config, transfers_test_utils),
+
     Posthook = fun(NewConfig) ->
         NewConfig1 = [{space_storage_mock, false} | NewConfig],
         NewConfig2 = initializer:setup_storage(NewConfig1),

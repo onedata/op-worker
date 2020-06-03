@@ -16,7 +16,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/helpers/helpers.hrl").
--include("test_utils/transfers_test_mechanism.hrl").
+-include("transfers_test_mechanism.hrl").
 -include("rest_test_utils.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/errors.hrl").

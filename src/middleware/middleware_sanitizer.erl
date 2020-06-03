@@ -21,7 +21,7 @@
 
 -type type_constraint() ::
     any | boolean | integer | atom | binary | list_of_binaries |
-    json | gri | page_token | cdmi_id.
+    json | gri | page_token.
 -type value_constraint() ::
     any |
     non_empty |
@@ -270,16 +270,6 @@ check_type(json, _Param, JSON) when is_map(JSON) ->
 check_type(json, Param, _) ->
     throw(?ERROR_BAD_VALUE_JSON(Param));
 
-check_type(cdmi_id, Key, Binary) when is_binary(Binary) ->
-    try
-        {ok, FileGuid} = file_id:objectid_to_guid(Binary),
-        FileGuid
-    catch _:_ ->
-        ?ERROR_BAD_VALUE_IDENTIFIER(Key)
-    end;
-check_type(cdmi_id, Key, _) ->
-    throw(?ERROR_BAD_VALUE_IDENTIFIER(Key));
-
 check_type(TypeConstraint, Param, _) ->
     ?error("Unknown type constraint: ~p for param: ~p", [
         TypeConstraint, Param
@@ -308,10 +298,7 @@ check_value(json, non_empty, Param, Map) when map_size(Map) == 0 ->
 check_value(_, non_empty, _Param, _) ->
     ok;
 
-check_value(Type, guid, Param, Value) when
-    Type == binary;
-    Type == cdmi_id
-->
+check_value(binary, guid, Param, Value) ->
     try
         {_, _, _} = file_id:unpack_share_guid(Value),
         ok

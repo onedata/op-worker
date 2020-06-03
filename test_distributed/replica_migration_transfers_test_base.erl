@@ -12,7 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("test_utils/transfers_test_mechanism.hrl").
+-include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
