@@ -312,7 +312,10 @@ check_dir_location_and_maybe_sync(StorageFileCtx, FileCtx, Info) ->
 -spec check_dir_location_and_maybe_sync(storage_file_ctx:ctx(), file_ctx:ctx(), 
     info(), boolean()) -> {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
 check_dir_location_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileIsRegularFile) ->
-    {StorageFileCreated, _} = file_ctx:is_storage_file_created(FileCtx),
+    StorageFileCreated = case file_ctx:get_dir_location_doc_const(FileCtx) of
+        undefined -> false;
+        DirLocation -> dir_location:is_storage_file_created(DirLocation)
+    end,
     case  StorageFileCreated or StorageFileIsRegularFile of
         true ->
             check_file_meta_and_maybe_sync(StorageFileCtx, FileCtx, Info, StorageFileCreated);

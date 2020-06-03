@@ -23,9 +23,9 @@
 %%% Callback definitions
 %%%===================================================================
 
--callback to_json(luma_db:db_record()) -> json_utils:map().
+-callback to_json(luma_db:db_record()) -> json_utils:json_map().
 
--callback from_json(json_utils:map()) -> luma_db:db_record().
+-callback from_json(json_utils:json_map()) -> luma_db:db_record().
 
 %%%===================================================================
 %%% API functions
@@ -40,5 +40,5 @@ encode(Record) ->
 -spec decode(binary()) -> json_utils:json_map().
 decode(EncodedRecord) ->
     RecordJson = json_utils:decode(EncodedRecord),
-    Module = binary_to_atom(maps:get(<<"record_type">>, RecordJson), utf8),
+    Module = binary_to_existing_atom(maps:get(<<"record_type">>, RecordJson), utf8),
     Module:from_json(RecordJson).

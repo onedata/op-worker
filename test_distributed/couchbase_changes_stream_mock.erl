@@ -25,9 +25,6 @@
 %% API
 -export([stream_changes/2, generate_changes/7, generate_changes/8]).
 
-%% RPC API
--export([]).
-
 %% gen_server callbacks
 -export([init/1,
     handle_call/3,

@@ -62,7 +62,7 @@
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_guid_const/1, get_uuid_const/1, get_extended_direct_io_const/1,
-    set_storage_path_type/2, get_storage_path_type_const/1, is_imported_storage/1
+    get_storage_path_type_const/1, get_dir_location_doc_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
     is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
@@ -89,8 +89,8 @@
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
     get_file_size_from_remote_locations/1, get_owner/1, get_local_storage_file_size/1,
-    is_space_synced/1, get_and_cache_file_doc_including_deleted/1, is_storage_file_created/1]).
--export([is_dir/1]).
+    is_space_synced/1, get_and_cache_file_doc_including_deleted/1, set_storage_path_type/2]).
+-export([is_dir/1, is_imported_storage/1, is_storage_file_created/1]).
 
 %%%===================================================================
 %%% API
@@ -964,6 +964,16 @@ get_local_file_location_doc(FileCtx, GetDocOpts) ->
             {undefined, FileCtx}
     end.
 
+-spec get_dir_location_doc_const(ctx()) -> dir_location:doc() | undefined.
+get_dir_location_doc_const(FileCtx) ->
+    FileUuid = get_uuid_const(FileCtx),
+    case dir_location:get(FileUuid) of
+        {ok, Location} ->
+            Location;
+        {error, not_found} ->
+            undefined
+    end.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file location IDs.
@@ -1436,16 +1446,6 @@ list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
             Children;
         false ->
             []
-    end.
-
--spec get_dir_location_doc_const(ctx()) -> dir_location:doc() | undefined.
-get_dir_location_doc_const(FileCtx) ->
-    FileUuid = get_uuid_const(FileCtx),
-    case dir_location:get(FileUuid) of
-        {ok, Location} ->
-            Location;
-        {error, not_found} ->
-            undefined
     end.
 
 -spec get_synced_gid(ctx()) -> {luma:gid() | undefined, ctx()}.
