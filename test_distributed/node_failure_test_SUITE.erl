@@ -44,7 +44,9 @@ failure_test(Config) ->
     [Worker1P2 | _] = WorkersP2 = test_config:get_provider_nodes(Config, P2),
     [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
     Workers = test_config:get_all_op_worker_nodes(Config),
-    ClusterManagerNodes = test_config:get_custom(Config, cm_nodes),
+    CM_P1 = test_config:get_custom(Config, [primary_cm, P1]),
+    CM_P2 = test_config:get_custom(Config, [primary_cm, P2]),
+    ClusterManagerNodes = [CM_P1, CM_P2],
 
     lists:foreach(fun(Worker) ->
         ?assertEqual(ok, rpc:call(Worker, ha_datastore, change_config, [2, call])) % TODO VFS-6389 - test with HA cast
