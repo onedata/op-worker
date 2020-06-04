@@ -16,15 +16,15 @@
  {<<"certifi">>,{pkg,<<"certifi">>,<<"0.7.0">>},2},
  {<<"clproto">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/clproto.git",
-       {ref,"12dad41e679eced1657148c5178b65772d0cd2de"}},
+       {ref,"b25928abfea4640947381bbd9da224ea839c0eff"}},
   0},
  {<<"cluster_manager">>,
   {raw,{git,"ssh://git@git.onedata.org:7999/vfs/cluster-manager.git",
-            {ref,"c0e78976f20c5fd1d6b72f198fc2355ef052a3f0"}}},
+            {ref,"4239b2095fa688979ecf2c000c467018cc4cf1f1"}}},
   0},
  {<<"cluster_worker">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/cluster-worker.git",
-       {ref,"652fca94d08649453127dfab71f1336d66f14461"}},
+       {ref,"66bae2d87ba4572b41ba44572a01fd70d0fe3469"}},
   0},
  {<<"cowboy">>,
   {git,"git://github.com/ninenines/cowboy.git",
@@ -36,7 +36,7 @@
   2},
  {<<"ctool">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/ctool.git",
-       {ref,"1b69e21d5ae847f1e4a51af683c4995cea6326e5"}},
+       {ref,"c5e1c22ac7c51b5764e407b9aef8d4f35d36b5e9"}},
   0},
  {<<"edown">>,
   {git,"git://github.com/uwiger/edown.git",
@@ -91,7 +91,7 @@
   1},
  {<<"helpers">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/helpers.git",
-       {ref,"18111ffb82bb6cca79981cff65140e049a0c9641"}},
+       {ref,"efb1dd554da9b15f6b50a6dd0219b72be666d414"}},
   0},
  {<<"hut">>,
   {git,"git://github.com/tolbrino/hut.git",
@@ -162,7 +162,7 @@
   0},
  {<<"rtransfer_link">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/rtransfer_link.git",
-       {ref,"cab491bd2379388beb3bc9d8a4faf3b891c1d4a2"}},
+       {ref,"852f1d116a9e867d9dc4543480bd855c0ecb309c"}},
   0},
  {<<"setup">>,
   {git,"git://github.com/uwiger/setup.git",
@@ -174,7 +174,8 @@
  {<<"worker_pool">>,
   {git,"https://github.com/inaka/worker_pool",
        {ref,"ae5aa2e5819f7cce3aa3fbc50d39743de3515cdc"}},
-  1}]}.
+  1},
+ {<<"yamerl">>,{pkg,<<"yamerl">>,<<"0.7.0">>},0}]}.
 [
 {pkg_hash,[
  {<<"backoff">>, <<"83B72ED2108BA1EE8F7D1C22E0B4A00CFE3593A67DBC792799E8CCE9F42F796B">>},
@@ -192,5 +193,6 @@
  {<<"recon">>, <<"2BCAD0CF621FB277CABBB6413159CD3AA30265C2DEE42C968697988B30108604">>},
  {<<"ssl_verify_fun">>, <<"28A4D65B7F59893BC2C7DE786DEC1E1555BD742D336043FE644AE956C3497FBE">>},
  {<<"stacktrace_compat">>, <<"8AD31C32C9A0EADB1EB298F04DC8B0C8D79BCC6233A638B02791FFCA4F331275">>},
- {<<"uuid">>, <<"D596C8DD01A4AE48B9D8D51832CCC8F8302BF67ACD01336AEC3FCFAE6B9D2BC2">>}]}
+ {<<"uuid">>, <<"D596C8DD01A4AE48B9D8D51832CCC8F8302BF67ACD01336AEC3FCFAE6B9D2BC2">>},
+ {<<"yamerl">>, <<"E51DBA652DCE74C20A88294130B48051EBBBB0BE7D76F22DE064F0F3CCF0AAF5">>}]}
 ].

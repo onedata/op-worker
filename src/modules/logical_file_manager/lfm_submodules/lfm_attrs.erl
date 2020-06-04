@@ -18,12 +18,13 @@
 
 -type file_attributes() :: #file_attr{}.
 -type file_details() :: #file_details{}.
+-type fs_stats() :: #fs_stats{}.
 
--export_type([file_attributes/0, file_details/0]).
+-export_type([file_attributes/0, file_details/0, fs_stats/0]).
 
 %% API
 -export([
-    stat/2, get_details/2,
+    stat/2, get_fs_stats/2, get_details/2,
     get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4,
     update_times/5
 ]).
@@ -59,6 +60,22 @@ stat(SessId, FileKey) ->
                     {ok, Attrs}
                 end)
     end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns fs_stats() containing support e.g. size and occupied size.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_fs_stats(session:id(), FileKey :: lfm:file_key()) ->
+    {ok, fs_stats()} | lfm:error_reply().
+get_fs_stats(SessId, FileKey) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(
+        SessId,
+        fuse_request,
+        #get_fs_stats{file_id = FileGuid},
+        fun(#fs_stats{} = FsStats) -> {ok, FsStats} end
+    ).
 
 %%--------------------------------------------------------------------
 %% @doc

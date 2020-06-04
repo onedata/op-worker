@@ -111,6 +111,10 @@ CHANGELOG
 * Hotfix - rename opened deleted files, enotdir when needed and fix async_request_manager
 
 
+### 19.02.3
+
+* Fix handling of remote helper params
+
 ### 19.02.2
 
 VFS-6081 sync handles recreating file with different type

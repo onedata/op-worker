@@ -14,38 +14,40 @@
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/test/performance.hrl").
+-include_lib("ctool/include/logging.hrl").
 
--include("transfers_test_mechanism.hrl").
 %% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0]).
+-export([init_per_suite/1, end_per_suite/1]).
+-export([init_per_testcase/2, end_per_testcase/2]).
 
 -export([
     failure_test/1
 ]).
 
-all() ->
-    ?ALL([failure_test]).
+all() -> [
+    failure_test
+].
 
 %%%===================================================================
-%%% Test functions
+%%% API
 %%%===================================================================
 
-failure_test(InitialConfig) ->
-    User = <<"user1">>,
-    Attempts = 30,
-    EnvironmentDescription = {4,0,0,2}, % {SyncNodes, ProxyNodes, ProxyNodesWritten, NodesPerProvider}
-    Config = multi_provider_file_ops_test_base:extend_config(InitialConfig, User, EnvironmentDescription, Attempts),
-    SessId = ?config(session, Config),
-    SpaceName = ?config(space_name, Config),
-    SpaceId = ?config(first_space_id, Config),
+failure_test(Config) ->
+    [P1, P2] = test_config:get_providers(Config),
+    [User1] = test_config:get_provider_users(Config, P1),
+    SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
+    [Worker1P1 | _] = test_config:get_provider_nodes(Config, P1),
+    [Worker1P2 | _] = WorkersP2 = test_config:get_provider_nodes(Config, P2),
+    [SpaceId | _] = test_config:get_provider_spaces(Config, P1),
+    Workers = test_config:get_all_op_worker_nodes(Config),
+    
+    SpaceGuid = rpc:call(Worker1P1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
     FileData = <<"1234567890abcd">>,
-    [Worker1P1, _] = ?config(workers1, Config),
-    [Worker1P2, _] = WorkersP2 = ?config(workers2, Config),
-    Workers = ?config(op_worker_nodes, Config),
-
+    Attempts = 30,
+    
     lists:foreach(fun(Worker) ->
         ?assertEqual(ok, rpc:call(Worker, ha_datastore, change_config, [2, call]))
     end, Workers),
@@ -54,43 +56,57 @@ failure_test(InitialConfig) ->
     WorkerToKillP2 = rpc:call(Worker1P2, datastore_key, responsible_node, [SpaceId]),
     ?assert(is_atom(WorkerToKillP2)),
     [WorkerToCheckP2] = WorkersP2 -- [WorkerToKillP2],
-
+    
     timer:sleep(5000), % Give time to flush data save before HA settings change
-
+    
     Dirs = lists:map(fun(_) ->
-        Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerToKillP1, SessId(WorkerToKillP1), Dir, 8#755)),
-        Dir
+        Dir = generator:gen_name(),
+        {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(WorkerToKillP1, SessId(P1), SpaceGuid, Dir, 8#755)),
+        DirGuid
     end, lists:seq(1, 1)),
     Files = lists:map(fun(_) ->
-        File = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-        ?assertMatch({ok, _}, lfm_proxy:create(WorkerToKillP1, SessId(WorkerToKillP1), File, 8#755)),
-        {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(WorkerToKillP1, SessId(WorkerToKillP1), {path, File}, rdwr)),
+        File = generator:gen_name(),
+        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(WorkerToKillP1, SessId(P1), SpaceGuid, File, 8#755)),
+        {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(WorkerToKillP1, SessId(P1), {guid, FileGuid}, rdwr)),
         ?assertMatch({ok, _}, lfm_proxy:write(WorkerToKillP1, Handle, 0, FileData)),
         ?assertEqual(ok, lfm_proxy:close(WorkerToKillP1, Handle)),
-        File
+        FileGuid
     end, lists:seq(1, 1)),
-
-    ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP1, erlang, halt, [])),
-    ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, erlang, halt, [])),
-
+    
+    % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
+    ok = onenv_test_utils:disable_panel_healthcheck(Config),
+    
+    ok = onenv_test_utils:kill_node(Config, WorkerToKillP1),
+    ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP1, oneprovider, get_id, []), 10),
+    ok = onenv_test_utils:kill_node(Config, WorkerToKillP2),
+    ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, oneprovider, get_id, []), 10),
+    ct:pal("Killed nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
+    
+    ok = onenv_test_utils:start_node(Config, WorkerToKillP1),
+    ?assertNotEqual({badrpc, nodedown}, rpc:call(WorkerToKillP1, oneprovider, get_id, []), 60),
+    ok = onenv_test_utils:start_node(Config, WorkerToKillP2),
+    ?assertNotEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, oneprovider, get_id, []), 60),
+    ct:pal("Started nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
+    
 %%    lists:foreach(fun(Dir) ->
 %%        ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-%%            lfm_proxy:stat(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, Dir}), Attempts)
+%%            lfm_proxy:stat(WorkerToCheckP2, SessId(P2), {guid, Dir}), Attempts)
 %%    end, Dirs),
 %%
 %%    lists:foreach(fun(Dir) ->
 %%        ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-%%            lfm_proxy:stat(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, Dir}), Attempts)
+%%            lfm_proxy:stat(WorkerToCheckP2, SessId(P2), {guid, Dir}), Attempts)
 %%    end, Dirs),
 %%
 %%    lists:foreach(fun(File) ->
 %%        ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
-%%            lfm_proxy:stat(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, File}), Attempts),
-%%
-%%        ?assertMatch({ok, FileData},
+%%            lfm_proxy:stat(WorkerToCheckP2, SessId(P2), {guid, File}), Attempts)
+
+    
+    % will not work as space is supported by null device storage
+%%        ?assertMatch({ok, _, FileData},
 %%            begin
-%%                {ok, Handle} = lfm_proxy:open(WorkerToCheckP2, SessId(WorkerToCheckP2), {path, File}, rdwr),
+%%                {ok, Handle} = lfm_proxy:open(WorkerToCheckP2, SessId(P2), {path, File}, rdwr),
 %%                try
 %%                    lfm_proxy:read(WorkerToCheckP2, Handle, 0, 1000)
 %%                after
@@ -98,13 +114,7 @@ failure_test(InitialConfig) ->
 %%                end
 %%            end, Attempts)
 %%    end, Files),
-
     ok.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
 
 
 %%%===================================================================
@@ -112,17 +122,25 @@ failure_test(InitialConfig) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    Posthook = fun(NewConfig) -> multi_provider_file_ops_test_base:init_env(NewConfig) end,
-    [{?LOAD_MODULES, [initializer, multi_provider_file_ops_test_base]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
-
-end_per_suite(_Config) ->
-%%    multi_provider_file_ops_test_base:teardown_env(Config). % Do not clean as two nodes were killed
-    ok.
+    Posthook = fun(NewConfig) ->
+        onenv_test_utils:prepare_base_test_config(NewConfig)
+    end,
+    test_config:set_many(Config, [
+        {add_envs, [op_worker, op_worker, [{key, value}]]},
+        {add_envs, [op_worker, cluster_worker, [{key, value}]]},
+        {add_envs, [oz_worker, cluster_worker, [{key, value}]]},
+        {add_envs, [cluster_manager, cluster_manager, [{key, value}]]},
+        {set_onenv_scenario, ["2op-2nodes"]}, % name of yaml file in test_distributed/onenv_scenarios
+        {set_posthook, Posthook}
+    ]).
 
 init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 10}),
     lfm_proxy:init(Config, false).
 
-end_per_testcase(_Case, _Config) ->
-%%    lfm_proxy:teardown(Config). % Do not clean as two nodes were killed
+
+end_per_testcase(_Case, Config) ->
+    lfm_proxy:teardown(Config),
+    Config.
+
+end_per_suite(_Config) ->
     ok.

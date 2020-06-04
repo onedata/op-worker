@@ -459,7 +459,7 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
                         case file_ctx:file_exists_const(NewFileCtx0) of
                             true ->
                                 % TODO VFS-6386 Enable and test view transfer with dirs
-                                case file_ctx:is_dir(FileCtx) of
+                                case file_ctx:is_dir(NewFileCtx0) of
                                     {true, _} ->
                                         transfer:increment_files_processed_counter(TransferId),
                                         false;

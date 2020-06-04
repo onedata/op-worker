@@ -370,6 +370,12 @@ translate_from_protobuf(#'GetHelperParams'{
         space_id = SpaceId,
         helper_mode = HelperMode
     };
+translate_from_protobuf(#'GetFSStats'{
+    file_id = FileGuid
+}) ->
+    #get_fs_stats{
+        file_id = FileGuid
+    };
 translate_from_protobuf(#'CreateStorageTestFile'{
     storage_id = Id,
     file_uuid = FileGuid
@@ -632,6 +638,24 @@ translate_from_protobuf(#'HelperArg'{
     #helper_arg{
         key = Key,
         value = Value
+    };
+translate_from_protobuf(#'FSStats'{
+    space_id = SpaceId,
+    storage_stats = StorageStats
+}) ->
+    #fs_stats{
+        space_id = SpaceId,
+        storage_stats = [translate_from_protobuf(Arg) || Arg <- StorageStats]
+    };
+translate_from_protobuf(#'StorageStats'{
+    storage_id = StorageId,
+    size = Size,
+    occupied = Occupied
+}) ->
+    #storage_stats{
+        storage_id = StorageId,
+        size = Size,
+        occupied = Occupied
     };
 translate_from_protobuf(#'Parameter'{
     key = Key,
@@ -1416,6 +1440,12 @@ translate_to_protobuf(#get_helper_params{
         space_id = SpaceId,
         helper_mode = HelperMode
     }};
+translate_to_protobuf(#get_fs_stats{
+    file_id = FileGuid
+}) ->
+    {get_fs_stats, #'GetFSStats'{
+        file_id = FileGuid
+    }};
 translate_to_protobuf(#file_request{
     context_guid = ContextGuid,
     extended_direct_io = ExtDIO,
@@ -1705,6 +1735,24 @@ translate_to_protobuf(#file_opened_extended{} = Record) ->
         file_id = Record#file_opened_extended.file_id,
         storage_id = Record#file_opened_extended.storage_id
     }};
+translate_to_protobuf(#fs_stats{
+    space_id = SpaceId,
+    storage_stats = StorageStats
+}) ->
+    {fs_stats, #'FSStats'{
+        space_id = SpaceId,
+        storage_stats = [translate_to_protobuf(Arg) || Arg <- StorageStats]
+    }};
+translate_to_protobuf(#storage_stats{
+    storage_id = StorageId,
+    size = Size,
+    occupied = Occupied
+}) ->
+    #'StorageStats'{
+        storage_id = StorageId,
+        size = Size,
+        occupied = Occupied
+    };
 translate_to_protobuf(#file_renamed{
     new_guid = NewGuid,
     child_entries = ChildEntries
