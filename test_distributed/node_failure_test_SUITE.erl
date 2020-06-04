@@ -162,6 +162,7 @@ init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         Workers = test_config:get_all_op_worker_nodes(Config),
         test_utils:set_env(Workers, ?APP_NAME, session_validity_check_interval_seconds, 1800),
+        test_utils:set_env(Workers, ?APP_NAME, fuse_session_grace_period_seconds, 1800),
         onenv_test_utils:prepare_base_test_config(NewConfig)
     end,
     test_config:set_many(Config, [
