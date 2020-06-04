@@ -337,23 +337,22 @@ create_validate_transfer_get_gs_call_result_fun(DataSourceType, ExpState, #{
     user_id := UserId,
     creation_time := CreationTime,
     transfer_id := TransferId,
-    query_view_params := QueryViewParams,
     exp_transfer := #{
         replicating_provider := ReplicatingProvider,
         evicting_provider := EvictingProvider
     }
 } = Env) ->
 
-    {ExpDataSourceType, DataSourceId, DataSourceName} = case DataSourceType of
+    {ExpDataSourceType, DataSourceId, DataSourceName, QueryViewParams} = case DataSourceType of
         file ->
             FileType = maps:get(root_file_type, Env),
             FileGuid = maps:get(root_file_guid, Env),
             FilePath = maps:get(root_file_path, Env),
-            {FileType, FileGuid, FilePath};
+            {FileType, FileGuid, FilePath, #{}};
         view ->
             ViewName = maps:get(view_name, Env),
             ViewId = maps:get(view_id, Env),
-            {<<"view">>, ViewId, ViewName}
+            {<<"view">>, ViewId, ViewName, maps:get(query_view_params, Env)}
     end,
     ConstantValues = #{
         <<"gri">> => gri:serialize(#gri{type = op_transfer, id = TransferId, aspect = instance}),

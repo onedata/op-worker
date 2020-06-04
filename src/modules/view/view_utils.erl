@@ -84,7 +84,7 @@ sanitize_query_options([{<<"bbox">>, Val} | Rest], Options) ->
     sanitize_query_options(Rest, [{bbox, Bbox} | Options]);
 
 sanitize_query_options([{<<"descending">>, true} | Rest], Options) ->
-    sanitize_query_options(Rest, [descending | Options]);
+    sanitize_query_options(Rest, [{descending, true} | Options]);
 sanitize_query_options([{<<"descending">>, false} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"descending">>, _} | _], _Options) ->
@@ -109,7 +109,7 @@ sanitize_query_options([{<<"startkey">>, StartKey} | Rest], Options) ->
     end;
 
 sanitize_query_options([{<<"inclusive_end">>, true} | Rest], Options) ->
-    sanitize_query_options(Rest, [inclusive_end | Options]);
+    sanitize_query_options(Rest, [{inclusive_end, true} | Options]);
 sanitize_query_options([{<<"inclusive_end">>, false} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"inclusive_end">>, _} | _], _Options) ->
