@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include_lib("cluster_worker/include/elements/node_manager/node_manager.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 
@@ -38,7 +39,7 @@
 % This can be used to e.g. move models between services.
 % Oldest known generation is the lowest one that can be directly upgraded to newest.
 % Human readable version is included to for logging purposes.
--define(INSTALLED_CLUSTER_GENERATION, 2).
+-define(INSTALLED_CLUSTER_GENERATION, 3).
 -define(OLDEST_KNOWN_CLUSTER_GENERATION, {1, <<"19.02.*">>}).
 
 %%%===================================================================
@@ -141,8 +142,11 @@ upgrade_essential_workers() -> filter_disabled_workers([
 -spec upgrade_cluster(node_manager:cluster_generation()) ->
     {ok, node_manager:cluster_generation()}.
 upgrade_cluster(1) ->
-    storage:migrate_to_zone(),
-    {ok, 2}.
+    ensure_zone_connection_and_upgrade(fun storage:migrate_to_zone/0),
+    {ok, 2};
+upgrade_cluster(2) ->
+    ensure_zone_connection_and_upgrade(fun storage:migrate_imported_storages_to_zone/0),
+    {ok, 3}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -233,3 +237,24 @@ filter_disabled_workers(WorkersSpecs) ->
         ({singleton, Worker, _WorkerArgs}) ->
             not sets:is_element(Worker, DisabledWorkersSet)
     end, WorkersSpecs).
+
+
+-define(ZONE_CONNECTION_RETRIES, 180).
+
+%% @private
+-spec ensure_zone_connection_and_upgrade(UpgradeFun :: fun(() -> ok)) -> ok.
+ensure_zone_connection_and_upgrade(UpgradeFun) ->
+    ?info("Checking connection to Onezone..."),
+    ensure_zone_connection_and_upgrade(oneprovider:is_connected_to_oz(), ?ZONE_CONNECTION_RETRIES, UpgradeFun).
+
+-spec ensure_zone_connection_and_upgrade(IsConnectedToZone :: boolean(), Retries :: integer(),
+    UpgradeFun :: fun(() -> ok)) -> ok.
+ensure_zone_connection_and_upgrade(false, 0, _) ->
+    ?critical("Could not establish connection to Onezone. Aborting upgrade procedure."),
+    throw(?ERROR_NO_CONNECTION_TO_ONEZONE);
+ensure_zone_connection_and_upgrade(false, Retries, UpgradeFun) ->
+    ?warning("There is no connection to Onezone. Next retry in 10 seconds"),
+    timer:sleep(timer:seconds(10)),
+    ensure_zone_connection_and_upgrade(oneprovider:is_connected_to_oz(), Retries - 1, UpgradeFun);
+ensure_zone_connection_and_upgrade(true, _, UpgradeFun) ->
+    UpgradeFun().

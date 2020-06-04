@@ -27,7 +27,8 @@
     init_per_testcase/2, end_per_testcase/2
 ]).
 -export([
-    upgrade_from_19_02_x_storages/1
+    upgrade_from_19_02_x_storages/1,
+    upgrade_from_20_02_0_beta3_storages/1
 ]).
 
 %%%===================================================================
@@ -35,13 +36,13 @@
 %%%===================================================================
 
 all() -> ?ALL([
-    upgrade_from_19_02_x_storages
+    upgrade_from_19_02_x_storages,
+    upgrade_from_20_02_0_beta3_storages
 ]).
 
 %%%===================================================================
 %%% Tests
 %%%===================================================================
-
 
 upgrade_from_19_02_x_storages(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -76,7 +77,8 @@ upgrade_from_19_02_x_storages(Config) ->
     rpc:call(Worker, datastore_model, create, [space_storage:get_ctx(), #document{
         key = SpaceId,
         value = #space_storage{
-            storage_ids = [<<"dummy_storage_id">>]
+            storage_ids = [St],
+            mounted_in_root = [St]
         }
     }]),
 
@@ -86,10 +88,25 @@ upgrade_from_19_02_x_storages(Config) ->
     ?assertMatch({error, not_found}, rpc:call(Worker, datastore_model, get, [space_storage:get_ctx(), SpaceId])),
 
     test_utils:mock_assert_num_calls_sum(Worker, storage_logic, upgrade_legacy_support, 2, 1),
-    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, create_in_zone, 2, 1),
+    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, create_in_zone, 3, 1),
+    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, set_imported_storage, ['_', true], 1),
     % Virtual storage should be removed in onezone
     test_utils:mock_assert_num_calls_sum(Worker, storage_logic, delete_in_zone, 1, 1),
     ?assertMatch({ok, #document{value = ExpectedStorageConfig}}, rpc:call(Worker, storage_config, get, [St])).
+
+
+upgrade_from_20_02_0_beta3_storages(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    
+    St = <<"storage2">>,
+    rpc:call(Worker, storage_config, create, [St, #helper{}, false, undefined]),
+    rpc:call(Worker, datastore_model, update, [storage_config:get_ctx(), St, 
+        fun(StorageConfig) -> {ok, StorageConfig#storage_config{imported_storage = true}} end]),
+    test_utils:mock_expect(Worker, provider_logic, get_storage_ids, fun() -> {ok, [St]} end),
+    
+    ?assertEqual({ok, 3}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [2])),
+    
+    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, set_imported_storage, ['_', true], 1).
 
 
 %%%===================================================================
@@ -108,14 +125,24 @@ init_per_testcase(upgrade_from_19_02_x_storages, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     test_utils:mock_new(Worker, storage_logic, [passthrough]),
-    test_utils:mock_expect(Worker, storage_logic, create_in_zone, fun(_,StorageId) -> {ok, StorageId} end),
+    test_utils:mock_expect(Worker, storage_logic, create_in_zone, fun(_, _, StorageId) -> {ok, StorageId} end),
     test_utils:mock_expect(Worker, storage_logic, delete_in_zone, fun(_) -> ok end),
     test_utils:mock_expect(Worker, storage_logic, upgrade_legacy_support, fun(_,_) -> ok end),
+    test_utils:mock_expect(Worker, storage_logic, set_imported_storage, fun(_,_) -> ok end),
+    test_utils:mock_new(Worker, oneprovider),
+    test_utils:mock_expect(Worker, oneprovider, is_connected_to_oz, fun() -> true end),
+    Config;
+
+init_per_testcase(upgrade_from_20_02_0_beta3_storages, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    
+    test_utils:mock_new(Worker, storage_logic, [passthrough]),
+    test_utils:mock_expect(Worker, storage_logic, set_imported_storage, fun(_,_) -> ok end),
     test_utils:mock_new(Worker, oneprovider),
     test_utils:mock_expect(Worker, oneprovider, is_connected_to_oz, fun() -> true end),
     Config.
 
-end_per_testcase(upgrade_from_19_02_x_storages, Config) ->
+end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker),
     ok.

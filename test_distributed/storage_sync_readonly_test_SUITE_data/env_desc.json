@@ -136,22 +136,24 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st1",
-                        "imported_storage": "true"
+                        "storage": "/mnt/st1"
                     },
                     "p2": {
-                        "storage": "/mnt/synced_storage",
-                        "imported_storage": "true"
+                        "storage": "/mnt/synced_storage"
                     }
                 }
             }
         },
         "storages": {
             "p1": {
-                "/mnt/st1": {}
+                "/mnt/st1": {
+                    "imported_storage": "true"
+                }
             },
             "p2": {
-                "/mnt/synced_storage": {},
+                "/mnt/synced_storage": {
+                    "imported_storage": "true"
+                },
                 "/mnt/rdwr_storage": {}
             }
         }

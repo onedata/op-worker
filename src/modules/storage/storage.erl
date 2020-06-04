@@ -50,6 +50,9 @@
 %%% Upgrade from 19.02.*
 -export([migrate_to_zone/0]).
 
+%%% Upgrade from 20.02.0-beta3
+-export([migrate_imported_storages_to_zone/0]).
+
 %% Legacy datastore_model callbacks
 -export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -94,9 +97,9 @@ create(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
 -spec create_insecure(name(), helpers:helper(), boolean(), luma_config:config(),
     boolean(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
-    case storage_logic:create_in_zone(Name) of
+    case storage_logic:create_in_zone(Name, ImportedStorage) of
         {ok, Id} ->
-            case storage_config:create(Id, Helper, Readonly, LumaConfig, ImportedStorage) of
+            case storage_config:create(Id, Helper, Readonly, LumaConfig) of
                 {ok, Id} ->
                     on_storage_created(Id, QosParameters),
                     {ok, Id};
@@ -151,7 +154,7 @@ describe(StorageData) ->
         <<"storagePathType">> => helper:get_storage_path_type(Helper),
         <<"lumaEnabled">> => is_luma_enabled(StorageData),
         <<"lumaUrl">> => LumaUrl,
-        <<"importedStorage">> => is_imported_storage(StorageData),
+        <<"importedStorage">> => is_imported_storage(StorageId),
         <<"qosParameters">> => fetch_qos_parameters_of_local_storage(StorageId)
     }}.
 
@@ -259,9 +262,10 @@ is_readonly(StorageDataOrId) ->
     storage_config:is_readonly(StorageDataOrId).
 
 
--spec is_imported_storage(data() | id()) -> boolean().
-is_imported_storage(StorageDataOrId) ->
-    storage_config:is_imported_storage(StorageDataOrId).
+-spec is_imported_storage(id()) -> boolean().
+is_imported_storage(StorageId) ->
+    {ok, ImportedStorage} = ?throw_on_error(storage_logic:is_imported_storage(StorageId)),
+    ImportedStorage.
 
 
 -spec is_luma_enabled(data()) -> boolean().
@@ -320,7 +324,7 @@ set_imported_storage(StorageId, ImportedStorage) ->
             true ->
                 ?ERROR_STORAGE_IN_USE;
             false ->
-                storage_config:set_imported_storage(StorageId, ImportedStorage)
+                storage_logic:set_imported_storage(StorageId, ImportedStorage)
         end
     end).
 
@@ -533,8 +537,6 @@ lock_on_storage_by_name(Identifier, Fun) ->
 %%% Upgrade from 19.02.*
 %%%===================================================================
 
--define(ZONE_CONNECTION_RETRIES, 180).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Migrates storages and spaces support data to Onezone.
@@ -544,18 +546,6 @@ lock_on_storage_by_name(Identifier, Fun) ->
 %%--------------------------------------------------------------------
 -spec migrate_to_zone() -> ok.
 migrate_to_zone() ->
-    ?info("Checking connection to Onezone..."),
-    migrate_to_zone(oneprovider:is_connected_to_oz(), ?ZONE_CONNECTION_RETRIES).
-
--spec migrate_to_zone(IsConnectedToZone :: boolean(), Retries :: integer()) -> ok.
-migrate_to_zone(false, 0) ->
-    ?critical("Could not establish connection to Onezone. Aborting upgrade procedure."),
-    throw(?ERROR_NO_CONNECTION_TO_ONEZONE);
-migrate_to_zone(false, Retries) ->
-    ?warning("There is no connection to Onezone. Next retry in 10 seconds"),
-    timer:sleep(timer:seconds(10)),
-    migrate_to_zone(oneprovider:is_connected_to_oz(), Retries - 1);
-migrate_to_zone(true, _) ->
     ?info("Starting storage migration procedure..."),
     {ok, StorageDocs} = list_deprecated(),
     lists:foreach(fun migrate_storage_docs/1, StorageDocs),
@@ -586,7 +576,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
         readonly = Readonly,
         luma_config = LumaConfig
     } = Storage,
-    case storage_config:create(StorageId, Helper, Readonly, LumaConfig, false) of
+    case storage_config:create(StorageId, Helper, Readonly, LumaConfig) of
         {ok, _} -> ok;
         {error, already_exists} -> ok;
         Error -> throw(Error)
@@ -594,7 +584,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            {ok, StorageId} = storage_logic:create_in_zone(Name, StorageId),
+            {ok, StorageId} = storage_logic:create_in_zone(Name, false, StorageId),
             ?notice("Storage ~p created in Onezone", [StorageId])
     end,
     ok = delete_deprecated(StorageId).
@@ -619,7 +609,7 @@ migrate_space_support(SpaceId) ->
                     end
             end,
             case lists:member(StorageId, MiR) of
-                true -> ok = storage_config:set_imported_storage(StorageId, true);
+                true -> ok = storage_logic:set_imported_storage(StorageId, true);
                 false -> ok
             end,
             case space_storage:delete(SpaceId) of
@@ -631,6 +621,23 @@ migrate_space_support(SpaceId) ->
             ok
     end,
     ?notice("Support of space: ~p successfully migrated", [SpaceId]).
+
+
+%%%===================================================================
+%%% Upgrade from 20.02.0-beta3
+%%%===================================================================
+
+-spec migrate_imported_storages_to_zone() -> ok.
+migrate_imported_storages_to_zone() ->
+    ?info("Starting imported storages migration procedure..."),
+    {ok, StorageIds} = provider_logic:get_storage_ids(),
+    lists:foreach(fun(StorageId) ->
+        case storage_config:is_imported_storage(StorageId) of
+            true -> storage_logic:set_imported_storage(StorageId, true);
+            false -> ok % imported storage is set to false by default in Onezone
+        end
+    end, StorageIds),
+    ?notice("Imported storages migration procedure finished succesfully").
 
 
 %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.
