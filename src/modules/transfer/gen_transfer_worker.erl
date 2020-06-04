@@ -456,13 +456,18 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
                     try
                         {ok, G} = file_id:objectid_to_guid(O),
                         NewFileCtx0 = file_ctx:new_by_guid(G),
-                        % TODO VFS-6386 Enable and test view transfer with dirs
-                        case file_ctx:is_dir(NewFileCtx0) of
-                            {true, _} ->
-                                transfer:increment_files_processed_counter(TransferId),
-                                false;
-                            {false, NewFileCtx1} ->
-                                {true, NewFileCtx1}
+                        case file_ctx:file_exists_const(NewFileCtx0) of
+                            true ->
+                                % TODO VFS-6386 Enable and test view transfer with dirs
+                                case file_ctx:is_dir(FileCtx) of
+                                    {true, _} ->
+                                        transfer:increment_files_processed_counter(TransferId),
+                                        false;
+                                    {false, NewFileCtx1} ->
+                                        {true, NewFileCtx1}
+                                end;
+                            false ->
+                                false
                         end
                     catch
                         Error:Reason ->
