@@ -65,8 +65,10 @@
 
 -type id() :: binary().
 -type diff() :: datastore_doc:diff(transfer()).
--type status() :: scheduled | enqueued | active | completed | aborting |
-    failed | cancelled | skipped.
+-type status() ::
+    ?SCHEDULED_STATUS | ?ENQUEUED_STATUS | ?ACTIVE_STATUS | ?COMPLETED_STATUS |
+    ?ABORTING_STATUS | ?FAILED_STATUS | ?CANCELLED_STATUS | ?SKIPPED_STATUS.
+-type overall_status() :: status() | ?EVICTING_STATUS | ?REPLICATING_STATUS.
 -type callback() :: undefined | binary().
 -type transfer() :: #transfer{}.
 -type type() :: replication | eviction | migration.
@@ -141,12 +143,12 @@ start_for_user(UserId, FileGuid, FilePath, EvictingProviderId,
     ReplicatingProviderId, Callback, IndexName, QueryViewParams
 ) ->
     ReplicationStatus = case ReplicatingProviderId of
-        undefined -> skipped;
-        _ -> scheduled
+        undefined -> ?SKIPPED_STATUS;
+        _ -> ?SCHEDULED_STATUS
     end,
     EvictionStatus = case EvictingProviderId of
-        undefined -> skipped;
-        _ -> scheduled
+        undefined -> ?SKIPPED_STATUS;
+        _ -> ?SCHEDULED_STATUS
     end,
     ScheduleTime = provider_logic:zone_time_seconds(),
     SpaceId = file_id:guid_to_space_id(FileGuid),
@@ -375,16 +377,16 @@ is_ongoing(TransferId) ->
 
 
 -spec is_replication_ongoing(transfer()) -> boolean().
-is_replication_ongoing(#transfer{replication_status = scheduled}) -> true;
-is_replication_ongoing(#transfer{replication_status = enqueued}) -> true;
-is_replication_ongoing(#transfer{replication_status = active}) -> true;
+is_replication_ongoing(#transfer{replication_status = ?SCHEDULED_STATUS}) -> true;
+is_replication_ongoing(#transfer{replication_status = ?ENQUEUED_STATUS}) -> true;
+is_replication_ongoing(#transfer{replication_status = ?ACTIVE_STATUS}) -> true;
 is_replication_ongoing(#transfer{replication_status = _}) -> false.
 
 
 -spec is_eviction_ongoing(transfer()) -> boolean().
-is_eviction_ongoing(#transfer{eviction_status = scheduled}) -> true;
-is_eviction_ongoing(#transfer{eviction_status = enqueued}) -> true;
-is_eviction_ongoing(#transfer{eviction_status = active}) -> true;
+is_eviction_ongoing(#transfer{eviction_status = ?SCHEDULED_STATUS}) -> true;
+is_eviction_ongoing(#transfer{eviction_status = ?ENQUEUED_STATUS}) -> true;
+is_eviction_ongoing(#transfer{eviction_status = ?ACTIVE_STATUS}) -> true;
 is_eviction_ongoing(#transfer{eviction_status = _}) -> false.
 
 
@@ -394,18 +396,18 @@ is_ended(Transfer) ->
 
 
 -spec is_replication_ended(transfer()) -> boolean().
-is_replication_ended(#transfer{replication_status = completed}) -> true;
-is_replication_ended(#transfer{replication_status = cancelled}) -> true;
-is_replication_ended(#transfer{replication_status = skipped}) -> true;
-is_replication_ended(#transfer{replication_status = failed}) -> true;
+is_replication_ended(#transfer{replication_status = ?COMPLETED_STATUS}) -> true;
+is_replication_ended(#transfer{replication_status = ?CANCELLED_STATUS}) -> true;
+is_replication_ended(#transfer{replication_status = ?SKIPPED_STATUS}) -> true;
+is_replication_ended(#transfer{replication_status = ?FAILED_STATUS}) -> true;
 is_replication_ended(#transfer{replication_status = _}) -> false.
 
 
 -spec is_eviction_ended(transfer()) -> boolean().
-is_eviction_ended(#transfer{eviction_status = completed}) -> true;
-is_eviction_ended(#transfer{eviction_status = cancelled}) -> true;
-is_eviction_ended(#transfer{eviction_status = skipped}) -> true;
-is_eviction_ended(#transfer{eviction_status = failed}) -> true;
+is_eviction_ended(#transfer{eviction_status = ?COMPLETED_STATUS}) -> true;
+is_eviction_ended(#transfer{eviction_status = ?CANCELLED_STATUS}) -> true;
+is_eviction_ended(#transfer{eviction_status = ?SKIPPED_STATUS}) -> true;
+is_eviction_ended(#transfer{eviction_status = ?FAILED_STATUS}) -> true;
 is_eviction_ended(#transfer{eviction_status = _}) -> false.
 
 
@@ -425,24 +427,24 @@ eviction_status(#transfer{eviction_status = Status}) -> Status.
 %% finished, but source replica eviction is still in progress.
 %% @end
 %%--------------------------------------------------------------------
--spec overall_status(transfer:transfer()) -> transfer:status() | evicting | replicating.
+-spec overall_status(transfer:transfer()) -> overall_status().
 overall_status(T = #transfer{
-    replication_status = completed,
+    replication_status = ?COMPLETED_STATUS,
     replicating_provider = P1,
     evicting_provider = P2
 }) when is_binary(P1) andalso is_binary(P2) ->
     case T#transfer.eviction_status of
-        scheduled -> evicting;
-        enqueued -> evicting;
-        active -> evicting;
+        ?SCHEDULED_STATUS -> ?EVICTING_STATUS;
+        ?ENQUEUED_STATUS -> ?EVICTING_STATUS;
+        ?ACTIVE_STATUS -> ?EVICTING_STATUS;
         Status -> Status
     end;
-overall_status(T = #transfer{replication_status = skipped}) ->
+overall_status(T = #transfer{replication_status = ?SKIPPED_STATUS}) ->
     case T#transfer.eviction_status of
-        active -> evicting;
+        ?ACTIVE_STATUS -> ?EVICTING_STATUS;
         Status -> Status
     end;
-overall_status(#transfer{replication_status = active}) -> replicating;
+overall_status(#transfer{replication_status = ?ACTIVE_STATUS}) -> ?REPLICATING_STATUS;
 overall_status(#transfer{replication_status = Status}) -> Status.
 
 
@@ -757,8 +759,8 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
     TargetProviderId = Transfer#transfer.replicating_provider,
     SelfId = oneprovider:get_id(),
 
-    IsReplicationAborting = Transfer#transfer.replication_status =:= aborting,
-    IsEvictionAborting = Transfer#transfer.eviction_status =:= aborting,
+    IsReplicationAborting = Transfer#transfer.replication_status =:= ?ABORTING_STATUS,
+    IsEvictionAborting = Transfer#transfer.eviction_status =:= ?ABORTING_STATUS,
     IsReplicationOngoing = is_replication_ongoing(Transfer),
     IsEvictionOngoing = is_eviction_ongoing(Transfer),
 
@@ -1013,11 +1015,11 @@ order_transfers(D1, D2) ->
 
 
 -spec status_to_int(status()) -> integer().
-status_to_int(scheduled) -> 0;
-status_to_int(enqueued) -> 1;
-status_to_int(active) -> 2;
-status_to_int(completed) -> 3;
-status_to_int(aborting) -> 4;
-status_to_int(cancelled) -> 5;
-status_to_int(failed) -> 6;
-status_to_int(skipped) -> 7.
+status_to_int(?SCHEDULED_STATUS) -> 0;
+status_to_int(?ENQUEUED_STATUS) -> 1;
+status_to_int(?ACTIVE_STATUS) -> 2;
+status_to_int(?COMPLETED_STATUS) -> 3;
+status_to_int(?ABORTING_STATUS) -> 4;
+status_to_int(?CANCELLED_STATUS) -> 5;
+status_to_int(?FAILED_STATUS) -> 6;
+status_to_int(?SKIPPED_STATUS) -> 7.

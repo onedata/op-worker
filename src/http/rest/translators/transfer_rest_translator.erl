@@ -77,9 +77,6 @@ get_response(#gri{aspect = instance}, #transfer{
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ReplicatingProvider = utils:ensure_defined(ReplicatingProviderId, undefined, null),
-    EvictingProvider = utils:ensure_defined(EvictingProviderId, undefined, null),
-
     DataSourceType = transfer:data_source_type(Transfer),
     DataSourceTypeDependentInfo = case DataSourceType of
         file ->
@@ -101,12 +98,12 @@ get_response(#gri{aspect = instance}, #transfer{
         <<"dataSourceType">> => DataSourceType,
 
         <<"userId">> => UserId,
-        <<"rerunId">> => utils:ensure_defined(RerunId, undefined, null),
+        <<"rerunId">> => utils:undefined_to_null(RerunId),
         <<"spaceId">> => SpaceId,
-        <<"callback">> => utils:ensure_defined(Callback, undefined, null),
+        <<"callback">> => utils:undefined_to_null(Callback),
 
-        <<"replicatingProviderId">> => ReplicatingProvider,
-        <<"evictingProviderId">> => EvictingProvider,
+        <<"replicatingProviderId">> => utils:undefined_to_null(ReplicatingProviderId),
+        <<"evictingProviderId">> => utils:undefined_to_null(EvictingProviderId),
 
         <<"transferStatus">> => transfer:overall_status(Transfer),
         <<"replicationStatus">> => ReplicationStatus,

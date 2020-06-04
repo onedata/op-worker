@@ -164,16 +164,16 @@ handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
             },
             replication_worker:enqueue_data_transfer(FileCtx, TransferParams),
             handle_enqueued(TransferId, Callback, EvictSourceReplica);
-        {error, enqueued} ->
+        {error, ?ENQUEUED_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
             handle_enqueued(TransferId, Callback, EvictSourceReplica);
-        {error, active} ->
+        {error, ?ACTIVE_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
             handle_active(TransferId, Callback, EvictSourceReplica);
-        {error, aborting} ->
+        {error, ?ABORTING_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
             handle_aborting(TransferId);
-        {error, S} when S == completed orelse S == cancelled orelse S == failed ->
+        {error, S} when S == ?COMPLETED_STATUS orelse S == ?CANCELLED_STATUS orelse S == ?FAILED_STATUS ->
             ok
     end,
     {noreply, State, hibernate};
@@ -240,7 +240,7 @@ handle_enqueued(TransferId, Callback, EvictSourceReplica) ->
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
-            ?log_bad_replication_msg(Msg, enqueued, TransferId),
+            ?log_bad_replication_msg(Msg, ?ENQUEUED_STATUS, TransferId),
             handle_enqueued(TransferId, Callback, EvictSourceReplica)
     end,
     ok.
@@ -262,7 +262,7 @@ handle_active(TransferId, Callback, EvictSourceReplica) ->
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
-            ?log_bad_replication_msg(Msg, active, TransferId),
+            ?log_bad_replication_msg(Msg, ?ACTIVE_STATUS, TransferId),
             handle_active(TransferId, Callback, EvictSourceReplica)
     end,
     ok.
@@ -281,7 +281,7 @@ handle_aborting(TransferId) ->
         replication_failed ->
             {ok, _} = replication_status:handle_failed(TransferId, false);
         Msg ->
-            ?log_bad_replication_msg(Msg, aborting, TransferId),
+            ?log_bad_replication_msg(Msg, ?ABORTING_STATUS, TransferId),
             handle_aborting(TransferId)
     end,
     ok.

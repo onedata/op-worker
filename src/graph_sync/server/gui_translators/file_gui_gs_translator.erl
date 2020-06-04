@@ -27,6 +27,7 @@
     translate_distribution/1
 ]).
 
+% For below types description see interpolate_chunks fun doc
 -type chunks_bar_entry() :: {BarNum :: non_neg_integer(), Fill :: non_neg_integer()}.
 -type chunks_bar_data() :: [chunks_bar_entry()].
 -type file_size() :: non_neg_integer().
@@ -102,6 +103,7 @@ translate_resource(#gri{aspect = file_qos_summary, scope = private}, EffQosRespo
     EffQosResponse.
 
 
+-spec translate_distribution(Distribution :: [map()]) -> map().
 translate_distribution(Distribution) ->
     FileSize = lists:foldl(fun
         (#{<<"blocks">> := []}, Acc) ->
@@ -242,9 +244,14 @@ interpolate_chunks(Blocks, FileSize) ->
 -define(bar_size, (?bar_end - ?bar_start)).
 
 %% @private
--spec interpolate_chunks(Blocks :: [[non_neg_integer()]], file_size(),
-    BarNum :: non_neg_integer(), BytesAcc :: non_neg_integer(),
-    chunks_bar_data()) -> chunks_bar_data().
+-spec interpolate_chunks(
+    ReversedBlocks :: [[non_neg_integer()]], % File blocks passed to this fun should be in reverse order
+    file_size(),
+    BarNum :: non_neg_integer(),
+    BytesAcc :: non_neg_integer(),
+    chunks_bar_data()
+) ->
+    chunks_bar_data().
 interpolate_chunks([], _FileSize, -1, _BytesAcc, ResChunks) ->
     ResChunks;
 interpolate_chunks([], _FileSize, _BarNum, 0, ResChunks) ->

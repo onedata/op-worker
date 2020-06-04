@@ -42,7 +42,7 @@ schedule_replica_eviction(
     UserCtx, FileCtx0, SourceProviderId,
     MigrationProviderId, ViewName, QueryViewParams
 ) ->
-    data_constraints:is_in_readonly_mode(UserCtx) andalso throw(?EACCES),
+    data_constraints:assert_not_readonly_mode(UserCtx),
 
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,

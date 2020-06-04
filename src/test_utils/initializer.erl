@@ -1096,7 +1096,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     GetSpaceFun = fun
         % Special value returning empty space doc - needed because no one ever
         % thought that someone may want to test not supported/nonexistent space
-        % and so all mocks depends on that assumption... pdk
+        % and so all mocks depends on that assumption
         (_, ?NOT_SUPPORTED_SPACE_ID) ->
             {ok, #document{key = ?NOT_SUPPORTED_SPACE_ID, value = #od_space{
                 name = ?NOT_SUPPORTED_SPACE_ID,

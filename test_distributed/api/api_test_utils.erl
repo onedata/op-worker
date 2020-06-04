@@ -158,7 +158,7 @@ ensure_defined(Value, _DefaultValue) -> Value.
 %%
 %% ATTENTION !!!
 %%
-%% Bad ids are available undef 'bad_id' atom key - test implementation should
+%% Bad ids are available under 'bad_id' atom key - test implementation should
 %% make sure to substitute them for fileId component in rest path or #gri.id
 %% before making test call.
 %% @end
