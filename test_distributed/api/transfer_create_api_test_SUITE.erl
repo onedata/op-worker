@@ -134,7 +134,7 @@ create_file_transfer(Config, Type) ->
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
-    SetupEnvFun = transfer_api_test_utils:create_setup_file_replication_env_fun(
+    SetupEnvFun = transfer_api_test_utils:create_setup_file_transfer_env_fun(
         Type, P1, P2, ?USER_IN_SPACE_2, Config
     ),
     VerifyEnvFun = transfer_api_test_utils:create_verify_transfer_env_fun(
@@ -730,7 +730,8 @@ init_per_suite(Config) ->
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
             test_utils:set_env(Worker, ?APP_NAME, prefetching, off),
             test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
-            test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0)
+            test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0),
+            test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
         end, ?config(op_worker_nodes, NewConfig2)),
         application:start(ssl),
         hackney:start(),

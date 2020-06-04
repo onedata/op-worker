@@ -144,7 +144,7 @@ root_name(FunctionName, Type, FileKeyType, RandomSuffix) ->
 %%-------------------------------------------------------------------
 -spec mock_prolonged_replication(node(), non_neg_integer(), non_neg_integer()) -> ok.
 mock_prolonged_replication(Worker, ProlongationProbability, ProlongationTime) ->
-    ok = test_utils:mock_new(Worker, replication_worker),
+    ok = test_utils:mock_new(Worker, replication_worker, [passthrough]),
     ok = test_utils:mock_expect(Worker, replication_worker, transfer_regular_file,
         fun(FileCtx, TransferParams) ->
             Result = meck:passthrough([FileCtx, TransferParams]),
@@ -167,7 +167,7 @@ unmock_prolonged_replication(Worker) ->
 %%-------------------------------------------------------------------
 -spec mock_prolonged_replica_eviction(node(), non_neg_integer(), non_neg_integer()) -> ok.
 mock_prolonged_replica_eviction(Worker, ProlongationProbability, ProlongationTime) ->
-    ok = test_utils:mock_new(Worker, replica_eviction_worker),
+    ok = test_utils:mock_new(Worker, replica_eviction_worker, [passthrough]),
     ok = test_utils:mock_expect(Worker, replica_eviction_worker, transfer_regular_file,
         fun
             (FileCtx, TransferParams) ->

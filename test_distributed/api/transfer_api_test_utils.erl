@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_test_runner.hrl").
+-include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("../transfers_test_mechanism.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -21,8 +22,11 @@
 -export([
     create_file/3,
 
-    create_setup_file_replication_env_fun/5,
+    create_setup_transfer_env_with_started_transfer_fun/6,
+    create_setup_file_transfer_env_fun/5,
     create_setup_view_transfer_env_fun/5,
+
+    await_transfer_end/3,
 
     create_verify_transfer_env_fun/6
 ]).
@@ -43,6 +47,30 @@ create_file(Node, SessId, DirPath) ->
     FileGuid.
 
 
+create_setup_transfer_env_with_started_transfer_fun(TransferType, DataSourceType, P1, P2, UserId, Config) ->
+    SetupEnvFun = get_setup_file_transfer_env_fun(
+        TransferType, DataSourceType, P1, P2, UserId, Config
+    ),
+    fun() ->
+        Env = SetupEnvFun(),
+        CreationTime = time_utils:system_time_millis() div 1000,
+        QueryViewParams = #{<<"descending">> => true},
+        Callback = <<"callback">>,
+
+        TransferId = create_transfer(
+            TransferType, DataSourceType, P1, P2, UserId,
+            QueryViewParams, Callback, Env, Config
+        ),
+        Env#{
+            transfer_id => TransferId,
+            user_id => UserId,
+            creation_time => CreationTime,
+            query_view_params => QueryViewParams,
+            callback => Callback
+        }
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates either single file or directory with 5 files (random select) and
@@ -51,7 +79,7 @@ create_file(Node, SessId, DirPath) ->
 %% FileGuid to transfer and expected transfer stats are saved in returned map.
 %% @end
 %%--------------------------------------------------------------------
-create_setup_file_replication_env_fun(TransferType, SrcNode, DstNode, UserId, Config) ->
+create_setup_file_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Config) ->
     fun() ->
         SessId1 = ?SESS_ID(UserId, SrcNode, Config),
 
@@ -82,6 +110,7 @@ create_setup_file_replication_env_fun(TransferType, SrcNode, DstNode, UserId, Co
         #{
             root_file_guid => RootFileGuid,
             root_file_path => RootFilePath,
+            root_file_type => RootFileType,
             root_file_cdmi_id => RootFileObjectId,
             exp_transfer => ExpTransfer#{
                 space_id => ?SPACE_2,
@@ -105,7 +134,7 @@ create_setup_view_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Confi
         XattrValue = 1,
         Xattr = #xattr{name = XattrName, value = XattrValue},
 
-        ViewName = create_view(TransferType, ?SPACE_2, XattrName, SrcNode, DstNode),
+        {ViewName, ViewId} = create_view(TransferType, ?SPACE_2, XattrName, SrcNode, DstNode),
 
         FilesToTransfer = lists:map(fun(_) ->
             FileGuid = create_file(SrcNode, SessId1, RootDirPath),
@@ -141,6 +170,7 @@ create_setup_view_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Confi
 
         #{
             view_name => ViewName,
+            view_id => ViewId,
             exp_transfer => ExpTransfer#{
                 space_id => ?SPACE_2,
                 file_uuid => fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_2),
@@ -150,6 +180,23 @@ create_setup_view_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Confi
             other_files => OtherFiles
         }
     end.
+
+
+await_transfer_end(Nodes, TransferId, TransferType) ->
+    ExpTransferStatus = case TransferType of
+        replication ->
+            #{replication_status => completed};
+        eviction ->
+            #{eviction_status => completed};
+        migration ->
+            #{
+                replication_status => completed,
+                eviction_status => completed
+            }
+    end,
+    lists:foreach(fun(Node) ->
+        transfers_test_utils:assert_transfer_state(Node, TransferId, ExpTransferStatus, ?ATTEMPTS)
+    end, Nodes).
 
 
 create_verify_transfer_env_fun(replication, Node, UserId, SrcProvider, DstProvider, Config) ->
@@ -180,8 +227,8 @@ create_view(TransferType, SpaceId, XattrName, SrcNode, DstNode) ->
     end,
 
     transfers_test_utils:create_view(DstNode, SpaceId, ViewName, MapFunction, [], Providers),
-
-    ViewName.
+    {ok, ViewId} = ?assertMatch({ok, _}, rpc:call(DstNode, view_links, get_view_id, [ViewName, SpaceId])),
+    {ViewName, ViewId}.
 
 
 %%--------------------------------------------------------------------
@@ -389,3 +436,50 @@ assert_distribution(Node, SessId, Files, ExpSizePerProvider) ->
     lists:foreach(fun(FileGuid) ->
         ?assertEqual(ExpDistribution, FetchDistributionFun(FileGuid), ?ATTEMPTS)
     end, Files).
+
+
+%% @private
+get_setup_file_transfer_env_fun(TransferType, file, P1, P2, UserId, Config) ->
+    transfer_api_test_utils:create_setup_file_transfer_env_fun(
+        TransferType, P1, P2, UserId, Config
+    );
+get_setup_file_transfer_env_fun(TransferType, view, P1, P2, UserId, Config) ->
+    transfer_api_test_utils:create_setup_view_transfer_env_fun(
+        TransferType, P1, P2, UserId, Config
+    ).
+
+
+%% @private
+create_transfer(Type, DataSourceType, SrcNode, DstNode, UserId, QueryViewParams, Callback, Env, Config) ->
+    DataSourceDependentData = case DataSourceType of
+        file ->
+            #{<<"fileId">> => maps:get(root_file_cdmi_id, Env)};
+        view ->
+            #{
+                <<"spaceId">> => ?SPACE_2,
+                <<"viewName">> => maps:get(view_name, Env),
+                <<"queryViewParams">> => QueryViewParams
+            }
+    end,
+    Data = DataSourceDependentData#{
+        <<"type">> => atom_to_binary(Type, utf8),
+        <<"evictingProviderId">> => transfers_test_utils:provider_id(SrcNode),
+        <<"replicatingProviderId">> => transfers_test_utils:provider_id(DstNode),
+        <<"dataSourceType">> => atom_to_binary(DataSourceType, utf8),
+        <<"spaceId">> => ?SPACE_2,
+        <<"callback">> => Callback
+    },
+    Req = #op_req{
+        auth = ?USER(UserId, ?SESS_ID(UserId, SrcNode, Config)),
+        gri = #gri{type = op_transfer, aspect = instance},
+        operation = create,
+        data = Data
+    },
+    {ok, value, TransferId} = ?assertMatch(
+        {ok, _, _},
+        rpc:call(SrcNode, middleware, handle, [Req])
+    ),
+    % Wait for transfer doc sync with DstProvider
+    ?assertMatch({ok, _}, rpc:call(DstNode, transfer, get, [TransferId]), ?ATTEMPTS),
+
+    TransferId.
