@@ -29,8 +29,6 @@
 -export([start_in_stream/1, stop_in_stream/1, start_out_stream/1, stop_out_stream/1]).
 
 -define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
--define(PROVIDER_SYNC_PROGRESS_REPORT_INTERVAL, timer:seconds(application:get_env(?APP_NAME,
-    provider_sync_progress_report_interval_sec, 15))).
 
 -define(IN_STREAM_ID(ID), {dbsync_in_stream, ID}).
 -define(OUT_STREAM_ID(ID), {dbsync_out_stream, ID}).
@@ -49,7 +47,6 @@
 init(_Args) ->
     couchbase_changes:enable([dbsync_utils:get_bucket()]),
     start_streams(),
-    erlang:send_after(?PROVIDER_SYNC_PROGRESS_REPORT_INTERVAL, self(), {sync_timer, provider_sync_progress_report}),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -61,15 +58,6 @@ init(_Args) ->
 handle(ping) ->
     pong;
 handle(healthcheck) ->
-    ok;
-handle(provider_sync_progress_report) ->
-    try
-        report_provider_sync_progress()
-    catch
-        Type:Reason ->
-            ?error_stacktrace("Failed to report provider sync progress to Onezone due to ~p:~p", [Type, Reason])
-    end,
-    erlang:send_after(?PROVIDER_SYNC_PROGRESS_REPORT_INTERVAL, self(), {sync_timer, provider_sync_progress_report}),
     ok;
 handle({dbsync_message, _SessId, Msg = #tree_broadcast2{}}) ->
     handle_tree_broadcast(Msg);
@@ -280,23 +268,6 @@ handle_tree_broadcast(BroadcastMsg = #tree_broadcast2{
 }) ->
     handle_changes_batch(SrcProviderId, MsgId, Msg),
     dbsync_communicator:forward(BroadcastMsg).
-
-%% @private
--spec report_provider_sync_progress() -> ok.
-report_provider_sync_progress() ->
-    Spaces = dbsync_utils:get_spaces(),
-    lists:foreach(fun(SpaceId) ->
-        is_this_responsible_node(SpaceId) andalso report_provider_sync_progress(SpaceId)
-    end, Spaces).
-
-%% @private
--spec report_provider_sync_progress(od_space:id()) -> ok.
-report_provider_sync_progress(SpaceId) ->
-    {ok, Providers} = space_logic:get_provider_ids(SpaceId),
-    ProviderSyncProgress = lists:foldl(fun(ProviderId, Acc) ->
-        Acc#{ProviderId => dbsync_state:get_seq_and_timestamp(SpaceId, ProviderId)}
-    end, #{}, Providers),
-    space_logic:report_provider_sync_progress(SpaceId, ProviderSyncProgress).
 
 %% @private
 -spec is_this_responsible_node(od_space:id()) -> boolean().
