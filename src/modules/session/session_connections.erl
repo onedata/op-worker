@@ -114,8 +114,7 @@ ensure_connected(SessId) ->
 
     session_manager:reuse_or_create_outgoing_provider_session(
         SessId, #user_identity{provider_id = ProviderId}
-    ),
-    ok.
+    ).
 
 
 %%%===================================================================

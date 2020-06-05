@@ -22,7 +22,7 @@
 -export([
     send_to_oneclient/2, send_to_oneclient/3,
 
-    send_to_provider/2, send_to_provider/3, send_to_provider/4,
+    send_to_provider/2, send_to_provider/3, send_to_provider/4, send_to_provider2/4,
     communicate_with_provider/2, communicate_with_provider/3,
     stream_to_provider/4
 ]).
@@ -128,6 +128,23 @@ send_to_provider(SessionId, Msg, RecipientPid, Retries) ->
     send_to_provider(SessionId, ClientMsg, RecipientPid, Retries).
 
 
+send_to_provider2(SessionId, #client_message{} = Msg0, RecipientPid, Retries) ->
+    {MsgId, Msg1} = maybe_set_msg_id(Msg0, RecipientPid),
+    Msg2 = clproto_utils:fill_effective_session_info(Msg1, SessionId),
+    case {send_to_provider_internal2(SessionId, Msg2, Retries), RecipientPid} of
+        {ok, undefined} ->
+            ok;
+        {ok, _} ->
+            {ok, MsgId};
+        {{error, no_connections}, _} ->
+            ?ERROR_NO_CONNECTION_TO_PEER_PROVIDER;
+        {Error, _} ->
+            Error
+    end;
+send_to_provider2(SessionId, Msg, RecipientPid, Retries) ->
+    ClientMsg = #client_message{message_body = Msg},
+    send_to_provider2(SessionId, ClientMsg, RecipientPid, Retries).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv communicate_with_provider(SessionId, Msg, 1).
@@ -225,6 +242,21 @@ send_to_provider_internal(SessionId, Msg, Retries) ->
         {error, _Reason} ->
             timer:sleep(?SEND_RETRY_DELAY),
             send_to_provider_internal(SessionId, Msg, decrement_retries(Retries))
+    end.
+
+send_to_provider_internal2(SessionId, Msg, 0) ->
+    connection_api:send(SessionId, Msg, [], true);
+send_to_provider_internal2(SessionId, Msg, Retries) ->
+    case connection_api:send(SessionId, Msg) of
+        ok ->
+            ok;
+        {error, R} when R == not_found orelse R == uninitialized_session ->
+            ok = session_connections:ensure_connected(SessionId),
+            timer:sleep(?SEND_RETRY_DELAY),
+            send_to_provider_internal2(SessionId, Msg, decrement_retries(Retries));
+        {error, _Reason} ->
+            timer:sleep(?SEND_RETRY_DELAY),
+            send_to_provider_internal2(SessionId, Msg, decrement_retries(Retries))
     end.
 
 
