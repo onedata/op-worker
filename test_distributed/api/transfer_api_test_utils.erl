@@ -108,6 +108,8 @@ create_setup_file_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Confi
         ),
 
         #{
+            src_node => SrcNode,
+            dst_node => DstNode,
             root_file_guid => RootFileGuid,
             root_file_path => RootFilePath,
             root_file_type => RootFileType,
@@ -169,6 +171,8 @@ create_setup_view_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Confi
         ),
 
         #{
+            src_node => SrcNode,
+            dst_node => DstNode,
             view_name => ViewName,
             view_id => ViewId,
             exp_transfer => ExpTransfer#{

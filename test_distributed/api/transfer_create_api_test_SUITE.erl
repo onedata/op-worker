@@ -17,6 +17,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("test_utils/initializer.hrl").
+-include("transfer_api_test_utils.hrl").
 -include("../transfers_test_mechanism.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -61,17 +62,6 @@ all() ->
 
 -define(TRANSFER_TYPES, [<<"replication">>, <<"eviction">>, <<"migration">>]).
 -define(DATA_SOURCE_TYPES, [<<"file">>, <<"view">>]).
-
--define(CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(__CONFIG), #client_spec{
-    correct = [?USER_IN_BOTH_SPACES_AUTH],
-    unauthorized = [?NOBODY],
-    forbidden_not_in_space = [?USER_IN_SPACE_1_AUTH],
-    forbidden_in_space = [
-        % forbidden by lack of privileges (even though being owner of files)
-        ?USER_IN_SPACE_2_AUTH
-    ],
-    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
-}).
 
 % Parameters having below value were not assigned proper value in data_spec()
 % definition and should be given one by `prepare_arg_fun`

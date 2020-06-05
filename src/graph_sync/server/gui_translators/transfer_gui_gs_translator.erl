@@ -104,8 +104,8 @@ translate_resource(#gri{aspect = instance, scope = private}, #transfer{
             <<"dataSourceName">> => DataSourceName,
             <<"queryParams">> => QueryParams,
             <<"userId">> => UserId,
-            <<"startTime">> => StartTime,
             <<"scheduleTime">> => ScheduleTime,
+            <<"startTime">> => StartTime,
             <<"finishTime">> => case IsOngoing of
                 true -> null;
                 false -> FinishTime

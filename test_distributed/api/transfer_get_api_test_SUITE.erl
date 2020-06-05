@@ -13,19 +13,13 @@
 -author("Bartosz Walkowicz").
 
 -include("api_test_runner.hrl").
--include("global_definitions.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/logical_file_manager/lfm.hrl").
--include("test_utils/initializer.hrl").
+-include("transfer_api_test_utils.hrl").
 -include("../transfers_test_mechanism.hrl").
--include_lib("ctool/include/aai/aai.hrl").
--include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
--include_lib("inets/include/httpd.hrl").
 
 
 -export([
@@ -55,17 +49,6 @@ all() ->
         get_view_migration_status
     ]).
 
-
--define(CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(__CONFIG), #client_spec{
-    correct = [?USER_IN_BOTH_SPACES_AUTH],
-    unauthorized = [?NOBODY],
-    forbidden_not_in_space = [?USER_IN_SPACE_1_AUTH],
-    forbidden_in_space = [
-        % forbidden by lack of privileges (even though being owner of files)
-        ?USER_IN_SPACE_2_AUTH
-    ],
-    supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
-}).
 
 -define(PROVIDER_GRI_ID(__PROVIDER_ID), gri:serialize(#gri{
     type = op_provider,
@@ -135,16 +118,16 @@ get_transfer_status_test_base(Config, TransferType, DataSourceType, Env, ExpStat
                 #scenario_template{
                     name = str_utils:format("Get transfer (~p) status using rest endpoint", [TransferType]),
                     type = rest,
-                    prepare_args_fun = create_prepare_transfer_rest_args_fun(Env),
-                    validate_result_fun = create_validate_transfer_rest_call_result_fun(
+                    prepare_args_fun = create_prepare_transfer_get_status_rest_args_fun(Env),
+                    validate_result_fun = create_validate_transfer_get_status_rest_call_result_fun(
                         TransferType, DataSourceType, ExpState, Env
                     )
                 },
                 #scenario_template{
                     name = str_utils:format("Get transfer (~p) status using gs transfer api", [TransferType]),
                     type = gs,
-                    prepare_args_fun = create_prepare_transfer_create_instance_gs_args_fun(Env),
-                    validate_result_fun = create_validate_transfer_get_gs_call_result_fun(DataSourceType, ExpState, Env)
+                    prepare_args_fun = create_prepare_transfer_get_status_gs_args_fun(Env),
+                    validate_result_fun = create_validate_transfer_get_status_gs_call_result_fun(DataSourceType, ExpState, Env)
                 }
             ],
             data_spec = get_transfer_status_spec()
@@ -160,7 +143,7 @@ get_transfer_status_spec() ->
 
 
 %% @private
-create_prepare_transfer_rest_args_fun(#{transfer_id := TransferId}) ->
+create_prepare_transfer_get_status_rest_args_fun(#{transfer_id := TransferId}) ->
     fun(#api_test_ctx{data = Data}) ->
         {Id, _} = api_test_utils:maybe_substitute_id(TransferId, Data),
 
@@ -172,7 +155,7 @@ create_prepare_transfer_rest_args_fun(#{transfer_id := TransferId}) ->
 
 
 %% @private
-create_prepare_transfer_create_instance_gs_args_fun(#{transfer_id := TransferId}) ->
+create_prepare_transfer_get_status_gs_args_fun(#{transfer_id := TransferId}) ->
     fun(#api_test_ctx{data = Data}) ->
         {Id, _} = api_test_utils:maybe_substitute_id(TransferId, Data),
 
@@ -184,7 +167,7 @@ create_prepare_transfer_create_instance_gs_args_fun(#{transfer_id := TransferId}
 
 
 %% @private
-create_validate_transfer_rest_call_result_fun(TransferType, DataSourceType, ExpState, Env) ->
+create_validate_transfer_get_status_rest_call_result_fun(TransferType, DataSourceType, ExpState, Env) ->
     AlwaysPresentFields = [
         <<"type">>, <<"dataSourceType">>,
         <<"userId">>, <<"rerunId">>, <<"spaceId">>, <<"callback">>,
@@ -210,17 +193,19 @@ create_validate_transfer_rest_call_result_fun(TransferType, DataSourceType, ExpS
         {ok, _, _, Body} = ?assertMatch({ok, ?HTTP_200_OK, _, _}, Result),
         ?assertMatch(AllFieldsSorted, lists:sort(maps:keys(Body))),
 
-        assert_proper_constant_fields_in_rest_response(TransferType, DataSourceType, Env, Body),
-        assert_proper_status_in_rest_response(ExpState, Env, Body),
-        assert_proper_file_stats_in_rest_response(Env, Body),
+        assert_proper_constant_fields_in_get_status_rest_response(TransferType, DataSourceType, Env, Body),
+        assert_proper_status_in_get_status_rest_response(ExpState, Env, Body),
+        assert_proper_file_stats_in_get_status_rest_response(ExpState, Env, Body),
+        assert_proper_histograms_in_get_status_rest_response(TransferType, ExpState, Env, Body),
 
+        CreationTime = maps:get(creation_time, Env),
         Now = time_utils:system_time_millis() div 1000,
-        assert_proper_times_in_rest_response(ExpState, maps:get(creation_time, Env), Now, Body)
+        assert_proper_times_in_get_status_rest_response(ExpState, CreationTime, Now, Body)
     end.
 
 
 %% @private
-assert_proper_constant_fields_in_rest_response(TransferType, DataSourceType, Env, Data) ->
+assert_proper_constant_fields_in_get_status_rest_response(TransferType, DataSourceType, Env, Data) ->
     #{
         replicating_provider := ReplicatingProvider,
         evicting_provider := EvictingProvider
@@ -256,7 +241,7 @@ assert_proper_constant_fields_in_rest_response(TransferType, DataSourceType, Env
     ?assertEqual(ExpConstantFields, maps:with(maps:keys(ExpConstantFields), Data)).
 
 
-assert_proper_status_in_rest_response(ExpState, Env, #{
+assert_proper_status_in_get_status_rest_response(ExpState, Env, #{
     <<"transferStatus">> := TransferStatus,
     <<"replicationStatus">> := ReplicationStatus,
     <<"replicaEvictionStatus">> := EvictionStatus,
@@ -286,7 +271,7 @@ assert_proper_status_in_rest_response(ExpState, Env, #{
 
 
 %% @private
-assert_proper_file_stats_in_rest_response(Env, #{
+assert_proper_file_stats_in_get_status_rest_response(ExpState, Env, #{
     <<"filesToProcess">> := FilesToProcess,
     <<"filesProcessed">> := FilesProcessed,
     <<"filesReplicated">> := FilesReplicated,
@@ -304,28 +289,67 @@ assert_proper_file_stats_in_rest_response(Env, #{
         files_evicted := ExpFilesEvicted
     } = maps:get(exp_transfer, Env),
 
+    CompareFun = case ExpState of
+        ongoing -> fun(X, Y) -> X =< Y end;
+        ended -> fun(X, Y) -> X == Y end
+    end,
+
     ?assertEqual(FailedFiles, 0),
-    ?assert(FilesToProcess =< ExpFilesToProcess),
-    ?assert(FilesProcessed =< ExpFilesProcessed),
-    ?assert(FilesReplicated =< ExpFilesReplicated),
-    ?assert(BytesReplicated =< ExpBytesReplicated),
-    ?assert(FilesEvicted =< ExpFilesEvicted).
+    ?assert(CompareFun(FilesToProcess, ExpFilesToProcess)),
+    ?assert(CompareFun(FilesProcessed, ExpFilesProcessed)),
+    ?assert(CompareFun(FilesReplicated, ExpFilesReplicated)),
+    ?assert(CompareFun(BytesReplicated, ExpBytesReplicated)),
+    ?assert(CompareFun(FilesEvicted, ExpFilesEvicted)).
 
 
 %% @private
-assert_proper_times_in_rest_response(ongoing, CreationTime, _Now, Data) ->
-    ScheduleTime = maps:get(<<"scheduleTime">>, Data),
-    StartTime = maps:get(<<"startTime">>, Data),
-    FinishTime = maps:get(<<"finishTime">>, Data),
+assert_proper_histograms_in_get_status_rest_response(eviction, _, _, Data) ->
+    ?assertEqual(
+        #{<<"minHist">> => #{}, <<"hrHist">> => #{}, <<"dyHist">> => #{}, <<"mthHist">> => #{}},
+        maps:with([<<"minHist">>, <<"hrHist">>, <<"dyHist">>, <<"mthHist">>], Data)
+    );
+assert_proper_histograms_in_get_status_rest_response(_TransferType, ExpState, #{
+    src_node := SrcNode,
+    exp_transfer := #{bytes_replicated := BytesReplicated}
+}, Data) ->
+    SrcProviderId = transfers_test_utils:provider_id(SrcNode),
 
+    ?assert(lists:all(fun({Key, ExpLen}) ->
+        case maps:to_list(maps:get(Key, Data)) of
+            [] ->
+                true;
+            [{SrcProviderId, Hist}] ->
+                HasProperLen = length(Hist) == ExpLen,
+                HasProperValue = case ExpState of
+                    ongoing -> lists:sum(Hist) =< BytesReplicated;
+                    ended -> lists:sum(Hist) == BytesReplicated
+                end,
+                HasProperLen andalso HasProperValue;
+            _ ->
+                false
+        end
+    end, [
+        {<<"minHist">>, ?MIN_HIST_LENGTH},
+        {<<"hrHist">>, ?HOUR_HIST_LENGTH},
+        {<<"dyHist">>, ?DAY_HIST_LENGTH},
+        {<<"mthHist">>, ?MONTH_HIST_LENGTH}
+    ])).
+
+
+%% @private
+assert_proper_times_in_get_status_rest_response(ongoing, CreationTime, _Now, #{
+    <<"scheduleTime">> := ScheduleTime,
+    <<"startTime">> := StartTime,
+    <<"finishTime">> := FinishTime
+}) ->
     ?assert(CreationTime =< ScheduleTime),
     ?assert(0 == StartTime orelse ScheduleTime =< StartTime),
     ?assert(0 == FinishTime);
-assert_proper_times_in_rest_response(ended, CreationTime, Now, Data) ->
-    ScheduleTime = maps:get(<<"scheduleTime">>, Data),
-    StartTime = maps:get(<<"startTime">>, Data),
-    FinishTime = maps:get(<<"finishTime">>, Data),
-
+assert_proper_times_in_get_status_rest_response(ended, CreationTime, Now, #{
+    <<"scheduleTime">> := ScheduleTime,
+    <<"startTime">> := StartTime,
+    <<"finishTime">> := FinishTime
+}) ->
     ?assert(CreationTime =< ScheduleTime),
     ?assert(ScheduleTime =< StartTime),
     ?assert(StartTime =< FinishTime),
@@ -333,7 +357,7 @@ assert_proper_times_in_rest_response(ended, CreationTime, Now, Data) ->
 
 
 %% @private
-create_validate_transfer_get_gs_call_result_fun(DataSourceType, ExpState, #{
+create_validate_transfer_get_status_gs_call_result_fun(DataSourceType, ExpState, #{
     user_id := UserId,
     creation_time := CreationTime,
     transfer_id := TransferId,

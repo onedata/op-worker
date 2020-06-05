@@ -467,6 +467,9 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
                                         {true, NewFileCtx1}
                                 end;
                             false ->
+                                % TODO VFS-4218 currently we silently omit garbage
+                                % returned from view (view can return anything)
+                                transfer:increment_files_processed_counter(TransferId),
                                 false
                         end
                     catch
