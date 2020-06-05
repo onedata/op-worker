@@ -335,7 +335,7 @@ get(#op_req{gri = #gri{aspect = progress}}, #transfer{
     files_evicted = FilesEvicted
 } = Transfer) ->
     {ok, #{
-        <<"status">> => transfer:overall_status(Transfer),
+        <<"status">> => transfer:status(Transfer),
         <<"timestamp">> => get_last_update(Transfer),
         <<"replicatedBytes">> => BytesReplicated,
         <<"replicatedFiles">> => FilesReplicated,

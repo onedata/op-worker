@@ -37,7 +37,7 @@
     file_guid :: fslogic_worker:file_guid(),
     callback :: transfer:callback(),
     space_id :: od_space:id(),
-    status :: transfer:status(),
+    status :: transfer:subtask_status(),
     supporting_provider_id :: od_provider:id(),
     view_name :: transfer:view_name(),
     query_view_params :: transfer:query_view_params()

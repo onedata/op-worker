@@ -38,7 +38,7 @@
     is_ongoing/1, is_replication_ongoing/1, is_eviction_ongoing/1,
     is_ended/1, is_replication_ended/1, is_eviction_ended/1,
 
-    replication_status/1, eviction_status/1, overall_status/1,
+    replication_status/1, eviction_status/1, status/1,
 
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
     increment_files_evicted_and_processed_counters/1,
@@ -65,10 +65,16 @@
 
 -type id() :: binary().
 -type diff() :: datastore_doc:diff(transfer()).
--type status() ::
+% Status of transfer subtask - 'replication' or 'eviction' of data source
+% (replication and eviction consist of only 1 subtask while migration has 2).
+-type subtask_status() ::
     ?SCHEDULED_STATUS | ?ENQUEUED_STATUS | ?ACTIVE_STATUS | ?COMPLETED_STATUS |
     ?ABORTING_STATUS | ?FAILED_STATUS | ?CANCELLED_STATUS | ?SKIPPED_STATUS.
--type overall_status() :: status() | ?EVICTING_STATUS | ?REPLICATING_STATUS.
+% Summarized transfer status calculated taking into account all subtask statuses.
+-type transfer_status() ::
+    ?SCHEDULED_STATUS | ?ENQUEUED_STATUS | ?REPLICATING_STATUS | ?EVICTING_STATUS |
+    ?COMPLETED_STATUS | ?ABORTING_STATUS | ?FAILED_STATUS | ?CANCELLED_STATUS |
+    ?SKIPPED_STATUS.
 -type callback() :: undefined | binary().
 -type transfer() :: #transfer{}.
 -type type() :: replication | eviction | migration.
@@ -80,7 +86,7 @@
 -type query_view_params() :: undefined | index:query_options() .
 
 -export_type([
-    id/0, transfer/0, type/0, data_source_type/0, status/0, callback/0, doc/0,
+    id/0, transfer/0, type/0, data_source_type/0, subtask_status/0, callback/0, doc/0,
     timestamp/0, list_limit/0, view_name/0, query_view_params/0
 ]).
 
@@ -411,24 +417,24 @@ is_eviction_ended(#transfer{eviction_status = ?FAILED_STATUS}) -> true;
 is_eviction_ended(#transfer{eviction_status = _}) -> false.
 
 
--spec replication_status(transfer()) -> status().
+-spec replication_status(transfer()) -> subtask_status().
 replication_status(#transfer{replication_status = Status}) -> Status.
 
 
--spec eviction_status(transfer()) -> status().
+-spec eviction_status(transfer()) -> subtask_status().
 eviction_status(#transfer{eviction_status = Status}) -> Status.
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns overall status of given transfer. Replaces active status with
+%% Returns status of given transfer. Replaces 'active' subtask status with
 %% 'replicating' for replication and 'evicting' for eviction.
 %% In case of migration 'evicting' indicates that the replication itself has
 %% finished, but source replica eviction is still in progress.
 %% @end
 %%--------------------------------------------------------------------
--spec overall_status(transfer:transfer()) -> overall_status().
-overall_status(T = #transfer{
+-spec status(transfer:transfer()) -> transfer_status().
+status(T = #transfer{
     replication_status = ?COMPLETED_STATUS,
     replicating_provider = P1,
     evicting_provider = P2
@@ -439,13 +445,15 @@ overall_status(T = #transfer{
         ?ACTIVE_STATUS -> ?EVICTING_STATUS;
         Status -> Status
     end;
-overall_status(T = #transfer{replication_status = ?SKIPPED_STATUS}) ->
+status(T = #transfer{replication_status = ?SKIPPED_STATUS}) ->
     case T#transfer.eviction_status of
         ?ACTIVE_STATUS -> ?EVICTING_STATUS;
         Status -> Status
     end;
-overall_status(#transfer{replication_status = ?ACTIVE_STATUS}) -> ?REPLICATING_STATUS;
-overall_status(#transfer{replication_status = Status}) -> Status.
+status(#transfer{replication_status = ?ACTIVE_STATUS}) ->
+    ?REPLICATING_STATUS;
+status(#transfer{replication_status = Status}) ->
+    Status.
 
 
 -spec increment_files_to_process_counter(undefined | id(), non_neg_integer()) ->
@@ -1014,7 +1022,7 @@ order_transfers(D1, D2) ->
     end.
 
 
--spec status_to_int(status()) -> integer().
+-spec status_to_int(subtask_status()) -> integer().
 status_to_int(?SCHEDULED_STATUS) -> 0;
 status_to_int(?ENQUEUED_STATUS) -> 1;
 status_to_int(?ACTIVE_STATUS) -> 2;

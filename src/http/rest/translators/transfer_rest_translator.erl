@@ -105,7 +105,7 @@ get_response(#gri{aspect = instance}, #transfer{
         <<"replicatingProviderId">> => utils:undefined_to_null(ReplicatingProviderId),
         <<"evictingProviderId">> => utils:undefined_to_null(EvictingProviderId),
 
-        <<"transferStatus">> => transfer:overall_status(Transfer),
+        <<"transferStatus">> => transfer:status(Transfer),
         <<"replicationStatus">> => ReplicationStatus,
         % TODO VFS-6365 remove deprecated transfer
         <<"replicaEvictionStatus">> => EvictionStatus,

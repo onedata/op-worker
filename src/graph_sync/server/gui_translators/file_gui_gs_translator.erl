@@ -32,6 +32,32 @@
 -type chunks_bar_data() :: [chunks_bar_entry()].
 -type file_size() :: non_neg_integer().
 
+-type file_distribution() :: #{binary() => term()}.
+%% Full file_distribution format can't be expressed directly in type spec due to
+%% dialyzer limitations in specifying concrete binaries. Instead it is shown
+%% below:
+%%
+%% %{
+%%      <<"providerId">> := od_provider:id(),
+%%      <<"blocks">> := fslogic_blocks:blocks(),
+%%      <<"totalBlocksSize">> := non_neg_integer()
+%% }
+-type distribution_per_provider() :: #{binary() => term()}.
+%% Full file_distribution format can't be expressed directly in type spec due to
+%% dialyzer limitations in specifying concrete binaries. Instead it is shown
+%% below:
+%%
+%% %{
+%%      <<"distributionPerProvider">> := #{
+%%          od_provider:id() => #{
+%%              <<"chunksBarData">> := #{
+%%                  non_neg_integer() := non_neg_integer()   % see chunks_bar_data()
+%%              },
+%%              <<"blocksPercentage">> := number(),
+%%          }
+%%      }
+%% }
+
 -define(CHUNKS_BAR_WIDTH, 320).
 
 -ifdef(TEST).
@@ -103,7 +129,8 @@ translate_resource(#gri{aspect = file_qos_summary, scope = private}, EffQosRespo
     EffQosResponse.
 
 
--spec translate_distribution(Distribution :: [map()]) -> map().
+-spec translate_distribution(Distribution :: [file_distribution()]) ->
+    distribution_per_provider().
 translate_distribution(Distribution) ->
     FileSize = lists:foldl(fun
         (#{<<"blocks">> := []}, Acc) ->
@@ -268,8 +295,6 @@ interpolate_chunks([], FileSize, BarNum, BytesAcc, ResChunks) ->
         0,
         merge_chunks({BarNum, Fill}, ResChunks)
     );
-interpolate_chunks([[_Offset, 0] | PrevBlocks], FileSize, BarNum, BytesAcc, ResChunks) ->
-    interpolate_chunks(PrevBlocks, FileSize, BarNum, BytesAcc, ResChunks);
 interpolate_chunks([[Offset, Size] | PrevBlocks], FileSize, BarNum, BytesAcc, ResChunks) when ?bar_start < Offset ->
     interpolate_chunks(PrevBlocks, FileSize, BarNum, BytesAcc + Size, ResChunks);
 interpolate_chunks([[Offset, Size] | PrevBlocks], FileSize, BarNum, BytesAcc, ResChunks) when Offset + Size > ?bar_start ->
