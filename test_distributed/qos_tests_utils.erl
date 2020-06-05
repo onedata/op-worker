@@ -119,7 +119,7 @@ add_qos(Config, #qos_to_add{
     case add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) of
         {ok, RespBody} ->
             DecodedBody = json_utils:decode(RespBody),
-            #{<<"qosEntryId">> := QosEntryId} = ?assertMatch(#{<<"qosEntryId">> := _}, DecodedBody),
+            #{<<"qosRequirementId">> := QosEntryId} = ?assertMatch(#{<<"qosRequirementId">> := _}, DecodedBody),
             {ok, {QosName, QosEntryId}};
         {error, _} = Error -> Error
     end.
@@ -128,7 +128,7 @@ add_qos(Config, #qos_to_add{
 add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) ->
     FileGuid = qos_tests_utils:get_guid(Worker, ?SESS_ID(Config, Worker), FilePath),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    URL = <<"qos_entry">>,
+    URL = <<"qos_requirement">>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID), {<<"Content-type">>, <<"application/json">>}],
     ReqBody = #{
         <<"expression">> => QosExpression,
@@ -244,11 +244,11 @@ wait_for_qos_fulfillment_in_parallel(Config, QosToWaitForList, QosNameIdMapping,
         ExpectedFulfillmentStatus = case LookupExpectedQosEntry of
             [ExpectedQosEntry] ->
                 case ExpectedQosEntry#expected_qos_entry.possibility_check of
-                    {possible, _} -> true;
-                    {impossible, _} -> impossible
+                    {possible, _} -> ?FULFILLED;
+                    {impossible, _} -> ?IMPOSSIBLE
                 end;
             [] ->
-                true
+                ?FULFILLED
         end,
 
         % wait for QoS fulfillment on different worker nodes
@@ -268,7 +268,7 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
                 traverse_reqs = TraversReqs
             }} ->
                 case ExpectedFulfillmentStatus of
-                    true ->
+                    ?FULFILLED ->
                         str_utils:format(
                             "QoS is not fulfilled while it should be. ~n"
                             "Worker: ~p ~n"
@@ -277,7 +277,7 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
                             "TraverseReqs: ~p ~n",
                             [Worker, QosName, PossibilityCheck, TraversReqs]
                         );
-                    impossible ->
+                    ?IMPOSSIBLE ->
                         str_utils:format(
                             "QoS is fulfilled while it shouldn't be. ~n"
                             "Worker: ~p ~n"
@@ -391,7 +391,7 @@ assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, Repl
 
 
 get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId) ->
-    URL = <<"qos_entry/", QosEntryId/binary>>,
+    URL = <<"qos_requirement/", QosEntryId/binary>>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
     case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
         {ok, RespBody} ->
@@ -533,8 +533,8 @@ get_effective_qos_by_rest(Config, Worker, FileGuid) ->
         {ok, RespBody} ->
             DecodedBody = json_utils:decode(RespBody),
             #{
-                <<"entries">> := QosEntriesWithStatus,
-                <<"assignedEntries">> := AssignedEntries
+                <<"requirements">> := QosEntriesWithStatus,
+                <<"assignedRequirements">> := AssignedEntries
             } = DecodedBody,
             {ok, #effective_file_qos{
                 assigned_entries = AssignedEntries,

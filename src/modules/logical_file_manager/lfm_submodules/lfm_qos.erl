@@ -50,7 +50,7 @@ add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos(session:id(), lfm:file_key()) ->
-    {ok, {#{qos_entry:id() => qos_status:fulfilled()}, file_qos:assigned_entries()}} | lfm:error_reply().
+    {ok, {#{qos_entry:id() => qos_status:summary()}, file_qos:assigned_entries()}} | lfm:error_reply().
 get_effective_file_qos(SessId, FileKey) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid, #get_effective_file_qos{},
@@ -109,10 +109,11 @@ check_qos_fulfilled(SessId, QosEntries) ->
 -spec check_qos_fulfilled(session:id(), qos_entry:id() | [qos_entry:id()],
     lfm:file_key() | undefined) -> {ok, boolean()} | lfm:error_reply().
 check_qos_fulfilled(SessId, QosEntries, FileKey) when is_list(QosEntries) ->
-    FulfillmentStatus = lists:all(fun(QosEntryId) ->
-        {ok, true} == check_qos_fulfilled(SessId, QosEntryId, FileKey)
+    Statuses = lists:map(fun(QosEntryId) ->
+        {ok, Status} = check_qos_fulfilled(SessId, QosEntryId, FileKey),
+        Status
     end, QosEntries),
-    {ok, FulfillmentStatus};
+    {ok, qos_status:aggregate(Statuses)};
 check_qos_fulfilled(SessId, QosEntryId, undefined) ->
     case qos_entry:get_file_guid(QosEntryId) of
         {error, _} = Error ->

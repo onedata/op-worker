@@ -616,15 +616,9 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, 
     case lfm:get_effective_file_qos(SessionId, {guid, FileGuid}) of
         {ok, {QosEntriesWithStatus, AssignedEntries}} ->
             {ok, #{
-                <<"entries">> => maps:map(fun(_QosEntryId, Fulfilled) -> 
-                    qos_middleware:fulfillment_to_status(Fulfilled) 
-                end, QosEntriesWithStatus),
-                <<"assignedEntries">> => AssignedEntries,
-                <<"status">> => qos_middleware:fulfillment_to_status(lists:foldl(
-                    fun (_, impossible) -> impossible;
-                        (impossible, _) -> impossible;
-                        (Fulfilled, Acc) -> Fulfilled and Acc
-                    end, true, maps:values(QosEntriesWithStatus)))
+                <<"requirements">> => QosEntriesWithStatus,
+                <<"assignedRequirements">> => AssignedEntries,
+                <<"status">> => qos_status:aggregate(maps:values(QosEntriesWithStatus))
             }};
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND;

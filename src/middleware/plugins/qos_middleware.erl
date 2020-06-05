@@ -30,8 +30,6 @@
 ]).
 -export([create/1, get/2, update/1, delete/1]).
 
--export([fulfillment_to_status/1]).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -214,12 +212,6 @@ update(_) ->
 delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
     ?check(lfm:remove_qos_entry(Auth#auth.session_id, QosEntryId)).
 
-
--spec fulfillment_to_status(qos_status:fulfilled()) -> binary().
-fulfillment_to_status(true) -> <<"fulfilled">>;
-fulfillment_to_status(false) -> <<"pending">>;
-fulfillment_to_status(impossible) -> <<"impossible">>.
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -236,7 +228,7 @@ fetch_qos_entry(_Auth, QosEntryId) ->
     end.
 
 %% @private
--spec entry_to_details(qos_entry:record(), qos_status:fulfilled(), od_space:id()) -> map().
+-spec entry_to_details(qos_entry:record(), qos_status:summary(), od_space:id()) -> map().
 entry_to_details(QosEntry, Status, SpaceId) ->
     {ok, ExpressionInRpn} = qos_entry:get_expression(QosEntry),
     {ok, ReplicasNum} = qos_entry:get_replicas_num(QosEntry),
@@ -247,5 +239,5 @@ entry_to_details(QosEntry, Status, SpaceId) ->
         <<"expressionRpn">> => ExpressionInRpn,
         <<"replicasNum">> => ReplicasNum,
         <<"fileId">> => QosRootFileObjectId,
-        <<"status">> => fulfillment_to_status(Status)
+        <<"status">> => Status
     }.

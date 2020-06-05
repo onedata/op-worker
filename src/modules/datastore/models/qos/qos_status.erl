@@ -70,7 +70,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([check_fulfillment/2]).
+-export([check_fulfillment/2, aggregate/1]).
 -export([report_traverse_start/2, report_traverse_finished/3,
     report_next_traverse_batch/6, report_traverse_finished_for_dir/3,
     report_traverse_finished_for_file/2]).
@@ -88,8 +88,8 @@
 % Describes whether link should be added upon successful function execution
 -type link_strategy() :: add_link | no_link.
 
--type fulfilled() :: boolean() | impossible.
--export_type([fulfilled/0]).
+-type summary() :: ?PENDING | ?FULFILLED | ?IMPOSSIBLE.
+-export_type([summary/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -111,18 +111,27 @@
 %%% API
 %%%===================================================================
 
--spec check_fulfillment(file_ctx:ctx(), qos_entry:id()) -> fulfilled().
+-spec check_fulfillment(file_ctx:ctx(), qos_entry:id()) -> summary().
 check_fulfillment(FileCtx, QosEntryId) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
-    {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
     
     case qos_entry:is_possible(QosDoc) of
-        false -> impossible;
-        true ->
-            (not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId)) orelse
-                is_file_reconciled(FileCtx1, QosDoc) andalso
-                are_traverses_finished_for_file(FileCtx1, QosDoc)
+        false -> ?IMPOSSIBLE;
+        true -> case check_possible_entry_fulfilled(FileCtx, QosDoc, QosEntryId) of
+            true -> ?FULFILLED;
+            false -> ?PENDING
+        end
     end.
+
+
+-spec aggregate([qos_status:summary()]) -> qos_status:summary().
+aggregate(Statuses) ->
+    lists:foldl(
+        fun (_, ?IMPOSSIBLE) -> ?IMPOSSIBLE;
+            (?IMPOSSIBLE, _) -> ?IMPOSSIBLE;
+            (_, ?PENDING) -> ?PENDING;
+            (Status, _Acc) -> Status
+        end, fulfilled, Statuses).
 
 
 -spec report_traverse_start(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
@@ -261,6 +270,15 @@ report_entry_deleted(SpaceId, QosEntryId) ->
 %%%===================================================================
 %%% Internal functions concerning QoS status check during traverse
 %%%===================================================================
+
+%% @private
+-spec check_possible_entry_fulfilled(file_ctx:ctx(), qos_entry:doc(), qos_entry:id()) -> boolean().
+check_possible_entry_fulfilled(FileCtx, QosDoc, QosEntryId) ->
+    {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
+    (not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId)) orelse
+        is_file_reconciled(FileCtx1, QosDoc) andalso
+            are_traverses_finished_for_file(FileCtx1, QosDoc).
+
 
 %% @private
 -spec are_traverses_finished_for_file(file_ctx:ctx(), qos_entry:doc()) -> boolean().

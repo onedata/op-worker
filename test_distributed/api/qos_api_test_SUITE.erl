@@ -239,7 +239,7 @@ prepare_args_fun_rest(create) ->
     fun(#api_test_ctx{data = Data, env = #{guid := Guid}}) ->
         #rest_args{
             method = post,
-            path = <<"qos_entry">>,
+            path = <<"qos_requirement">>,
             body = json_utils:encode(maybe_inject_object_id(Data, Guid)),
             headers = #{<<"content-type">> => <<"application/json">>}
         } 
@@ -258,7 +258,7 @@ prepare_args_fun_rest(Method) ->
     fun(#api_test_ctx{env = #{qos := QosEntryId}}) -> 
         #rest_args{
             method = Method,
-            path = <<"qos_entry/", QosEntryId/binary>>
+            path = <<"qos_requirement/", QosEntryId/binary>>
         } 
     end.
 
@@ -296,7 +296,7 @@ prepare_args_fun_gs(Method) ->
 validate_result_fun_rest(create) ->
     fun(#api_test_ctx{env = Env} = ApiTestCtx, {ok, RespCode, RespBody}) ->
         ?assertEqual(?HTTP_201_CREATED, RespCode),
-        QosEntryId = maps:get(<<"qosEntryId">>, RespBody),
+        QosEntryId = maps:get(<<"qosRequirementId">>, RespBody),
         {ok, ApiTestCtx#api_test_ctx{env = Env#{qos => QosEntryId}}}
     end;
 
@@ -313,7 +313,7 @@ validate_result_fun_rest(get) ->
         ?assertEqual(ObjectId, maps:get(<<"fileId">>, RespBody)),
         ?assertEqual(qos_expression:rpn_to_infix(ExpressionRpn), {ok, maps:get(<<"expression">>, RespBody)}),
         ?assertEqual(ReplicasNum, maps:get(<<"replicasNum">>, RespBody)),
-        ?assertEqual(QosEntryId, maps:get(<<"qosEntryId">>, RespBody)),
+        ?assertEqual(QosEntryId, maps:get(<<"qosRequirementId">>, RespBody)),
         ok
     end;
 
@@ -321,7 +321,7 @@ validate_result_fun_rest(qos_summary) ->
     fun(#api_test_ctx{env = #{qos := [QosEntryIdInherited, QosEntryIdDirect]}}, {ok, RespCode, RespBody}) ->
         ?assertEqual(?HTTP_200_OK, RespCode),
         ?assertMatch(#{
-            <<"entries">> := #{
+            <<"requirements">> := #{
                 QosEntryIdDirect := <<"impossible">>,
                 QosEntryIdInherited := <<"impossible">>
             }, 
@@ -355,7 +355,7 @@ validate_result_fun_gs(get) ->
 validate_result_fun_gs(qos_summary) ->
     fun(#api_test_ctx{env = #{qos := [QosEntryIdInherited, QosEntryIdDirect]}}, {ok, Result}) ->
         ?assertMatch(#{
-            <<"entries">> := #{
+            <<"requirements">> := #{
                 QosEntryIdDirect := <<"impossible">>,
                 QosEntryIdInherited := <<"impossible">>
             }
