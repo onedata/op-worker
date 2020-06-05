@@ -145,11 +145,15 @@ wait({{ok, MsgId}, _}) ->
         % TODO VFS-4025 - multiprovider communication
         Timeout -> {error, timeout}
     end;
-wait({{error, {badmatch, {error, internal_call} = Error}}, SessId}) ->
+wait({{error, {badmatch, {error, internal_call}}}, SessId}) ->
     ?info("Remote driver internal call"),
     spawn(fun() ->
         session_connections:ensure_connected(SessId)
     end),
-    Error;
+    {error, interrupted_call};
 wait({{error, Reason}, _}) ->
-    {error, Reason}.
+    ?info("Remote driver error ~p", [Reason]),
+    {error, Reason};
+wait({WrongError, _}) ->
+    ?info("Remote driver unknown error ~p", [WrongError]),
+    WrongError.
