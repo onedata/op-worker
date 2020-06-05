@@ -64,5 +64,8 @@ get_response(#gri{aspect = As}, Metadata) when
 get_response(#gri{aspect = rdf_metadata}, RdfMetadata) ->
     ?OK_REPLY({binary, RdfMetadata});
 
-get_response(#gri{aspect = file_qos_summary}, EffQosResp) ->
+get_response(#gri{aspect = As}, EffQosResp) when
+    As =:= distribution;
+    As =:= file_qos_summary
+->
     ?OK_REPLY(EffQosResp).

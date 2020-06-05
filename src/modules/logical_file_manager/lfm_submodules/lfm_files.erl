@@ -19,14 +19,17 @@
 %% API
 %% Functions operating on directories or files
 -export([unlink/3, rm/2, mv/3, mv/4, cp/3, cp/4, get_parent/2, get_file_path/2,
-    get_file_guid/2, schedule_file_replication/4, schedule_replica_eviction/4,
-    schedule_replication_by_view/6]).
+    get_file_guid/2,
+    schedule_file_transfer/5, schedule_view_transfer/7,
+    schedule_file_replication/4, schedule_replica_eviction/4,
+    schedule_replication_by_view/6, schedule_replica_eviction_by_view/6
+]).
 %% Functions operating on files
 -export([create/2, create/3, create/4, open/3, get_file_location/2, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read/4, check_size_and_read/3, read_without_events/3,
     read_without_events/4, silent_read/3, silent_read/4,
     truncate/3, release/1, get_file_distribution/2, create_and_open/5,
-    create_and_open/4, schedule_replica_eviction_by_view/6]).
+    create_and_open/4]).
 
 -compile({no_auto_import, [unlink/1]}).
 
@@ -164,6 +167,61 @@ get_file_guid(SessId, FilePath) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Schedules file transfer and returns its ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_file_transfer(
+    session:id(),
+    file_id:file_guid(),
+    ReplicatingProviderId :: undefined | od_provider:id(),
+    EvictingProviderId :: undefined | od_provider:id(),
+    transfer:callback()
+) ->
+    {ok, transfer:id()} | lfm:error_reply().
+schedule_file_transfer(SessId, FileGuid, ReplicatingProviderId, EvictingProviderId, Callback) ->
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
+        #schedule_file_transfer{
+            replicating_provider_id = ReplicatingProviderId,
+            evicting_provider_id = EvictingProviderId,
+            callback = Callback
+        },
+        fun(#scheduled_transfer{transfer_id = TransferId}) ->
+            {ok, TransferId}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules transfer by view and returns its ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_view_transfer(
+    session:id(),
+    od_space:id(),
+    transfer:view_name(), transfer:query_view_params(),
+    ReplicatingProviderId :: undefined | od_provider:id(),
+    EvictingProviderId :: undefined | od_provider:id(),
+    transfer:callback()
+) ->
+    {ok, transfer:id()} | lfm:error_reply().
+schedule_view_transfer(
+    SessId, SpaceId, ViewName, QueryViewParams,
+    ReplicatingProviderId, EvictingProviderId, Callback
+) ->
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    remote_utils:call_fslogic(SessId, provider_request, SpaceGuid,
+        #schedule_view_transfer{
+            replicating_provider_id = ReplicatingProviderId,
+            evicting_provider_id = EvictingProviderId,
+            view_name = ViewName,
+            query_view_params = QueryViewParams,
+            callback = Callback
+        },
+        fun(#scheduled_transfer{transfer_id = TransferId}) ->
+            {ok, TransferId}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Schedules replication transfer and returns its ID.
 %% @end
 %%--------------------------------------------------------------------
@@ -207,6 +265,7 @@ schedule_replication_by_view(SessId, TargetProviderId, Callback, SpaceId, ViewNa
 %% Schedules replica_eviction transfer on given provider,
 %% migrates unique data to provider given as MigrateProviderId.
 %% Returns ID of scheduled transfer.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction(session:id(), fslogic_worker:file_guid_or_path(),
@@ -228,6 +287,7 @@ schedule_replica_eviction(SessId, FileKey, ProviderId, MigrationProviderId) ->
 %% Schedules replica_eviction transfer by view on given provider,
 %% migrates unique data to provider given as MigrateProviderId.
 %% Returns ID of scheduled transfer.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction_by_view(session:id(), ProviderId :: oneprovider:id(),
