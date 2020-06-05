@@ -107,7 +107,10 @@ request_credentials_update(SessionId, AccessToken, ConsumerToken) ->
 init([SessId, SessType]) ->
     process_flag(trap_exit, true),
     Self = self(),
-    {ok, #document{value = Session}} = session:update(SessId, fun(#session{} = Sess) ->
+    {ok, #document{value = #session{
+        identity = Identity,
+        credentials = Credentials
+    }}} = session:update(SessId, fun(#session{} = Sess) ->
         {ok, Sess#session{
             status = active,
             watcher = Self
@@ -117,17 +120,27 @@ init([SessId, SessType]) ->
     GracePeriod = get_session_grace_period(SessType),
     schedule_session_activity_checkup(GracePeriod),
 
-    % Auth was checked by auth_manager not so long ago (just before creation
-    % of session) so result should be cached and immediate check will not be
-    % expensive. Instead, it will allow to fetch TokenTTL and adjust real
-    % timer for next validity checkup.
-    ValidityCheckupTimer = schedule_session_validity_checkup(0),
+    ValidityCheckupTimer = case Credentials of
+        undefined ->
+            undefined;
+        TokenCredentials ->
+            AccessTokenBin = auth_manager:get_access_token(TokenCredentials),
+            {ok, AccessToken} = tokens:deserialize(AccessTokenBin),
+
+            NextCheckupDelay = case infer_ttl(tokens:get_caveats(AccessToken)) of
+                undefined ->
+                    ?SESSION_VALIDITY_CHECK_INTERVAL;
+                TokenTTL ->
+                    min(?SESSION_VALIDITY_CHECK_INTERVAL, TokenTTL)
+            end,
+            schedule_session_validity_checkup(NextCheckupDelay)
+    end,
 
     {ok, #state{
         session_id = SessId,
         session_grace_period = GracePeriod,
-        identity = Session#session.identity,
-        credentials = Session#session.credentials,
+        identity = Identity,
+        credentials = Credentials,
         validity_checkup_timer = ValidityCheckupTimer
     }}.
 
@@ -412,3 +425,16 @@ cancel_validity_checkup_timer(ValidityCheckupTimer) ->
     TimeRef :: reference().
 schedule_session_removal(Delay) ->
     erlang:send_after(timer:seconds(Delay), self(), ?REMOVE_SESSION).
+
+%% @private
+-spec infer_ttl([caveats:caveat()]) -> undefined | time_utils:seconds().
+infer_ttl(Caveats) ->
+    ValidUntil = lists:foldl(fun
+        (#cv_time{valid_until = ValidUntil}, undefined) -> ValidUntil;
+        (#cv_time{valid_until = ValidUntil}, Acc) -> min(ValidUntil, Acc)
+    end, undefined, caveats:filter([cv_time], Caveats)),
+
+    case ValidUntil of
+        undefined -> undefined;
+        _ -> ValidUntil - time_utils:cluster_time_seconds()
+    end.
