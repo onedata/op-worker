@@ -268,8 +268,3 @@ handle_tree_broadcast(BroadcastMsg = #tree_broadcast2{
 }) ->
     handle_changes_batch(SrcProviderId, MsgId, Msg),
     dbsync_communicator:forward(BroadcastMsg).
-
-%% @private
--spec is_this_responsible_node(od_space:id()) -> boolean().
-is_this_responsible_node(SpaceId) ->
-    node() == datastore_key:responsible_node(SpaceId).
