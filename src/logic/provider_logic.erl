@@ -668,24 +668,14 @@ map_idp_group_to_onedata(Idp, IdpGroupId) ->
 -spec zone_time_seconds() -> non_neg_integer().
 zone_time_seconds() ->
     TimeMillis = time_utils:remote_timestamp(zone_time_bias, fun() ->
-        Req = #gs_req_graph{
-            operation = get,
-            gri = #gri{type = od_provider, id = undefined, aspect = current_time}
-        },
-        case gs_client_worker:request(?ROOT_SESS_ID, Req) of
-            {ok, Timestamp1} ->
-                {ok, Timestamp1};
-            _ ->
-                % Fallback to REST in case GS returned an error. 
-                case oneprovider:get_oz_domain_or_undefined() =/= undefined 
-                    andalso oz_providers:get_zone_time(none) of
-                    {ok, Timestamp2} ->
-                        {ok, Timestamp2};
-                    _ ->
-                        % Use local time if Onezone is unreachable or cluster is not initialized
-                        {ok, time_utils:system_time_millis()}
-                end
-        end
+        try
+            case oneprovider:is_registered() andalso get_remote_timestamp() of
+                {ok, Timestamp} -> {ok, Timestamp};
+                _ -> {ok, time_utils:system_time_millis()}
+            end
+        catch
+            _:_  -> {ok, time_utils:system_time_millis()}
+        end 
     end),
     TimeMillis div 1000.
 
@@ -964,4 +954,20 @@ verify_provider_identity(ProviderId, IdentityToken) ->
             ?ERROR_TOKEN_SUBJECT_INVALID;
         {error, _} = Error ->
             Error
+    end.
+
+
+%% @private
+-spec get_remote_timestamp() -> non_neg_integer().
+get_remote_timestamp() ->
+    Req = #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_provider, id = undefined, aspect = current_time}
+    },
+    case gs_client_worker:request(?ROOT_SESS_ID, Req) of
+        {ok, Timestamp} ->
+            {ok, Timestamp};
+        _ ->
+            % Fallback to REST in case GS returned an error. 
+            oz_providers:get_zone_time(none)
     end.

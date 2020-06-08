@@ -142,10 +142,10 @@ upgrade_essential_workers() -> filter_disabled_workers([
 -spec upgrade_cluster(node_manager:cluster_generation()) ->
     {ok, node_manager:cluster_generation()}.
 upgrade_cluster(1) ->
-    ensure_zone_connection_and_upgrade(fun storage:migrate_to_zone/0),
+    await_zone_connection_and_run(fun storage:migrate_to_zone/0),
     {ok, 2};
 upgrade_cluster(2) ->
-    ensure_zone_connection_and_upgrade(fun storage:migrate_imported_storages_to_zone/0),
+    await_zone_connection_and_run(fun storage:migrate_imported_storages_to_zone/0),
     {ok, 3}.
 
 %%--------------------------------------------------------------------
@@ -242,19 +242,19 @@ filter_disabled_workers(WorkersSpecs) ->
 -define(ZONE_CONNECTION_RETRIES, 180).
 
 %% @private
--spec ensure_zone_connection_and_upgrade(UpgradeFun :: fun(() -> ok)) -> ok.
-ensure_zone_connection_and_upgrade(UpgradeFun) ->
+-spec await_zone_connection_and_run(Fun :: fun(() -> ok)) -> ok.
+await_zone_connection_and_run(Fun) ->
     ?info("Checking connection to Onezone..."),
-    ensure_zone_connection_and_upgrade(oneprovider:is_connected_to_oz(), ?ZONE_CONNECTION_RETRIES, UpgradeFun).
+    await_zone_connection_and_run(oneprovider:is_connected_to_oz(), ?ZONE_CONNECTION_RETRIES, Fun).
 
--spec ensure_zone_connection_and_upgrade(IsConnectedToZone :: boolean(), Retries :: integer(),
-    UpgradeFun :: fun(() -> ok)) -> ok.
-ensure_zone_connection_and_upgrade(false, 0, _) ->
+-spec await_zone_connection_and_run(IsConnectedToZone :: boolean(), Retries :: integer(),
+    Fun :: fun(() -> ok)) -> ok.
+await_zone_connection_and_run(false, 0, _) ->
     ?critical("Could not establish connection to Onezone. Aborting upgrade procedure."),
     throw(?ERROR_NO_CONNECTION_TO_ONEZONE);
-ensure_zone_connection_and_upgrade(false, Retries, UpgradeFun) ->
+await_zone_connection_and_run(false, Retries, Fun) ->
     ?warning("There is no connection to Onezone. Next retry in 10 seconds"),
     timer:sleep(timer:seconds(10)),
-    ensure_zone_connection_and_upgrade(oneprovider:is_connected_to_oz(), Retries - 1, UpgradeFun);
-ensure_zone_connection_and_upgrade(true, _, UpgradeFun) ->
-    UpgradeFun().
+    await_zone_connection_and_run(oneprovider:is_connected_to_oz(), Retries - 1, Fun);
+await_zone_connection_and_run(true, _, Fun) ->
+    Fun().

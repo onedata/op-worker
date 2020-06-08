@@ -34,12 +34,12 @@
 -export([get_id/1, get_helper/1, get_type/1, get_luma_config/1]).
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
--export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
+-export([is_readonly/1, is_luma_enabled/1, is_imported/1]).
 -export([is_local/1]).
 
 %%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
--export([set_readonly/2, set_imported_storage/2, set_qos_parameters/2]).
+-export([set_readonly/2, set_imported/2, set_qos_parameters/2]).
 -export([set_helper_insecure/2, update_helper_args/2, update_helper_admin_ctx/2,
     update_helper/2]).
 
@@ -154,7 +154,7 @@ describe(StorageData) ->
         <<"storagePathType">> => helper:get_storage_path_type(Helper),
         <<"lumaEnabled">> => is_luma_enabled(StorageData),
         <<"lumaUrl">> => LumaUrl,
-        <<"importedStorage">> => is_imported_storage(StorageId),
+        <<"importedStorage">> => is_imported(StorageId),
         <<"qosParameters">> => fetch_qos_parameters_of_local_storage(StorageId)
     }}.
 
@@ -262,10 +262,10 @@ is_readonly(StorageDataOrId) ->
     storage_config:is_readonly(StorageDataOrId).
 
 
--spec is_imported_storage(id()) -> boolean().
-is_imported_storage(StorageId) ->
-    {ok, ImportedStorage} = ?throw_on_error(storage_logic:is_imported_storage(StorageId)),
-    ImportedStorage.
+-spec is_imported(id()) -> boolean().
+is_imported(StorageId) ->
+    {ok, Imported} = ?throw_on_error(storage_logic:is_imported(StorageId)),
+    Imported.
 
 
 -spec is_luma_enabled(data()) -> boolean().
@@ -317,14 +317,14 @@ set_readonly(StorageId, Readonly) ->
     storage_config:set_readonly(StorageId, Readonly).
 
 
--spec set_imported_storage(id(), boolean()) -> ok | {error, term()}.
-set_imported_storage(StorageId, ImportedStorage) ->
+-spec set_imported(id(), boolean()) -> ok | {error, term()}.
+set_imported(StorageId, Imported) ->
     lock_on_storage_by_id(StorageId, fun() ->
         case supports_any_space(StorageId) of
             true ->
                 ?ERROR_STORAGE_IN_USE;
             false ->
-                storage_logic:set_imported_storage(StorageId, ImportedStorage)
+                storage_logic:set_imported(StorageId, Imported)
         end
     end).
 
@@ -400,7 +400,7 @@ support_space(StorageId, SerializedToken, SupportSize) ->
 support_space_insecure(StorageId, SpaceSupportToken, SupportSize) ->
     case validate_support_request(SpaceSupportToken) of
         ok ->
-            case is_imported_storage(StorageId) andalso supports_any_space(StorageId) of
+            case is_imported(StorageId) andalso supports_any_space(StorageId) of
                 true ->
                     ?ERROR_STORAGE_IN_USE;
                 false ->
@@ -609,7 +609,7 @@ migrate_space_support(SpaceId) ->
                     end
             end,
             case lists:member(StorageId, MiR) of
-                true -> ok = storage_logic:set_imported_storage(StorageId, true);
+                true -> ok = storage_logic:set_imported(StorageId, true);
                 false -> ok
             end,
             case space_storage:delete(SpaceId) of
@@ -633,7 +633,7 @@ migrate_imported_storages_to_zone() ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
     lists:foreach(fun(StorageId) ->
         case storage_config:is_imported_storage(StorageId) of
-            true -> storage_logic:set_imported_storage(StorageId, true);
+            true -> storage_logic:set_imported(StorageId, true);
             false -> ok % imported storage is set to false by default in Onezone
         end
     end, StorageIds),

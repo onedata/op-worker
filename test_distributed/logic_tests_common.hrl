@@ -506,8 +506,8 @@ end).
     <<"name">> => ?STORAGE_NAME(__StorageId),
     <<"provider">> => ?PROVIDER_1,
     <<"spaces">> => [],
-    <<"qos_parameters">> => #{},
-    <<"imported_storage">> => false
+    <<"qosParameters">> => #{},
+    <<"imported">> => false
 }).
 
 

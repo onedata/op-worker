@@ -27,7 +27,7 @@
 -export([get_id/0, get_id_or_undefined/0, is_self/1, is_registered/0]).
 -export([get_version/0, get_build/0]).
 -export([trusted_ca_certs/0]).
--export([get_oz_domain/0, get_oz_domain_or_undefined/0, get_oz_url/0, get_oz_version/0]).
+-export([get_oz_domain/0, get_oz_url/0, get_oz_version/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([is_connected_to_oz/0]).
 -export([terminate_oz_connection/0, force_oz_connection_start/0, restart_oz_connection/0]).
@@ -181,16 +181,6 @@ get_oz_domain() ->
         {ok, Domain} when is_binary(Domain) -> Domain;
         {ok, Domain} when is_list(Domain) -> str_utils:to_binary(Domain);
         _ -> error({missing_env_variable, oz_domain})
-    end.
-
-
--spec get_oz_domain_or_undefined() -> binary() | undefined.
-get_oz_domain_or_undefined() ->
-    try get_oz_domain()
-    catch
-        _:_ ->
-            % Can appear before cluster is initialized
-            undefined
     end.
 
 

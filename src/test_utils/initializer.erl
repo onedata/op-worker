@@ -1494,7 +1494,7 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
                     % storage name is equal to its id
                     name = StorageId,
                     qos_parameters = maps:get(<<"qos_parameters">>, StorageDesc, #{}),
-                    imported_storage = binary_to_atom(maps:get(<<"imported_storage">>, StorageDesc, <<"false">>), utf8)
+                    imported = binary_to_atom(maps:get(<<"imported_storage">>, StorageDesc, <<"false">>), utf8)
                 }}}
         end
     end,
@@ -1531,7 +1531,7 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     
     ok = test_utils:mock_expect(Workers, storage_logic, is_imported_storage,
         fun(StorageId) ->
-            {ok, #document{value = #od_storage{imported_storage = ImportedStorage}}} = storage_logic:get(StorageId),
+            {ok, #document{value = #od_storage{imported = ImportedStorage}}} = storage_logic:get(StorageId),
             {ok, ImportedStorage}
         end),
 

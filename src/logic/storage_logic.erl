@@ -39,10 +39,10 @@
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
 -export([get_provider/1]).
 -export([get_spaces/1]).
--export([is_imported_storage/1]).
+-export([is_imported/1]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
--export([set_imported_storage/2]).
+-export([set_imported/2]).
 -export([upgrade_legacy_support/2]).
 
 -compile({no_auto_import, [get/1]}).
@@ -72,7 +72,7 @@ create_in_zone(Name, ImportedStorage, StorageId) ->
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
         data = #{
             <<"name">> => Name,
-            <<"imported_storage">> => ImportedStorage
+            <<"imported">> => ImportedStorage
         }
     }),
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
@@ -196,10 +196,10 @@ get_spaces(StorageId) ->
     end.
 
 
--spec is_imported_storage(storage:id()) -> {ok, boolean()} | errors:error().
-is_imported_storage(StorageId) ->
+-spec is_imported(storage:id()) -> {ok, boolean()} | errors:error().
+is_imported(StorageId) ->
     case get(StorageId) of
-        {ok, #document{value = #od_storage{imported_storage = ImportedStorage}}} ->
+        {ok, #document{value = #od_storage{imported = ImportedStorage}}} ->
             {ok, ImportedStorage};
         Error -> Error
     end.
@@ -222,19 +222,19 @@ set_qos_parameters(StorageId, QosParameters) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        data = #{<<"qos_parameters">> => QosParameters}
+        data = #{<<"qosParameters">> => QosParameters}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_storage, StorageId)
     end).
 
 
--spec set_imported_storage(storage:id(), boolean()) -> ok | errors:error().
-set_imported_storage(StorageId, ImportedStorage) ->
+-spec set_imported(storage:id(), boolean()) -> ok | errors:error().
+set_imported(StorageId, Imported) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        data = #{<<"imported_storage">> => ImportedStorage}
+        data = #{<<"imported">> => Imported}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_storage, StorageId)
