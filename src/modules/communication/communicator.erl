@@ -251,7 +251,7 @@ send_to_provider_internal2(SessionId, Msg, Retries) ->
         ok ->
             ok;
         {error, R} when R == not_found orelse R == uninitialized_session ->
-            ok = session_connections:ensure_connected(SessionId),
+            {ok, _} = session_connections:ensure_connected(SessionId),
             timer:sleep(?SEND_RETRY_DELAY),
             send_to_provider_internal2(SessionId, Msg, decrement_retries(Retries));
         {error, _Reason} ->
