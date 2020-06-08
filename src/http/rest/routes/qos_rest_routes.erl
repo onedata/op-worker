@@ -31,7 +31,7 @@
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
     %% Add QoS requirement
-    {<<"/qos_requirement">>, rest_handler, #rest_req{
+    {<<"/qos_requirements">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
@@ -44,7 +44,7 @@ routes() -> [
         }
     }},
     %% Remove QoS requirement
-    {<<"/qos_requirement/:qid">>, rest_handler, #rest_req{
+    {<<"/qos_requirements/:qid">>, rest_handler, #rest_req{
         method = 'DELETE',
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
@@ -55,7 +55,7 @@ routes() -> [
         }
     }},
     %% Get QoS requirement
-    {<<"/qos_requirement/:qid">>, rest_handler, #rest_req{
+    {<<"/qos_requirements/:qid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{

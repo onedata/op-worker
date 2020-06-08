@@ -19,7 +19,7 @@
 
 %% API
 -export([add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2, get_effective_file_qos/2,
-    check_qos_fulfilled/2, check_qos_fulfilled/3]).
+    check_qos_status/2, check_qos_fulfilled/3]).
 
 %%%===================================================================
 %%% API
@@ -97,8 +97,9 @@ remove_qos_entry(SessId, QosEntryId) ->
 %% check_qos_fulfilled(SessId, QosEntries, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_fulfilled(session:id(), qos_entry:id() | [qos_entry:id()]) -> {ok, boolean()}.
-check_qos_fulfilled(SessId, QosEntries) ->
+-spec check_qos_status(session:id(), qos_entry:id() | [qos_entry:id()]) -> 
+    {ok, qos_status:summary()} | lfm:error_reply().
+check_qos_status(SessId, QosEntries) ->
     check_qos_fulfilled(SessId, QosEntries, undefined).
 
 %%--------------------------------------------------------------------
@@ -107,7 +108,7 @@ check_qos_fulfilled(SessId, QosEntries) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_qos_fulfilled(session:id(), qos_entry:id() | [qos_entry:id()],
-    lfm:file_key() | undefined) -> {ok, boolean()} | lfm:error_reply().
+    lfm:file_key() | undefined) -> {ok, qos_status:summary()} | lfm:error_reply().
 check_qos_fulfilled(SessId, QosEntries, FileKey) when is_list(QosEntries) ->
     Statuses = lists:map(fun(QosEntryId) ->
         {ok, Status} = check_qos_fulfilled(SessId, QosEntryId, FileKey),
@@ -123,6 +124,6 @@ check_qos_fulfilled(SessId, QosEntryId, undefined) ->
     end;
 check_qos_fulfilled(SessId, QosEntryId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid, #check_qos_fulfillment{qos_id = QosEntryId},
-        fun(#qos_fulfillment{fulfilled = FulfillmentStatus}) -> {ok, FulfillmentStatus} end).
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid, #check_qos_status{qos_id = QosEntryId},
+        fun(#qos_status_response{status = Status}) -> {ok, Status} end).
 

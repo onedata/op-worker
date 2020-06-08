@@ -70,7 +70,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([check_fulfillment/2, aggregate/1]).
+-export([check/2, aggregate/1]).
 -export([report_traverse_start/2, report_traverse_finished/3,
     report_next_traverse_batch/6, report_traverse_finished_for_dir/3,
     report_traverse_finished_for_file/2]).
@@ -111,13 +111,13 @@
 %%% API
 %%%===================================================================
 
--spec check_fulfillment(file_ctx:ctx(), qos_entry:id()) -> summary().
-check_fulfillment(FileCtx, QosEntryId) ->
+-spec check(file_ctx:ctx(), qos_entry:id()) -> summary().
+check(FileCtx, QosEntryId) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     
     case qos_entry:is_possible(QosDoc) of
         false -> ?IMPOSSIBLE;
-        true -> case check_possible_entry_fulfilled(FileCtx, QosDoc, QosEntryId) of
+        true -> case check_possible_entry_status(FileCtx, QosDoc, QosEntryId) of
             true -> ?FULFILLED;
             false -> ?PENDING
         end
@@ -272,8 +272,8 @@ report_entry_deleted(SpaceId, QosEntryId) ->
 %%%===================================================================
 
 %% @private
--spec check_possible_entry_fulfilled(file_ctx:ctx(), qos_entry:doc(), qos_entry:id()) -> boolean().
-check_possible_entry_fulfilled(FileCtx, QosDoc, QosEntryId) ->
+-spec check_possible_entry_status(file_ctx:ctx(), qos_entry:doc(), qos_entry:id()) -> boolean().
+check_possible_entry_status(FileCtx, QosDoc, QosEntryId) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
     (not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId)) orelse
         is_file_reconciled(FileCtx1, QosDoc) andalso

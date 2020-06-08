@@ -239,7 +239,7 @@ prepare_args_fun_rest(create) ->
     fun(#api_test_ctx{data = Data, env = #{guid := Guid}}) ->
         #rest_args{
             method = post,
-            path = <<"qos_requirement">>,
+            path = <<"qos_requirements">>,
             body = json_utils:encode(maybe_inject_object_id(Data, Guid)),
             headers = #{<<"content-type">> => <<"application/json">>}
         } 
@@ -258,7 +258,7 @@ prepare_args_fun_rest(Method) ->
     fun(#api_test_ctx{env = #{qos := QosEntryId}}) -> 
         #rest_args{
             method = Method,
-            path = <<"qos_requirement/", QosEntryId/binary>>
+            path = <<"qos_requirements/", QosEntryId/binary>>
         } 
     end.
 

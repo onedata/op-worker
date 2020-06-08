@@ -130,7 +130,7 @@
 -record(get_effective_file_qos, {
 }).
 
--record(check_qos_fulfillment, {
+-record(check_qos_status, {
     qos_id :: qos_entry:id()
 }).
 
@@ -142,7 +142,7 @@
 #get_file_distribution{} | #schedule_file_replication{} | #schedule_replica_invalidation{} |
 #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
 #create_share{} | #remove_share{} |
-#add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_fulfillment{}.
+#add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -186,8 +186,8 @@
     id :: qos_entry:id()
 }).
 
--record(qos_fulfillment, {
-    fulfilled :: boolean()
+-record(qos_status_response, {
+    status :: qos_status:summary()
 }).
 
 -record(eff_qos_response, {
@@ -199,7 +199,7 @@
     #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
     #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} |
-    #qos_fulfillment{} | undefined.
+    #qos_status_response{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

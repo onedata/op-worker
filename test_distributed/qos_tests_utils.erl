@@ -128,7 +128,7 @@ add_qos(Config, #qos_to_add{
 add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) ->
     FileGuid = qos_tests_utils:get_guid(Worker, ?SESS_ID(Config, Worker), FilePath),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    URL = <<"qos_requirement">>,
+    URL = <<"qos_requirements">>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID), {<<"Content-type">>, <<"application/json">>}],
     ReqBody = #{
         <<"expression">> => QosExpression,
@@ -391,7 +391,7 @@ assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, Repl
 
 
 get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId) ->
-    URL = <<"qos_requirement/", QosEntryId/binary>>,
+    URL = <<"qos_requirements/", QosEntryId/binary>>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
     case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
         {ok, RespBody} ->
@@ -622,9 +622,13 @@ assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus) ->
 assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus, Attempts) ->
     Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    ExpectedStatusMatcher = case ExpectedStatus of
+        {error, _} -> ExpectedStatus;
+        _ -> {ok, ExpectedStatus}
+    end, 
     lists:foreach(fun(Worker) ->
         lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, ExpectedStatus}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), Attempts)
+            ?assertEqual(ExpectedStatusMatcher, lfm_proxy:check_qos_status(Worker, SessId(Worker), QosList, {guid, Guid}), Attempts)
         end, Guids)
     end, Workers).
 
