@@ -46,6 +46,7 @@
 %%--------------------------------------------------------------------
 -spec operation_supported(middleware:operation(), gri:aspect(),
     middleware:scope()) -> boolean().
+operation_supported(create, instance, private) -> true;
 operation_supported(create, rerun, private) -> true;
 
 operation_supported(get, instance, private) -> true;
@@ -63,6 +64,52 @@ operation_supported(_, _, _) -> false.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
+data_spec(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}}) ->
+    AlwaysRequired = #{
+        <<"type">> => {atom, [replication, eviction, migration]},
+        <<"dataSourceType">> => {atom, [file, view]}
+    },
+    AlwaysOptional = #{<<"callback">> => {binary, non_empty}},
+
+    RequiredDependingOnType = case maps:get(<<"type">>, Data, undefined) of
+        <<"replication">> ->
+            AlwaysRequired#{<<"replicatingProviderId">> => {binary, non_empty}};
+        <<"eviction">> ->
+            AlwaysRequired#{<<"evictingProviderId">> => {binary, non_empty}};
+        <<"migration">> ->
+            AlwaysRequired#{
+                <<"replicatingProviderId">> => {binary, non_empty},
+                <<"evictingProviderId">> => {binary, non_empty}
+            };
+        _ ->
+            % Do not do anything - exception will be raised by middleware_sanitizer
+            AlwaysRequired
+    end,
+    {AllRequired, AllOptional} = case maps:get(<<"dataSourceType">>, Data, undefined) of
+        <<"file">> ->
+            {RequiredDependingOnType#{
+                <<"fileId">> => {binary, fun(ObjectId) ->
+                    {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)}
+                end}
+            }, AlwaysOptional};
+        <<"view">> ->
+            ViewRequired = RequiredDependingOnType#{
+                <<"spaceId">> => {binary, non_empty},
+                <<"viewName">> => {binary, non_empty}
+            },
+            ViewOptional = AlwaysOptional#{
+                <<"queryViewParams">> => {json, fun(QueryViewParams) ->
+                    {true, view_utils:sanitize_query_options(QueryViewParams)}
+                end}
+            },
+            {ViewRequired, ViewOptional};
+        _ ->
+            % Do not do anything - exception will be raised by middleware_sanitizer
+            {RequiredDependingOnType, AlwaysOptional}
+    end,
+
+    #{required => AllRequired, optional => AllOptional};
+
 data_spec(#op_req{operation = create, gri = #gri{aspect = rerun}}) ->
     undefined;
 
@@ -112,19 +159,30 @@ fetch_entity(#op_req{gri = #gri{id = TransferId}}) ->
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
+authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #gri{
+    aspect = instance
+}}, _) ->
+    {SpaceId, ViewPrivileges} = case maps:get(<<"dataSourceType">>, Data) of
+        file ->
+            FileGuid = maps:get(<<"fileId">>, Data),
+            {file_id:guid_to_space_id(FileGuid), []};
+        view ->
+            {maps:get(<<"spaceId">>, Data), [?SPACE_QUERY_VIEWS]}
+    end,
+    TransferPrivileges = create_transfer_privileges(maps:get(<<"type">>, Data)),
+
+    space_logic:has_eff_privileges(SpaceId, UserId, ViewPrivileges ++ TransferPrivileges);
+
 authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = rerun
 }}, #transfer{space_id = SpaceId} = Transfer) ->
 
-    ViewPrivileges = case Transfer#transfer.index_name of
-        undefined -> [];
-        _ -> [?SPACE_QUERY_VIEWS]
+    ViewPrivileges = case transfer:data_source_type(Transfer) of
+        file -> [];
+        view -> [?SPACE_QUERY_VIEWS]
     end,
-    TransferPrivileges = case transfer:type(Transfer) of
-        replication -> [?SPACE_SCHEDULE_REPLICATION];
-        eviction -> [?SPACE_SCHEDULE_EVICTION];
-        migration -> [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION]
-    end,
+    TransferPrivileges = create_transfer_privileges(transfer:type(Transfer)),
+
     space_logic:has_eff_privileges(SpaceId, UserId, ViewPrivileges ++ TransferPrivileges);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
@@ -136,25 +194,22 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_TRANSFERS);
 
-authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = delete, auth = Auth = ?USER(UserId), gri = #gri{
     aspect = cancel
-}} = Req, #transfer{space_id = SpaceId} = Transfer) ->
-    case Transfer#transfer.user_id of
-        UserId ->
+}}, #transfer{space_id = SpaceId, user_id = Creator} = Transfer) ->
+
+    case UserId of
+        Creator ->
             % User doesn't need cancel privileges to cancel his transfer but
             % must still be member of space.
-            middleware_utils:is_eff_space_member(Req#op_req.auth, SpaceId);
+            middleware_utils:is_eff_space_member(Auth, SpaceId);
         _ ->
-            case transfer:type(Transfer) of
-                replication ->
-                    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_CANCEL_REPLICATION);
-                eviction ->
-                    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_CANCEL_EVICTION);
-                migration ->
-                    space_logic:has_eff_privileges(
-                        SpaceId, UserId, [?SPACE_CANCEL_REPLICATION, ?SPACE_CANCEL_EVICTION]
-                    )
-            end
+            RequiredPrivileges = case transfer:type(Transfer) of
+                replication -> [?SPACE_CANCEL_REPLICATION];
+                eviction -> [?SPACE_CANCEL_EVICTION];
+                migration -> [?SPACE_CANCEL_REPLICATION, ?SPACE_CANCEL_EVICTION]
+            end,
+            space_logic:has_eff_privileges(SpaceId, UserId, RequiredPrivileges)
     end.
 
 
@@ -168,8 +223,44 @@ authorize(#op_req{operation = delete, auth = ?USER(UserId), gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = create, gri = #gri{aspect = rerun}}, _) ->
-    ok;
+validate(#op_req{operation = create, auth = Auth, data = Data, gri = #gri{aspect = instance}}, _) ->
+    ReplicatingProviderId = maps:get(<<"replicatingProviderId">>, Data, undefined),
+    EvictingProviderId = maps:get(<<"evictingProviderId">>, Data, undefined),
+
+    case maps:get(<<"dataSourceType">>, Data) of
+        file ->
+            validate_file_transfer_creation(
+                Auth, maps:get(<<"fileId">>, Data),
+                ReplicatingProviderId, EvictingProviderId
+            );
+        view ->
+            validate_view_transfer_creation(
+                maps:get(<<"spaceId">>, Data),
+                maps:get(<<"viewName">>, Data),
+                ReplicatingProviderId, EvictingProviderId
+            )
+    end;
+
+validate(#op_req{operation = create, auth = Auth, gri = #gri{aspect = rerun}}, #transfer{
+    space_id = SpaceId,
+    replicating_provider = ReplicatingProviderId,
+    evicting_provider = EvictingProviderId,
+
+    file_uuid = FileUuid,
+    index_name = ViewName
+} = Transfer) ->
+    case transfer:data_source_type(Transfer) of
+        file ->
+            validate_file_transfer_creation(
+                Auth, file_id:pack_guid(FileUuid, SpaceId),
+                ReplicatingProviderId, EvictingProviderId
+            );
+        view ->
+            validate_view_transfer_creation(
+                SpaceId, ViewName,
+                ReplicatingProviderId, EvictingProviderId
+            )
+    end;
 
 validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
     As =:= instance;
@@ -188,6 +279,37 @@ validate(#op_req{operation = delete, gri = #gri{aspect = cancel}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
+create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance}}) ->
+    SessionId = Auth#auth.session_id,
+
+    ReplicatingProviderId = maps:get(<<"replicatingProviderId">>, Data, undefined),
+    EvictingProviderId = maps:get(<<"evictingProviderId">>, Data, undefined),
+    Callback = maps:get(<<"callback">>, Data, undefined),
+
+    Result = case maps:get(<<"dataSourceType">>, Data) of
+        file ->
+            lfm:schedule_file_transfer(
+                SessionId, maps:get(<<"fileId">>, Data),
+                ReplicatingProviderId, EvictingProviderId,
+                Callback
+            );
+        view ->
+            lfm:schedule_view_transfer(
+                SessionId,
+                maps:get(<<"spaceId">>, Data),
+                maps:get(<<"viewName">>, Data),
+                maps:get(<<"queryViewParams">>, Data, []),
+                ReplicatingProviderId, EvictingProviderId,
+                Callback
+            )
+    end,
+    case Result of
+        {ok, TransferId} ->
+            {ok, value, TransferId};
+        {error, Errno} ->
+            ?ERROR_POSIX(Errno)
+    end;
+
 create(#op_req{auth = ?USER(UserId), gri = #gri{id = TransferId, aspect = rerun}}) ->
     case transfer:rerun_ended(UserId, TransferId) of
         {ok, NewTransferId} ->
@@ -213,7 +335,7 @@ get(#op_req{gri = #gri{aspect = progress}}, #transfer{
     files_evicted = FilesEvicted
 } = Transfer) ->
     {ok, #{
-        <<"status">> => get_status(Transfer),
+        <<"status">> => transfer:status(Transfer),
         <<"timestamp">> => get_last_update(Transfer),
         <<"replicatedBytes">> => BytesReplicated,
         <<"replicatedFiles">> => FilesReplicated,
@@ -281,35 +403,69 @@ delete(#op_req{gri = #gri{id = TransferId, aspect = cancel}}) ->
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Returns status of given transfer. Replaces active status with 'replicating'
-%% for replication and 'evicting' for eviction.
-%% In case of migration 'evicting' indicates that the replication itself has
-%% finished, but source replica eviction is still in progress.
-%% @end
-%%--------------------------------------------------------------------
--spec get_status(transfer:transfer()) ->
-    transfer:status() | evicting | replicating.
-get_status(T = #transfer{
-    replication_status = completed,
-    replicating_provider = P1,
-    evicting_provider = P2
-}) when is_binary(P1) andalso is_binary(P2) ->
-    case T#transfer.eviction_status of
-        scheduled -> evicting;
-        enqueued -> evicting;
-        active -> evicting;
-        Status -> Status
-    end;
-get_status(T = #transfer{replication_status = skipped}) ->
-    case T#transfer.eviction_status of
-        active -> evicting;
-        Status -> Status
-    end;
-get_status(#transfer{replication_status = active}) -> replicating;
-get_status(#transfer{replication_status = Status}) -> Status.
+-spec create_transfer_privileges(transfer:type()) -> [privileges:space_privilege()].
+create_transfer_privileges(replication) -> [?SPACE_SCHEDULE_REPLICATION];
+create_transfer_privileges(eviction)    -> [?SPACE_SCHEDULE_EVICTION];
+create_transfer_privileges(migration)   -> [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION].
+
+
+%% @private
+-spec validate_file_transfer_creation(
+    Auth :: aai:auth(),
+    FileGuid :: file_id:file_guid(),
+    ReplicatingProvider :: undefined | od_provider:id(),
+    EvictingProvider :: undefined | od_provider:id()
+) ->
+    ok | no_return().
+validate_file_transfer_creation(Auth, FileGuid, ReplicatingProvider, EvictingProvider) ->
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    middleware_utils:assert_space_supported_locally(SpaceId),
+    middleware_utils:assert_file_exists(Auth, FileGuid),
+
+    assert_space_supported_by(SpaceId, ReplicatingProvider),
+    assert_space_supported_by(SpaceId, EvictingProvider).
+
+
+%% @private
+-spec validate_view_transfer_creation(
+    SpaceId :: od_space:id(),
+    ViewName :: index:name(),
+    ReplicatingProvider :: undefined | od_provider:id(),
+    EvictingProvider :: undefined | od_provider:id()
+) ->
+    ok | no_return().
+validate_view_transfer_creation(SpaceId, ViewName, ReplicatingProvider, EvictingProvider) ->
+    middleware_utils:assert_space_supported_locally(SpaceId),
+
+    assert_space_supported_by(SpaceId, ReplicatingProvider),
+    assert_view_exists_on_provider(SpaceId, ViewName, ReplicatingProvider),
+
+    assert_space_supported_by(SpaceId, EvictingProvider),
+    assert_view_exists_on_provider(SpaceId, ViewName, EvictingProvider).
+
+
+%% @private
+-spec assert_space_supported_by(od_space:id(), undefined | od_provider:id()) ->
+    ok | no_return().
+assert_space_supported_by(_SpaceId, undefined) ->
+    ok;
+assert_space_supported_by(SpaceId, ProviderId) ->
+    middleware_utils:assert_space_supported_by(SpaceId, ProviderId).
+
+
+%% @private
+-spec assert_view_exists_on_provider(od_space:id(), index:name(),
+    undefined | od_provider:id()) -> ok | no_return().
+assert_view_exists_on_provider(_SpaceId, _ViewName, undefined) ->
+    ok;
+assert_view_exists_on_provider(SpaceId, ViewName, ProviderId) ->
+    case index:exists_on_provider(SpaceId, ViewName, ProviderId) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_VIEW_NOT_EXISTS_ON(ProviderId))
+    end.
 
 
 -spec get_last_update(#transfer{}) -> non_neg_integer().

@@ -58,7 +58,7 @@ run_suite(Config, #suite_spec{
     teardown_fun = EnvTeardownFun,
     verify_fun = EnvVerifyFun,
 
-    scenario_templates = ScenarioSchemes,
+    scenario_templates = ScenarioTemplates,
     data_spec = DataSpec
 }) ->
     lists:foldl(fun(#scenario_template{
@@ -79,14 +79,15 @@ run_suite(Config, #suite_spec{
             validate_result_fun = ValidateCallResultFun,
             data_spec = DataSpec
         })
-    end, true, ScenarioSchemes).
+    end, true, ScenarioTemplates).
 
 
 run_scenario(Config, ScenarioSpec) ->
     try
         true
         and run_unauthorized_clients_test_cases(Config, ScenarioSpec)
-        and run_forbidden_clients_test_cases(Config, ScenarioSpec)
+        and run_forbidden_not_in_space_clients_test_cases(Config, ScenarioSpec)
+        and run_forbidden_in_space_clients_test_cases(Config, ScenarioSpec)
         and run_malformed_data_test_cases(Config, ScenarioSpec)
         and run_expected_success_test_cases(Config, ScenarioSpec)
     catch
@@ -102,101 +103,102 @@ run_scenario(Config, ScenarioSpec) ->
 
 run_unauthorized_clients_test_cases(Config, #scenario_spec{
     type = ScenarioType,
-    client_spec = #client_spec{
-        unauthorized = UnauthorizedClients,
-        supported_clients_per_node = SupportedClientsPerNode
-    },
-    data_spec = DataSpec
+    client_spec = #client_spec{unauthorized = UnauthorizedClients}
 } = ScenarioSpec) ->
-    run_invalid_clients_test_cases(
-        Config,
-        SupportedClientsPerNode,
-        ScenarioSpec,
-        UnauthorizedClients,
-        required_data_sets(DataSpec),
-        case ScenarioType of
-            rest_not_supported ->
-                ?ERROR_NOT_SUPPORTED;
-            gs_not_supported ->
-                ?ERROR_NOT_SUPPORTED;
-            rest_with_file_path ->
-                ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
-            _ ->
-                ?ERROR_UNAUTHORIZED
-        end
-    ).
+    ScenarioSpecificError = get_scenario_specific_error(ScenarioType, ?ERROR_UNAUTHORIZED),
+    run_invalid_clients_test_cases(Config, ScenarioSpecificError, UnauthorizedClients, ScenarioSpec).
 
 
-run_forbidden_clients_test_cases(Config, #scenario_spec{
+run_forbidden_not_in_space_clients_test_cases(Config, #scenario_spec{
     type = ScenarioType,
-    client_spec = #client_spec{
-        forbidden = ForbiddenClients,
-        supported_clients_per_node = SupportedClientsPerNode
-    },
-    data_spec = DataSpec
+    client_spec = #client_spec{forbidden_not_in_space = ForbiddenClients}
 } = ScenarioSpec) ->
-    run_invalid_clients_test_cases(
-        Config,
-        SupportedClientsPerNode,
-        ScenarioSpec,
-        ForbiddenClients,
-        required_data_sets(DataSpec),
-        case ScenarioType of
-            rest_not_supported ->
-                ?ERROR_NOT_SUPPORTED;
-            gs_not_supported ->
-                ?ERROR_NOT_SUPPORTED;
-            rest_with_file_path ->
-                ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
-            _ ->
-                ?ERROR_FORBIDDEN
-        end
-    ).
+    ScenarioSpecificError = get_scenario_specific_error(ScenarioType, ?ERROR_FORBIDDEN),
+    run_invalid_clients_test_cases(Config, ScenarioSpecificError, ForbiddenClients, ScenarioSpec).
 
 
-run_invalid_clients_test_cases(Config, SupportedClientsPerNode, #scenario_spec{
+run_forbidden_in_space_clients_test_cases(Config, #scenario_spec{
+    type = ScenarioType,
+    client_spec = #client_spec{forbidden_in_space = ForbiddenClients}
+} = ScenarioSpec) ->
+    % ForbiddenClients from space should be able to resolve file path and fail
+    % only at auth check
+    ScenarioSpecificError = case ScenarioType of
+        rest_with_file_path ->
+            ?ERROR_FORBIDDEN;
+        _ ->
+            get_scenario_specific_error(ScenarioType, ?ERROR_FORBIDDEN)
+    end,
+    run_invalid_clients_test_cases(Config, ScenarioSpecificError, ForbiddenClients, ScenarioSpec).
+
+
+get_scenario_specific_error(rest_not_supported, _DefaultError) ->
+    % Error thrown by middleware when checking if operation is supported -
+    % before auth checks could be performed
+    ?ERROR_NOT_SUPPORTED;
+get_scenario_specific_error(gs_not_supported, _DefaultError) ->
+    % Error thrown by middleware when checking if operation is supported -
+    % before auth checks could be performed
+    ?ERROR_NOT_SUPPORTED;
+get_scenario_specific_error(rest_with_file_path, _DefaultError) ->
+    % Error thrown by rest_handler (before middleware auth checks could be performed)
+    % as invalid clients who doesn't belong to space can't resolve file path to guid
+    ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
+get_scenario_specific_error(_, DefaultError) ->
+    DefaultError.
+
+
+run_invalid_clients_test_cases(_Config, _InvalidClientError, [], _ScenarioSpec) ->
+    true;
+run_invalid_clients_test_cases(Config, InvalidClientError, Clients, #scenario_spec{
     name = ScenarioName,
     type = ScenarioType,
+    client_spec = #client_spec{supported_clients_per_node = SupportedClientsPerNode},
     target_nodes = TargetNodes,
 
     setup_fun = EnvSetupFun,
     teardown_fun = EnvTeardownFun,
     verify_fun = EnvVerifyFun,
 
-    prepare_args_fun = PrepareArgsFun
-}, Clients, DataSets, Error) ->
-    Env = EnvSetupFun(),
+    prepare_args_fun = PrepareArgsFun,
 
-    Result = run_test_cases(
+    data_spec = DataSpec
+}) ->
+    % Invalid clients test cases are expected to fail without destroying
+    % environment so it is enough to set it once and reuse for all test cases
+    TestsEnv = EnvSetupFun(),
+
+    TestsResult = run_test_cases(
         ScenarioType,
         TargetNodes,
         Clients,
-        DataSets,
+        required_data_sets(DataSpec),
         fun(TargetNode, Client, DataSet) ->
             ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
-                true -> Error;
+                true -> InvalidClientError;
                 false -> ?ERROR_USER_NOT_SUPPORTED
             end,
             TestCaseCtx = #api_test_ctx{
+                scenario = ScenarioType,
                 node = TargetNode,
                 client = Client,
-                env = Env,
+                env = TestsEnv,
                 data = DataSet
             },
             Args = PrepareArgsFun(TestCaseCtx),
-            Result = make_request(Config, TargetNode, Client, Args),
+            RequestResult = make_request(Config, TargetNode, Client, Args),
             try
-                validate_error_result(ScenarioType, ExpError, Result),
+                validate_error_result(ScenarioType, ExpError, RequestResult),
                 EnvVerifyFun(expected_failure, TestCaseCtx)
             catch E:T ->
-                log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result, E, T),
+                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, E, T),
                 false
             end
         end
     ),
 
-    EnvTeardownFun(Env),
-    Result.
+    EnvTeardownFun(TestsEnv),
+    TestsResult.
 
 
 run_malformed_data_test_cases(Config, #scenario_spec{
@@ -215,9 +217,11 @@ run_malformed_data_test_cases(Config, #scenario_spec{
     prepare_args_fun = PrepareArgsFun,
     data_spec = DataSpec
 }) ->
+    % Malformed data test cases are expected to fail without destroying
+    % environment so it is enough to set it once and reuse for all test cases
     Env = EnvSetupFun(),
 
-    Result = run_test_cases(
+    TestsResult = run_test_cases(
         ScenarioType,
         TargetNodes,
         CorrectClients,
@@ -232,25 +236,26 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                     false ->
                         true;
                     true ->
-                        ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
-                            false ->
-                                ?ERROR_USER_NOT_SUPPORTED;
-                            true ->
-                                get_expected_malformed_data_error(Error, ScenarioType)
-                        end,
                         TestCaseCtx = #api_test_ctx{
+                            scenario = ScenarioType,
                             node = TargetNode,
                             client = Client,
                             env = Env,
                             data = DataSet
                         },
+                        ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
+                            true ->
+                                get_expected_malformed_data_error(Error, ScenarioType, TestCaseCtx);
+                            false ->
+                                ?ERROR_USER_NOT_SUPPORTED
+                        end,
                         Args = PrepareArgsFun(TestCaseCtx),
-                        Result = make_request(Config, TargetNode, Client, Args),
+                        RequestResult = make_request(Config, TargetNode, Client, Args),
                         try
-                            validate_error_result(ScenarioType, ExpError, Result),
+                            validate_error_result(ScenarioType, ExpError, RequestResult),
                             EnvVerifyFun(expected_failure, TestCaseCtx)
                         catch E:T ->
-                            log_failure(ScenarioName, TargetNode, Client, Args, ExpError, Result, E, T),
+                            log_failure(ScenarioName, TestCaseCtx, Args, ExpError, Result, E, T),
                             false
                         end
                 end
@@ -258,33 +263,37 @@ run_malformed_data_test_cases(Config, #scenario_spec{
     ),
 
     EnvTeardownFun(Env),
-    Result.
+    TestsResult.
 
 
 is_error_applicable_to_scenario({error, _}, _)                          -> true;
+is_error_applicable_to_scenario({Scenario, _}, Scenario)                -> true;
 is_error_applicable_to_scenario({rest_handler, _}, rest)                -> true;
 is_error_applicable_to_scenario({rest_handler, _}, rest_with_file_path) -> true;
 is_error_applicable_to_scenario({rest_handler, _}, rest_not_supported)  -> true;
-is_error_applicable_to_scenario({rest, _}, rest)                        -> true;
-is_error_applicable_to_scenario({rest, _}, rest_with_file_path)         -> true;
-is_error_applicable_to_scenario({rest, _}, rest_not_supported)          -> true;
-is_error_applicable_to_scenario({gs, _}, gs)                            -> true;
-is_error_applicable_to_scenario({gs, _}, gs_not_supported)              -> true;
 is_error_applicable_to_scenario(_, _)                                   -> false.
 
 
-get_expected_malformed_data_error({rest_handler, RestHandlerSpecificError}, _) ->
-    % Rest handler errors takes precedence other anything else as it is
+get_expected_malformed_data_error({rest_handler, RestHandlerSpecificError}, _, _) ->
+    % Rest handler errors takes precedence over anything else as it is
     % thrown before request is even passed to middleware
     RestHandlerSpecificError;
-get_expected_malformed_data_error(_, rest_not_supported) ->
+get_expected_malformed_data_error(_, rest_not_supported, _) ->
+    % Operation not supported errors takes precedence over any data sanitization
+    % or auth checks errors as it is done earlier
     ?ERROR_NOT_SUPPORTED;
-get_expected_malformed_data_error(_, gs_not_supported) ->
+get_expected_malformed_data_error(_, gs_not_supported, _) ->
+    % Operation not supported errors takes precedence over any data sanitization
+    % or auth checks errors as it is done earlier
     ?ERROR_NOT_SUPPORTED;
-get_expected_malformed_data_error({error, _} = Error, _) ->
+get_expected_malformed_data_error({error, _} = Error, _, _) ->
     Error;
-get_expected_malformed_data_error({_Type, TypeSpecificError}, _) ->
-    TypeSpecificError.
+get_expected_malformed_data_error({error_fun, ErrorFun}, _, TestCaseCtx) ->
+    ErrorFun(TestCaseCtx);
+get_expected_malformed_data_error({_ScenarioType, {error, _} = ScenarioSpecificError}, _, _) ->
+    ScenarioSpecificError;
+get_expected_malformed_data_error({_ScenarioType, {error_fun, ErrorFun}}, _, TestCaseCtx) ->
+    ErrorFun(TestCaseCtx).
 
 
 run_expected_success_test_cases(Config, #scenario_spec{
@@ -312,6 +321,7 @@ run_expected_success_test_cases(Config, #scenario_spec{
         fun(TargetNode, Client, DataSet) ->
             Env = EnvSetupFun(),
             TestCaseCtx = #api_test_ctx{
+                scenario = ScenarioType,
                 node = TargetNode,
                 client = Client,
                 env = Env,
@@ -332,7 +342,7 @@ run_expected_success_test_cases(Config, #scenario_spec{
                         EnvVerifyFun(expected_failure, TestCaseCtx)
                 end
             catch E:T ->
-                log_failure(ScenarioName, TargetNode, Client, Args, success, Result, E, T),
+                log_failure(ScenarioName, TestCaseCtx, Args, success, Result, E, T),
                 false
             after
                 EnvTeardownFun(Env)
@@ -352,6 +362,7 @@ run_test_cases(ScenarioType, TargetNodes, Clients, DataSets, TestCaseFun) ->
 
 filter_available_clients(Type, Clients) when
     Type == gs;
+    Type == gs_with_shared_guid_and_aspect_private;
     Type == gs_not_supported
 ->
     % TODO VFS-6201 rm when connecting via gs as nobody becomes possible
@@ -360,7 +371,7 @@ filter_available_clients(_ScenarioType, Clients) ->
     Clients.
 
 
-validate_error_result(Type, ExpError, {ok, RespCode, RespBody}) when
+validate_error_result(Type, ExpError, {ok, RespCode, _RespHeaders, RespBody}) when
     Type == rest;
     Type == rest_with_file_path;
     Type == rest_not_supported
@@ -372,12 +383,13 @@ validate_error_result(Type, ExpError, {ok, RespCode, RespBody}) when
 
 validate_error_result(Type, ExpError, Result) when
     Type == gs;
+    Type == gs_with_shared_guid_and_aspect_private;
     Type == gs_not_supported
 ->
     ?assertEqual(ExpError, Result).
 
 
-log_failure(ScenarioName, TargetNode, Client, Args, Expected, Got, Error, Type) ->
+log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Args, Expected, Got, Error, Type) ->
     ct:pal("~s test case failed:~n"
     "Node: ~p~n"
     "Client: ~p~n"
@@ -524,7 +536,7 @@ is_client_supported_by_node(Client, Node, SupportedClientsPerNode) ->
 
 %% @private
 -spec make_request(config(), node(), aai:auth(), rest_args() | gs_args()) ->
-    {ok, Result :: map()} | {error, term()}.
+    {ok, Result :: term()} | {error, term()}.
 make_request(Config, Node, Client, #rest_args{} = Args) ->
     make_rest_request(Config, Node, Client, Args);
 make_request(Config, Node, Client, #gs_args{} = Args) ->
@@ -622,9 +634,9 @@ make_rest_request(_Config, Node, Client, #rest_args{
         {ok, RespCode, RespHeaders, RespBody} ->
             case maps:get(<<"content-type">>, RespHeaders, undefined) of
                 <<"application/json">> ->
-                    {ok, RespCode, json_utils:decode(RespBody)};
+                    {ok, RespCode, RespHeaders, json_utils:decode(RespBody)};
                 _ ->
-                    {ok, RespCode, RespBody}
+                    {ok, RespCode, RespHeaders, RespBody}
             end;
         {error, _} = Error ->
             Error

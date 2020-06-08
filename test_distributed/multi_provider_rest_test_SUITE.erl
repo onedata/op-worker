@@ -37,7 +37,6 @@
 
 -export([
     lookup_file_objectid/1,
-    get_simple_file_distribution/1,
     transfers_should_be_ordered_by_timestamps/1,
     metric_get/1,
     list_spaces/1,
@@ -46,6 +45,7 @@
     get_share/1,
     update_share_name/1,
     delete_share/1,
+    download_file_test/1,
     list_transfers/1,
     track_transferred_files/1
 ]).
@@ -60,7 +60,6 @@
 all() ->
     ?ALL([
         lookup_file_objectid,
-        get_simple_file_distribution,
         transfers_should_be_ordered_by_timestamps,
         metric_get,
         list_spaces,
@@ -69,6 +68,7 @@ all() ->
         get_share,
         update_share_name,
         delete_share,
+        download_file_test,
         list_transfers,
         track_transferred_files
     ]).
@@ -145,25 +145,6 @@ lookup_file_objectid(Config) ->
     #{<<"fileId">> := ObjectId} = json_utils:decode(Response),
     ?assertMatch({ok, ObjectId}, file_id:guid_to_objectid(FileGuid)).
 
-
-get_simple_file_distribution(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = filename:join(["/", SpaceName, "file0_gsfd"]),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-    {ok, Handle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
-    {ok, _} = lfm_proxy:write(WorkerP1, Handle, 0, ?TEST_DATA),
-    lfm_proxy:fsync(WorkerP1, Handle),
-
-    % when
-    ExpectedDistribution = [#{
-        <<"providerId">> => domain(WorkerP1),
-        <<"blocks">> => [[0, 4]]
-    }],
-
-    % then
-    ?assertDistribution(WorkerP1, ExpectedDistribution, Config, File).
 
 transfers_should_be_ordered_by_timestamps(Config) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -600,6 +581,30 @@ delete_share(Config) ->
         {ok, _},
         lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedDirGuid}, <<"Share name">>)
     ).
+
+download_file_test(Config) ->
+    {OpNode, _} = get_op_nodes(Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(OpNode)}}, Config),
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+
+    % create regular file
+    FilePath = filename:join(["/", SpaceName, "download_file_test"]),
+    {ok, FileGuid} = lfm_proxy:create(OpNode, SessionId, FilePath, 8#777),
+
+    DummyData = <<"DATA">>,
+    {ok, WriteHandle} = lfm_proxy:open(OpNode, SessionId, {guid, FileGuid}, write),
+    {ok, _} = lfm_proxy:write(OpNode, WriteHandle, 0, DummyData),
+    ok = lfm_proxy:close(OpNode, WriteHandle),
+
+    % Assert file_download_url is one time use only
+    {ok, URL1} = rpc:call(OpNode, page_file_download, get_file_download_url, [SessionId, FileGuid]),
+    ?assertEqual({ok, <<"DATA">>}, download_file(OpNode, URL1, Config)),
+    ?assertEqual(?ERROR_UNAUTHORIZED, download_file(OpNode, URL1, Config)),
+
+    % Assert that trying to download deleted file should result in ?ENOENT
+    {ok, URL2} = rpc:call(OpNode, page_file_download, get_file_download_url, [SessionId, FileGuid]),
+    lfm_proxy:unlink(OpNode, SessionId, {guid, FileGuid}),
+    ?assertEqual(?ERROR_POSIX(?ENOENT), download_file(OpNode, URL2, Config)).
 
 list_transfers(Config) ->
     ct:timetrap({hours, 1}),
@@ -1109,4 +1114,17 @@ get_op_nodes(Config) ->
             {Worker1, Worker2};
         false ->
             {Worker2, Worker1}
+    end.
+
+download_file(Node, DownloadUrl, Config) ->
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
+    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
+    Opts = [{ssl_options, [{cacerts, CaCerts}]}, {recv_timeout, 15000}],
+
+    case http_client:request(get, DownloadUrl, maps:from_list(Headers), <<>>, Opts) of
+        {ok, ?HTTP_200_OK, _RespHeaders, Content} ->
+            {ok, Content};
+        {ok, _ErrorCode, _ErrorHeaders, ErrorResponse} ->
+            Error = maps:get(<<"error">>, json_utils:decode(ErrorResponse), #{}),
+            errors:from_json(Error)
     end.

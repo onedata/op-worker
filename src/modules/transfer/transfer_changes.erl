@@ -48,10 +48,10 @@
 handle(#document{deleted = true}) ->
     ok;
 
-handle(Doc = #document{value = #transfer{replication_status = scheduled}}) ->
+handle(Doc = #document{value = #transfer{replication_status = ?SCHEDULED_STATUS}}) ->
     handle_scheduled_replication(Doc);
 
-handle(Doc = #document{value = #transfer{replication_status = enqueued}}) ->
+handle(Doc = #document{value = #transfer{replication_status = ?ENQUEUED_STATUS}}) ->
     handle_enqueued_replication(Doc);
 
 handle(Doc = #document{
@@ -59,38 +59,38 @@ handle(Doc = #document{
         replication_status = Status,
         enqueued = true
     }
-}) when Status =/= skipped ->
+}) when Status =/= ?SKIPPED_STATUS ->
     handle_dequeued_transfer(Doc);
 
-handle(Doc = #document{value = #transfer{replication_status = active}}) ->
+handle(Doc = #document{value = #transfer{replication_status = ?ACTIVE_STATUS}}) ->
     handle_active_replication(Doc);
 
-handle(Doc = #document{value = #transfer{replication_status = aborting}}) ->
+handle(Doc = #document{value = #transfer{replication_status = ?ABORTING_STATUS}}) ->
     handle_aborting_replication(Doc);
 
 handle(Doc = #document{
     value = #transfer{
         replication_status = ReplicationStatus,
-        eviction_status = scheduled
+        eviction_status = ?SCHEDULED_STATUS
     }
-}) when ReplicationStatus == completed orelse ReplicationStatus == skipped ->
+}) when ReplicationStatus == ?COMPLETED_STATUS orelse ReplicationStatus == ?SKIPPED_STATUS ->
     handle_scheduled_replica_eviction(Doc);
 
-handle(Doc = #document{value = #transfer{eviction_status = enqueued}}) ->
+handle(Doc = #document{value = #transfer{eviction_status = ?ENQUEUED_STATUS}}) ->
     handle_enqueued_replica_eviction(Doc);
 
 handle(Doc = #document{
     value = #transfer{
-        replication_status = skipped,
+        replication_status = ?SKIPPED_STATUS,
         enqueued = true
     }
 }) ->
     handle_dequeued_transfer(Doc);
 
-handle(Doc = #document{value = #transfer{eviction_status = active}}) ->
+handle(Doc = #document{value = #transfer{eviction_status = ?ACTIVE_STATUS}}) ->
     handle_active_replica_eviction(Doc);
 
-handle(Doc = #document{value = #transfer{eviction_status = aborting}}) ->
+handle(Doc = #document{value = #transfer{eviction_status = ?ABORTING_STATUS}}) ->
     handle_aborting_replica_eviction(Doc);
 
 handle(Doc = #document{
@@ -98,10 +98,10 @@ handle(Doc = #document{
         replication_status = ReplicationStatus,
         eviction_status = EvictionStatus
     }
-}) when ReplicationStatus =/= skipped andalso
-    (EvictionStatus =:= completed orelse
-     EvictionStatus =:= failed orelse
-     EvictionStatus =:= cancelled)
+}) when ReplicationStatus =/= ?SKIPPED_STATUS andalso
+    (EvictionStatus =:= ?COMPLETED_STATUS orelse
+     EvictionStatus =:= ?FAILED_STATUS orelse
+     EvictionStatus =:= ?CANCELLED_STATUS)
 ->
     handle_finished_migration(Doc);
 
@@ -127,7 +127,7 @@ handle(_Doc) ->
 handle_scheduled_replication(Doc = #document{
     key = TransferId,
     value = #transfer{
-        replication_status = scheduled,
+        replication_status = ?SCHEDULED_STATUS,
         replicating_provider = ReplicatingProviderId,
         cancel = Cancel
     }
@@ -154,7 +154,7 @@ handle_scheduled_replication(Doc = #document{
 %%--------------------------------------------------------------------
 -spec handle_enqueued_replication(transfer:doc()) -> ok.
 handle_enqueued_replication(Doc = #document{value = #transfer{
-    replication_status = enqueued,
+    replication_status = ?ENQUEUED_STATUS,
     replicating_provider = ReplicatingProviderId,
     cancel = Cancel,
     files_processed = FilesProcessed,
@@ -299,7 +299,7 @@ handle_aborting_replication(_) ->
 handle_scheduled_replica_eviction(Doc = #document{
     key = TransferId,
     value = #transfer{
-        eviction_status = scheduled,
+        eviction_status = ?SCHEDULED_STATUS,
         evicting_provider = EvictingProviderId,
         cancel = Cancel
     }
@@ -330,7 +330,7 @@ handle_scheduled_replica_eviction(Doc = #document{
 handle_enqueued_replica_eviction(#document{
     key = TransferId,
     value = #transfer{
-        eviction_status = enqueued,
+        eviction_status = ?ENQUEUED_STATUS,
         evicting_provider = EvictingProviderId,
         cancel = Cancel
     }
