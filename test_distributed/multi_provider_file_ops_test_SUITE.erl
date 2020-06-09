@@ -215,7 +215,7 @@ remote_driver_internal_call_test(Config0) ->
     RecAns = receive
         {link_node, Key, Ctx, {{ok, #document{value = #links_node{key = DirUniqueKey}}}, _}} -> {ok, Key, Ctx}
     after
-        0 -> receive_error
+        1000 -> receive_error
     end,
     {ok, LinkKey, LinkCtx} = ?assertMatch({ok, _, _}, RecAns),
 
@@ -223,6 +223,7 @@ remote_driver_internal_call_test(Config0) ->
     delete_link_from_memory(Workers2, LinkKey, LinkCtx),
     test_utils:mock_expect(Workers2, datastore_remote_driver, get_async, fun(Ctx, Key) ->
         Master ! {link_remote_node, Key},
+        put(tp_master, self()), % Mock code is executed in dedicated process so needed variables have to be set here
         meck:passthrough([Ctx, Key])
     end),
     test_utils:mock_expect(Workers2, datastore_remote_driver, wait, fun
@@ -237,7 +238,7 @@ remote_driver_internal_call_test(Config0) ->
     RecAns2 = receive
         {link_remote_node, LinkKey} -> ok
     after
-        0 -> receive_error
+        1000 -> receive_error
     end,
     ?assertEqual(ok, RecAns2),
 
@@ -252,13 +253,13 @@ remote_driver_internal_call_test(Config0) ->
     RecAns3 = receive
         {link_remote_node, LinkKey} -> ok
     after
-        0 -> receive_error
+        1000 -> receive_error
     end,
     ?assertEqual(ok, RecAns3),
     RecAns4 = receive
         internal_call -> ok
     after
-        0 -> receive_error
+        1000 -> receive_error
     end,
     ?assertEqual(ok, RecAns4),
 

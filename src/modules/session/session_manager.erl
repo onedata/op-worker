@@ -123,9 +123,7 @@ reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
 reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
     case user_identity:get_or_fetch(Auth) of
         {ok, #document{value = #user_identity{} = Iden}} ->
-            critical_section:run([?MODULE, SessId], fun() ->
-                reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia)
-            end);
+            reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia);
         Error ->
             Error
     end.
@@ -212,9 +210,7 @@ remove_session(SessId) ->
     session:identity(), session:auth() | undefined) ->
     {ok, SessId :: session:id()} | error().
 reuse_or_create_session(SessId, SessType, Iden, Auth) ->
-    critical_section:run([?MODULE, SessId], fun() ->
-        reuse_or_create_session(SessId, SessType, Iden, Auth, undefined)
-    end).
+    reuse_or_create_session(SessId, SessType, Iden, Auth, undefined).
 
 
 %%%===================================================================
@@ -243,6 +239,8 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
             % TODO VFS-5126 - possible race with closing (creation when cleanup
             % is not finished)
             {error, not_found};
+        (#session{status = initializing}) ->
+            {error, initializing};
         (#session{identity = ValidIden} = ExistingSess) ->
             case Iden of
                 ValidIden ->
@@ -261,6 +259,9 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
                 Other ->
                     Other
             end;
+        {error, initializing} ->
+            timer:sleep(100),
+            reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia);
         {error, Reason} ->
             {error, Reason}
     end.
