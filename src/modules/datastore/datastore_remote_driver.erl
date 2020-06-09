@@ -30,7 +30,8 @@
                  source_ids := [oneprovider:id()]}.
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
--type future() :: {ok, clproto_message_id:id()} | {error, term()}.
+-type communicator_ans() :: {ok, clproto_message_id:id()} | {error, term()}.
+-type future() :: {communicator_ans(), session:id()}.
 
 
 %%%===================================================================
@@ -96,7 +97,7 @@ get_async(#{
                     routing_key = RoutingKey
                 },
                 SendAns = try
-                    communicator:send_to_provider2(SessId, Msg, self(), 1)
+                    communicator:send_to_provider(SessId, Msg, self(), 1, true)
                 catch
                     _:Reason ->
                         {error, Reason}
@@ -146,14 +147,11 @@ wait({{ok, MsgId}, _}) ->
         Timeout -> {error, timeout}
     end;
 wait({{error, {badmatch, {error, internal_call}}}, SessId}) ->
-    ?info("Remote driver internal call"),
+    ?debug("Remote driver internal call"),
     spawn(fun() ->
         session_connections:ensure_connected(SessId)
     end),
     {error, interrupted_call};
 wait({{error, Reason}, _}) ->
-    ?info("Remote driver error ~p", [Reason]),
-    {error, Reason};
-wait({WrongError, _}) ->
-    ?info("Remote driver unknown error ~p", [WrongError]),
-    WrongError.
+    ?debug("Remote driver error ~p", [Reason]),
+    {error, interrupted_call}.
