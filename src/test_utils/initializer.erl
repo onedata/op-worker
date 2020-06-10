@@ -1529,7 +1529,7 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
     ok = test_utils:mock_expect(Workers, storage_logic, get_spaces,
         fun(StorageId) -> {ok, maps:get(StorageId, StoragesToSpaces, [])} end),
     
-    ok = test_utils:mock_expect(Workers, storage_logic, is_imported_storage,
+    ok = test_utils:mock_expect(Workers, storage_logic, is_imported,
         fun(StorageId) ->
             {ok, #document{value = #od_storage{imported = ImportedStorage}}} = storage_logic:get(StorageId),
             {ok, ImportedStorage}

@@ -347,7 +347,8 @@
     name = ?STORAGE_NAME(__Storage),
     provider = ?PROVIDER_1,
     spaces = [],
-    qos_parameters = #{}
+    qos_parameters = #{},
+    imported = false
 }}).
 
 

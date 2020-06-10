@@ -958,7 +958,7 @@ verify_provider_identity(ProviderId, IdentityToken) ->
 
 
 %% @private
--spec get_remote_timestamp() -> non_neg_integer().
+-spec get_remote_timestamp() -> {ok, non_neg_integer()}.
 get_remote_timestamp() ->
     Req = #gs_req_graph{
         operation = get,

@@ -89,7 +89,7 @@ upgrade_from_19_02_x_storages(Config) ->
 
     test_utils:mock_assert_num_calls_sum(Worker, storage_logic, upgrade_legacy_support, 2, 1),
     test_utils:mock_assert_num_calls_sum(Worker, storage_logic, create_in_zone, 3, 1),
-    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, set_imported_storage, ['_', true], 1),
+    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, set_imported, ['_', true], 1),
     % Virtual storage should be removed in onezone
     test_utils:mock_assert_num_calls_sum(Worker, storage_logic, delete_in_zone, 1, 1),
     ?assertMatch({ok, #document{value = ExpectedStorageConfig}}, rpc:call(Worker, storage_config, get, [St])).
@@ -106,7 +106,7 @@ upgrade_from_20_02_0_beta3_storages(Config) ->
     
     ?assertEqual({ok, 3}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [2])),
     
-    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, set_imported_storage, ['_', true], 1).
+    test_utils:mock_assert_num_calls_sum(Worker, storage_logic, set_imported, ['_', true], 1).
 
 
 %%%===================================================================
@@ -128,7 +128,7 @@ init_per_testcase(upgrade_from_19_02_x_storages, Config) ->
     test_utils:mock_expect(Worker, storage_logic, create_in_zone, fun(_, _, StorageId) -> {ok, StorageId} end),
     test_utils:mock_expect(Worker, storage_logic, delete_in_zone, fun(_) -> ok end),
     test_utils:mock_expect(Worker, storage_logic, upgrade_legacy_support, fun(_,_) -> ok end),
-    test_utils:mock_expect(Worker, storage_logic, set_imported_storage, fun(_,_) -> ok end),
+    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_,_) -> ok end),
     test_utils:mock_new(Worker, oneprovider),
     test_utils:mock_expect(Worker, oneprovider, is_connected_to_oz, fun() -> true end),
     Config;
@@ -137,7 +137,7 @@ init_per_testcase(upgrade_from_20_02_0_beta3_storages, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     
     test_utils:mock_new(Worker, storage_logic, [passthrough]),
-    test_utils:mock_expect(Worker, storage_logic, set_imported_storage, fun(_,_) -> ok end),
+    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_,_) -> ok end),
     test_utils:mock_new(Worker, oneprovider),
     test_utils:mock_expect(Worker, oneprovider, is_connected_to_oz, fun() -> true end),
     Config.
