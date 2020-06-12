@@ -455,7 +455,23 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
                 NewFileCtxs = lists:filtermap(fun(O) ->
                     try
                         {ok, G} = file_id:objectid_to_guid(O),
-                        {true, file_ctx:new_by_guid(G)}
+                        NewFileCtx0 = file_ctx:new_by_guid(G),
+                        case file_ctx:file_exists_const(NewFileCtx0) of
+                            true ->
+                                % TODO VFS-6386 Enable and test view transfer with dirs
+                                case file_ctx:is_dir(NewFileCtx0) of
+                                    {true, _} ->
+                                        transfer:increment_files_processed_counter(TransferId),
+                                        false;
+                                    {false, NewFileCtx1} ->
+                                        {true, NewFileCtx1}
+                                end;
+                            false ->
+                                % TODO VFS-4218 currently we silently omit garbage
+                                % returned from view (view can return anything)
+                                transfer:increment_files_processed_counter(TransferId),
+                                false
+                        end
                     catch
                         Error:Reason ->
                             transfer:increment_files_failed_and_processed_counters(TransferId),

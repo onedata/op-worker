@@ -171,16 +171,11 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 
 %% @private
 -spec switch_context_if_shared_file_request(req()) -> req().
-switch_context_if_shared_file_request(#op_req{gri = #gri{type = op_file, id = undefined}} = OpReq) ->
-    OpReq;
-switch_context_if_shared_file_request(#op_req{gri = #gri{type = op_file} = GRI} = OpReq) ->
-    % Every request concerning shared files must be carried with guest auth
-    case file_id:is_share_guid(GRI#gri.id) of
+switch_context_if_shared_file_request(#op_req{gri = #gri{type = Tp, aspect = As, id = Id}} = OpReq) ->
+    case middleware_utils:is_shared_file_request(Tp, As, Id) of
         true -> OpReq#op_req{auth = ?GUEST};
         false -> OpReq
-    end;
-switch_context_if_shared_file_request(OpReq) ->
-    OpReq.
+    end.
 
 
 %% @private
@@ -230,7 +225,7 @@ ensure_operation_supported(#req_ctx{plugin = Plugin, req = #op_req{
 %%--------------------------------------------------------------------
 -spec sanitize_request(req_ctx()) -> req_ctx().
 sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
-    gri = #gri{aspect = Aspect},
+    gri = #gri{id = Id, aspect = Aspect},
     data = RawData
 } = Req} = ReqCtx) ->
     case Plugin:data_spec(Req) of
@@ -238,10 +233,10 @@ sanitize_request(#req_ctx{plugin = Plugin, req = #op_req{
             ReqCtx;
         DataSpec ->
             SanitizedData = middleware_sanitizer:sanitize_data(
-                RawData#{aspect => Aspect}, DataSpec
+                RawData#{id => Id, aspect => Aspect}, DataSpec
             ),
             ReqCtx#req_ctx{req = Req#op_req{
-                data = maps:remove(aspect, SanitizedData)
+                data = maps:without([id, aspect], SanitizedData)
             }}
     end.
 

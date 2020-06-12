@@ -12,15 +12,16 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
--include("transfers_test_mechanism.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/common/credentials.hrl").
+-include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([get_transfer/2, provider_id/1, ensure_transfers_removed/1,
+-export([
+    get_transfer/2, provider_id/1, ensure_transfers_removed/1,
     list_ended_transfers/2, list_waiting_transfers/2, list_ongoing_transfers/2,
     get_ongoing_transfers_for_file/2, get_ended_transfers_for_file/2,
     remove_transfers/1, get_space_support/2,
@@ -31,7 +32,10 @@
     mock_replica_eviction_failure/1, unmock_replica_eviction_failure/1,
     unmock_replica_synchronizer_failure/1, remove_all_views/2, random_job_name/1,
     test_map_function/1, test_reduce_function/1, test_map_function/2,
-    create_view/7, create_view/6, random_view_name/1, unmock_prolonged_replication/1]).
+    create_view/7, create_view/6, random_view_name/1, unmock_prolonged_replication/1
+]).
+-export([assert_transfer_state/4]).
+
 
 -define(RANDOM_NAMESPACE_SIZE, 1073741824). % 1024 ^ 3
 
@@ -140,7 +144,7 @@ root_name(FunctionName, Type, FileKeyType, RandomSuffix) ->
 %%-------------------------------------------------------------------
 -spec mock_prolonged_replication(node(), non_neg_integer(), non_neg_integer()) -> ok.
 mock_prolonged_replication(Worker, ProlongationProbability, ProlongationTime) ->
-    ok = test_utils:mock_new(Worker, replication_worker),
+    ok = test_utils:mock_new(Worker, replication_worker, [passthrough]),
     ok = test_utils:mock_expect(Worker, replication_worker, transfer_regular_file,
         fun(FileCtx, TransferParams) ->
             Result = meck:passthrough([FileCtx, TransferParams]),
@@ -163,7 +167,7 @@ unmock_prolonged_replication(Worker) ->
 %%-------------------------------------------------------------------
 -spec mock_prolonged_replica_eviction(node(), non_neg_integer(), non_neg_integer()) -> ok.
 mock_prolonged_replica_eviction(Worker, ProlongationProbability, ProlongationTime) ->
-    ok = test_utils:mock_new(Worker, replica_eviction_worker),
+    ok = test_utils:mock_new(Worker, replica_eviction_worker, [passthrough]),
     ok = test_utils:mock_expect(Worker, replica_eviction_worker, transfer_regular_file,
         fun
             (FileCtx, TransferParams) ->
@@ -249,7 +253,83 @@ create_view(Worker, SpaceId, ViewName, MapFunction, ReduceFunction, Options, Pro
     ok = rpc:call(Worker, index, save, [SpaceId, ViewName, MapFunction, ReduceFunction,
         Options, false, Providers]).
 
+assert_transfer_state(Node, TransferId, ExpectedTransfer, Attempts) ->
+    try
+        Transfer = get_transfer(Node, TransferId),
+        assert_transfer_state(ExpectedTransfer, Transfer)
+    catch
+        throw:transfer_not_found ->
+            case Attempts == 0 of
+                false ->
+                    timer:sleep(timer:seconds(1)),
+                    assert_transfer_state(Node, TransferId, ExpectedTransfer, Attempts - 1);
+                true ->
+                    ct:pal("Transfer: ~p not found.", [TransferId]),
+                    ct:fail("Transfer: ~p not found.", [TransferId])
+            end;
+        throw:{assertion_error, Field, Expected, Value} ->
+            case Attempts == 0 of
+                false ->
+                    timer:sleep(timer:seconds(1)),
+                    assert_transfer_state(Node, TransferId, ExpectedTransfer, Attempts - 1);
+                true ->
+                    {Format, Args} = transfer_fields_description(Node, TransferId),
+                    ct:pal(
+                        "Assertion of field \"~p\" in transfer ~p failed.~n"
+                        "    Expected: ~p~n"
+                        "    Value: ~p~n" ++ Format, [Field, TransferId, Expected, Value | Args]),
+                    ct:fail("assertion failed")
+            end
+    end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+assert_transfer_state(ExpectedTransfer, Transfer) ->
+    maps:fold(fun(FieldName, ExpectedValueOrPredicate, _AccIn) ->
+        assert_transfer_field(ExpectedValueOrPredicate, Transfer, FieldName)
+    end, undefined, ExpectedTransfer).
+
+assert_transfer_field(ExpectedValueOrPredicate, Transfer, FieldName) ->
+    Value = get_transfer_value(Transfer, FieldName),
+    try
+        case is_function(ExpectedValueOrPredicate, 1) of
+            true ->
+                case ExpectedValueOrPredicate(Value) of
+                    true ->
+                        ok;
+                    false ->
+                        throw({assertion_error, FieldName, <<"<pred>">>, Value})
+                end;
+            false ->
+                case Value of
+                    ExpectedValueOrPredicate ->
+                        ok;
+                    _ ->
+                        throw({assertion_error, FieldName, ExpectedValueOrPredicate, Value})
+                end
+        end
+    catch error:{assertMatch_failed, _} ->
+        throw({assertion_error, FieldName, ExpectedValueOrPredicate, Value})
+    end.
+
+get_transfer_value(Transfer, FieldName) ->
+    FieldsList = record_info(fields, transfer),
+    Index = index(FieldName, FieldsList),
+    element(Index + 1, Transfer).
+
+index(Key, List) ->
+    case lists:keyfind(Key, 2, lists:zip(lists:seq(1, length(List)), List)) of
+        false ->
+            throw({wrong_assertion_key, Key, List});
+        {Index, _} ->
+            Index
+    end.
+
+transfer_fields_description(Node, TransferId) ->
+    FieldsList = record_info(fields, transfer),
+    Transfer = transfers_test_utils:get_transfer(Node, TransferId),
+    lists:foldl(fun(FieldName, {AccFormat, AccArgs}) ->
+        {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [FieldName, get_transfer_value(Transfer, FieldName)]}
+    end, {"~nTransfer ~p fields values:~n", [TransferId]}, FieldsList).
