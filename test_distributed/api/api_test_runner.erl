@@ -28,6 +28,7 @@
 -define(NO_DATA, undefined).
 -define(GS_RESP(Result), #gs_resp_graph{data = Result}).
 
+-define(GS_SCENARIO_TYPES, [gs, gs_with_shared_guid_and_aspect_private, gs_not_supported]).
 
 %%%===================================================================
 %%% API
@@ -39,7 +40,7 @@
 run_tests(Config, Specs) ->
     lists:foldl(fun
         (#scenario_spec{} = ScenarioSpec, AllTestsPassed) ->
-            AllTestsPassed and run_scenario(Config, ScenarioSpec);
+            AllTestsPassed and run_suite(Config, scenario_spec_to_suite_spec(ScenarioSpec));
         (#suite_spec{} = SuiteSpec, AllTestsPassed) ->
             AllTestsPassed and run_suite(Config, SuiteSpec)
     end, true, Specs).
@@ -50,160 +51,105 @@ run_tests(Config, Specs) ->
 %%%===================================================================
 
 
-run_suite(Config, #suite_spec{
-    target_nodes = TargetNodes,
-    client_spec = ClientSpec,
-
-    setup_fun = EnvSetupFun,
-    teardown_fun = EnvTeardownFun,
-    verify_fun = EnvVerifyFun,
-
-    scenario_templates = ScenarioTemplates,
-    data_spec = DataSpec
-}) ->
-    lists:foldl(fun(#scenario_template{
-        name = Name,
-        type = Type,
-        prepare_args_fun = PrepareArgsFun,
-        validate_result_fun = ValidateCallResultFun
-    }, AllScenariosPassed) ->
-        AllScenariosPassed and run_scenario(Config, #scenario_spec{
-            name = Name,
-            type = Type,
-            target_nodes = TargetNodes,
-            client_spec = ClientSpec,
-            setup_fun = EnvSetupFun,
-            teardown_fun = EnvTeardownFun,
-            verify_fun = EnvVerifyFun,
-            prepare_args_fun = PrepareArgsFun,
-            validate_result_fun = ValidateCallResultFun,
-            data_spec = DataSpec
-        })
-    end, true, ScenarioTemplates).
-
-
-run_scenario(Config, ScenarioSpec) ->
+%% @private
+run_suite(Config, SuiteSpec) ->
     try
         true
-        and run_unauthorized_clients_test_cases(Config, ScenarioSpec)
-        and run_forbidden_not_in_space_clients_test_cases(Config, ScenarioSpec)
-        and run_forbidden_in_space_clients_test_cases(Config, ScenarioSpec)
-        and run_malformed_data_test_cases(Config, ScenarioSpec)
-        and run_expected_success_test_cases(Config, ScenarioSpec)
+        and run_invalid_clients_test_cases(Config, unauthorized, SuiteSpec)
+        and run_invalid_clients_test_cases(Config, forbidden_not_in_space, SuiteSpec)
+        and run_invalid_clients_test_cases(Config, forbidden_in_space, SuiteSpec)
+        and run_malformed_data_test_cases(Config, SuiteSpec)
+        and run_missing_required_data_test_cases(Config, SuiteSpec)
+        and run_expected_success_test_cases(Config, SuiteSpec)
     catch
         throw:fail ->
             false;
         Type:Reason ->
-            ct:pal("Unexpected error while running test scenario ~p:~p ~p", [
+            ct:pal("Unexpected error while running test suite ~p:~p ~p", [
                 Type, Reason, erlang:get_stacktrace()
             ]),
             false
     end.
 
 
-run_unauthorized_clients_test_cases(Config, #scenario_spec{
-    type = ScenarioType,
-    client_spec = #client_spec{unauthorized = UnauthorizedClients}
-} = ScenarioSpec) ->
-    ScenarioSpecificError = get_scenario_specific_error(ScenarioType, ?ERROR_UNAUTHORIZED),
-    run_invalid_clients_test_cases(Config, ScenarioSpecificError, UnauthorizedClients, ScenarioSpec).
-
-
-run_forbidden_not_in_space_clients_test_cases(Config, #scenario_spec{
-    type = ScenarioType,
-    client_spec = #client_spec{forbidden_not_in_space = ForbiddenClients}
-} = ScenarioSpec) ->
-    ScenarioSpecificError = get_scenario_specific_error(ScenarioType, ?ERROR_FORBIDDEN),
-    run_invalid_clients_test_cases(Config, ScenarioSpecificError, ForbiddenClients, ScenarioSpec).
-
-
-run_forbidden_in_space_clients_test_cases(Config, #scenario_spec{
-    type = ScenarioType,
-    client_spec = #client_spec{forbidden_in_space = ForbiddenClients}
-} = ScenarioSpec) ->
-    % ForbiddenClients from space should be able to resolve file path and fail
-    % only at auth check
-    ScenarioSpecificError = case ScenarioType of
-        rest_with_file_path ->
-            ?ERROR_FORBIDDEN;
-        _ ->
-            get_scenario_specific_error(ScenarioType, ?ERROR_FORBIDDEN)
-    end,
-    run_invalid_clients_test_cases(Config, ScenarioSpecificError, ForbiddenClients, ScenarioSpec).
-
-
-get_scenario_specific_error(rest_not_supported, _DefaultError) ->
-    % Error thrown by middleware when checking if operation is supported -
-    % before auth checks could be performed
-    ?ERROR_NOT_SUPPORTED;
-get_scenario_specific_error(gs_not_supported, _DefaultError) ->
-    % Error thrown by middleware when checking if operation is supported -
-    % before auth checks could be performed
-    ?ERROR_NOT_SUPPORTED;
-get_scenario_specific_error(rest_with_file_path, _DefaultError) ->
-    % Error thrown by rest_handler (before middleware auth checks could be performed)
-    % as invalid clients who doesn't belong to space can't resolve file path to guid
-    ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
-get_scenario_specific_error(_, DefaultError) ->
-    DefaultError.
-
-
-run_invalid_clients_test_cases(_Config, _InvalidClientError, [], _ScenarioSpec) ->
-    true;
-run_invalid_clients_test_cases(Config, InvalidClientError, Clients, #scenario_spec{
-    name = ScenarioName,
-    type = ScenarioType,
-    client_spec = #client_spec{supported_clients_per_node = SupportedClientsPerNode},
+%% @private
+run_invalid_clients_test_cases(Config, InvalidClientsType, #suite_spec{
     target_nodes = TargetNodes,
+    client_spec = #client_spec{supported_clients_per_node = SupportedClientsPerNode},
 
     setup_fun = EnvSetupFun,
     teardown_fun = EnvTeardownFun,
     verify_fun = EnvVerifyFun,
 
-    prepare_args_fun = PrepareArgsFun,
+    scenario_templates = ScenarioTemplates,
 
     data_spec = DataSpec
-}) ->
-    % Invalid clients test cases are expected to fail without destroying
-    % environment so it is enough to set it once and reuse for all test cases
-    TestsEnv = EnvSetupFun(),
+} = SuiteSpec) ->
 
-    TestsResult = run_test_cases(
-        ScenarioType,
-        TargetNodes,
-        Clients,
-        required_data_sets(DataSpec),
-        fun(TargetNode, Client, DataSet) ->
-            ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
-                true -> InvalidClientError;
-                false -> ?ERROR_USER_NOT_SUPPORTED
-            end,
-            TestCaseCtx = #api_test_ctx{
-                scenario = ScenarioType,
-                node = TargetNode,
-                client = Client,
-                env = TestsEnv,
-                data = DataSet
-            },
-            Args = PrepareArgsFun(TestCaseCtx),
-            RequestResult = make_request(Config, TargetNode, Client, Args),
-            try
-                validate_error_result(ScenarioType, ExpError, RequestResult),
-                EnvVerifyFun(expected_failure, TestCaseCtx)
-            catch _:_ ->
-                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult),
-                false
-            end
-        end
+    ValidDataSets = required_data_sets(DataSpec),
+    InvalidClients = get_invalid_clients(InvalidClientsType, SuiteSpec),
+
+    TestCaseFun = fun(TargetNode, Client, DataSet, #scenario_template{
+        type = ScenarioType
+    } = ScenarioTemplate) ->
+        run_exp_error_testcase(
+            TargetNode, Client, DataSet,
+            get_scenario_specific_error_for_invalid_clients(ScenarioType, InvalidClientsType),
+            EnvVerifyFun, SupportedClientsPerNode, ScenarioTemplate, Config
+        )
+    end,
+
+    EnvSetupFun(),
+    TestsPassed = run_scenarios(
+        ScenarioTemplates, TargetNodes, InvalidClients, ValidDataSets,
+        TestCaseFun
     ),
+    EnvTeardownFun(),
 
-    EnvTeardownFun(TestsEnv),
-    TestsResult.
+    TestsPassed.
 
 
-run_malformed_data_test_cases(Config, #scenario_spec{
-    name = ScenarioName,
-    type = ScenarioType,
+%% @private
+get_invalid_clients(unauthorized, #suite_spec{client_spec = #client_spec{
+    unauthorized = UnauthorizedClients
+}}) ->
+    UnauthorizedClients;
+get_invalid_clients(forbidden_not_in_space, #suite_spec{client_spec = #client_spec{
+    forbidden_not_in_space = ForbiddenClients
+}}) ->
+    ForbiddenClients;
+get_invalid_clients(forbidden_in_space, #suite_spec{client_spec = #client_spec{
+    forbidden_in_space = ForbiddenClients
+}}) ->
+    ForbiddenClients.
+
+
+%% @private
+get_scenario_specific_error_for_invalid_clients(rest_not_supported, _InvalidClientsType) ->
+    % Error thrown by middleware when checking if operation is supported -
+    % before auth checks could be performed
+    ?ERROR_NOT_SUPPORTED;
+get_scenario_specific_error_for_invalid_clients(gs_not_supported, _InvalidClientsType) ->
+    % Error thrown by middleware when checking if operation is supported -
+    % before auth checks could be performed
+    ?ERROR_NOT_SUPPORTED;
+get_scenario_specific_error_for_invalid_clients(rest_with_file_path, InvalidClientsType) when
+    InvalidClientsType =:= unauthorized;
+    InvalidClientsType =:= forbidden_not_in_space
+->
+    % Error thrown by rest_handler (before middleware auth checks could be performed)
+    % as invalid clients who doesn't belong to space can't resolve file path to guid
+    ?ERROR_BAD_VALUE_IDENTIFIER(<<"urlFilePath">>);
+get_scenario_specific_error_for_invalid_clients(_ScenarioType, unauthorized) ->
+    ?ERROR_UNAUTHORIZED;
+get_scenario_specific_error_for_invalid_clients(_ScenarioType, forbidden_not_in_space) ->
+    ?ERROR_FORBIDDEN;
+get_scenario_specific_error_for_invalid_clients(_ScenarioType, forbidden_in_space) ->
+    ?ERROR_FORBIDDEN.
+
+
+%% @private
+run_malformed_data_test_cases(Config, #suite_spec{
     target_nodes = TargetNodes,
     client_spec = #client_spec{
         correct = CorrectClients,
@@ -214,66 +160,54 @@ run_malformed_data_test_cases(Config, #scenario_spec{
     teardown_fun = EnvTeardownFun,
     verify_fun = EnvVerifyFun,
 
-    prepare_args_fun = PrepareArgsFun,
+    scenario_templates = ScenarioTemplates,
+
     data_spec = DataSpec
 }) ->
-    % Malformed data test cases are expected to fail without destroying
-    % environment so it is enough to set it once and reuse for all test cases
-    Env = EnvSetupFun(),
+    TestCaseFun = fun
+        (_TargetNode, _Client, ?NO_DATA, _) ->
+            % operations not requiring any data cannot be tested against
+            % malformed data
+            true;
+        (TargetNode, Client, {DataSet, _BadKey, Error}, #scenario_template{
+            name = ScenarioName,
+            type = ScenarioType
+        } = ScenarioTemplate) ->
+            case is_data_error_applicable_to_scenario(Error, ScenarioType) of
+                false ->
+                    true;
+                true ->
+                    TestCaseCtx = build_test_ctx(
+                        ScenarioName, ScenarioType, TargetNode, Client, #{}, DataSet
+                    ),
+                    run_exp_error_testcase(
+                        TargetNode, Client, DataSet,
+                        get_expected_malformed_data_error(Error, ScenarioType, TestCaseCtx),
+                        EnvVerifyFun, SupportedClientsPerNode, ScenarioTemplate, Config
+                    )
+            end
+    end,
 
-    TestsResult = run_test_cases(
-        ScenarioType,
-        TargetNodes,
-        CorrectClients,
-        bad_data_sets(DataSpec),
-        fun
-            (_TargetNode, _Client, ?NO_DATA) ->
-                % operations not requiring any data cannot be tested against
-                % malformed data
-                true;
-            (TargetNode, Client, {DataSet, _BadKey, Error}) ->
-                case is_error_applicable_to_scenario(Error, ScenarioType) of
-                    false ->
-                        true;
-                    true ->
-                        TestCaseCtx = #api_test_ctx{
-                            scenario = ScenarioType,
-                            node = TargetNode,
-                            client = Client,
-                            env = Env,
-                            data = DataSet
-                        },
-                        ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
-                            true ->
-                                get_expected_malformed_data_error(Error, ScenarioType, TestCaseCtx);
-                            false ->
-                                ?ERROR_USER_NOT_SUPPORTED
-                        end,
-                        Args = PrepareArgsFun(TestCaseCtx),
-                        RequestResult = make_request(Config, TargetNode, Client, Args),
-                        try
-                            validate_error_result(ScenarioType, ExpError, RequestResult),
-                            EnvVerifyFun(expected_failure, TestCaseCtx)
-                        catch _:_ ->
-                            log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult),
-                            false
-                        end
-                end
-        end
+    EnvSetupFun(),
+    TestsPassed = run_scenarios(
+        ScenarioTemplates, TargetNodes, CorrectClients, bad_data_sets(DataSpec),
+        TestCaseFun
     ),
+    EnvTeardownFun(),
 
-    EnvTeardownFun(Env),
-    TestsResult.
-
-
-is_error_applicable_to_scenario({error, _}, _)                          -> true;
-is_error_applicable_to_scenario({Scenario, _}, Scenario)                -> true;
-is_error_applicable_to_scenario({rest_handler, _}, rest)                -> true;
-is_error_applicable_to_scenario({rest_handler, _}, rest_with_file_path) -> true;
-is_error_applicable_to_scenario({rest_handler, _}, rest_not_supported)  -> true;
-is_error_applicable_to_scenario(_, _)                                   -> false.
+    TestsPassed.
 
 
+%% @private
+is_data_error_applicable_to_scenario({error, _}, _)                          -> true;
+is_data_error_applicable_to_scenario({Scenario, _}, Scenario)                -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, rest)                -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, rest_with_file_path) -> true;
+is_data_error_applicable_to_scenario({rest_handler, _}, rest_not_supported)  -> true;
+is_data_error_applicable_to_scenario(_, _)                                   -> false.
+
+
+%% @private
 get_expected_malformed_data_error({rest_handler, RestHandlerSpecificError}, _, _) ->
     % Rest handler errors takes precedence over anything else as it is
     % thrown before request is even passed to middleware
@@ -296,9 +230,15 @@ get_expected_malformed_data_error({_ScenarioType, {error_fun, ErrorFun}}, _, Tes
     ErrorFun(TestCaseCtx).
 
 
-run_expected_success_test_cases(Config, #scenario_spec{
-    name = ScenarioName,
-    type = ScenarioType,
+%% @private
+run_missing_required_data_test_cases(_Config, #suite_spec{data_spec = undefined}) ->
+    true;
+run_missing_required_data_test_cases(_Config, #suite_spec{data_spec = #data_spec{
+    required = [],
+    at_least_one = []
+}}) ->
+    true;
+run_missing_required_data_test_cases(Config, #suite_spec{
     target_nodes = TargetNodes,
     client_spec = #client_spec{
         correct = CorrectClients,
@@ -309,25 +249,203 @@ run_expected_success_test_cases(Config, #scenario_spec{
     teardown_fun = EnvTeardownFun,
     verify_fun = EnvVerifyFun,
 
-    prepare_args_fun = PrepareArgsFun,
-    validate_result_fun = ValidateResultFun,
+    scenario_templates = ScenarioTemplates,
+
+    data_spec = DataSpec = #data_spec{
+        required = RequiredParams,
+        at_least_one = AtLeastOneParams
+    }
+}) ->
+    RequiredDataSets = required_data_sets(DataSpec),
+    RequiredDataSet = hd(RequiredDataSets),
+
+    MissingRequiredParamsDataSetsAndErrors = lists:map(fun(RequiredParam) ->
+        {maps:remove(RequiredParam, RequiredDataSet), ?ERROR_MISSING_REQUIRED_VALUE(RequiredParam)}
+    end, RequiredParams),
+    MissingAtLeastOneParamsDataSetAndError = case AtLeastOneParams of
+        [] -> [];
+        _ -> [{maps:without(AtLeastOneParams, RequiredDataSet), ?ERROR_MISSING_AT_LEAST_ONE_VALUE(AtLeastOneParams)}]
+    end,
+
+    IncompleteDataSetsAndErrors = lists:flatten([
+        MissingRequiredParamsDataSetsAndErrors,
+        MissingAtLeastOneParamsDataSetAndError
+    ]),
+
+    TestCaseFun = fun(TargetNode, Client, {DataSet, MissingParamError}, #scenario_template{
+        type = ScenarioType
+    } = ScenarioTemplate) ->
+        run_exp_error_testcase(
+            TargetNode, Client, DataSet,
+            get_scenario_specific_error_for_missing_date(ScenarioType, MissingParamError),
+            EnvVerifyFun, SupportedClientsPerNode, ScenarioTemplate, Config
+        )
+    end,
+
+    EnvSetupFun(),
+    TestsPassed = run_scenarios(
+        ScenarioTemplates, TargetNodes, CorrectClients, IncompleteDataSetsAndErrors,
+        TestCaseFun
+    ),
+    EnvTeardownFun(),
+
+    TestsPassed.
+
+
+%% @private
+get_scenario_specific_error_for_missing_date(rest_not_supported, _Error) ->
+    % Error thrown by middleware when checking if operation is supported -
+    % before sanitization could be performed
+    ?ERROR_NOT_SUPPORTED;
+get_scenario_specific_error_for_missing_date(gs_not_supported, _Error) ->
+    % Error thrown by middleware when checking if operation is supported -
+    % before sanitization could be performed
+    ?ERROR_NOT_SUPPORTED;
+get_scenario_specific_error_for_missing_date(_ScenarioType, Error) ->
+    Error.
+
+
+%% @private
+run_expected_success_test_cases(Config, #suite_spec{
+    target_nodes = TargetNodes,
+    client_spec = #client_spec{
+        correct = CorrectClients,
+        supported_clients_per_node = SupportedClientsPerNode
+    },
+
+    setup_fun = EnvSetupFun,
+    teardown_fun = EnvTeardownFun,
+    verify_fun = EnvVerifyFun,
+
+    scenario_templates = ScenarioTemplates,
+    randomly_select_scenarios = true,
+
     data_spec = DataSpec
 }) ->
-    run_test_cases(
-        ScenarioType,
-        TargetNodes,
-        CorrectClients,
-        correct_data_sets(DataSpec),
-        fun(TargetNode, Client, DataSet) ->
-            Env = EnvSetupFun(),
-            TestCaseCtx = #api_test_ctx{
-                scenario = ScenarioType,
-                node = TargetNode,
-                client = Client,
-                env = Env,
-                data = DataSet
-            },
-            Args = PrepareArgsFun(TestCaseCtx),
+    CorrectDataSets = correct_data_sets(DataSpec),
+
+    lists:foldl(fun(Client, OuterAcc) ->
+        case filter_scenarios_available_for_client(Client, ScenarioTemplates) of
+            [] ->
+                OuterAcc;
+            AvailableScenarios ->
+                CorrectDataSetsNum = length(CorrectDataSets),
+                AvailableScenariosNum = length(AvailableScenarios),
+                ScenarioPerDataSet = case AvailableScenariosNum > CorrectDataSetsNum of
+                    true ->
+                        ct:fail("Not enough data sets compared to available scenarios");
+                    false ->
+                        RandomizedScenarios = lists:flatmap(
+                            fun(_) -> lists_utils:shuffle(AvailableScenarios) end,
+                            lists:seq(1, CorrectDataSetsNum div AvailableScenariosNum + 1)
+                        ),
+                        lists:zip(
+                            lists:sublist(RandomizedScenarios, CorrectDataSetsNum),
+                            CorrectDataSets
+                        )
+                end,
+                OuterAcc and lists:foldl(fun({Scenario, DataSet}, InnerAcc) ->
+                    TargetNode = lists_utils:random_element(TargetNodes),
+
+                    EnvSetupFun(),
+                    TestCasePassed = run_exp_success_testcase(
+                        TargetNode, Client, DataSet, EnvVerifyFun,
+                        SupportedClientsPerNode, Scenario, Config
+                    ),
+                    EnvTeardownFun(),
+
+                    InnerAcc and TestCasePassed
+                end, true, ScenarioPerDataSet)
+        end
+    end, true, CorrectClients);
+run_expected_success_test_cases(Config, #suite_spec{
+    target_nodes = TargetNodes,
+    client_spec = #client_spec{
+        correct = CorrectClients,
+        supported_clients_per_node = SupportedClientsPerNode
+    },
+
+    setup_fun = EnvSetupFun,
+    teardown_fun = EnvTeardownFun,
+    verify_fun = EnvVerifyFun,
+
+    scenario_templates = ScenarioTemplates,
+    randomly_select_scenarios = false,
+
+    data_spec = DataSpec
+}) ->
+    TestCaseFun = fun(TargetNode, Client, DataSet, ScenarioTemplate) ->
+        EnvSetupFun(),
+        TestCasePassed = run_exp_success_testcase(
+            TargetNode, Client, DataSet, EnvVerifyFun,
+            SupportedClientsPerNode, ScenarioTemplate, Config
+        ),
+        EnvTeardownFun(),
+
+        TestCasePassed
+    end,
+
+    run_scenarios(
+        ScenarioTemplates, TargetNodes, CorrectClients, correct_data_sets(DataSpec),
+        TestCaseFun
+    ).
+
+
+%% @private
+run_scenarios(ScenarioTemplates, TargetNodes, Clients, DataSets, TestCaseFun) ->
+    lists:foldl(fun(#scenario_template{type = ScenarioType} = ScenarioTemplate, PrevScenariosPassed) ->
+        PrevScenariosPassed and lists:foldl(fun(Client, PrevClientsPassed) ->
+            PrevClientsPassed and lists:foldl(fun(DataSet, PrevDataSetsPassed) ->
+                TargetNode = lists_utils:random_element(TargetNodes),
+                PrevDataSetsPassed and TestCaseFun(
+                    TargetNode, Client, DataSet, ScenarioTemplate
+                )
+            end, true, DataSets)
+        end, true, filter_available_clients(ScenarioType, Clients))
+    end, true, ScenarioTemplates).
+
+
+%% @private
+run_exp_error_testcase(
+    TargetNode, Client, DataSet, ScenarioError, EnvVerifyFun, SupportedClientsPerNode, #scenario_template{
+        name = ScenarioName,
+        type = ScenarioType,
+        prepare_args_fun = PrepareArgsFun
+    }, Config
+) ->
+    ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
+        true -> ScenarioError;
+        false -> ?ERROR_USER_NOT_SUPPORTED
+    end,
+    TestCaseCtx = build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, #{}, DataSet),
+
+    case PrepareArgsFun(TestCaseCtx) of
+        skip ->
+            true;
+        Args ->
+            RequestResult = make_request(Config, TargetNode, Client, Args),
+            try
+                validate_error_result(ScenarioType, ExpError, RequestResult),
+                EnvVerifyFun(expected_failure, TestCaseCtx)
+            catch _:_ ->
+                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult),
+                false
+            end
+    end.
+
+
+%% @private
+run_exp_success_testcase(TargetNode, Client, DataSet, EnvVerifyFun, SupportedClientsPerNode, #scenario_template{
+    name = ScenarioName,
+    type = ScenarioType,
+    prepare_args_fun = PrepareArgsFun,
+    validate_result_fun = ValidateResultFun
+}, Config) ->
+    TestCaseCtx = build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, #{}, DataSet),
+    case PrepareArgsFun(TestCaseCtx) of
+        skip ->
+            true;
+        Args ->
             Result = make_request(Config, TargetNode, Client, Args),
             try
                 case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
@@ -341,33 +459,33 @@ run_expected_success_test_cases(Config, #scenario_spec{
             catch _:_ ->
                 log_failure(ScenarioName, TestCaseCtx, Args, succes, Result),
                 false
-            after
-                EnvTeardownFun(Env)
             end
-        end
-    ).
+    end.
 
 
-run_test_cases(ScenarioType, TargetNodes, Clients, DataSets, TestCaseFun) ->
-    lists:foldl(fun(Client, OuterAcc) ->
-        OuterAcc and lists:foldl(fun(DataSet, InnerAcc) ->
-            TargetNode = lists_utils:random_element(TargetNodes),
-            InnerAcc and TestCaseFun(TargetNode, Client, DataSet)
-        end, true, DataSets)
-    end, true, filter_available_clients(ScenarioType, Clients)).
-
-
+% TODO VFS-6201 rm when connecting via gs as nobody becomes possible
+%% @private
 filter_available_clients(Type, Clients) when
     Type == gs;
     Type == gs_with_shared_guid_and_aspect_private;
     Type == gs_not_supported
 ->
-    % TODO VFS-6201 rm when connecting via gs as nobody becomes possible
     Clients -- [?NOBODY];
 filter_available_clients(_ScenarioType, Clients) ->
     Clients.
 
 
+% TODO VFS-6201 rm when connecting via gs as nobody becomes possible
+%% @private
+filter_scenarios_available_for_client(?NOBODY, ScenarioTemplates) ->
+    lists:filter(fun(#scenario_template{type = Type}) ->
+        not lists:member(Type, ?GS_SCENARIO_TYPES)
+    end, ScenarioTemplates);
+filter_scenarios_available_for_client(_, ScenarioTemplates) ->
+    ScenarioTemplates.
+
+
+%% @private
 validate_error_result(Type, ExpError, {ok, RespCode, _RespHeaders, RespBody}) when
     Type == rest;
     Type == rest_with_file_path;
@@ -386,6 +504,7 @@ validate_error_result(Type, ExpError, Result) when
     ?assertEqual(ExpError, Result).
 
 
+%% @private
 log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Args, Expected, Got) ->
     ct:pal("~s test case failed:~n"
     "Node: ~p~n"
@@ -516,6 +635,57 @@ get_correct_value(Key, #data_spec{correct_values = CorrectValues}) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec scenario_spec_to_suite_spec(scenario_spec()) -> suite_spec().
+scenario_spec_to_suite_spec(#scenario_spec{
+    name = ScenarioName,
+    type = ScenarioType,
+    target_nodes = TargetNodes,
+    client_spec = ClientSpec,
+
+    setup_fun = EnvSetupFun,
+    teardown_fun = EnvTeardownFun,
+    verify_fun = EnvVerifyFun,
+
+    prepare_args_fun = PrepareArgsFun,
+    validate_result_fun = ValidateResultFun,
+
+    data_spec = DataSpec
+}) ->
+    #suite_spec{
+        target_nodes = TargetNodes,
+        client_spec = ClientSpec,
+
+        setup_fun = EnvSetupFun,
+        teardown_fun = EnvTeardownFun,
+        verify_fun = EnvVerifyFun,
+
+        scenario_templates = [#scenario_template{
+            name = ScenarioName,
+            type = ScenarioType,
+            prepare_args_fun = PrepareArgsFun,
+            validate_result_fun = ValidateResultFun
+        }],
+        randomly_select_scenarios = false,
+
+        data_spec = DataSpec
+    }.
+
+
+%% @private
+-spec build_test_ctx(binary(), scenario_type(), node(), aai:auth(), api_test_env(), map()) ->
+    api_test_ctx().
+build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, TestsEnv, DataSet) ->
+    #api_test_ctx{
+        scenario_name = ScenarioName,
+        scenario_type = ScenarioType,
+        node = TargetNode,
+        client = Client,
+        env = TestsEnv,
+        data = DataSet
+    }.
 
 
 %% @private

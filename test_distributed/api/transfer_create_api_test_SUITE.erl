@@ -569,7 +569,7 @@ create_prepare_replica_rest_args_fun(Type) ->
         _ -> delete
     end,
 
-    fun(#api_test_ctx{scenario = Scenario, env = Env, node = Node, data = Data0}) ->
+    fun(#api_test_ctx{scenario_type = Scenario, env = Env, node = Node, data = Data0}) ->
         ProviderId = transfers_test_utils:provider_id(Node),
 
         Data1 = api_test_utils:ensure_defined(Data0, #{}),

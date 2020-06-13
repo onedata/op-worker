@@ -75,7 +75,9 @@ set_file_rdf_metadata_test(Config) ->
     DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
         FileGuid, ShareId, #data_spec{
             required = [<<"metadata">>],
-            correct_values = #{<<"metadata">> => [?RDF_METADATA_1, ?RDF_METADATA_2]}
+            correct_values = #{
+                <<"metadata">> => [?RDF_METADATA_1, ?RDF_METADATA_2, ?RDF_METADATA_3, ?RDF_METADATA_4]
+            }
         }
     ),
     VerifyEnvFun = fun
@@ -87,7 +89,7 @@ set_file_rdf_metadata_test(Config) ->
                 ?assertMatch({ok, Metadata}, get_rdf(Node, FileGuid, Config), ?ATTEMPTS)
             end, Providers),
 
-            case Metadata == ?RDF_METADATA_2 of
+            case Metadata == ?RDF_METADATA_4 of
                 true ->
                     % Remove ?RDF_METADATA_2 to test setting ?RDF_METADATA_1 in other scenario on clean state
                     ?assertMatch(ok, remove_rdf(TestNode, FileGuid, Config)),
@@ -111,6 +113,7 @@ set_file_rdf_metadata_test(Config) ->
         ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
         DataSpec,
         _QsParams = [],
+        _RandomlySelectScenario = true,
         Config
     ).
 
@@ -140,6 +143,7 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
         DataSpec,
         _QsParams = [],
+        _RandomlySelectScenario = false,
         Config
     ).
 
@@ -300,6 +304,7 @@ set_file_json_metadata_test(Config) ->
         ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
         DataSpec,
         QsParams,
+        _RandomlySelectScenario = true,
         Config
     ).
 
@@ -354,6 +359,7 @@ set_file_primitive_json_metadata_test(Config) ->
         ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
         DataSpec,
         _QsParams = [],
+        _RandomlySelectScenario = true,
         Config
     ).
 
@@ -383,6 +389,7 @@ set_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
         DataSpec,
         _QsParams = [],
+        _RandomlySelectScenario = false,
         Config
     ).
 
@@ -467,6 +474,7 @@ set_file_xattrs_test(Config) ->
         ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
         DataSpec,
         _QsParams = [],
+        _RandomlySelectScenario = true,
         Config
     ).
 
@@ -496,6 +504,7 @@ set_file_xattrs_on_provider_not_supporting_space_test(Config) ->
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
         DataSpec,
         _QsParams = [],
+        _RandomlySelectScenario = false,
         Config
     ).
 
@@ -591,13 +600,14 @@ create_validate_set_metadata_gs_call_fun(GetExpResultFun) ->
     client_spec(),
     data_spec(),
     QsParameters :: [binary()],
+    RandomlySelectScenario :: boolean(),
     Config :: proplists:proplist()
 ) ->
     ok.
 set_metadata_test_base(
     MetadataType, FileType, FilePath, FileGuid, ShareId,
     ValidateRestCallResultFun, ValidateGsCallResultFun, VerifyEnvFun,
-    Providers, ClientSpec, DataSpec, QsParameters, Config
+    Providers, ClientSpec, DataSpec, QsParameters, RandomlySelectScenario, Config
 ) ->
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -633,6 +643,7 @@ set_metadata_test_base(
                     validate_result_fun = ValidateGsCallResultFun
                 }
             ],
+            randomly_select_scenarios = RandomlySelectScenario,
             data_spec = DataSpec
         },
 
@@ -668,28 +679,38 @@ create_prepare_deprecated_id_set_metadata_rest_args_fun(MetadataType, FileObject
 %% @private
 create_prepare_set_metadata_rest_args_fun(Endpoint, MetadataType, ValidId, QsParams) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_id(ValidId, Data0),
+        % 'metadata' is required key but it may not be present in Data in case of
+        % missing required data test cases. Because it is send via http body and
+        % as such server will interpret this as empty string <<>> those test cases
+        % must be skipped.
+        case maps:is_key(<<"metadata">>, Data0) of
+            false ->
+                skip;
+            true ->
+                {Id, Data1} = api_test_utils:maybe_substitute_id(ValidId, Data0),
 
-        RestPath = case Endpoint of
-            new_id -> ?NEW_ID_METADATA_REST_PATH(Id, MetadataType);
-            deprecated_path -> ?DEPRECATED_PATH_METADATA_REST_PATH(Id, MetadataType);
-            deprecated_id -> ?DEPRECATED_ID_METADATA_REST_PATH(Id, MetadataType)
-        end,
-        #rest_args{
-            method = put,
-            headers = case MetadataType of
-                <<"rdf">> -> #{<<"content-type">> => <<"application/rdf+xml">>};
-                _ -> #{<<"content-type">> => <<"application/json">>}
-            end,
-            path = http_utils:append_url_parameters(
-                RestPath,
-                maps:with(QsParams, Data1)
-            ),
-            body = case maps:get(<<"metadata">>, Data1) of
-                Metadata when is_binary(Metadata) -> Metadata;
-                Metadata when is_map(Metadata) -> json_utils:encode(Metadata)
-            end
-        }
+                RestPath = case Endpoint of
+                    new_id -> ?NEW_ID_METADATA_REST_PATH(Id, MetadataType);
+                    deprecated_path -> ?DEPRECATED_PATH_METADATA_REST_PATH(Id, MetadataType);
+                    deprecated_id -> ?DEPRECATED_ID_METADATA_REST_PATH(Id, MetadataType)
+                end,
+
+                #rest_args{
+                    method = put,
+                    headers = case MetadataType of
+                        <<"rdf">> -> #{<<"content-type">> => <<"application/rdf+xml">>};
+                        _ -> #{<<"content-type">> => <<"application/json">>}
+                    end,
+                    path = http_utils:append_url_parameters(
+                        RestPath,
+                        maps:with(QsParams, Data1)
+                    ),
+                    body = case maps:get(<<"metadata">>, Data1) of
+                        Metadata when is_binary(Metadata) -> Metadata;
+                        Metadata when is_map(Metadata) -> json_utils:encode(Metadata)
+                    end
+                }
+        end
     end.
 
 
@@ -698,10 +719,16 @@ create_prepare_set_metadata_gs_args_fun(MetadataType, FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
         {Aspect, Data1} = case MetadataType of
             <<"json">> ->
-                % Primitive metadata were specified as binaries to be send via REST,
-                % but gs needs them decoded first to be able to send them properly
-                Meta = maps:get(<<"metadata">>, Data0),
-                {json_metadata, Data0#{<<"metadata">> => maybe_decode_json(Meta)}};
+                % 'metadata' is required key but it may not be present in
+                % Data in case of missing required data test cases
+                case maps:take(<<"metadata">>, Data0) of
+                    {Meta, _} ->
+                        % Primitive metadata were specified as binaries to be send via REST,
+                        % but gs needs them decoded first to be able to send them properly
+                        {json_metadata, Data0#{<<"metadata">> => maybe_decode_json(Meta)}};
+                    error ->
+                        {json_metadata, Data0}
+                end;
             <<"rdf">> ->
                 {rdf_metadata, Data0};
             <<"xattrs">> ->
