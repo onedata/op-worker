@@ -74,6 +74,9 @@ all() ->
     ]).
 
 
+-define(ATTEMPTS, 30).
+
+
 %%%===================================================================
 %%% Get Rdf metadata test functions
 %%%===================================================================
@@ -122,6 +125,10 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
 
     api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
 
+    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+        FileGuid, ShareId, undefined
+    ),
+
     get_metadata_test_base(
         <<"rdf">>,
         FileType, FilePath, FileGuid, ShareId,
@@ -129,7 +136,7 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
         create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
         _Providers = ?config(op_worker_nodes, Config),
         ClientSpec,
-        _DataSpec = undefined,
+        DataSpec,
         _QsParams = [],
         Config
     ).
@@ -192,28 +199,31 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
         share_mode -> ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config);
         normal_mode -> ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config)
     end,
-    DataSpec = #data_spec{
-        optional = QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
-        correct_values = #{
-            <<"inherited">> => [true, false],
-            <<"filter_type">> => [<<"keypath">>],
-            <<"filter">> => [
-                <<"attr3.attr32">>, <<"attr3.[10]">>,
-                <<"attr2.attr22.[2]">>, <<"attr2.attr22.[10]">>
-            ]
-        },
-        bad_values = [
-            {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-            {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-            {<<"filter_type">>, <<"dummy">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
+    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+        FileLayer5Guid, ShareId, #data_spec{
+            optional = QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
+            correct_values = #{
+                <<"inherited">> => [true, false],
+                <<"filter_type">> => [<<"keypath">>],
+                <<"filter">> => [
+                    <<"attr3.attr32">>, <<"attr3.[10]">>,
+                    <<"attr2.attr22.[2]">>, <<"attr2.attr22.[10]">>
+                ]
+            },
+            bad_values = [
+                {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                {<<"filter_type">>, <<"dummy">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
 
-            % Below differences between error returned by rest and gs are results of sending
-            % parameters via qs in REST, so they lost their original type and are cast to binary
-            {<<"filter_type">>, 100, {rest, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
-            {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
-            {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
-        ]
-    },
+                % Below differences between error returned by rest and gs are results of sending
+                % parameters via qs in REST, so they lost their original type and are cast to binary
+                {<<"filter_type">>, 100, {rest_with_file_path, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
+                {<<"filter_type">>, 100, {rest, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
+                {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
+                {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
+            ]
+        }
+    ),
 
     get_metadata_test_base(
         <<"json">>,
@@ -426,30 +436,32 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
         share_mode -> ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config);
         normal_mode -> ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config)
     end,
-    DataSpec = #data_spec{
-        optional = QsParams = [<<"attribute">>, <<"inherited">>, <<"show_internal">>],
-        correct_values = #{
-            <<"attribute">> => [
-                % Xattr name with prefixes 'cdmi_' and 'onedata_' should be forbidden
-                % with exception of those listed in ?ALL_XATTRS_KEYS. Nonetheless that is
-                % checked not in middleware but in lfm and depends on whether request will
-                % arrive there. That is why, depending where request was rejected, different
-                % error than ?EPERM may be returned
-                <<"cdmi_attr">>, <<"onedata_attr">>,
-                NotSetXattrKey
-                | ?ALL_XATTRS_KEYS
-            ],
-            <<"inherited">> => [true, false],
-            <<"show_internal">> => [true, false]
-        },
-        bad_values = [
-            {<<"attribute">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"attribute">>)},
-            {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-            {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-            {<<"show_internal">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)},
-            {<<"show_internal">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)}
-        ]
-    },
+    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+        FileLayer3Guid, ShareId, #data_spec{
+            optional = QsParams = [<<"attribute">>, <<"inherited">>, <<"show_internal">>],
+            correct_values = #{
+                <<"attribute">> => [
+                    NotSetXattrKey,
+                    % Xattr name with prefixes 'cdmi_' and 'onedata_' should be forbidden
+                    % with exception of those listed in ?ALL_XATTRS_KEYS. Nonetheless that is
+                    % checked not in middleware but in lfm and depends on whether request will
+                    % arrive there. That is why, depending where request was rejected, different
+                    % error than ?EPERM may be returned
+                    <<"cdmi_attr">>, <<"onedata_attr">>
+                    | ?ALL_XATTRS_KEYS
+                ],
+                <<"inherited">> => [true, false],
+                <<"show_internal">> => [true, false]
+            },
+            bad_values = [
+                {<<"attribute">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"attribute">>)},
+                {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                {<<"show_internal">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)},
+                {<<"show_internal">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"show_internal">>)}
+            ]
+        }
+    ),
 
     get_metadata_test_base(
         <<"xattrs">>,
@@ -694,11 +706,11 @@ create_validate_get_metadata_rest_call_fun(GetExpResultFun) ->
 %% @private
 create_validate_get_metadata_rest_call_fun(GetExpResultFun, ProviderNotSupportingSpace) ->
     fun
-        (#api_test_ctx{node = TestNode}, {ok, RespCode, RespBody}) when TestNode == ProviderNotSupportingSpace ->
+        (#api_test_ctx{node = TestNode}, {ok, RespCode, _RespHeaders, RespBody}) when TestNode == ProviderNotSupportingSpace ->
             ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
             ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderDomain)),
             ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody});
-        (TestCtx, {ok, RespCode, RespBody}) ->
+        (TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
             case GetExpResultFun(TestCtx) of
                 {ok, ExpMetadata} ->
                     ?assertEqual({?HTTP_200_OK, ExpMetadata}, {RespCode, RespBody});
@@ -820,7 +832,7 @@ get_metadata_test_base(
                 },
                 #scenario_template{
                     name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using gs private api">>,
-                    type = gs,
+                    type = gs_with_shared_guid_and_aspect_private,
                     prepare_args_fun = create_prepare_get_metadata_gs_args_fun(MetadataType, FileShareGuid, private),
                     validate_result_fun = fun(_, Result) ->
                         ?assertEqual(?ERROR_UNAUTHORIZED, Result)
@@ -834,44 +846,46 @@ get_metadata_test_base(
 
 %% @private
 create_prepare_new_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    create_prepare_get_metadata_rest_args_fun(
-        ?NEW_ID_METADATA_REST_PATH(FileObjectId, MetadataType),
-        QsParams
-    ).
+    create_prepare_get_metadata_rest_args_fun(new_id, MetadataType, FileObjectId, QsParams).
 
 
 %% @private
 create_prepare_deprecated_path_get_metadata_rest_args_fun(MetadataType, FilePath, QsParams) ->
-    create_prepare_get_metadata_rest_args_fun(
-        ?DEPRECATED_PATH_METADATA_REST_PATH(FilePath, MetadataType),
-        QsParams
-    ).
+    create_prepare_get_metadata_rest_args_fun(deprecated_path, MetadataType, FilePath, QsParams).
 
 
 %% @private
 create_prepare_deprecated_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    create_prepare_get_metadata_rest_args_fun(
-        ?DEPRECATED_ID_METADATA_REST_PATH(FileObjectId, MetadataType),
-        QsParams
-    ).
+    create_prepare_get_metadata_rest_args_fun(deprecated_id, MetadataType, FileObjectId, QsParams).
 
 
 %% @private
-create_prepare_get_metadata_rest_args_fun(RestPath, QsParams) ->
-    fun(#api_test_ctx{data = Data}) ->
+create_prepare_get_metadata_rest_args_fun(Endpoint, MetadataType, ValidId, QsParams) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        Data1 = api_test_utils:ensure_defined(Data0, #{}),
+        {Id, Data2} = api_test_utils:maybe_substitute_id(ValidId, Data1),
+
+        Id = case maps:find(bad_id, Data1) of
+            {ok, BadId} -> BadId;
+            error -> ValidId
+        end,
+        Path = case Endpoint of
+            new_id -> ?NEW_ID_METADATA_REST_PATH(Id, MetadataType);
+            deprecated_path -> ?DEPRECATED_PATH_METADATA_REST_PATH(Id, MetadataType);
+            deprecated_id -> ?DEPRECATED_ID_METADATA_REST_PATH(Id, MetadataType)
+        end,
         #rest_args{
             method = get,
-            path = http_utils:append_url_parameters(
-                RestPath,
-                maps:with(QsParams, utils:ensure_defined(Data, undefined, #{}))
-            )
+            path = http_utils:append_url_parameters(Path, maps:with(QsParams, Data2))
         }
     end.
 
 
 %% @private
 create_prepare_get_metadata_gs_args_fun(MetadataType, FileGuid, Scope) ->
-    fun(#api_test_ctx{data = Data}) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {GriId, Data1} = api_test_utils:maybe_substitute_id(FileGuid, Data0),
+
         Aspect = case MetadataType of
             <<"json">> -> json_metadata;
             <<"rdf">> -> rdf_metadata;
@@ -879,8 +893,8 @@ create_prepare_get_metadata_gs_args_fun(MetadataType, FileGuid, Scope) ->
         end,
         #gs_args{
             operation = get,
-            gri = #gri{type = op_file, id = FileGuid, aspect = Aspect, scope = Scope},
-            data = Data
+            gri = #gri{type = op_file, id = GriId, aspect = Aspect, scope = Scope},
+            data = Data1
         }
     end.
 

@@ -114,9 +114,6 @@
 
     harvesters = [] :: [od_harvester:id()],
 
-    support_parameters_per_provider = #{} :: support_parameters:per_provider(),
-    support_stage_per_provider = #{} :: support_stage:per_provider(),
-
     cache_state = #{} :: cache_state()
 }).
 
@@ -727,8 +724,8 @@
     callback :: undefined | transfer:callback(),
     enqueued = true :: boolean(),
     cancel = false :: boolean(),
-    replication_status :: undefined | transfer:status(),
-    eviction_status :: undefined | transfer:status(),
+    replication_status :: undefined | transfer:subtask_status(),
+    eviction_status :: undefined | transfer:subtask_status(),
     scheduling_provider :: od_provider:id(),
     replicating_provider :: undefined | od_provider:id(),
     evicting_provider :: undefined | od_provider:id(),

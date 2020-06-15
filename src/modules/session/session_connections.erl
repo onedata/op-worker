@@ -127,6 +127,7 @@ ensure_connected(SessId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
+%% TODO VFS-6364 refactor proxy
 %% Returns effective session, that is session, which is not proxied.
 %% @end
 %%--------------------------------------------------------------------

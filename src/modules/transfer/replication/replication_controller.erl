@@ -164,16 +164,16 @@ handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
             },
             replication_worker:enqueue_data_transfer(FileCtx, TransferParams),
             handle_enqueued(TransferId, Callback, EvictSourceReplica);
-        {error, enqueued} ->
+        {error, ?ENQUEUED_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
             handle_enqueued(TransferId, Callback, EvictSourceReplica);
-        {error, active} ->
+        {error, ?ACTIVE_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
             handle_active(TransferId, Callback, EvictSourceReplica);
-        {error, aborting} ->
+        {error, ?ABORTING_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
             handle_aborting(TransferId);
-        {error, S} when S == completed orelse S == cancelled orelse S == failed ->
+        {error, S} when S == ?COMPLETED_STATUS orelse S == ?CANCELLED_STATUS orelse S == ?FAILED_STATUS ->
             ok
     end,
     {noreply, State, hibernate};
@@ -240,7 +240,7 @@ handle_enqueued(TransferId, Callback, EvictSourceReplica) ->
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
-            ?log_bad_replication_msg(Msg, enqueued, TransferId),
+            ?log_bad_replication_msg(Msg, ?ENQUEUED_STATUS, TransferId),
             handle_enqueued(TransferId, Callback, EvictSourceReplica)
     end,
     ok.
@@ -256,13 +256,13 @@ handle_active(TransferId, Callback, EvictSourceReplica) ->
             handle_active(TransferId, Callback, EvictSourceReplica);
         replication_completed ->
             {ok, _} = replication_status:handle_completed(TransferId),
-            notify_callback(Callback, EvictSourceReplica);
+            notify_callback(Callback, EvictSourceReplica, TransferId);
         {replication_aborting, Reason} ->
             {ok, _} = replication_status:handle_aborting(TransferId),
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
             handle_aborting(TransferId);
         Msg ->
-            ?log_bad_replication_msg(Msg, active, TransferId),
+            ?log_bad_replication_msg(Msg, ?ACTIVE_STATUS, TransferId),
             handle_active(TransferId, Callback, EvictSourceReplica)
     end,
     ok.
@@ -281,7 +281,7 @@ handle_aborting(TransferId) ->
         replication_failed ->
             {ok, _} = replication_status:handle_failed(TransferId, false);
         Msg ->
-            ?log_bad_replication_msg(Msg, aborting, TransferId),
+            ?log_bad_replication_msg(Msg, ?ABORTING_STATUS, TransferId),
             handle_aborting(TransferId)
     end,
     ok.
@@ -293,13 +293,15 @@ handle_aborting(TransferId) ->
 %% Notifies callback about successful replication
 %% @end
 %%--------------------------------------------------------------------
--spec notify_callback(transfer:callback(),
-    EvictSourceReplica :: boolean()) -> ok.
-notify_callback(_Callback, true) -> ok;
-notify_callback(undefined, false) -> ok;
-notify_callback(<<>>, false) -> ok;
-notify_callback(Callback, false) ->
-    {ok, _, _, _} = http_client:get(Callback).
+-spec notify_callback(transfer:callback(), EvictSourceReplica :: boolean(),
+    transfer:id()) -> ok.
+notify_callback(_Callback, true, _TransferId) -> ok;
+notify_callback(undefined, false, _TransferId) -> ok;
+notify_callback(<<>>, false, _TransferId) -> ok;
+notify_callback(Callback, false, TransferId) ->
+    {ok, _, _, _} = http_client:post(Callback, #{}, json_utils:encode(#{
+        <<"transferId">> => TransferId
+    })).
 
 
 %%--------------------------------------------------------------------

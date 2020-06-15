@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of resolve_file_path REST methods.
+%%% This module contains definitions of file_path_resolution REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(resolve_file_path_rest_routes).
+-module(file_path_resolution_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of resolve_file_path REST paths.
+%% Definitions of file_path_resolution REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].

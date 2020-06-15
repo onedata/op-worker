@@ -41,6 +41,19 @@ routes() -> [
             scope = private
         }
     }},
+    %% Create transfer
+    {<<"/transfers">>, rest_handler, #rest_req{
+        method = 'POST',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_transfer, 
+            id = undefined, 
+            aspect = instance, 
+            scope = private
+        }
+    }},
     %% Cancel specific transfer
     {<<"/transfers/:tid">>, rest_handler, #rest_req{
         method = 'DELETE',
