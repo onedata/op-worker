@@ -785,46 +785,11 @@ assert_transfer(_Config, _Node, #expected{
     attempts = _Attempts
 }, _TransferId, _FileGuid, _FilePath, _TargetNode) ->
     ok;
-assert_transfer(Config, Node, #expected{
+assert_transfer(_Config, Node, #expected{
     expected_transfer = TransferAssertion,
     attempts = Attempts
-}, TransferId, FileGuid, FilePath, TargetNode) ->
-    SpaceId = ?config(?SPACE_ID_KEY, Config),
-    assert_transfer_state(Node, TransferId, SpaceId, FileGuid, FilePath,
-        TargetNode, TransferAssertion, Attempts).
-
-assert_transfer_state(Node, TransferId, SpaceId, FileGuid, FilePath, TargetNode,
-    ExpectedTransfer, Attempts
-) ->
-    try
-        Transfer = transfers_test_utils:get_transfer(Node, TransferId),
-        assert(ExpectedTransfer, Transfer)
-    catch
-        throw:transfer_not_found ->
-            case Attempts == 0 of
-                false ->
-                    timer:sleep(timer:seconds(1)),
-                    assert_transfer_state(Node, TransferId, SpaceId, FileGuid,
-                        FilePath, TargetNode, ExpectedTransfer, Attempts - 1);
-                true ->
-                    ct:pal("Transfer: ~p not found.", [TransferId]),
-                    ct:fail("Transfer: ~p not found.", [TransferId])
-            end;
-        throw:{assertion_error, Field, Expected, Value} ->
-            case Attempts == 0 of
-                false ->
-                    timer:sleep(timer:seconds(1)),
-                    assert_transfer_state(Node, TransferId, SpaceId, FileGuid,
-                        FilePath, TargetNode, ExpectedTransfer, Attempts - 1);
-                true ->
-                    {Format, Args} = transfer_fields_description(Node, TransferId),
-                    ct:pal(
-                        "Assertion of field \"~p\" in transfer ~p failed.~n"
-                        "    Expected: ~p~n"
-                        "    Value: ~p~n" ++ Format, [Field, TransferId, Expected, Value | Args]),
-                    ct:fail("assertion failed")
-            end
-    end.
+}, TransferId, _FileGuid, _FilePath, _TargetNode) ->
+    transfers_test_utils:assert_transfer_state(Node, TransferId, TransferAssertion, Attempts).
 
 create_files(Config, #setup{
     root_directory = {RootDirGuid, RootDirPath},
@@ -1443,55 +1408,6 @@ file_key(Guid, _Path, guid) ->
     {guid, Guid};
 file_key(_Guid, Path, path) ->
     {path, Path}.
-
-assert(ExpectedTransfer, Transfer) ->
-    maps:fold(fun(FieldName, ExpectedValueOrPredicate, _AccIn) ->
-        assert_field(ExpectedValueOrPredicate, Transfer, FieldName)
-    end, undefined, ExpectedTransfer).
-
-assert_field(ExpectedValueOrPredicate, Transfer, FieldName) ->
-    Value = get_transfer_value(Transfer, FieldName),
-    try
-        case is_function(ExpectedValueOrPredicate, 1) of
-            true ->
-                case ExpectedValueOrPredicate(Value) of
-                    true ->
-                        ok;
-                    false ->
-                        throw({assertion_error, FieldName, <<"<pred>">>, Value})
-                end;
-            false ->
-                case Value of
-                    ExpectedValueOrPredicate ->
-                        ok;
-                    _ ->
-                        throw({assertion_error, FieldName, ExpectedValueOrPredicate, Value})
-                end
-        end
-    catch
-        error:{assertMatch_failed, _} ->
-            throw({assertion_error, FieldName, ExpectedValueOrPredicate, Value})
-    end.
-
-get_transfer_value(Transfer, FieldName) ->
-    FieldsList = record_info(fields, transfer),
-    Index = index(FieldName, FieldsList),
-    element(Index + 1, Transfer).
-
-index(Key, List) ->
-    case lists:keyfind(Key, 2, lists:zip(lists:seq(1, length(List)), List)) of
-        false ->
-            throw({wrong_assertion_key, Key, List});
-        {Index, _} ->
-            Index
-    end.
-
-transfer_fields_description(Node, TransferId) ->
-    FieldsList = record_info(fields, transfer),
-    Transfer = transfers_test_utils:get_transfer(Node, TransferId),
-    lists:foldl(fun(FieldName, {AccFormat, AccArgs}) ->
-        {AccFormat ++ "    ~p = ~p~n", AccArgs ++ [FieldName, get_transfer_value(Transfer, FieldName)]}
-    end, {"~nTransfer ~p fields values:~n", [TransferId]}, FieldsList).
 
 await_replication_starts(Node, TransferId) ->
     ?assertEqual(true, begin

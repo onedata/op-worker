@@ -40,7 +40,7 @@
 
 
 %% API
--export([get_allow_all_constraints/0, get/1, is_in_readonly_mode/1, inspect/4]).
+-export([get_allow_all_constraints/0, get/1, assert_not_readonly_mode/1, inspect/4]).
 
 -ifdef(TEST).
 -export([
@@ -131,10 +131,13 @@ get(Caveats) ->
     end.
 
 
--spec is_in_readonly_mode(user_ctx:ctx()) -> boolean().
-is_in_readonly_mode(UserCtx) ->
+-spec assert_not_readonly_mode(user_ctx:ctx()) -> ok | no_return().
+assert_not_readonly_mode(UserCtx) ->
     DataConstraints = user_ctx:get_data_constraints(UserCtx),
-    DataConstraints#constraints.readonly.
+    case DataConstraints#constraints.readonly of
+        true -> throw(?EACCES);
+        false -> ok
+    end.
 
 
 %%--------------------------------------------------------------------

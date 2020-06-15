@@ -6,6 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
+%%% TODO VFS-6365 remove deprecated replicas endpoints
+%%%
 %%% This module handles middleware operations (create, get, update, delete)
 %%% corresponding to file aspects such as:
 %%% - distribution,
@@ -74,6 +76,7 @@ operation_supported(_, _, _) -> false.
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
+    required => #{id => {binary, guid}},
     optional => #{
         <<"provider_id">> => {binary, non_empty},
         <<"url">> => {binary, non_empty}
@@ -103,10 +106,12 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = replicate_by_view}}) -
     }
 };
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = distribution}}) ->
-    undefined;
+data_spec(#op_req{operation = get, gri = #gri{aspect = distribution}}) -> #{
+    required => #{id => {binary, guid}}
+};
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) -> #{
+    required => #{id => {binary, guid}},
     optional => #{
         <<"provider_id">> => {binary, non_empty},
         <<"migration_provider_id">> => {binary, non_empty}
