@@ -546,9 +546,14 @@ terminate(Reason, #state{
                 [ARId, Reason]
             )
     end,
+
     autocleaning_run:mark_finished(ARId, ReleasedFiles, ReleasedBytes),
     ok = internal_services_manager:report_service_stop(?MODULE, SpaceId, SpaceId),
-    ReportTo ! {controller_terminated, SpaceId},
+
+    case ReportTo of
+        undefined -> ok;
+        _ -> ReportTo ! {controller_terminated, SpaceId}
+    end,
     ok.
 
 %%--------------------------------------------------------------------
@@ -570,7 +575,7 @@ code_change(_OldVsn, State, _Extra) ->
     {noreply, state()} | {stop, normal | {error, term()}, state()}.
 handle_cast_internal(#cancel_cleaning{report_to = ReportTo}, State = #state{run_id = ARId}) ->
     autocleaning_run:mark_cancelling(ARId),
-    {noreply, process_updated_state(State#state{run_cancelled = true, report_terminate_to= ReportTo})};
+    {noreply, process_updated_state(State#state{run_cancelled = true, report_terminate_to = ReportTo})};
 handle_cast_internal(#files_to_process{
     files_number = FilesNumber,
     batch_no = BatchNo,

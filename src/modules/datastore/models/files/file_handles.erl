@@ -72,13 +72,7 @@ exists(Key) ->
 %%--------------------------------------------------------------------
 -spec list() -> {ok, [doc()]} | {error, term()}.
 list() ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    lists:foldl(fun
-        (Node, {ok, Acc}) ->
-            datastore_model:fold(?CTX#{fold_node => Node}, fun(Doc, InternalAcc) -> {ok, [Doc | InternalAcc]} end, Acc);
-        (_Node, Error) ->
-            Error
-    end, {ok, []}, Nodes).
+    datastore_model:local_fold_all_nodes(?CTX, fun(Doc, InternalAcc) -> {ok, [Doc | InternalAcc]} end, []).
 
 -spec is_removed(record() | doc()) -> boolean().
 is_removed(#document{value = FileHandles}) ->
