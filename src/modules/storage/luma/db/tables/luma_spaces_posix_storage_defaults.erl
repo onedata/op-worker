@@ -6,25 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO UPDATE
 %%% This module implements LUMA DB table that associates space with
-%%% default credentials used in LUMA DB mappings for users.
-%%% The default credentials are represented by #luma_space_default record.
+%%% default credentials used in LUMA DB mappings for users on POSIX
+%%% compatible storages.
+%%% The default credentials are represented by #luma_posix_credentials record.
 %%%
 %%% A separate table is created for each storage
 %%% so the mappings are actually associated with
 %%% pair (storage:id(), od_space:id()).
-%%%
-%%% For more info on luma_space_defaults:defaults() structure please see
-%%% luma_space_defaults.erl module.
-%%%
-%%% Mappings may be set in 3 ways:
-%%%  * filled by default algorithm in case NO_LUMA mode is set for given
-%%%    storage (see luma_space_defaults:ensure_all_fields_defined/3 function)
-%%%  * preconfigured using REST API in case EMBEDDED_LUMA
-%%%    is set for given storage
-%%%  * cached after querying external, 3rd party LUMA server in case
-%%%    EXTERNAL_LUMA mode is set for given storage
 %%%
 %%% For more info please read the docs of luma.erl module.
 %%% @end
@@ -58,8 +47,8 @@ get_or_acquire(Storage, SpaceId) ->
 store(Storage, SpaceId, PosixDefaultsMap) ->
     case storage:is_imported_storage(Storage) of
         true ->
-            % TODO handle this error in onepanel, add to ctol errors
-          {error, imported_storage};
+            % ignore user input in case of imported_storage
+            ok;
         false ->
             case luma_sanitizer:sanitize_posix_credentials(PosixDefaultsMap) of
                 {ok, PosixDefaultsMap} ->

@@ -16,18 +16,6 @@
 %%% For more info in luma_storage_user:user() structure please see
 %%% luma_storage_user.erl module.
 %%%
-%%% Mappings may be set in 3 ways:
-%%%  * filled by default algorithm in case NO_LUMA mode is set for given
-%%%    storage - if storage is POSIX compatible, UID is generated and
-%%%    used in both fields: storage_credentials and display_uid.
-%%%    On POSIX incompatible storages, helper's AdminCtx is used as
-%%%    storage_credentials and display_uid is generated.
-%%%    (see acquire_default_mapping function).
-%%%  * preconfigured using REST API in case EMBEDDED_LUMA
-%%%    is set for given storage
-%%%  * cached after querying external, 3rd party LUMA server in case
-%%%    EXTERNAL_LUMA mode is set for given storage
-%%%
 %%% For more info please read the docs of luma.erl.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -175,7 +163,7 @@ acquire_mapping_from_external_feed(Storage, UserId) ->
     case luma_external_feed:map_onedata_user_to_credentials(UserId, Storage) of
         {ok, StorageUserMap} ->
             {ok, luma_storage_user:new(UserId, StorageUserMap, Storage), ?EXTERNAL_FEED};
-        {error, external_luma_error} ->
+        {error, luma_external_feed_error} ->
             {error, not_found};
         OtherError ->
             OtherError

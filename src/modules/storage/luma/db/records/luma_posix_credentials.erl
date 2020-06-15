@@ -6,19 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
-%%% This is a helper module for luma_spaces_defaults module.
-%%% It encapsulates #luma_space_defaults{} record, which stores
-%%% POSIX-compatible credentials for given space.
+%%% This is a helper module for luma_spaces_display_defaults and
+%%% luma_spaces_posix_storage_defaults modules.
+%%% It encapsulates #luma_posix_credentials{} record, which stores
+%%% POSIX-compatible credentials.
 %%%
-%%% This record has 4 fields:
-%%%  * storage_uid - uid field in luma:storage_credentials() on POSIX-compatible
-%%%                  storages for virtual SpaceOwner
-%%%  * storage_gid - gid field in luma:storage_credentials() on POSIX-compatible
-%%%                  storages for ALL users in given space
-%%%  * display_uid - uid field in luma:display_credentials() for virtual SpaceOwner
-%%%  * display_gid - gid field in luma:display_credentials() for ALL users in
-%%%                  given space
+%%% This record has 2 fields:
+%%%  * uid,
+%%%  * gid.
 %%%
 %%% For more info please read the docs of luma.erl and
 %%% luma_spaces_defaults.erl modules.

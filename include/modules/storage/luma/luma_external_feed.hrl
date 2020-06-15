@@ -11,8 +11,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(EXTERNAL_LUMA_HRL).
--define(EXTERNAL_LUMA_HRL, 1).
+-ifndef(LUMA_EXTERNAL_FEED_HRL).
+-define(LUMA_EXTERNAL_FEED_HRL, 1).
 
 -define(TO_PATH(Tokens), str_utils:join_binary(Tokens, <<"/">>)).
 

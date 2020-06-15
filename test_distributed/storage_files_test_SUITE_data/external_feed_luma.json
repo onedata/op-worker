@@ -64,7 +64,7 @@
             }
         }
     },
-    "s3_external_luma_8": {
+    "s3_external_feed_luma_8": {
         "storageUsers": {
             "user1": {
                 "storageCredentials": {

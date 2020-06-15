@@ -1341,7 +1341,7 @@ clean_posix_storage_mountpoints(Worker) ->
 clear_luma_db(Worker) ->
     lists:foreach(fun(StorageId) ->
         ok = rpc:call(Worker, luma, clear_db, [StorageId])
-    end, ?AUTO_LUMA_FEED_STORAGES ++ ?EXTERNAL_LUMA_FEED_STORAGES).
+    end, ?AUTO_FEED_LUMA_STORAGES ++ ?EXTERNAL_FEED_LUMA_STORAGES).
 
 
 is_supporting_storage_posix_compatible(Worker, SpaceId) ->

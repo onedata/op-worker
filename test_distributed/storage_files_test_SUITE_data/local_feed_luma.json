@@ -53,7 +53,7 @@
             }
         }
     },
-    "s3_local_luma_9": {
+    "s3_local_feed_luma_9": {
         "storageUsers": {
             "user1": {
                 "storageCredentials": {

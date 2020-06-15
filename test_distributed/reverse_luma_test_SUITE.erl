@@ -184,7 +184,7 @@ map_uid_to_onedata_user_failure_external_feed_luma_base(Config, StorageLumaConfi
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     lists:foreach(fun(Uid) ->
-        ?assertEqual({error, external_luma_error},
+        ?assertEqual({error, luma_external_feed_error},
             luma_test_utils:map_uid_to_onedata_user(Worker, Uid, ?SPACE_ID, Storage))
     end, ?ERR_UIDS).
 
@@ -204,7 +204,7 @@ map_acl_user_to_onedata_user_failure_external_feed_luma_base(Config, StorageLuma
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     lists:foreach(fun(AclUser) ->
-        ?assertEqual({error, external_luma_error},
+        ?assertEqual({error, luma_external_feed_error},
             luma_test_utils:map_acl_user_to_onedata_user(Worker, AclUser, Storage))
     end, ?ERR_ACL_USERS).
 
@@ -224,7 +224,7 @@ map_acl_group_to_onedata_group_failure_external_feed_luma_base(Config, StorageLu
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     lists:foreach(fun(AclGroup) ->
-        ?assertEqual({error, external_luma_error},
+        ?assertEqual({error, luma_external_feed_error},
             luma_test_utils:map_acl_group_to_onedata_group(Worker, AclGroup, Storage))
     end, ?ERR_ACL_GROUPS).
 

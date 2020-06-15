@@ -11,10 +11,11 @@
 %%% It allows to uniquely identify a Onedata user.
 %%%
 %%% This record has 3 fields:
-%%%   *  onedata_user_id  - od_user:id(),
-%%%   *  idp - id of an external identity provider,
-%%%   *  subject_id - id of the user, understood by
-%%%      the idp.
+%%%   * onedata_user_id  - od_user:id(),
+%%%   * idp - id of an external identity provider,
+%%%   * subject_id - id of the user, understood by
+%%%     the idp,
+%%%   * mapping_scheme - name of scheme used to represent user identity.
 %%% 
 %%% If onedata_user_id is missing, a call to Onezone is performed to
 %%% compute it basing on idp and subject_id.

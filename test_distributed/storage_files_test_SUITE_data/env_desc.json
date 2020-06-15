@@ -43,12 +43,12 @@
                 },
                 {
                     "type": "s3",
-                    "name": "s3_external_luma_8",
+                    "name": "s3_external_feed_luma_8",
                     "bucket": "onedata"
                 },
                 {
                     "type": "s3",
-                    "name": "s3_local_luma_9",
+                    "name": "s3_local_feed_luma_9",
                     "bucket": "onedata"
                 },
                 {
@@ -225,7 +225,7 @@
                 "groups": [],
                 "providers": {
                     "p1": {
-                        "storage": "s3_external_luma_8",
+                        "storage": "s3_external_feed_luma_8",
                         "supported_size": 10737418240
                     }
                 }
@@ -240,7 +240,7 @@
                 "groups": [],
                 "providers": {
                     "p1": {
-                        "storage": "s3_local_luma_9",
+                        "storage": "s3_local_feed_luma_9",
                         "supported_size": 10737418240
                     }
                 }
@@ -276,10 +276,10 @@
                 "/mnt/st6": {
                     "luma": "local"
                 },
-                "s3_external_luma_8": {
+                "s3_external_feed_luma_8": {
                     "luma": "external"
                 },
-                "s3_local_luma_9": {
+                "s3_local_feed_luma_9": {
                     "luma": "local"
                 },
                 "/mnt/st10": {

@@ -11,24 +11,21 @@
 %%% It contains functions that should be used for mapping onedata users
 %%% to storage users and the other way round.
 %%%
-%%% LUMA DB consists of 4 tables, represented by the following modules:
+%%% LUMA DB consists of 5 tables, represented by the following modules:
 %%%  * luma_storage_users,
-%%%  * luma_spaces_defaults,
+%%%  * luma_spaces_posix_storage_defaults,
+%%%  * luma_spaces_display_defaults,
 %%%  * luma_onedata_users,
 %%%  * luma_onedata_groups.
 %%%
 %%%
-%%% There are 3 modes of LUMA that can be configured for a specific storage:
-%%%  * NO_LUMA - no luma service, default mappings are used
-%%%  * EMBEDDED_LUMA - custom mappings can be set using REST API
-%%%                    and stored in the database.
-%%%                    It must be configured before supporting space with
-%%%                    the storage.
-%%%  * EXTERNAL_LUMA - external HTTP server that implements required
-%%%                    LUMA API (described on onedata.org).
+%%% There are 3 types of feed for LUMA DB that can be configured for a specific storage:
+%%%  * AUTO_FEED - LUMA DB will be automatically filled.
+%%%  * LOCAL_FEED - custom mappings in LUMA DB can be set using REST API.
+%%%                 It must be configured before supporting space with the storage.
+%%%  * EXTERNAL_FEED - external HTTP server that implements required API (described on onedata.org).
 %%%                    The server is lazily queried for custom mappings
-%%%                    which are then stored in the database. This mode
-%%%                    can be treated as a lazy feed for EMBEDDED_LUMA store.
+%%%                    which are then stored in the LUMA DB.
 %%%
 %%% Functions exported by this module can be divided into 3 groups:
 %%%  * LUMA functions
@@ -48,28 +45,30 @@
 %%%    which are returned in getattr response. They are used to present
 %%%    file owners in the result of ls operation in Oneclient.
 %%%
-%%% Credentials are stored in 2 tables:
+%%% Credentials are stored in 3 tables:
 %%%  * luma_storage_users - this model is used for storing
 %%%    storage_credentials() for a pair (storage:id(), od_user:id()).
 %%     It also stores display_uid which is a component of
 %%     display_credentials().
-%%%  * luma_spaces_defaults - this model is used for storing 2 pairs of
-%%%    POSIX credentials (UID & GID) for a given space support
-%%%    identified by pair (storage:id(), od_space:id()).
-%%%    First of them is called display (display_uid, display_gid) and is
-%%%    used to store default display credentials.
-%%%    Second one is called storage (storage_uid, storage_gid) and
-%%%    is used only on POSIX compatible storages (described below
+%%%  * luma_spaces_posix_storage_defaults - this model is used
+%%%    only on POSIX compatible storages (described below
 %%%    in the section considering acquiring of credentials on POSIX
 %%%    compatible storages).
-%%%
-%%%    Please see luma_spaces_defaults.erl and luma_storage_users.erl for
-%%%    more info (i.e. how tables are filled according to LUMA mode
+%%%  * luma_spaces_display_defaults - this model is used for storing
+%%%    default display credentials for a given space support
+%%%    identified by pair (storage:id(), od_space:id()).
+
+%%%    Please see luma_storage_users.erl, luma_spaces_posix_storage_defaults.erl
+%%%    and luma_spaces_display_defaults.erl for more info
+%%%    (i.e. how tables are filled according to LUMA feed
 %%%    for given storage).
 %%%
 %%% On each type of storage, display_credentials() have the
 %%% following structure:
-%%% {#luma_storage_user.display_uid, #luma_space_defaults.display_gid}
+%%% {#luma_storage_user.display_uid, #luma_posix_credentials.gid}
+%%%
+%%% where #luma_posix_credentials record is acquired from luma_spaces_display_defaults table.
+%%%
 %%%
 %%% storage_credentials() are composed differently depending on
 %%% the storage type (whether it is POSIX-compatible).
@@ -89,7 +88,8 @@
 %%% storages are constructed in the following way:
 %%% #{
 %%%     <<"uid">> => maps:get(<<"uid">>, #luma_storage_user.storage_credentials),
-%%%     <<"gid">> => #luma_space_defaults.default_gid
+%%      #luma_posix_credentials record is acquired from luma_spaces_posix_storage_defaults table
+%%%     <<"gid">> => #luma_posix_credentials.gid
 %%% }
 %%%
 %%%-------------------------------------------------------------------
@@ -98,11 +98,11 @@
 %%% This API is used only by storage_sync mechanism.
 %%% It is used to map storage users/groups to users/groups in onedata.
 %%%
-%%% If EMBEDDED_LUMA mode is set for given storage, mappings should
+%%% If LOCAL_FEED mode is set for given storage, mappings should
 %%% be set in the luma_onedata_users and luma_onedata_groups tables
 %%% using REST API.
 %%%
-%%% If EXTERNAL_LUMA mode is set for given storage, external 3rd party
+%%% If EXTERNAL_FEED mode is set for given storage, external 3rd party
 %%% server is queried for mappings and mappings are stored in
 %%% luma_onedata_users and luma_onedata_groups tables.
 %%%

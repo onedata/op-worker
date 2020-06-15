@@ -14,11 +14,11 @@
 %%% A separate table is created for each storage
 %%% so the mappings are actually associated with pair (storage:id(), luma:acl_who()).
 %%%
-%%% Mappings may be set in 2 ways:
-%%%  * preconfigured using REST API in case EMBEDDED_LUMA
+%%% Mappings may be set only in 2 ways:
+%%%  * preconfigured using REST API in case LOCAL_FEED
 %%%    is set for given storage.
-%%%  * cached after querying external, 3rd party LUMA server in case
-%%%    EXTERNAL_LUMA mode is set for given storage.
+%%%  * acquired from external service in case EXTERNAL FEED
+%%%    is set for given storage.
 %%%
 %%% For more info please read the docs of luma.erl module.
 %%% @end

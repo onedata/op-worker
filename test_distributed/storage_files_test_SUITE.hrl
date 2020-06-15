@@ -37,11 +37,11 @@
 -define(STORAGE_ID6, <<"/mnt/st6">>). % synced (mount_in_root) posix storage with local feed LUMA
 
 -define(STORAGE_ID7, <<"s3_auto_luma_7">>). % s3 storage with auto feed LUMA
--define(STORAGE_ID8, <<"s3_external_luma_8">>). % s3 storage with external feed LUMA
--define(STORAGE_ID9, <<"s3_local_luma_9">>). % s3 storage with local feed LUMA
+-define(STORAGE_ID8, <<"s3_external_feed_luma_8">>). % s3 storage with external feed LUMA
+-define(STORAGE_ID9, <<"s3_local_feed_luma_9">>). % s3 storage with local feed LUMA
 
--define(AUTO_LUMA_FEED_STORAGES, [?STORAGE_ID1, ?STORAGE_ID4, ?STORAGE_ID7]).
--define(EXTERNAL_LUMA_FEED_STORAGES, [?STORAGE_ID2, ?STORAGE_ID5, ?STORAGE_ID8]).
+-define(AUTO_FEED_LUMA_STORAGES, [?STORAGE_ID1, ?STORAGE_ID4, ?STORAGE_ID7]).
+-define(EXTERNAL_FEED_LUMA_STORAGES, [?STORAGE_ID2, ?STORAGE_ID5, ?STORAGE_ID8]).
 
 -define(SPACE_NAME(SpaceId, Config), ?config(SpaceId, ?config(spaces, Config))).
 -define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
