@@ -59,6 +59,7 @@
 -type key() :: file_meta:uuid().
 -type record() :: #file_qos{}.
 -type doc() :: datastore_doc:doc(record()).
+-type pred() :: datastore_doc:pred(record()).
 -type effective_file_qos() :: #effective_file_qos{}.
 -type assigned_entries() :: #{storage:id() => [qos_entry:id()]}.
 
@@ -82,6 +83,10 @@ get(Key) ->
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
     ?ok_if_not_found(datastore_model:delete(?CTX, Key)).
+
+-spec delete(key(), pred()) -> ok | {error, term()}.
+delete(Key, Pred) ->
+    ?ok_if_not_found(datastore_model:delete(?CTX, Key, Pred)).
 
 %%%===================================================================
 %%% Higher-level functions operating on file_qos document.
@@ -203,8 +208,13 @@ remove_qos_entry_id(SpaceId, FileUuid, QosEntryId) ->
             assigned_entries = UpdatedAssignedEntries
         }}
     end,
+    % critical section to avoid adding new entry for file between update and delete
     case datastore_model:update(?CTX, FileUuid, UpdateFun) of
-        {ok, _} -> ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+        {ok, #document{value = #file_qos{qos_entries = []}}} -> 
+            ok = delete(FileUuid, fun(#file_qos{qos_entries = QosEntries}) -> QosEntries =:= [] end),
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
+        {ok, _} ->
+            ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId);
         {error, _} = Error -> Error
     end.
 

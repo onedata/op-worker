@@ -32,17 +32,18 @@
 -spec routes() -> [{binary(), module(), map()}].
 routes() ->
     AllRoutes = lists:flatten([
-        deprecated_file_rest_routes:routes(),
-        file_data_rest_routes:routes(),
-        file_metadata_rest_routes:routes(),
-        file_path_rest_routes:routes(),
+        basic_file_operations_rest_routes:routes(),
+        custom_file_metadata_rest_routes:routes(),
+        deprecated_file_api_rest_routes:routes(),
         monitoring_rest_routes:routes(),
         oneprovider_rest_routes:routes(),
         qos_rest_routes:routes(),
         replica_rest_routes:routes(),
+        resolve_file_path_rest_routes:routes(),
         share_rest_routes:routes(),
         space_rest_routes:routes(),
-        transfer_rest_routes:routes()
+        transfer_rest_routes:routes(),
+        view_rest_routes:routes()
     ]),
 
     % Aggregate routes that share the same path

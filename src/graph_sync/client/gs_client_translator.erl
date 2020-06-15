@@ -89,7 +89,9 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
         key = Id,
         value = #od_space{
             name = maps:get(<<"name">>, Result),
-            providers = maps:get(<<"providers">>, Result)
+            providers = maps:get(<<"providers">>, Result),
+            support_parameters_per_provider = support_parameters:per_provider_from_json(maps:get(<<"supportParametersPerProvider">>, Result)),
+            support_stage_per_provider = support_stage:per_provider_from_json(maps:get(<<"supportStagePerProvider">>, Result))
         }
     };
 
@@ -115,7 +117,10 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = private}, Re
 
             providers = maps:get(<<"providers">>, Result),
             shares = maps:get(<<"shares">>, Result),
-            harvesters = maps:get(<<"harvesters">>, Result)
+            harvesters = maps:get(<<"harvesters">>, Result),
+
+            support_parameters_per_provider = support_parameters:per_provider_from_json(maps:get(<<"supportParametersPerProvider">>, Result)),
+            support_stage_per_provider = support_stage:per_provider_from_json(maps:get(<<"supportStagePerProvider">>, Result))
         }
     };
 

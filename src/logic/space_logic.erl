@@ -38,7 +38,8 @@
 -export([can_view_group_through_space/3, can_view_group_through_space/4]).
 -export([harvest_metadata/5]).
 -export([get_harvesters/1]).
--export([report_dbsync_state/2]).
+-export([report_provider_sync_progress/2]).
+-export([on_space_supported/1]).
 
 -define(HARVEST_METADATA_TIMEOUT, application:get_env(
     ?APP_NAME, graph_sync_harvest_metadata_request_timeout, 120000
@@ -339,8 +340,17 @@ get_harvesters(SpaceId) ->
     end.
 
 
--spec report_dbsync_state(od_space:id(), space_support:seq_per_provider()) -> ok.
-report_dbsync_state(_SpaceId, _SeqPerProvider) ->
-    % TODO VFS-6182 temporarily disabled, to be implemented in 20.02.0-rc1
-    ok.
+-spec report_provider_sync_progress(od_space:id(), provider_sync_progress:stats()) -> ok | errors:error().
+report_provider_sync_progress(SpaceId, ProviderSyncProgress) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = space_stats, id = SpaceId, aspect = {provider_sync_progress, oneprovider:get_id()}},
+        data = #{<<"providerSyncProgress">> => provider_sync_progress:to_json(ProviderSyncProgress)}
+    }).
+
+
+-spec on_space_supported(od_space:id()) -> ok.
+on_space_supported(SpaceId) ->
+    ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
+
 

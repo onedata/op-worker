@@ -32,6 +32,7 @@
 -export([update/1, update/2]).
 -export([get_name/0, get_name/1, get_name/2]).
 -export([get_spaces/0, get_spaces/1, get_spaces/2]).
+-export([get_eff_users/0]).
 -export([get_storage_ids/0, get_storage_ids/1]).
 -export([has_storage/1]).
 -export([has_eff_user/1, has_eff_user/2, has_eff_user/3]).
@@ -56,6 +57,7 @@
 
 -define(PROVIDER_NODES_CACHE_TTL, application:get_env(?APP_NAME, provider_nodes_cache_ttl, timer:minutes(10))).
 
+-compile([{no_auto_import, [get/0]}]).
 
 %%%===================================================================
 %%% API
@@ -228,6 +230,13 @@ get_spaces() ->
 get_spaces(ProviderId) ->
     get_spaces(?ROOT_SESS_ID, ProviderId).
 
+
+-spec get_eff_users() -> {ok, [od_user:id()]} | errors:error().
+get_eff_users() ->
+    case get() of
+        {ok, #document{value = #od_provider{eff_users = EffUsers}}} -> {ok, EffUsers};
+        {error, _} = Error -> Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

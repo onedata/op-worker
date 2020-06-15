@@ -37,6 +37,8 @@ translate_value(#gri{aspect = children_details, scope = Scope}, ChildrenDetails)
     #{<<"children">> => lists:map(fun(ChildDetails) ->
         translate_file_details(ChildDetails, Scope)
     end, ChildrenDetails)};
+translate_value(#gri{aspect = attrs}, Attrs) ->
+    #{<<"attributes">> => Attrs};
 translate_value(#gri{aspect = As}, Metadata) when
     As =:= xattrs;
     As =:= json_metadata;
@@ -102,17 +104,21 @@ translate_file_details(#file_details{
         owner_id = OwnerId
     }
 }, Scope) ->
+    PosixPerms = list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
     {Type, Size} = case TypeAttr of
         ?DIRECTORY_TYPE ->
             {<<"dir">>, null};
         _ ->
             {<<"file">>, SizeAttr}
     end,
-    IsRootDir = case file_id:guid_to_share_id(FileGuid) of
+    {IsRootDir, Index} = case file_id:guid_to_share_id(FileGuid) of
         undefined ->
-            fslogic_uuid:is_space_dir_guid(FileGuid);
+            case fslogic_uuid:is_space_dir_guid(FileGuid) of
+                true -> {true, FileName};
+                false -> {false, StartId}
+            end;
         ShareId ->
-            lists:member(ShareId, Shares)
+            {lists:member(ShareId, Shares), StartId}
     end,
     ParentId = case IsRootDir of
         true -> null;
@@ -122,13 +128,14 @@ translate_file_details(#file_details{
         <<"hasMetadata">> => HasMetadata,
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
-        <<"index">> => StartId,
-        <<"posixPermissions">> => integer_to_binary((Mode rem 8#1000), 8),
+        <<"index">> => Index,
+        <<"posixPermissions">> => PosixPerms,
         <<"parentId">> => ParentId,
         <<"mtime">> => MTime,
         <<"type">> => Type,
         <<"size">> => Size,
-        <<"shares">> => Shares
+        <<"shares">> => Shares,
+        <<"activePermissionsType">> => ActivePermissionsType
     },
     case Scope of
         public ->
@@ -138,7 +145,6 @@ translate_file_details(#file_details{
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId,
                 <<"hasDirectQos">> => HasDirectQos,
-                <<"hasEffQos">> => HasEffQos,
-                <<"activePermissionsType">> => ActivePermissionsType
+                <<"hasEffQos">> => HasEffQos
             }
     end.

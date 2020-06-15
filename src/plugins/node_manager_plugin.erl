@@ -22,11 +22,12 @@
 -export([installed_cluster_generation/0]).
 -export([oldest_known_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
--export([listeners/0]).
--export([upgrade_essential_workers/0, custom_workers/0]).
--export([before_init/1]).
+-export([before_init/0]).
+-export([upgrade_essential_workers/0]).
 -export([upgrade_cluster/1]).
--export([on_cluster_ready/0]).
+-export([custom_workers/0]).
+-export([on_db_and_workers_ready/0]).
+-export([listeners/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
 
@@ -92,14 +93,32 @@ db_nodes() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:listeners/0}.
+%% Overrides {@link node_manager_plugin_default:renamed_models/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec listeners() -> Listeners :: [atom()].
-listeners() -> [
-    http_listener,
-    https_listener
-].
+-spec renamed_models() -> #{{record_version(), model()} => model()}.
+renamed_models() ->
+    #{
+        {1, open_file} => file_handles
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:before_init/0}.
+%% This callback is executed on all cluster nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec before_init() -> ok | {error, Reason :: term()}.
+before_init() ->
+    try
+        op_worker_sup:start_link(),
+        ok = helpers_nif:init()
+    catch
+        _:Error ->
+            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p",
+                [Error]),
+            {error, cannot_start_node_manager_plugin}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -112,6 +131,18 @@ upgrade_essential_workers() -> filter_disabled_workers([
         {supervisor_flags, gs_worker:supervisor_flags()}
     ]}
 ]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:upgrade_cluster/1}.
+%% This callback is executed only on one cluster node.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_cluster(node_manager:cluster_generation()) ->
+    {ok, node_manager:cluster_generation()}.
+upgrade_cluster(1) ->
+    storage:migrate_to_zone(),
+    {ok, 2}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -144,6 +175,44 @@ custom_workers() -> filter_disabled_workers([
     {qos_worker, []}
 ]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:on_db_and_workers_ready/1}.
+%% This callback is executed on all cluster nodes.
+%% @end
+%%--------------------------------------------------------------------
+on_db_and_workers_ready() ->
+    space_unsupport:init_pools(),
+    gs_worker:on_db_and_workers_ready().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:listeners/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec listeners() -> Listeners :: [atom()].
+listeners() -> [
+    http_listener,
+    https_listener
+].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of modules that register exometer reporters.
+%% @end
+%%--------------------------------------------------------------------
+-spec modules_with_exometer() -> list().
+modules_with_exometer() ->
+    [fslogic_worker, helpers, session, event_stream, event].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of exometer reporters.
+%% @end
+%%--------------------------------------------------------------------
+-spec exometer_reporters() -> list().
+exometer_reporters() -> [].
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -164,70 +233,3 @@ filter_disabled_workers(WorkersSpecs) ->
         ({singleton, Worker, _WorkerArgs}) ->
             not sets:is_element(Worker, DisabledWorkersSet)
     end, WorkersSpecs).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Overrides {@link node_manager_plugin_default:renamed_models/0}.
-%% @end
-%%--------------------------------------------------------------------
--spec renamed_models() -> #{{record_version(), model()} => model()}.
-renamed_models() ->
-    #{
-        {1, open_file} => file_handles
-    }.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Overrides {@link node_manager_plugin_default:before_init/1}.
-%% This callback is executed on all cluster nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec before_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
-before_init([]) ->
-    try
-        op_worker_sup:start_link(),
-        ok = helpers_nif:init()
-    catch
-        _:Error ->
-            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p",
-                [Error]),
-            {error, cannot_start_node_manager_plugin}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Overrides {@link node_manager_plugin_default:upgrade_cluster/1}.
-%% This callback is executed only on one cluster node.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_cluster(node_manager:cluster_generation()) ->
-    {ok, node_manager:cluster_generation()}.
-upgrade_cluster(1) ->
-    storage:migrate_to_zone(),
-    {ok, 2}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Overrides {@link node_manager_plugin_default:on_cluster_ready/1}.
-%% This callback is executed on all cluster nodes.
-%% @end
-%%--------------------------------------------------------------------
-on_cluster_ready() ->
-    gs_worker:on_cluster_ready().
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of modules that register exometer reporters.
-%% @end
-%%--------------------------------------------------------------------
--spec modules_with_exometer() -> list().
-modules_with_exometer() ->
-    [fslogic_worker, helpers, session, event_stream, event].
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of exometer reporters.
-%% @end
-%%--------------------------------------------------------------------
--spec exometer_reporters() -> list().
-exometer_reporters() -> [].

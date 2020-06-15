@@ -100,30 +100,6 @@ routes() -> [
             scope = private
         }
     }},
-    %% Evict existing replicas by index (deprecated)
-    {<<"/replicas-index/:index_name">>, rest_handler, #rest_req{
-        method = 'DELETE',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_replica, 
-            id = ?BINDING(index_name), 
-            aspect = evict_by_view, 
-            scope = private
-        }
-    }},
-    %% Replicate files by index (deprecated)
-    {<<"/replicas-index/:index_name">>, rest_handler, #rest_req{
-        method = 'POST',
-        parse_body = as_json_params,
-        consumes = [<<"application/json">>],
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_replica, 
-            id = ?BINDING(index_name), 
-            aspect = replicate_by_view, 
-            scope = private
-        }
-    }},
     %% Evict existing replicas by view
     {<<"/replicas-view/:view_name">>, rest_handler, #rest_req{
         method = 'DELETE',

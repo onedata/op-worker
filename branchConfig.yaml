@@ -1,0 +1,9 @@
+# Used when specific branch for given repo does not exist.
+default: develop
+
+branches:
+  # Specification of branches from which sources for components will be pulled.
+  oz-worker: current_branch
+  op-worker: current_branch
+  onepanel: current_branch
+  oneclient: current_branch

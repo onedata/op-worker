@@ -54,7 +54,7 @@
 -export([get_ctx/0]).
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
-% exported for initializer
+% exported for initializer and env_up escripts
 -export([on_storage_created/1]).
 
 
@@ -94,11 +94,11 @@ create(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
 -spec create_insecure(name(), helpers:helper(), boolean(), luma_config:config(),
     boolean(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
-    case storage_logic:create_in_zone(Name, QosParameters) of
+    case storage_logic:create_in_zone(Name) of
         {ok, Id} ->
             case storage_config:create(Id, Helper, Readonly, LumaConfig, ImportedStorage) of
                 {ok, Id} ->
-                    on_storage_created(Id),
+                    on_storage_created(Id, QosParameters),
                     {ok, Id};
                 StorageConfigError ->
                     case storage_logic:delete_in_zone(Id) of
@@ -327,7 +327,20 @@ set_imported_storage(StorageId, ImportedStorage) ->
 
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
 set_qos_parameters(StorageId, QosParameters) ->
-    case storage_logic:set_qos_parameters(StorageId, QosParameters) of
+    set_qos_parameters(StorageId, oneprovider:get_id(), QosParameters).
+
+
+-spec set_qos_parameters(id(), oneprovider:id(), qos_parameters()) -> ok | errors:error().
+set_qos_parameters(_StorageId, ProviderId, #{<<"providerId">> := OtherProvider}) when ProviderId =/= OtherProvider ->
+    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"qosParameters.providerId">>, [ProviderId]);
+set_qos_parameters(StorageId, _ProviderId, #{<<"storageId">> := OtherStorage}) when StorageId =/= OtherStorage ->
+    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"qosParameters.storageId">>, [StorageId]);
+set_qos_parameters(StorageId, ProviderId, QosParameters) ->
+    ExtendedQosParameters = QosParameters#{
+        <<"storageId">> => StorageId,
+        <<"providerId">> => ProviderId
+    },
+    case storage_logic:set_qos_parameters(StorageId, ExtendedQosParameters) of
         ok ->
             {ok, Spaces} = storage_logic:get_spaces(StorageId),
             lists:foreach(fun(SpaceId) ->
@@ -439,6 +452,7 @@ update_space_support_size(StorageId, SpaceId, NewSupportSize) ->
 
 -spec revoke_space_support(id(), od_space:id()) -> ok | errors:error().
 revoke_space_support(StorageId, SpaceId) ->
+    %% @TODO VFS-6132 Use space_unsupport when it is implemented
     %% @TODO VFS-6208 Cancel sync and auto-cleaning traverse and clean up ended tasks when unsupporting
     case storage_logic:revoke_space_support(StorageId, SpaceId) of
         ok -> on_space_unsupported(SpaceId, StorageId);
@@ -459,10 +473,16 @@ supports_any_space(StorageId) ->
 %%% Internal functions
 %%%===================================================================
 
-%% @private
 -spec on_storage_created(id()) -> ok.
 on_storage_created(StorageId) ->
     rtransfer_config:add_storage(StorageId).
+
+
+%% @private
+-spec on_storage_created(id(), qos_parameters()) -> ok.
+on_storage_created(StorageId, QosParameters) ->
+    ok = set_qos_parameters(StorageId, QosParameters),
+    on_storage_created(StorageId).
 
 
 %% @private
@@ -470,35 +490,24 @@ on_storage_created(StorageId) ->
 on_space_supported(SpaceId, StorageId) ->
     % remove possible remnants of previous support 
     % (when space was unsupported in Onezone without provider knowledge)
-    delete_associated_documents(SpaceId, StorageId),
-    ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
+    space_unsupport:cleanup_local_documents(SpaceId, StorageId),
+    space_logic:on_space_supported(SpaceId).
 
 
 %% @private
 -spec on_space_unsupported(od_space:id(), id()) -> ok.
 on_space_unsupported(SpaceId, StorageId) ->
-    delete_associated_documents(SpaceId, StorageId),
+    space_unsupport:cleanup_local_documents(SpaceId, StorageId),
     main_harvesting_stream:space_unsupported(SpaceId).
 
 
 %% @private
 -spec on_helper_changed(StorageId :: id()) -> ok.
 on_helper_changed(StorageId) ->
-    {ok, Nodes} = node_manager:get_cluster_nodes(),
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
     rtransfer_config:add_storage(StorageId),
-    rpc:multicall(Nodes, rtransfer_config, restart_link, []),
+    rpc:multicall(consistent_hashing:get_all_nodes(), rtransfer_config, restart_link, []),
     helpers_reload:refresh_helpers_by_storage(StorageId).
-
-
-%% @private
--spec delete_associated_documents(od_space:id(), id()) -> ok.
-delete_associated_documents(SpaceId, StorageId) ->
-    file_popularity_api:disable(SpaceId),
-    file_popularity_api:delete_config(SpaceId),
-    autocleaning_api:disable(SpaceId),
-    autocleaning_api:delete_config(SpaceId),
-    storage_sync:clean_up(SpaceId, StorageId).
 
 
 %% @private
@@ -585,7 +594,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            {ok, StorageId} = storage_logic:create_in_zone(Name, #{}, StorageId),
+            {ok, StorageId} = storage_logic:create_in_zone(Name, StorageId),
             ?notice("Storage ~p created in Onezone", [StorageId])
     end,
     ok = delete_deprecated(StorageId).

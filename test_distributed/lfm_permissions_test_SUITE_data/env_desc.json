@@ -19,6 +19,16 @@
             ],
             "users": [],
             "groups": {}
+        },
+        "cfg2": {
+            "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st2"
+                }
+            ],
+            "users": [],
+            "groups": {}
         }
     },
     "provider_domains": {
@@ -34,7 +44,7 @@
                         "cm_nodes": [
                             "cm"
                         ],
-                        "worker_num": 1
+                        "worker_num": 2
                     }
                 }
             },
@@ -49,6 +59,55 @@
                         ],
                         "db_nodes": [
                             "127.0.0.1:49161"
+                        ],
+                        "oz_domain": "oz",
+                        "graph_sync_healthcheck_interval": 999999999
+                    }
+                },
+                "worker2": {
+                    "vm.args": {
+                        "setcookie": "test_cookie1"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49161"
+                        ],
+                        "oz_domain": "oz",
+                        "graph_sync_healthcheck_interval": 999999999
+                    }
+                }
+            }
+        },
+        "p2": {
+            "db_driver": "couchdb",
+            "os_config": "cfg2",
+            "cluster_manager": {
+                "cm": {
+                    "vm.args": {
+                        "setcookie": "test_cookie2"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "worker_num": 1
+                    }
+                }
+            },
+            "op_worker": {
+                "worker1": {
+                    "vm.args": {
+                        "setcookie": "test_cookie2"
+                    },
+                    "sys.config": {
+                        "cm_nodes": [
+                            "cm"
+                        ],
+                        "db_nodes": [
+                            "127.0.0.1:49162"
                         ],
                         "oz_domain": "oz",
                         "graph_sync_healthcheck_interval": 999999999
@@ -96,6 +155,10 @@
                     "p1": {
                         "storage": "/mnt/st",
                         "supported_size": 1000000000
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 1000000000
                     }
                 }
             },
@@ -107,6 +170,10 @@
                 "providers": {
                     "p1": {
                         "storage": "/mnt/st",
+                        "supported_size": 1000000000
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
                         "supported_size": 1000000000
                     }
                 }

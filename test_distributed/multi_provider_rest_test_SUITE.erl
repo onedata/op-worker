@@ -39,20 +39,15 @@
     lookup_file_objectid/1,
     get_simple_file_distribution/1,
     transfers_should_be_ordered_by_timestamps/1,
-    posix_mode_get/1,
-    posix_mode_put/1,
-    attributes_list/1,
     metric_get/1,
     list_spaces/1,
     get_space/1,
     create_share/1,
     get_share/1,
-    get_file_shares/1,
     update_share_name/1,
     delete_share/1,
     list_transfers/1,
-    track_transferred_files/1,
-    xattr_put/1
+    track_transferred_files/1
 ]).
 
 %utils
@@ -67,20 +62,15 @@ all() ->
         lookup_file_objectid,
         get_simple_file_distribution,
         transfers_should_be_ordered_by_timestamps,
-        posix_mode_get,
-        posix_mode_put,
-        attributes_list,
         metric_get,
         list_spaces,
         get_space,
         create_share,
         get_share,
-        get_file_shares,
         update_share_name,
         delete_share,
         list_transfers,
-        track_transferred_files,
-        xattr_put
+        track_transferred_files
     ]).
 
 -define(ATTEMPTS, 100).
@@ -256,112 +246,6 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid), ?ATTEMPTS),
     ?assertEqual([], get_ongoing_transfers_for_file(WorkerP2, FileGuid2), ?ATTEMPTS),
     ?assert(get_finish_time(WorkerP2, Tid, Config) =< get_finish_time(WorkerP2, Tid2, Config)).
-
-posix_mode_get(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = filename:join(["/", SpaceName, "file1_pmg"]),
-    Mode = 8#700,
-    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-
-    % then
-    DecodedBody = json_utils:decode(Body),
-    ?assertEqual(
-        #{
-            <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>
-        },
-        DecodedBody
-    ).
-
-posix_mode_put(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = filename:join(["/", SpaceName, "file2_pmp"]),
-    Mode = 8#700,
-    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, Mode),
-
-    % when
-    NewMode = 8#777,
-    Body = json_utils:encode(#{<<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>}),
-    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary>>, put,
-        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), Body),
-
-    % then
-    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary, "?attribute=mode">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-    DecodedBody = json_utils:decode(RespBody),
-    ?assertEqual(
-        #{
-            <<"mode">> => <<"0", (integer_to_binary(NewMode, 8))/binary>>
-        },
-        DecodedBody
-    ).
-
-attributes_list(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    UserId1 = ?config({user_id, <<"user1">>}, Config),
-    File = filename:join(["/", SpaceName, "file1_al"]),
-    {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-
-    % when
-    {ok, 200, _, Body} = rest_test_utils:request(WorkerP1, <<"metadata/attrs", File/binary>>, get, ?USER_1_AUTH_HEADERS(Config), []),
-
-    % then
-    {ok, #file_attr{
-        atime = ATime,
-        ctime = CTime,
-        mtime = MTime,
-        gid = Gid,
-        uid = Uid
-    }} = lfm_proxy:stat(WorkerP1, SessionId, {guid, FileGuid}),
-    {ok, CdmiObjectId} = file_id:guid_to_objectid(FileGuid),
-    DecodedBody = json_utils:decode(Body),
-    ?assertEqual(
-        #{
-            <<"mode">> => <<"0700">>,
-            <<"size">> => 0,
-            <<"atime">> => ATime,
-            <<"ctime">> => CTime,
-            <<"mtime">> => MTime,
-            <<"storage_group_id">> => Gid,
-            <<"storage_user_id">> => Uid,
-            <<"name">> => <<"file1_al">>,
-            <<"owner_id">> => UserId1,
-            <<"shares">> => [],
-            <<"provider_id">> => rpc:call(WorkerP1, oneprovider, get_id, []),
-            <<"type">> => <<"reg">>,
-            <<"file_id">> => CdmiObjectId
-        },
-        DecodedBody
-    ).
-
-xattr_put(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    File = filename:join(["/", SpaceName, "file2_xp"]),
-    {ok, _FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
-
-    % when
-    Body = json_utils:encode(#{<<"k1">> => <<"v1">>}),
-    {ok, 204, _, _} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary>>, put,
-        ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), Body),
-
-    % then
-    {ok, 200, _, RespBody} = rest_test_utils:request(WorkerP1, <<"metadata/xattrs", File/binary, "?attribute=k1">>, get, ?USER_1_AUTH_HEADERS(Config), []),
-    DecodedBody = json_utils:decode(RespBody),
-    ?assertEqual(
-        #{
-            <<"k1">> => <<"v1">>
-        },
-        DecodedBody
-    ).
 
 metric_get(Config) ->
     Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
@@ -604,56 +488,6 @@ get_share(Config) ->
         }}},
         rpc:call(SupportingProviderNode, share_logic, get, [?ROOT_SESS_ID, ShareId])
     ).
-
-
-get_file_shares(Config) ->
-    {SupportingProviderNode, OtherProviderNode} = get_op_nodes(Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(SupportingProviderNode)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_CONTENT_TYPE, <<"application/json">>}]),
-
-    % create file
-    FilePath = filename:join(["/", SpaceName, "shared_file"]),
-    {ok, SharedFileGuid} = lfm_proxy:create(SupportingProviderNode, SessionId, FilePath, 8#700),
-    {ok, SharedFileObjectId} = file_id:guid_to_objectid(SharedFileGuid),
-
-    RestPath1 = str_utils:format_bin("file-shares/~s", [FilePath]),
-    RestPath2 = str_utils:format_bin("file-id-shares/~s", [SharedFileObjectId]),
-
-    lists:foreach(fun(RestPath) ->
-        % getting share from provider that does not support space should fail
-        ?assertMatch(true, rest_test_utils:assert_request_error(
-            ?ERROR_SPACE_NOT_SUPPORTED_BY(?GET_DOMAIN_BIN(OtherProviderNode)),
-            {OtherProviderNode, RestPath, get, Headers, <<>>}
-        )),
-
-        % getting shares for file not yet shared should return empty list
-        {ok, 200, _, Response} = ?assertMatch(
-            {ok, 200, _, Response},
-            rest_test_utils:request(SupportingProviderNode, RestPath, get, Headers, <<>>)
-        ),
-        #{<<"shares">> := Shares} = json_utils:decode(Response),
-        ?assertEqual([], Shares)
-    end, [RestPath1, RestPath2]),
-
-    ShareIds = lists:map(fun(_) ->
-        {ok, ShareId} = ?assertMatch(
-            {ok, _},
-            lfm_proxy:create_share(SupportingProviderNode, SessionId, {guid, SharedFileGuid}, <<"share">>)
-        ),
-        ShareId
-    end, lists:seq(1, 10)),
-    ExpShareIds = lists:sort(ShareIds),
-
-    lists:foreach(fun(RestPath) ->
-        % getting shares for file not yet shared should return empty list
-        {ok, 200, _, Response} = ?assertMatch(
-            {ok, 200, _, _},
-            rest_test_utils:request(SupportingProviderNode, RestPath, get, Headers, <<>>)
-        ),
-        #{<<"shares">> := Shares} = json_utils:decode(Response),
-        ?assertEqual(ExpShareIds, lists:sort(Shares))
-    end, [RestPath1, RestPath2]).
 
 
 update_share_name(Config) ->

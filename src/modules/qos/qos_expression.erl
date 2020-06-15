@@ -126,6 +126,8 @@ infix_to_rpn([?L_PAREN | Expression], Stack, RPNExpression) ->
 infix_to_rpn([?R_PAREN | Expression], Stack, RPNExpression) ->
     {Stack2, RPNExpression2} = handle_right_paren(Stack, RPNExpression),
     infix_to_rpn(Expression, Stack2, RPNExpression2);
+infix_to_rpn([?QOS_ANY_STORAGE | Expression], Stack, RPNExpression) ->
+    infix_to_rpn(Expression, Stack, RPNExpression ++ [?QOS_ANY_STORAGE]);
 infix_to_rpn([Operand | Expression], Stack, RPNExpression) ->
     case binary:split(Operand, [?EQUALITY], [global]) of
         [_Key, _Val] ->
@@ -240,6 +242,8 @@ apply_operator(_, _) ->
 %%--------------------------------------------------------------------
 -spec select_storages_with_param(storages_with_params(), expr_token()) ->
     [[storage:id()] | expr_token()].
+select_storages_with_param(AllStoragesWithParams, ?QOS_ANY_STORAGE) ->
+    maps:keys(AllStoragesWithParams);
 select_storages_with_param(AllStoragesWithParams, ExprToken) ->
     case binary:split(ExprToken, [?EQUALITY], [global]) of
         [Key, Val] ->
