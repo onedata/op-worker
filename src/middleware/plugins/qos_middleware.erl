@@ -172,7 +172,11 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     case lfm:add_qos_entry(SessionId, {guid, FileGuid}, ExpressionInRpn, ReplicasNum) of
         {ok, QosEntryId} ->
             {ok, QosEntry} = ?check(lfm:get_qos_entry(SessionId, QosEntryId)),
-            {ok, resource, {GRI#gri{id = QosEntryId}, entry_to_details(QosEntry, pending, SpaceId)}};
+            Status = case qos_entry:is_possible(QosEntry) of
+                true -> ?PENDING;
+                false -> ?IMPOSSIBLE
+            end,
+            {ok, resource, {GRI#gri{id = QosEntryId}, entry_to_details(QosEntry, Status, SpaceId)}};
         ?ERROR_INVALID_QOS_EXPRESSION ->
             ?ERROR_INVALID_QOS_EXPRESSION;
         {error, Errno} ->

@@ -255,7 +255,7 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                             validate_error_result(ScenarioType, ExpError, RequestResult),
                             EnvVerifyFun(expected_failure, TestCaseCtx)
                         catch E:T ->
-                            log_failure(ScenarioName, TestCaseCtx, Args, ExpError, Result, E, T),
+                            log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, E, T),
                             false
                         end
                 end

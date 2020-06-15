@@ -223,14 +223,14 @@ authorize(#op_req{operation = delete, auth = Auth = ?USER(UserId), gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = create, auth = Auth, data = Data, gri = #gri{aspect = instance}}, _) ->
+validate(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}}, _) ->
     ReplicatingProviderId = maps:get(<<"replicatingProviderId">>, Data, undefined),
     EvictingProviderId = maps:get(<<"evictingProviderId">>, Data, undefined),
 
     case maps:get(<<"dataSourceType">>, Data) of
         file ->
             validate_file_transfer_creation(
-                Auth, maps:get(<<"fileId">>, Data),
+                maps:get(<<"fileId">>, Data),
                 ReplicatingProviderId, EvictingProviderId
             );
         view ->
@@ -241,7 +241,7 @@ validate(#op_req{operation = create, auth = Auth, data = Data, gri = #gri{aspect
             )
     end;
 
-validate(#op_req{operation = create, auth = Auth, gri = #gri{aspect = rerun}}, #transfer{
+validate(#op_req{operation = create, gri = #gri{aspect = rerun}}, #transfer{
     space_id = SpaceId,
     replicating_provider = ReplicatingProviderId,
     evicting_provider = EvictingProviderId,
@@ -252,7 +252,7 @@ validate(#op_req{operation = create, auth = Auth, gri = #gri{aspect = rerun}}, #
     case transfer:data_source_type(Transfer) of
         file ->
             validate_file_transfer_creation(
-                Auth, file_id:pack_guid(FileUuid, SpaceId),
+                file_id:pack_guid(FileUuid, SpaceId),
                 ReplicatingProviderId, EvictingProviderId
             );
         view ->
@@ -412,16 +412,14 @@ create_transfer_privileges(migration)   -> [?SPACE_SCHEDULE_REPLICATION, ?SPACE_
 
 %% @private
 -spec validate_file_transfer_creation(
-    Auth :: aai:auth(),
     FileGuid :: file_id:file_guid(),
     ReplicatingProvider :: undefined | od_provider:id(),
     EvictingProvider :: undefined | od_provider:id()
 ) ->
     ok | no_return().
-validate_file_transfer_creation(Auth, FileGuid, ReplicatingProvider, EvictingProvider) ->
+validate_file_transfer_creation(FileGuid, ReplicatingProvider, EvictingProvider) ->
     SpaceId = file_id:guid_to_space_id(FileGuid),
     middleware_utils:assert_space_supported_locally(SpaceId),
-    middleware_utils:assert_file_exists(Auth, FileGuid),
 
     assert_space_supported_by(SpaceId, ReplicatingProvider),
     assert_space_supported_by(SpaceId, EvictingProvider).

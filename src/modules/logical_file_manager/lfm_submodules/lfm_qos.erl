@@ -19,7 +19,7 @@
 
 %% API
 -export([add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2, get_effective_file_qos/2,
-    check_qos_status/2, check_qos_fulfilled/3]).
+    check_qos_status/2, check_qos_status/3]).
 
 %%%===================================================================
 %%% API
@@ -100,29 +100,29 @@ remove_qos_entry(SessId, QosEntryId) ->
 -spec check_qos_status(session:id(), qos_entry:id() | [qos_entry:id()]) -> 
     {ok, qos_status:summary()} | lfm:error_reply().
 check_qos_status(SessId, QosEntries) ->
-    check_qos_fulfilled(SessId, QosEntries, undefined).
+    check_qos_status(SessId, QosEntries, undefined).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Check if QoS requirements defined in qos_entry document/documents are fulfilled.
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_fulfilled(session:id(), qos_entry:id() | [qos_entry:id()],
+-spec check_qos_status(session:id(), qos_entry:id() | [qos_entry:id()],
     lfm:file_key() | undefined) -> {ok, qos_status:summary()} | lfm:error_reply().
-check_qos_fulfilled(SessId, QosEntries, FileKey) when is_list(QosEntries) ->
+check_qos_status(SessId, QosEntries, FileKey) when is_list(QosEntries) ->
     Statuses = lists:map(fun(QosEntryId) ->
-        {ok, Status} = check_qos_fulfilled(SessId, QosEntryId, FileKey),
+        {ok, Status} = check_qos_status(SessId, QosEntryId, FileKey),
         Status
     end, QosEntries),
     {ok, qos_status:aggregate(Statuses)};
-check_qos_fulfilled(SessId, QosEntryId, undefined) ->
+check_qos_status(SessId, QosEntryId, undefined) ->
     case qos_entry:get_file_guid(QosEntryId) of
         {error, _} = Error ->
             Error;
         {ok, QosRootFileGuid} ->
-            check_qos_fulfilled(SessId, QosEntryId, {guid, QosRootFileGuid})
+            check_qos_status(SessId, QosEntryId, {guid, QosRootFileGuid})
     end;
-check_qos_fulfilled(SessId, QosEntryId, FileKey) ->
+check_qos_status(SessId, QosEntryId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid, #check_qos_status{qos_id = QosEntryId},
         fun(#qos_status_response{status = Status}) -> {ok, Status} end).

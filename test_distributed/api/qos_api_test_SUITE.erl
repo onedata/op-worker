@@ -46,12 +46,44 @@ create_qos_test(Config) ->
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     
+    {ok, FileToShareGuid} = api_test_utils:create_file(
+        FileType, P1, SessIdP1, filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()])),
+    ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileToShareGuid}), 20),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileToShareGuid}, <<"share">>),
+    
     SetupFun = fun() ->
         FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
         {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
         ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, Guid}), 20),
         #{guid => Guid}
     end, 
+    
+    CreateDataScec = #data_spec{
+        required = [<<"expression">>, <<"fileId">>],
+        optional = [<<"replicasNum">>],
+        correct_values = #{
+            <<"expression">> => [
+                <<"key=value">>,
+                <<"key=value | anotherKey=anotherValue">>,
+                <<"key=value & anotherKey=anotherValue">>,
+                <<"key=value - anotherKey=anotherValue">>,
+                <<"(key=value - anotherKey=anotherValue)">>,
+                <<"(key=value - anotherKey=anotherValue) | a=b">>,
+                <<"anyStorage">>
+            ],
+            <<"fileId">> => [objectId],
+            <<"replicasNum">> => [rand:uniform(10)]
+        },
+        bad_values = [
+            {<<"expression">>, <<"aaa">>, ?ERROR_INVALID_QOS_EXPRESSION},
+            {<<"expression">>, <<"key | value">>, ?ERROR_INVALID_QOS_EXPRESSION},
+            {<<"expression">>, <<"(key = value">>, ?ERROR_INVALID_QOS_EXPRESSION},
+            {<<"expression">>, <<"key = value)">>, ?ERROR_INVALID_QOS_EXPRESSION},
+            {<<"fileId">>, <<"gibberish">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
+            {<<"replicasNum">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"replicasNum">>)},
+            {<<"replicasNum">>, 0, ?ERROR_BAD_VALUE_TOO_LOW(<<"replicasNum">>, 1)}
+        ]
+    },
     
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
@@ -73,32 +105,10 @@ create_qos_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(create)
                 }
             ],
-            data_spec = #data_spec{
-                required = [<<"expression">>, <<"fileId">>],
-                optional = [<<"replicasNum">>],
-                correct_values = #{
-                    <<"expression">> => [
-                        <<"key=value">>,
-                        <<"key=value | anotherKey=anotherValue">>,
-                        <<"key=value & anotherKey=anotherValue">>,
-                        <<"key=value - anotherKey=anotherValue">>,
-                        <<"(key=value - anotherKey=anotherValue)">>,
-                        <<"(key=value - anotherKey=anotherValue) | a=b">>,
-                        <<"anyStorage">>
-                    ],
-                    <<"fileId">> => [objectId],
-                    <<"replicasNum">> => [rand:uniform(10)]
-                },
-                bad_values = [
-                    {<<"expression">>, <<"aaa">>, ?ERROR_INVALID_QOS_EXPRESSION},
-                    {<<"expression">>, <<"key | value">>, ?ERROR_INVALID_QOS_EXPRESSION},
-                    {<<"expression">>, <<"(key = value">>, ?ERROR_INVALID_QOS_EXPRESSION},
-                    {<<"expression">>, <<"key = value)">>, ?ERROR_INVALID_QOS_EXPRESSION},
-                    {<<"fileId">>, <<"gibberish">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
-                    {<<"replicasNum">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"replicasNum">>)},
-                    {<<"replicasNum">>, 0, ?ERROR_BAD_VALUE_TOO_LOW(<<"replicasNum">>, 1)}
-                ]
-            }
+            data_spec = 
+                api_test_utils:add_file_id_bad_values_for_operations_not_available_in_share_mode(
+                    FileToShareGuid, ?SPACE_2, ShareId, CreateDataScec
+                )
         }
     ])),
     ok.
@@ -130,7 +140,9 @@ get_qos_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(get)
                 }
             ],
-            data_spec = undefined
+            data_spec = #data_spec{
+                bad_values = [{bad_id, <<"NonExistingRequirement">>, ?ERROR_NOT_FOUND}]
+            }
         }
     ])),
     ok.
@@ -154,7 +166,7 @@ delete_qos_test(Config) ->
                     name = <<"Delete QoS using rest endpoint">>,
                     type = rest,
                     prepare_args_fun = prepare_args_fun_rest(delete),
-                    validate_result_fun = fun(_, {ok, ?HTTP_204_NO_CONTENT, #{}}) -> ok end
+                    validate_result_fun = fun(_, {ok, ?HTTP_204_NO_CONTENT, _, #{}}) -> ok end
                 },
                 #scenario_template{
                     name = <<"Delete QoS using gs endpoint">>,
@@ -163,7 +175,9 @@ delete_qos_test(Config) ->
                     validate_result_fun = fun(_, {ok, undefined}) -> ok end
                 }
             ],
-            data_spec = undefined
+            data_spec = #data_spec{
+                bad_values = [{bad_id, <<"NonExistingRequirement">>, ?ERROR_NOT_FOUND}]
+            }
         }
     ])),
     ok.
@@ -182,6 +196,7 @@ get_qos_summary_test(Config) ->
     % wait for qos entries to be dbsynced to other provider
     ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryIdInherited), 20),
     ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryIdDirect), 20),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, Guid}, <<"share">>),
     
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
@@ -202,7 +217,7 @@ get_qos_summary_test(Config) ->
                     validate_result_fun = validate_result_fun_gs(qos_summary)
                 }
             ],
-            data_spec = undefined
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(Guid, ShareId, undefined)
         }
     ])),
     ok.
@@ -246,19 +261,21 @@ prepare_args_fun_rest(create) ->
     end;
 
 prepare_args_fun_rest(qos_summary) ->
-    fun(#api_test_ctx{env = #{guid := Guid}}) ->
+    fun(#api_test_ctx{env = #{guid := Guid}, data = Data}) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+        {Id, _} = api_test_utils:maybe_substitute_id(ObjectId, Data),
         #rest_args{
             method = get,
-            path = <<"data/", ObjectId/binary, "/qos_summary">>
+            path = <<"data/", Id/binary, "/qos_summary">>
         } 
     end;
 
 prepare_args_fun_rest(Method) ->
-    fun(#api_test_ctx{env = #{qos := QosEntryId}}) -> 
+    fun(#api_test_ctx{env = #{qos := QosEntryId}, data = Data}) ->
+        {Id, _} = api_test_utils:maybe_substitute_id(QosEntryId, Data),
         #rest_args{
             method = Method,
-            path = <<"qos_requirements/", QosEntryId/binary>>
+            path = <<"qos_requirements/", Id/binary>>
         } 
     end.
 
@@ -273,18 +290,20 @@ prepare_args_fun_gs(create) ->
     end;
 
 prepare_args_fun_gs(qos_summary) ->
-    fun(#api_test_ctx{env = #{guid := Guid}}) -> 
+    fun(#api_test_ctx{env = #{guid := Guid}, data = Data}) ->
+        {Id, _} = api_test_utils:maybe_substitute_id(Guid, Data),
         #gs_args{
             operation = get,
-            gri = #gri{type = op_file, id = Guid, aspect = file_qos_summary, scope = private}
+            gri = #gri{type = op_file, id = Id, aspect = file_qos_summary, scope = private}
         } 
     end;
 
 prepare_args_fun_gs(Method) ->
-    fun(#api_test_ctx{env = #{qos := QosEntryId}}) -> 
+    fun(#api_test_ctx{env = #{qos := QosEntryId}, data = Data}) ->
+        {Id, _} = api_test_utils:maybe_substitute_id(QosEntryId, Data),
         #gs_args{
             operation = Method,
-            gri = #gri{type = op_qos, id = QosEntryId, aspect = instance, scope = private}
+            gri = #gri{type = op_qos, id = Id, aspect = instance, scope = private}
         } 
     end.
 
@@ -294,14 +313,14 @@ prepare_args_fun_gs(Method) ->
 %%%===================================================================
 
 validate_result_fun_rest(create) ->
-    fun(#api_test_ctx{env = Env} = ApiTestCtx, {ok, RespCode, RespBody}) ->
+    fun(#api_test_ctx{env = Env} = ApiTestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         ?assertEqual(?HTTP_201_CREATED, RespCode),
         QosEntryId = maps:get(<<"qosRequirementId">>, RespBody),
         {ok, ApiTestCtx#api_test_ctx{env = Env#{qos => QosEntryId}}}
     end;
 
 validate_result_fun_rest(get) ->
-    fun(#api_test_ctx{env = Env}, {ok, RespCode, RespBody}) ->
+    fun(#api_test_ctx{env = Env}, {ok, RespCode, _RespHeaders, RespBody}) ->
         #{
             guid := Guid,
             qos := QosEntryId,
@@ -318,7 +337,7 @@ validate_result_fun_rest(get) ->
     end;
 
 validate_result_fun_rest(qos_summary) ->
-    fun(#api_test_ctx{env = #{qos := [QosEntryIdInherited, QosEntryIdDirect]}}, {ok, RespCode, RespBody}) ->
+    fun(#api_test_ctx{env = #{qos := [QosEntryIdInherited, QosEntryIdDirect]}}, {ok, RespCode, _RespHeaders, RespBody}) ->
         ?assertEqual(?HTTP_200_OK, RespCode),
         ?assertMatch(#{
             <<"requirements">> := #{

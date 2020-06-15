@@ -639,10 +639,9 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, _) ->
     SessionId = Auth#auth.session_id,
     case lfm:get_effective_file_qos(SessionId, {guid, FileGuid}) of
-        {ok, {QosEntriesWithStatus, AssignedEntries}} ->
+        {ok, {QosEntriesWithStatus, _AssignedEntries}} ->
             {ok, #{
                 <<"requirements">> => QosEntriesWithStatus,
-                <<"assignedRequirements">> => AssignedEntries,
                 <<"status">> => qos_status:aggregate(maps:values(QosEntriesWithStatus))
             }};
         ?ERROR_NOT_FOUND ->

@@ -510,7 +510,7 @@ assert_effective_qos(Config, Worker,  FilePath, QosEntries, AssignedEntries, Fil
 
     GetSortedEffectiveQos = fun() ->
         FileGuid = qos_tests_utils:get_guid(Worker, ?SESS_ID(Config, Worker), FilePath),
-        {ok, EffQos} = get_effective_qos_by_rest(Config, Worker, FileGuid),
+        {ok, EffQos} = get_effective_qos_by_lfm(Config, Worker, FileGuid),
         EffQosSorted = sort_effective_qos(EffQos),
         ErrMsg = str_utils:format(
             "Worker: ~p~n"
@@ -524,24 +524,13 @@ assert_effective_qos(Config, Worker,  FilePath, QosEntries, AssignedEntries, Fil
     assert_match_with_err_msg(GetSortedEffectiveQos, ExpectedEffectiveQosSorted, Attempts, 500).
 
 
-get_effective_qos_by_rest(Config, Worker, FileGuid) ->
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    URL = <<"data/", FileObjectId/binary, "/qos_summary">>,
-    Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-    case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
-        {ok, RespBody} ->
-            DecodedBody = json_utils:decode(RespBody),
-            #{
-                <<"requirements">> := QosEntriesWithStatus,
-                <<"assignedRequirements">> := AssignedEntries
-            } = DecodedBody,
-            {ok, #effective_file_qos{
-                assigned_entries = AssignedEntries,
-                qos_entries = maps:keys(QosEntriesWithStatus)
-            }};
-        {error, _} = Error -> Error
-    end.
+get_effective_qos_by_lfm(Config, Worker, FileGuid) ->
+    {ok, {QosEntriesWithStatus, AssignedEntries}} = 
+        lfm_proxy:get_effective_file_qos(Worker, ?SESS_ID(Config, Worker), {guid, FileGuid}),
+    {ok, #effective_file_qos{
+        assigned_entries = AssignedEntries,
+        qos_entries = maps:keys(QosEntriesWithStatus)
+    }}.
 
 
 assert_distribution_in_dir_structure(_, undefined, _) ->
