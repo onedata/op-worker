@@ -144,12 +144,12 @@ clear_all(StorageId) ->
     luma_db:clear_all(StorageId, ?MODULE).
 
 -spec get_by_uid_and_describe(storage(), luma:uid()) ->
-    {ok, json_utils:json_map()} | {error, term()}.
+    {ok, luma_onedata_user:user_map()} | {error, term()}.
 get_by_uid_and_describe(Storage, Uid) ->
     luma_db:get_and_describe(Storage, ?KEY(ensure_integer(Uid), ?UID), ?MODULE).
 
 -spec get_by_acl_user_and_describe(storage(), luma:acl_who()) ->
-    {ok, json_utils:json_map()} | {error, term()}.
+    {ok, luma_onedata_user:user_map()} | {error, term()}.
 get_by_acl_user_and_describe(Storage, AclUser) ->
     luma_db:get_and_describe(Storage, ?KEY(AclUser, ?ACL), ?MODULE).
 

@@ -74,7 +74,7 @@ clear_all(StorageId) ->
     luma_db:clear_all(StorageId, ?MODULE).
 
 -spec get_and_describe(storage(), key()) ->
-    {ok, json_utils:json_map()} | {error, term()}.
+    {ok, luma_posix_credentials:credentials_map()} | {error, term()}.
 get_and_describe(Storage, SpaceId) ->
     luma_db:get_and_describe(Storage, SpaceId, ?MODULE).
 
@@ -98,7 +98,7 @@ acquire(Storage, SpaceId) ->
 -spec acquire_from_auto_feed(storage(), od_space:id()) ->
     {ok, record(), luma:feed()}.
 acquire_from_auto_feed(Storage, SpaceId) ->
-    PosixDefaults = luma_auto_feed:acquire_default_posix_storage_credentials(Storage, SpaceId),
+    {ok, PosixDefaults} = luma_auto_feed:acquire_default_posix_storage_credentials(Storage, SpaceId),
     {ok, PosixDefaults, ?AUTO_FEED}.
 
 -spec acquire_from_external_feed(storage(), od_space:id()) ->
@@ -129,7 +129,7 @@ ensure_all_fields_are_defined(FetchedPosixDefaultsMap, Storage, SpaceId) ->
         true ->
             FetchedPosixDefaultsMap;
         false ->
-            FallbackDefaults = luma_auto_feed:acquire_default_posix_storage_credentials(Storage, SpaceId),
+            {ok, FallbackDefaults} = luma_auto_feed:acquire_default_posix_storage_credentials(Storage, SpaceId),
             FallbackDefaultsJson = luma_posix_credentials:to_json(FallbackDefaults),
             maps:merge(FallbackDefaultsJson, FetchedPosixDefaultsMap)
     end.

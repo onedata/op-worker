@@ -54,11 +54,6 @@ run_test(TestFun, Module, Config, StorageConfig) ->
     Config2 = Module:init_per_testcase(Config),
     try
         TestFun(Config, StorageConfig)
-    catch
-        E:R ->
-            ct:pal("FAILED: ~p", [{E, R}]),
-            ct:timetrap({hours, 10}),
-            ct:sleep({hours, 10})
     after
         Module:end_per_testcase(Config2)
     end.

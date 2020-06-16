@@ -49,23 +49,32 @@ upgrade_from_19_02_x_storages(Config) ->
     SpaceId = <<"space_id1">>,
 
     St = <<"storage1">>,
+    Readonly = false,
     Helper = {helper,
         <<"HelperName">>,
-        #{}, % args
-        #{}, % admin_ctx
+        Args = #{}, % args
+        AdminCtx = #{}, % admin_ctx
         false, % insecure
         true, % extended_direct_io
-        <<"storage_path_type">> % storage_path_type
+        StoragePathType = <<"storage_path_type">> % storage_path_type
+    },
+    ExpectedHelper = {helper,
+        <<"HelperName">>,
+        Args#{
+            <<"skipStorageDetection">> => atom_to_binary(Readonly, utf8),
+            <<"storagePathType">> => StoragePathType
+        }, % args
+        AdminCtx
     },
     LumaConfig = luma_config:new_with_external_feed(<<"https://example.com">>, <<"api_key">>),
     Storage = #storage{
         name = St,
         helpers = [Helper],
-        readonly = false,
+        readonly = Readonly,
         luma_config = LumaConfig
     },
     ExpectedStorageConfig = #storage_config{
-        helper = Helper,
+        helper = ExpectedHelper,
         luma_config = LumaConfig,
         imported_storage = false
     },

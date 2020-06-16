@@ -38,7 +38,7 @@
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
 -export([is_storage_detection_skipped/1, is_imported/1, is_posix_compatible/1]).
--export([is_not_auto_luma_feed/1, is_not_local_luma_feed/1]).
+-export([is_not_auto_luma_feed/1]).
 -export([is_local/1]).
 
 %%% Functions to modify storage details
@@ -294,10 +294,6 @@ is_imported(StorageData) ->
 -spec is_not_auto_luma_feed(data()) -> boolean().
 is_not_auto_luma_feed(Storage) ->
     get_luma_feed(Storage) =/= ?AUTO_FEED.
-
--spec is_not_local_luma_feed(data()) -> boolean().
-is_not_local_luma_feed(Storage) ->
-    get_luma_feed(Storage) =/= ?LOCAL_FEED.
 
 -spec is_local(id()) -> boolean().
 is_local(StorageId) ->

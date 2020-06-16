@@ -132,7 +132,7 @@ store_posix_compatible_mapping(Storage, UserId, Uid, Feed) ->
     luma_db:store(Storage, UserId, ?MODULE, StorageUser, Feed, true).
 
 -spec get_and_describe(storage(), key()) ->
-    {ok, json_utils:json_map()} | {error, term()}.
+    {ok, luma_storage_user:user_map()} | {error, term()}.
 get_and_describe(Storage, UserId) ->
     luma_db:get_and_describe(Storage, UserId, ?MODULE).
 
@@ -172,7 +172,7 @@ acquire_mapping_from_external_feed(Storage, UserId) ->
 -spec acquire_default_mapping(storage:data(), key()) ->
     {ok, record(), luma:feed()}.
 acquire_default_mapping(Storage, UserId) ->
-    StorageUser = luma_auto_feed:acquire_user_storage_credentials(Storage, UserId),
+    {ok, StorageUser} = luma_auto_feed:acquire_user_storage_credentials(Storage, UserId),
     {ok, StorageUser, ?AUTO_FEED}.
 
 

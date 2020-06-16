@@ -43,7 +43,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec acquire_user_storage_credentials(storage:data(), od_user:id()) ->
-    luma_storage_user:user().
+    {ok, luma_storage_user:user()}.
 acquire_user_storage_credentials(Storage, UserId) ->
     StorageCredentials = case storage:is_posix_compatible(Storage) of
         true ->
@@ -54,7 +54,7 @@ acquire_user_storage_credentials(Storage, UserId) ->
             helper:get_admin_ctx(Helper)
     end,
     StorageUserMap = #{<<"storageCredentials">> => StorageCredentials},
-    luma_storage_user:new(UserId, StorageUserMap, Storage).
+    {ok, luma_storage_user:new(UserId, StorageUserMap, Storage)}.
 
 
 %%--------------------------------------------------------------------
@@ -64,22 +64,22 @@ acquire_user_storage_credentials(Storage, UserId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec acquire_default_posix_storage_credentials(storage:data(), od_space:id()) ->
-    luma_posix_credentials:credentials().
+    {ok, luma_posix_credentials:credentials()}.
 acquire_default_posix_storage_credentials(Storage, SpaceId) ->
     StorageFileCtx = storage_file_ctx:new(?DIRECTORY_SEPARATOR_BINARY, SpaceId, storage:get_id(Storage)),
     {#statbuf{st_uid = Uid, st_gid = Gid}, _} = storage_file_ctx:stat(StorageFileCtx),
-    luma_posix_credentials:new(Uid, Gid).
+    {ok, luma_posix_credentials:new(Uid, Gid)}.
 
 
 -spec acquire_default_display_credentials(storage:data(), od_space:id()) ->
-    luma_posix_credentials:credentials().
+    {ok, luma_posix_credentials:credentials()}.
 acquire_default_display_credentials(Storage, SpaceId) ->
     case storage:is_posix_compatible(Storage) of
         true ->
-            acquire_default_posix_storage_credentials(Storage, SpaceId);
+            luma_spaces_posix_storage_defaults:get_or_acquire(Storage, SpaceId);
         false ->
             {FallbackUid, FallbackGid} = generate_posix_credentials(SpaceId),
-            luma_posix_credentials:new(FallbackUid, FallbackGid)
+            {ok, luma_posix_credentials:new(FallbackUid, FallbackGid)}
     end.
 
 

@@ -75,7 +75,7 @@ clear_all(StorageId) ->
     luma_db:clear_all(StorageId, ?MODULE).
 
 -spec get_and_describe(storage(), key()) ->
-    {ok, json_utils:json_map()} | {error, term()}.
+    {ok, luma_onedata_group:group_map()} | {error, term()}.
 get_and_describe(Storage, AclGroup) ->
     luma_db:get_and_describe(Storage, AclGroup, ?MODULE).
 

@@ -29,30 +29,43 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
     end_per_testcase/2]).
 -export([
-    user_operation_fails_with_expired_token_on_insecure_storage/1,
-    root_operation_fails_with_expired_token_on_insecure_storage/1,
-    user_operation_succeeds_with_refreshed_token_on_insecure_storage/1,
-    root_operation_succeeds_with_refreshed_token_on_insecure_storage/1,
-    user_operation_fails_with_expired_token_on_secure_storage/1,
-    root_operation_fails_with_expired_token_on_secure_storage/1,
-    user_operation_succeeds_with_refreshed_token_on_secure_storage/1,
-    root_operation_succeeds_with_refreshed_token_on_secure_storage/1
+    user_operation_fails_with_expired_token_on_storage_with_auto_feed_luma/1,
+    root_operation_fails_with_expired_token_on_storage_with_auto_feed_luma/1,
+    user_operation_succeeds_with_refreshed_token_on_storage_with_auto_feed_luma/1,
+    root_operation_succeeds_with_refreshed_token_on_storage_with_auto_feed_luma/1,
+    user_operation_fails_with_expired_token_on_storage_with_local_feed_luma/1,
+    root_operation_fails_with_expired_token_on_storage_with_local_feed_luma/1,
+    user_operation_succeeds_with_refreshed_token_on_storage_with_local_feed_luma/1,
+    root_operation_succeeds_with_refreshed_token_on_storage_with_local_feed_luma/1,
+    user_operation_fails_with_expired_token_on_storage_with_external_feed_luma/1,
+    root_operation_fails_with_expired_token_on_storage_with_external_feed_luma/1,
+    user_operation_succeeds_with_refreshed_token_on_storage_with_external_feed_luma/1,
+    root_operation_succeeds_with_refreshed_token_on_storage_with_external_feed_luma/1
 ]).
 
 
 all() -> [
-    user_operation_fails_with_expired_token_on_insecure_storage,
-    root_operation_fails_with_expired_token_on_insecure_storage,
-    user_operation_succeeds_with_refreshed_token_on_insecure_storage,
-    root_operation_succeeds_with_refreshed_token_on_insecure_storage,
-    user_operation_fails_with_expired_token_on_secure_storage,
-    root_operation_fails_with_expired_token_on_secure_storage,
-    user_operation_succeeds_with_refreshed_token_on_secure_storage,
-    root_operation_succeeds_with_refreshed_token_on_secure_storage
+    user_operation_fails_with_expired_token_on_storage_with_auto_feed_luma,
+    root_operation_fails_with_expired_token_on_storage_with_auto_feed_luma,
+    user_operation_succeeds_with_refreshed_token_on_storage_with_auto_feed_luma,
+    root_operation_succeeds_with_refreshed_token_on_storage_with_auto_feed_luma,
+    user_operation_fails_with_expired_token_on_storage_with_local_feed_luma,
+    root_operation_fails_with_expired_token_on_storage_with_local_feed_luma,
+    user_operation_succeeds_with_refreshed_token_on_storage_with_local_feed_luma,
+    root_operation_succeeds_with_refreshed_token_on_storage_with_local_feed_luma,
+    user_operation_fails_with_expired_token_on_storage_with_external_feed_luma,
+    root_operation_fails_with_expired_token_on_storage_with_external_feed_luma,
+    user_operation_succeeds_with_refreshed_token_on_storage_with_external_feed_luma,
+    root_operation_succeeds_with_refreshed_token_on_storage_with_external_feed_luma
 ].
 
--define(SPACE_ID, <<"space1">>).
--define(STORAGE_FILE_ID, filename:join(["/", ?SPACE_ID, <<"dummyFile">>])).
+-define(SPACE_ID1, <<"space1">>). % space supported by webdav with auto LUMA feed
+-define(SPACE_ID2, <<"space2">>). % space supported by webdav with local LUMA feed
+-define(SPACE_ID3, <<"space3">>). % space supported by webdav with external LUMA feed
+
+-define(STORAGE_IDS, [<<"webdav_auto_luma_feed">>, <<"webdav_local_luma_feed">>, <<"webdav_external_luma_feed">>]).
+
+-define(STORAGE_FILE_ID(SpaceId), filename:join(["/", SpaceId, <<"dummyFile">>])).
 -define(USER1, <<"user1">>).
 -define(SESSION(Worker, Config), ?SESSION(?USER1, Worker, Config)).
 -define(SESSION(User, Worker, Config),
@@ -85,79 +98,54 @@ all() -> [
 %%% Tests
 %%%===================================================================
 
-user_operation_fails_with_expired_token_on_insecure_storage(Config) ->
+user_operation_fails_with_expired_token_on_storage_with_auto_feed_luma(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessionId = ?SESSION(W, Config),
-    operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config).
+    operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, ?SPACE_ID1, Config).
 
-root_operation_fails_with_expired_token_on_insecure_storage(Config) ->
-    operation_with_expired_token_in_admin_ctx_should_fail_base(?ROOT_SESS_ID, Config).
+root_operation_fails_with_expired_token_on_storage_with_auto_feed_luma(Config) ->
+    operation_with_expired_token_in_admin_ctx_should_fail_base(?ROOT_SESS_ID, ?SPACE_ID1, Config).
 
-user_operation_succeeds_with_refreshed_token_on_insecure_storage(Config) ->
+user_operation_succeeds_with_refreshed_token_on_storage_with_auto_feed_luma(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     SessionId = ?SESSION(W, Config),
-    operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Config).
+    operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, ?SPACE_ID1, Config).
 
-root_operation_succeeds_with_refreshed_token_on_insecure_storage(Config) ->
-    operation_with_refreshed_token_in_admin_ctx_should_succeed_base(?ROOT_SESS_ID, Config).
+root_operation_succeeds_with_refreshed_token_on_storage_with_auto_feed_luma(Config) ->
+    operation_with_refreshed_token_in_admin_ctx_should_succeed_base(?ROOT_SESS_ID, ?SPACE_ID1, Config).
 
-user_operation_fails_with_expired_token_on_secure_storage(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?SESSION(W, Config),
-    StorageId = initializer:get_storage_id(W),
-    TTL = 0,
-    SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
-    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP]),
-    mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
+user_operation_fails_with_expired_token_on_storage_with_local_feed_luma(Config) ->
+    operation_with_expired_token_in_user_ctx_should_fail_base(Config, ?SPACE_ID2).
 
-    % setxattr should return EKEYEXPIRED due to TTL=0
-    ?assertEqual({error, ?EKEYEXPIRED}, setxattr(W, SDHandle, <<"K">>, <<"V">>)),
-    % ensure that helper params were refreshed
-    ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
-    % ensure that setxattr was repeated
-    ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 2),
-    % ensure that token was acquired in admin_ctx
-    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP])).
+root_operation_fails_with_expired_token_on_storage_with_local_feed_luma(Config) ->
+    operation_with_expired_token_in_admin_ctx_should_fail_base(?ROOT_SESS_ID, ?SPACE_ID2, Config).
 
-root_operation_fails_with_expired_token_on_secure_storage(Config) ->
-    operation_with_expired_token_in_admin_ctx_should_fail_base(?ROOT_SESS_ID, Config).
+user_operation_succeeds_with_refreshed_token_on_storage_with_local_feed_luma(Config) ->
+    operation_with_refreshed_token_in_user_ctx_should_succeed_base(Config, ?SPACE_ID2).
 
-user_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    SessionId = ?SESSION(W, Config),
-    StorageId = initializer:get_storage_id(W),
-    TTL = 5,
-    SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
-    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP]),
-    mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
+root_operation_succeeds_with_refreshed_token_on_storage_with_local_feed_luma(Config) ->
+    operation_with_refreshed_token_in_admin_ctx_should_succeed_base(?ROOT_SESS_ID, ?SPACE_ID2, Config).
 
-    ?assertEqual(ok, setxattr(W, SDHandle, <<"K">>, <<"V">>)),
+user_operation_fails_with_expired_token_on_storage_with_external_feed_luma(Config) ->
+    operation_with_expired_token_in_user_ctx_should_fail_base(Config, ?SPACE_ID3).
 
-    %sleep longer than TTL to ensure that new token will be fetched
-    timer:sleep(timer:seconds(TTL + 1)),
+root_operation_fails_with_expired_token_on_storage_with_external_feed_luma(Config) ->
+    operation_with_expired_token_in_admin_ctx_should_fail_base(?ROOT_SESS_ID, ?SPACE_ID3, Config).
 
-    % setxattr should succeed after retry with refreshed token
-    ?assertEqual(ok, setxattr(W, SDHandle, <<"K2">>, <<"V2">>)),
-    % ensure that helper params were refreshed
-    ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
-    % ensure that setxattr was repeated
-    ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 3),
-    % ensure that token was acquired in admin_ctx
-    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP])).
+user_operation_succeeds_with_refreshed_token_on_storage_with_external_feed_luma(Config) ->
+    operation_with_refreshed_token_in_user_ctx_should_succeed_base(Config, ?SPACE_ID3).
 
-
-root_operation_succeeds_with_refreshed_token_on_secure_storage(Config) ->
-    operation_with_refreshed_token_in_admin_ctx_should_succeed_base(?ROOT_SESS_ID, Config).
+root_operation_succeeds_with_refreshed_token_on_storage_with_external_feed_luma(Config) ->
+    operation_with_refreshed_token_in_admin_ctx_should_succeed_base(?ROOT_SESS_ID, ?SPACE_ID3, Config).
 
 %%%===================================================================
 %%% Test bases
 %%%===================================================================
 
-operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
+operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, SpaceId, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StorageId = initializer:get_storage_id(W),
     TTL = 0,
-    SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
+    SDHandle = get_sd_handle(W, SpaceId, SessionId, ?STORAGE_FILE_ID(SpaceId)),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP]),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
 
@@ -171,11 +159,10 @@ operation_with_expired_token_in_admin_ctx_should_fail_base(SessionId, Config) ->
     ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP])).
 
 
-operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Config) ->
+operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, SpaceId, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    StorageId = initializer:get_storage_id(W),
     TTL = 5,
-    SDHandle = get_sd_handle(W, ?SPACE_ID, SessionId, ?UUID, StorageId, ?STORAGE_FILE_ID),
+    SDHandle = get_sd_handle(W, SpaceId, SessionId, ?STORAGE_FILE_ID(SpaceId)),
     mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
     FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP]),
 
@@ -193,6 +180,46 @@ operation_with_refreshed_token_in_admin_ctx_should_succeed_base(SessionId, Confi
     % ensure that token was acquired in admin_ctx
     ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [?ADMIN_CREDENTIALS, ?ADMIN_ID, ?IDP])).
 
+
+operation_with_expired_token_in_user_ctx_should_fail_base(Config, SpaceId) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?SESSION(W, Config),
+    TTL = 0,
+    SDHandle = get_sd_handle(W, SpaceId, SessionId, ?STORAGE_FILE_ID(SpaceId)),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP]),
+    mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
+
+    % setxattr should return EKEYEXPIRED due to TTL=0
+    ?assertEqual({error, ?EKEYEXPIRED}, setxattr(W, SDHandle, <<"K">>, <<"V">>)),
+    % ensure that helper params were refreshed
+    ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
+    % ensure that setxattr was repeated
+    ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 2),
+    % ensure that token was acquired in user_ctx
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP])).
+
+
+operation_with_refreshed_token_in_user_ctx_should_succeed_base(Config, SpaceId) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?SESSION(W, Config),
+    TTL = 5,
+    SDHandle = get_sd_handle(W, SpaceId, SessionId, ?STORAGE_FILE_ID(SpaceId)),
+    FetchTokenCallsNum0 = ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP]),
+    mock_fetch_token(W, ?IDP_ACCESS_TOKEN,  TTL),
+
+    ?assertEqual(ok, setxattr(W, SDHandle, <<"K">>, <<"V">>)),
+
+    %sleep longer than TTL to ensure that new token will be fetched
+    timer:sleep(timer:seconds(TTL + 1)),
+
+    % setxattr should succeed after retry with refreshed token
+    ?assertEqual(ok, setxattr(W, SDHandle, <<"K2">>, <<"V2">>)),
+    % ensure that helper params were refreshed
+    ?assertRefreshParamsCalls(W, ['_', '_', '_', '_'], 1),
+    % ensure that setxattr was repeated
+    ?assertSetxattrCalls(W, ['_', '_', '_', '_', '_', '_'], 3),
+    % ensure that token was acquired in user_ctx
+    ?assertEqual(FetchTokenCallsNum0 + 2, ?getFetchTokenCalls(W, [SessionId, ?USER1, ?IDP])).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -206,32 +233,15 @@ init_per_suite(Config) ->
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
 
-init_per_testcase(Case, Config) when
-    Case =:= user_operation_fails_with_expired_token_on_insecure_storage;
-    Case =:= root_operation_fails_with_expired_token_on_insecure_storage;
-    Case =:= user_operation_succeeds_with_refreshed_token_on_insecure_storage;
-    Case =:= root_operation_succeeds_with_refreshed_token_on_insecure_storage
-->
+init_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    enable_webdav_test_mode_insecure_storage(W, initializer:get_storage_id(W)),
+    enable_webdav_test_mode_on_all_storages(W),
     test_utils:mock_new(W, [helpers, helpers_reload], [passthrough]),
-    Config;
-
-init_per_testcase(Case, Config) when
-    Case =:= user_operation_fails_with_expired_token_on_secure_storage;
-    Case =:= root_operation_fails_with_expired_token_on_secure_storage;
-    Case =:= user_operation_succeeds_with_refreshed_token_on_secure_storage;
-    Case =:= root_operation_succeeds_with_refreshed_token_on_secure_storage
-->
-    [W | _] = ?config(op_worker_nodes, Config),
-    enable_webdav_test_mode_secure_storage(W, initializer:get_storage_id(W)),
-    test_utils:mock_new(W, [helpers, helpers_reload], [passthrough]),
-    mock_luma(W),
     Config.
 
 end_per_testcase(_Case, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_unload(W, [helpers_reload, helpers, luma_external_feed]),
+    ok = test_utils:mock_unload(W, [helpers_reload, helpers]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?SESSION(W, Config)]),
     ok = rpc:call(W, session_helpers, delete_helpers, [?ROOT_SESS_ID]),
     Config.
@@ -245,34 +255,16 @@ end_per_suite(Config) ->
 %%% Internal functions
 %%%===================================================================
 
-mock_luma(Worker) ->
-    ok = test_utils:mock_new(Worker, luma_external_feed),
-    ok = test_utils:mock_expect(Worker, luma_external_feed, map_onedata_user_to_credentials, fun(_, _) ->
-        {ok, #{
-            <<"storageCredentials">> => #{
-                <<"credentialsType">> => <<"oauth2">>,
-                <<"credentials">> => ?USER_CREDENTIALS
-            }
-        }}
-    end).
-
-
 mock_fetch_token(Worker, Token, TTL) ->
     ok = test_utils:mock_expect(Worker, user_logic, fetch_idp_access_token,
         fun (_, _, _) -> {ok, {Token, TTL}} end).
 
-enable_webdav_test_mode_secure_storage(Worker, StorageId) ->
-    enable_webdav_test_mode(Worker, StorageId, false).
+enable_webdav_test_mode_on_all_storages(Worker) ->
+    lists:foreach(fun(StorageId) ->
+        enable_webdav_test_mode(Worker, StorageId)
+    end, ?STORAGE_IDS).
 
-enable_webdav_test_mode_insecure_storage(Worker, StorageId) ->
-    enable_webdav_test_mode(Worker, StorageId, true).
-
-enable_webdav_test_mode(Worker, StorageId, Insecure) ->
-    LumaConfig = case Insecure of
-        true -> luma_config:new(?AUTO_FEED);
-        false -> luma_config:new(?EXTERNAL_FEED)
-    end,
-
+enable_webdav_test_mode(Worker, StorageId) ->
     UpdateHelperFun = fun(#helper{args = Args, admin_ctx = AdminCtx}  = Helper) ->
         Args2 = Args#{
             <<"testTokenRefreshMode">> => <<"true">>,
@@ -288,12 +280,11 @@ enable_webdav_test_mode(Worker, StorageId, Insecure) ->
             }
         }}
     end,
-    rpc:call(Worker, storage, update_helper, [StorageId, UpdateHelperFun]),
-    rpc:call(Worker, storage, update_luma_config, [StorageId, LumaConfig]).
+    ok = rpc:call(Worker, storage, update_helper, [StorageId, UpdateHelperFun]).
 
-
-get_sd_handle(Worker, SpaceId, SessionId, Uuid, StorageId, FilePath) ->
-    rpc:call(Worker, storage_driver, new_handle, [SessionId, SpaceId, Uuid, StorageId, FilePath]).
+get_sd_handle(Worker, SpaceId, SessionId, FilePath) ->
+    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
+    rpc:call(Worker, storage_driver, new_handle, [SessionId, SpaceId, undefined, StorageId, FilePath]).
 
 setxattr(Worker, SDHandle, Key, Value) ->
     rpc:call(Worker, storage_driver, setxattr, [SDHandle, Key, Value, true, true]).

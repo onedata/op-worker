@@ -585,16 +585,20 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = undefined}) ->
     {FileMetaDoc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
     OwnerId = file_meta:get_owner(FileMetaDoc),
     {Storage, FileCtx3} = get_storage(FileCtx2),
-    {ok, DisplayCredentials = {Uid, Gid}} = luma:map_to_display_credentials(OwnerId, SpaceId, Storage),
-    case Storage =:= undefined of
-        true ->
-            {DisplayCredentials, FileCtx3#file_ctx{display_credentials = DisplayCredentials}};
-        false ->
-            {SyncedGid, FileCtx4} = get_synced_gid(FileCtx3),
-            % if SyncedGid =/= undefined override display Gid
-            FinalGid = utils:ensure_defined(SyncedGid, undefined, Gid),
-            FinalDisplayCredentials = {Uid, FinalGid},
-            {FinalDisplayCredentials, FileCtx4#file_ctx{display_credentials = FinalDisplayCredentials}}
+    case luma:map_to_display_credentials(OwnerId, SpaceId, Storage) of
+        {ok, DisplayCredentials = {Uid, Gid}} ->
+            case Storage =:= undefined of
+                true ->
+                    {DisplayCredentials, FileCtx3#file_ctx{display_credentials = DisplayCredentials}};
+                false ->
+                    {SyncedGid, FileCtx4} = get_synced_gid(FileCtx3),
+                    % if SyncedGid =/= undefined override display Gid
+                    FinalGid = utils:ensure_defined(SyncedGid, undefined, Gid),
+                    FinalDisplayCredentials = {Uid, FinalGid},
+                    {FinalDisplayCredentials, FileCtx4#file_ctx{display_credentials = FinalDisplayCredentials}}
+            end;
+        {error, not_found} ->
+            {error, ?EACCES}
     end;
 get_display_credentials(FileCtx = #file_ctx{display_credentials = DisplayCredentials}) ->
     {DisplayCredentials, FileCtx}.

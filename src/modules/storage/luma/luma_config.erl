@@ -81,7 +81,7 @@ update(LumaConfig = #luma_config{
     url = Url,
     api_key = ApiKey
 }, Diff) when is_map(Diff) ->
-    NewFeed = maps:get(feed, Diff, Feed),
+    NewFeed = ensure_atom(maps:get(feed, Diff, Feed)),
     FeedHasChanged = NewFeed =/= Feed,
     case {FeedHasChanged, NewFeed =:= ?EXTERNAL_FEED} of
         {false, false} ->
@@ -101,10 +101,10 @@ update(LumaConfig = #luma_config{
             case maps:get(url, Diff, undefined) of
                 undefined ->
                     ?ERROR_MISSING_REQUIRED_VALUE(url);
-                Url when is_binary(Url) ->
+                NewUrl when is_binary(NewUrl) ->
                     {ok, #luma_config{
                         feed = NewFeed,
-                        url = Url,
+                        url = NewUrl,
                         api_key = maps:get(api_key, Diff, ApiKey)
                     }}
             end
@@ -125,3 +125,7 @@ describe(#luma_config{feed = LumaFeed}) ->
     #{
         <<"lumaFeed">> => LumaFeed
     }.
+
+-spec ensure_atom(feed() | binary()) -> feed().
+ensure_atom(Atom) when is_atom(Atom) -> Atom;
+ensure_atom(Binary) when is_binary(Binary) -> binary_to_existing_atom(Binary, utf8).

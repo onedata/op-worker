@@ -67,7 +67,7 @@ clear_all(StorageId) ->
     luma_db:clear_all(StorageId, ?MODULE).
 
 -spec get_and_describe(storage(), key()) ->
-    {ok, json_utils:json_map()} | {error, term()}.
+    {ok, luma_posix_credentials:credentials_map()} | {error, term()}.
 get_and_describe(Storage, SpaceId) ->
     luma_db:get_and_describe(Storage, SpaceId, ?MODULE).
 
@@ -89,7 +89,7 @@ acquire(Storage, SpaceId) ->
 -spec acquire_from_auto_feed(storage(), od_space:id()) ->
     {ok, record(), luma:feed()}.
 acquire_from_auto_feed(Storage, SpaceId) ->
-    DisplayDefaults = luma_auto_feed:acquire_default_display_credentials(Storage, SpaceId),
+    {ok, DisplayDefaults} = luma_auto_feed:acquire_default_display_credentials(Storage, SpaceId),
     {ok, DisplayDefaults, ?AUTO_FEED}.
 
 -spec acquire_from_external_feed(storage(), od_space:id()) ->
@@ -138,6 +138,6 @@ set_missing_fields_posix(DisplayDefaultsMap, Storage, SpaceId) ->
 -spec set_missing_fields_non_posix(luma_posix_credentials:credentials_map(), storage(), od_space:id()) ->
     luma_posix_credentials:credentials_map().
 set_missing_fields_non_posix(DisplayDefaultsMap, Storage, SpaceId) ->
-    FallbackDefaults = luma_auto_feed:acquire_default_display_credentials(Storage, SpaceId),
+    {ok, FallbackDefaults} = luma_auto_feed:acquire_default_display_credentials(Storage, SpaceId),
     FallbackDefaultsJson = luma_posix_credentials:to_json(FallbackDefaults),
     maps:merge(FallbackDefaultsJson, DisplayDefaultsMap).
