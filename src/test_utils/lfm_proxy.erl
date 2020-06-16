@@ -763,7 +763,7 @@ check_qos_status(Worker, SessId, QosEntryId) ->
 
 
 -spec check_qos_status(node(), session:id(), qos_entry:id(), lfm:file_key()) ->
-    {ok, boolean()} | lfm:error_reply().
+    {ok, qos_status:summary()} | lfm:error_reply().
 check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
     ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId, FileKey)).
 

@@ -917,6 +917,6 @@ check_qos_status(SessId, QosEntryId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_qos_status(session:id(), qos_entry:id(), file_key()) ->
-    {ok, boolean()} | error_reply().
+    {ok, qos_status:summary()} | error_reply().
 check_qos_status(SessId, QosEntryId, FileKey) ->
     ?run(fun() -> lfm_qos:check_qos_status(SessId, QosEntryId, FileKey) end).
