@@ -33,7 +33,7 @@
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
     add_file_id_errors_for_operations_not_available_in_share_mode/3,
-    add_file_id_bad_values_for_operations_not_available_in_share_mode/4,
+    add_cdmi_id_errors_for_operations_not_available_in_share_mode/4,
     maybe_substitute_id/2
 ]).
 
@@ -209,7 +209,7 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
 %%
 %% ATTENTION !!!
 %%
-%% Bad ids are available undef 'bad_id' atom key - test implementation should
+%% Bad ids are available under 'bad_id' atom key - test implementation should
 %% make sure to substitute them for fileId component in rest path or #gri.id
 %% before making test call.
 %% @end
@@ -262,11 +262,12 @@ add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId,
 %% @doc
 %% Extends data_spec() with file id bad values and errors for operations 
 %% not available in share mode that provide file id as parameter in data spec map.
+%% All added bad values are in cdmi form and are stored under <<"fileId">> key.
 %% @end
 %%--------------------------------------------------------------------
--spec add_file_id_bad_values_for_operations_not_available_in_share_mode(file_id:file_guid(), od_space:id(), od_share:id(), data_spec()) ->
+-spec add_cdmi_id_errors_for_operations_not_available_in_share_mode(file_id:file_guid(), od_space:id(), od_share:id(), data_spec()) ->
     data_spec().
-add_file_id_bad_values_for_operations_not_available_in_share_mode(FileGuid, SpaceId, ShareId, DataSpec) ->
+add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId, ShareId, DataSpec) ->
     {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
     
     NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),

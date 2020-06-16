@@ -58,7 +58,7 @@ create_qos_test(Config) ->
         #{guid => Guid}
     end, 
     
-    CreateDataScec = #data_spec{
+    CreateDataSpec = #data_spec{
         required = [<<"expression">>, <<"fileId">>],
         optional = [<<"replicasNum">>],
         correct_values = #{
@@ -106,8 +106,8 @@ create_qos_test(Config) ->
                 }
             ],
             data_spec = 
-                api_test_utils:add_file_id_bad_values_for_operations_not_available_in_share_mode(
-                    FileToShareGuid, ?SPACE_2, ShareId, CreateDataScec
+                api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+                    FileToShareGuid, ?SPACE_2, ShareId, CreateDataSpec
                 )
         }
     ])),

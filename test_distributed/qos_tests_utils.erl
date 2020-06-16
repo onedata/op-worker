@@ -286,13 +286,13 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
                 end;
             {error, _} = Error ->
                 str_utils:format(
-                    "Error when checking if QoS is fulfilled. ~n"
+                    "Error when checking QoS status. ~n"
                     "Worker: ~p~n"
                     "QosName: ~p~n"
                     "Error: ~p~n", [Worker, QosName, Error]
                 )
         end,
-        {lfm_proxy:check_qos_fulfilled(Worker, SessId, QosEntryId), ErrMsg}
+        {lfm_proxy:check_qos_status(Worker, SessId, QosEntryId), ErrMsg}
     end,
     assert_match_with_err_msg(Fun, {ok, ExpectedFulfillmentStatus}, 3 * ?ATTEMPTS, 1000).
 

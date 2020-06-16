@@ -131,7 +131,7 @@ aggregate(Statuses) ->
             (?IMPOSSIBLE, _) -> ?IMPOSSIBLE;
             (_, ?PENDING) -> ?PENDING;
             (Status, _Acc) -> Status
-        end, fulfilled, Statuses).
+        end, ?FULFILLED, Statuses).
 
 
 -spec report_traverse_start(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.

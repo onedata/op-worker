@@ -219,7 +219,7 @@ remove_qos_entry_insecure(UserCtx, FileCtx, QosEntryId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether requirements defined in given qos_entry are fulfilled.
+%% Checks status of requirements defined in given qos_entry.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_status_insecure(file_ctx:ctx(), qos_entry:id()) ->

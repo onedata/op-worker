@@ -94,7 +94,7 @@ remove_qos_entry(SessId, QosEntryId) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv
-%% check_qos_fulfilled(SessId, QosEntries, undefined)
+%% check_qos_status(SessId, QosEntries, undefined)
 %% @end
 %%--------------------------------------------------------------------
 -spec check_qos_status(session:id(), qos_entry:id() | [qos_entry:id()]) -> 
@@ -104,7 +104,7 @@ check_qos_status(SessId, QosEntries) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if QoS requirements defined in qos_entry document/documents are fulfilled.
+%% Check status of QoS requirements defined in qos_entry document/documents.
 %% @end
 %%--------------------------------------------------------------------
 -spec check_qos_status(session:id(), qos_entry:id() | [qos_entry:id()],

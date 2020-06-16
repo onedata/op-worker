@@ -66,7 +66,7 @@
 
     get_effective_file_qos/3,
     add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
-    check_qos_fulfilled/3, check_qos_status/4
+    check_qos_status/3, check_qos_status/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -756,16 +756,16 @@ remove_qos_entry(Worker, SessId, QosEntryId) ->
     ?EXEC(Worker, lfm:remove_qos_entry(SessId, QosEntryId)).
 
 
--spec check_qos_fulfilled(node(), session:id(), qos_entry:id()) ->
+-spec check_qos_status(node(), session:id(), qos_entry:id()) ->
     {ok, qos_status:summary()} | lfm:error_reply().
-check_qos_fulfilled(Worker, SessId, QosEntryId) ->
+check_qos_status(Worker, SessId, QosEntryId) ->
     ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId)).
 
 
 -spec check_qos_status(node(), session:id(), qos_entry:id(), lfm:file_key()) ->
     {ok, boolean()} | lfm:error_reply().
 check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
-    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosEntryId, FileKey)).
+    ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId, FileKey)).
 
 
 %%%===================================================================

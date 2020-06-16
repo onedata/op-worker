@@ -151,7 +151,7 @@ create_file_transfer(Config, Type) ->
                     validate_result_fun = fun validate_transfer_gs_call_result/2
                 }
             ],
-            data_spec = api_test_utils:add_file_id_bad_values_for_operations_not_available_in_share_mode(
+            data_spec = api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                 FileGuid, ?SPACE_2, ShareId,
                 op_transfer_spec(Type, <<"file">>, P1, P2)
             )
