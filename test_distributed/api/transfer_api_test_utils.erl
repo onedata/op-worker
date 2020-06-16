@@ -22,13 +22,13 @@
 -export([
     create_file/3,
 
-    create_setup_transfer_env_with_started_transfer_fun/6,
-    create_setup_file_transfer_env_fun/5,
-    create_setup_view_transfer_env_fun/5,
+    create_setup_transfer_env_with_started_transfer_fun/7,
+    create_setup_file_transfer_env_fun/6,
+    create_setup_view_transfer_env_fun/6,
 
     await_transfer_end/3,
 
-    create_verify_transfer_env_fun/6
+    create_verify_transfer_env_fun/7
 ]).
 
 
@@ -47,27 +47,29 @@ create_file(Node, SessId, DirPath) ->
     FileGuid.
 
 
-create_setup_transfer_env_with_started_transfer_fun(TransferType, DataSourceType, P1, P2, UserId, Config) ->
+create_setup_transfer_env_with_started_transfer_fun(TransferType, EnvRef, DataSourceType, P1, P2, UserId, Config) ->
     SetupEnvFun = get_setup_file_transfer_env_fun(
-        TransferType, DataSourceType, P1, P2, UserId, Config
+        TransferType, EnvRef, DataSourceType, P1, P2, UserId, Config
     ),
     fun() ->
-        Env = SetupEnvFun(),
+        SetupEnvFun(),
+        {ok, TransferDetails} = api_test_utils:get_env_var(EnvRef, transfer_details),
+
         CreationTime = time_utils:system_time_millis() div 1000,
         QueryViewParams = #{<<"descending">> => true},
         Callback = <<"callback">>,
 
         TransferId = create_transfer(
             TransferType, DataSourceType, P1, P2, UserId,
-            QueryViewParams, Callback, Env, Config
+            QueryViewParams, Callback, TransferDetails, Config
         ),
-        Env#{
+        api_test_utils:set_env_var(EnvRef, transfer_details, TransferDetails#{
             transfer_id => TransferId,
             user_id => UserId,
             creation_time => CreationTime,
             query_view_params => QueryViewParams,
             callback => Callback
-        }
+        })
     end.
 
 
@@ -76,10 +78,10 @@ create_setup_transfer_env_with_started_transfer_fun(TransferType, DataSourceType
 %% Creates either single file or directory with 5 files (random select) and
 %% awaits metadata synchronization between nodes. In case of 'eviction' also
 %% copies data so that it would exist on all nodes.
-%% FileGuid to transfer and expected transfer stats are saved in returned map.
+%% FileGuid to transfer and expected transfer stats are saved in env.
 %% @end
 %%--------------------------------------------------------------------
-create_setup_file_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Config) ->
+create_setup_file_transfer_env_fun(TransferType, EnvRef, SrcNode, DstNode, UserId, Config) ->
     fun() ->
         SessId1 = ?SESS_ID(UserId, SrcNode, Config),
 
@@ -107,7 +109,7 @@ create_setup_file_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Confi
             TransferType, RootFileType, SrcNode, DstNode, length(FilesToTransfer)
         ),
 
-        #{
+        api_test_utils:set_env_var(EnvRef, transfer_details, #{
             src_node => SrcNode,
             dst_node => DstNode,
             root_file_guid => RootFileGuid,
@@ -121,11 +123,11 @@ create_setup_file_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Confi
             },
             files_to_transfer => FilesToTransfer,
             other_files => OtherFiles
-        }
+        })
     end.
 
 
-create_setup_view_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Config) ->
+create_setup_view_transfer_env_fun(TransferType, EnvRef, SrcNode, DstNode, UserId, Config) ->
     fun() ->
         SessId1 = ?SESS_ID(UserId, SrcNode, Config),
 
@@ -170,7 +172,7 @@ create_setup_view_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Confi
             TransferType, <<"dir">>, SrcNode, DstNode, FilesToTransferNum
         ),
 
-        #{
+        api_test_utils:set_env_var(EnvRef, transfer_details, #{
             src_node => SrcNode,
             dst_node => DstNode,
             view_name => ViewName,
@@ -182,7 +184,7 @@ create_setup_view_transfer_env_fun(TransferType, SrcNode, DstNode, UserId, Confi
             },
             files_to_transfer => FilesToTransfer,
             other_files => OtherFiles
-        }
+        })
     end.
 
 
@@ -203,12 +205,12 @@ await_transfer_end(Nodes, TransferId, TransferType) ->
     end, Nodes).
 
 
-create_verify_transfer_env_fun(replication, Node, UserId, SrcProvider, DstProvider, Config) ->
-    create_verify_replication_env_fun(Node, UserId, SrcProvider, DstProvider, Config);
-create_verify_transfer_env_fun(eviction, Node, UserId, SrcProvider, DstProvider, Config) ->
-    create_verify_eviction_env_fun(Node, UserId, SrcProvider, DstProvider, Config);
-create_verify_transfer_env_fun(migration, Node, UserId, SrcProvider, DstProvider, Config) ->
-    create_verify_migration_env_fun(Node, UserId, SrcProvider, DstProvider, Config).
+create_verify_transfer_env_fun(replication, EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
+    create_verify_replication_env_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config);
+create_verify_transfer_env_fun(eviction, EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
+    create_verify_eviction_env_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config);
+create_verify_transfer_env_fun(migration, EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
+    create_verify_migration_env_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config).
 
 
 %%%===================================================================
@@ -348,17 +350,23 @@ get_exp_transfer_stats(migration, <<"dir">>, SrcNode, DstNode, FilesToTransferNu
 
 
 %% @private
-create_verify_replication_env_fun(Node, UserId, SrcProvider, DstProvider, Config) ->
+create_verify_replication_env_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
     SessId = ?SESS_ID(UserId, Node, Config),
 
     fun
-        (expected_failure, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+        (expected_failure, _) ->
+            {ok, #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}} = api_test_utils:get_env_var(
+                EnvRef, transfer_details
+            ),
             assert_distribution(
                 Node, SessId, _AllFiles = OtherFiles ++ FilesToTransfer,
                 [{SrcProvider, ?BYTES_NUM}]
             ),
             true;
-        (expected_success, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+        (expected_success, _) ->
+            {ok, #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}} = api_test_utils:get_env_var(
+                EnvRef, transfer_details
+            ),
             assert_distribution(
                 Node, SessId, OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}]
@@ -372,17 +380,23 @@ create_verify_replication_env_fun(Node, UserId, SrcProvider, DstProvider, Config
 
 
 %% @private
-create_verify_eviction_env_fun(Node, UserId, SrcProvider, DstProvider, Config) ->
+create_verify_eviction_env_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
     SessId = ?SESS_ID(UserId, Node, Config),
 
     fun
-        (expected_failure, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+        (expected_failure, _) ->
+            {ok, #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}} = api_test_utils:get_env_var(
+                EnvRef, transfer_details
+            ),
             assert_distribution(
                 Node, SessId, _AllFiles = OtherFiles ++ FilesToTransfer,
                 [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
             ),
             true;
-        (expected_success, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+        (expected_success, _) ->
+            {ok, #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}} = api_test_utils:get_env_var(
+                EnvRef, transfer_details
+            ),
             assert_distribution(
                 Node, SessId, OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}, {DstProvider, ?BYTES_NUM}]
@@ -396,17 +410,23 @@ create_verify_eviction_env_fun(Node, UserId, SrcProvider, DstProvider, Config) -
 
 
 %% @private
-create_verify_migration_env_fun(Node, UserId, SrcProvider, DstProvider, Config) ->
+create_verify_migration_env_fun(EnvRef, Node, UserId, SrcProvider, DstProvider, Config) ->
     SessId = ?SESS_ID(UserId, Node, Config),
 
     fun
-        (expected_failure, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+        (expected_failure, _) ->
+            {ok, #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}} = api_test_utils:get_env_var(
+                EnvRef, transfer_details
+            ),
             assert_distribution(
                 Node, SessId, _AllFiles = FilesToTransfer ++ OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}]
             ),
             true;
-        (expected_success, #api_test_ctx{env = #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}}) ->
+        (expected_success, _) ->
+            {ok, #{files_to_transfer := FilesToTransfer, other_files := OtherFiles}} = api_test_utils:get_env_var(
+                EnvRef, transfer_details
+            ),
             assert_distribution(
                 Node, SessId, OtherFiles,
                 [{SrcProvider, ?BYTES_NUM}]
@@ -443,25 +463,25 @@ assert_distribution(Node, SessId, Files, ExpSizePerProvider) ->
 
 
 %% @private
-get_setup_file_transfer_env_fun(TransferType, file, P1, P2, UserId, Config) ->
-    transfer_api_test_utils:create_setup_file_transfer_env_fun(
-        TransferType, P1, P2, UserId, Config
+get_setup_file_transfer_env_fun(TransferType, EnvRef, file, P1, P2, UserId, Config) ->
+    create_setup_file_transfer_env_fun(
+        TransferType, EnvRef, P1, P2, UserId, Config
     );
-get_setup_file_transfer_env_fun(TransferType, view, P1, P2, UserId, Config) ->
-    transfer_api_test_utils:create_setup_view_transfer_env_fun(
-        TransferType, P1, P2, UserId, Config
+get_setup_file_transfer_env_fun(TransferType, EnvRef, view, P1, P2, UserId, Config) ->
+    create_setup_view_transfer_env_fun(
+        TransferType, EnvRef, P1, P2, UserId, Config
     ).
 
 
 %% @private
-create_transfer(Type, DataSourceType, SrcNode, DstNode, UserId, QueryViewParams, Callback, Env, Config) ->
+create_transfer(Type, DataSourceType, SrcNode, DstNode, UserId, QueryViewParams, Callback, TransferDetails, Config) ->
     DataSourceDependentData = case DataSourceType of
         file ->
-            #{<<"fileId">> => maps:get(root_file_cdmi_id, Env)};
+            #{<<"fileId">> => maps:get(root_file_cdmi_id, TransferDetails)};
         view ->
             #{
                 <<"spaceId">> => ?SPACE_2,
-                <<"viewName">> => maps:get(view_name, Env),
+                <<"viewName">> => maps:get(view_name, TransferDetails),
                 <<"queryViewParams">> => QueryViewParams
             }
     end,

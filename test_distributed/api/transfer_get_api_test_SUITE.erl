@@ -98,14 +98,18 @@ get_transfer_status_test_base(Config, TransferType, DataSourceType) ->
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
     % Start transfer and check returned stats for ongoing transfer (transfer is prolonged via mock)
+    EnvRef = api_test_utils:init_env(),
     SetupEnvFun = transfer_api_test_utils:create_setup_transfer_env_with_started_transfer_fun(
-        TransferType, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
+        TransferType, EnvRef, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
     ),
-    Env = #{transfer_id := TransferId} = SetupEnvFun(),
+    SetupEnvFun(),
+    {ok, #{transfer_id := TransferId} = TransferDetails} = api_test_utils:get_env_var(
+        EnvRef, transfer_details
+    ),
 
-    get_transfer_status_test_base(Config, TransferType, DataSourceType, Env, ongoing),
+    get_transfer_status_test_base(Config, TransferType, DataSourceType, TransferDetails, ongoing),
     transfer_api_test_utils:await_transfer_end(Providers, TransferId, TransferType),
-    get_transfer_status_test_base(Config, TransferType, DataSourceType, Env, ended).
+    get_transfer_status_test_base(Config, TransferType, DataSourceType, TransferDetails, ended).
 
 
 %% @private

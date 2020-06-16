@@ -178,7 +178,7 @@ run_malformed_data_test_cases(Config, #suite_spec{
                     true;
                 true ->
                     TestCaseCtx = build_test_ctx(
-                        ScenarioName, ScenarioType, TargetNode, Client, #{}, DataSet
+                        ScenarioName, ScenarioType, TargetNode, Client, DataSet
                     ),
                     run_exp_error_testcase(
                         TargetNode, Client, DataSet,
@@ -417,7 +417,7 @@ run_exp_error_testcase(
         true -> ScenarioError;
         false -> ?ERROR_USER_NOT_SUPPORTED
     end,
-    TestCaseCtx = build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, #{}, DataSet),
+    TestCaseCtx = build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet),
 
     case PrepareArgsFun(TestCaseCtx) of
         skip ->
@@ -441,7 +441,7 @@ run_exp_success_testcase(TargetNode, Client, DataSet, EnvVerifyFun, SupportedCli
     prepare_args_fun = PrepareArgsFun,
     validate_result_fun = ValidateResultFun
 }, Config) ->
-    TestCaseCtx = build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, #{}, DataSet),
+    TestCaseCtx = build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet),
     case PrepareArgsFun(TestCaseCtx) of
         skip ->
             true;
@@ -675,15 +675,14 @@ scenario_spec_to_suite_spec(#scenario_spec{
 
 
 %% @private
--spec build_test_ctx(binary(), scenario_type(), node(), aai:auth(), api_test_env(), map()) ->
+-spec build_test_ctx(binary(), scenario_type(), node(), aai:auth(), map()) ->
     api_test_ctx().
-build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, TestsEnv, DataSet) ->
+build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet) ->
     #api_test_ctx{
         scenario_name = ScenarioName,
         scenario_type = ScenarioType,
         node = TargetNode,
         client = Client,
-        env = TestsEnv,
         data = DataSet
     }.
 

@@ -138,6 +138,7 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
         ClientSpec,
         DataSpec,
         _QsParams = [],
+        _RandomlySelectScenario = false,
         Config
     ).
 
@@ -162,6 +163,7 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
         _DataSpec = undefined,
         _QsParams = [],
+        _RandomlySelectScenario = false,
         Config
     ).
 
@@ -234,6 +236,7 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
         ClientSpec,
         DataSpec,
         QsParams,
+        _RandomlySelectScenario = true,
         Config
     ).
 
@@ -397,6 +400,7 @@ get_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
         _DataSpec = undefined,
         _QsParams = [],
+        _RandomlySelectScenario = false,
         Config
     ).
 
@@ -472,6 +476,7 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
         ClientSpec,
         DataSpec,
         QsParams,
+        _RandomlySelectScenario = true,
         Config
     ).
 
@@ -689,6 +694,7 @@ get_file_xattrs_on_provider_not_supporting_space_test(Config) ->
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
         _DataSpec = undefined,
         _QsParams = [],
+        _RandomlySelectScenario = false,
         Config
     ).
 
@@ -756,13 +762,14 @@ create_validate_get_metadata_gs_call_fun(GetExpResultFun, ProviderNotSupportingS
     client_spec(),
     data_spec(),
     QsParameters :: [binary()],
+    RandomlySelectScenario :: boolean(),
     Config :: proplists:proplist()
 ) ->
     ok.
 get_metadata_test_base(
     MetadataType, FileType, FilePath, FileGuid, _ShareId = undefined,
     ValidateRestCallResultFun, ValidateGsCallResultFun,
-    Providers, ClientSpec, DataSpec, QsParameters, Config
+    Providers, ClientSpec, DataSpec, QsParameters, RandomlySelectScenario, Config
 ) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -796,13 +803,14 @@ get_metadata_test_base(
                     validate_result_fun = ValidateGsCallResultFun
                 }
             ],
+            randomly_select_scenarios = RandomlySelectScenario,
             data_spec = DataSpec
         }
     ]));
 get_metadata_test_base(
     MetadataType, FileType, _FilePath, FileGuid, ShareId,
     ValidateRestCallResultFun, ValidateGsCallResultFun,
-    Providers, ClientSpec, DataSpec, QsParameters, Config
+    Providers, ClientSpec, DataSpec, QsParameters, RandomlySelectScenario, Config
 ) ->
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, FileShareObjectId} = file_id:guid_to_objectid(FileShareGuid),
@@ -839,6 +847,7 @@ get_metadata_test_base(
                     end
                 }
             ],
+            randomly_select_scenarios = RandomlySelectScenario,
             data_spec = DataSpec
         }
     ])).

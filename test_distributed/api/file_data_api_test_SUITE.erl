@@ -117,6 +117,7 @@ get_dir_children_test(Config) ->
                     end
                 }
             ],
+            randomly_select_scenarios = true,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 DirGuid, undefined, get_children_data_spec()
             )
@@ -268,6 +269,7 @@ get_file_children_test(Config) ->
                     end
                 }
             ],
+            randomly_select_scenarios = true,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, undefined, get_children_data_spec()
             )
@@ -325,6 +327,7 @@ get_user_root_dir_children_test(Config) ->
                     end
                 }
             ],
+            randomly_select_scenarios = true,
             data_spec = DataSpec
         },
         % Special case - listing files using path '/' works for all users but
@@ -411,6 +414,7 @@ get_dir_children_on_provider_not_supporting_space_test(Config) ->
                     end
                 }
             ],
+            randomly_select_scenarios = true,
             data_spec = get_children_data_spec()
         }
     ])).
@@ -581,6 +585,7 @@ get_file_attrs_test(Config) ->
                     validate_result_fun = create_validate_get_attrs_gs_call_fun(JsonAttrs, undefined)
                 }
             ],
+            randomly_select_scenarios = true,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, undefined, get_attrs_data_spec(normal_mode)
             )
@@ -634,6 +639,7 @@ get_shared_file_attrs_test(Config) ->
                     validate_result_fun = create_validate_get_attrs_gs_call_fun(JsonAttrs, ShareId1)
                 }
             ],
+            randomly_select_scenarios = true,
             data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
                 FileGuid, ShareId1, get_attrs_data_spec(share_mode)
             )
@@ -693,6 +699,7 @@ get_attrs_on_provider_not_supporting_space_test(Config) ->
                     validate_result_fun = create_validate_get_attrs_gs_call_fun(JsonAttrs, undefined, P2)
                 }
             ],
+            randomly_select_scenarios = true,
             data_spec = get_attrs_data_spec(normal_mode)
         }
     ])).
@@ -980,6 +987,7 @@ set_file_mode_test(Config) ->
                     end
                 }
             ],
+            randomly_select_scenarios = true,
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
                 FileGuid, ShareId, set_mode_data_spec()
             )
@@ -1063,6 +1071,7 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
                     end
                 }
             ],
+            randomly_select_scenarios = true,
             data_spec = set_mode_data_spec()
         }
     ])).
@@ -1122,7 +1131,7 @@ create_prepare_set_mode_gs_args_fun(FileGuid, Scope) ->
 set_mode_data_spec() ->
     #data_spec{
         required = [<<"mode">>],
-        correct_values = #{<<"mode">> => [<<"0000">>, <<"0111">>, <<"0777">>]},
+        correct_values = #{<<"mode">> => [<<"0000">>, <<"0111">>, <<"0544">>, <<"0777">>]},
         bad_values = [
             {<<"mode">>, true, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)},
             {<<"mode">>, <<"integer">>, ?ERROR_BAD_VALUE_INTEGER(<<"mode">>)}

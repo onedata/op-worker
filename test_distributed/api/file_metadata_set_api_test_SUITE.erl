@@ -595,7 +595,7 @@ create_validate_set_metadata_gs_call_fun(GetExpResultFun) ->
     ShareId :: od_share:id(),
     ValidateRestCallResultFun :: fun((api_test_ctx(), {ok, RespCode :: pos_integer(), RespBody :: term()}) -> ok),
     ValidateGsCallResultFun :: fun((api_test_ctx(), Result :: term()) -> ok),
-    VerifyEnvFun :: fun((ShouldSucceed :: boolean(), api_test_env()) -> boolean()),
+    VerifyEnvFun :: fun((ShouldSucceed :: boolean(), api_test_ctx()) -> boolean()),
     Providers :: [node()],
     client_spec(),
     data_spec(),

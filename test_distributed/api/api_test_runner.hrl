@@ -87,12 +87,9 @@
     scenario_type :: scenario_type(),
     node :: node(),
     client :: aai:auth(),
-    env :: api_test_env(),
     data :: map()
 }).
 -type api_test_ctx() :: #api_test_ctx{}.
-
--type api_test_env() :: map().
 
 % Hook called before testcase. Can be used to create ephemeral things and set env
 % vars used in testcase. For that it should use api_test_utils:init_env/set_env_var
