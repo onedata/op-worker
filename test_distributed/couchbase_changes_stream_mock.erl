@@ -199,7 +199,7 @@ generate_change(Seq, CustomMetadataProb, DeletedProb, EmptyValueProb, ProviderId
         seq = Seq,
         value = doc_value(CustomMetadataProb, EmptyValueProb, FileId),
         deleted = rand:uniform() < DeletedProb,
-        mutators = [utils:random_element(ProviderIds)]
+        mutators = [lists_utils:random_element(ProviderIds)]
     }.
 
 generate_sequences(Since, Until, Count) ->
@@ -209,7 +209,7 @@ generate_sequences(Since, Until, Count) ->
 throw_out_random_elements(Seqs, TargetLength) when length(Seqs) =:= TargetLength ->
     Seqs;
 throw_out_random_elements(Seqs, TargetLength) ->
-    Seqs2 = Seqs -- [utils:random_element(Seqs)],
+    Seqs2 = Seqs -- [lists_utils:random_element(Seqs)],
     throw_out_random_elements(Seqs2, TargetLength).
 
 doc_value(CustomMetadataProb, EmptyValueProb, undefined) ->

@@ -18,7 +18,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("cluster_worker/include/global_definitions.hrl").
 -include_lib("kernel/include/file.hrl").
 
@@ -233,7 +233,7 @@ directory_should_be_deleted_from_storage_after_releasing_handle_to_its_child(Con
 
     % then
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, {guid, DirGuid})),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:ls(Worker, SessId, {guid, DirGuid}, 0, 1)),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(Worker, SessId, {guid, DirGuid}, 0, 1)),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, {guid, FileGuid})),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, read)),
 
@@ -527,7 +527,7 @@ suffix_in_metadata_and_storage_test(Config) ->
     StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
 
     ListDir = fun(Worker, Session, Path) ->
-        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        {ok, List} = lfm_proxy:get_children(Worker, Session, {path, Path}, 0, 100),
         List
               end,
     {ok, StorageFiles} = list_dir(Worker1, StorageSpacePathW1),
@@ -596,7 +596,7 @@ suffix_in_dir_metadata_test(Config) ->
     StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
 
     ListDir = fun(Worker, Session, Path) ->
-        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        {ok, List} = lfm_proxy:get_children(Worker, Session, {path, Path}, 0, 100),
         List
               end,
 
@@ -678,7 +678,7 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     StorageSpacePathW1 = storage_file_path(Worker1, SpaceId, <<>>),
 
     ListDir = fun(Worker, Session, Path) ->
-        {ok, List} = lfm_proxy:ls(Worker, Session, {path, Path}, 0, 100),
+        {ok, List} = lfm_proxy:get_children(Worker, Session, {path, Path}, 0, 100),
         List
     end,
     StorageFiles= case list_dir(Worker1, StorageSpacePathW1) of
@@ -810,14 +810,10 @@ storage_file_path(Worker, SpaceId, FilePath) ->
     filename:join([SpaceMnt, SpaceId, FilePath]).
 
 get_space_mount_point(Worker, SpaceId) ->
-    StorageId = get_supporting_storage_id(Worker, SpaceId),
+    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
     storage_mount_point(Worker, StorageId).
 
-get_supporting_storage_id(Worker, SpaceId) ->
-    [StorageId] = rpc:call(Worker, space_storage, get_storage_ids, [SpaceId]),
-    StorageId.
-
 storage_mount_point(Worker, StorageId) ->
-    [Helper | _] = rpc:call(Worker, storage, get_helpers, [StorageId]),
+    Helper = rpc:call(Worker, storage, get_helper, [StorageId]),
     HelperArgs = helper:get_args(Helper),
     maps:get(<<"mountPoint">>, HelperArgs).

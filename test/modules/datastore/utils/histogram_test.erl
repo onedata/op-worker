@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 new_histogram_should_be_filled_with_zeroes_test() ->
     ?assertEqual([0, 0, 0, 0, 0], histogram:new(5)).

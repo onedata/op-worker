@@ -14,7 +14,7 @@
 -define(LUMA_TEST_HRL, 1).
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/storage_file_manager/helpers/helpers.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 
 -define(STRIP_OK(Result), begin {ok, _} = Result, element(2, Result) end).
 
@@ -71,7 +71,7 @@ end).
 ).
 
 -define(POSIX_STORAGE_DOC(LumaConfig),
-    ?STORAGE_DOC(?POSIX_STORAGE_ID, <<"POSIX">>, ?POSIX_HELPER, LumaConfig)).
+    ?STORAGE_RECORD(?POSIX_STORAGE_ID, <<"POSIX">>, ?POSIX_HELPER, LumaConfig)).
 -define(POSIX_STORAGE_DOC_SECURE, ?POSIX_STORAGE_DOC(?LUMA_CONFIG)).
 -define(POSIX_STORAGE_DOC_INSECURE, ?POSIX_STORAGE_DOC(undefined)).
 
@@ -93,7 +93,7 @@ end).
 )).
 
 -define(CEPH_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_DOC(?CEPH_STORAGE_ID, <<"CEPH">>,
+    ?STORAGE_RECORD(?CEPH_STORAGE_ID, <<"CEPH">>,
         ?CEPH_HELPER(Insecure), LumaConfig)
 ).
 -define(CEPH_STORAGE_DOC_SECURE,
@@ -120,7 +120,7 @@ end).
 )).
 
 -define(S3_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_DOC(?S3_STORAGE_ID, <<"S3">>, ?S3_HELPER(Insecure), LumaConfig)
+    ?STORAGE_RECORD(?S3_STORAGE_ID, <<"S3">>, ?S3_HELPER(Insecure), LumaConfig)
 ).
 -define(S3_STORAGE_DOC_SECURE,
     ?S3_STORAGE_DOC(false, ?LUMA_CONFIG)).
@@ -146,7 +146,7 @@ end).
 )).
 
 -define(SWIFT_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_DOC(?SWIFT_STORAGE_ID, <<"SWIFT">>, ?SWIFT_HELPER(Insecure), LumaConfig)
+    ?STORAGE_RECORD(?SWIFT_STORAGE_ID, <<"SWIFT">>, ?SWIFT_HELPER(Insecure), LumaConfig)
 ).
 -define(SWIFT_STORAGE_DOC_SECURE,
     ?SWIFT_STORAGE_DOC(false, ?LUMA_CONFIG)).
@@ -172,7 +172,7 @@ end).
 )).
 
 -define(CEPHRADOS_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_DOC(?CEPHRADOS_STORAGE_ID, <<"CEPHRADOS">>,
+    ?STORAGE_RECORD(?CEPHRADOS_STORAGE_ID, <<"CEPHRADOS">>,
         ?CEPHRADOS_HELPER(Insecure), LumaConfig)
 ).
 -define(CEPHRADOS_STORAGE_DOC_SECURE,
@@ -196,7 +196,7 @@ end).
 )).
 
 -define(GLUSTERFS_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_DOC(?GLUSTERFS_STORAGE_ID, <<"GLUSTERFS">>,
+    ?STORAGE_RECORD(?GLUSTERFS_STORAGE_ID, <<"GLUSTERFS">>,
         ?GLUSTERFS_HELPER(Insecure), LumaConfig)
 ).
 -define(GLUSTERFS_STORAGE_DOC_SECURE,
@@ -218,7 +218,7 @@ end).
     ?NULLDEVICE_ADMIN_CTX, Insecure, ?FLAT_STORAGE_PATH))).
 
 -define(NULLDEVICE_STORAGE_DOC(Insecure, LumaConfig),
-    ?STORAGE_DOC(?NULLDEVICE_STORAGE_ID, <<"NULLDEVICE">>,
+    ?STORAGE_RECORD(?NULLDEVICE_STORAGE_ID, <<"NULLDEVICE">>,
         ?NULLDEVICE_HELPER(Insecure), LumaConfig)
 ).
 -define(NULLDEVICE_STORAGE_DOC_SECURE,
@@ -311,7 +311,7 @@ end).
     ?WEBDAV_HELPER(Insecure, ?WEBDAV_OAUTH2_ADMIN_CTX)).
 
 -define(WEBDAV_STORAGE_DOC(LumaConfig, Helper),
-    ?STORAGE_DOC(?WEBDAV_STORAGE_ID, <<"WEBDAV">>, Helper, LumaConfig)
+    ?STORAGE_RECORD(?WEBDAV_STORAGE_ID, <<"WEBDAV">>, Helper, LumaConfig)
 ).
 
 -define(WEBDAV_BASIC_STORAGE_DOC_SECURE,
@@ -335,11 +335,12 @@ end).
 %%% storage macros
 %%%===================================================================
 
--define(STORAGE_DOC(Id, Name, Helper, LumaConfig), #document{
+-define(STORAGE_RECORD(Id, Name, Helper, LumaConfig), #document{
     key = Id,
-    value = #storage{
-        name = Name,
-        helpers = [Helper],
+    value = #storage_config{
+        helper = Helper,
+        readonly = false,
+        imported_storage = false,
         luma_config = LumaConfig
     }
 }).
@@ -349,7 +350,7 @@ end).
     admin_ctx => ?POSIX_ADMIN_CTX,
     user_ctx => ?POSIX_USER_CTX,
     helper_name => ?POSIX_HELPER_NAME,
-    storage_doc => ?POSIX_STORAGE_DOC_SECURE
+    storage_record => ?POSIX_STORAGE_DOC_SECURE
 }).
 
 -define(SECURE_CEPH_STORAGE_CONFIG, #{
@@ -357,7 +358,7 @@ end).
     admin_ctx => ?CEPH_ADMIN_CTX,
     user_ctx => ?CEPH_USER_CTX,
     helper_name => ?CEPH_HELPER_NAME,
-    storage_doc => ?CEPH_STORAGE_DOC_SECURE
+    storage_record => ?CEPH_STORAGE_DOC_SECURE
 }).
 
 -define(SECURE_S3_STORAGE_CONFIG, #{
@@ -365,7 +366,7 @@ end).
     admin_ctx => ?S3_ADMIN_CTX,
     user_ctx => ?S3_USER_CTX,
     helper_name => ?S3_HELPER_NAME,
-    storage_doc => ?S3_STORAGE_DOC_SECURE
+    storage_record => ?S3_STORAGE_DOC_SECURE
 }).
 
 -define(SECURE_SWIFT_STORAGE_CONFIG, #{
@@ -373,7 +374,7 @@ end).
     admin_ctx => ?SWIFT_ADMIN_CTX,
     user_ctx => ?SWIFT_USER_CTX,
     helper_name => ?SWIFT_HELPER_NAME,
-    storage_doc => ?SWIFT_STORAGE_DOC_SECURE
+    storage_record => ?SWIFT_STORAGE_DOC_SECURE
 }).
 
 -define(SECURE_CEPHRADOS_STORAGE_CONFIG, #{
@@ -381,7 +382,7 @@ end).
     admin_ctx => ?CEPHRADOS_ADMIN_CTX,
     user_ctx => ?CEPHRADOS_USER_CTX,
     helper_name => ?CEPHRADOS_HELPER_NAME,
-    storage_doc => ?CEPHRADOS_STORAGE_DOC_SECURE
+    storage_record => ?CEPHRADOS_STORAGE_DOC_SECURE
 }).
 
 -define(SECURE_GLUSTERFS_STORAGE_CONFIG, #{
@@ -389,7 +390,7 @@ end).
     admin_ctx => ?GLUSTERFS_ADMIN_CTX,
     user_ctx => ?GLUSTERFS_USER_CTX,
     helper_name => ?GLUSTERFS_HELPER_NAME,
-    storage_doc => ?GLUSTERFS_STORAGE_DOC_SECURE
+    storage_record => ?GLUSTERFS_STORAGE_DOC_SECURE
 }).
 
 -define(SECURE_NULLDEVICE_STORAGE_CONFIG, #{
@@ -397,7 +398,7 @@ end).
     admin_ctx => ?NULLDEVICE_ADMIN_CTX,
     user_ctx => ?NULLDEVICE_USER_CTX,
     helper_name => ?NULL_DEVICE_HELPER_NAME,
-    storage_doc => ?NULLDEVICE_STORAGE_DOC_SECURE
+    storage_record => ?NULLDEVICE_STORAGE_DOC_SECURE
 }).
 
 -define(SECURE_WEBDAV_BASIC_STORAGE_CONFIG, #{
@@ -405,7 +406,7 @@ end).
     admin_ctx => ?WEBDAV_BASIC_ADMIN_CTX,
     user_ctx => ?WEBDAV_BASIC_USER_CTX,
     helper_name => ?WEBDAV_HELPER_NAME,
-    storage_doc => ?WEBDAV_BASIC_STORAGE_DOC_SECURE
+    storage_record => ?WEBDAV_BASIC_STORAGE_DOC_SECURE
 }).
 
 -define(SECURE_WEBDAV_TOKEN_STORAGE_CONFIG, #{
@@ -413,7 +414,7 @@ end).
     admin_ctx => ?WEBDAV_TOKEN_ADMIN_CTX,
     user_ctx => ?WEBDAV_TOKEN_USER_CTX,
     helper_name => ?WEBDAV_HELPER_NAME,
-    storage_doc => ?WEBDAV_TOKEN_STORAGE_DOC_SECURE
+    storage_record => ?WEBDAV_TOKEN_STORAGE_DOC_SECURE
 }).
 
 -define(SECURE_WEBDAV_NONE_STORAGE_CONFIG, #{
@@ -421,7 +422,7 @@ end).
     admin_ctx => ?WEBDAV_NONE_CTX,
     user_ctx => ?WEBDAV_NONE_CTX,
     helper_name => ?WEBDAV_HELPER_NAME,
-    storage_doc => ?WEBDAV_NONE_STORAGE_DOC_SECURE
+    storage_record => ?WEBDAV_NONE_STORAGE_DOC_SECURE
 }).
 
 -define(SECURE_WEBDAV_OAUTH2_STORAGE_CONFIG, #{
@@ -430,7 +431,7 @@ end).
     user_ctx => ?EXPECTED_WEBDAV_OAUTH2_USER_CTX,
     user_ctx_luma_mock => ?WEBDAV_OAUTH2_USER_CTX,
     helper_name => ?WEBDAV_HELPER_NAME,
-    storage_doc => ?WEBDAV_OAUTH2_STORAGE_DOC_SECURE
+    storage_record => ?WEBDAV_OAUTH2_STORAGE_DOC_SECURE
 }).
 
 
@@ -452,7 +453,7 @@ end).
     admin_ctx => ?POSIX_ADMIN_CTX,
     user_ctx => ?POSIX_USER_CTX,
     helper_name => ?POSIX_HELPER_NAME,
-    storage_doc => ?POSIX_STORAGE_DOC_INSECURE
+    storage_record => ?POSIX_STORAGE_DOC_INSECURE
 }).
 
 -define(INSECURE_CEPH_STORAGE_CONFIG, #{
@@ -460,7 +461,7 @@ end).
     admin_ctx => ?CEPH_ADMIN_CTX,
     user_ctx => ?CEPH_USER_CTX,
     helper_name => ?CEPH_HELPER_NAME,
-    storage_doc => ?CEPH_STORAGE_DOC_INSECURE
+    storage_record => ?CEPH_STORAGE_DOC_INSECURE
 }).
 
 -define(INSECURE_S3_STORAGE_CONFIG, #{
@@ -468,7 +469,7 @@ end).
     admin_ctx => ?S3_ADMIN_CTX,
     user_ctx => ?S3_USER_CTX,
     helper_name => ?S3_HELPER_NAME,
-    storage_doc => ?S3_STORAGE_DOC_INSECURE
+    storage_record => ?S3_STORAGE_DOC_INSECURE
 }).
 
 -define(INSECURE_SWIFT_STORAGE_CONFIG, #{
@@ -476,7 +477,7 @@ end).
     admin_ctx => ?SWIFT_ADMIN_CTX,
     user_ctx => ?SWIFT_USER_CTX,
     helper_name => ?SWIFT_HELPER_NAME,
-    storage_doc => ?SWIFT_STORAGE_DOC_INSECURE
+    storage_record => ?SWIFT_STORAGE_DOC_INSECURE
 }).
 
 -define(INSECURE_CEPHRADOS_STORAGE_CONFIG, #{
@@ -484,7 +485,7 @@ end).
     admin_ctx => ?CEPHRADOS_ADMIN_CTX,
     user_ctx => ?CEPHRADOS_USER_CTX,
     helper_name => ?CEPHRADOS_HELPER_NAME,
-    storage_doc => ?CEPHRADOS_STORAGE_DOC_INSECURE
+    storage_record => ?CEPHRADOS_STORAGE_DOC_INSECURE
 }).
 
 -define(INSECURE_GLUSTERFS_STORAGE_CONFIG, #{
@@ -492,7 +493,7 @@ end).
     admin_ctx => ?GLUSTERFS_ADMIN_CTX,
     user_ctx => ?GLUSTERFS_USER_CTX,
     helper_name => ?GLUSTERFS_HELPER_NAME,
-    storage_doc => ?GLUSTERFS_STORAGE_DOC_INSECURE
+    storage_record => ?GLUSTERFS_STORAGE_DOC_INSECURE
 }).
 
 -define(INSECURE_NULLDEVICE_STORAGE_CONFIG, #{
@@ -500,7 +501,7 @@ end).
     admin_ctx => ?NULLDEVICE_ADMIN_CTX,
     user_ctx => ?NULLDEVICE_USER_CTX,
     helper_name => ?NULL_DEVICE_HELPER_NAME,
-    storage_doc => ?NULLDEVICE_STORAGE_DOC_INSECURE
+    storage_record => ?NULLDEVICE_STORAGE_DOC_INSECURE
 }).
 
 -define(INSECURE_WEBDAV_BASIC_STORAGE_CONFIG, #{
@@ -508,7 +509,7 @@ end).
     admin_ctx => ?WEBDAV_BASIC_ADMIN_CTX,
     user_ctx => ?WEBDAV_BASIC_USER_CTX,
     helper_name => ?WEBDAV_HELPER_NAME,
-    storage_doc => ?WEBDAV_BASIC_STORAGE_DOC_INSECURE
+    storage_record => ?WEBDAV_BASIC_STORAGE_DOC_INSECURE
 }).
 
 -define(INSECURE_WEBDAV_TOKEN_STORAGE_CONFIG, #{
@@ -516,7 +517,7 @@ end).
     admin_ctx => ?WEBDAV_TOKEN_ADMIN_CTX,
     user_ctx => ?WEBDAV_TOKEN_USER_CTX,
     helper_name => ?WEBDAV_HELPER_NAME,
-    storage_doc => ?WEBDAV_TOKEN_STORAGE_DOC_INSECURE
+    storage_record => ?WEBDAV_TOKEN_STORAGE_DOC_INSECURE
 }).
 
 -define(INSECURE_WEBDAV_NONE_STORAGE_CONFIG, #{
@@ -524,7 +525,7 @@ end).
     admin_ctx => ?WEBDAV_NONE_CTX,
     user_ctx => ?WEBDAV_NONE_CTX,
     helper_name => ?WEBDAV_HELPER_NAME,
-    storage_doc => ?WEBDAV_NONE_STORAGE_DOC_INSECURE
+    storage_record => ?WEBDAV_NONE_STORAGE_DOC_INSECURE
 }).
 
 -define(INSECURE_WEBDAV_OAUTH2_STORAGE_CONFIG, #{
@@ -532,7 +533,7 @@ end).
     admin_ctx => ?EXPECTED_WEBDAV_OAUTH2_ADMIN_CTX,
     user_ctx => ?EXPECTED_WEBDAV_OAUTH2_USER_CTX,
     helper_name => ?WEBDAV_HELPER_NAME,
-    storage_doc => ?WEBDAV_OAUTH2_STORAGE_DOC_INSECURE
+    storage_record => ?WEBDAV_OAUTH2_STORAGE_DOC_INSECURE
 }).
 
 -define(INSECURE_STORAGE_CONFIGS, [

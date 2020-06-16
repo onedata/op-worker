@@ -309,7 +309,7 @@ maybe_delete_parent_link(FileCtx, UserCtx, false) ->
 -spec maybe_remove_file_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok | {error, term()}.
 maybe_remove_file_on_storage(FileCtx, UserCtx) ->
     try
-        case sfm_utils:delete(FileCtx, UserCtx) of
+        case sd_utils:delete(FileCtx, UserCtx) of
             {ok, FileCtx2} -> {ok, FileCtx2};
             {error, ?ENOENT} -> {ok, FileCtx};
             {error, _} = OtherError -> OtherError
@@ -349,10 +349,15 @@ delete_shares(UserCtx, FileCtx) ->
 
 -spec delete_storage_sync_info(file_ctx:ctx()) -> file_ctx:ctx().
 delete_storage_sync_info(FileCtx) ->
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    storage_sync_info:delete(StorageFileId, SpaceId),
-    FileCtx2.
+    try
+        {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+        SpaceId = file_ctx:get_space_id_const(FileCtx2),
+        storage_sync_info:delete(StorageFileId, SpaceId),
+        FileCtx2
+    catch
+        error:{badmatch, {error, not_found}} ->
+            FileCtx
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -371,13 +376,12 @@ maybe_emit_event(_FileCtx, _UserCtx, _) ->
 
 -spec get_open_file_handling_method(file_ctx:ctx()) -> {opened_file_handling_method(), file_ctx:ctx()}.
 get_open_file_handling_method(FileCtx) ->
-    {#document{
-        value = #storage{helpers = [#helper{name = HelperName} | _]}
-    }, FileCtx2} =
-        file_ctx:get_storage_doc(FileCtx),
+    {Storage, FileCtx2} = file_ctx:get_storage(FileCtx),
+    Helper = storage:get_helper(Storage),
+    HelperName = helper:get_name(Helper),
     case lists:member(HelperName,
-        [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME,
-            ?WEBDAV_HELPER_NAME]) of
+        [?POSIX_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?WEBDAV_HELPER_NAME])
+    of
         true -> {?RENAME_HANDLING_METHOD, FileCtx2};
         _ -> {?LINK_HANDLING_METHOD, FileCtx2}
     end.
@@ -398,10 +402,9 @@ maybe_rename_storage_file(FileCtx) ->
 
 -spec ensure_dir_for_deleted_files_created(od_space:id()) -> ok.
 ensure_dir_for_deleted_files_created(SpaceId) ->
-    {ok, Storage} = fslogic_storage:select_storage(SpaceId),
-    RootHandle = storage_file_manager:new_handle(?ROOT_SESS_ID, SpaceId, undefined, Storage,
-        ?DELETED_OPENED_FILES_DIR, undefined),
-    case storage_file_manager:mkdir(RootHandle, ?DELETED_OPENED_FILES_DIR_MODE, false) of
+    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+    RootHandle = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId, ?DELETED_OPENED_FILES_DIR),
+    case storage_driver:mkdir(RootHandle, ?DELETED_OPENED_FILES_DIR_MODE, false) of
         ok -> ok;
         {error, ?EEXIST} -> ok
     end.
@@ -411,11 +414,11 @@ ensure_dir_for_deleted_files_created(SpaceId) ->
 rename_storage_file(FileCtx, SourceFileId, TargetFileId) ->
     % ensure SourceFileId is set in FileCtx
     FileCtx2 = file_ctx:set_file_id(FileCtx, SourceFileId),
-    {SFMHandle, FileCtx3} = storage_file_manager:new_handle(?ROOT_SESS_ID, FileCtx2 ),
+    {SFMHandle, FileCtx3} = storage_driver:new_handle(?ROOT_SESS_ID, FileCtx2 ),
     FileUuid = file_ctx:get_uuid_const(FileCtx3),
     case init_file_location_rename(FileUuid, TargetFileId) of
         {ok, #document{value = NewFL}} ->
-            case storage_file_manager:mv(SFMHandle, TargetFileId) of
+            case storage_driver:mv(SFMHandle, TargetFileId) of
                 ok ->
                     FinalFL = case finalize_file_location_rename(FileUuid) of
                         {ok, #document{value = NewFL2}} -> NewFL2;
@@ -472,6 +475,8 @@ remove_synced_auxiliary_documents(FileCtx) ->
 remove_local_auxiliary_documents(FileCtx) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     % TODO VFS-6114 delete storage_sync_info here?
+    ok = file_qos:clean_up(FileCtx),
+    ok = file_meta_posthooks:delete(FileUuid),
     ok = file_popularity:delete(FileUuid).
 
 %%--------------------------------------------------------------------

@@ -18,11 +18,16 @@
 
 -behaviour(gen_server).
 
--include("countdown_server.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2, init_counter/2, decrease/3, await/3]).
+-export([start_link/2, stop/1,
+    init_counter/2, init_counter/3,
+    decrease/2, decrease/3, decrease_by_value/3,
+    await/3, await_all/2, await_all/3,
+    await_many/3, await_many/4,
+    not_received_any/2,not_received_any/3
+]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -42,71 +47,153 @@
 -record(state, {
     node :: node(),
     parent :: pid(),
-    counters = #{} :: #{reference() => #counter{}}
+    counters = #{} :: #{counter_id() => #counter{}}
 }).
+
+-type counter() :: #counter{}.
+-type data() :: [term()].
+-type counter_id() :: reference() | term().
+-type node_counters() :: #{node() => counter_id() | [counter_id()]}.
+-type node_counters_data() :: #{node() => #{counter_id()  => data()}}.
+
+-define(COUNTDOWN_SERVER(Node),
+    binary_to_atom(<<"countdown_server_", (atom_to_binary(Node, latin1))/binary>>, latin1)
+).
+
+-define(INIT(InitialValue, CounterId), {init, InitialValue, CounterId}).
+-define(DECREASE_BY_VALUE(Value, CounterId), {decrease_by_value, Value, CounterId}).
+-define(DECREASE(Data, CounterId), {decrease, Data, CounterId}).
+-define(COUNTDOWN_FINISHED(CounterId, Node, Data), {countdown_finished, CounterId, Node, Data}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the server
-%% @end
-%%--------------------------------------------------------------------
--spec(start_link(pid(), node()) ->
-    {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
+-spec(start_link(pid(), node()) -> {ok, Pid :: pid()} | {error, Reason :: term()}).
 start_link(Parent, Node) ->
     gen_server:start_link({local, ?COUNTDOWN_SERVER(Node)}, ?MODULE, [Parent, Node], []).
+
+-spec stop(node()) -> ok.
+stop(Node) ->
+    gen_server:stop(?COUNTDOWN_SERVER(Node)).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Initializes new counter with given InitialValue.
-%% Returns counter reference.
+%% Returns counter id.
 %% @end
 %%-------------------------------------------------------------------
--spec init_counter(node(), non_neg_integer()) -> reference().
+-spec init_counter(node(), non_neg_integer()) -> counter_id().
 init_counter(Node, InitialValue) ->
-    gen_server:call(?COUNTDOWN_SERVER(Node), {init, InitialValue}).
+    init_counter(Node, InitialValue, undefined).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Decreases counter associated with given Ref. Saves Data
+%% Initializes new counter with given InitialValue and predefined CounterId.
+%% If CounterId is undefined, it will be set and returned.
 %% @end
 %%-------------------------------------------------------------------
--spec decrease(node(), reference(), term()) -> ok.
-decrease(Node, Ref, Data) ->
-    gen_server:cast(?COUNTDOWN_SERVER(Node), {decrease, Ref, Data}).
+-spec init_counter(node(), non_neg_integer(), undefined | counter_id()) -> counter_id().
+init_counter(Node, InitialValue, CounterId) ->
+    gen_server:call(?COUNTDOWN_SERVER(Node), ?INIT(InitialValue, CounterId)).
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Awaits finish of counting down by counter associated with given Ref
-%% and returns saved Data.
+%% Decreases counter associated with given CounterId.
 %% @end
 %%-------------------------------------------------------------------
--spec await(node(), reference(), non_neg_integer()) -> term().
-await(Node, Ref, Timeout) ->
-    receive
-        {?COUNTDOWN_FINISHED, Ref, Node, Data} ->
-            Data
-    after
-        Timeout ->
-            throw({?MODULE, timeout})
-    end.
+-spec decrease(node() | pid(), counter_id()) -> ok.
+decrease(NodeOrPid, CounterId) ->
+    decrease_by_value(NodeOrPid, CounterId, 1).
+
+-spec decrease_by_value(node() | pid(), counter_id(), non_neg_integer()) -> ok.
+decrease_by_value(Node, CounterId, Value) when is_atom(Node) ->
+    gen_server:cast(?COUNTDOWN_SERVER(Node), ?DECREASE_BY_VALUE(Value, CounterId));
+decrease_by_value(Pid, CounterId, Value) when is_pid(Pid) ->
+    gen_server:cast(Pid, ?DECREASE_BY_VALUE(Value, CounterId)).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Decreases counter associated with given CounterId. Saves Data.
+%% Counter is decreased by length of Data (if it's a list).
+%% @end
+%%-------------------------------------------------------------------
+-spec decrease(node() | pid(), counter_id(), [data()] | data()) -> ok.
+decrease(Node, CounterId, Data) when is_atom(Node) ->
+    gen_server:cast(?COUNTDOWN_SERVER(Node), ?DECREASE(Data, CounterId));
+decrease(Pid, CounterId, Data) when is_pid(Pid) ->
+    gen_server:cast(Pid, ?DECREASE(Data, CounterId)).
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Awaits for finish of counting down by counter associated with given
+%% CounterId and returns saved Data.
+%% @end
+%%-------------------------------------------------------------------
+-spec await(node(), counter_id(), non_neg_integer()) -> data().
+await(Node, CounterId, Timeout) ->
+    #{Node := #{CounterId := Data}} = await_all(Node, CounterId, Timeout),
+    Data.
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Awaits for finish of counting down by all counters in NodesToCounters
+%% map. Returns map of counters' data.
+%% @end
+%%-------------------------------------------------------------------
+-spec await_all(node_counters(), non_neg_integer()) -> node_counters_data().
+await_all(NodesToCounters, Timeout) ->
+    NumberOfCounters = count_counters(NodesToCounters),
+    {CountersData, #{}} = await_many(NodesToCounters, Timeout, NumberOfCounters),
+    CountersData.
+
+-spec await_all(node(), counter_id() | [counter_id()], non_neg_integer()) -> node_counters_data().
+await_all(Node, CounterIds, Timeout) when is_list(CounterIds) ->
+    await_all(#{Node => CounterIds}, Timeout);
+await_all(Node, CounterId, Timeout) ->
+    await_all(Node, [CounterId], Timeout).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Awaits for finish of counting down by up to Count counters in
+%% NodesToCounters map. Returns map of counters' data and node_counters()
+%% map of not finished counters.
+%% @end
+%%-------------------------------------------------------------------
+-spec await_many(node_counters(), non_neg_integer(), non_neg_integer()) ->
+    {node_counters_data(), node_counters()}.
+await_many(NodesToCounters, Timeout, Count) ->
+    await_many_internal(NodesToCounters, Timeout, Count, #{}, []).
+
+-spec await_many(node(), counter_id() | [counter_id()], non_neg_integer(), non_neg_integer()) ->
+    {node_counters_data(), node_counters()}.
+await_many(Node, CounterIds, Timeout, Count) when is_list(CounterIds) ->
+    await_many(#{Node => CounterIds}, Timeout, Count);
+await_many(Node, CounterId, Timeout, Count) ->
+    await_many(Node, [CounterId], Timeout, Count).
+
+
+%%-------------------------------------------------------------------
+%% @doc
+%% Ensures that none of counters present in NodesToCounters are finished.
+%% @end
+%%-------------------------------------------------------------------
+-spec not_received_any(node_counters(), non_neg_integer()) -> ok.
+not_received_any(NodesToCounters, Timeout) ->
+    not_received_any_internal(NodesToCounters, Timeout, []).
+
+-spec not_received_any(node(), counter_id() | [counter_id()], non_neg_integer()) -> ok.
+not_received_any(Node, CounterIds, Timeout) when is_list(CounterIds) ->
+    not_received_any(#{Node => CounterIds}, Timeout);
+not_received_any(Node, CounterId, Timeout) ->
+    not_received_any(Node, [CounterId], Timeout).
 
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server
-%% @end
-%%--------------------------------------------------------------------
--spec(init(Args :: term()) ->
-    {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term()} | ignore).
+-spec init(Args :: term()) -> {ok, State :: #state{}}.
 init([Parent, Node]) ->
     {ok, #state{
         parent = Parent,
@@ -119,90 +206,69 @@ init([Parent, Node]) ->
 %% Handling call messages
 %% @end
 %%--------------------------------------------------------------------
--spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
+-spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) ->
-    {reply, Reply :: term(), NewState :: #state{}} |
-    {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-    {stop, Reason :: term(), NewState :: #state{}}).
-handle_call({init, 0}, _From, State = #state{
+    {reply, Reply :: term(), NewState :: #state{}}.
+handle_call(?INIT(0, IdOrUndefined), _From, State = #state{
     parent = Parent,
     node = Node
 }) ->
-    Ref = make_ref(),
-    notify_parent(Parent, Node, Ref, []),
-    {reply, Ref, State};
-handle_call({init, ToVerify}, _From, State = #state{counters = Tasks}) ->
-    Ref = make_ref(),
-    {reply, Ref, State#state{counters = Tasks#{Ref => #counter{value = ToVerify}}}};
+    Id = ensure_id(IdOrUndefined),
+    notify_parent(Parent, Node, Id, []),
+    {reply, Id, State};
+handle_call(?INIT(ToVerify, IdOrUndefined), _From, State = #state{counters = Tasks}) ->
+    Id = ensure_id(IdOrUndefined),
+    {reply, Id, State#state{counters = Tasks#{Id => #counter{value = ToVerify}}}};
 handle_call(_Request, _From, State) ->
     ?log_bad_request(_Request),
-    {reply, wrong_request, State}.
+    {reply, {error, wrong_request}, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling cast messages
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_cast(Request :: term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}).
-handle_cast({decrease, Ref, Data}, State = #state{
+
+-spec handle_cast(Request :: term(), State :: #state{}) ->
+    {noreply, NewState :: #state{}}.
+handle_cast(?DECREASE_BY_VALUE(Value, CounterId), State = #state{
     parent = Parent,
     node = Node,
     counters = Counters
 }) ->
-    Counter = maps:get(Ref, Counters),
+    Counter = maps:get(CounterId, Counters),
+    Counter2 = decrease_by_value(Counter, Value),
+    case Counter2#counter.value of
+        0 ->
+            notify_parent(Parent, Node, CounterId, Counter2#counter.data),
+            {noreply, State#state{counters = maps:remove(CounterId, Counters)}};
+        _ ->
+            {noreply, State#state{counters = maps:update(CounterId, Counter2, Counters)}}
+    end;
+handle_cast(?DECREASE(Data, CounterId), State = #state{
+    parent = Parent,
+    node = Node,
+    counters = Counters
+}) ->
+    Counter = maps:get(CounterId, Counters),
     Counter2 = decrease_and_save_data(Counter, Data),
     case Counter2#counter.value of
         0 ->
-            notify_parent(Parent, Node, Ref, Counter2#counter.data),
-            {noreply, State#state{counters = maps:remove(Ref, Counters)}};
+            notify_parent(Parent, Node, CounterId, Counter2#counter.data),
+            {noreply, State#state{counters = maps:remove(CounterId, Counters)}};
         _ ->
-            {noreply, State#state{counters = maps:update(Ref, Counter2, Counters)}}
+            {noreply, State#state{counters = maps:update(CounterId, Counter2, Counters)}}
     end;
 handle_cast(_Request, State) ->
     ?log_bad_request(_Request),
     {noreply, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handling all non call/cast messages
-%% @end
-%%--------------------------------------------------------------------
--spec(handle_info(Info :: timeout() | term(), State :: #state{}) ->
-    {noreply, NewState :: #state{}} |
-    {noreply, NewState :: #state{}, timeout() | hibernate} |
-    {stop, Reason :: term(), NewState :: #state{}}).
+-spec handle_info(Info :: timeout() | term(), State :: #state{}) ->
+    {noreply, NewState :: #state{}}.
 handle_info(_Info, State) ->
     ?log_bad_request(_Info),
     {noreply, State}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%% @end
-%%--------------------------------------------------------------------
--spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #state{}) -> term()).
+-spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
+    State :: #state{}) -> term().
 terminate(_Reason, _State) ->
     ok.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Convert process state when code is changed
-%% @end
-%%--------------------------------------------------------------------
 -spec(code_change(OldVsn :: term() | {down, term()}, State :: #state{},
     Extra :: term()) ->
     {ok, NewState :: #state{}} | {error, Reason :: term()}).
@@ -219,8 +285,12 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec notify_parent(reference(), pid(), node(), term()) -> term().
-notify_parent(Parent, Node, Ref, Data) ->
-    Parent ! {?COUNTDOWN_FINISHED, Ref, Node, Data}.
+notify_parent(Parent, Node, CounterId, Data) ->
+    Parent ! ?COUNTDOWN_FINISHED(CounterId, Node, Data).
+
+-spec decrease_by_value(counter(), non_neg_integer()) -> counter().
+decrease_by_value(Counter = #counter{value = Value0}, Value) ->
+    Counter#counter{value = Value0 - Value}.
 
 %%-------------------------------------------------------------------
 %% @private
@@ -228,12 +298,105 @@ notify_parent(Parent, Node, Ref, Data) ->
 %% Decreases given Counter and saves Data.
 %% @end
 %%-------------------------------------------------------------------
--spec decrease_and_save_data(any(), any()) -> any().
-decrease_and_save_data(Counter = #counter{
-    value = Value,
-    data = Data0
-}, Data) ->
+-spec decrease_and_save_data(counter(), data() | [data()]) -> counter().
+decrease_and_save_data(Counter = #counter{value = Value, data = Data0}, Data) when is_list(Data) ->
+    Counter#counter{
+        value = Value - length(Data),
+        data = Data ++ Data0
+    };
+decrease_and_save_data(Counter = #counter{value = Value, data = Data0}, Data) ->
     Counter#counter{
         value = Value - 1,
         data = [Data | Data0]
     }.
+
+
+-spec await_many_internal(node_counters(), non_neg_integer(), non_neg_integer(), node_counters_data(), [term()]) ->
+    {node_counters_data(), node_counters()}.
+await_many_internal(NodesToCounterIds, _Timeout, 0, DataAcc, NotMatchedMessages) when map_size(NodesToCounterIds) =:= 0 ->
+    resend_messages_to_self(NotMatchedMessages),
+    {DataAcc, NodesToCounterIds};
+await_many_internal(NodesToCounterIds, _Timeout, _Count, DataAcc, NotMatchedMessages) when map_size(NodesToCounterIds) =:= 0 ->
+    resend_messages_to_self(NotMatchedMessages),
+    {DataAcc, NodesToCounterIds};
+await_many_internal(NodesToCounterIds, Timeout, Count, DataAcc, NotMatchedMessages) ->
+    receive
+        Msg = ?COUNTDOWN_FINISHED(CounterId, Node, Data) ->
+            case is_expected_counter(Node, CounterId, NodesToCounterIds) of
+                true ->
+                    NodesToCounterIds2 = remove_counter(Node, CounterId, NodesToCounterIds),
+                    await_many_internal(NodesToCounterIds2, Timeout, Count - 1, maps:update_with(Node,
+                        fun(NodeCounterIdsToData) -> NodeCounterIdsToData#{CounterId => Data} end,
+                        #{CounterId => Data}, DataAcc), NotMatchedMessages);
+                false ->
+                    await_many_internal(NodesToCounterIds, Timeout, Count, DataAcc, [Msg | NotMatchedMessages])
+            end
+    after
+        Timeout ->
+            resend_messages_to_self(NotMatchedMessages),
+            {DataAcc, NodesToCounterIds}
+    end.
+
+-spec not_received_any_internal(node_counters(), non_neg_integer(), [term()]) -> ok.
+not_received_any_internal(NodesToCounterIds, Timeout, NotMatchedMessages) ->
+    receive
+        Msg = ?COUNTDOWN_FINISHED(CounterId, Node, _Data) ->
+            case is_expected_counter(Node, CounterId, NodesToCounterIds) of
+                true ->
+                    ct:print("Countdown server unexpectedly received ~p", [Msg]),
+                    ct:fail("Countdown server unexpectedly received ~p", [Msg]);
+                false ->
+                    not_received_any_internal(NodesToCounterIds, Timeout, [Msg | NotMatchedMessages])
+            end
+    after
+        Timeout ->
+            resend_messages_to_self(NotMatchedMessages),
+            ok
+    end.
+
+
+-spec ensure_id(counter_id() | undefined) -> counter_id().
+ensure_id(undefined) -> make_ref();
+ensure_id(Id) -> Id.
+
+-spec is_expected_counter(node(), counter_id(), node_counters()) -> node_counters().
+is_expected_counter(Node, ExpectedCounterId, NodesToCounterIds) ->
+    case maps:is_key(Node, NodesToCounterIds) of
+        true ->
+            case maps:get(Node, NodesToCounterIds) of
+                CounterIds when is_list(CounterIds) ->
+                    lists:member(ExpectedCounterId, maps:get(Node, NodesToCounterIds));
+                CounterId ->
+                    CounterId =:= ExpectedCounterId
+            end;
+        false ->
+            false
+    end.
+
+-spec remove_counter(node(), counter_id(), node_counters()) -> node_counters().
+remove_counter(Node, ExpectedCounterId, NodesToCounterIds) ->
+    NodesToCounterIds2 = maps:update_with(Node, fun
+        (CounterIds) when is_list(CounterIds) -> CounterIds -- [ExpectedCounterId];
+        (CounterId) when CounterId =:= ExpectedCounterId -> undefined
+    end, NodesToCounterIds),
+    case maps:get(Node, NodesToCounterIds2) of
+        [] -> maps:remove(Node, NodesToCounterIds2);
+        undefined -> maps:remove(Node, NodesToCounterIds2);
+        _ -> NodesToCounterIds2
+    end.
+
+-spec resend_messages_to_self([term()]) -> ok.
+resend_messages_to_self([]) ->
+    ok;
+resend_messages_to_self([Msg | Rest]) ->
+    self() ! Msg,
+    resend_messages_to_self(Rest).
+
+-spec count_counters(node_counters()) -> non_neg_integer().
+count_counters(NodesToCounters) ->
+    maps:fold(fun
+        (_Node, Counters, SumAcc) when is_list(Counters) ->
+            SumAcc + length(Counters);
+        (_Node, _Counter, SumAcc) ->
+            SumAcc + 1
+    end, 0, NodesToCounters).

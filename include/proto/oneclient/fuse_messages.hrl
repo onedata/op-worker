@@ -15,6 +15,7 @@
 
 -include("common_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/file_details.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -define(AUTO_HELPER_MODE, 'AUTO').
@@ -34,6 +35,9 @@
 -record(get_file_attr, {
 }).
 
+-record(get_file_details, {
+}).
+
 -record(get_child_attr, {
     name :: file_meta:name()
 }).
@@ -49,6 +53,12 @@
     offset :: file_meta:offset(),
     size :: file_meta:size(),
     index_token :: undefined | binary()
+}).
+
+-record(get_file_children_details, {
+    offset :: file_meta:offset(),
+    size :: file_meta:size(),
+    index_startid = undefined :: undefined | binary()
 }).
 
 -record(create_dir, {
@@ -124,7 +134,7 @@
 }).
 
 -record(get_xattr, {
-    name :: xattr:name(),
+    name :: custom_metadata:name(),
     inherited = false :: boolean()
 }).
 
@@ -135,7 +145,7 @@
 }).
 
 -record(remove_xattr, {
-    name :: xattr:name()
+    name :: custom_metadata:name()
 }).
 
 -record(list_xattr, {
@@ -152,13 +162,15 @@
 }).
 
 -type file_request_type() ::
-    #get_file_attr{} | #get_file_children{} | #create_dir{} | #delete_file{} |
+    #get_file_attr{} | #get_file_children{} | #get_file_children_attrs{} |
+    #get_file_details{} | #get_file_children_details{} |
+    #create_dir{} | #delete_file{} |
     #update_times{} | #change_mode{} | #rename{} | #create_file{} | #make_file{} |
     #open_file{} | #get_file_location{} | #release{} | #truncate{} |
     #synchronize_block{} | #synchronize_block_and_compute_checksum{} |
     #block_synchronization_request{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
-    #list_xattr{} | #fsync{} | #get_file_children_attrs{} |
+    #list_xattr{} | #fsync{} |
     #storage_file_created{} | #open_file_with_extended_info{}.
 
 -record(file_request, {
@@ -206,6 +218,11 @@
 -record(file_children_attrs, {
     child_attrs :: [#file_attr{}],
     index_token :: binary(),
+    is_last :: boolean()
+}).
+
+-record(file_children_details, {
+    child_details :: [#file_details{}],
     is_last :: boolean()
 }).
 
@@ -265,7 +282,7 @@
 }).
 
 -record(xattr_list, {
-    names :: [xattr:name()]
+    names :: [custom_metadata:name()]
 }).
 
 -type fuse_response_type() ::
@@ -273,11 +290,17 @@
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
     #file_children_attrs{} | #file_location_changed{} | #file_opened_extended{} |
+    #file_details{} | #file_children_details{} |
     undefined.
 
 -record(fuse_response, {
     status :: undefined | #status{},
     fuse_response :: fuse_response_type()
+}).
+
+-define(FUSE_OK_RESP(__RESPONSE), #fuse_response{
+    status = #status{code = ?OK},
+    fuse_response = __RESPONSE
 }).
 
 -endif.

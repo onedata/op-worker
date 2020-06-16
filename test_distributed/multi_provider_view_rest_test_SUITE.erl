@@ -18,14 +18,14 @@
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("rest_test_utils.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/posix/file_attr.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
--include_lib("ctool/include/posix/errors.hrl").
--include_lib("ctool/include/api_errors.hrl").
--include_lib("ctool/include/privileges.hrl").
 
 
 %% API
@@ -82,7 +82,7 @@ all() ->
 -define(USER_1_AUTH_HEADERS(Config, OtherHeaders),
     ?USER_AUTH_HEADERS(Config, <<"user1">>, OtherHeaders)).
 
--define(VIEW_NAME(__FunctionName), begin
+-define(FILE_POPULARITY_VIEW(__FunctionName), begin
     FunctionNameBin = str_utils:to_binary(__FunctionName),
     RandomIntBin = integer_to_binary(erlang:unique_integer([positive])),
     <<"view_", FunctionNameBin/binary, RandomIntBin/binary>>
@@ -145,7 +145,7 @@ create_get_update_delete_view(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
     UserId = <<"user1">>,
 
@@ -277,7 +277,7 @@ create_get_update_delete_view(Config) ->
 
 creating_view_with_invalid_params_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     lists:foreach(fun({Options, ExpError}) ->
@@ -311,7 +311,7 @@ creating_view_with_invalid_params_should_fail(Config) ->
 
 updating_view_with_invalid_params_should_fail(Config) ->
     Workers = [WorkerP1 | _] = ?config(op_worker_nodes, Config),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     % create view
@@ -366,7 +366,7 @@ updating_view_with_invalid_params_should_fail(Config) ->
 overwriting_view_should_fail(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     % create
@@ -424,7 +424,7 @@ overwriting_view_should_fail(Config) ->
 create_get_delete_reduce_fun(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
     UserId = <<"user1">>,
 
@@ -539,7 +539,7 @@ create_get_delete_reduce_fun(Config) ->
 
 getting_nonexistent_view_should_fail(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
     ExpRestError = rest_test_utils:get_rest_error(?ERROR_NOT_FOUND),
 
     lists:foreach(fun(Worker) ->
@@ -551,7 +551,7 @@ getting_nonexistent_view_should_fail(Config) ->
 
 getting_view_of_not_supported_space_should_fail(Config) ->
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
     SpaceId = <<"space2">>,
     XattrName = ?XATTR_NAME,
 
@@ -612,7 +612,7 @@ query_view(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
     UserId = <<"user1">>,
 
@@ -668,7 +668,7 @@ quering_view_with_invalid_params_should_fail(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     Query = query_filter(Config, SpaceId, ViewName),
@@ -727,7 +727,7 @@ quering_view_with_invalid_params_should_fail(Config) ->
 
 create_geospatial_view(Config) ->
     Workers = [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
 
     create_view_via_rest(Config, WorkerP1, ?SPACE_ID, ViewName, ?GEOSPATIAL_MAP_FUNCTION, true),
     ?assertMatch([ViewName], list_views_via_rest(Config, WorkerP1, ?SPACE_ID, 100), ?ATTEMPTS),
@@ -751,12 +751,12 @@ query_geospatial_view(Config) ->
     Workers = [WorkerP1, WorkerP2, WorkerP3 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
 
-    Path0 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f0"])),
-    Path1 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f1"])),
-    Path2 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f2"])),
-    Path3 = list_to_binary(filename:join(["/", binary_to_list(SpaceName), "f3"])),
+    Path0 = filename:join(["/", SpaceName, "f0"]),
+    Path1 = filename:join(["/", SpaceName, "f1"]),
+    Path2 = filename:join(["/", SpaceName, "f2"]),
+    Path3 = filename:join(["/", SpaceName, "f3"]),
     {ok, _Guid0} = lfm_proxy:create(WorkerP1, SessionId, Path0, 8#777),
     {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1, 8#777),
     {ok, Guid2} = lfm_proxy:create(WorkerP1, SessionId, Path2, 8#777),
@@ -799,7 +799,7 @@ query_file_popularity_view(Config) ->
 spatial_flag_test(Config) ->
     [WorkerP1 | _] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
 
     ?assertMatch(ok, create_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName,
@@ -816,7 +816,7 @@ file_removal_test(Config) ->
     [WorkerP1, WorkerP2 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     Query = query_filter(Config, SpaceId, ViewName),
@@ -846,7 +846,7 @@ create_duplicated_views_on_remote_providers(Config) ->
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Provider1 = ?PROVIDER_ID(WorkerP1),
     Provider2 = ?PROVIDER_ID(WorkerP2),
-    ViewName = ?VIEW_NAME(?FUNCTION_NAME),
+    ViewName = ?FILE_POPULARITY_VIEW(?FUNCTION_NAME),
     XattrName = ?XATTR_NAME,
 
     FilePrefix = atom_to_list(?FUNCTION_NAME),
@@ -1114,7 +1114,7 @@ create_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Spatial, Pr
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, QueryString/binary>>,
 
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, put, Headers, MapFunction) of
@@ -1129,7 +1129,7 @@ update_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Options) ->
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, QueryString/binary>>,
 
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, patch, Headers, MapFunction) of
@@ -1142,7 +1142,7 @@ update_view_via_rest(Config, Worker, SpaceId, ViewName, MapFunction, Options) ->
 add_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName, ReduceFunction) ->
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, "/reduce">>,
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, put, Headers, ReduceFunction) of
@@ -1155,7 +1155,7 @@ add_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName, ReduceFunction) ->
 remove_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName) ->
     Path = <<(?VIEW_PATH(SpaceId, ViewName))/binary, "/reduce">>,
     Headers = ?USER_1_AUTH_HEADERS(Config, [
-        {<<"content-type">>, <<"application/javascript">>}
+        {?HDR_CONTENT_TYPE, <<"application/javascript">>}
     ]),
 
     case rest_test_utils:request(Worker, Path, delete, Headers, []) of
@@ -1167,7 +1167,7 @@ remove_reduce_fun_via_rest(Config, Worker, SpaceId, ViewName) ->
 
 get_view_via_rest(Config, Worker, SpaceId, ViewName) ->
     Path = ?VIEW_PATH(SpaceId, ViewName),
-    Headers = ?USER_1_AUTH_HEADERS(Config, [{<<"accept">>, <<"application/json">>}]),
+    Headers = ?USER_1_AUTH_HEADERS(Config, [{?HDR_ACCEPT, <<"application/json">>}]),
     case rest_test_utils:request(Worker, Path, get, Headers, []) of
         {ok, 200, _, Body} ->
             {ok, json_utils:decode(Body)};
@@ -1322,9 +1322,7 @@ query_filter2(Config, SpaceId, ViewName) ->
 
 create_files_with_xattrs(Node, SessionId, SpaceName, Prefix, Num, XattrName) ->
     lists:map(fun(X) ->
-        Path = list_to_binary(filename:join(
-            ["/", binary_to_list(SpaceName), Prefix ++ integer_to_list(X)]
-        )),
+        Path = filename:join(["/", SpaceName, Prefix ++ integer_to_list(X)]),
         {ok, Guid} = lfm_proxy:create(Node, SessionId, Path, 8#777),
         ok = lfm_proxy:set_xattr(Node, SessionId, {guid, Guid}, ?XATTR(XattrName, X)),
         Guid

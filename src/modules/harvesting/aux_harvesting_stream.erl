@@ -21,7 +21,7 @@
 
 -include("modules/harvesting/harvesting.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([reject_takeover/2, space_removed/1, space_unsupported/1]).

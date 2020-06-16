@@ -18,82 +18,41 @@
 -export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 
 -export([
-    authorize_test/1,
-    get_by_auth_test/1,
     get_test/1,
     get_protected_data_test/1,
     get_shared_data_test/1,
     mixed_get_test/1,
     subscribe_test/1,
     convenience_functions_test/1,
-    fetch_idp_access_token_test/1
+    fetch_idp_access_token_test/1,
+    confined_access_token_test/1
 ]).
 
 all() -> ?ALL([
-    authorize_test,
-    get_by_auth_test,
     get_test,
     get_protected_data_test,
     get_shared_data_test,
     mixed_get_test,
     subscribe_test,
     convenience_functions_test,
-    fetch_idp_access_token_test
+    fetch_idp_access_token_test,
+    confined_access_token_test
 ]).
 
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
 
-authorize_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    InitialCallsNum = logic_tests_common:count_reqs(Config, rpc),
-
-    ?assertMatch(
-        {ok, ?MOCK_DISCH_MACAROON},
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID])
-    ),
-
-    ?assertEqual(InitialCallsNum + 1, logic_tests_common:count_reqs(Config, rpc)),
-
-    % RPC calls are not cached
-    ?assertMatch(
-        {ok, ?MOCK_DISCH_MACAROON},
-        rpc:call(Node, user_logic, authorize, [?MOCK_CAVEAT_ID])
-    ),
-
-    ?assertEqual(InitialCallsNum + 2, logic_tests_common:count_reqs(Config, rpc)),
-
-    ok.
-
-
-get_by_auth_test(Config) ->
-    [Node | _] = ?config(op_worker_nodes, Config),
-
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-
-    ?assertMatch(
-        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
-        rpc:call(Node, user_logic, get_by_auth, [?USER_INTERNAL_MACAROON_AUTH(?USER_1)])
-    ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-
-    % Getting user by auth is always done by delegating to onezone, so no cache
-    % works here
-    ?assertMatch(
-        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
-        rpc:call(Node, user_logic, get_by_auth, [?USER_INTERNAL_MACAROON_AUTH(?USER_1)])
-    ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-
-    ok.
-
 
 get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
+    User1AccessToken = initializer:create_access_token(?USER_1),
+    User1TokenCredentials = auth_manager:build_token_credentials(
+        User1AccessToken, undefined,
+        initializer:local_ip_v4(), graphsync, disallow_data_access_caveats
+    ),
     User2Sess = logic_tests_common:get_user_session(Config, ?USER_2),
     % Creating session should fetch user (private aspect), invalidate
     logic_tests_common:invalidate_cache(Config, od_user, ?USER_1),
@@ -111,6 +70,12 @@ get_test(Config) ->
     ?assertMatch(
         {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
         rpc:call(Node, user_logic, get, [User1Sess, ?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+
+    ?assertMatch(
+        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
+        rpc:call(Node, user_logic, get, [User1TokenCredentials, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
 
@@ -138,6 +103,25 @@ get_test(Config) ->
         rpc:call(Node, user_logic, get, [?ROOT_SESS_ID, ?USER_1])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+
+    % Make sure that after auth cache purge next request will reach zone
+    % (when using TokenCredentials 2 requests will be made - one to verify token
+    % credentials and second to fetch user data)
+    true = rpc:call(Node, ets, delete_all_objects, [auth_cache]),
+
+    ?assertMatch(
+        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
+        rpc:call(Node, user_logic, get, [User1TokenCredentials, ?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph)),
+
+    % And will be cached for later requests
+    ?assertMatch(
+        {ok, ?USER_PRIVATE_DATA_MATCHER(?USER_1)},
+        rpc:call(Node, user_logic, get, [User1TokenCredentials, ?USER_1])
+    ),
+    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph)),
+
     ok.
 
 
@@ -359,7 +343,7 @@ subscribe_test(Config) ->
         <<"fullName">> => <<"changedName">>
     },
     PushMessage1 = #gs_push_graph{gri = User1SharedGRI, data = ChangedData, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage1]),
+    logic_tests_common:simulate_push(Config, PushMessage1),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
@@ -382,7 +366,7 @@ subscribe_test(Config) ->
         <<"fullName">> => <<"changedName2">>
     },
     PushMessage2 = #gs_push_graph{gri = User1ProtectedGRI, data = ChangedData2, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage2]),
+    logic_tests_common:simulate_push(Config, PushMessage2),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
@@ -405,7 +389,7 @@ subscribe_test(Config) ->
         <<"fullName">> => <<"changedName4">>
     },
     PushMessage4 = #gs_push_graph{gri = User1PrivateGRI, data = ChangedData4, change_type = updated},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage4]),
+    logic_tests_common:simulate_push(Config, PushMessage4),
 
     ?assertMatch(
         {ok, #document{key = ?USER_1, value = #od_user{
@@ -418,7 +402,7 @@ subscribe_test(Config) ->
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage7 = #gs_push_graph{gri = User1PrivateGRI, change_type = deleted},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage7]),
+    logic_tests_common:simulate_push(Config, PushMessage7),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_user, get_from_cache, [?USER_1])
@@ -433,7 +417,7 @@ subscribe_test(Config) ->
     ),
 
     PushMessage8 = #gs_push_nosub{gri = User1PrivateGRI, reason = forbidden},
-    rpc:call(Node, gs_client_worker, process_push_message, [PushMessage8]),
+    logic_tests_common:simulate_push(Config, PushMessage8),
     ?assertMatch(
         {error, not_found},
         rpc:call(Node, od_user, get_from_cache, [?USER_1])
@@ -553,6 +537,30 @@ fetch_idp_access_token_test(Config) ->
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
 
     ok.
+
+
+confined_access_token_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    Caveat = #cv_data_readonly{},
+    AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
+    TokenCredentials = auth_manager:build_token_credentials(
+        AccessToken, undefined,
+        initializer:local_ip_v4(), rest, allow_data_access_caveats
+    ),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+
+    % Request should be denied before contacting Onezone because of
+    % data access caveat presence
+    ?assertMatch(
+        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
+        rpc:call(Node, user_logic, fetch_idp_access_token, [TokenCredentials, ?USER_1, ?MOCK_IDP])
+    ),
+    % Nevertheless, GraphCalls should be increased by 2 as:
+    % 1) TokenCredentials was verified to retrieve caveats
+    % 2) auth_manager fetched token data to subscribe itself for updates from oz
+    ?assertEqual(GraphCalls+2, logic_tests_common:count_reqs(Config, graph)).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

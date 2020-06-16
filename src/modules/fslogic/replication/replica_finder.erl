@@ -20,8 +20,7 @@
 -type storage_details() :: {StorageId :: binary(), FileId :: binary()}.
 
 %% API
--export([get_blocks_for_sync/2, get_unique_blocks/1,
-    get_duplicated_blocks/2, get_all_blocks/1]).
+-export([get_blocks_for_sync/2, get_remote_duplicated_blocks/1, get_all_blocks/1]).
 
 %%%===================================================================
 %%% API
@@ -74,19 +73,6 @@ get_blocks_for_sync(Locations, Blocks) ->
     end, PresentBlocks4),
     minimize_present_blocks(PresentBlocks5, []).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns lists of blocks that are unique in local locations (no other provider has them)
-%% @end
-%%--------------------------------------------------------------------
--spec get_unique_blocks(file_ctx:ctx()) -> {fslogic_blocks:blocks(), file_ctx:ctx()}.
-get_unique_blocks(FileCtx) ->
-    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx, skip_local_blocks),
-    LocalLocations = filter_local_locations(LocationDocs),
-    RemoteLocations = LocationDocs -- LocalLocations,
-    LocalBlocksList = get_all_blocks(LocalLocations),
-    RemoteBlocksList = get_all_blocks(RemoteLocations),
-    {fslogic_blocks:invalidate(LocalBlocksList, RemoteBlocksList), FileCtx2}.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -94,25 +80,28 @@ get_unique_blocks(FileCtx) ->
 %% replicated in other provider.
 %% NOTE: Currently this functions support only whole files.
 %%       If remote provider doesn't have whole file, he is not included
-%% in the response.
+%%       in the response.
+%% NOTE: For better performance, pass location docs fetched without
+%%       local blocks (option skip_local_blocks). In such case,
+%%       duplicated blocks for local blocks won't be found.
 %% @end
 %%-------------------------------------------------------------------
--spec get_duplicated_blocks(file_ctx:ctx(), version_vector:version_vector()) ->
-    {undefined | [{od_provider:id(), fslogic_blocks:blocks()}] , file_ctx:ctx()}.
-get_duplicated_blocks(FileCtx, LocalVV) ->
-    % TODO - local blocks are always duplicated somewhere
-    {LocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx, skip_local_blocks),
-    LocalLocations = filter_local_locations(LocationDocs),
-    LocalBlocksList = get_all_blocks(LocalLocations),
-    case LocalBlocksList of
+-spec get_remote_duplicated_blocks([file_location:doc()]) ->
+    undefined | [{od_provider:id(), fslogic_blocks:blocks()}].
+get_remote_duplicated_blocks(LocationDocs) ->
+    case filter_local_locations(LocationDocs) of
         [] ->
-            {undefined, FileCtx2};
-        _ ->
-            RemoteLocations = LocationDocs -- LocalLocations,
-            Result = get_duplicated_blocks_per_provider(LocalBlocksList,
-                LocalVV, RemoteLocations),
-            %TODO VFS-4622 maybe result should be sorted by version or by size?
-            {Result, FileCtx2}
+            undefined;
+        [LocalLocation] ->
+            LocalVV = file_location:get_version_vector(LocalLocation),
+            case fslogic_location_cache:get_blocks(LocalLocation) of
+                [] ->
+                    [];
+                LocalBlocks ->
+                    RemoteLocations = LocationDocs -- [LocalLocation],
+                    get_duplicated_blocks_per_provider(LocalBlocks, LocalVV, RemoteLocations)
+                    %TODO VFS-4622 maybe result should be sorted by version or by size?
+            end
     end.
 
 %%--------------------------------------------------------------------

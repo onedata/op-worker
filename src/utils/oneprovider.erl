@@ -16,7 +16,7 @@
 -include("global_definitions.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% Id of this provider (assigned by Onezone)
 -type id() :: binary().
@@ -31,7 +31,7 @@
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([is_connected_to_oz/0]).
 -export([terminate_oz_connection/0, force_oz_connection_start/0, restart_oz_connection/0]).
--export([on_connect_to_oz/0, on_deregister/0]).
+-export([on_connect_to_oz/0, on_disconnect_from_oz/0, on_deregister/0]).
 -export([set_up_service_in_onezone/0]).
 
 % Developer functions
@@ -91,7 +91,7 @@ get_rest_endpoint(Path) ->
 -spec get_id() -> od_provider:id() | no_return().
 get_id() ->
     case provider_auth:get_provider_id() of
-        {error, _} -> throw(?ERROR_UNREGISTERED_PROVIDER);
+        {error, _} -> throw(?ERROR_UNREGISTERED_ONEPROVIDER);
         {ok, ProviderId} -> ProviderId
     end.
 
@@ -177,8 +177,11 @@ trusted_ca_certs() ->
 %%--------------------------------------------------------------------
 -spec get_oz_domain() -> binary().
 get_oz_domain() ->
-    {ok, Hostname} = application:get_env(?APP_NAME, oz_domain),
-    str_utils:to_binary(Hostname).
+    case application:get_env(?APP_NAME, oz_domain) of
+        {ok, Domain} when is_binary(Domain) -> Domain;
+        {ok, Domain} when is_list(Domain) -> str_utils:to_binary(Domain);
+        _ -> error({missing_env_variable, oz_domain})
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -297,8 +300,22 @@ restart_oz_connection() ->
 on_connect_to_oz() ->
     set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
+    ok = auth_cache:report_oz_connection_start(),
+    ok = fslogic_worker:init_paths_caches(all),
     ok = main_harvesting_stream:revise_all_spaces(),
-    ok = fslogic_worker:init_cannonical_paths_cache(all).
+    ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
+    ok = rtransfer_config:add_storages(),
+    storage_sync_worker:notify_connection_to_oz().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback called when connection to Onezone is terminated.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_disconnect_from_oz() -> ok.
+on_disconnect_from_oz() ->
+    ok = auth_cache:report_oz_connection_termination().
 
 
 %%--------------------------------------------------------------------
@@ -310,6 +327,7 @@ on_connect_to_oz() ->
 on_deregister() ->
     ?notice("Provider has been deregistered - clearing existing credentials"),
     provider_auth:delete(),
+    storage:clear_storages(),
     % kill the connection to prevent 'unauthorized' errors due
     % to older authorization when immediately registering anew
     terminate_oz_connection().
@@ -380,9 +398,9 @@ register_in_oz_dev(NodeList, ProviderName, Token) ->
         ],
         {ok, #{
             <<"providerId">> := ProviderId,
-            <<"macaroon">> := Macaroon
+            <<"providerRootToken">> := RootToken
         }} = oz_providers:register_with_uuid(none, Parameters),
-        provider_auth:save(ProviderId, Macaroon),
+        provider_auth:save(ProviderId, RootToken),
         {ok, ProviderId}
     catch
         T:M ->

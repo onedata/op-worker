@@ -26,23 +26,24 @@
 
 -type alias() :: binary().
 -type name() :: binary().
+-type support_size() :: pos_integer().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([alias/0, name/0]).
+-export_type([alias/0, name/0, support_size/0]).
 
 -define(CTX, #{
     model => ?MODULE,
     fold_enabled => true,
-    memory_copies => all
+    memory_copies => all,
+    disc_driver => undefined
 }).
 
 %% API
 -export([update_cache/3, get_from_cache/1, invalidate_cache/1, list/0, run_after/3]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0]).
+-export([get_ctx/0]).
 -export([get_posthooks/0]).
--export([get_record_struct/1, upgrade_record/2]).
 
 %%%===================================================================
 %%% API
@@ -82,9 +83,9 @@ run_after(_Function, _Args, Result) ->
 
 -spec run_after(doc()) -> {ok, doc()}.
 run_after(Doc = #document{key = SpaceId}) ->
-    space_strategies:create(space_strategies:new(SpaceId)),
     ok = permissions_cache:invalidate(),
-    ok = fslogic_worker:init_cannonical_paths_cache(SpaceId),
+    ok = qos_bounded_cache:ensure_exists_on_all_nodes(SpaceId),
+    ok = fslogic_worker:init_paths_caches(SpaceId),
     emit_monitoring_event(Doc),
     maybe_revise_space_harvesters(Doc),
     {ok, Doc}.
@@ -104,15 +105,6 @@ get_ctx() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns model's record version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_version() -> datastore_model:record_version().
-get_record_version() ->
-    3.
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Returns list of callbacks which will be called after each operation
 %% on datastore model.
 %% @end
@@ -120,128 +112,6 @@ get_record_version() ->
 -spec get_posthooks() -> [datastore_hooks:posthook()].
 get_posthooks() ->
     [fun run_after/3].
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_struct(datastore_model:record_version()) ->
-    datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {name, string},
-
-        {providers_supports, [{string, integer}]},
-        {providers, [string]},
-        {users, [{string, [atom]}]},
-        {groups, [{string, [atom]}]},
-        {shares, [string]},
-
-        {eff_users, [{string, [atom]}]},
-        {eff_groups, [{string, [atom]}]},
-        {revision_history, [term]}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {name, string},
-
-        {direct_users, #{string => [atom]}},
-        {eff_users, #{string => [atom]}},
-
-        {direct_groups, #{string => [atom]}},
-        {eff_groups, #{string => [atom]}},
-
-        {providers, #{string => integer}},
-        {shares, [string]},
-
-        {cache_state, #{atom => term}}
-    ]};
-get_record_struct(3) ->
-    {record, [
-        {name, string},
-
-        {direct_users, #{string => [atom]}},
-        {eff_users, #{string => [atom]}},
-
-        {direct_groups, #{string => [atom]}},
-        {eff_groups, #{string => [atom]}},
-
-        {providers, #{string => integer}},
-        {shares, [string]},
-        {harvesters, [string]}, % new field
-
-        {cache_state, #{atom => term}}
-    ]}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades model's record from provided version to the next one.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, Space) ->
-    {
-        od_space,
-        Name,
-
-        _ProviderSupports,
-        _Providers,
-        _Users,
-        _Groups,
-        _Shares,
-
-        _EffUsers,
-        _EffGroups,
-
-        _RevisionHistory
-    } = Space,
-    {2, {od_space,
-        Name,
-
-        #{},
-        #{},
-
-        #{},
-        #{},
-
-        #{},
-        [],
-
-        #{}
-    }};
-upgrade_record(2, Space) ->
-    {
-        od_space,
-        Name,
-
-        DirectUsers,
-        EffUsers,
-
-        DirectGroups,
-        EffGroups,
-
-        Providers,
-        Shares,
-
-        CacheState
-    } = Space,
-    {3, #od_space{
-        name = Name,
-
-        direct_users = DirectUsers,
-        eff_users = EffUsers,
-
-        direct_groups = DirectGroups,
-        eff_groups = EffGroups,
-
-        providers = Providers,
-        shares = Shares,
-        harvesters = [],
-
-        cache_state = CacheState
-    }}.
 
 %%%===================================================================
 %%% Internal functions

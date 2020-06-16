@@ -13,7 +13,7 @@
 -author("Tomasz Lichon").
 
 -include("global_definitions.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([rm/2]).
@@ -77,7 +77,7 @@ is_dir(SessId, Guid) ->
     Offset :: non_neg_integer(), Chunk :: non_neg_integer(), ok | {error, term()}) ->
     ok | lfm:error_reply().
 rm_children(SessId, Guid, Offset, Chunk, Answer) ->
-    case lfm_dirs:ls(SessId, {guid, Guid}, Offset, Chunk) of
+    case lfm_dirs:get_children(SessId, {guid, Guid}, Offset, Chunk) of
         {ok, Children} ->
             Answers = lists:map(fun
                 ({ChildGuid, _ChildName}) ->

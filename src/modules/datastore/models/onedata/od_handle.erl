@@ -36,7 +36,8 @@
 -define(CTX, #{
     model => ?MODULE,
     fold_enabled => true,
-    memory_copies => all
+    memory_copies => all,
+    disc_driver => undefined
 }).
 
 %% API
@@ -44,8 +45,7 @@
 -export([actual_timestamp/0]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0]).
--export([get_record_struct/1, upgrade_record/2]).
+-export([get_ctx/0]).
 
 %%%===================================================================
 %%% API
@@ -90,94 +90,3 @@ list() ->
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_version() -> datastore_model:record_version().
-get_record_version() ->
-    2.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_struct(datastore_model:record_version()) ->
-    datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {public_handle, string},
-        {resource_type, string},
-        {resource_id, string},
-        {metadata, string},
-        {timestamp, {{integer, integer, integer}, {integer, integer, integer}}},
-
-        {handle_service, string},
-
-        {users, [{string, [atom]}]},
-        {groups, [{string, [atom]}]},
-
-        {eff_users, [{string, [atom]}]},
-        {eff_groups, [{string, [atom]}]},
-
-        {revision_history, [term]}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {public_handle, string},
-        {resource_type, string},
-        {resource_id, string},
-        {metadata, string},
-        {timestamp, {{integer, integer, integer}, {integer, integer, integer}}},
-
-        {handle_service, string},
-
-        {eff_users, #{string => [atom]}},
-        {eff_groups, #{string => [atom]}},
-
-        {cache_state, #{atom => term}}
-    ]}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades model's record from provided version to the next one.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, Handle) ->
-    {
-        od_handle,
-        PublicHandle,
-        ResourceType,
-        ResourceId,
-        Metadata,
-        Timestamp,
-
-        HandleServiceId,
-
-        _Users,
-        _Groups,
-
-        _EffUsers,
-        _EffGroups,
-
-        _RevisionHistory
-    } = Handle,
-    {2, #od_handle{
-        public_handle = PublicHandle,
-        resource_type = ResourceType,
-        metadata = Metadata,
-        timestamp = Timestamp,
-
-        resource_id = ResourceId,
-        handle_service = HandleServiceId,
-
-        eff_users = #{},
-        eff_groups = #{},
-
-        cache_state = #{}
-    }}.

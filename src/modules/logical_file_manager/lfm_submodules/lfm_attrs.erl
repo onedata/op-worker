@@ -17,14 +17,21 @@
 -include_lib("ctool/include/posix/file_attr.hrl").
 
 -type file_attributes() :: #file_attr{}.
+-type file_details() :: #file_details{}.
 
--export_type([file_attributes/0]).
+-export_type([file_attributes/0, file_details/0]).
 
 %% API
--export([stat/2, get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4, update_times/5]).
--export([get_transfer_encoding/2, set_transfer_encoding/3,
+-export([
+    stat/2, get_details/2,
+    get_xattr/4, set_xattr/5, remove_xattr/3, list_xattr/4,
+    update_times/5
+]).
+-export([
+    get_transfer_encoding/2, set_transfer_encoding/3,
     get_cdmi_completion_status/2, set_cdmi_completion_status/3, get_mimetype/2,
-    set_mimetype/3]).
+    set_mimetype/3
+]).
 -export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
 
 %%%===================================================================
@@ -33,7 +40,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns file attributes.
+%% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
 -spec stat(SessId :: session:id(), FileKey :: lfm:file_key()) ->
@@ -55,6 +62,20 @@ stat(SessId, FileKey) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Returns file details (see file_details.hrl).
+%% @end
+%%--------------------------------------------------------------------
+-spec get_details(session:id(), FileKey :: lfm:file_key()) ->
+    {ok, file_details()} | lfm:error_reply().
+get_details(SessId, FileKey) ->
+    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
+    remote_utils:call_fslogic(SessId, file_request, FileGuid, #get_file_details{},
+        fun(#file_details{} = FileDetails) ->
+            {ok, FileDetails}
+        end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Changes file timestamps.
 %% @end
 %%--------------------------------------------------------------------
@@ -73,7 +94,7 @@ update_times(SessId, FileKey, ATime, MTime, CTime) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_xattr(SessId :: session:id(), FileKey :: lfm:file_key(),
-    XattrName :: xattr:name(), boolean()) ->
+    XattrName :: custom_metadata:name(), boolean()) ->
     {ok, #xattr{}} | lfm:error_reply().
 get_xattr(SessId, FileKey, XattrName, Inherited) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
@@ -104,7 +125,7 @@ set_xattr(SessId, FileKey, Xattr, Create, Replace) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_xattr(SessId :: session:id(), FileKey :: lfm:file_key(),
-    XattrName :: xattr:name()) ->
+    XattrName :: custom_metadata:name()) ->
     ok | lfm:error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
@@ -119,7 +140,7 @@ remove_xattr(SessId, FileKey, XattrName) ->
 %%--------------------------------------------------------------------
 -spec list_xattr(session:id(), FileUuid :: lfm:file_key(),
     boolean(), boolean()) ->
-    {ok, [xattr:name()]} | lfm:error_reply().
+    {ok, [custom_metadata:name()]} | lfm:error_reply().
 list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
@@ -134,7 +155,7 @@ list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_transfer_encoding(session:id(), lfm:file_key()) ->
-    {ok, xattr:transfer_encoding()} | lfm:error_reply().
+    {ok, custom_metadata:transfer_encoding()} | lfm:error_reply().
 get_transfer_encoding(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -147,7 +168,7 @@ get_transfer_encoding(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_transfer_encoding(session:id(), lfm:file_key(),
-    xattr:transfer_encoding()) ->
+    custom_metadata:transfer_encoding()) ->
     ok | lfm:error_reply().
 set_transfer_encoding(SessId, FileKey, Encoding) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
@@ -162,7 +183,7 @@ set_transfer_encoding(SessId, FileKey, Encoding) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_cdmi_completion_status(session:id(), lfm:file_key()) ->
-    {ok, xattr:cdmi_completion_status()} | lfm:error_reply().
+    {ok, custom_metadata:cdmi_completion_status()} | lfm:error_reply().
 get_cdmi_completion_status(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -176,7 +197,7 @@ get_cdmi_completion_status(SessId, FileKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_cdmi_completion_status(session:id(), lfm:file_key(),
-    xattr:cdmi_completion_status()) ->
+    custom_metadata:cdmi_completion_status()) ->
     ok | lfm:error_reply().
 set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
@@ -190,7 +211,7 @@ set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_mimetype(session:id(), lfm:file_key()) ->
-    {ok, xattr:mimetype()} | lfm:error_reply().
+    {ok, custom_metadata:mimetype()} | lfm:error_reply().
 get_mimetype(SessId, FileKey) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
@@ -202,7 +223,7 @@ get_mimetype(SessId, FileKey) ->
 %% Sets mimetype of file.
 %% @end
 %%--------------------------------------------------------------------
--spec set_mimetype(session:id(), lfm:file_key(), xattr:mimetype()) ->
+-spec set_mimetype(session:id(), lfm:file_key(), custom_metadata:mimetype()) ->
     ok | lfm:error_reply().
 set_mimetype(SessId, FileKey, Mimetype) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
@@ -215,12 +236,12 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %% Gets metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec get_metadata(session:id(), lfm:file_key(), custom_metadata:type(), custom_metadata:filter(), boolean()) ->
+-spec get_metadata(session:id(), lfm:file_key(), custom_metadata:type(), custom_metadata:query(), boolean()) ->
     {ok, custom_metadata:value()} | lfm:error_reply().
-get_metadata(SessId, FileKey, Type, Names, Inherited) ->
+get_metadata(SessId, FileKey, Type, Query, Inherited) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #get_metadata{type = Type, names = Names, inherited = Inherited},
+        #get_metadata{type = Type, query = Query, inherited = Inherited},
         fun(#metadata{value = Value}) -> {ok, Value} end).
 
 %%--------------------------------------------------------------------
@@ -228,12 +249,12 @@ get_metadata(SessId, FileKey, Type, Names, Inherited) ->
 %% Sets metadata linked with file
 %% @end
 %%--------------------------------------------------------------------
--spec set_metadata(session:id(), lfm:file_key(), custom_metadata:type(), custom_metadata:value(), custom_metadata:filter()) ->
+-spec set_metadata(session:id(), lfm:file_key(), custom_metadata:type(), custom_metadata:value(), custom_metadata:query()) ->
     ok | lfm:error_reply().
-set_metadata(SessId, FileKey, Type, Value, Names) ->
+set_metadata(SessId, FileKey, Type, Value, Query) ->
     {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #set_metadata{names = Names, metadata = #metadata{type = Type, value = Value}},
+        #set_metadata{query = Query, metadata = #metadata{type = Type, value = Value}},
         fun(_) -> ok end).
 
 %%--------------------------------------------------------------------

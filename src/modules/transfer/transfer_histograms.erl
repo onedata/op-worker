@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2018 ACK CYFRONET AGH
+%%% @copyright (C) 2018-2019 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -16,19 +16,23 @@
 -include("modules/datastore/transfer.hrl").
 
 % possible types are: <<"minute">>, <<"hour">>, <<"day">> and <<"month">>.
--type type() :: binary().
+-type period() :: binary().
 -type histograms() :: #{od_provider:id() => histogram:histogram()}.
 -type timestamp() :: non_neg_integer().
 -type timestamps() :: #{od_provider:id() => non_neg_integer()}.
+-type stats_record() ::
+    transfer:transfer() |
+    space_transfer_stats:space_transfer_stats().
 
 -export_type([histograms/0]).
 
 %% API
 -export([
-    new/2, update/6,
+    new/2, get/2, update/6,
+    prepare/4,
     pad_with_zeroes/4,
     trim_min_histograms/2, trim_histograms/4, trim_timestamp/1,
-    type_to_time_window/1, type_to_hist_length/1,
+    period_to_time_window/1, period_to_hist_length/1,
     to_speed_charts/4
 ]).
 
@@ -49,12 +53,23 @@
 %% @end
 %%-------------------------------------------------------------------
 -spec new(BytesPerProvider :: #{od_provider:id() => non_neg_integer()},
-    HistogramsType :: type()) -> histograms().
-new(BytesPerProvider, HistogramsType) ->
-    HistogramLength = type_to_hist_length(HistogramsType),
+    Period :: period()) -> histograms().
+new(BytesPerProvider, Period) ->
+    HistogramLength = period_to_hist_length(Period),
     maps:map(fun(_ProviderId, Bytes) ->
         histogram:increment(histogram:new(HistogramLength), Bytes)
     end, BytesPerProvider).
+
+
+-spec get(stats_record(), Period :: binary()) -> histograms().
+get(#transfer{min_hist = Hist}, ?MINUTE_PERIOD)             -> Hist;
+get(#transfer{hr_hist = Hist}, ?HOUR_PERIOD)                -> Hist;
+get(#transfer{dy_hist = Hist}, ?DAY_PERIOD)                 -> Hist;
+get(#transfer{mth_hist = Hist}, ?MONTH_PERIOD)              -> Hist;
+get(#space_transfer_stats{min_hist = Hist}, ?MINUTE_PERIOD) -> Hist;
+get(#space_transfer_stats{hr_hist = Hist}, ?HOUR_PERIOD)    -> Hist;
+get(#space_transfer_stats{dy_hist = Hist}, ?DAY_PERIOD)     -> Hist;
+get(#space_transfer_stats{mth_hist = Hist}, ?MONTH_PERIOD)  -> Hist.
 
 
 %%-------------------------------------------------------------------
@@ -64,15 +79,15 @@ new(BytesPerProvider, HistogramsType) ->
 %% @end
 %%-------------------------------------------------------------------
 -spec update(BytesPerProvider :: #{od_provider:id() => non_neg_integer()},
-    histograms(), HistogramsType :: type(), LastUpdates :: timestamps(),
+    histograms(), Period :: period(), LastUpdates :: timestamps(),
     StartTime :: timestamp(), CurrentTime :: timestamp()
 ) ->
     histograms().
-update(BytesPerProvider, Histograms, HistogramsType,
+update(BytesPerProvider, Histograms, Period,
     LastUpdates, StartTime, CurrentTime
 ) ->
-    Window = type_to_time_window(HistogramsType),
-    HistogramLength = type_to_hist_length(HistogramsType),
+    Window = period_to_time_window(Period),
+    HistogramLength = period_to_hist_length(Period),
     maps:fold(fun(ProviderId, Bytes, OldHistograms) ->
         Histogram = case maps:find(ProviderId, OldHistograms) of
             {ok, OldHistogram} ->
@@ -84,6 +99,46 @@ update(BytesPerProvider, Histograms, HistogramsType,
         end,
         OldHistograms#{ProviderId => histogram:increment(Histogram, Bytes)}
     end, Histograms, BytesPerProvider).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Get histograms of requested type from given record. Pad them with zeroes
+%% to current time and erase recent n-seconds to avoid fluctuations on charts
+%% (due to synchronization between providers). To do that for type other than
+%% minute one, it is required to calculate also mentioned minute hists
+%% (otherwise it is not possible to trim histograms of other types).
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare(stats_record(), period(), timestamp(), LastUpdates :: timestamps()) ->
+    {histograms(), timestamp(), TimeWindow :: non_neg_integer()}.
+prepare(Stats, ?MINUTE_PERIOD, CurrentTime, LastUpdates) ->
+    Histograms = get(Stats, ?MINUTE_PERIOD),
+    TimeWindow = ?FIVE_SEC_TIME_WINDOW,
+    PaddedHistograms = pad_with_zeroes(
+        Histograms, TimeWindow, LastUpdates, CurrentTime
+    ),
+    {NewHistograms, NewTimestamp} = trim_min_histograms(
+        PaddedHistograms, CurrentTime
+    ),
+    {NewHistograms, NewTimestamp, TimeWindow};
+
+prepare(Stats, Period, CurrentTime, LastUpdates) ->
+    MinHistograms = get(Stats, ?MINUTE_PERIOD),
+    RequestedHistograms = get(Stats, Period),
+    TimeWindow = period_to_time_window(Period),
+
+    PaddedMinHistograms = pad_with_zeroes(
+        MinHistograms, ?FIVE_SEC_TIME_WINDOW, LastUpdates, CurrentTime
+    ),
+    PaddedRequestedHistograms = pad_with_zeroes(
+        RequestedHistograms, TimeWindow, LastUpdates, CurrentTime
+    ),
+    {_, NewRequestedHistograms, NewTimestamp} = trim_histograms(
+        PaddedMinHistograms, PaddedRequestedHistograms, TimeWindow, CurrentTime
+    ),
+
+    {NewRequestedHistograms, NewTimestamp, TimeWindow}.
 
 
 %%-------------------------------------------------------------------
@@ -218,18 +273,18 @@ to_speed_charts(Histograms, StartTime, EndTime, TimeWindow) ->
     end, Histograms).
 
 
--spec type_to_time_window(type()) -> non_neg_integer().
-type_to_time_window(?MINUTE_STAT_TYPE) -> ?FIVE_SEC_TIME_WINDOW;
-type_to_time_window(?HOUR_STAT_TYPE) -> ?MIN_TIME_WINDOW;
-type_to_time_window(?DAY_STAT_TYPE) -> ?HOUR_TIME_WINDOW;
-type_to_time_window(?MONTH_STAT_TYPE) -> ?DAY_TIME_WINDOW.
+-spec period_to_time_window(period()) -> non_neg_integer().
+period_to_time_window(?MINUTE_PERIOD) -> ?FIVE_SEC_TIME_WINDOW;
+period_to_time_window(?HOUR_PERIOD)   -> ?MIN_TIME_WINDOW;
+period_to_time_window(?DAY_PERIOD)    -> ?HOUR_TIME_WINDOW;
+period_to_time_window(?MONTH_PERIOD)  -> ?DAY_TIME_WINDOW.
 
 
--spec type_to_hist_length(type()) -> non_neg_integer().
-type_to_hist_length(?MINUTE_STAT_TYPE) -> ?MIN_HIST_LENGTH;
-type_to_hist_length(?HOUR_STAT_TYPE) -> ?HOUR_HIST_LENGTH;
-type_to_hist_length(?DAY_STAT_TYPE) -> ?DAY_HIST_LENGTH;
-type_to_hist_length(?MONTH_STAT_TYPE) -> ?MONTH_HIST_LENGTH.
+-spec period_to_hist_length(period()) -> non_neg_integer().
+period_to_hist_length(?MINUTE_PERIOD) -> ?MIN_HIST_LENGTH;
+period_to_hist_length(?HOUR_PERIOD)   -> ?HOUR_HIST_LENGTH;
+period_to_hist_length(?DAY_PERIOD)    -> ?DAY_HIST_LENGTH;
+period_to_hist_length(?MONTH_PERIOD)  -> ?MONTH_HIST_LENGTH.
 
 
 %%%===================================================================

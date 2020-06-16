@@ -15,7 +15,8 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
--include_lib("ctool/include/posix/errors.hrl").
+-include("modules/fslogic/file_popularity_view.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -287,9 +288,9 @@ delete_db_view(ViewId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec query(od_space:id(), name(), options()) ->
-    {ok, datastore_json:ejson()} | {error, term()}.
+    {ok, json_utils:json_term()} | {error, term()}.
 query(SpaceId, <<"file-popularity">>, Options) ->
-    query(<<"file-popularity-", SpaceId/binary>>, Options);
+    query(?FILE_POPULARITY_VIEW(SpaceId), Options);
 query(SpaceId, ViewName, Options) ->
     ?get_view_id_and_run(ViewName, SpaceId, fun(ViewId) ->
         query(ViewId, Options)
@@ -395,7 +396,7 @@ update(ViewName, Diff, SpaceId) ->
 
 
 %% @private
--spec query(id(), options()) -> {ok, datastore_json:ejson()} | {error, term()}.
+-spec query(id(), options()) -> {ok, json_utils:json_map()} | {error, term()}.
 query(ViewId, Options) ->
     case couchbase_driver:query_view(?DISK_CTX, ViewId, ViewId, Options) of
         {ok, _} = Ans ->

@@ -11,7 +11,8 @@
 {application, op_worker,
     [
         {description, "Application starts node of oneprovider cluster"},
-        {vsn, "19.02.3"},
+        {vsn, "20.02.0-beta4"},   % Due to changes in file_meta compatibility with 19.02.1 will be lost
+                                  % Due to changes in provider handshake next version will be incompatible with 19.02.*
         {registered, [op_worker_sup]},
         {applications, [
             kernel,

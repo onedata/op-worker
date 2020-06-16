@@ -19,14 +19,15 @@
 -include("http/gui_paths.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/api_errors.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 % Default buffer size used to send file to a client. It is used if env variable
 % gui_download_buffer cannot be found.
 -define(DOWNLOAD_BUFFER_SIZE, application:get_env(?APP_NAME, gui_download_buffer, 4194304)). % 4MB
 
--define(CONN_CLOSE_HEADERS, #{<<"connection">> => <<"close">>}).
+-define(CONN_CLOSE_HEADERS, #{?HDR_CONNECTION => <<"close">>}).
 
 -export([get_file_download_url/2, handle/2]).
 
@@ -45,14 +46,16 @@
     {ok, binary()} | {error, term()}.
 get_file_download_url(SessionId, FileGuid) ->
     case lfm:check_perms(SessionId, {guid, FileGuid}, read) of
-        {ok, true} ->
+        ok ->
             Hostname = oneprovider:get_domain(),
             {ok, Code} = file_download_code:create(SessionId, FileGuid),
             URL = str_utils:format_bin("https://~s~s/~s", [
                 Hostname, ?FILE_DOWNLOAD_PATH, Code
             ]),
             {ok, URL};
-        {ok, false} ->
+        {error, ?EACCES} ->
+            ?ERROR_FORBIDDEN;
+        {error, ?EPERM} ->
             ?ERROR_FORBIDDEN;
         Error ->
             Error
@@ -100,7 +103,7 @@ handle_http_download(Req, SessionId, FileId) ->
             Headers = attachment_headers(FileName),
             % Reply with attachment headers and a streaming function
             Req2 = cowboy_req:stream_reply(?HTTP_200_OK, Headers#{
-                <<"content-length">> => integer_to_binary(Size)
+                ?HDR_CONTENT_LENGTH => integer_to_binary(Size)
             }, Req),
             stream_file(Req2, FileHandle, Size)
         catch
@@ -193,8 +196,8 @@ attachment_headers(FileName) ->
     {Type, Subtype, _} = cow_mimetypes:all(FileName),
     MimeType = <<Type/binary, "/", Subtype/binary>>,
     #{
-        <<"content-type">> => MimeType,
-        <<"content-disposition">> =>
+        ?HDR_CONTENT_TYPE => MimeType,
+        ?HDR_CONTENT_DISPOSITION =>
         <<"attachment; filename=\"", FileName/binary, "\"">>
         %% @todo VFS-2073 - check if needed
         %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>

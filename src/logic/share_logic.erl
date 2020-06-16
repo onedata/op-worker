@@ -22,7 +22,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 -export([get/2, get_public_data/2]).
--export([create/5, update_name/3, delete/2]).
+-export([create/6, update_name/3, delete/2]).
 
 %%%===================================================================
 %%% API
@@ -34,7 +34,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_share:id()) ->
-    {ok, od_share:doc()} | gs_protocol:error().
+    {ok, od_share:doc()} | errors:error().
 get(SessionId, ShareId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -49,7 +49,7 @@ get(SessionId, ShareId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_public_data(gs_client_worker:client(), od_share:id()) ->
-    {ok, od_share:doc()} | gs_protocol:error().
+    {ok, od_share:doc()} | errors:error().
 get_public_data(SessionId, ShareId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -59,17 +59,19 @@ get_public_data(SessionId, ShareId) ->
 
 
 -spec create(gs_client_worker:client(), od_share:id(), od_share:name(),
-    od_space:id(), od_share:root_file_guid()) ->
-    {ok, od_share:id()} | gs_protocol:error().
-create(SessionId, ShareId, Name, SpaceId, ShareFileGuid) ->
+    od_space:id(), od_share:root_file_guid(), od_share:file_type()
+) ->
+    {ok, od_share:id()} | errors:error().
+create(SessionId, ShareId, Name, SpaceId, ShareFileGuid, FileType) ->
     Res = ?CREATE_RETURN_ID(gs_client_worker:request(SessionId, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_share, id = undefined, aspect = instance},
         data = #{
             <<"shareId">> => ShareId,
             <<"name">> => Name,
+            <<"spaceId">> => SpaceId,
             <<"rootFileId">> => ShareFileGuid,
-            <<"spaceId">> => SpaceId
+            <<"fileType">> => FileType
         },
         subscribe = true
     })),
@@ -79,7 +81,7 @@ create(SessionId, ShareId, Name, SpaceId, ShareFileGuid) ->
 
 
 -spec update_name(gs_client_worker:client(), od_share:id(), od_share:name()) ->
-    ok | gs_protocol:error().
+    ok | errors:error().
 update_name(SessionId, ShareId, NewName) ->
     Res = gs_client_worker:request(SessionId, #gs_req_graph{
         operation = update,
@@ -91,7 +93,7 @@ update_name(SessionId, ShareId, NewName) ->
     end).
 
 
--spec delete(gs_client_worker:client(), od_share:id()) -> ok | gs_protocol:error().
+-spec delete(gs_client_worker:client(), od_share:id()) -> ok | errors:error().
 delete(SessionId, ShareId) ->
     Res = gs_client_worker:request(SessionId, #gs_req_graph{
         operation = delete,
