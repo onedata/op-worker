@@ -248,8 +248,6 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, ProxyVia) ->
 %% @doc
 %% Creates session or if session exists reuses it.
 %% NOTE !!!
-%% To avoid races during session creation this function should be run in
-%% critical section.
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(
@@ -300,7 +298,8 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
             end;
         {error, initializing} ->
             timer:sleep(100),
-            reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia);
+            reuse_or_create_session(SessId, SessType, Identity, Credentials,
+                DataConstraints, ProxyVia);
         {error, Reason} ->
             {error, Reason}
     end.
