@@ -310,7 +310,7 @@ create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, StorageId) ->
                     {Doc, _} = file_ctx:get_file_doc(FileCtx2),
                     ?info("Infinite loop detected on parent dirs creation for file ~p", [Doc]),
                     lists:foreach(fun(Ctx) ->
-                        create_dir(Ctx, SpaceId, Storage)
+                        create_dir(Ctx, SpaceId, StorageId)
                     end, [FileCtx | ChildrenDirCtxs]);
                 false ->
                     create_parent_dirs(ParentCtx, [FileCtx2 | ChildrenDirCtxs], SpaceId, StorageId)
