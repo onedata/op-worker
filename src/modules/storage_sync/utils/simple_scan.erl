@@ -793,6 +793,8 @@ get_attr_including_deleted(FileCtx) ->
 %% Updates file's size if it has changed since last import.
 %% @end
 %%--------------------------------------------------------------------
+-spec maybe_update_file_location(#statbuf{}, file_ctx:ctx(), file_meta:type(), storage_file_ctx:ctx()) ->
+    updated | not_updated.
 maybe_update_file_location(#statbuf{}, _FileCtx, ?DIRECTORY_TYPE, _StorageFileCtx) ->
     not_updated;
 maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
@@ -801,8 +803,11 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
     {StorageSyncInfo, FileCtx2} = file_ctx:get_storage_sync_info(FileCtx),
     {Size, FileCtx3} = file_ctx:get_local_storage_file_size(FileCtx2),
     {{_, _, MTime}, FileCtx4} = file_ctx:get_times(FileCtx3),
-    FileUuid = file_ctx:get_uuid_const(FileCtx4),
-    SpaceId = file_ctx:get_space_id_const(FileCtx4),
+    {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
+    ProviderId = file_meta:get_provider_id(FileDoc),
+    FileUuid = file_ctx:get_uuid_const(FileCtx5),
+    SpaceId = file_ctx:get_space_id_const(FileCtx5),
+    IsLocallyCreatedFile = oneprovider:get_id() =:= ProviderId,
     NewLastStat = storage_file_ctx:get_stat_timestamp_const(StorageFileCtx),
     LocationId = file_location:local_id(FileUuid),
     {ok, #document{
@@ -810,18 +815,22 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
             last_replication_timestamp = LastReplicationTimestamp
     }}} = fslogic_location_cache:get_location(LocationId, FileUuid),
 
-    Result2 = case {LastReplicationTimestamp, StorageSyncInfo} of
+    Result2 = case {IsLocallyCreatedFile, LastReplicationTimestamp, StorageSyncInfo} of
         %todo VFS-4847 refactor this case, use when wherever possible
-        {undefined, undefined} when MTime < StMtime ->
+        {false, undefined, _} ->
+            % remote file created on storage by open and not yet replicated
+            not_updated;
+
+        {true, undefined, undefined} when MTime < StMtime ->
             % file created locally and modified on storage
-            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
+            location_and_link_utils:update_imported_file_location(FileCtx5, StSize),
             updated;
 
-        {undefined, undefined} ->
+        {true, undefined, undefined} ->
             % file created locally and not modified on storage
             not_updated;
 
-        {undefined, #document{value = #storage_sync_info{
+        {true, undefined, #document{value = #storage_sync_info{
             mtime = LastMtime,
             last_stat = LastStat
         }}} when LastMtime =:= StMtime
@@ -831,23 +840,23 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
             % file not replicated and already handled because LastStat > StMtime
             not_updated;
 
-        {undefined, #document{value = #storage_sync_info{}}} ->
+        {true, undefined, #document{value = #storage_sync_info{}}} ->
             case (MTime < StMtime) or (Size =/= StSize) of
                 true ->
-                    location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
+                    location_and_link_utils:update_imported_file_location(FileCtx5, StSize),
                     updated;
                 false ->
                     not_updated
             end;
 
-        {_, undefined} ->
+        {_, _, undefined} ->
             case LastReplicationTimestamp < StMtime of
                 true ->
                     % file was modified after replication and has never been synced
                     case (MTime < StMtime) of
                         true ->
                             % file was modified on storage
-                            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
+                            location_and_link_utils:update_imported_file_location(FileCtx5, StSize),
                             updated;
                         false ->
                             % file was modified via onedata
@@ -858,7 +867,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
                     not_updated
             end;
 
-        {_, #document{value = #storage_sync_info{
+        {_, _, #document{value = #storage_sync_info{
             mtime = LastMtime,
             last_stat = LastStat
         }}} when LastMtime =:= StMtime
@@ -868,14 +877,14 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
             % file replicated and already handled because LastStat > StMtime
             not_updated;
 
-        {_, #document{value = #storage_sync_info{}}} ->
+        {_, _, #document{value = #storage_sync_info{}}} ->
             case LastReplicationTimestamp < StMtime of
                 true ->
                     % file was modified after replication
                     case (MTime < StMtime) of
                         true ->
                             %there was modified on storage
-                            location_and_link_utils:update_imported_file_location(FileCtx4, StSize),
+                            location_and_link_utils:update_imported_file_location(FileCtx5, StSize),
                             updated;
                         false ->
                             % file was modified via onedata
@@ -886,7 +895,7 @@ maybe_update_file_location(#statbuf{st_mtime = StMtime, st_size = StSize},
                     not_updated
             end
     end,
-    {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx4),
+    {StorageFileId, _} = file_ctx:get_storage_file_id(FileCtx5),
     storage_sync_info:create_or_update(StorageFileId, fun(SSI) ->
         {ok, SSI#storage_sync_info{
             mtime = StMtime,
@@ -1151,7 +1160,7 @@ maybe_update_nfs4_acl(StorageFileCtx, FileCtx, true) ->
                 throw:?ENOENT ->
                     not_updated;
                 throw:?ENODATA ->
-                    ok
+                    not_updated
             end
     end.
 

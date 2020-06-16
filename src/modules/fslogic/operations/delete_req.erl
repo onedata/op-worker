@@ -105,5 +105,4 @@ delete_insecure(UserCtx, FileCtx, Silent) ->
         {ok, FileMeta#file_meta{deleted = true}}
     end),
     fslogic_delete:delete_file_locally(UserCtx, FileCtx, Silent),
-    fslogic_delete:remove_auxiliary_documents(FileCtx),
     #fuse_response{status = #status{code = ?OK}}.

@@ -68,7 +68,10 @@ truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
                         Error2 = {error, ?EDOM} ->
                             log_warning(storage_file_manager, release, Error2, FileCtx3)
                     end,
-                    ok = file_popularity:update_size(FileCtx3, Size);
+                    case file_popularity:update_size(FileCtx3, Size) of
+                        ok -> ok;
+                        {error, not_found} -> ok
+                    end;
                 {error, ?ENOENT} ->
                     ok
             end,
