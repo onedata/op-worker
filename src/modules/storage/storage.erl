@@ -319,14 +319,7 @@ set_readonly(StorageId, Readonly) ->
 
 -spec set_imported(id(), boolean()) -> ok | {error, term()}.
 set_imported(StorageId, Imported) ->
-    lock_on_storage_by_id(StorageId, fun() ->
-        case supports_any_space(StorageId) of
-            true ->
-                ?ERROR_STORAGE_IN_USE;
-            false ->
-                storage_logic:set_imported(StorageId, Imported)
-        end
-    end).
+    storage_logic:set_imported(StorageId, Imported).
 
 
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
@@ -389,28 +382,14 @@ update_helper(StorageId, UpdateFun) ->
 -spec support_space(id(), tokens:serialized(), od_space:support_size()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SerializedToken, SupportSize) ->
-    lock_on_storage_by_id(StorageId, fun() ->
-        support_space_insecure(StorageId, SerializedToken, SupportSize)
-    end).
-
-
-%% @private
--spec support_space_insecure(id(), tokens:serialized(), od_space:support_size()) ->
-    {ok, od_space:id()} | errors:error().
-support_space_insecure(StorageId, SpaceSupportToken, SupportSize) ->
-    case validate_support_request(SpaceSupportToken) of
+    case validate_support_request(SerializedToken) of
         ok ->
-            case is_imported(StorageId) andalso supports_any_space(StorageId) of
-                true ->
-                    ?ERROR_STORAGE_IN_USE;
-                false ->
-                    case storage_logic:support_space(StorageId, SpaceSupportToken, SupportSize) of
-                        {ok, SpaceId} ->
-                            on_space_supported(SpaceId, StorageId),
-                            {ok, SpaceId};
-                        {error, _} = Error ->
-                            Error
-                    end
+            case storage_logic:support_space(StorageId, SerializedToken, SupportSize) of
+                {ok, SpaceId} ->
+                    on_space_supported(SpaceId, StorageId),
+                    {ok, SpaceId};
+                {error, _} = Error ->
+                    Error
             end;
         Error ->
             Error
