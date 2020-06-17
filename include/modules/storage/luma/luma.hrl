@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% Generic header file containing definitions of macros used by modules
+%%% associated with LUMA DB.
 %%% @end
 %%%-------------------------------------------------------------------
 

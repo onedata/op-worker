@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% This module contains functions for acquiring automatic (default)
+%%% mappings for LUMA DB.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_auto_feed).

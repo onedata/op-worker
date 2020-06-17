@@ -221,7 +221,9 @@ delete(StorageId, Key, Table) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-% WRITEME
+% This functions deletes record from LUMA DB if and only if
+% it was created by ?AUTO_FEED.
+% This allows to ensure that user defined records won't be deleted.
 %% @end
 %%--------------------------------------------------------------------
 -spec delete_if_auto_feed(storage:id(), db_key(), table()) -> ok.

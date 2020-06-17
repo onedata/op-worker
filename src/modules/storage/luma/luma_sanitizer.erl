@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% Util module containing sanitizing function for data structures used
+%%% by modules associated with LUMA DB.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_sanitizer).

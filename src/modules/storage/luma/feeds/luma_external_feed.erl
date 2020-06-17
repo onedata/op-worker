@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% WRITEME
+%%% This module contains functions for acquiring mappings for LUMA DB
+%%% from external feed.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_external_feed).
