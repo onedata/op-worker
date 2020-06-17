@@ -88,7 +88,6 @@ count_file_attrs_hash(StorageFileCtx, SyncAcl) ->
     #statbuf{
         st_mode = StMode,
         st_size = StSize,
-        st_atime = StAtime,
         st_mtime = STMtime,
         st_ctime = STCtime
     }= StatBuf,
@@ -101,7 +100,7 @@ count_file_attrs_hash(StorageFileCtx, SyncAcl) ->
             {<<"">>, StorageFileCtx3};
         ?REGULAR_FILE_TYPE ->
             FileId = storage_file_ctx:get_file_name_const(StorageFileCtx2),
-            {hash([FileId, StMode, StSize, StAtime, STMtime, STCtime, Xattr]), StorageFileCtx3}
+            {hash([FileId, StMode, StSize, STMtime, STCtime, Xattr]), StorageFileCtx3}
     end.
 
 -spec maybe_get_nfs4_acl(storage_file_ctx:ctx(), boolean()) ->
