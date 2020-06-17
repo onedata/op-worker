@@ -24,17 +24,19 @@
     init_per_testcase/2, end_per_testcase/2
 ]).
 
--export([
-    create_share_test/1,
-    delete_share_test/1
-]).
-
 % exported for rpc test calls
 -export([create_share/2, update_share/2, delete_share/2]).
+
+-export([
+    create_share_test/1,
+    update_share_test/1,
+    delete_share_test/1
+]).
 
 all() ->
     ?ALL([
         create_share_test,
+        update_share_test,
         delete_share_test
     ]).
 
@@ -174,6 +176,94 @@ create_validate_create_share_gs_call_result_fun(EnvRef, Providers, FileType, Con
             Providers, ShareId, ShareName, ?SPACE_2,
             FileGuid, FileType, UserId, Config
         )
+    end.
+
+
+update_share_test(Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
+    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
+
+    OriginalShareName = <<"share">>,
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, OriginalShareName),
+    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+            verify_fun = fun
+                (expected_failure, _) ->
+                    verify_share_doc(
+                        Providers, ShareId, OriginalShareName, ?SPACE_2, FileGuid, FileType,
+                        ?USER_IN_BOTH_SPACES, Config
+                    ),
+                    true;
+                (expected_success, #api_test_ctx{client = ?USER(UserId), data = #{<<"name">> := ShareName}}) ->
+                    verify_share_doc(Providers, ShareId, ShareName, ?SPACE_2, FileGuid, FileType, UserId, Config),
+                    true
+            end,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Update share for ", FileType/binary, " using /shares rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_update_share_rest_args_fun(ShareId),
+                    validate_result_fun = fun(_, {ok, RespCode, _, RespBody}) ->
+                        ?assertEqual({?HTTP_204_NO_CONTENT, #{}}, {RespCode, RespBody})
+                    end
+                },
+                #scenario_template{
+                    name = <<"Update share for ", FileType/binary, " using gs api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_update_share_gs_args_fun(ShareId),
+                    validate_result_fun = fun(_, Result) ->
+                        ?assertEqual({ok, undefined}, Result)
+                    end
+                }
+            ],
+            data_spec = #data_spec{
+                required = [<<"name">>],
+                correct_values = #{
+                    <<"name">> => [<<"szer">>, OriginalShareName]
+                },
+                bad_values = [
+                    {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)},
+                    {<<"name">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"name">>)},
+                    {bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}
+                ]
+            }
+        }
+    ])).
+
+
+%% @private
+create_prepare_update_share_rest_args_fun(ShareId) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {Id, Data1} = api_test_utils:maybe_substitute_id(ShareId, Data0),
+
+        #rest_args{
+            method = patch,
+            path = <<"shares/", Id/binary>>,
+            headers = #{<<"content-type">> => <<"application/json">>},
+            body = json_utils:encode(Data1)
+        }
+    end.
+
+
+%% @private
+create_prepare_update_share_gs_args_fun(ShareId) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {Id, Data1} = api_test_utils:maybe_substitute_id(ShareId, Data0),
+
+        #gs_args{
+            operation = update,
+            gri = #gri{type = op_share, id = Id, aspect = instance, scope = private},
+            data = Data1
+        }
     end.
 
 
