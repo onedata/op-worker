@@ -563,7 +563,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            {ok, StorageId} = storage_logic:create_in_zone(Name, false, StorageId),
+            {ok, StorageId} = storage_logic:create_in_zone(Name, undefined, StorageId),
             ?notice("Storage ~p created in Onezone", [StorageId])
     end,
     ok = delete_deprecated(StorageId).
@@ -587,10 +587,7 @@ migrate_space_support(SpaceId) ->
                         Error1 -> throw(Error1)
                     end
             end,
-            case lists:member(StorageId, MiR) of
-                true -> ok = storage_logic:set_imported(StorageId, true);
-                false -> ok
-            end,
+            ok = storage_logic:set_imported(StorageId, lists:member(StorageId, MiR)),
             case space_storage:delete(SpaceId) of
                 ok -> ok;
                 ?ERROR_NOT_FOUND -> ok;
@@ -611,10 +608,8 @@ migrate_imported_storages_to_zone() ->
     ?info("Starting imported storages migration procedure..."),
     {ok, StorageIds} = provider_logic:get_storage_ids(),
     lists:foreach(fun(StorageId) ->
-        case storage_config:is_imported_storage(StorageId) of
-            true -> storage_logic:set_imported(StorageId, true);
-            false -> ok % imported storage is set to false by default in Onezone
-        end
+        ImportedStorage = storage_config:is_imported_storage(StorageId),
+        storage_logic:set_imported(StorageId, ImportedStorage)
     end, StorageIds),
     ?notice("Imported storages migration procedure finished succesfully").
 

@@ -54,7 +54,7 @@
 %%--------------------------------------------------------------------
 %% @equiv create_in_zone(Name, ImportedStorage, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), boolean()) -> {ok, storage:id()} | errors:error().
+-spec create_in_zone(od_storage:name(), boolean() | undefined) -> {ok, storage:id()} | errors:error().
 create_in_zone(Name, ImportedStorage) ->
     create_in_zone(Name, ImportedStorage, undefined).
 
@@ -64,15 +64,18 @@ create_in_zone(Name, ImportedStorage) ->
 %% Creates document containing storage public information in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), boolean(), storage:id() | undefined) ->
+-spec create_in_zone(od_storage:name(), boolean() | undefined, storage:id() | undefined) ->
     {ok, storage:id()} | errors:error().
 create_in_zone(Name, ImportedStorage, StorageId) ->
+    PartialData = case ImportedStorage of
+        undefined -> #{};
+        _ -> #{<<"imported">> => ImportedStorage}
+    end,
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        data = #{
-            <<"name">> => Name,
-            <<"imported">> => ImportedStorage
+        data = PartialData#{
+            <<"name">> => Name
         }
     }),
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
