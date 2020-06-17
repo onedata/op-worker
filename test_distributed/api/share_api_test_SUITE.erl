@@ -29,6 +29,7 @@
 
 -export([
     create_share_test/1,
+    get_share_test/1,
     update_share_test/1,
     delete_share_test/1
 ]).
@@ -36,10 +37,13 @@
 all() ->
     ?ALL([
         create_share_test,
+        get_share_test,
         update_share_test,
         delete_share_test
     ]).
 
+-define(SHARE_PUBLIC_URL(__SHARE_ID), <<__SHARE_ID/binary, "_public_url">>).
+-define(SHARE_HANDLE(__SHARE_ID), <<__SHARE_ID/binary, "_handle_id">>).
 
 -define(ATTEMPTS, 30).
 
@@ -171,11 +175,100 @@ create_validate_create_share_gs_call_result_fun(EnvRef, Providers, FileType, Con
         api_test_utils:set_env_var(EnvRef, shares, [ShareId | Shares]),
 
         {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
-        assert_gs_share_data(ShareId, ShareName, private, FileGuid, FileType, ShareData),
+        assert_proper_gs_share_translation(ShareId, ShareName, private, FileGuid, FileType, ShareData),
+
         verify_share_doc(
             Providers, ShareId, ShareName, ?SPACE_2,
             FileGuid, FileType, UserId, Config
         )
+    end.
+
+
+get_share_test(Config) ->
+    [P2, P1] = Providers = ?config(op_worker_nodes, Config),
+    SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
+    SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
+
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
+    FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
+    {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
+
+    ShareName = <<"share">>,
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, ShareName),
+    api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+
+    ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+    {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
+
+    ?assert(api_test_runner:run_tests(Config, [
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get share using /shares rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = create_prepare_get_share_rest_args_fun(ShareId),
+                    validate_result_fun = fun(_, {ok, RespCode, _, RespBody}) ->
+                        ExpShareData = #{
+                            <<"shareId">> => ShareId,
+                            <<"name">> => ShareName,
+                            <<"fileType">> => FileType,
+                            <<"publicUrl">> => ?SHARE_PUBLIC_URL(ShareId),
+                            <<"rootFileId">> => ShareObjectId,
+                            <<"spaceId">> => ?SPACE_2,
+                            <<"handleId">> => ?SHARE_HANDLE(ShareId)
+                        },
+                        ?assertEqual({?HTTP_200_OK, ExpShareData}, {RespCode, RespBody})
+                    end
+                },
+                #scenario_template{
+                    name = <<"Get share using gs private api">>,
+                    type = gs,
+                    prepare_args_fun = create_prepare_get_share_gs_args_fun(ShareId, private),
+                    validate_result_fun = fun(_, {ok, Result}) ->
+                        assert_proper_gs_share_translation(ShareId, ShareName, private, FileGuid, FileType, Result)
+                    end
+                }
+            ],
+            data_spec = #data_spec{bad_values = [{bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}]}
+        },
+        #scenario_spec{
+            name = <<"Get share using gs public api">>,
+            type = gs,
+            target_nodes = Providers,
+            client_spec = ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
+            prepare_args_fun = create_prepare_get_share_gs_args_fun(ShareId, public),
+            validate_result_fun = fun(_, {ok, Result}) ->
+                assert_proper_gs_share_translation(ShareId, ShareName, public, FileGuid, FileType, Result)
+            end,
+            data_spec = #data_spec{bad_values = [{bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}]}
+        }
+    ])).
+
+
+%% @private
+create_prepare_get_share_rest_args_fun(ShareId) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {Id, _} = api_test_utils:maybe_substitute_id(ShareId, Data),
+
+        #rest_args{
+            method = get,
+            path = <<"shares/", Id/binary>>
+        }
+    end.
+
+
+%% @private
+create_prepare_get_share_gs_args_fun(ShareId, Scope) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {Id, Data1} = api_test_utils:maybe_substitute_id(ShareId, Data0),
+
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_share, id = Id, aspect = instance, scope = Scope},
+            data = Data1
+        }
     end.
 
 
@@ -385,48 +478,9 @@ validate_delete_share_result(EnvRef, UserId, Providers, Config) ->
 
 
 %% @private
-assert_gs_share_data(ShareId, ShareName, Scope, FileGuid, FileType, GsShareData) ->
-    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-
-    % Unfortunately there is no oz in api tests and so all *_logic modules are mocked.
-    % Because of share_logic mocks created shares already have handle and dummy public url.
-    ExpShareData = #{
-        <<"revision">> => 1,
-        <<"gri">> => gri:serialize(#gri{
-            type = op_share,
-            id = ShareId,
-            aspect = instance,
-            scope = Scope
-        }),
-        <<"name">> => ShareName,
-        <<"fileType">> => FileType,
-        <<"publicUrl">> => <<ShareId/binary, "_public_url">>,
-        <<"handle">> => gri:serialize(#gri{
-            type = op_handle,
-            id = <<ShareId/binary, "_handle_id">>,
-            aspect = instance,
-            scope = private
-        }),
-        <<"privateRootFile">> => gri:serialize(#gri{
-            type = op_file,
-            id = FileGuid,
-            aspect = instance,
-            scope = private
-        }),
-        <<"rootFile">> => gri:serialize(#gri{
-            type = op_file,
-            id = ShareFileGuid,
-            aspect = instance,
-            scope = public
-        })
-    },
-    ?assertEqual(ExpShareData, GsShareData).
-
-
-%% @private
 verify_share_doc(Providers, ShareId, ShareName, SpaceId, FileGuid, FileType, UserId, Config) ->
-    ExpPublicUrl = <<ShareId/binary, "_public_url">>,
-    ExpHandle = <<ShareId/binary, "_handle_id">>,
+    ExpPublicUrl = ?SHARE_PUBLIC_URL(ShareId),
+    ExpHandle = ?SHARE_HANDLE(ShareId),
     ExpFileType = binary_to_atom(FileType, utf8),
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
@@ -443,6 +497,55 @@ verify_share_doc(Providers, ShareId, ShareName, SpaceId, FileGuid, FileType, Use
             rpc:call(Node, share_logic, get, [?SESS_ID(UserId, Node, Config), ShareId])
         )
     end, Providers).
+
+
+%% @private
+assert_proper_gs_share_translation(ShareId, ShareName, Scope, FileGuid, FileType, GsShareData) ->
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+
+    % Unfortunately there is no oz in api tests and so all *_logic modules are
+    % mocked. Because of share_logic mocks created shares already have handle
+    % and dummy public url.
+    ExpBasicShareData = #{
+        <<"revision">> => 1,
+        <<"gri">> => gri:serialize(#gri{
+            type = op_share,
+            id = ShareId,
+            aspect = instance,
+            scope = Scope
+        }),
+        <<"name">> => ShareName,
+        <<"fileType">> => FileType,
+        <<"publicUrl">> => <<ShareId/binary, "_public_url">>,
+        <<"rootFile">> => gri:serialize(#gri{
+            type = op_file,
+            id = ShareFileGuid,
+            aspect = instance,
+            scope = public
+        })
+    },
+    ExpShareData = case Scope of
+        public ->
+            ExpBasicShareData#{<<"handle">> => null};
+        private ->
+            ExpBasicShareData#{
+                <<"handle">> => gri:serialize(#gri{
+                    type = op_handle,
+                    id = <<ShareId/binary, "_handle_id">>,
+                    aspect = instance,
+                    scope = private
+                }),
+                <<"privateRootFile">> => gri:serialize(#gri{
+                    type = op_file,
+                    id = FileGuid,
+                    aspect = instance,
+                    scope = private
+                })
+            }
+    end,
+
+    ?assertEqual(ExpShareData, GsShareData).
+
 
 
 %% @private
@@ -536,36 +639,55 @@ mock_share_logic(Config) ->
             name = Name,
             space = SpaceId,
             root_file = ShareFileGuid,
-            public_url = <<ShareId/binary, "_public_url">>,
+            public_url = ?SHARE_PUBLIC_URL(ShareId),
             file_type = FileType,
-            handle = <<ShareId/binary, "_handle_id">>
+            handle = ?SHARE_HANDLE(ShareId)
         }},
         rpc:call(TestNode, ?MODULE, create_share, [Workers, ShareDoc])
     end),
+
     test_utils:mock_expect(Workers, share_logic, get, fun(_Auth, ShareId) ->
         od_share:get_from_cache(ShareId)
     end),
-    test_utils:mock_expect(Workers, share_logic, delete, fun(_Auth, ShareId) ->
-        rpc:call(TestNode, ?MODULE, delete_share, [Workers, ShareId]),
-        ok
+
+    test_utils:mock_expect(Workers, share_logic, get_public_data, fun(_Auth, ShareId) ->
+        case od_share:get_from_cache(ShareId) of
+            {ok, #document{value = Share} = Doc} ->
+                {ok, Doc#document{value = Share#od_share{
+                    space = undefined,
+                    handle = undefined
+                }}};
+            Error ->
+                Error
+        end
     end),
+
     test_utils:mock_expect(Workers, share_logic, update_name, fun(Auth, ShareId, NewName) ->
         {ok, #document{key = ShareId, value = Share}} = share_logic:get(Auth, ShareId),
         rpc:call(TestNode, ?MODULE, update_share, [Workers, #document{
             key = ShareId,
             value = Share#od_share{name = NewName}}
         ])
+    end),
+
+    test_utils:mock_expect(Workers, share_logic, delete, fun(_Auth, ShareId) ->
+        rpc:call(TestNode, ?MODULE, delete_share, [Workers, ShareId]),
+        ok
     end).
 
 
 create_share(Providers, ShareDoc = #document{key = ShareId, value = Record}) ->
-    {_, []} = rpc:multicall(Providers, od_share, update_cache, [ShareId, fun(_) -> {ok, Record} end, ShareDoc]),
+    {_, []} = rpc:multicall(Providers, od_share, update_cache, [
+        ShareId, fun(_) -> {ok, Record} end, ShareDoc
+    ]),
     {ok, ShareId}.
 
 
 update_share(Providers, NewShareDoc = #document{key = ShareId, value = NewRecord}) ->
     {_, []} = rpc:multicall(Providers, od_share, invalidate_cache, [ShareId]),
-    {_, []} = rpc:multicall(Providers, od_share, update_cache, [ShareId, fun(_) -> {ok, NewRecord} end, NewShareDoc]),
+    {_, []} = rpc:multicall(Providers, od_share, update_cache, [
+        ShareId, fun(_) -> {ok, NewRecord} end, NewShareDoc
+    ]),
     ok.
 
 
