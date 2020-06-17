@@ -15,6 +15,7 @@
 
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("kernel/include/file.hrl").
 
 % Utility macros
 -define(SPACE_ID1, <<"space1">>).
@@ -80,18 +81,14 @@
 -define(ROOT_OWNER, ?OWNER(?ROOT_UID, ?ROOT_GID)).
 
 % Generated UID and GID, where UID=hash(UserId) and GID is GID of storage mountpoint
--define(GEN_OWNER(UserId), ?OWNER(?UID(UserId), ?MOUNT_DIR_GID)).
+-define(GEN_OWNER(Worker, StorageId, UserId), ?MOUNT_DIR_OWNER(Worker, StorageId, ?UID(UserId))).
 % Generated UID and GID, where UID=hash(?SPACE_OWNER_ID(SpaceId)) and GID=hash(SpaceId)
 -define(GEN_SPACE_OWNER(SpaceId), ?OWNER(?UID(?SPACE_OWNER_ID(SpaceId)), ?GID(SpaceId))).
 % Generated UID and GID, where UID=hash(UserId) and GID=hash(SpaceId)
 -define(GEN_OWNER(UserId, SpaceId), ?OWNER(?UID(UserId), ?GID(SpaceId))).
 
-
-% UID and GID of storages' mountpoints in docker container
--define(MOUNT_DIR_UID, 1000).
--define(MOUNT_DIR_GID, 1000).
--define(MOUNT_DIR_OWNER(Uid), ?OWNER(Uid, ?MOUNT_DIR_GID)).
--define(MOUNT_DIR_OWNER, ?OWNER(?MOUNT_DIR_UID, ?MOUNT_DIR_GID)).
+-define(MOUNT_DIR_OWNER(Worker, StorageId), storage_files_test_SUITE:mount_dir_owner(Worker, StorageId)).
+-define(MOUNT_DIR_OWNER(Worker, StorageId, Uid), storage_files_test_SUITE:mount_dir_owner(Worker, StorageId, Uid)).
 
 -define(OWNER(Uid, Gid), #{uid => Uid, gid => Gid}).
 

@@ -34,6 +34,8 @@
     creating_file_should_result_in_eacces_when_mapping_is_not_found/1
 ]).
 
+% utils
+-export([mount_dir_owner/2, mount_dir_owner/3]).
 
 -define(assertFileInfo(Expected, Worker, FilePath),
     assert_file_info(Expected, Worker, FilePath, ?LINE)).
@@ -75,6 +77,7 @@ all() -> [
 %%%===================================================================
 
 space_directory_mode_and_owner_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     ?RUN(#test_spec{
         config = Config,
         test_fun = fun space_directory_mode_and_owner_test_base/4,
@@ -82,18 +85,18 @@ space_directory_mode_and_owner_test(Config) ->
             ?SPACE_ID1 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?MOUNT_DIR_OWNER
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?MOUNT_DIR_OWNER
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1)
                 },
                 #{
                     user => ?ROOT_USER_ID,
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?MOUNT_DIR_OWNER
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1)
                 }
             ],
             ?SPACE_ID2 => [
@@ -133,51 +136,51 @@ space_directory_mode_and_owner_test(Config) ->
             ?SPACE_ID4 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?MOUNT_DIR_OWNER
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID4),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID4)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?MOUNT_DIR_OWNER
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID4),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID4)
                 },
                 #{
                     user => ?ROOT_USER_ID,
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_display_owner => ?MOUNT_DIR_OWNER
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID4),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID4)
                 }
             ],
             ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5),
                     expected_display_owner => ?OWNER(5555, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5),
                     expected_display_owner => ?OWNER(5555, 5555)
                 },
                 #{
                     user => ?ROOT_USER_ID,
-                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5),
                     expected_display_owner => ?OWNER(5555, 5555)
                 }
             ],
             ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6),
                     expected_display_owner => ?OWNER(6666, 6666)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6),
                     expected_display_owner => ?OWNER(6666, 6666)
                 },
                 #{
                     user => ?ROOT_USER_ID,
-                    expected_owner => ?MOUNT_DIR_OWNER,
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6),
                     expected_display_owner => ?OWNER(6666, 6666)
                 }
             ],
@@ -227,6 +230,7 @@ space_directory_mode_and_owner_test(Config) ->
         }}).
 
 regular_file_mode_and_owner_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     ?RUN(#test_spec{
         config = Config,
         test_fun = fun regular_file_mode_and_owner_test_base/4,
@@ -234,13 +238,13 @@ regular_file_mode_and_owner_test(Config) ->
             ?SPACE_ID1 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?GEN_OWNER(?USER1),
-                    expected_display_owner => ?GEN_OWNER(?USER1)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER1),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER1)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?GEN_OWNER(?USER2),
-                    expected_display_owner => ?GEN_OWNER(?USER2)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER2),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER2)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -285,13 +289,13 @@ regular_file_mode_and_owner_test(Config) ->
             ?SPACE_ID4 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?GEN_OWNER(?USER1),
-                    expected_display_owner => ?GEN_OWNER(?USER1)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER1),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER1)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?GEN_OWNER(?USER2),
-                    expected_display_owner => ?GEN_OWNER(?USER2)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER2),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER2)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -302,12 +306,12 @@ regular_file_mode_and_owner_test(Config) ->
             ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(5001),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5, 5001),
                     expected_display_owner => ?OWNER(5551, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(5002),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5, 5002),
                     expected_display_owner => ?OWNER(5002, 5555)
                 },
                 #{
@@ -319,12 +323,12 @@ regular_file_mode_and_owner_test(Config) ->
             ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(6001),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6, 6001),
                     expected_display_owner => ?OWNER(6661, 6666)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(6002),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6, 6002),
                     expected_display_owner => ?OWNER(6002, 6666)
                 },
                 #{
@@ -381,6 +385,7 @@ regular_file_mode_and_owner_test(Config) ->
     }).
 
 regular_file_custom_mode_and_owner_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     ?RUN(#test_spec{
         config = Config,
         test_fun = fun regular_file_mode_and_owner_test_base/4,
@@ -388,13 +393,13 @@ regular_file_custom_mode_and_owner_test(Config) ->
             ?SPACE_ID1 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?GEN_OWNER(?USER1),
-                    expected_display_owner => ?GEN_OWNER(?USER1)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER1),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER1)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?GEN_OWNER(?USER2),
-                    expected_display_owner => ?GEN_OWNER(?USER2)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER2),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER2)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -439,13 +444,13 @@ regular_file_custom_mode_and_owner_test(Config) ->
             ?SPACE_ID4 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?GEN_OWNER(?USER1),
-                    expected_display_owner => ?GEN_OWNER(?USER1)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER1),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER1)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?GEN_OWNER(?USER2),
-                    expected_display_owner => ?GEN_OWNER(?USER2)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER2),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER2)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -456,12 +461,12 @@ regular_file_custom_mode_and_owner_test(Config) ->
             ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(5001),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5, 5001),
                     expected_display_owner => ?OWNER(5551, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(5002),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5, 5002),
                     expected_display_owner => ?OWNER(5002, 5555)
                 },
                 #{
@@ -473,12 +478,12 @@ regular_file_custom_mode_and_owner_test(Config) ->
             ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(6001),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6, 6001),
                     expected_display_owner => ?OWNER(6661, 6666)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(6002),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6, 6002),
                     expected_display_owner => ?OWNER(6002, 6666)
                 },
                 #{
@@ -535,22 +540,23 @@ regular_file_custom_mode_and_owner_test(Config) ->
     }).
 
 regular_file_unknown_owner_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     ?RUN(#test_spec{
         config = Config,
         test_fun = fun regular_file_unknown_owner_test_base/4,
         custom_test_setups = #{
             ?SPACE_ID1 => [
                 #{
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_owner2 => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER)),
-                    expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1),
+                    expected_owner2 => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1, ?UID(?UNKNOWN_USER)),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1, ?UID(?UNKNOWN_USER))
                 }
             ],
             ?SPACE_ID4 => [
                 #{
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_owner2 => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER)),
-                    expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1),
+                    expected_owner2 => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID4, ?UID(?UNKNOWN_USER)),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID4, ?UID(?UNKNOWN_USER))
                 }
             ],
             ?SPACE_ID7 => [
@@ -565,6 +571,7 @@ regular_file_unknown_owner_test(Config) ->
     }).
 
 directory_mode_and_owner_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     ?RUN(#test_spec{
         config = Config,
         test_fun = fun directory_mode_and_owner_test_base/4,
@@ -572,13 +579,13 @@ directory_mode_and_owner_test(Config) ->
             ?SPACE_ID1 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?GEN_OWNER(?USER1),
-                    expected_display_owner => ?GEN_OWNER(?USER1)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER1),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER1)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?GEN_OWNER(?USER2),
-                    expected_display_owner => ?GEN_OWNER(?USER2)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER2),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER2)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -623,13 +630,13 @@ directory_mode_and_owner_test(Config) ->
             ?SPACE_ID4 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?GEN_OWNER(?USER1),
-                    expected_display_owner => ?GEN_OWNER(?USER1)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER1),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER1)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?GEN_OWNER(?USER2),
-                    expected_display_owner => ?GEN_OWNER(?USER2)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER2),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER2)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -640,12 +647,12 @@ directory_mode_and_owner_test(Config) ->
             ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(5001),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5, 5001),
                     expected_display_owner => ?OWNER(5551, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(5002),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5, 5002),
                     expected_display_owner => ?OWNER(5002, 5555)
                 },
                 #{
@@ -657,12 +664,12 @@ directory_mode_and_owner_test(Config) ->
             ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(6001),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6, 6001),
                     expected_display_owner => ?OWNER(6661, 6666)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(6002),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6, 6002),
                     expected_display_owner => ?OWNER(6002, 6666)
                 },
                 #{
@@ -720,6 +727,7 @@ directory_mode_and_owner_test(Config) ->
     }).
 
 directory_custom_mode_and_owner_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     ?RUN(#test_spec{
         config = Config,
         test_fun = fun directory_mode_and_owner_test_base/4,
@@ -727,13 +735,13 @@ directory_custom_mode_and_owner_test(Config) ->
             ?SPACE_ID1 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?GEN_OWNER(?USER1),
-                    expected_display_owner => ?GEN_OWNER(?USER1)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER1),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER1)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?GEN_OWNER(?USER2),
-                    expected_display_owner => ?GEN_OWNER(?USER2)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER2),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER2)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -778,13 +786,13 @@ directory_custom_mode_and_owner_test(Config) ->
             ?SPACE_ID4 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?GEN_OWNER(?USER1),
-                    expected_display_owner => ?GEN_OWNER(?USER1)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER1),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER1)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?GEN_OWNER(?USER2),
-                    expected_display_owner => ?GEN_OWNER(?USER2)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER2),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER2)
                 },
                 #{
                     user => ?ROOT_USER_ID,
@@ -795,12 +803,12 @@ directory_custom_mode_and_owner_test(Config) ->
             ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(5001),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5, 5001),
                     expected_display_owner => ?OWNER(5551, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(5002),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5, 5002),
                     expected_display_owner => ?OWNER(5002, 5555)
                 },
                 #{
@@ -812,12 +820,12 @@ directory_custom_mode_and_owner_test(Config) ->
             ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(6001),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6, 6001),
                     expected_display_owner => ?OWNER(6661, 6666)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(6002),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6, 6002),
                     expected_display_owner => ?OWNER(6002, 6666)
                 },
                 #{
@@ -873,22 +881,23 @@ directory_custom_mode_and_owner_test(Config) ->
     }).
 
 directory_with_unknown_owner_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     ?RUN(#test_spec{
         config = Config,
         test_fun = fun directory_with_unknown_owner_test_base/4,
         custom_test_setups = #{
             ?SPACE_ID1 => [
                 #{
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_owner2 => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER)),
-                    expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1),
+                    expected_owner2 => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1, ?UID(?UNKNOWN_USER)),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID1, ?UID(?UNKNOWN_USER))
                 }
             ],
             ?SPACE_ID4 => [
                 #{
-                    expected_owner => ?MOUNT_DIR_OWNER,
-                    expected_owner2 => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER)),
-                    expected_display_owner => ?MOUNT_DIR_OWNER(?UID(?UNKNOWN_USER))
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID4),
+                    expected_owner2 => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID4, ?UID(?UNKNOWN_USER)),
+                    expected_display_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID4, ?UID(?UNKNOWN_USER))
                 }
             ],
             ?SPACE_ID7 => [
@@ -903,6 +912,7 @@ directory_with_unknown_owner_test(Config) ->
     }).
 
 rename_file_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
     % this test case is not run for user=?ROOT_USER_ID because
     % we cannot perform mv in context of ROOT as path cannot be resolve in context of special session
     ?RUN(#test_spec{
@@ -912,13 +922,13 @@ rename_file_test(Config) ->
             ?SPACE_ID1 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?GEN_OWNER(?USER1),
-                    expected_display_owner => ?GEN_OWNER(?USER1)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER1),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER1)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?GEN_OWNER(?USER2),
-                    expected_display_owner => ?GEN_OWNER(?USER2)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER2),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID1, ?USER2)
                 }
             ],
             ?SPACE_ID2 => [
@@ -948,36 +958,36 @@ rename_file_test(Config) ->
             ?SPACE_ID4 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?GEN_OWNER(?USER1),
-                    expected_display_owner => ?GEN_OWNER(?USER1)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER1),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER1)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?GEN_OWNER(?USER2),
-                    expected_display_owner => ?GEN_OWNER(?USER2)
+                    expected_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER2),
+                    expected_display_owner => ?GEN_OWNER(Worker, ?STORAGE_ID4, ?USER2)
                 }
             ],
             ?SPACE_ID5 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(5001),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5, 5001),
                     expected_display_owner => ?OWNER(5551, 5555)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(5002),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID5, 5002),
                     expected_display_owner => ?OWNER(5002, 5555)
                 }
             ],
             ?SPACE_ID6 => [
                 #{
                     user => ?USER1,
-                    expected_owner => ?MOUNT_DIR_OWNER(6001),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6, 6001),
                     expected_display_owner => ?OWNER(6661, 6666)
                 },
                 #{
                     user => ?USER2,
-                    expected_owner => ?MOUNT_DIR_OWNER(6002),
+                    expected_owner => ?MOUNT_DIR_OWNER(Worker, ?STORAGE_ID6, 6002),
                     expected_display_owner => ?OWNER(6002, 6666)
                 }
             ],
@@ -1275,11 +1285,9 @@ init_per_testcase(Config) ->
     init_per_testcase(default, Config).
 
 init_per_testcase(default, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    mock_stat_on_space_mount_dir(W1),
-    lfm_proxy:init(Config);
+    Config;
 init_per_testcase(_Case, Config) ->
-    Config.
+    lfm_proxy:init(Config).
 
 end_per_testcase(Config) ->
     end_per_testcase(default, Config).
@@ -1289,9 +1297,7 @@ end_per_testcase(default, Config) ->
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     clean_spaces(Workers),
     lists:foreach(fun(W) -> clean_posix_storage_mountpoints(W) end, Workers),
-    test_utils:mock_unload(hd(Workers), storage_file_ctx),
-    clear_luma_db(hd(Workers)),
-    lfm_proxy:teardown(Config);
+    clear_luma_db(hd(Workers));
 end_per_testcase(_Case, _Config) ->
     ok.
 
@@ -1462,8 +1468,10 @@ run_test(TestName, TestBaseFun, TestNo, Config, SpaceId, TestArgs) ->
             false
     end.
 
-mock_stat_on_space_mount_dir(Worker) ->
-    ok = test_utils:mock_new(Worker, storage_file_ctx),
-    ok = test_utils:mock_expect(Worker, storage_file_ctx, stat, fun(StFileCtx) ->
-        {#statbuf{st_uid = ?MOUNT_DIR_UID, st_gid = ?MOUNT_DIR_GID}, StFileCtx}
-    end).
+mount_dir_owner(Worker, StorageId) ->
+    {ok, FI} = rpc:call(Worker, file, read_file_info, [StorageId]),
+    ?OWNER(FI#file_info.uid, FI#file_info.gid).
+
+mount_dir_owner(Worker, StorageId, Uid) ->
+    Owner = mount_dir_owner(Worker, StorageId),
+    Owner#{uid => Uid}.
