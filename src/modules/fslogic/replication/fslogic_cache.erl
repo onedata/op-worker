@@ -775,6 +775,8 @@ flush_key(Key, Type) ->
 %%-------------------------------------------------------------------
 -spec flush_local_blocks(file_location:doc(), list(), list(), flush_type()) ->
     ok | {error, term()} | [{error, term()}].
+flush_local_blocks(_, [], [], _) ->
+    ok;
 flush_local_blocks(#document{key = Key,
     value = #file_location{blocks = PublicBlocks}}, DelBlocks, AddBlocks, Type) ->
     Proceed = case ?LOCAL_BLOCKS_FLUSH of

@@ -292,7 +292,7 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
 make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     {FileCtx, ParentFileCtx2} = ?MODULE:create_file_doc(UserCtx, ParentFileCtx, Name, Mode),
     try
-        {_, FileCtx2, _} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
+        {_, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
         fslogic_times:update_mtime_ctime(ParentFileCtx2),
         #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,
@@ -542,7 +542,7 @@ create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
     ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
     case ExtDIO of
         true ->
-            {FL, FileCtx2, _} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
+            {{ok, FL}, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
             {FL, FileCtx2};
         _ ->
             {#document{value = FL}, FileCtx2} =

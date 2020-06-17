@@ -915,15 +915,15 @@ get_or_create_local_file_location_doc(FileCtx) ->
 %% Returns local file location doc.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_local_file_location_doc(ctx(), boolean()) ->
+-spec get_or_create_local_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts()) ->
     {file_location:doc() | undefined, ctx()}.
-get_or_create_local_file_location_doc(FileCtx, IncludeBlocks) ->
+get_or_create_local_file_location_doc(FileCtx, GetDocOpts) ->
     case is_dir(FileCtx) of
         {true, FileCtx2} ->
             {undefined, FileCtx2};
         {false, FileCtx2} ->
             get_or_create_local_regular_file_location_doc(FileCtx2,
-                IncludeBlocks, true)
+                GetDocOpts, true)
     end.
 
 %%--------------------------------------------------------------------
@@ -1107,12 +1107,8 @@ get_file_size(FileCtx) ->
             value = #file_location{
                 size = undefined
             }
-        } = FL, FileCtx2} ->
-            {#document{
-                value = #file_location{
-                    size = undefined
-                }
-            } = FL, _} = get_local_file_location_doc(FileCtx, true),
+        }, FileCtx2} ->
+            {FL, _} = get_local_file_location_doc(FileCtx, true),
             {fslogic_blocks:upper(fslogic_location_cache:get_blocks(FL)), FileCtx2};
         {#document{value = #file_location{size = Size}}, FileCtx2} ->
             {Size, FileCtx2};
@@ -1349,36 +1345,26 @@ resolve_and_cache_path(FileCtx, Type) ->
 %% Returns local file location doc, creates it if it's not present
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_create_local_regular_file_location_doc(ctx(), boolean(), boolean()) ->
-    {file_location:doc() | undefined, ctx()}.
-get_or_create_local_regular_file_location_doc(FileCtx, IncludeBlocks, true) ->
-    case get_local_file_location_doc(FileCtx, IncludeBlocks) of
+-spec get_or_create_local_regular_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts(),
+    boolean()) -> {file_location:doc() | undefined, ctx()}.
+get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true) ->
+    case get_local_file_location_doc(FileCtx, GetDocOpts) of
         {undefined, FileCtx2} ->
-            get_or_create_local_regular_file_location_doc(FileCtx2, IncludeBlocks, false);
+            get_or_create_local_regular_file_location_doc(FileCtx2, GetDocOpts, false);
         {Location, FileCtx2} ->
             {Location, FileCtx2}
     end;
-get_or_create_local_regular_file_location_doc(FileCtx, _IncludeBlocks, _CheckLocationExists) ->
-    {CreatedLocation, FileCtx2, New} =
-        location_and_link_utils:get_new_file_location_doc(FileCtx, false, false),
-    FileCtx4 = case New of
-        true ->
+get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocationExists) ->
+    case location_and_link_utils:get_new_file_location_doc(FileCtx, false, false) of
+        {{ok, _}, FileCtx2} ->
             {LocationDocs, FileCtx3} = get_file_location_docs(FileCtx2, true, false),
             lists:foreach(fun(ChangedLocation) ->
                 replica_dbsync_hook:on_file_location_change(FileCtx3, ChangedLocation)
             end, LocationDocs),
-            FileCtx3;
-        _ ->
-            FileCtx2
-    end,
-    FileUuid = get_uuid_const(FileCtx),
-    {
-        #document{
-            key = file_location:local_id(FileUuid),
-            value = CreatedLocation
-        },
-        FileCtx4
-    }.
+            get_local_file_location_doc(FileCtx3, GetDocOpts);
+        {{error, already_exists}, FileCtx2} ->
+            get_local_file_location_doc(FileCtx2, GetDocOpts)
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
