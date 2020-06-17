@@ -33,6 +33,7 @@
 -export([
     add_file_id_errors_for_operations_available_in_share_mode/3,
     add_file_id_errors_for_operations_not_available_in_share_mode/3,
+    add_cdmi_id_errors_for_operations_not_available_in_share_mode/4,
     maybe_substitute_id/2
 ]).
 
@@ -85,7 +86,7 @@ randomly_choose_file_type_for_test() ->
 -spec randomly_choose_file_type_for_test(boolean()) -> file_type().
 randomly_choose_file_type_for_test(LogSelectedFileType) ->
     FileType = ?RANDOM_FILE_TYPE(),
-    LogSelectedFileType andalso ct:pal("Choosen file type for test: ~s", [FileType]),
+    LogSelectedFileType andalso ct:pal("Chosen file type for test: ~s", [FileType]),
     FileType.
 
 
@@ -195,13 +196,8 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
         {bad_id, NonExistentFileObjectId, {rest, ?ERROR_POSIX(?ENOENT)}},
         {bad_id, NonExistentFileGuid, {gs, ?ERROR_POSIX(?ENOENT)}}
     ],
-
-    case DataSpec of
-        undefined ->
-            #data_spec{bad_values = BadFileIdErrors};
-        #data_spec{bad_values = BadValues} ->
-            DataSpec#data_spec{bad_values = BadFileIdErrors ++ BadValues}
-    end.
+    
+    add_bad_values_to_data_spec(BadFileIdErrors, DataSpec).
 
 
 %%--------------------------------------------------------------------
@@ -213,7 +209,7 @@ add_file_id_errors_for_operations_available_in_share_mode(FileGuid, ShareId, Dat
 %%
 %% ATTENTION !!!
 %%
-%% Bad ids are available undef 'bad_id' atom key - test implementation should
+%% Bad ids are available under 'bad_id' atom key - test implementation should
 %% make sure to substitute them for fileId component in rest path or #gri.id
 %% before making test call.
 %% @end
@@ -258,13 +254,53 @@ add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId,
         NonExistentFileErrors,
         ShareFileErrors
     ]),
+    
+    add_bad_values_to_data_spec(BadFileIdErrors, DataSpec).
 
-    case DataSpec of
-        undefined ->
-            #data_spec{bad_values = BadFileIdErrors};
-        #data_spec{bad_values = BadValues} ->
-            DataSpec#data_spec{bad_values = BadFileIdErrors ++ BadValues}
-    end.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Extends data_spec() with file id bad values and errors for operations 
+%% not available in share mode that provide file id as parameter in data spec map.
+%% All added bad values are in cdmi form and are stored under <<"fileId">> key.
+%% @end
+%%--------------------------------------------------------------------
+-spec add_cdmi_id_errors_for_operations_not_available_in_share_mode(file_id:file_guid(), od_space:id(), od_share:id(), data_spec()) ->
+    data_spec().
+add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId, ShareId, DataSpec) ->
+    {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
+    
+    NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
+    {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
+    
+    NonExistentSpaceShareGuid = file_id:guid_to_share_guid(NonExistentSpaceGuid, ShareId),
+    {ok, NonExistentSpaceShareObjectId} = file_id:guid_to_objectid(NonExistentSpaceShareGuid),
+    
+    NonExistentFileGuid = file_id:pack_guid(<<"InvalidUuid">>, SpaceId),
+    {ok, NonExistentFileObjectId} = file_id:guid_to_objectid(NonExistentFileGuid),
+    
+    NonExistentFileShareGuid = file_id:guid_to_share_guid(NonExistentFileGuid, ShareId),
+    {ok, NonExistentFileShareObjectId} = file_id:guid_to_objectid(NonExistentFileShareGuid),
+    
+    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
+    {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
+    
+    BadFileIdValues = [
+        {<<"fileId">>, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
+        {<<"fileId">>, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
+
+        % user has no privileges in non existent space and so he should receive ?ERROR_FORBIDDEN
+        {<<"fileId">>, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
+        {<<"fileId">>, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
+        
+        {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
+        
+        % operation on shared file is forbidden - it should result in ?EACCES
+        {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EACCES)},
+        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?EACCES)}
+    ],
+    
+    add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
 
 
 maybe_substitute_id(ValidId, undefined) ->
@@ -279,6 +315,13 @@ maybe_substitute_id(ValidId, Data) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+add_bad_values_to_data_spec(BadValuesToAdd, undefined) ->
+    #data_spec{bad_values = BadValuesToAdd};
+add_bad_values_to_data_spec(BadValuesToAdd, #data_spec{bad_values = BadValues} = DataSpec) ->
+    DataSpec#data_spec{bad_values = BadValuesToAdd ++ BadValues}.
 
 
 %% @private

@@ -23,7 +23,7 @@
     get_qos_entry/3, 
     remove_qos_entry/3, 
     get_effective_file_qos/2,
-    check_fulfillment/3
+    check_status/3
 ]).
 
 %%%===================================================================
@@ -91,14 +91,14 @@ remove_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 %% @equiv check_fulfillment_insecure/2 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec check_fulfillment(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
+-spec check_status(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
-check_fulfillment(UserCtx, FileCtx0, QosEntryId) ->
+check_status(UserCtx, FileCtx0, QosEntryId) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors, ?read_metadata]
     ),
-    check_fulfillment_insecure(FileCtx1, QosEntryId).
+    check_status_insecure(FileCtx1, QosEntryId).
 
 
 %%%===================================================================
@@ -151,7 +151,7 @@ get_effective_file_qos_insecure(FileCtx) ->
         {ok, EffQos} ->
             QosEntriesList = file_qos:get_qos_entries(EffQos),
             EntriesWithStatus = lists:foldl(fun(QosEntryId, Acc) ->
-                Status = qos_status:check_fulfillment(FileCtx, QosEntryId),
+                Status = qos_status:check(FileCtx, QosEntryId),
                 Acc#{QosEntryId => Status}
             end, #{}, QosEntriesList),
             #provider_response{
@@ -219,16 +219,16 @@ remove_qos_entry_insecure(UserCtx, FileCtx, QosEntryId) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Checks whether requirements defined in given qos_entry are fulfilled.
+%% Checks status of requirements defined in given qos_entry.
 %% @end
 %%--------------------------------------------------------------------
--spec check_fulfillment_insecure(file_ctx:ctx(), qos_entry:id()) ->
+-spec check_status_insecure(file_ctx:ctx(), qos_entry:id()) ->
     fslogic_worker:provider_response().
-check_fulfillment_insecure(FileCtx, QosEntryId) ->
-    FulfillmentStatus = qos_status:check_fulfillment(FileCtx, QosEntryId),
+check_status_insecure(FileCtx, QosEntryId) ->
+    QosStatus = qos_status:check(FileCtx, QosEntryId),
 
-    #provider_response{status = #status{code = ?OK}, provider_response = #qos_fulfillment{
-        fulfilled = FulfillmentStatus
+    #provider_response{status = #status{code = ?OK}, provider_response = #qos_status_response{
+        status = QosStatus
     }}.
 
 

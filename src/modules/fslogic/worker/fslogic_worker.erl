@@ -631,8 +631,8 @@ handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->
     qos_req:get_qos_entry(UserCtx, FileCtx, QosEntryId);
 handle_provider_request(UserCtx, #remove_qos_entry{id = QosEntryId}, FileCtx) ->
     qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
-handle_provider_request(UserCtx, #check_qos_fulfillment{qos_id = QosEntryId}, FileCtx) ->
-    qos_req:check_fulfillment(UserCtx, FileCtx, QosEntryId).
+handle_provider_request(UserCtx, #check_qos_status{qos_id = QosEntryId}, FileCtx) ->
+    qos_req:check_status(UserCtx, FileCtx, QosEntryId).
 
 %%--------------------------------------------------------------------
 %% @private
