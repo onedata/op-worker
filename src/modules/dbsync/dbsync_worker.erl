@@ -239,8 +239,7 @@ handle_changes_batch(ProviderId, MsgId, #changes_batch{
 %% Starts outgoing DBSync recovery stream.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_changes_request(od_provider:id(),
-    dbsync_communicator:changes_request()) -> supervisor:startchild_ret().
+-spec handle_changes_request(od_provider:id(), dbsync_communicator:changes_request()) -> ok.
 handle_changes_request(ProviderId, #changes_request2{
     space_id = SpaceId,
     since = Since,
@@ -256,7 +255,7 @@ handle_changes_request(ProviderId, #changes_request2{
                 ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )
     end,
-    Name = base64:encode(term_to_binary({SpaceId, ProviderId})),
+    Name = <<SpaceId/binary, "_", ProviderId/binary>>,
     case global:whereis_name({dbsync_out_stream, Name}) of
         undefined ->
             Spec = dbsync_out_stream_spec(Name, SpaceId, [

@@ -349,10 +349,7 @@ changes_request_should_be_handled(Config) ->
         ProviderIds = lists:usort(get_providers(SpaceId)),
         ProviderIds2 = lists:delete(<<"p1">>, ProviderIds),
         lists:foreach(fun(ProviderId) ->
-            StreamId = <<SpaceId/binary, "-", ProviderId/binary>>,
-            test_utils:mock_expect(Worker, dbsync_utils, gen_request_id, fun() ->
-                StreamId
-            end),
+            StreamId = <<SpaceId/binary, "_", ProviderId/binary>>,
             Request = #changes_request2{
                 space_id = SpaceId,
                 since = 1,
