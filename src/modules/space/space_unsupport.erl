@@ -168,7 +168,7 @@ execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = 
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = QosEntryId} = _Job) ->
     %% @TODO Use subscription after resolving VFS-5647
     %% @TODO Insecure(fulfilling qos can fail - wait will never end) before resolving VFS-5737
-    wait(fun() -> lfm:check_qos_fulfilled(?ROOT_SESS_ID, QosEntryId) end),
+    wait(fun() -> lfm:check_qos_status(?ROOT_SESS_ID, QosEntryId) == {ok, ?FULFILLED} end),
     lfm:remove_qos_entry(?ROOT_SESS_ID, QosEntryId);
 
 execute_stage(#space_unsupport_job{stage = cleanup_traverse, subtask_id = undefined} = Job) ->
@@ -227,8 +227,8 @@ execute_stage(#space_unsupport_job{stage = delete_local_documents} = Job) ->
 wait(Fun) ->
     try
         case Fun() of
-            {ok, true} -> ok;
-            {ok, false} ->
+            true -> ok;
+            false ->
                 timer:sleep(timer:seconds(10)),
                 wait(Fun)
         end

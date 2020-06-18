@@ -1072,15 +1072,15 @@ qos_status_during_traverse_test_base(Config, SpaceId, NumberOfFilesInDir) ->
     
     
     ok = qos_tests_utils:finish_all_transfers(Guids1),
-    qos_tests_utils:assert_status_on_all_workers(Config, Guids1, QosList, true, ?ATTEMPTS),
-    qos_tests_utils:assert_status_on_all_workers(Config, Guids2 ++ Guids3 ++ [Dir1, Dir2, Dir3, Dir4], QosList, false, ?ATTEMPTS),
+    qos_tests_utils:assert_status_on_all_workers(Config, Guids1, QosList, ?FULFILLED, ?ATTEMPTS),
+    qos_tests_utils:assert_status_on_all_workers(Config, Guids2 ++ Guids3 ++ [Dir1, Dir2, Dir3, Dir4], QosList, ?PENDING, ?ATTEMPTS),
     
     ok = qos_tests_utils:finish_all_transfers(Guids2),
-    qos_tests_utils:assert_status_on_all_workers(Config, Guids1 ++ Guids2 ++ [Dir2], QosList, true, ?ATTEMPTS),
-    qos_tests_utils:assert_status_on_all_workers(Config, Guids3 ++ [Dir1, Dir3, Dir4], QosList, false, ?ATTEMPTS),
+    qos_tests_utils:assert_status_on_all_workers(Config, Guids1 ++ Guids2 ++ [Dir2], QosList, ?FULFILLED, ?ATTEMPTS),
+    qos_tests_utils:assert_status_on_all_workers(Config, Guids3 ++ [Dir1, Dir3, Dir4], QosList, ?PENDING, ?ATTEMPTS),
     
     ok = qos_tests_utils:finish_all_transfers(Guids3),
-    qos_tests_utils:assert_status_on_all_workers(Config, Guids1 ++ Guids2 ++ Guids3 ++ [Dir1, Dir2, Dir3, Dir4], QosList, true, ?ATTEMPTS).
+    qos_tests_utils:assert_status_on_all_workers(Config, Guids1 ++ Guids2 ++ Guids3 ++ [Dir1, Dir2, Dir3, Dir4], QosList, ?FULFILLED, ?ATTEMPTS).
 
 
 qos_status_during_traverse_with_file_deletion_test_base(Config, SpaceId, NumberOfFilesInDir) ->
@@ -1111,11 +1111,11 @@ qos_status_during_traverse_with_file_deletion_test_base(Config, SpaceId, NumberO
     ok = qos_tests_utils:finish_all_transfers(ToFinish),
     
     Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
-    ok = qos_tests_utils:assert_status_on_all_workers(Config, ToFinish ++ [Dir1], QosList, true, ?ATTEMPTS),
+    ok = qos_tests_utils:assert_status_on_all_workers(Config, ToFinish ++ [Dir1], QosList, ?FULFILLED, ?ATTEMPTS),
     % finish transfers to unlock waiting slave job processes
     ok = qos_tests_utils:finish_all_transfers(ToDelete),
     % These files where deleted so QoS is not fulfilled
-    ok = qos_tests_utils:assert_status_on_all_workers(Config, ToDelete, QosList, false, ?ATTEMPTS).
+    ok = qos_tests_utils:assert_status_on_all_workers(Config, ToDelete, QosList, {error, enoent}, ?ATTEMPTS).
     
 
 qos_status_during_traverse_with_dir_deletion_test_base(Config, SpaceId, NumberOfFilesInDir) ->
@@ -1138,7 +1138,7 @@ qos_status_during_traverse_with_dir_deletion_test_base(Config, SpaceId, NumberOf
     
     ok = lfm_proxy:rm_recursive(Worker1, SessId(Worker1), {guid, Dir2}),
     
-    qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, true, ?ATTEMPTS),
+    qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, ?FULFILLED, ?ATTEMPTS),
     
     % finish transfers to unlock waiting slave job processes
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]).
@@ -1166,7 +1166,7 @@ qos_status_during_traverse_file_without_qos_test_base(Config, SpaceId) ->
     {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
     ok = lfm_proxy:close(Worker1, FileHandle),
     
-    qos_tests_utils:assert_status_on_all_workers(Config, [FileGuid], QosList, true, ?ATTEMPTS),
+    qos_tests_utils:assert_status_on_all_workers(Config, [FileGuid], QosList, ?FULFILLED, ?ATTEMPTS),
     
     % finish transfer to unlock waiting slave job process
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]).
@@ -1183,7 +1183,7 @@ qos_status_during_reconciliation_test_base(Config, SpaceId, DirStructure, Filena
     FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
     FilesAndDirsGuids = lists:map(fun({G, _}) -> G end, FilesAndDirs),
     
-    qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, true, ?ATTEMPTS),
+    qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED, ?ATTEMPTS),
     
     IsAncestor = fun
         (F, F) -> true;
@@ -1197,11 +1197,15 @@ qos_status_during_reconciliation_test_base(Config, SpaceId, DirStructure, Filena
         ok = lfm_proxy:close(Worker1, FileHandle),
         lists:foreach(fun({G, P}) ->
             ct:pal("Checking file: ~p~n\tis_ancestor: ~p", [P, IsAncestor(P, FilePath)]),
-            qos_tests_utils:assert_status_on_all_workers(Config, [G], QosList, not IsAncestor(P, FilePath), ?ATTEMPTS)
+            ExpectedStatus = case IsAncestor(P, FilePath) of
+                true -> ?PENDING;
+                false -> ?FULFILLED
+            end,
+            qos_tests_utils:assert_status_on_all_workers(Config, [G], QosList, ExpectedStatus, ?ATTEMPTS)
         end, FilesAndDirs),
         ok = qos_tests_utils:finish_all_transfers([FileGuid]),
         ct:pal("Checking after finish"),
-        qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, true, ?ATTEMPTS)
+        qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED, ?ATTEMPTS)
     end, maps:get(files, GuidsAndPaths)).
 
 
@@ -1225,15 +1229,15 @@ qos_status_during_reconciliation_with_file_deletion_test_base(Config, SpaceId) -
     FilesAndDirsGuids = lists:map(fun({G, _}) -> G end, FilesAndDirs),
     [{Dir1, _}] = maps:get(dirs, GuidsAndPaths),
     
-    qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, true, ?ATTEMPTS),
+    qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED, ?ATTEMPTS),
     
     lists:foreach(fun(Worker) ->
         {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), Dir1, generator:gen_name(), 8#664),
         {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
         ok = lfm_proxy:close(Worker1, FileHandle),
-        qos_tests_utils:assert_status_on_all_workers(Config, [FileGuid], QosList, false, ?ATTEMPTS),
+        qos_tests_utils:assert_status_on_all_workers(Config, [FileGuid], QosList, ?PENDING, ?ATTEMPTS),
         ok = lfm_proxy:unlink(Worker, SessId(Worker), {guid, FileGuid}),
-        qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, true, ?ATTEMPTS),
+        qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, ?FULFILLED, ?ATTEMPTS),
         % finish transfer to unlock waiting slave job process
         ok = qos_tests_utils:finish_all_transfers([FileGuid])
     end, Workers).
@@ -1253,16 +1257,16 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(Config, SpaceId) ->
     {GuidsAndPaths, QosList} = prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name),
     Dir1 = qos_tests_utils:get_guid(resolve_path(SpaceId, Name, []), GuidsAndPaths),
     ok = qos_tests_utils:finish_all_transfers([F || {F, _} <- maps:get(files, GuidsAndPaths)]),
-    qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, true, ?ATTEMPTS),
+    qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, ?FULFILLED, ?ATTEMPTS),
     
     lists:foreach(fun(Worker) ->
         {ok, DirGuid} = lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir1, generator:gen_name(), 8#775),
         {ok, {FileGuid, FileHandle}} = lfm_proxy:create_and_open(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), 8#664),
         {ok, _} = lfm_proxy:write(Worker1, FileHandle, 0, <<"new_data">>),
         ok = lfm_proxy:close(Worker1, FileHandle),
-        qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, false, ?ATTEMPTS),
+        qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, ?PENDING, ?ATTEMPTS),
         ok = lfm_proxy:rm_recursive(Worker, SessId(Worker), {guid, DirGuid}),
-        qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, true, ?ATTEMPTS),
+        qos_tests_utils:assert_status_on_all_workers(Config, [Dir1], QosList, ?FULFILLED, ?ATTEMPTS),
         % finish transfer to unlock waiting slave job process
         ok = qos_tests_utils:finish_all_transfers([FileGuid])
     end, Workers).
@@ -1304,7 +1308,7 @@ prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
     
     FilesAndDirs = maps:get(files, GuidsAndPaths) ++ maps:get(dirs, GuidsAndPaths),
     FilesAndDirsGuids = lists:filtermap(fun({G, P}) when P >= Name -> {true, G}; (_) -> false end, FilesAndDirs),
-    qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, false),
+    qos_tests_utils:assert_status_on_all_workers(Config, FilesAndDirsGuids, QosList, ?PENDING),
     {GuidsAndPaths, QosList}.
 
 

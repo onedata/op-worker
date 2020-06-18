@@ -105,14 +105,16 @@
 % test was truly deleted).
 % First argument tells whether request made during testcase should succeed
 -type env_verify_fun() :: fun(
-    (RequestResultExpectation :: expected_success | expected_failure, api_test_env()) ->
+    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) ->
         boolean()
 ).
 
 % Function called during testcase to prepare call/request arguments
 -type prepare_args_fun() :: fun((api_test_ctx()) -> rest_args() | gs_args()).
-% Function called after testcase to validate returned call/request result
--type validate_call_result_fun() :: fun((api_test_ctx(), Result :: term()) -> ok | no_return()).
+% Function called after testcase to validate returned call/request result.
+% When api_test_ctx is returned it will be passed to env_verify_fun
+-type validate_call_result_fun() :: fun((api_test_ctx(), Result :: term()) -> 
+    ok | {ok, api_test_ctx()} | no_return()).
 
 -record(scenario_spec, {
     name :: binary(),

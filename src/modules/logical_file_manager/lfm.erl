@@ -80,7 +80,7 @@
 -export([check_result/1]).
 %% Functions concerning qos
 -export([add_qos_entry/4, add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2,
-    get_effective_file_qos/2, check_qos_fulfilled/2, check_qos_fulfilled/3]).
+    get_effective_file_qos/2, check_qos_status/2, check_qos_status/3]).
 
 %%%===================================================================
 %%% API
@@ -878,7 +878,7 @@ add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos(session:id(), file_key()) ->
-    {ok, {#{qos_entry:id() => qos_status:fulfilled()}, file_qos:assigned_entries()}} | error_reply().
+    {ok, {#{qos_entry:id() => qos_status:summary()}, file_qos:assigned_entries()}} | error_reply().
 get_effective_file_qos(SessId, FileKey) ->
     ?run(fun() -> lfm_qos:get_effective_file_qos(SessId, FileKey) end).
 
@@ -903,20 +903,20 @@ remove_qos_entry(SessId, QosEntryId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if QoS requirements defined in qos_entry document are fulfilled.
+%% Check status of QoS requirements defined in qos_entry document.
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_fulfilled(session:id(), qos_entry:id()) -> {ok, boolean()} | error_reply().
-check_qos_fulfilled(SessId, QosEntryId) ->
-    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosEntryId) end).
+-spec check_qos_status(session:id(), qos_entry:id()) -> {ok, qos_status:summary()} | error_reply().
+check_qos_status(SessId, QosEntryId) ->
+    ?run(fun() -> lfm_qos:check_qos_status(SessId, QosEntryId) end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if QoS requirements defined in qos_entry document/documents
-%% are fulfilled for given file.
+%% Check status of QoS requirements defined in qos_entry document/documents
+%% for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_fulfilled(session:id(), qos_entry:id(), file_key()) ->
-    {ok, boolean()} | error_reply().
-check_qos_fulfilled(SessId, QosEntryId, FileKey) ->
-    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosEntryId, FileKey) end).
+-spec check_qos_status(session:id(), qos_entry:id(), file_key()) ->
+    {ok, qos_status:summary()} | error_reply().
+check_qos_status(SessId, QosEntryId, FileKey) ->
+    ?run(fun() -> lfm_qos:check_qos_status(SessId, QosEntryId, FileKey) end).
