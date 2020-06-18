@@ -706,7 +706,6 @@ maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
 -spec maybe_update_attrs(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx(), storage_file_ctx:ctx()}.
 maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
-%%    ?alert("Maybe update attrs of ~p~nInfo: ~p", [element(3, StorageFileCtx), Info]),
     UpdateAttrsFoldFun = fun(UpdateAttrFun, {StorageFileCtxAcc, FileCtxAcc, UpdatedAttrsAcc}) ->
         {Updated, FileCtxOut, StorageFileCtxOut, AttrName} = UpdateAttrFun(StorageFileCtxAcc, FileAttr, FileCtxAcc, Info),
         UpdatedAttrsOut = case Updated of
@@ -910,10 +909,8 @@ maybe_update_times(StorageFileCtx, #file_attr{mtime = MTime, ctime = CTime}, Fil
 
 -spec update_times(file_ctx:ctx(), helpers:stat()) -> ok.
 update_times(FileCtx, #statbuf{st_atime = StorageATime, st_mtime = StorageMTime, st_ctime = StorageCTime}) ->
-%%    {C, _} = file_ctx:get_canonical_path(FileCtx),
     ok = fslogic_times:update_times_and_emit(FileCtx,
         fun(T = #times{atime = ATime, mtime = MTime, ctime = CTime}) ->
-%%            ?alert("UPDATING TIMESTAMP for ~p: ~p ||| ~p", [C, {ATime, MTime, CTime}, {StorageATime, StorageMTime, StorageCTime}]),
             {ok, T#times{
                 atime = max(StorageATime, ATime),
                 mtime = max(StorageMTime, MTime),
