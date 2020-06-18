@@ -256,7 +256,7 @@ handle_changes_request(ProviderId, #changes_request2{
                 ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )
     end,
-    Name = base64:encode({SpaceId, ProviderId}),
+    Name = base64:encode(term_to_binary({SpaceId, ProviderId})),
     case global:whereis_name({dbsync_out_stream, Name}) of
         undefined ->
             Spec = dbsync_out_stream_spec(Name, SpaceId, [

@@ -259,9 +259,6 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
         throw:already_ended ->
             {error, already_ended};
         error:{badmatch, Error = {error, not_found}} ->
-            ?error_stacktrace("Unexpected error ~p during transfer ~p", [
-                Error, Params#transfer_params.transfer_id
-            ]),
             maybe_retry(FileCtx0, Params, RetriesLeft, Error);
         Error:Reason ->
             ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [
@@ -368,7 +365,6 @@ enqueue_files_transfer(#state{mod = Mod}, FileCtxs, TransferParams) ->
 %% @private
 -spec transfer_fs_subtree(state(), file_ctx:ctx(), transfer_params()) ->
     ok | {error, term()}.
-
 transfer_fs_subtree(State = #state{mod = Mod}, FileCtx, Params) ->
     case transfer:is_ongoing(Params#transfer_params.transfer_id) of
         true ->
