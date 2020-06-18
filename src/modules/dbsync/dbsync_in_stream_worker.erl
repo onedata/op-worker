@@ -161,7 +161,7 @@ handle_info(request_changes, State = #state{
             {noreply, State#state{changes_request_ref = undefined}};
         {Until, _} ->
             MaxSize = application:get_env(?APP_NAME,
-                dbsync_changes_max_request_size, 20000),
+                dbsync_changes_max_request_size, 1000000),
             Until2 = min(Until, Seq + MaxSize),
             dbsync_communicator:request_changes(
                 ProviderId, SpaceId, Seq, Until2

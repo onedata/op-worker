@@ -256,18 +256,24 @@ handle_changes_request(ProviderId, #changes_request2{
                 ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )
     end,
-    ReqId = dbsync_utils:gen_request_id(),
-    Spec = dbsync_out_stream_spec(ReqId, SpaceId, [
-        {since, Since},
-        {until, Until},
-        {except_mutator, ProviderId},
-        {handler, Handler},
-        {handling_interval, application:get_env(
-            ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
-        )}
-    ]),
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]).
+    Name = base64:encode({SpaceId, ProviderId}),
+    case global:whereis_name({dbsync_out_stream, Name}) of
+        undefined ->
+            Spec = dbsync_out_stream_spec(Name, SpaceId, [
+                {since, Since},
+                {until, Until},
+                {except_mutator, ProviderId},
+                {handler, Handler},
+                {handling_interval, application:get_env(
+                    ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
+                )}
+            ]),
+            Node = datastore_key:responsible_node(SpaceId),
+            rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]),
+            ok;
+        _ ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
