@@ -125,8 +125,8 @@ translate_resource(#gri{aspect = shares, scope = private}, ShareIds) ->
         end, ShareIds)
     };
 
-translate_resource(#gri{aspect = file_qos_summary, scope = private}, EffQosResponse) ->
-    EffQosResponse.
+translate_resource(#gri{aspect = file_qos_summary, scope = private}, QosSummaryResponse) ->
+    maps:without([<<"status">>], QosSummaryResponse).
 
 
 -spec translate_distribution(Distribution :: [file_distribution()]) ->

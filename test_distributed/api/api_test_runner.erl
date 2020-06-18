@@ -427,8 +427,8 @@ run_exp_error_testcase(
             try
                 validate_error_result(ScenarioType, ExpError, RequestResult),
                 EnvVerifyFun(expected_failure, TestCaseCtx)
-            catch _:_ ->
-                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult),
+            catch T:R ->
+                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R),
                 false
             end
     end.
@@ -456,8 +456,8 @@ run_exp_success_testcase(TargetNode, Client, DataSet, EnvVerifyFun, SupportedCli
                         validate_error_result(ScenarioType, ?ERROR_USER_NOT_SUPPORTED, Result),
                         EnvVerifyFun(expected_failure, TestCaseCtx)
                 end
-            catch _:_ ->
-                log_failure(ScenarioName, TestCaseCtx, Args, succes, Result),
+            catch T:R ->
+                log_failure(ScenarioName, TestCaseCtx, Args, succes, Result, T, R),
                 false
             end
     end.
@@ -505,19 +505,23 @@ validate_error_result(Type, ExpError, Result) when
 
 
 %% @private
-log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Args, Expected, Got) ->
+log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Args, Expected, Got, ErrType, ErrReason) ->
     ct:pal("~s test case failed:~n"
     "Node: ~p~n"
     "Client: ~p~n"
     "Args: ~s~n"
     "Expected: ~p~n"
-    "Got: ~p~n", [
+    "Got: ~p~n"
+    "Error: ~p:~p~n"
+    "Stacktrace: ~p~n", [
         ScenarioName,
         TargetNode,
         aai:auth_to_printable(Client),
         io_lib_pretty:print(Args, fun get_record_def/2),
         Expected,
-        Got
+        Got,
+        ErrType, ErrReason,
+        erlang:get_stacktrace()
     ]).
 
 

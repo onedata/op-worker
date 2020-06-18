@@ -92,16 +92,21 @@ create_share_test(Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = #data_spec{
-                required = [<<"name">>, <<"fileId">>],
-                correct_values = #{
-                    <<"name">> => [<<"share1">>, <<"share2">>],
-                    <<"fileId">> => [FileObjectId]
-                },
-                bad_values = [
-                    {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)}
-                ]
-            }
+            data_spec = api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
+                % Operations should be rejected even before checking if share exists
+                % (in case of using share file id) so it is not necessary to use
+                % valid share id
+                FileGuid, ?SPACE_2, <<"NonExistentShare">>, #data_spec{
+                    required = [<<"name">>, <<"fileId">>],
+                    correct_values = #{
+                        <<"name">> => [<<"share1">>, <<"share2">>],
+                        <<"fileId">> => [FileObjectId]
+                    },
+                    bad_values = [
+                        {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)}
+                    ]
+                }
+            )
         }
     ])).
 
@@ -140,6 +145,7 @@ create_validate_create_share_rest_call_result_fun(EnvRef, Providers, FileType, S
             {ok, ?HTTP_201_CREATED, #{<<"Location">> := _}, #{<<"shareId">> := _}},
             Result
         ),
+        {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
         ShareId = maps:get(<<"shareId">>, Body),
 
         {ok, Shares} = api_test_utils:get_env_var(EnvRef, shares),
@@ -149,8 +155,6 @@ create_validate_create_share_rest_call_result_fun(EnvRef, Providers, FileType, S
             string:trim(filename:join([<<"/">>, <<"shares">>, ShareId]), leading, [$/])
         ])),
         ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers)),
-
-        {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
 
         verify_share_doc(
             Providers, ShareId, ShareName, SpaceId,
@@ -165,6 +169,7 @@ create_validate_create_share_gs_call_result_fun(EnvRef, Providers, FileType, Con
         client = ?USER(UserId),
         data = #{<<"name">> := ShareName, <<"fileId">> := FileObjectId}
     }, Result) ->
+        {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
         {ok, #{<<"gri">> := ShareGri} = ShareData} = ?assertMatch({ok, _}, Result),
 
         #gri{id = ShareId} = ?assertMatch(
@@ -174,7 +179,6 @@ create_validate_create_share_gs_call_result_fun(EnvRef, Providers, FileType, Con
         {ok, Shares} = api_test_utils:get_env_var(EnvRef, shares),
         api_test_utils:set_env_var(EnvRef, shares, [ShareId | Shares]),
 
-        {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
         assert_proper_gs_share_translation(ShareId, ShareName, private, FileGuid, FileType, ShareData),
 
         verify_share_doc(
@@ -199,6 +203,10 @@ get_share_test(Config) ->
 
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
+
+    DataSpec = #data_spec{
+        bad_values = [{bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}]
+    },
 
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
@@ -231,7 +239,7 @@ get_share_test(Config) ->
                     end
                 }
             ],
-            data_spec = #data_spec{bad_values = [{bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}]}
+            data_spec = DataSpec
         },
         #scenario_spec{
             name = <<"Get share using gs public api">>,
@@ -242,7 +250,7 @@ get_share_test(Config) ->
             validate_result_fun = fun(_, {ok, Result}) ->
                 assert_proper_gs_share_translation(ShareId, ShareName, public, FileGuid, FileType, Result)
             end,
-            data_spec = #data_spec{bad_values = [{bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}]}
+            data_spec = DataSpec
         }
     ])).
 
@@ -545,7 +553,6 @@ assert_proper_gs_share_translation(ShareId, ShareName, Scope, FileGuid, FileType
     end,
 
     ?assertEqual(ExpShareData, GsShareData).
-
 
 
 %% @private

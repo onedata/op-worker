@@ -152,7 +152,7 @@ create_file_transfer(Config, Type) ->
                     validate_result_fun = create_validate_transfer_gs_call_result_fun(EnvRef)
                 }
             ],
-            data_spec = add_file_id_bad_values(
+            data_spec = api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                 FileGuid, ?SPACE_2, ShareId,
                 op_transfer_spec(Type, <<"file">>, P1, P2)
             )
@@ -199,44 +199,6 @@ create_file_transfer_required_privs(eviction) ->
     [?SPACE_SCHEDULE_EVICTION];
 create_file_transfer_required_privs(migration) ->
     [?SPACE_SCHEDULE_REPLICATION, ?SPACE_SCHEDULE_EVICTION].
-
-
-%% @private
--spec add_file_id_bad_values(file_id:file_guid(), od_space:id(), od_share:id(), data_spec()) ->
-    data_spec().
-add_file_id_bad_values(FileGuid, SpaceId, ShareId, #data_spec{bad_values = BadValues} = DataSpec) ->
-    {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
-
-    NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
-    {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
-
-    NonExistentSpaceShareGuid = file_id:guid_to_share_guid(NonExistentSpaceGuid, ShareId),
-    {ok, NonExistentSpaceShareObjectId} = file_id:guid_to_objectid(NonExistentSpaceShareGuid),
-
-    NonExistentFileGuid = file_id:pack_guid(<<"InvalidUuid">>, SpaceId),
-    {ok, NonExistentFileObjectId} = file_id:guid_to_objectid(NonExistentFileGuid),
-
-    NonExistentFileShareGuid = file_id:guid_to_share_guid(NonExistentFileGuid, ShareId),
-    {ok, NonExistentFileShareObjectId} = file_id:guid_to_objectid(NonExistentFileShareGuid),
-
-    ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
-    {ok, ShareFileObjectId} = file_id:guid_to_objectid(ShareFileGuid),
-
-    BadFileIdValues = [
-        {<<"fileId">>, <<"InvalidObjectId">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
-        {<<"fileId">>, DummyObjectId, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
-
-        % user has no privileges in non existent space and so he should receive ?ERROR_FORBIDDEN
-        {<<"fileId">>, NonExistentSpaceObjectId, ?ERROR_FORBIDDEN},
-        {<<"fileId">>, NonExistentSpaceShareObjectId, ?ERROR_FORBIDDEN},
-
-        {<<"fileId">>, NonExistentFileObjectId, ?ERROR_POSIX(?ENOENT)},
-        {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?ENOENT)},
-
-        % transferring shared file is forbidden - it should result in ?EACCES
-        {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EACCES)}
-    ],
-    DataSpec#data_spec{bad_values = BadFileIdValues ++ BadValues}.
 
 
 %%%===================================================================
