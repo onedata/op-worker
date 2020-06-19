@@ -11,6 +11,17 @@
 
 -include("global_definitions.hrl").
 
+-define(SCHEDULED_STATUS, scheduled).
+-define(ENQUEUED_STATUS, enqueued).
+-define(ACTIVE_STATUS, active).
+-define(COMPLETED_STATUS, completed).
+-define(ABORTING_STATUS, aborting).
+-define(FAILED_STATUS, failed).
+-define(CANCELLED_STATUS, cancelled).
+-define(SKIPPED_STATUS, skipped).
+-define(EVICTING_STATUS, evicting).
+-define(REPLICATING_STATUS, replicating).
+
 -define(WAITING_TRANSFERS_STATE, <<"waiting">>).
 -define(ONGOING_TRANSFERS_STATE, <<"ongoing">>).
 -define(ENDED_TRANSFERS_STATE, <<"ended">>).

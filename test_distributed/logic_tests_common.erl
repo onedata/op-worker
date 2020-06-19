@@ -94,12 +94,6 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_expect(Nodes, provider_logic, has_eff_user, fun(UserId) ->
         lists:member(UserId, [?USER_1, ?USER_2, ?USER_3, ?USER_INCREASING_REV])
     end),
-
-    % dbsync reports its state regularly - mock the function so as not to generate
-    % requests to gs_client which would interfere with request counting in tests
-    ok = test_utils:mock_expect(Nodes, space_logic, report_dbsync_state, fun(_, _) ->
-        ok
-    end),
     
     % adding dummy storages to rtransfer would fail
     ok = test_utils:mock_expect(Nodes, rtransfer_config, add_storages, fun() -> ok end),

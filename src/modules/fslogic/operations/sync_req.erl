@@ -159,6 +159,7 @@ get_file_distribution(UserCtx, FileCtx0) ->
 %% Schedules file or dir replication, returns the id of created transfer doc
 %% wrapped in 'scheduled_transfer' provider response.
 %% Resolves file path based on file guid.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(user_ctx:ctx(), file_ctx:ctx(),
@@ -168,7 +169,7 @@ schedule_file_replication(
     UserCtx, FileCtx0, TargetProviderId, Callback,
     ViewName, QueryViewParams
 ) ->
-    data_constraints:is_in_readonly_mode(UserCtx) andalso throw(?EACCES),
+    data_constraints:assert_not_readonly_mode(UserCtx),
 
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,

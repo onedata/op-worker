@@ -21,6 +21,7 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
+-include_lib("ctool/include/space_support/support_stage.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -346,7 +347,8 @@
     name = ?STORAGE_NAME(__Storage),
     provider = ?PROVIDER_1,
     spaces = [],
-    qos_parameters = #{}
+    qos_parameters = #{},
+    imported = false
 }}).
 
 
@@ -505,7 +507,8 @@ end).
     <<"name">> => ?STORAGE_NAME(__StorageId),
     <<"provider">> => ?PROVIDER_1,
     <<"spaces">> => [],
-    <<"qos_parameters">> => #{}
+    <<"qosParameters">> => #{},
+    <<"imported">> => false
 }).
 
 

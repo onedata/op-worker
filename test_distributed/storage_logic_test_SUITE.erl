@@ -82,7 +82,7 @@ subscribe_test(Config) ->
 
     NewQosParams = #{<<"key">> => <<"value">>},
     ChangedData1 = Storage1PrivateData#{
-        <<"qos_parameters">> => NewQosParams,
+        <<"qosParameters">> => NewQosParams,
         <<"revision">> => 6
     },
     PushMessage1 = #gs_push_graph{gri = Storage1PrivateGRI, data = ChangedData1, change_type = updated},
@@ -91,7 +91,8 @@ subscribe_test(Config) ->
     ?assertMatch(
         {ok, #document{key = ?STORAGE_1, value = #od_storage{
             qos_parameters = NewQosParams,
-            cache_state = #{revision := 6}
+            cache_state = #{revision := 6},
+            imported = false
         }}},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
@@ -149,7 +150,7 @@ resupport_cleanup_test(Config) ->
         onezone_domain = <<"zone">>,
         subject = ?SUB(user, <<"user1">>),
         id = <<"user1">>,
-        type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId, space_support:build_parameters(global, eager)),
+        type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId, support_parameters:build(global, eager)),
         persistence = named
     }, <<"secret">>, [])),
     

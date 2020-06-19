@@ -42,7 +42,7 @@
     get_synced_storage/2, get_host_storage_file_id/4, get_mount_point/1, clean_traverse_tasks/1,
     mock_import_file_error/2, unmock_import_file_error/1, verify_file/5,
     verify_file_in_dir/5, verify_dir/5, schedule_spaces_check/2, cancel/3, remove_link/3, provider_id/1, block_syncing_process/1,
-    await_syncing_process/0, release_syncing_process/1, bump_mtime/2]).
+    await_syncing_process/0, release_syncing_process/1, touch/2]).
 
 %% tests
 -export([
@@ -165,19 +165,13 @@ empty_import_test(Config) ->
         <<"scans">> => 1,
         <<"toProcess">> => 1,
         <<"imported">> => 0,
-        <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
         <<"importedSum">> => 0,
-        <<"updatedSum">> => 1,
         <<"deletedSum">> => 0,
         <<"importedMinHist">> => 0,
         <<"importedHourHist">> => 0,
         <<"importedDayHist">> => 0,
-        <<"updatedMinHist">> => 1,
-        <<"updatedHourHist">> => 1,
-        <<"updatedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
@@ -1315,9 +1309,10 @@ close_file_import_race_test(Config, StorageType) ->
 
     ?EXEC_ON_POSIX_ONLY(fun() ->
         % touch space_dir to ensure that it will be updated
+        timer:sleep(timer:seconds(1)),
         RDWRStorageMountPoint = get_mount_point(RDWRStorage),
         ContainerStorageSpacePath = storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>, MountInRoot),
-        bump_mtime(W1, ContainerStorageSpacePath)
+        touch(W1, ContainerStorageSpacePath)
     end, StorageType),
 
     enable_import(Config, ?SPACE_ID, SyncedStorage),
@@ -1382,9 +1377,10 @@ delete_file_reimport_race_test(Config, StorageType) ->
 
     ?EXEC_ON_POSIX_ONLY(fun() ->
         % touch space dir to ensure that it will be scanned
+        timer:sleep(timer:seconds(1)),
         RDWRStorageMountPoint = get_mount_point(RDWRStorage),
         ContainerStorageSpacePath = storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>, MountInRoot),
-        bump_mtime(W1, ContainerStorageSpacePath)
+        touch(W1, ContainerStorageSpacePath)
     end, StorageType),
 
     enable_import(Config, ?SPACE_ID, SyncedStorage),
@@ -1454,9 +1450,10 @@ delete_opened_file_reimport_race_test(Config, StorageType) ->
 
     ?EXEC_ON_POSIX_ONLY(fun() ->
         % touch space dir to ensure that it will be scanned
+        timer:sleep(timer:seconds(1)),
         RDWRStorageMountPoint = get_mount_point(RDWRStorage),
         ContainerStorageSpacePath = storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>, MountInRoot),
-        bump_mtime(W1, ContainerStorageSpacePath)
+        touch(W1, ContainerStorageSpacePath)
     end, StorageType),
 
     enable_import(Config, ?SPACE_ID, SyncedStorage),
@@ -1557,16 +1554,16 @@ update_syncs_files_after_import_failed_test(Config, MountSpaceInRoot) ->
         <<"scans">> => 2,
         <<"toProcess">> => 2,
         <<"imported">> => 1,
-        <<"updated">> => 1,
+        <<"updated">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
+        <<"otherProcessed">> => 1,
         <<"importedSum">> => 1,
-        <<"updatedSum">> => 2,
+        <<"updatedSum">> => 1,
         <<"importedHourHist">> => 1,
         <<"importedDayHist">> => 1,
-        <<"updatedHourHist">> => 2,
-        <<"updatedDayHist">> => 2,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
@@ -1650,7 +1647,8 @@ update_syncs_files_after_previous_update_failed_test(Config, MountSpaceInRoot) -
         <<"imported">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
+        <<"updated">> => 0,
+        <<"otherProcessed">> => 1,
         <<"importedSum">> => 1,
         <<"deletedSum">> => 0,
         <<"importedMinHist">> => 1,
@@ -1702,19 +1700,19 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
         <<"scans">> => 1,
         <<"toProcess">> => 2,
         <<"imported">> => 0,
-        <<"updated">> => 1,
+        <<"updated">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 2,
         <<"importedSum">> => 0,
-        <<"updatedSum">> => 1,
+        <<"updatedSum">> => 0,
         <<"deletedSum">> => 0,
         <<"importedMinHist">> => 0,
         <<"importedHourHist">> => 0,
         <<"importedDayHist">> => 0,
-        <<"updatedMinHist">> => 1,
-        <<"updatedHourHist">> => 1,
-        <<"updatedDayHist">> => 1,
+        <<"updatedMinHist">> => 0,
+        <<"updatedHourHist">> => 0,
+        <<"updatedDayHist">> => 0,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
@@ -1772,9 +1770,10 @@ sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storag
     ?assertEqual(ok, lfm_proxy:rm_recursive(W1, SessId, {path, SpaceTestDirPath})),
 
     % touch space dir to make sure that it will be updated
+    timer:sleep(timer:seconds(1)),
     RDWRStorageMountPoint = get_mount_point(RDWRStorage),
     ContainerStorageSpacePath = storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>, MountSpaceInRoot),
-    bump_mtime(W1, ContainerStorageSpacePath),
+    touch(W1, ContainerStorageSpacePath),
 
     enable_update(Config, ?SPACE_ID, RDWRStorage),
     assertUpdateTimes(W1, ?SPACE_ID),
@@ -1863,9 +1862,10 @@ sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Con
 
     ?EXEC_ON_POSIX_ONLY(fun() ->
         % touch space dir to make sure that it will be updated
+        timer:sleep(timer:seconds(1)),
         RDWRStorageMountPoint = get_mount_point(RDWRStorage),
         ContainerStorageSpacePath = storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>, MountSpaceInRoot),
-        bump_mtime(W1, ContainerStorageSpacePath)
+        touch(W1, ContainerStorageSpacePath)
     end, StorageType),
 
     enable_update(Config, ?SPACE_ID, RDWRStorage),
@@ -2239,19 +2239,19 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config, MountS
         <<"scans">> => 2,
         <<"toProcess">> => 2,
         <<"imported">> => 0,
-        <<"updated">> => 1,
+        <<"updated">> => 0,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 1,
+        <<"otherProcessed">> => 2,
         <<"importedSum">> => 1,
-        <<"updatedSum">> => 2,
+        <<"updatedSum">> => 1,
         <<"deletedSum">> => 0,
         <<"importedMinHist">> => 1,
         <<"importedHourHist">> => 1,
         <<"importedDayHist">> => 1,
         <<"updatedMinHist">> => 1,
-        <<"updatedHourHist">> => 2,
-        <<"updatedDayHist">> => 2,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
@@ -2435,19 +2435,19 @@ create_file_in_dir_update_test(Config, MountSpaceInRoot) ->
         <<"scans">> => 2,
         <<"toProcess">> => 4,
         <<"imported">> => 1,
-        <<"updated">> => 3,
+        <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
+        <<"otherProcessed">> => 2,
         <<"importedSum">> => 3,
-        <<"updatedSum">> => 4,
+        <<"updatedSum">> => 2,
         <<"deletedSum">> => 0,
         <<"importedMinHist">> => 1,
         <<"importedHourHist">> => 3,
         <<"importedDayHist">> => 3,
-        <<"updatedMinHist">> => 3,
-        <<"updatedHourHist">> => 4,
-        <<"updatedDayHist">> => 4,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 2,
+        <<"updatedDayHist">> => 2,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
@@ -2567,19 +2567,19 @@ create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
         <<"scans">> => 2,
         <<"toProcess">> => 7,
         <<"imported">> => 1,
-        <<"updated">> => 3,
+        <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 3,
+        <<"otherProcessed">> => 5,
         <<"importedSum">> => 7,
-        <<"updatedSum">> => 4,
+        <<"updatedSum">> => 2,
         <<"deletedSum">> => 0,
         <<"importedMinHist">> => 1,
         <<"importedHourHist">> => 7,
         <<"importedDayHist">> => 7,
-        <<"updatedMinHist">> => 3,
-        <<"updatedHourHist">> => 4,
-        <<"updatedDayHist">> => 4,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 2,
+        <<"updatedDayHist">> => 2,
         <<"deletedMinHist">> => 0,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
@@ -2919,14 +2919,18 @@ delete_and_update_files_simultaneously_update_test(Config, MountSpaceInRoot) ->
         <<"toProcess">> => 5,
         <<"imported">> => 0,
         <<"deleted">> => 1,
-        <<"updated">> => 3,
-        <<"otherProcessed">> => 1,
+        <<"updated">> => 2,
+        <<"otherProcessed">> => 2,
         <<"failed">> => 0,
         <<"importedSum">> => 3,
+        <<"updatedSum">> => 3,
         <<"deletedSum">> => 1,
         <<"importedMinHist">> => 3,
         <<"importedHourHist">> => 3,
         <<"importedDayHist">> => 3,
+        <<"updatedMinHist">> => 2,
+        <<"updatedHourHist">> => 3,
+        <<"updatedDayHist">> => 3,
         <<"deletedMinHist">> => 1,
         <<"deletedHourHist">> => 1,
         <<"deletedDayHist">> => 1
@@ -3201,9 +3205,10 @@ create_delete_race_test(Config, MountSpaceInRoot, StorageType) ->
 
     ?EXEC_ON_POSIX_ONLY(fun() ->
         % touch space dir to ensure that sync will try to detect deletions
+        timer:sleep(timer:seconds(1)),
         RDWRStorageMountPoint = get_mount_point(RDWRStorage),
         ContainerStorageSpacePath = storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>, MountSpaceInRoot),
-        bump_mtime(W1, ContainerStorageSpacePath)
+        touch(W1, ContainerStorageSpacePath)
     end, StorageType),
 
     enable_update(Config, ?SPACE_ID, SyncedStorage),
@@ -3290,9 +3295,10 @@ create_list_race_test(Config, MountSpaceInRoot) ->
     end),
 
     % touch space dir to ensure that sync will try to detect deletions
+    timer:sleep(timer:seconds(1)),
     RDWRStorageMountPoint = get_mount_point(RDWRStorage),
     ContainerStorageSpacePath = storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>, MountSpaceInRoot),
-    bump_mtime(W1, ContainerStorageSpacePath),
+    touch(W1, ContainerStorageSpacePath),
 
     enable_update(Config, ?SPACE_ID, SyncedStorage),
 
@@ -3702,7 +3708,6 @@ copy_file_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:read(W1, Handle1, 0, byte_size(?TEST_DATA))),
     lfm_proxy:close(W1, Handle1),
 
-    timer:sleep(timer:seconds(10)), %ensure that copy time is different from read time
     %% Copy file
     file:copy(SrcFilePath, DestFilePath),
 
@@ -3714,17 +3719,17 @@ copy_file_update_test(Config, MountSpaceInRoot) ->
         <<"scans">> => 2,
         <<"toProcess">> => 3,
         <<"imported">> => 1,
-        <<"updated">> => 2,
+        <<"updated">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
-        <<"otherProcessed">> => 0,
+        <<"otherProcessed">> => 1,
         <<"importedSum">> => 2,
-        <<"updatedSum">> => 3,
+        <<"updatedSum">> => 2,
         <<"deletedSum">> => 0,
         <<"importedHourHist">> => 2,
         <<"importedDayHist">> => 2,
-        <<"updatedHourHist">> => 3,
-        <<"updatedDayHist">> => 3,
+        <<"updatedHourHist">> => 2,
+        <<"updatedDayHist">> => 2,
         <<"deletedHourHist">> => 0,
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID),
@@ -5498,7 +5503,7 @@ clean_space(Config) ->
     ?assertMatch({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10000), ?ATTEMPTS).
 
 close_opened_files(Worker, SessionId) ->
-    {ok, Handles} = rpc:call(Worker, file_handles, list, []),
+    {ok, Handles} = rpc:call(Worker, file_handles, list_local, []),
     lists:foreach(fun(#document{key = Uuid}) ->
         Guid = file_id:pack_guid(Uuid, ?SPACE_ID),
         FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [Guid]),
@@ -5658,9 +5663,8 @@ storage_path(MountPath, _SpaceId, File, true) ->
 storage_path(MountPath, SpaceId, FileName, false) ->
     filename:join([MountPath, SpaceId, FileName]).
 
-bump_mtime(Node, FilePath) ->
-    {ok, #file_info{mtime = Mtime}} = rpc:call(Node, file, read_file_info, [FilePath, [{time, posix}]]),
-    ok = rpc:call(Node, storage_sync_test_base, change_time, [FilePath, Mtime + 1]).
+touch(Node, FilePath) ->
+    ok = rpc:call(Node, file, write_file_info, [FilePath, #file_info{}]).
 
 change_time(FilePath, Mtime) ->
     file:write_file_info(FilePath,

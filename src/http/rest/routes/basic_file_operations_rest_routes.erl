@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of file_path REST methods.
+%%% This module contains definitions of basic_file_operations REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_path_rest_routes).
+-module(basic_file_operations_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,19 +25,42 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of file_path REST paths.
+%% Definitions of basic_file_operations REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Lookup file id
-    {<<"/lookup-file-id/[...]">>, rest_handler, #rest_req{
-        method = 'POST',
+    %% List directory files and subdirectories
+    {<<"/data/:id/children">>, rest_handler, #rest_req{
+        method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_file, 
-            id = ?PATH_BINDING, 
-            aspect = object_id, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = children, 
+            scope = private
+        }
+    }},
+    %% Get file attributes
+    {<<"/data/:id">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = attrs, 
+            scope = private
+        }
+    }},
+    %% Set file attribute
+    {<<"/data/:id">>, rest_handler, #rest_req{
+        method = 'PUT',
+        parse_body = as_json_params,
+        consumes = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = attrs, 
             scope = private
         }
     }}

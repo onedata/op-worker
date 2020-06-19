@@ -28,8 +28,6 @@
 -define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
 -define(STREAMS_HEALTHCHECK_INTERVAL, application:get_env(?APP_NAME,
     dbsync_streams_healthcheck_interval, timer:seconds(5))).
--define(DBSYNC_STATE_REPORT_INTERVAL, timer:seconds(application:get_env(?APP_NAME,
-    dbsync_state_report_interval_sec, 15))).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -46,7 +44,6 @@ init(_Args) ->
     couchbase_changes:enable([dbsync_utils:get_bucket()]),
     start_streams(),
     erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(), {sync_timer, streams_healthcheck}),
-    erlang:send_after(?DBSYNC_STATE_REPORT_INTERVAL, self(), {sync_timer, dbsync_state_report}),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -67,15 +64,6 @@ handle(streams_healthcheck) ->
             ?error_stacktrace("Failed to start streams due to ~p:~p", [Type, Reason])
     end,
     erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(), {sync_timer, streams_healthcheck}),
-    ok;
-handle(dbsync_state_report) ->
-    try
-        report_dbsync_state()
-    catch
-        Type:Reason ->
-            ?error_stacktrace("Failed to report DBSync state to Onezone due to ~p:~p", [Type, Reason])
-    end,
-    erlang:send_after(?DBSYNC_STATE_REPORT_INTERVAL, self(), {sync_timer, dbsync_state_report}),
     ok;
 handle({dbsync_message, _SessId, Msg = #tree_broadcast2{}}) ->
     handle_tree_broadcast(Msg);
@@ -288,23 +276,6 @@ handle_tree_broadcast(BroadcastMsg = #tree_broadcast2{
 }) ->
     handle_changes_batch(SrcProviderId, MsgId, Msg),
     dbsync_communicator:forward(BroadcastMsg).
-
-%% @private
--spec report_dbsync_state() -> ok.
-report_dbsync_state() ->
-    Spaces = dbsync_utils:get_spaces(),
-    lists:foreach(fun(SpaceId) ->
-        is_this_responsible_node(SpaceId) andalso report_dbsync_state(SpaceId)
-    end, Spaces).
-
-%% @private
--spec report_dbsync_state(od_space:id()) -> ok.
-report_dbsync_state(SpaceId) ->
-    {ok, Providers} = space_logic:get_provider_ids(SpaceId),
-    SeqPerProvider = lists:foldl(fun(ProviderId, Acc) ->
-        Acc#{ProviderId => dbsync_state:get_seq(SpaceId, ProviderId)}
-    end, #{}, Providers),
-    space_logic:report_dbsync_state(SpaceId, SeqPerProvider).
 
 %% @private
 -spec is_this_responsible_node(od_space:id()) -> boolean().

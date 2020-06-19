@@ -86,16 +86,19 @@
     list_xattr_test/1,
     set_xattr_test/1,
     remove_xattr_test/1,
-    
+
     add_qos_entry_test/1,
     get_qos_entry_test/1,
     remove_qos_entry_test/1,
     get_effective_file_qos_test/1,
     check_qos_fulfillment_test/1,
-    
+
     permission_cache_test/1,
+    multi_provider_permission_cache_test/1,
     expired_session_test/1
 ]).
+% Export for use in rpc
+-export([check_perms/3]).
 
 all() ->
     ?ALL([
@@ -163,6 +166,7 @@ all() ->
         check_qos_fulfillment_test,
 
         permission_cache_test,
+        multi_provider_permission_cache_test,
         expired_session_test
     ]).
 
@@ -170,6 +174,8 @@ all() ->
 -define(rpcCache(W, Function, Args), rpc:call(W, permissions_cache, Function, Args)).
 
 -define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
+
+-define(ATTEMPTS, 35).
 
 
 %%%===================================================================
@@ -696,7 +702,7 @@ mkdir_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
-            lfm_proxy:mkdir(W, SessId, ParentDirGuid, <<"dir2">>, 8#777)
+            extract_ok(lfm_proxy:mkdir(W, SessId, ParentDirGuid, <<"dir2">>, 8#777))
         end
     }, Config).
 
@@ -718,7 +724,7 @@ get_children_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            lfm_proxy:get_children(W, SessId, DirKey, 0, 100)
+            extract_ok(lfm_proxy:get_children(W, SessId, DirKey, 0, 100))
         end
     }, Config).
 
@@ -740,7 +746,7 @@ get_children_attrs_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            lfm_proxy:get_children_attrs(W, SessId, DirKey, 0, 100)
+            extract_ok(lfm_proxy:get_children_attrs(W, SessId, DirKey, 0, 100))
         end
     }, Config).
 
@@ -762,7 +768,7 @@ get_children_details_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            lfm_proxy:get_children_details(W, SessId, DirKey, 0, 100, undefined)
+            extract_ok(lfm_proxy:get_children_details(W, SessId, DirKey, 0, 100, undefined))
         end
     }, Config).
 
@@ -783,7 +789,7 @@ get_child_attr_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
-            lfm_proxy:get_child_attr(W, SessId, ParentDirGuid, <<"file1">>)
+            extract_ok(lfm_proxy:get_child_attr(W, SessId, ParentDirGuid, <<"file1">>))
         end
     }, Config).
 
@@ -819,7 +825,7 @@ mv_dir_test(Config) ->
             SrcDirKey = maps:get(SrcDirPath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
             DstDirKey = maps:get(DstDirPath, ExtraData),
-            lfm_proxy:mv(W, SessId, SrcDirKey, DstDirKey, <<"dir21">>)
+            extract_ok(lfm_proxy:mv(W, SessId, SrcDirKey, DstDirKey, <<"dir21">>))
         end
     }, Config).
 
@@ -849,7 +855,7 @@ rm_dir_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
             DirKey = maps:get(DirPath, ExtraData),
-            lfm_proxy:unlink(W, SessId, DirKey)
+            extract_ok(lfm_proxy:unlink(W, SessId, DirKey))
         end
     }, Config).
 
@@ -871,7 +877,7 @@ create_file_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
-            lfm_proxy:create(W, SessId, ParentDirGuid, <<"file1">>, 8#777)
+            extract_ok(lfm_proxy:create(W, SessId, ParentDirGuid, <<"file1">>, 8#777))
         end
     }, Config).
 
@@ -899,7 +905,7 @@ open_for_read_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:open(W, SessId, FileKey, read)
+            extract_ok(lfm_proxy:open(W, SessId, FileKey, read))
         end
     }, Config).
 
@@ -927,7 +933,7 @@ open_for_write_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:open(W, SessId, FileKey, write)
+            extract_ok(lfm_proxy:open(W, SessId, FileKey, write))
         end
     }, Config).
 
@@ -955,7 +961,7 @@ open_for_rdwr_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:open(W, SessId, FileKey, rdwr)
+            extract_ok(lfm_proxy:open(W, SessId, FileKey, rdwr))
         end
     }, Config).
 
@@ -977,7 +983,7 @@ create_and_open_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
-            lfm_proxy:create_and_open(W, SessId, ParentDirGuid, <<"file1">>, 8#777)
+            extract_ok(lfm_proxy:create_and_open(W, SessId, ParentDirGuid, <<"file1">>, 8#777))
         end
     }, Config).
 
@@ -999,7 +1005,7 @@ truncate_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:truncate(W, SessId, FileKey, 0)
+            extract_ok(lfm_proxy:truncate(W, SessId, FileKey, 0))
         end
     }, Config).
 
@@ -1035,7 +1041,7 @@ mv_file_test(Config) ->
             SrcFileKey = maps:get(SrcFilePath, ExtraData),
             DstDirPath = <<TestCaseRootDirPath/binary, "/dir2">>,
             DstDirKey = maps:get(DstDirPath, ExtraData),
-            lfm_proxy:mv(W, SessId, SrcFileKey, DstDirKey, <<"file21">>)
+            extract_ok(lfm_proxy:mv(W, SessId, SrcFileKey, DstDirKey, <<"file21">>))
         end
     }, Config).
 
@@ -1065,7 +1071,7 @@ rm_file_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:unlink(W, SessId, FileKey)
+            extract_ok(lfm_proxy:unlink(W, SessId, FileKey))
         end
     }, Config).
 
@@ -1082,7 +1088,7 @@ get_parent_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_parent(W, SessId, FileKey)
+            extract_ok(lfm_proxy:get_parent(W, SessId, FileKey))
         end
     }, Config).
 
@@ -1099,7 +1105,7 @@ get_file_path_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             {guid, FileGuid} = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_file_path(W, SessId, FileGuid)
+            extract_ok(lfm_proxy:get_file_path(W, SessId, FileGuid))
         end
     }, Config).
 
@@ -1115,7 +1121,7 @@ get_file_guid_test(Config) ->
         available_in_share_mode = inapplicable,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
-            lfm_proxy:resolve_guid(W, SessId, FilePath)
+            extract_ok(lfm_proxy:resolve_guid(W, SessId, FilePath))
         end
     }, Config).
 
@@ -1132,7 +1138,7 @@ get_file_attr_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:stat(W, SessId, FileKey)
+            extract_ok(lfm_proxy:stat(W, SessId, FileKey))
         end
     }, Config).
 
@@ -1149,7 +1155,7 @@ get_file_details_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_details(W, SessId, FileKey)
+            extract_ok(lfm_proxy:get_details(W, SessId, FileKey))
         end
     }, Config).
 
@@ -1171,7 +1177,7 @@ get_file_distribution_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_file_distribution(W, SessId, FileKey)
+            extract_ok(lfm_proxy:get_file_distribution(W, SessId, FileKey))
         end
     }, Config).
 
@@ -1292,7 +1298,7 @@ check_read_perms_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:check_perms(W, SessId, FileKey, read)
+            extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, read))
         end
     }, Config).
 
@@ -1314,7 +1320,7 @@ check_write_perms_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:check_perms(W, SessId, FileKey, write)
+            extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, write))
         end
     }, Config).
 
@@ -1336,7 +1342,7 @@ check_rdwr_perms_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:check_perms(W, SessId, FileKey, rdwr)
+            extract_ok(lfm_proxy:check_perms(W, SessId, FileKey, rdwr))
         end
     }, Config).
 
@@ -1355,7 +1361,7 @@ create_share_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            lfm_proxy:create_share(W, SessId, DirKey, <<"create_share">>)
+            extract_ok(lfm_proxy:create_share(W, SessId, DirKey, <<"create_share">>))
         end
     }, Config).
 
@@ -1382,7 +1388,7 @@ remove_share_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ShareId = maps:get(DirPath, ExtraData),
-            lfm_proxy:remove_share(W, SessId, ShareId)
+            extract_ok(lfm_proxy:remove_share(W, SessId, ShareId))
         end
     }, Config).
 
@@ -1445,7 +1451,7 @@ get_acl_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_acl(W, SessId, FileKey)
+            extract_ok(lfm_proxy:get_acl(W, SessId, FileKey))
         end
     }, Config).
 
@@ -1467,13 +1473,13 @@ set_acl_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:set_acl(W, SessId, FileKey, [
+            extract_ok(lfm_proxy:set_acl(W, SessId, FileKey, [
                 ?ALLOW_ACE(
                     ?group,
                     ?no_flags_mask,
                     lfm_permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS)
                 )
-            ])
+            ]))
         end
     }, Config).
 
@@ -1495,7 +1501,7 @@ remove_acl_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:remove_acl(W, SessId, FileKey)
+            extract_ok(lfm_proxy:remove_acl(W, SessId, FileKey))
         end
     }, Config).
 
@@ -1519,7 +1525,7 @@ get_transfer_encoding_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_transfer_encoding(W, SessId, FileKey)
+            extract_ok(lfm_proxy:get_transfer_encoding(W, SessId, FileKey))
         end
     }, Config).
 
@@ -1541,7 +1547,7 @@ set_transfer_encoding_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:set_transfer_encoding(W, SessId, FileKey, <<"base64">>)
+            extract_ok(lfm_proxy:set_transfer_encoding(W, SessId, FileKey, <<"base64">>))
         end
     }, Config).
 
@@ -1565,7 +1571,7 @@ get_cdmi_completion_status_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_cdmi_completion_status(W, SessId, FileKey)
+            extract_ok(lfm_proxy:get_cdmi_completion_status(W, SessId, FileKey))
         end
     }, Config).
 
@@ -1587,7 +1593,7 @@ set_cdmi_completion_status_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:set_cdmi_completion_status(W, SessId, FileKey, <<"Completed">>)
+            extract_ok(lfm_proxy:set_cdmi_completion_status(W, SessId, FileKey, <<"Completed">>))
         end
     }, Config).
 
@@ -1611,7 +1617,7 @@ get_mimetype_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_mimetype(W, SessId, FileKey)
+            extract_ok(lfm_proxy:get_mimetype(W, SessId, FileKey))
         end
     }, Config).
 
@@ -1633,7 +1639,7 @@ set_mimetype_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:set_mimetype(W, SessId, FileKey, <<"mimetype">>)
+            extract_ok(lfm_proxy:set_mimetype(W, SessId, FileKey, <<"mimetype">>))
         end
     }, Config).
 
@@ -1659,7 +1665,7 @@ get_metadata_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_metadata(W, SessId, FileKey, json, [], false)
+            extract_ok(lfm_proxy:get_metadata(W, SessId, FileKey, json, [], false))
         end
     }, Config).
 
@@ -1681,7 +1687,7 @@ set_metadata_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:set_metadata(W, SessId, FileKey, json, <<"VAL">>, [])
+            extract_ok(lfm_proxy:set_metadata(W, SessId, FileKey, json, <<"VAL">>, []))
         end
     }, Config).
 
@@ -1707,7 +1713,7 @@ remove_metadata_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:remove_metadata(W, SessId, FileKey, json)
+            extract_ok(lfm_proxy:remove_metadata(W, SessId, FileKey, json))
         end
     }, Config).
 
@@ -1734,7 +1740,7 @@ get_xattr_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_xattr(W, SessId, FileKey, <<"myxattr">>)
+            extract_ok(lfm_proxy:get_xattr(W, SessId, FileKey, <<"myxattr">>))
         end
     }, Config).
 
@@ -1758,7 +1764,7 @@ list_xattr_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:list_xattr(W, SessId, FileKey, false, false)
+            extract_ok(lfm_proxy:list_xattr(W, SessId, FileKey, false, false))
         end
     }, Config).
 
@@ -1780,7 +1786,7 @@ set_xattr_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:set_xattr(W, SessId, FileKey, #xattr{name = <<"myxattr">>, value = <<"VAL">>})
+            extract_ok(lfm_proxy:set_xattr(W, SessId, FileKey, #xattr{name = <<"myxattr">>, value = <<"VAL">>}))
         end
     }, Config).
 
@@ -1807,7 +1813,7 @@ remove_xattr_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:remove_xattr(W, SessId, FileKey, <<"myxattr">>)
+            extract_ok(lfm_proxy:remove_xattr(W, SessId, FileKey, <<"myxattr">>))
         end
     }, Config).
 
@@ -1829,7 +1835,7 @@ add_qos_entry_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:add_qos_entry(W, SessId, FileKey, [<<"country=FR">>], 1)
+            extract_ok(lfm_proxy:add_qos_entry(W, SessId, FileKey, [<<"country=FR">>], 1))
         end
     }, Config).
 
@@ -1857,7 +1863,7 @@ get_qos_entry_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_qos_entry(W, SessId, QosEntryId)
+            extract_ok(lfm_proxy:get_qos_entry(W, SessId, QosEntryId))
         end
     }, Config).
 
@@ -1885,7 +1891,7 @@ remove_qos_entry_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            lfm_proxy:remove_qos_entry(W, SessId, QosEntryId)
+            extract_ok(lfm_proxy:remove_qos_entry(W, SessId, QosEntryId))
         end
     }, Config).
 
@@ -1913,7 +1919,7 @@ get_effective_file_qos_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            lfm_proxy:get_effective_file_qos(W, SessId, FileKey)
+            extract_ok(lfm_proxy:get_effective_file_qos(W, SessId, FileKey))
         end
     }, Config).
 
@@ -1941,7 +1947,7 @@ check_qos_fulfillment_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            lfm_proxy:check_qos_fulfilled(W, SessId, QosEntryId)
+            extract_ok(lfm_proxy:check_qos_status(W, SessId, QosEntryId))
         end
     }, Config).
 
@@ -2004,6 +2010,94 @@ permission_cache_test(Config) ->
     ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p3])).
 
 
+multi_provider_permission_cache_test(Config) ->
+    [P2, P1W2, P1W1] = ?config(op_worker_nodes, Config),
+    Nodes = [P1W2, P1W1, P2],
+
+    User = <<"user1">>,
+
+    Path = <<"/space1/multi_provider_permission_cache_test">>,
+    P1W2SessId = ?config({session_id, {User, ?GET_DOMAIN(P1W2)}}, Config),
+
+    {Guid, AllPerms} = case rand:uniform(2) of
+        1 ->
+            {_, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(P1W2, P1W2SessId, Path, 8#777)),
+            {FileGuid, ?ALL_FILE_PERMS};
+        2 ->
+            {_, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(P1W2, P1W2SessId, Path, 8#777)),
+            {DirGuid, ?ALL_DIR_PERMS}
+    end,
+
+    % Set random posix permissions for file/dir and assert they are properly propagated to other
+    % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
+    lists:foreach(fun(_IterationNum) ->
+        PosixPerms = lists_utils:random_sublist(?ALL_POSIX_PERMS),
+        Mode = lists:foldl(fun(Perm, Acc) ->
+            Acc bor lfm_permissions_test_utils:posix_perm_to_mode(Perm, owner)
+        end, 0, PosixPerms),
+        lfm_permissions_test_utils:set_modes(P1W2, #{Guid => Mode}),
+
+        {AllowedPerms, DeniedPerms} = lists:foldl(fun(Perm, {AllowedPermsAcc, DeniedPermsAcc}) ->
+            case lfm_permissions_test_utils:perm_to_posix_perms(Perm) -- [owner, owner_if_parent_sticky | PosixPerms] of
+                [] -> {[Perm | AllowedPermsAcc], DeniedPermsAcc};
+                _ -> {AllowedPermsAcc, [Perm | DeniedPermsAcc]}
+            end
+        end, {[], []}, AllPerms),
+
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, PosixPerms, DeniedPerms,
+            {error, ?EACCES}, <<"denied posix perm">>, Config
+        ),
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, PosixPerms, AllowedPerms,
+            ok, <<"allowed posix perm">>, Config
+        )
+    end, lists:seq(1, 5)),
+
+    % Set random acl permissions for file/dir and assert they are properly propagated to other
+    % nodes/providers (that includes permissions cache - obsolete entries should be overridden)
+    lists:foreach(fun(_IterationNum) ->
+        SetPerms = lists_utils:random_sublist(AllPerms),
+        lfm_permissions_test_utils:set_acls(P1W2, #{Guid => SetPerms}, #{}, ?everyone, ?no_flags_mask),
+
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, SetPerms, lfm_permissions_test_utils:complementary_perms(P1W2, Guid, SetPerms),
+            {error, ?EACCES}, <<"denied acl perm">>, Config
+        ),
+        run_multi_provider_perm_test(
+            Nodes, User, Guid, SetPerms, SetPerms,
+            ok, <<"allowed acl perm">>, Config
+        )
+    end, lists:seq(1, 10)).
+
+
+run_multi_provider_perm_test(Nodes, User, Guid, PermsSet, TestedPerms, ExpResult, Scenario, Config) ->
+    lists:foreach(fun(TestedPerm) ->
+        lists:foreach(fun(Node) ->
+            try
+                ?assertMatch(
+                    ExpResult,
+                    check_perms(Node, User, Guid, [TestedPerm], Config),
+                    ?ATTEMPTS
+                )
+            catch _:Reason ->
+                ct:pal(
+                    "PERMISSIONS TESTS FAILURE~n"
+                    "   Scenario: multi_provider_permission_cache_test ~p~n"
+                    "   Node: ~p~n"
+                    "   Perms set: ~p~n"
+                    "   Tested perm: ~p~n"
+                    "   Reason: ~p~n",
+                    [
+                        Scenario, Node, PermsSet, TestedPerm, Reason
+                    ]
+                ),
+                erlang:error(perms_test_failed)
+            end
+        end, Nodes)
+    end, TestedPerms).
+
+
 expired_session_test(Config) ->
     % Setup
     [W | _] = ?config(op_worker_nodes, Config),
@@ -2046,6 +2140,10 @@ end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
 
+init_per_testcase(multi_provider_permission_cache_test, Config) ->
+    ct:timetrap({minutes, 15}),
+    init_per_testcase(default, Config);
+
 init_per_testcase(_Case, Config) ->
     initializer:mock_share_logic(Config),
     lfm_proxy:init(Config).
@@ -2059,6 +2157,24 @@ end_per_testcase(_Case, Config) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+check_perms(Node, User, Guid, Perms, Config) ->
+    SessId = ?config({session_id, {User, ?GET_DOMAIN(Node)}}, Config),
+    UserCtx = rpc:call(Node, user_ctx, new, [SessId]),
+
+    rpc:call(Node, ?MODULE, check_perms, [
+        UserCtx, file_ctx:new_by_guid(Guid), Perms
+    ]).
+
+
+check_perms(UserCtx, FileCtx, Perms) ->
+    try
+        fslogic_authz:ensure_authorized(UserCtx, FileCtx, Perms),
+        ok
+    catch _Type:Reason ->
+        {error, Reason}
+    end.
 
 
 -spec for(pos_integer(), term()) -> term().
@@ -2078,3 +2194,13 @@ fill_file_with_dummy_data(Node, SessId, Guid) ->
     ?assertMatch({ok, 4}, lfm_proxy:write(Node, FileHandle, 0, <<"DATA">>)),
     ?assertMatch(ok, lfm_proxy:fsync(Node, FileHandle)),
     ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
+
+
+-spec extract_ok
+    (ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()}) -> ok;
+    ({error, term()}) -> {error, term()}.
+extract_ok(ok) -> ok;
+extract_ok({ok, _}) -> ok;
+extract_ok({ok, _, _}) -> ok;
+extract_ok({ok, _, _, _}) -> ok;
+extract_ok({error, _} = Error) -> Error.

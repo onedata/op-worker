@@ -17,9 +17,9 @@
 
 
 %% API
--export([init/1, teardown/1]).
+-export([init/1, init/2, teardown/1]).
 -export([
-    stat/3, get_details/3,
+    stat/3, get_fs_stats/3, get_details/3,
     resolve_guid/3, get_file_path/3,
     get_parent/3,
     check_perms/4,
@@ -66,7 +66,7 @@
 
     get_effective_file_qos/3,
     add_qos_entry/5, get_qos_entry/3, remove_qos_entry/3,
-    check_qos_fulfilled/3, check_qos_fulfilled/4
+    check_qos_status/3, check_qos_status/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -90,17 +90,24 @@
 
 -spec init(Config :: list()) -> list().
 init(Config) ->
+    init(Config, true).
+
+-spec init(Config :: list(), boolean()) -> list().
+init(Config, Link) ->
     Host = self(),
+    ServerFun = fun() ->
+        lfm_handles = ets:new(lfm_handles, [public, set, named_table]),
+        Host ! {self(), done},
+        receive
+            exit -> ok
+        end
+    end,
     Servers = lists:map(
         fun(W) ->
-            spawn_link(W,
-                fun() ->
-                    lfm_handles = ets:new(lfm_handles, [public, set, named_table]),
-                    Host ! {self(), done},
-                    receive
-                        exit -> ok
-                    end
-                end)
+            case Link of
+                true -> spawn_link(W, ServerFun);
+                false -> spawn(W, ServerFun)
+            end
         end, lists:usort(?config(op_worker_nodes, Config))),
 
     lists:foreach(
@@ -132,6 +139,12 @@ teardown(Config) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
 stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_guid(Worker, FileKey))).
+
+
+-spec get_fs_stats(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
+    {ok, lfm_attrs:fs_stats()} | lfm:error_reply().
+get_fs_stats(Worker, SessId, FileKey) ->
+    ?EXEC(Worker, lfm:get_fs_stats(SessId, uuid_to_guid(Worker, FileKey))).
 
 
 -spec get_details(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
@@ -720,7 +733,7 @@ get_file_distribution(Worker, SessId, FileKey) ->
 
 
 -spec get_effective_file_qos(node(), session:id(), lfm:file_key()) ->
-    {ok, {#{qos_entry:id() => qos_status:fulfilled()}, file_qos:assigned_entries()}} | lfm:error_reply().
+    {ok, {#{qos_entry:id() => qos_status:summary()}, file_qos:assigned_entries()}} | lfm:error_reply().
 get_effective_file_qos(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_effective_file_qos(SessId, FileKey)).
 
@@ -743,16 +756,16 @@ remove_qos_entry(Worker, SessId, QosEntryId) ->
     ?EXEC(Worker, lfm:remove_qos_entry(SessId, QosEntryId)).
 
 
--spec check_qos_fulfilled(node(), session:id(), qos_entry:id()) ->
-    {ok, boolean()} | lfm:error_reply().
-check_qos_fulfilled(Worker, SessId, QosEntryId) ->
-    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosEntryId)).
+-spec check_qos_status(node(), session:id(), qos_entry:id()) ->
+    {ok, qos_status:summary()} | lfm:error_reply().
+check_qos_status(Worker, SessId, QosEntryId) ->
+    ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId)).
 
 
--spec check_qos_fulfilled(node(), session:id(), qos_entry:id(), lfm:file_key()) ->
-    {ok, boolean()} | lfm:error_reply().
-check_qos_fulfilled(Worker, SessId, QosEntryId, FileKey) ->
-    ?EXEC(Worker, lfm:check_qos_fulfilled(SessId, QosEntryId, FileKey)).
+-spec check_qos_status(node(), session:id(), qos_entry:id(), lfm:file_key()) ->
+    {ok, qos_status:summary()} | lfm:error_reply().
+check_qos_status(Worker, SessId, QosEntryId, FileKey) ->
+    ?EXEC(Worker, lfm:check_qos_status(SessId, QosEntryId, FileKey)).
 
 
 %%%===================================================================

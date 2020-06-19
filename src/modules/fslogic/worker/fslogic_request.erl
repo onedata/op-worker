@@ -38,6 +38,8 @@ get_file_partial_ctx(UserCtx, #fuse_request{fuse_request = #resolve_guid{path = 
     file_partial_ctx:new_by_logical_path(UserCtx, Path);
 get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #file_request{context_guid = FileGuid}}) ->
     file_partial_ctx:new_by_guid(FileGuid);
+get_file_partial_ctx(_UserCtx, #fuse_request{fuse_request = #get_fs_stats{file_id = FileGuid}}) ->
+    file_partial_ctx:new_by_guid(FileGuid);
 get_file_partial_ctx(_UserCtx, #fuse_request{}) ->
     undefined;
 get_file_partial_ctx(_UserCtx, #provider_request{context_guid = FileGuid}) ->

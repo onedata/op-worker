@@ -35,7 +35,6 @@
 %%%       when traverse task for this request is completed
 %%%     - there are no links indicating that file has been changed and it should
 %%%       be reconciled (see qos_status.erl)
-%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_entry).
@@ -56,7 +55,7 @@
 
 %% functions operating on qos_entry record
 -export([get_expression/1, get_replicas_num/1, get_file_uuid/1, 
-    get_traverse_reqs/1, is_possible/1]).
+    get_traverse_reqs/1, is_possible/1, is_internal/1]).
 
 %%% functions operating on links tree lists
 -export([add_to_impossible_list/2, remove_from_impossible_list/2, 
@@ -73,6 +72,10 @@
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
 -type replicas_num() :: pos_integer().
+% Entry type denotes whether entry was created as part of internal 
+% provider logic (internal) or was created by a user (user_defined).
+% Internal entries can only be deleted by root.
+-type type() :: internal | user_defined.
 
 -type qos_transfer_id() :: transfer:id().
 -type one_or_many(Type) :: Type | [Type].
@@ -82,7 +85,7 @@
 }.
 -type list_apply_fun() :: fun((datastore_links:link_name()) -> any()).
 
--export_type([id/0, doc/0, record/0, replicas_num/0]).
+-export_type([id/0, doc/0, record/0, type/0, replicas_num/0]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -105,17 +108,18 @@
 %%% Functions operating on document using datastore_model API
 %%%===================================================================
 
--spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
-    replicas_num()) -> {ok, doc()} | {error, term()}.
-create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum) ->
-    create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, false, 
+-spec create(od_space:id(), file_meta:uuid(), qos_expression:rpn(),
+    replicas_num(), type()) -> {ok, doc()} | {error, term()}.
+create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
+    create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, false, 
         qos_traverse_req:build_traverse_reqs(FileUuid, [])).
 
 
--spec create(od_space:id(), id(), file_meta:uuid(), qos_expression:rpn(),
-    replicas_num(), boolean(), qos_traverse_req:traverse_reqs()) ->
-    {ok, doc()} | {error, term()}.
-create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible, TraverseReqs) ->
+-spec create(od_space:id(), file_meta:uuid(), qos_expression:rpn(),
+    replicas_num(), type(), boolean(), qos_traverse_req:traverse_reqs()) ->
+    {ok, id()} | {error, term()}.
+create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, TraverseReqs) ->
+    QosEntryId = datastore_key:new_adjacent_to(SpaceId),
     PossibilityCheck = case Possible of
         true ->
             {possible, oneprovider:get_id()};
@@ -123,15 +127,16 @@ create(SpaceId, QosEntryId, FileUuid, Expression, ReplicasNum, Possible, Travers
             ok = add_to_impossible_list(SpaceId, QosEntryId),
             {impossible, oneprovider:get_id()}
     end,
-    datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
+    ?extract_key(datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
         value = #qos_entry{
             file_uuid = FileUuid,
             expression = Expression,
             replicas_num = ReplicasNum,
             possibility_check = PossibilityCheck,
-            traverse_reqs = TraverseReqs
+            traverse_reqs = TraverseReqs,
+            type = EntryType
         }
-    }).
+    })).
 
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
@@ -222,7 +227,7 @@ mark_possible(QosEntryId, SpaceId, AllTraverseReqs) ->
 %% Removes given traverse from traverse reqs of given QoS entry.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_traverse_req(id(), qos_traverse_req:id()) -> ok.
+-spec remove_traverse_req(id(), qos_traverse_req:id()) -> ok | {error, term()}.
 remove_traverse_req(QosEntryId, TraverseId) ->
     Diff = fun(#qos_entry{traverse_reqs = TR} = QosEntry) ->
         {ok, QosEntry#qos_entry{
@@ -270,6 +275,13 @@ is_possible(#qos_entry{possibility_check = {possible, _}}) ->
     true;
 is_possible(#qos_entry{possibility_check = {impossible, _}}) ->
     false.
+
+
+-spec is_internal(doc() | record()) -> boolean().
+is_internal(#document{value = QosEntry}) ->
+    is_internal(QosEntry);
+is_internal(#qos_entry{type = Type}) ->
+    Type =:= internal.
 
 
 %%%===================================================================
@@ -368,6 +380,7 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
+        {type, atom},
         {file_uuid, string},
         {expression, [string]},
         {replicas_num, integer},

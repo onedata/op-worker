@@ -369,6 +369,10 @@ delete_doc(Key) ->
         _ ->
             ok
     end,
+    
+    delete_local_blocks(Key),
+
+    delete_local_blocks(Key),
 
     erase({?DOCS, Key}),
     erase({?FLUSHED_DOCS, Key}),
@@ -1019,3 +1023,11 @@ store_doc(#document{key = Key, value = #file_location{space_id = SpaceId} =
     put({?SPACE_IDS, Key}, SpaceId),
 
     {ok, Key}.
+
+-spec delete_local_blocks(file_location:id()) -> ok.
+delete_local_blocks(Key) ->
+    case ?LOCAL_BLOCKS_STORE of
+        doc -> file_local_blocks:delete(Key);
+        link -> file_local_blocks:delete_local_blocks(Key, all);
+        none -> ok
+    end.

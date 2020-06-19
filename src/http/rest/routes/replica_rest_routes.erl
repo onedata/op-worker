@@ -66,61 +66,37 @@ routes() -> [
         }
     }},
     %% Evict existing replica by file Id
-    {<<"/replicas-id/:fid">>, rest_handler, #rest_req{
+    {<<"/replicas-id/:id">>, rest_handler, #rest_req{
         method = 'DELETE',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_replica, 
-            id = ?OBJECTID_BINDING(fid), 
+            id = ?OBJECTID_BINDING(id), 
             aspect = instance, 
             scope = private
         }
     }},
     %% Get replicas by Id
-    {<<"/replicas-id/:fid">>, rest_handler, #rest_req{
+    {<<"/replicas-id/:id">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_replica, 
-            id = ?OBJECTID_BINDING(fid), 
+            id = ?OBJECTID_BINDING(id), 
             aspect = distribution, 
             scope = private
         }
     }},
     %% Replicate file or directory by Id
-    {<<"/replicas-id/:fid">>, rest_handler, #rest_req{
+    {<<"/replicas-id/:id">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         produces = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_replica, 
-            id = ?OBJECTID_BINDING(fid), 
+            id = ?OBJECTID_BINDING(id), 
             aspect = instance, 
-            scope = private
-        }
-    }},
-    %% Evict existing replicas by index (deprecated)
-    {<<"/replicas-index/:index_name">>, rest_handler, #rest_req{
-        method = 'DELETE',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_replica, 
-            id = ?BINDING(index_name), 
-            aspect = evict_by_view, 
-            scope = private
-        }
-    }},
-    %% Replicate files by index (deprecated)
-    {<<"/replicas-index/:index_name">>, rest_handler, #rest_req{
-        method = 'POST',
-        parse_body = as_json_params,
-        consumes = [<<"application/json">>],
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_replica, 
-            id = ?BINDING(index_name), 
-            aspect = replicate_by_view, 
             scope = private
         }
     }},

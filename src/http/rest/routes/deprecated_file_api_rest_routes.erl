@@ -8,10 +8,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc 
-%%% This module contains definitions of deprecated_file REST methods.
+%%% This module contains definitions of deprecated_file_api REST methods.
 %%% @end
 %%%--------------------------------------------------------------------
--module(deprecated_file_rest_routes).
+-module(deprecated_file_api_rest_routes).
 
 -include("http/rest.hrl").
 
@@ -25,7 +25,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Definitions of deprecated_file REST paths.
+%% Definitions of deprecated_file_api REST paths.
 %% @end
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
@@ -49,28 +49,6 @@ routes() -> [
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
             aspect = list, 
-            scope = private
-        }
-    }},
-    %% List file shares by path (deprecated)
-    {<<"/file-shares/[...]">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_file, 
-            id = ?PATH_BINDING, 
-            aspect = shares, 
-            scope = private
-        }
-    }},
-    %% List file shares by Id (deprecated)
-    {<<"/file-id-shares/:id">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_file, 
-            id = ?OBJECTID_BINDING(id), 
-            aspect = shares, 
             scope = private
         }
     }},

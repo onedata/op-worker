@@ -39,8 +39,10 @@
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
 -export([get_provider/1]).
 -export([get_spaces/1]).
+-export([is_imported/1]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
+-export([set_imported/2]).
 -export([upgrade_legacy_support/2]).
 
 -compile({no_auto_import, [get/1]}).
@@ -50,12 +52,11 @@
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @equiv create_in_zone(Name, QosParameters, undefined)
+%% @equiv create_in_zone(Name, ImportedStorage, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), od_storage:qos_parameters()) ->
-    {ok, storage:id()} | errors:error().
-create_in_zone(Name, QosParameters) ->
-    create_in_zone(Name, QosParameters, undefined).
+-spec create_in_zone(od_storage:name(), boolean()) -> {ok, storage:id()} | errors:error().
+create_in_zone(Name, ImportedStorage) ->
+    create_in_zone(Name, ImportedStorage, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -63,15 +64,18 @@ create_in_zone(Name, QosParameters) ->
 %% Creates document containing storage public information in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), od_storage:qos_parameters(), storage:id() | undefined) ->
+-spec create_in_zone(od_storage:name(), boolean() | unknown, storage:id() | undefined) ->
     {ok, storage:id()} | errors:error().
-create_in_zone(Name, QosParameters, StorageId) ->
+create_in_zone(Name, ImportedStorage, StorageId) ->
+    PartialData = case ImportedStorage of
+        unknown-> #{};
+        _ -> #{<<"imported">> => ImportedStorage}
+    end,
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        data = #{
-            <<"name">> => Name,
-            <<"qos_parameters">> => QosParameters
+        data = PartialData#{
+            <<"name">> => Name
         }
     }),
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
@@ -195,6 +199,15 @@ get_spaces(StorageId) ->
     end.
 
 
+-spec is_imported(storage:id()) -> {ok, boolean()} | errors:error().
+is_imported(StorageId) ->
+    case get(StorageId) of
+        {ok, #document{value = #od_storage{imported = ImportedStorage}}} ->
+            {ok, ImportedStorage};
+        Error -> Error
+    end.
+
+
 -spec update_name(storage:id(), od_storage:name()) -> ok | errors:error().
 update_name(StorageId, NewName) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
@@ -212,7 +225,19 @@ set_qos_parameters(StorageId, QosParameters) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        data = #{<<"qos_parameters">> => QosParameters}
+        data = #{<<"qosParameters">> => QosParameters}
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_storage, StorageId)
+    end).
+
+
+-spec set_imported(storage:id(), boolean()) -> ok | errors:error().
+set_imported(StorageId, Imported) ->
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
+        data = #{<<"imported">> => Imported}
     }),
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_storage, StorageId)

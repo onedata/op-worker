@@ -219,7 +219,8 @@ create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
 -spec delete_local_location(file_meta:uuid()) ->
     ok | {error, term()}.
 delete_local_location(Uuid) ->
-    delete_location(Uuid, file_location:local_id(Uuid)).
+    LocId = file_location:local_id(Uuid),
+    delete_location(Uuid, LocId).
 
 %%-------------------------------------------------------------------
 %% @doc

@@ -452,6 +452,7 @@ traverse_restart_test(Config) ->
     {ok, TaskID2} = ?assertMatch({ok, _}, rpc:call(Worker, tree_traverse, run,
         [?MODULE, file_ctx:new_by_guid(Guid1), RunOptions2])),
 
+    % Stop pools
     RecAns = receive
         {cancel, Check} when Check =:= DirName ->
             ?assertEqual(ok, rpc:call(Worker, worker_pool, stop_sup_pool, [?MASTER_POOL_NAME])),
@@ -461,7 +462,14 @@ traverse_restart_test(Config) ->
             timeout
     end,
     ?assertEqual(ok, RecAns),
-    ?assertEqual(ok, rpc:call(Worker, tree_traverse, init, [?MODULE, 3, 3, 10])),
+
+    % Restart pools
+    PoolName = atom_to_binary(?MODULE, utf8),
+    ?assertMatch({ok, _}, rpc:call(Worker, worker_pool, start_sup_pool, [?MASTER_POOL_NAME,
+        [{workers, 3}, {queue_type, lifo}]])),
+    ?assertMatch({ok, _}, rpc:call(Worker, worker_pool, start_sup_pool, [?SLAVE_POOL_NAME,
+        [{workers, 3}, {queue_type, lifo}]])),
+    ?assertEqual(ok, rpc:call(Worker, traverse, restart_tasks, [PoolName, #{executor => ExecutorID}, Worker])),
 
     get_slave_ans(),
 
@@ -470,8 +478,8 @@ traverse_restart_test(Config) ->
             canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID]), 30),
         ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
             canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskID2]), 30),
-        ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
-        ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
+        ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, ongoing]), 30),
+        ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, scheduled]), 30),
         check_ended(Worker, [TaskID, TaskID2])
     end, Workers).
 

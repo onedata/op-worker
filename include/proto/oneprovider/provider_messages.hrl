@@ -62,6 +62,25 @@
 -record(get_file_distribution, {
 }).
 
+-record(schedule_file_transfer, {
+    % meaning of fields in this record is explained in datastore_models.hrl
+    % in definition of transfer record
+    replicating_provider_id :: undefined | oneprovider:id(),
+    evicting_provider_id :: undefined | oneprovider:id(),
+    callback :: transfer:callback()
+}).
+
+-record(schedule_view_transfer, {
+    % meaning of fields in this record is explained in datastore_models.hrl
+    % in definition of transfer record
+    replicating_provider_id :: undefined | oneprovider:id(),
+    evicting_provider_id :: undefined | oneprovider:id(),
+    view_name :: transfer:view_name(),
+    query_view_params :: transfer:query_view_params(),
+    callback :: transfer:callback()
+}).
+
+%% TODO VFS-6365 remove deprecated replicas endpoints
 -record(schedule_file_replication, {
     % meaning of fields in this record is explained in datastore_models.hrl
     % in definition of transfer record
@@ -72,6 +91,7 @@
     query_view_params :: transfer:query_view_params()
 }).
 
+%% TODO VFS-6365 remove deprecated replicas endpoints
 -record(schedule_replica_invalidation, {
     % meaning of fields in this record is explained in datastore_models.hrl
     % in definition of transfer record
@@ -112,10 +132,11 @@
     share_id :: od_share:id()
 }).
 
-% messages for adding, getting and removing QoS entry
+% messages for QoS management
 -record(add_qos_entry, {
     expression :: qos_expression:rpn(),
-    replicas_num :: qos_entry:replicas_num()
+    replicas_num :: qos_entry:replicas_num(),
+    entry_type = user_defined :: qos_entry:type()
 }).
 
 -record(get_qos_entry, {
@@ -129,7 +150,7 @@
 -record(get_effective_file_qos, {
 }).
 
--record(check_qos_fulfillment, {
+-record(check_qos_status, {
     qos_id :: qos_entry:id()
 }).
 
@@ -138,10 +159,12 @@
 #get_transfer_encoding{} | #set_transfer_encoding{} |
 #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
 #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
-#get_file_distribution{} | #schedule_file_replication{} | #schedule_replica_invalidation{} |
+#get_file_distribution{} |
+#schedule_file_transfer{} | #schedule_view_transfer{} |
+#schedule_file_replication{} | #schedule_replica_invalidation{} |
 #get_metadata{} | #remove_metadata{} | #set_metadata{} | #check_perms{} |
 #create_share{} | #remove_share{} |
-#add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_fulfillment{}.
+#add_qos_entry{} | #get_effective_file_qos{} | #get_qos_entry{} | #remove_qos_entry{} | #check_qos_status{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -185,12 +208,12 @@
     id :: qos_entry:id()
 }).
 
--record(qos_fulfillment, {
-    fulfilled :: boolean()
+-record(qos_status_response, {
+    status :: qos_status:summary()
 }).
 
 -record(eff_qos_response, {
-    entries_with_status = #{} :: #{qos_entry:id() => qos_status:fulfilled()},
+    entries_with_status = #{} :: #{qos_entry:id() => qos_status:summary()},
     assigned_entries = #{} :: file_qos:assigned_entries()
 }).
 
@@ -198,7 +221,7 @@
     #transfer_encoding{} | #cdmi_completion_status{} |#mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} | #share{} |
     #scheduled_transfer{} | #qos_entry_id{} | #qos_entry{} | #eff_qos_response{} |
-    #qos_fulfillment{} | undefined.
+    #qos_status_response{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

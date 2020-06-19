@@ -30,7 +30,6 @@
 ]).
 -export([create/1, get/2, update/1, delete/1]).
 
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -63,7 +62,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
         <<"expression">> => {any, 
             fun(Expression) -> {true, qos_expression:ensure_rpn(Expression)} end},
         <<"fileId">> => {binary, 
-            fun(ObjectId) -> middleware_utils:decode_object_id(ObjectId, <<"fileId">>) end}
+            fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)} end}
     },
     optional => #{<<"replicasNum">> => {integer, {not_lower_than, 1}}}
 };
@@ -173,7 +172,11 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     case lfm:add_qos_entry(SessionId, {guid, FileGuid}, ExpressionInRpn, ReplicasNum) of
         {ok, QosEntryId} ->
             {ok, QosEntry} = ?check(lfm:get_qos_entry(SessionId, QosEntryId)),
-            {ok, resource, {GRI#gri{id = QosEntryId}, entry_to_details(QosEntry, false, SpaceId)}};
+            Status = case qos_entry:is_possible(QosEntry) of
+                true -> ?PENDING;
+                false -> ?IMPOSSIBLE
+            end,
+            {ok, resource, {GRI#gri{id = QosEntryId}, entry_to_details(QosEntry, Status, SpaceId)}};
         ?ERROR_INVALID_QOS_EXPRESSION ->
             ?ERROR_INVALID_QOS_EXPRESSION;
         {error, Errno} ->
@@ -190,7 +193,7 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
 get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEntry) ->
     SessionId = Auth#auth.session_id,
     {ok, SpaceId} = qos_entry:get_space_id(QosEntryId),
-    {ok, Status} = ?check(lfm_qos:check_qos_fulfilled(SessionId, QosEntryId)),
+    {ok, Status} = ?check(lfm_qos:check_qos_status(SessionId, QosEntryId)),
     {ok, entry_to_details(QosEntry, Status, SpaceId)}.
 
 
@@ -213,7 +216,6 @@ update(_) ->
 delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
     ?check(lfm:remove_qos_entry(Auth#auth.session_id, QosEntryId)).
 
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -221,8 +223,8 @@ delete(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}) ->
 %% @private
 -spec fetch_qos_entry(aai:auth(), qos_entry:id()) ->
     {ok, {qos_entry:record(), middleware:revision()}} | ?ERROR_NOT_FOUND.
-fetch_qos_entry(?USER(_UserId, SessionId), QosEntryId) ->
-    case lfm:get_qos_entry(SessionId, QosEntryId) of
+fetch_qos_entry(_Auth, QosEntryId) ->
+    case lfm:get_qos_entry(?ROOT_SESS_ID, QosEntryId) of
         {ok, QosEntry} ->
             {ok, {QosEntry, 1}};
         _ ->
@@ -230,7 +232,7 @@ fetch_qos_entry(?USER(_UserId, SessionId), QosEntryId) ->
     end.
 
 %% @private
--spec entry_to_details(qos_entry:record(), qos_status:fulfilled(), od_space:id()) -> map().
+-spec entry_to_details(qos_entry:record(), qos_status:summary(), od_space:id()) -> map().
 entry_to_details(QosEntry, Status, SpaceId) ->
     {ok, ExpressionInRpn} = qos_entry:get_expression(QosEntry),
     {ok, ReplicasNum} = qos_entry:get_replicas_num(QosEntry),
@@ -241,5 +243,5 @@ entry_to_details(QosEntry, Status, SpaceId) ->
         <<"expressionRpn">> => ExpressionInRpn,
         <<"replicasNum">> => ReplicasNum,
         <<"fileId">> => QosRootFileObjectId,
-        <<"fulfilled">> => Status
+        <<"status">> => Status
     }.

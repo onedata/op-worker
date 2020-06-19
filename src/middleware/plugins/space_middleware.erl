@@ -472,10 +472,7 @@ get(#op_req{data = Data, gri = #gri{id = SpaceId, aspect = views}}, _) ->
                 Limit -> #{<<"nextPageToken">> => lists:last(Views)};
                 _ -> #{}
             end,
-            {ok, maps:merge(#{
-                <<"indexes">> => Views,   % TODO VFS-5608
-                <<"views">> => Views
-            }, NextPageToken)};
+            {ok, maps:merge(#{<<"views">> => Views}, NextPageToken)};
         {error, _} = Error ->
             Error
     end;
