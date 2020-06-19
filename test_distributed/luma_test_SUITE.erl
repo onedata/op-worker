@@ -334,7 +334,7 @@ init_per_testcase(Config) ->
 init_per_testcase(default, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Worker, storage),
-    ok = test_utils:mock_expect(Worker, storage, is_imported_storage, fun(_) -> false end),
+    ok = test_utils:mock_expect(Worker, storage, is_imported, fun(_) -> false end),
     luma_test_utils:setup_local_feed_luma(Worker, Config, <<"local_feed_luma.json">>),
     luma_test_utils:mock_stat_on_space_mount_dir(Worker),
     ok = test_utils:mock_new(Worker, [idp_access_token]),

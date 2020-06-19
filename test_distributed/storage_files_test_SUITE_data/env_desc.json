@@ -270,11 +270,17 @@
                 "/mnt/st3": {
                     "luma": "local"
                 },
+                "/mnt/st4": {
+                    "luma": "auto",
+                    "imported_storage": true
+                },
                 "/mnt/st5": {
-                    "luma": "external"
+                    "luma": "external",
+                    "imported_storage": true
                 },
                 "/mnt/st6": {
-                    "luma": "local"
+                    "luma": "local",
+                    "imported_storage": true
                 },
                 "s3_external_feed_luma_8": {
                     "luma": "external"

@@ -45,7 +45,7 @@ get_or_acquire(Storage, SpaceId) ->
 
 -spec store(storage(), key(), luma_posix_credentials:credentials_map()) -> ok | {error, term()}.
 store(Storage, SpaceId, PosixDefaultsMap) ->
-    case storage:is_imported_storage(Storage) of
+    case storage:is_imported(Storage) of
         true ->
             % ignore user input in case of imported_storage
             ok;
@@ -84,7 +84,7 @@ get_and_describe(Storage, SpaceId) ->
 
 -spec acquire(storage:data(), key()) -> {ok, record(), luma:feed()}.
 acquire(Storage, SpaceId) ->
-    IsImportedStorage = storage:is_imported_storage(Storage),
+    IsImportedStorage = storage:is_imported(Storage),
     LumaFeed = storage:get_luma_feed(Storage),
     case IsImportedStorage orelse LumaFeed =/= ?EXTERNAL_FEED of
         true ->

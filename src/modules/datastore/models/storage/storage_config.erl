@@ -27,7 +27,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/2, create/4, get/1, exists/1, delete/1]).
+-export([create/2, create/3, get/1, exists/1, delete/1]).
 -export([get_id/1, get_helper/1,
     get_luma_feed/1, get_luma_config/1,
     is_storage_detection_skipped/1, is_imported_storage/1]).
