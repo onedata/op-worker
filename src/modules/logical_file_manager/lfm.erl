@@ -52,6 +52,7 @@
 %% Functions operating on directories or files
 -export([mv/3, mv/4, cp/3, cp/4, get_file_path/2, get_file_guid/2, rm_recursive/2, unlink/3]).
 -export([
+    schedule_file_transfer/5, schedule_view_transfer/7,
     schedule_file_replication/4, schedule_replica_eviction/4,
     schedule_replication_by_view/6, schedule_replica_eviction_by_view/6
 ]).
@@ -79,7 +80,7 @@
 -export([check_result/1]).
 %% Functions concerning qos
 -export([add_qos_entry/4, add_qos_entry/5, get_qos_entry/2, remove_qos_entry/2,
-    get_effective_file_qos/2, check_qos_fulfilled/2, check_qos_fulfilled/3]).
+    get_effective_file_qos/2, check_qos_status/2, check_qos_status/3]).
 
 %%%===================================================================
 %%% API
@@ -320,7 +321,49 @@ unlink(SessId, FileEntry, Silent) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Schedules file transfer and returns its ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_file_transfer(
+    session:id(),
+    file_id:file_guid(),
+    ReplicatingProviderId :: undefined | od_provider:id(),
+    EvictingProviderId :: undefined | od_provider:id(),
+    transfer:callback()
+) ->
+    {ok, transfer:id()} | lfm:error_reply().
+schedule_file_transfer(SessId, FileGuid, ReplicatingProviderId, EvictingProviderId, Callback) ->
+    ?run(fun() -> lfm_files:schedule_file_transfer(
+        SessId, FileGuid, ReplicatingProviderId, EvictingProviderId, Callback
+    ) end).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules transfer by view and returns its ID.
+%% @end
+%%--------------------------------------------------------------------
+-spec schedule_view_transfer(
+    session:id(),
+    od_space:id(),
+    transfer:view_name(), transfer:query_view_params(),
+    ReplicatingProviderId :: undefined | od_provider:id(),
+    EvictingProviderId :: undefined | od_provider:id(),
+    transfer:callback()
+) ->
+    {ok, transfer:id()} | lfm:error_reply().
+schedule_view_transfer(
+    SessId, SpaceId, ViewName, QueryViewParams,
+    ReplicatingProviderId, EvictingProviderId, Callback
+) ->
+    ?run(fun() -> lfm_files:schedule_view_transfer(
+        SessId, SpaceId, ViewName, QueryViewParams,
+        ReplicatingProviderId, EvictingProviderId, Callback
+    ) end).
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Schedules file replication to given provider.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_file_replication(session:id(), fslogic_worker:file_guid_or_path(),
@@ -334,6 +377,7 @@ schedule_file_replication(SessId, FileKey, TargetProviderId, Callback) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Schedules file replication to given provider.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replication_by_view(session:id(), TargetProviderId :: oneprovider:id(),
@@ -350,6 +394,7 @@ schedule_replication_by_view(SessId, TargetProviderId, Callback, SpaceId,
 %% @doc
 %% Schedules file replica eviction on given provider, migrates unique data
 %% to provider given as MigrateProviderId.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction(session:id(), fslogic_worker:file_guid_or_path(),
@@ -364,6 +409,7 @@ schedule_replica_eviction(SessId, FileKey, SourceProviderId, TargetProviderId) -
 %% @doc
 %% Schedules file replica eviction on given provider, migrates unique data
 %% to provider given as MigrateProviderId.
+%% TODO VFS-6365 remove deprecated replicas endpoints
 %% @end
 %%--------------------------------------------------------------------
 -spec schedule_replica_eviction_by_view(session:id(), oneprovider:id(),
@@ -832,7 +878,7 @@ add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos(session:id(), file_key()) ->
-    {ok, {#{qos_entry:id() => qos_status:fulfilled()}, file_qos:assigned_entries()}} | error_reply().
+    {ok, {#{qos_entry:id() => qos_status:summary()}, file_qos:assigned_entries()}} | error_reply().
 get_effective_file_qos(SessId, FileKey) ->
     ?run(fun() -> lfm_qos:get_effective_file_qos(SessId, FileKey) end).
 
@@ -857,20 +903,20 @@ remove_qos_entry(SessId, QosEntryId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if QoS requirements defined in qos_entry document are fulfilled.
+%% Check status of QoS requirements defined in qos_entry document.
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_fulfilled(session:id(), qos_entry:id()) -> {ok, boolean()} | error_reply().
-check_qos_fulfilled(SessId, QosEntryId) ->
-    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosEntryId) end).
+-spec check_qos_status(session:id(), qos_entry:id()) -> {ok, qos_status:summary()} | error_reply().
+check_qos_status(SessId, QosEntryId) ->
+    ?run(fun() -> lfm_qos:check_qos_status(SessId, QosEntryId) end).
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Check if QoS requirements defined in qos_entry document/documents
-%% are fulfilled for given file.
+%% Check status of QoS requirements defined in qos_entry document/documents
+%% for given file.
 %% @end
 %%--------------------------------------------------------------------
--spec check_qos_fulfilled(session:id(), qos_entry:id(), file_key()) ->
-    {ok, boolean()} | error_reply().
-check_qos_fulfilled(SessId, QosEntryId, FileKey) ->
-    ?run(fun() -> lfm_qos:check_qos_fulfilled(SessId, QosEntryId, FileKey) end).
+-spec check_qos_status(session:id(), qos_entry:id(), file_key()) ->
+    {ok, qos_status:summary()} | error_reply().
+check_qos_status(SessId, QosEntryId, FileKey) ->
+    ?run(fun() -> lfm_qos:check_qos_status(SessId, QosEntryId, FileKey) end).

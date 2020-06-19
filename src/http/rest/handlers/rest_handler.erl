@@ -281,28 +281,19 @@ send_response(#rest_resp{code = Code, headers = Headers, body = Body}, Req) ->
     gri:gri().
 resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = Sc}, Req) ->
     IdBinding = resolve_bindings(SessionId, Id, Req),
-    AspectBinding = case As of
+    AsBinding = case As of
         {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
-    ScopeBinding = case Tp of
-        op_file ->
-            % REST endpoints requiring $FILE_ID in URL accepts both normal
-            % guids and share guids. In case of share ones scope must be
-            % changed to 'public'.
-            case file_id:is_share_guid(IdBinding) of
-                true -> public;
-                false -> Sc
-            end;
-        _ ->
-            Sc
+    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, IdBinding) of
+        true -> public;
+        false -> Sc
     end,
-
     #gri{
         type = Tp,
         id = IdBinding,
-        aspect = AspectBinding,
-        scope = ScopeBinding
+        aspect = AsBinding,
+        scope = ScBinding
     }.
 
 
@@ -318,12 +309,7 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
 resolve_bindings(_SessionId, ?BINDING(Key), Req) ->
     cowboy_req:binding(Key, Req);
 resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
-    case catch file_id:objectid_to_guid(cowboy_req:binding(Key, Req)) of
-        {ok, Guid} ->
-            Guid;
-        _Error ->
-            throw(?ERROR_BAD_VALUE_IDENTIFIER(Key))
-    end;
+    middleware_utils:decode_object_id(cowboy_req:binding(Key, Req), Key);
 resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
     Path = filename:join([<<"/">> | cowboy_req:path_info(Req)]),
     case guid_utils:ensure_guid(SessionId, {path, Path}) of

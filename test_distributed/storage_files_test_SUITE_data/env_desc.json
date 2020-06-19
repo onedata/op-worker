@@ -208,8 +208,12 @@
                 "/mnt/st2": {
                     "luma": true
                 },
+                "/mnt/st3": {
+                    "imported_storage": true
+                },
                 "/mnt/st4": {
-                    "luma": true
+                    "luma": true,
+                    "imported_storage": true
                 },
                 "s3_luma": {
                     "luma": true

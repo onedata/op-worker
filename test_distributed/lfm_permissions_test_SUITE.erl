@@ -1953,7 +1953,7 @@ check_qos_fulfillment_test(Config) ->
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:check_qos_fulfilled(W, SessId, QosEntryId))
+            extract_ok(lfm_proxy:check_qos_status(W, SessId, QosEntryId))
         end
     }, Config).
 

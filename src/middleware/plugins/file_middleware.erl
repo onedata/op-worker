@@ -163,23 +163,30 @@ data_spec_create(#gri{aspect = object_id}) ->
     undefined;
 
 data_spec_create(#gri{aspect = attrs}) -> #{
-    required => #{<<"mode">> => {binary,
-        fun(Mode) ->
+    required => #{
+        id => {binary, guid},
+        <<"mode">> => {binary, fun(Mode) ->
             try
                 {true, binary_to_integer(Mode, 8)}
             catch _:_ ->
                 throw(?ERROR_BAD_VALUE_INTEGER(<<"mode">>))
             end
-        end
-    }}
+        end}
+    }
 };
 
 data_spec_create(#gri{aspect = xattrs}) -> #{
-    required => #{<<"metadata">> => {json, any}}
+    required => #{
+        id => {binary, guid},
+        <<"metadata">> => {json, any}
+    }
 };
 
 data_spec_create(#gri{aspect = json_metadata}) -> #{
-    required => #{<<"metadata">> => {any, any}},
+    required => #{
+        id => {binary, guid},
+        <<"metadata">> => {any, any}
+    },
     optional => #{
         <<"filter_type">> => {binary, [<<"keypath">>]},
         <<"filter">> => {binary, any}
@@ -187,7 +194,10 @@ data_spec_create(#gri{aspect = json_metadata}) -> #{
 };
 
 data_spec_create(#gri{aspect = rdf_metadata}) -> #{
-    required => #{<<"metadata">> => {binary, any}}
+    required => #{
+        id => {binary, guid},
+        <<"metadata">> => {binary, any}
+    }
 }.
 
 
@@ -313,6 +323,7 @@ get_operation_supported(json_metadata, private) -> true;
 get_operation_supported(json_metadata, public) -> true;
 get_operation_supported(rdf_metadata, private) -> true;
 get_operation_supported(rdf_metadata, public) -> true;
+get_operation_supported(distribution, private) -> true;
 get_operation_supported(acl, private) -> true;
 get_operation_supported(shares, private) -> true;
 get_operation_supported(transfers, private) -> true;
@@ -324,10 +335,12 @@ get_operation_supported(_, _) -> false.
 
 %% @private
 -spec data_spec_get(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
-data_spec_get(#gri{aspect = instance}) ->
-    undefined;
+data_spec_get(#gri{aspect = instance}) -> #{
+    required => #{id => {binary, guid}}
+};
 
 data_spec_get(#gri{aspect = list}) -> #{
+    required => #{id => {binary, guid}},
     optional => #{
         <<"limit">> => {integer, {between, 1, 1000}},
         <<"offset">> => {integer, {not_lower_than, 0}}
@@ -338,6 +351,7 @@ data_spec_get(#gri{aspect = As}) when
     As =:= children;
     As =:= children_details
 -> #{
+    required => #{id => {binary, guid}},
     optional => #{
         <<"limit">> => {integer, {between, 1, 1000}},
         <<"index">> => {any, fun
@@ -357,13 +371,16 @@ data_spec_get(#gri{aspect = As}) when
 };
 
 data_spec_get(#gri{aspect = attrs, scope = private}) -> #{
+    required => #{id => {binary, guid}},
     optional => #{<<"attribute">> => {binary, ?PRIVATE_BASIC_ATTRIBUTES}}
 };
 data_spec_get(#gri{aspect = attrs, scope = public}) -> #{
+    required => #{id => {binary, guid}},
     optional => #{<<"attribute">> => {binary, ?PUBLIC_BASIC_ATTRIBUTES}}
 };
 
 data_spec_get(#gri{aspect = xattrs}) -> #{
+    required => #{id => {binary, guid}},
     optional => #{
         <<"attribute">> => {binary, non_empty},
         <<"inherited">> => {boolean, any},
@@ -372,6 +389,7 @@ data_spec_get(#gri{aspect = xattrs}) -> #{
 };
 
 data_spec_get(#gri{aspect = json_metadata}) -> #{
+    required => #{id => {binary, guid}},
     optional => #{
         <<"filter_type">> => {binary, [<<"keypath">>]},
         <<"filter">> => {binary, any},
@@ -379,24 +397,26 @@ data_spec_get(#gri{aspect = json_metadata}) -> #{
     }
 };
 
-data_spec_get(#gri{aspect = rdf_metadata}) ->
-    undefined;
-
-data_spec_get(#gri{aspect = acl}) ->
-    undefined;
-
-data_spec_get(#gri{aspect = shares}) ->
-    undefined;
+data_spec_get(#gri{aspect = As}) when
+    As =:= rdf_metadata;
+    As =:= distribution;
+    As =:= acl;
+    As =:= shares
+->
+    #{required => #{id => {binary, guid}}};
 
 data_spec_get(#gri{aspect = transfers}) -> #{
+    required => #{id => {binary, guid}},
     optional => #{<<"include_ended_ids">> => {boolean, any}}
 };
 
-data_spec_get(#gri{aspect = file_qos_summary}) ->
-    undefined;
+data_spec_get(#gri{aspect = file_qos_summary}) -> #{
+    required => #{id => {binary, guid}}
+};
 
-data_spec_get(#gri{aspect = download_url}) ->
-    undefined.
+data_spec_get(#gri{aspect = download_url}) -> #{
+    required => #{id => {binary, guid}}
+}.
 
 
 %% @private
@@ -422,6 +442,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
+    As =:= distribution;
     As =:= acl;
     As =:= shares;
     As =:= download_url
@@ -448,6 +469,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= xattrs;
     As =:= json_metadata;
     As =:= rdf_metadata;
+    As =:= distribution;
     As =:= acl;
     As =:= shares;
     As =:= transfers;
@@ -586,6 +608,9 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) -
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     ?check(lfm:get_acl(Auth#auth.session_id, {guid, FileGuid}));
 
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
+    ?check(lfm:get_file_distribution(Auth#auth.session_id, {guid, FileGuid}));
+
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
     case lfm:stat(Auth#auth.session_id, {guid, FileGuid}) of
         {ok, #file_attr{shares = Shares}} ->
@@ -614,11 +639,10 @@ get(#op_req{data = Data, gri = #gri{id = FileGuid, aspect = transfers}}, _) ->
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = file_qos_summary}}, _) ->
     SessionId = Auth#auth.session_id,
     case lfm:get_effective_file_qos(SessionId, {guid, FileGuid}) of
-        {ok, {QosEntriesWithStatus, AssignedEntries}} ->
+        {ok, {QosEntriesWithStatus, _AssignedEntries}} ->
             {ok, #{
-                <<"entries">> => QosEntriesWithStatus,
-                <<"assignedEntries">> => AssignedEntries,
-                <<"fulfilled">> => lists:all(fun(Status) -> Status end, maps:values(QosEntriesWithStatus))
+                <<"requirements">> => QosEntriesWithStatus,
+                <<"status">> => qos_status:aggregate(maps:values(QosEntriesWithStatus))
             }};
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND;
@@ -654,6 +678,7 @@ update_operation_supported(_, _) -> false.
 %% @private
 -spec data_spec_update(gri:gri()) -> undefined | middleware_sanitizer:data_spec().
 data_spec_update(#gri{aspect = instance}) -> #{
+    required => #{id => {binary, guid}},
     optional => #{
         <<"posixPermissions">> => {binary,
             fun(Mode) ->
@@ -669,15 +694,14 @@ data_spec_update(#gri{aspect = instance}) -> #{
 
 data_spec_update(#gri{aspect = acl}) -> #{
     required => #{
-        <<"list">> => {any,
-            fun(JsonAcl) ->
-                try
-                    {true, acl:from_json(JsonAcl, gui)}
-                catch throw:{error, Errno} ->
-                    throw(?ERROR_POSIX(Errno))
-                end
+        id => {binary, guid},
+        <<"list">> => {any, fun(JsonAcl) ->
+            try
+                {true, acl:from_json(JsonAcl, gui)}
+            catch throw:{error, Errno} ->
+                throw(?ERROR_POSIX(Errno))
             end
-        }
+        end}
     }
 }.
 
@@ -743,10 +767,13 @@ data_spec_delete(#gri{aspect = As}) when
     As =:= json_metadata;
     As =:= rdf_metadata
 ->
-    undefined;
+    #{required => #{id => {binary, guid}}};
 
 data_spec_delete(#gri{aspect = xattrs}) -> #{
-    required => #{<<"keys">> => {list_of_binaries, any}}
+    required => #{
+        id => {binary, guid},
+        <<"keys">> => {list_of_binaries, any}
+    }
 }.
 
 

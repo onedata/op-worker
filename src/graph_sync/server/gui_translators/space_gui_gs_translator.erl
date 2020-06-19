@@ -57,7 +57,7 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             null
     end,
 
-    #{
+    Result = #{
         <<"name">> => Space#od_space.name,
         <<"effUserList">> => gri:serialize(#gri{
             type = op_space,
@@ -84,7 +84,13 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             scope = private
         }),
         <<"rootDir">> => RootDir
-    };
+    },
+    fun
+        (?USER(Id)) -> 
+            Result#{<<"currentUserEffPrivileges">> => maps:get(Id, Space#od_space.eff_users, [])};
+        (_) -> 
+            Result
+    end;
 translate_resource(#gri{aspect = eff_users, scope = private}, Users) ->
     #{
         <<"list">> => lists:map(fun(UserId) ->

@@ -543,6 +543,29 @@ handle_file_request(UserCtx, #fsync{
     provider_response().
 handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
     sync_req:get_file_distribution(UserCtx, FileCtx);
+handle_provider_request(UserCtx, #schedule_file_transfer{
+    replicating_provider_id = ReplicatingProviderId,
+    evicting_provider_id = EvictingProviderId,
+    callback = Callback
+}, FileCtx) ->
+    transfer_req:schedule_file_transfer(
+        UserCtx, FileCtx,
+        ReplicatingProviderId, EvictingProviderId,
+        Callback
+    );
+handle_provider_request(UserCtx, #schedule_view_transfer{
+    replicating_provider_id = ReplicatingProviderId,
+    evicting_provider_id = EvictingProviderId,
+    view_name = ViewName,
+    query_view_params = QueryViewParams,
+    callback = Callback
+}, FileCtx) ->
+    transfer_req:schedule_view_transfer(
+        UserCtx, FileCtx,
+        ReplicatingProviderId, EvictingProviderId,
+        ViewName, QueryViewParams,
+        Callback
+    );
 handle_provider_request(UserCtx, #schedule_file_replication{
     block = _Block, target_provider_id = TargetProviderId, callback = Callback,
     view_name = ViewName, query_view_params = QueryViewParams
@@ -608,8 +631,8 @@ handle_provider_request(UserCtx, #get_qos_entry{id = QosEntryId}, FileCtx) ->
     qos_req:get_qos_entry(UserCtx, FileCtx, QosEntryId);
 handle_provider_request(UserCtx, #remove_qos_entry{id = QosEntryId}, FileCtx) ->
     qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
-handle_provider_request(UserCtx, #check_qos_fulfillment{qos_id = QosEntryId}, FileCtx) ->
-    qos_req:check_fulfillment(UserCtx, FileCtx, QosEntryId).
+handle_provider_request(UserCtx, #check_qos_status{qos_id = QosEntryId}, FileCtx) ->
+    qos_req:check_status(UserCtx, FileCtx, QosEntryId).
 
 %%--------------------------------------------------------------------
 %% @private

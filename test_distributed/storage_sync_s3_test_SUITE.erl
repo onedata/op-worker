@@ -193,13 +193,13 @@ delete_opened_file_reimport_race_test(Config) ->
 
 
 update_syncs_files_after_import_failed_test(Config) ->
-    storage_sync_test_base:update_syncs_files_after_import_failed_test(Config, false).
+    storage_sync_s3_test_base:update_syncs_files_after_import_failed_test(Config, false).
 
 update_syncs_files_after_previous_update_failed_test(Config) ->
-    storage_sync_test_base:update_syncs_files_after_previous_update_failed_test(Config, false).
+    storage_sync_s3_test_base:update_syncs_files_after_previous_update_failed_test(Config, false).
 
 sync_should_not_reimport_deleted_but_still_opened_file(Config) ->
-    storage_sync_test_base:sync_should_not_reimport_deleted_but_still_opened_file(Config, ?S3_HELPER_NAME).
+    storage_sync_s3_test_base:sync_should_not_reimport_deleted_but_still_opened_file(Config, ?S3_HELPER_NAME).
 
 sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Config) ->
     storage_sync_test_base:sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Config, ?S3_HELPER_NAME).
@@ -217,7 +217,7 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config) ->
     storage_sync_test_base:sync_should_update_replicated_file_with_suffix_on_storage(Config, ?S3_HELPER_NAME).
 
 sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
-    storage_sync_test_base:sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config, false).
+    storage_sync_s3_test_base:sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config, false).
 
 create_delete_import2_test(Config) ->
     storage_sync_test_base:create_delete_import2_test(Config, false, true).

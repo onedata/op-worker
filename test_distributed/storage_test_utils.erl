@@ -43,7 +43,7 @@ file_path(Worker, SpaceId, FilePath) ->
 
 get_space_mount_point(Worker, SpaceId) ->
     {ok, StorageId} = get_supporting_storage_id(Worker, SpaceId),
-    IsImportedStorage = rpc:call(Worker, storage, is_imported_storage, [StorageId]),
+    IsImportedStorage = rpc:call(Worker, storage, is_imported, [StorageId]),
     StorageMountPoint = storage_mount_point(Worker, StorageId),
     case IsImportedStorage of
         true -> StorageMountPoint;

@@ -20,11 +20,12 @@
 -include_lib("ctool/include/errors.hrl").
 
 -type type_constraint() ::
-    any | boolean | integer | binary | list_of_binaries |
-    json | gri | page_token | qos_expression.
+    any | boolean | integer | atom | binary | list_of_binaries |
+    json | gri | page_token.
 -type value_constraint() ::
     any |
     non_empty |
+    guid |
     [term()] | % A list of accepted values
     {between, integer(), integer()} |
     {not_lower_than, integer()} | {not_greater_than, integer()} | custom_value_constraint().
@@ -34,10 +35,10 @@
 -type param_spec() :: {type_constraint(), value_constraint()}.
 % The 'aspect' keyword allows to validate the data provided in aspect identifier.
 -type params_spec() :: #{
-    Param :: binary() | {aspect, binary()} => param_spec()
+    Param :: binary() | id | {aspect, binary()} => param_spec()
 }.
 
--type data() :: #{Param :: aspect | binary() => term()}.
+-type data() :: #{Param :: id | aspect | binary() => term()}.
 -type data_spec() :: #{
     required => params_spec(),
     at_least_one => params_spec(),
@@ -186,6 +187,19 @@ sanitize_param(TypeConstraint, ValueConstraint, Param, RawValue) ->
 check_type(any, _Param, Term) ->
     Term;
 
+check_type(atom, _Key, Atom) when is_atom(Atom) ->
+    Atom;
+check_type(atom, _Key, Binary) when is_binary(Binary) ->
+    try
+        binary_to_existing_atom(Binary, utf8)
+    catch _:_ ->
+        % return empty atom so it can fail on value verification
+        % (atoms can always have only predefined values)
+        ''
+    end;
+check_type(atom, Key, _) ->
+    throw(?ERROR_BAD_VALUE_ATOM(Key));
+
 check_type(binary, _Param, Binary) when is_binary(Binary) ->
     Binary;
 check_type(binary, _Param, Atom) when is_atom(Atom) ->
@@ -284,6 +298,14 @@ check_value(json, non_empty, Param, Map) when map_size(Map) == 0 ->
     throw(?ERROR_BAD_VALUE_EMPTY(Param));
 check_value(_, non_empty, _Param, _) ->
     ok;
+
+check_value(binary, guid, Param, Value) ->
+    try
+        {_, _, _} = file_id:unpack_share_guid(Value),
+        ok
+    catch _:_ ->
+        throw(?ERROR_BAD_VALUE_IDENTIFIER(Param))
+    end;
 
 check_value(_, {not_lower_than, Threshold}, Param, Value) ->
     case Value >= Threshold of

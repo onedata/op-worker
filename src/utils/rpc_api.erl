@@ -167,7 +167,7 @@ storage_set_readonly(StorageId, Readonly) ->
 -spec storage_set_imported_storage(storage:id(), boolean()) ->
     ok | {error, term()}.
 storage_set_imported_storage(StorageId, Value) ->
-    storage:set_imported_storage(StorageId, Value).
+    storage:set_imported(StorageId, Value).
 
 
 -spec storage_set_qos_parameters(storage:id(), storage:qos_parameters()) ->
@@ -200,7 +200,7 @@ storage_describe(StorageId) ->
 
 -spec storage_is_imported_storage(storage:id()) -> boolean().
 storage_is_imported_storage(StorageId) ->
-    storage:is_imported_storage(StorageId).
+    storage:is_imported(StorageId).
 
 -spec luma_clear_db(storage:id()) -> ok.
 luma_clear_db(StorageId) ->

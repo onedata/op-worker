@@ -32,6 +32,10 @@
     rest_not_supported |
     % Standard graph sync scenario
     gs |
+    % Gs scenario with gri.scope == private and gri.id == SharedGuid.
+    % Such requests should be rejected at auth steps resulting in
+    % ?ERROR_UNAUTHORIZED.
+    gs_with_shared_guid_and_aspect_private |
     % Gs scenario that results in ?ERROR_NOT_SUPPORTED regardless
     % of test case due to for example invalid aspect.
     gs_not_supported.
@@ -47,7 +51,8 @@
 -record(client_spec, {
     correct = [] :: [aai:auth()],
     unauthorized = [] :: [aai:auth()],
-    forbidden = [] :: [aai:auth()],
+    forbidden_not_in_space = [] :: [aai:auth()],
+    forbidden_in_space = [] :: [aai:auth()],
     supported_clients_per_node :: #{node() => [aai:auth()]}
 }).
 -type client_spec() :: #client_spec{}.
@@ -78,6 +83,7 @@
 -type gs_args() :: #gs_args{}.
 
 -record(api_test_ctx, {
+    scenario :: scenario_type(),
     node :: node(),
     client :: aai:auth(),
     env :: api_test_env(),
@@ -99,14 +105,16 @@
 % test was truly deleted).
 % First argument tells whether request made during testcase should succeed
 -type env_verify_fun() :: fun(
-    (RequestResultExpectation :: expected_success | expected_failure, api_test_env()) ->
+    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) ->
         boolean()
 ).
 
 % Function called during testcase to prepare call/request arguments
 -type prepare_args_fun() :: fun((api_test_ctx()) -> rest_args() | gs_args()).
-% Function called after testcase to validate returned call/request result
--type validate_call_result_fun() :: fun((api_test_ctx(), Result :: term()) -> ok | no_return()).
+% Function called after testcase to validate returned call/request result.
+% When api_test_ctx is returned it will be passed to env_verify_fun
+-type validate_call_result_fun() :: fun((api_test_ctx(), Result :: term()) -> 
+    ok | {ok, api_test_ctx()} | no_return()).
 
 -record(scenario_spec, {
     name :: binary(),
@@ -153,7 +161,6 @@
 }).
 -type suite_spec() :: #suite_spec{}.
 
--define(ATTEMPTS, 30).
 -define(SCENARIO_NAME, atom_to_binary(?FUNCTION_NAME, utf8)).
 
 -define(SPACE_1, <<"space1">>).
@@ -179,13 +186,13 @@ end)()).
 -define(CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(__CONFIG), #client_spec{
     correct = [?USER_IN_SPACE_1_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [?NOBODY],
-    forbidden = [?USER_IN_SPACE_2_AUTH],
+    forbidden_not_in_space = [?USER_IN_SPACE_2_AUTH],
     supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
 }).
 -define(CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(__CONFIG), #client_spec{
     correct = [?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [?NOBODY],
-    forbidden = [?USER_IN_SPACE_1_AUTH],
+    forbidden_not_in_space = [?USER_IN_SPACE_1_AUTH],
     supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
 }).
 % Special case -> any user can make requests for shares but if request is
@@ -194,7 +201,7 @@ end)()).
 -define(CLIENT_SPEC_FOR_SHARE_SCENARIOS(__CONFIG), #client_spec{
     correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [],
-    forbidden = [],
+    forbidden_not_in_space = [],
     supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
 }).
 

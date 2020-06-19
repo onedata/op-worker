@@ -34,10 +34,7 @@ get_storage_record(Worker, StorageId) ->
     rpc:call(Worker, storage, get, [StorageId]).
 
 get_storage_mountpoint_handle(Worker, SpaceId, Storage) ->
-    case rpc:call(Worker, storage, is_imported_storage, [Storage]) of
-        true -> new_handle(Worker, SpaceId, <<"..">>, Storage);
-        false -> new_handle(Worker, SpaceId, <<"">>, Storage)
-    end.
+    new_handle(Worker, SpaceId, <<"">>, Storage).
 
 new_handle(Worker, SpaceId, StorageFileId, StorageId) when is_binary(StorageId) ->
     rpc:call(Worker, storage_driver, new_handle, [?ROOT_SESS_ID, SpaceId, undefined, StorageId, StorageFileId]);

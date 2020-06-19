@@ -6,6 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
+%%% TODO VFS-6365 remove deprecated replicas endpoints
 %%% This module handles translation of middleware results concerning
 %%% replica entities into REST responses.
 %%% @end

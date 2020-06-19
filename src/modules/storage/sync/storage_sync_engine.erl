@@ -919,13 +919,12 @@ update_mode(FileCtx, NewMode) ->
 
 -spec maybe_update_times(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_times(StorageFileCtx, #file_attr{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx, _Info) ->
+maybe_update_times(StorageFileCtx, #file_attr{mtime = MTime, ctime = CTime}, FileCtx, _Info) ->
     {StorageStat = #statbuf{
-        st_atime = StorageATime,
         st_mtime = StorageMTime,
         st_ctime = StorageCTime
     }, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    Updated = case ATime >= StorageATime andalso  MTime >= StorageMTime andalso CTime >= StorageCTime of
+    Updated = case MTime >= StorageMTime andalso CTime >= StorageCTime of
         true ->
             false;
         false ->
