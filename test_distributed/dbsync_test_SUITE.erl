@@ -349,7 +349,7 @@ changes_request_should_be_handled(Config) ->
         ProviderIds = lists:usort(get_providers(SpaceId)),
         ProviderIds2 = lists:delete(<<"p1">>, ProviderIds),
         lists:foreach(fun(ProviderId) ->
-            StreamId = <<SpaceId/binary, "_", ProviderId/binary>>,
+            StreamId = dbsync_worker:get_on_demand_changes_stream_id(SpaceId, ProviderId),
             Request = #changes_request2{
                 space_id = SpaceId,
                 since = 1,

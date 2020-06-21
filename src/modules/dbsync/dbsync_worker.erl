@@ -23,7 +23,7 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([supervisor_flags/0]).
+-export([supervisor_flags/0, get_on_demand_changes_stream_id/2]).
 
 -define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
 -define(STREAMS_HEALTHCHECK_INTERVAL, application:get_env(?APP_NAME,
@@ -128,6 +128,10 @@ dbsync_out_stream_spec(ReqId, SpaceId, Opts) ->
         type => worker,
         modules => [dbsync_out_stream]
     }.
+
+-spec get_on_demand_changes_stream_id(od_space:id(), od_provider:id()) -> binary().
+get_on_demand_changes_stream_id(SpaceId, ProviderId) ->
+    <<SpaceId/binary, "_", ProviderId/binary>>.
 
 %%%===================================================================
 %%% Internal functions
@@ -243,7 +247,7 @@ handle_changes_request(ProviderId, #changes_request2{
                 ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )
     end,
-    Name = <<SpaceId/binary, "_", ProviderId/binary>>,
+    Name = get_on_demand_changes_stream_id(SpaceId, ProviderId),
     case global:whereis_name({dbsync_out_stream, Name}) of
         undefined ->
             Spec = dbsync_out_stream_spec(Name, SpaceId, [
@@ -253,11 +257,21 @@ handle_changes_request(ProviderId, #changes_request2{
                 {handler, Handler},
                 {handling_interval, application:get_env(
                     ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
-                )}
+                )},
+                {register, true}
             ]),
             Node = datastore_key:responsible_node(SpaceId),
-            rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]),
-            ok;
+            try
+                case rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]) of
+                    {ok, _} -> ok;
+                    % Errors in case of race between two processes that handle #changes_request2{}
+                    {error, already_present} -> ok;
+                    {error, {already_started, _}} -> ok
+                end
+            catch
+                Error:Reason  ->
+                    ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
+            end;
         _ ->
             ok
     end.
