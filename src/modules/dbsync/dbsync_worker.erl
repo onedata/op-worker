@@ -122,7 +122,7 @@ dbsync_in_stream_spec(SpaceId) ->
 dbsync_out_stream_spec(ReqId, SpaceId, Opts) ->
     #{
         id => {dbsync_out_stream, ReqId},
-        start => {dbsync_out_stream, start_link, [SpaceId, Opts]},
+        start => {dbsync_out_stream, start_link, [ReqId, SpaceId, Opts]},
         restart => temporary,
         shutdown => timer:seconds(10),
         type => worker,

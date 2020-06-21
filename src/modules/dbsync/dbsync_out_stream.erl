@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2]).
+-export([start_link/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -64,13 +64,12 @@
 %% it globally.
 %% @end
 %%--------------------------------------------------------------------
--spec start_link(od_space:id(), [option()]) ->
+-spec start_link(binary(), od_space:id(), [option()]) ->
     {ok, pid()} | {error, Reason :: term()}.
-start_link(SpaceId, Opts) ->
+start_link(Name, SpaceId, Opts) ->
     case proplists:get_value(register, Opts, false) of
         true ->
-            Name = {?MODULE, SpaceId},
-            gen_server2:start_link({global, Name}, ?MODULE, [SpaceId, Opts], []);
+            gen_server2:start_link({global, {?MODULE, Name}}, ?MODULE, [SpaceId, Opts], []);
         false ->
             gen_server2:start_link(?MODULE, [SpaceId, Opts], [])
     end.
