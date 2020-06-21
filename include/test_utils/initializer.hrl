@@ -16,4 +16,6 @@
 -define(DUMMY_PROVIDER_IDENTITY_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-IDENTITY-TOKEN-", __ProviderId/binary>>).
 -define(DUMMY_PROVIDER_ACCESS_TOKEN(__ProviderId), <<"DUMMY-PROVIDER-ACCESS-TOKEN-", __ProviderId/binary>>).
 
+-define(NOT_SUPPORTED_SPACE_ID, <<"NotSupportedSpaceId">>).
+
 -endif.

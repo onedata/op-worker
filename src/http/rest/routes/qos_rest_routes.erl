@@ -30,8 +30,8 @@
 %%--------------------------------------------------------------------
 -spec routes() -> [{binary(), module(), #rest_req{}}].
 routes() -> [
-    %% Add QoS entry
-    {<<"/qos_entry">>, rest_handler, #rest_req{
+    %% Add QoS requirement
+    {<<"/qos_requirements">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
@@ -43,8 +43,8 @@ routes() -> [
             scope = private
         }
     }},
-    %% Remove QoS entry
-    {<<"/qos_entry/:qid">>, rest_handler, #rest_req{
+    %% Remove QoS requirement
+    {<<"/qos_requirements/:qid">>, rest_handler, #rest_req{
         method = 'DELETE',
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
@@ -54,8 +54,8 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get QoS entry
-    {<<"/qos_entry/:qid">>, rest_handler, #rest_req{
+    %% Get QoS requirement
+    {<<"/qos_requirements/:qid">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
@@ -65,7 +65,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Get file QoS summary
+    %% Get QoS summary for file or directory
     {<<"/data/:id/qos_summary">>, rest_handler, #rest_req{
         method = 'GET',
         produces = [<<"application/json">>],

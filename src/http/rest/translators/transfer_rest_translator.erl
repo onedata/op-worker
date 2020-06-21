@@ -32,7 +32,10 @@
 -spec create_response(gri:gri(), middleware:auth_hint(),
     middleware:data_format(), Result :: term() | {gri:gri(), term()} |
     {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
-create_response(#gri{aspect = rerun}, _, value, TransferId) ->
+create_response(#gri{aspect = As}, _, value, TransferId) when
+    As =:= instance;
+    As =:= rerun
+->
     PathTokens = [<<"transfers">>, TransferId],
     ?CREATED_REPLY(PathTokens, #{<<"transferId">> => TransferId}).
 
@@ -46,12 +49,14 @@ create_response(#gri{aspect = rerun}, _, value, TransferId) ->
 get_response(#gri{aspect = instance}, #transfer{
     file_uuid = FileUuid,
     space_id = SpaceId,
+    index_name = ViewName,
+    query_view_params = QueryViewParams,
     user_id = UserId,
     rerun_id = RerunId,
     path = Path,
     replication_status = ReplicationStatus,
     eviction_status = EvictionStatus,
-    evicting_provider = EvictingProvider,
+    evicting_provider = EvictingProviderId,
     replicating_provider = ReplicatingProviderId,
     callback = Callback,
     files_to_process = FilesToProcess,
@@ -68,43 +73,59 @@ get_response(#gri{aspect = instance}, #transfer{
     hr_hist = HrHist,
     dy_hist = DyHist,
     mth_hist = MthHist
-}) ->
+} = Transfer) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    NullableCallback = utils:ensure_defined(Callback, undefined, null),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ReplicationStatusBin = atom_to_binary(ReplicationStatus, utf8),
-    ReplicatingProvider = utils:ensure_defined(
-        ReplicatingProviderId, undefined, null
-    ),
+    DataSourceType = transfer:data_source_type(Transfer),
+    DataSourceTypeDependentInfo = case DataSourceType of
+        file ->
+            #{
+                <<"fileId">> => FileObjectId,
+                % TODO VFS-6365 remove deprecated transfer
+                <<"path">> => Path,
+                <<"filePath">> => Path
+            };
+        view ->
+            #{
+                <<"viewName">> => ViewName,
+                <<"queryViewParams">> => maps:from_list(QueryViewParams)
+            }
+    end,
 
-    ?OK_REPLY(#{
-        <<"fileId">> => FileObjectId,
+    ?OK_REPLY(DataSourceTypeDependentInfo#{
+        <<"type">> => transfer:type(Transfer),
+        <<"dataSourceType">> => DataSourceType,
+
         <<"userId">> => UserId,
-        <<"rerunId">> => utils:ensure_defined(RerunId, undefined, null),
-        <<"path">> => Path,
-        <<"transferStatus">> => ReplicationStatusBin,
-        <<"replicationStatus">> => ReplicationStatusBin,
-        <<"invalidationStatus">> => atom_to_binary(EvictionStatus, utf8),
-        <<"replicaEvictionStatus">> => atom_to_binary(EvictionStatus, utf8),
-        <<"targetProviderId">> => ReplicatingProvider,
-        <<"replicatingProviderId">> => ReplicatingProvider,
-        <<"evictingProviderId">> => utils:ensure_defined(
-            EvictingProvider, undefined, null
-        ),
-        <<"callback">> => NullableCallback,
+        <<"rerunId">> => utils:undefined_to_null(RerunId),
+        <<"spaceId">> => SpaceId,
+        <<"callback">> => utils:undefined_to_null(Callback),
+
+        <<"replicatingProviderId">> => utils:undefined_to_null(ReplicatingProviderId),
+        <<"evictingProviderId">> => utils:undefined_to_null(EvictingProviderId),
+
+        <<"transferStatus">> => transfer:status(Transfer),
+        <<"replicationStatus">> => ReplicationStatus,
+        % TODO VFS-6365 remove deprecated transfer
+        <<"replicaEvictionStatus">> => EvictionStatus,
+        <<"evictionStatus">> => EvictionStatus,
+
         <<"filesToProcess">> => FilesToProcess,
         <<"filesProcessed">> => FilesProcessed,
-        <<"filesTransferred">> => FilesReplicated,
         <<"filesReplicated">> => FilesReplicated,
-        <<"failedFiles">> => FailedFiles,
-        <<"filesInvalidated">> => FilesEvicted,
-        <<"fileReplicasEvicted">> => FilesEvicted,
-        <<"bytesTransferred">> => BytesReplicated,
         <<"bytesReplicated">> => BytesReplicated,
+        % TODO VFS-6365 remove deprecated transfer
+        <<"fileReplicasEvicted">> => FilesEvicted,
+        <<"filesEvicted">> => FilesEvicted,
+        % TODO VFS-6365 remove deprecated transfer
+        <<"failedFiles">> => FailedFiles,
+        <<"failesFailed">> => FailedFiles,
+
         <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,
         <<"finishTime">> => FinishTime,
+
         % It is possible that there is no last update, if 0 bytes were
         % transferred, in this case take the start time.
         <<"lastUpdate">> => lists:max([StartTime | maps:values(LastUpdate)]),

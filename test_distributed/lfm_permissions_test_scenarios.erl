@@ -49,29 +49,6 @@
     end)()
 ).
 
--define(assertNotMatchWithPerms(__Expect, __Expression, __ScenarioName, __PermsPerGuid),
-    (fun() ->
-        try
-            ?assertNotMatch(__Expect, __Expression)
-        catch _:__Reason ->
-            ct:pal(
-                "PERMISSIONS TESTS FAILURE~n"
-                "   Scenario: ~p~n"
-                "   Perms per file: ~p~n"
-                "   Reason: ~p~n",
-                [
-                    __ScenarioName,
-                    maps:fold(fun(Guid, SetPerms, Acc) ->
-                        Acc#{get_file_path(Node, OwnerSessId, Guid) => SetPerms}
-                    end, #{}, __PermsPerGuid),
-                    __Reason
-                ]
-            ),
-            erlang:error(perms_test_failed)
-        end
-    end)()
-).
-
 -define(SCENARIO_NAME(__PREFIX, __TYPE),
     <<__PREFIX, (atom_to_binary(__TYPE, utf8))/binary>>
 ).
@@ -222,13 +199,13 @@ space_privs_test(
         [Node], SpaceId, UserId, privileges:space_admin()
     ),
     ?assertMatch(
-        {error, _},
+        {error, ?EACCES},
         Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
     ),
 
     initializer:testmaster_mock_space_user_privileges([Node], SpaceId, OwnerId, []),
-    ?assertNotMatch(
-        {error, _},
+    ?assertMatch(
+        ok,
         Operation(OwnerSessId, OwnerSessId, RootDirPath, ExtraData)
     );
 
@@ -244,8 +221,8 @@ space_privs_test(
 
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(Node)}}, Config),
     OwnerSessId = ?config({session_id, {OwnerId, ?GET_DOMAIN(Node)}}, Config),
-    ?assertNotMatch(
-        {error, _},
+    ?assertMatch(
+        ok,
         Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
     );
 
@@ -276,8 +253,8 @@ space_privs_test(
     initializer:testmaster_mock_space_user_privileges(
         [Node], SpaceId, UserId, RequiredPrivs
     ),
-    ?assertNotMatch(
-        {error, _},
+    ?assertMatch(
+        ok,
         Operation(OwnerSessId, UserSessId, RootDirPath, ExtraData)
     ).
 
@@ -630,7 +607,7 @@ run_posix_tests(
             % even if all files modes are set to 0
             lfm_permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 0 end, ComplementaryPermsPerFile)),
             ?assertNotMatch(
-                {error, _},
+                {error, ?EACCES},
                 Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
             );
         _ ->
@@ -676,9 +653,11 @@ run_posix_tests(
 ) ->
     lfm_permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 8#777 end, ComplementaryPermsPerFile)),
     ?assertMatch(
-        {error, _},
+        {error, ?ENOENT},
         Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
     ),
+    % Some operations cannot be performed with special session (either root or guest)
+    % and result in eagain error instead of enoent
     ?assertMatch(
         {error, _},
         Operation(OwnerSessId, ?GUEST_SESS_ID, TestCaseRootDirPath, ExtraData)
@@ -690,11 +669,11 @@ run_standard_posix_tests(
     ComplementaryPermsPerFile, AllRequiredPerms, ExtraData, Type
 ) ->
     AllRequiredModes = lists:map(fun({Guid, PosixPerm}) ->
-        {Guid, posix_permission_to_mode(PosixPerm, Type)}
+        {Guid, lfm_permissions_test_utils:posix_perm_to_mode(PosixPerm, Type)}
     end, AllRequiredPerms),
     ComplementaryModesPerFile = maps:map(fun(_, Perms) ->
         lists:foldl(fun(Perm, Acc) ->
-            Acc bor posix_permission_to_mode(Perm, Type)
+            Acc bor lfm_permissions_test_utils:posix_perm_to_mode(Perm, Type)
         end, 0, Perms)
     end, ComplementaryPermsPerFile),
 
@@ -705,7 +684,9 @@ run_standard_posix_tests(
         EaccesModesPerFile = lists:foldl(fun({Guid, Mode}, Acc) ->
             Acc#{Guid => Mode bor maps:get(Guid, Acc)}
         end, ComplementaryModesPerFile, EaccessModeComb),
+
         lfm_permissions_test_utils:set_modes(Node, EaccesModesPerFile),
+
         ?assertMatchWithPerms(
             {error, ?EACCES},
             Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
@@ -718,9 +699,11 @@ run_standard_posix_tests(
     RequiredModesPerFile = lists:foldl(fun({Guid, Mode}, Acc) ->
         Acc#{Guid => Mode bor maps:get(Guid, Acc, 0)}
     end, #{}, RequiredModesComb),
+
     lfm_permissions_test_utils:set_modes(Node, RequiredModesPerFile),
-    ?assertNotMatchWithPerms(
-        {error, _},
+
+    ?assertMatchWithPerms(
+        ok,
         Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
         ScenarioName,
         RequiredModesPerFile
@@ -740,20 +723,6 @@ get_complementary_posix_perms(PosixPermsPerFile)->
             [{FileGuid, Perm} || Perm <- FileRequiredPerms] ++ RequiredPermsAcc
         }
     end, {#{}, []}, PosixPermsPerFile).
-
-
--spec posix_permission_to_mode(PosixPerm :: atom(), Type :: owner | group) ->
-    non_neg_integer().
-posix_permission_to_mode(read, owner)  -> 8#4 bsl 6;
-posix_permission_to_mode(write, owner) -> 8#2 bsl 6;
-posix_permission_to_mode(exec, owner)  -> 8#1 bsl 6;
-posix_permission_to_mode(read, group)  -> 8#4 bsl 3;
-posix_permission_to_mode(write, group) -> 8#2 bsl 3;
-posix_permission_to_mode(exec, group)  -> 8#1 bsl 3;
-posix_permission_to_mode(read, other)  -> 8#4;
-posix_permission_to_mode(write, other) -> 8#2;
-posix_permission_to_mode(exec, other)  -> 8#1;
-posix_permission_to_mode(_, _)         -> 8#0.
 
 
 %%%===================================================================
@@ -849,8 +818,8 @@ run_acl_perms_scenario(
     lfm_permissions_test_utils:set_acls(
         Node, RequiredPermsPerFile, #{}, AceWho, AceFlags
     ),
-    ?assertNotMatchWithPerms(
-        {error, _},
+    ?assertMatchWithPerms(
+        ok,
         Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
         ScenarioName,
         RequiredPermsPerFile
@@ -883,8 +852,8 @@ run_acl_perms_scenario(
     lfm_permissions_test_utils:set_acls(
         Node, #{}, ComplementaryPermsPerFile, AceWho, AceFlags
     ),
-    ?assertNotMatchWithPerms(
-        {error, _},
+    ?assertMatchWithPerms(
+        ok,
         Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData),
         ScenarioName,
         ComplementaryPermsPerFile

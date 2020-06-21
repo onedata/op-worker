@@ -15,6 +15,7 @@
 -include("global_definitions.hrl").
 -include("graph_sync/provider_graph_sync.hrl").
 -include_lib("cluster_worker/include/elements/node_manager/node_manager.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/global_definitions.hrl").
 
@@ -22,11 +23,12 @@
 -export([installed_cluster_generation/0]).
 -export([oldest_known_cluster_generation/0]).
 -export([app_name/0, cm_nodes/0, db_nodes/0]).
--export([listeners/0]).
--export([upgrade_essential_workers/0, custom_workers/0]).
--export([before_init/1]).
+-export([before_init/0]).
+-export([upgrade_essential_workers/0]).
 -export([upgrade_cluster/1]).
--export([on_cluster_ready/0]).
+-export([custom_workers/0]).
+-export([on_db_and_workers_ready/0]).
+-export([listeners/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
 
@@ -37,7 +39,7 @@
 % This can be used to e.g. move models between services.
 % Oldest known generation is the lowest one that can be directly upgraded to newest.
 % Human readable version is included to for logging purposes.
--define(INSTALLED_CLUSTER_GENERATION, 2).
+-define(INSTALLED_CLUSTER_GENERATION, 3).
 -define(OLDEST_KNOWN_CLUSTER_GENERATION, {1, <<"19.02.*">>}).
 
 %%%===================================================================
@@ -92,14 +94,32 @@ db_nodes() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:listeners/0}.
+%% Overrides {@link node_manager_plugin_default:renamed_models/0}.
 %% @end
 %%--------------------------------------------------------------------
--spec listeners() -> Listeners :: [atom()].
-listeners() -> [
-    http_listener,
-    https_listener
-].
+-spec renamed_models() -> #{{record_version(), model()} => model()}.
+renamed_models() ->
+    #{
+        {1, open_file} => file_handles
+    }.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:before_init/0}.
+%% This callback is executed on all cluster nodes.
+%% @end
+%%--------------------------------------------------------------------
+-spec before_init() -> ok | {error, Reason :: term()}.
+before_init() ->
+    try
+        op_worker_sup:start_link(),
+        ok = helpers_nif:init()
+    catch
+        _:Error ->
+            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p",
+                [Error]),
+            {error, cannot_start_node_manager_plugin}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -112,6 +132,21 @@ upgrade_essential_workers() -> filter_disabled_workers([
         {supervisor_flags, gs_worker:supervisor_flags()}
     ]}
 ]).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:upgrade_cluster/1}.
+%% This callback is executed only on one cluster node.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_cluster(node_manager:cluster_generation()) ->
+    {ok, node_manager:cluster_generation()}.
+upgrade_cluster(1) ->
+    await_zone_connection_and_run(fun storage:migrate_to_zone/0),
+    {ok, 2};
+upgrade_cluster(2) ->
+    await_zone_connection_and_run(fun storage:migrate_imported_storages_to_zone/0),
+    {ok, 3}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -144,6 +179,44 @@ custom_workers() -> filter_disabled_workers([
     {qos_worker, []}
 ]).
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:on_db_and_workers_ready/1}.
+%% This callback is executed on all cluster nodes.
+%% @end
+%%--------------------------------------------------------------------
+on_db_and_workers_ready() ->
+    space_unsupport:init_pools(),
+    gs_worker:on_db_and_workers_ready().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:listeners/0}.
+%% @end
+%%--------------------------------------------------------------------
+-spec listeners() -> Listeners :: [atom()].
+listeners() -> [
+    http_listener,
+    https_listener
+].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of modules that register exometer reporters.
+%% @end
+%%--------------------------------------------------------------------
+-spec modules_with_exometer() -> list().
+modules_with_exometer() ->
+    [fslogic_worker, helpers, session, event_stream, event].
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns list of exometer reporters.
+%% @end
+%%--------------------------------------------------------------------
+-spec exometer_reporters() -> list().
+exometer_reporters() -> [].
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -165,69 +238,23 @@ filter_disabled_workers(WorkersSpecs) ->
             not sets:is_element(Worker, DisabledWorkersSet)
     end, WorkersSpecs).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Overrides {@link node_manager_plugin_default:renamed_models/0}.
-%% @end
-%%--------------------------------------------------------------------
--spec renamed_models() -> #{{record_version(), model()} => model()}.
-renamed_models() ->
-    #{
-        {1, open_file} => file_handles
-    }.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Overrides {@link node_manager_plugin_default:before_init/1}.
-%% This callback is executed on all cluster nodes.
-%% @end
-%%--------------------------------------------------------------------
--spec before_init(Args :: term()) -> Result :: ok | {error, Reason :: term()}.
-before_init([]) ->
-    try
-        op_worker_sup:start_link(),
-        ok = helpers_nif:init()
-    catch
-        _:Error ->
-            ?error_stacktrace("Error in node_manager_plugin:before_init: ~p",
-                [Error]),
-            {error, cannot_start_node_manager_plugin}
-    end.
+-define(ZONE_CONNECTION_RETRIES, 180).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Overrides {@link node_manager_plugin_default:upgrade_cluster/1}.
-%% This callback is executed only on one cluster node.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_cluster(node_manager:cluster_generation()) ->
-    {ok, node_manager:cluster_generation()}.
-upgrade_cluster(1) ->
-    storage:migrate_to_zone(),
-    {ok, 2}.
+%% @private
+-spec await_zone_connection_and_run(Fun :: fun(() -> ok)) -> ok.
+await_zone_connection_and_run(Fun) ->
+    ?info("Checking connection to Onezone..."),
+    await_zone_connection_and_run(oneprovider:is_connected_to_oz(), ?ZONE_CONNECTION_RETRIES, Fun).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Overrides {@link node_manager_plugin_default:on_cluster_ready/1}.
-%% This callback is executed on all cluster nodes.
-%% @end
-%%--------------------------------------------------------------------
-on_cluster_ready() ->
-    gs_worker:on_cluster_ready().
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of modules that register exometer reporters.
-%% @end
-%%--------------------------------------------------------------------
--spec modules_with_exometer() -> list().
-modules_with_exometer() ->
-    [fslogic_worker, helpers, session, event_stream, event].
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of exometer reporters.
-%% @end
-%%--------------------------------------------------------------------
--spec exometer_reporters() -> list().
-exometer_reporters() -> [].
+-spec await_zone_connection_and_run(IsConnectedToZone :: boolean(), Retries :: integer(),
+    Fun :: fun(() -> ok)) -> ok.
+await_zone_connection_and_run(false, 0, _) ->
+    ?critical("Could not establish connection to Onezone. Aborting upgrade procedure."),
+    throw(?ERROR_NO_CONNECTION_TO_ONEZONE);
+await_zone_connection_and_run(false, Retries, Fun) ->
+    ?warning("There is no connection to Onezone. Next retry in 10 seconds"),
+    timer:sleep(timer:seconds(10)),
+    await_zone_connection_and_run(oneprovider:is_connected_to_oz(), Retries - 1, Fun);
+await_zone_connection_and_run(true, _, Fun) ->
+    Fun().

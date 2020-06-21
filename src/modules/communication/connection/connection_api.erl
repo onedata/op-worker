@@ -17,7 +17,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([send/2, send/3, send/4, send_via_any/2]).
+-export([send/2, send/3, send/4, send_via_any/3]).
 
 
 %%%===================================================================
@@ -70,15 +70,24 @@ send(SessionId, Msg, ExcludedCons, LogErrors) ->
 
 %%--------------------------------------------------------------------
 %% @doc
+%% TODO VFS-6364 refactor proxy session - session restart should be on this level
 %% Tries to send given message via any of specified connections.
 %% @end
 %%--------------------------------------------------------------------
--spec send_via_any(communicator:message(), [pid()]) -> ok | {error, term()}.
-send_via_any(_Msg, []) ->
+-spec send_via_any(communicator:message(), EffSessId :: session:id(), [pid()]) ->
+    ok | {error, term()}.
+send_via_any(_Msg, EffSessId, []) ->
+    session_manager:maybe_restart_session(EffSessId),
     {error, no_connections};
-send_via_any(Msg, [Conn]) ->
-    connection:send_msg(Conn, Msg);
-send_via_any(Msg, [Conn | Cons]) ->
+send_via_any(Msg, EffSessId, [Conn]) ->
+    case connection:send_msg(Conn, Msg) of
+        {error, no_connection} = Error ->
+            session_manager:maybe_restart_session(EffSessId),
+            Error;
+        Result ->
+            Result
+    end;
+send_via_any(Msg, EffSessId, [Conn | Cons]) ->
     case connection:send_msg(Conn, Msg) of
         ok ->
             ok;
@@ -86,8 +95,11 @@ send_via_any(Msg, [Conn | Cons]) ->
             SerializationError;
         {error, sending_msg_via_wrong_conn_type} = WrongConnError ->
             WrongConnError;
+        {error, no_connection} ->
+            session_manager:maybe_restart_session(EffSessId),
+            send_via_any(Msg, EffSessId, Cons);
         _Error ->
-            send_via_any(Msg, Cons)
+            send_via_any(Msg, EffSessId, Cons)
     end.
 
 
@@ -101,9 +113,9 @@ send_via_any(Msg, [Conn | Cons]) ->
     ExcludedCons :: [pid()]) -> ok | {error, term()}.
 send_msg_excluding_connections(SessionId, Msg, ExcludedCons) ->
     case session_connections:list(SessionId) of
-        {ok, AllCons} ->
+        {ok, EffSessId, AllCons} ->
             Cons = lists_utils:shuffle(AllCons -- ExcludedCons),
-            send_via_any(Msg, Cons);
+            send_via_any(Msg, EffSessId, Cons);
         Error ->
             Error
     end.

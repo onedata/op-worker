@@ -1394,6 +1394,7 @@ remove_share(Config) ->
 share_getattr(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
+    ProviderId = ?GET_DOMAIN_BIN(W),
     OwnerSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
@@ -1405,26 +1406,34 @@ share_getattr(Config) ->
 
     ShareGuid = file_id:guid_to_share_guid(DirGuid, ShareId1),
 
-    ?assertMatch(
+    {ok, #file_attr{uid = Uid, gid = Gid}} = ?assertMatch(
         {ok, #file_attr{
             mode = 8#704,
             name = <<"share_dir2">>,
             type = ?DIRECTORY_TYPE,
             guid = DirGuid,
             parent_uuid = SpaceGuid,
+            owner_id = UserId,
+            provider_id = ProviderId,
             shares = [ShareId2, ShareId1]}
         },
         lfm_proxy:stat(W, OwnerSessId, {guid, DirGuid})
     ),
+    ?assertNotMatch({Uid, Gid}, {?SHARE_UID, ?SHARE_GID}),
+
     lists:foreach(fun(SessId) ->
         ?assertMatch(
             {ok, #file_attr{
-                mode = 8#704,
+                mode = 8#004,                 % only 'other' bits should be shown
                 name = <<"share_dir2">>,
                 type = ?DIRECTORY_TYPE,
                 guid = ShareGuid,
-                parent_uuid = undefined,   % share root should not point to any parent
-                shares = [ShareId1]}       % other shares shouldn't be shown
+                uid = ?SHARE_UID,
+                gid = ?SHARE_GID,
+                parent_uuid = undefined,      % share root should not point to any parent
+                owner_id = <<"unknown">>,
+                provider_id = <<"unknown">>,
+                shares = [ShareId1]}          % other shares shouldn't be shown
             },
             lfm_proxy:stat(W, SessId, {guid, ShareGuid})
         )
@@ -1507,7 +1516,7 @@ share_child_getattr(Config) ->
 
     ?assertMatch(
         {ok, #file_attr{
-            mode = 8#700,
+            mode = 8#000,                   % only 'other' bits should be shown
             name = <<"file">>,
             type = ?REGULAR_FILE_TYPE,
             guid = ShareChildGuid,
@@ -1567,7 +1576,7 @@ share_permission_denied(Config) ->
     DirPath = <<"/space_name1/share_dir8">>,
     {ok, Guid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
 
-    ?assertEqual({error, ?EACCES}, lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, Guid})).
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, Guid})).
 
 storage_file_creation_should_be_delayed_until_open(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),

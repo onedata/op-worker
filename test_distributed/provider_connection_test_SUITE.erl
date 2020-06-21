@@ -344,7 +344,10 @@ session_exists(Provider, SessId) ->
 
 
 list_session_connections(Provider, SessId) ->
-    rpc:call(Provider, session_connections, list, [SessId]).
+    case rpc:call(Provider, session_connections, list, [SessId]) of
+        {ok, _EffSessId, Cons} -> {ok, Cons};
+        Error -> Error
+    end.
 
 
 get_outgoing_connection_manager(Provider, SessId) ->

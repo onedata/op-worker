@@ -116,9 +116,9 @@ check_spaces() ->
             {ok, Spaces} ->
                 lists:foreach(fun(SpaceId) -> check_space(SpaceId) end, Spaces),
                 schedule_spaces_check();
-            {error, ?ERROR_NO_CONNECTION_TO_ONEZONE} ->
+            ?ERROR_NO_CONNECTION_TO_ONEZONE ->
                 ?warning("storage_sync_worker was unable to check spaces due to no connection to oz");
-            {error, ?ERROR_UNREGISTERED_ONEPROVIDER} ->
+            ?ERROR_UNREGISTERED_ONEPROVIDER ->
                 ?warning("storage_sync_worker was unable to check spaces due to unregistered provider");
             {error, _} = Error ->
                 ?error("storage_sync_worker was unable to check spaces due to unexpected ~p", [Error]),

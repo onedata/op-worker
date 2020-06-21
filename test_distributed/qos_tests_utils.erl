@@ -119,7 +119,7 @@ add_qos(Config, #qos_to_add{
     case add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) of
         {ok, RespBody} ->
             DecodedBody = json_utils:decode(RespBody),
-            #{<<"qosEntryId">> := QosEntryId} = ?assertMatch(#{<<"qosEntryId">> := _}, DecodedBody),
+            #{<<"qosRequirementId">> := QosEntryId} = ?assertMatch(#{<<"qosRequirementId">> := _}, DecodedBody),
             {ok, {QosName, QosEntryId}};
         {error, _} = Error -> Error
     end.
@@ -128,7 +128,7 @@ add_qos(Config, #qos_to_add{
 add_qos_by_rest(Config, Worker, FilePath, QosExpression, ReplicasNum) ->
     FileGuid = qos_tests_utils:get_guid(Worker, ?SESS_ID(Config, Worker), FilePath),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    URL = <<"qos_entry">>,
+    URL = <<"qos_requirements">>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID), {<<"Content-type">>, <<"application/json">>}],
     ReqBody = #{
         <<"expression">> => QosExpression,
@@ -241,25 +241,25 @@ wait_for_qos_fulfillment_in_parallel(Config, QosToWaitForList, QosNameIdMapping,
         LookupExpectedQosEntry = lists:filter(fun(Entry) ->
             Entry#expected_qos_entry.qos_name == QosName
         end, ExpectedQosEntries),
-        ExpectedIsPossible = case LookupExpectedQosEntry of
+        ExpectedFulfillmentStatus = case LookupExpectedQosEntry of
             [ExpectedQosEntry] ->
                 case ExpectedQosEntry#expected_qos_entry.possibility_check of
-                    {possible, _} -> true;
-                    {impossible, _} -> false
+                    {possible, _} -> ?FULFILLED;
+                    {impossible, _} -> ?IMPOSSIBLE
                 end;
             [] ->
-                true
+                ?FULFILLED
         end,
 
         % wait for QoS fulfillment on different worker nodes
         utils:pmap(fun(Worker) ->
-            wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, ExpectedIsPossible)
+            wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, ExpectedFulfillmentStatus)
         end, WorkerList)
     end, QosToWaitForList),
 
     ?assert(lists:all(fun(Result) -> Result =:= ok end, lists:flatten(Results))).
 
-wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, ExpectedIsPossible) ->
+wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, ExpectedFulfillmentStatus) ->
     SessId = ?SESS_ID(Config, Worker),
     Fun = fun() ->
         ErrMsg = case rpc:call(Worker, lfm_qos, get_qos_entry, [SessId, QosEntryId]) of
@@ -267,8 +267,8 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
                 possibility_check = PossibilityCheck,
                 traverse_reqs = TraversReqs
             }} ->
-                case ExpectedIsPossible of
-                    true ->
+                case ExpectedFulfillmentStatus of
+                    ?FULFILLED ->
                         str_utils:format(
                             "QoS is not fulfilled while it should be. ~n"
                             "Worker: ~p ~n"
@@ -277,7 +277,7 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
                             "TraverseReqs: ~p ~n",
                             [Worker, QosName, PossibilityCheck, TraversReqs]
                         );
-                    false ->
+                    ?IMPOSSIBLE ->
                         str_utils:format(
                             "QoS is fulfilled while it shouldn't be. ~n"
                             "Worker: ~p ~n"
@@ -286,15 +286,15 @@ wait_for_qos_fulfilment_in_parallel(Config, Worker, QosEntryId, QosName, Expecte
                 end;
             {error, _} = Error ->
                 str_utils:format(
-                    "Error when checking if QoS is fulfilled. ~n"
+                    "Error when checking QoS status. ~n"
                     "Worker: ~p~n"
                     "QosName: ~p~n"
                     "Error: ~p~n", [Worker, QosName, Error]
                 )
         end,
-        {lfm_proxy:check_qos_fulfilled(Worker, SessId, QosEntryId), ErrMsg}
+        {lfm_proxy:check_qos_status(Worker, SessId, QosEntryId), ErrMsg}
     end,
-    assert_match_with_err_msg(Fun, {ok, ExpectedIsPossible}, 3 * ?ATTEMPTS, 1000).
+    assert_match_with_err_msg(Fun, {ok, ExpectedFulfillmentStatus}, 3 * ?ATTEMPTS, 1000).
 
 
 map_qos_names_to_ids(QosNamesList, QosNameIdMapping) ->
@@ -391,7 +391,7 @@ assert_qos_entry_document(Config, Worker, QosEntryId, FileUuid, Expression, Repl
 
 
 get_qos_entry_by_rest(Config, Worker, QosEntryId, SpaceId) ->
-    URL = <<"qos_entry/", QosEntryId/binary>>,
+    URL = <<"qos_requirements/", QosEntryId/binary>>,
     Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
     case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
         {ok, RespBody} ->
@@ -510,7 +510,7 @@ assert_effective_qos(Config, Worker,  FilePath, QosEntries, AssignedEntries, Fil
 
     GetSortedEffectiveQos = fun() ->
         FileGuid = qos_tests_utils:get_guid(Worker, ?SESS_ID(Config, Worker), FilePath),
-        {ok, EffQos} = get_effective_qos_by_rest(Config, Worker, FileGuid),
+        {ok, EffQos} = get_effective_qos_by_lfm(Config, Worker, FileGuid),
         EffQosSorted = sort_effective_qos(EffQos),
         ErrMsg = str_utils:format(
             "Worker: ~p~n"
@@ -524,24 +524,13 @@ assert_effective_qos(Config, Worker,  FilePath, QosEntries, AssignedEntries, Fil
     assert_match_with_err_msg(GetSortedEffectiveQos, ExpectedEffectiveQosSorted, Attempts, 500).
 
 
-get_effective_qos_by_rest(Config, Worker, FileGuid) ->
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-    URL = <<"data/", FileObjectId/binary, "/qos_summary">>,
-    Headers = [?USER_TOKEN_HEADER(Config, ?USER_ID)],
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-    case make_rest_request(Config, Worker, URL, get, Headers, #{}, SpaceId, [?SPACE_VIEW_QOS]) of
-        {ok, RespBody} ->
-            DecodedBody = json_utils:decode(RespBody),
-            #{
-                <<"entries">> := QosEntriesWithStatus,
-                <<"assignedEntries">> := AssignedEntries
-            } = DecodedBody,
-            {ok, #effective_file_qos{
-                assigned_entries = AssignedEntries,
-                qos_entries = maps:keys(QosEntriesWithStatus)
-            }};
-        {error, _} = Error -> Error
-    end.
+get_effective_qos_by_lfm(Config, Worker, FileGuid) ->
+    {ok, {QosEntriesWithStatus, AssignedEntries}} = 
+        lfm_proxy:get_effective_file_qos(Worker, ?SESS_ID(Config, Worker), {guid, FileGuid}),
+    {ok, #effective_file_qos{
+        assigned_entries = AssignedEntries,
+        qos_entries = maps:keys(QosEntriesWithStatus)
+    }}.
 
 
 assert_distribution_in_dir_structure(_, undefined, _) ->
@@ -622,9 +611,13 @@ assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus) ->
 assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus, Attempts) ->
     Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
+    ExpectedStatusMatcher = case ExpectedStatus of
+        {error, _} -> ExpectedStatus;
+        _ -> {ok, ExpectedStatus}
+    end, 
     lists:foreach(fun(Worker) ->
         lists:foreach(fun(Guid) ->
-            ?assertEqual({ok, ExpectedStatus}, lfm_proxy:check_qos_fulfilled(Worker, SessId(Worker), QosList, {guid, Guid}), Attempts)
+            ?assertEqual(ExpectedStatusMatcher, lfm_proxy:check_qos_status(Worker, SessId(Worker), QosList, {guid, Guid}), Attempts)
         end, Guids)
     end, Workers).
 
@@ -677,23 +670,21 @@ assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts, _Sleep) 
                 error(Error)
         end
     catch
-        Error2 ->
-            ct:pal(Error2)
+        Error2:Type->
+            ct:pal("~p:~p", [Error2, Type])
     end;
 
 assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected , Attempts, Sleep) ->
     try
         {ActualVal, _ErrMsg} = GetActualValAndErrMsgFun(),
         case ActualVal of
-            Expected ->
-                ?assertMatch(Expected, ActualVal),
-                ok;
+            Expected -> ok;
             _ ->
                 timer:sleep(Sleep),
                 assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts - 1, Sleep)
         end
     catch
-        _ ->
+        _:_ ->
             timer:sleep(Sleep),
             assert_match_with_err_msg(GetActualValAndErrMsgFun, Expected, Attempts - 1, Sleep)
     end.

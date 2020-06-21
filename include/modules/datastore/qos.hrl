@@ -16,9 +16,7 @@
 -ifndef(QOS_HRL).
 -define(QOS_HRL, 1).
 
-
 -define(QOS_SYNCHRONIZATION_PRIORITY, 224).
-
 
 % macros used for operations on QoS expression
 -define(UNION, <<"|">>).
@@ -32,11 +30,18 @@
 -define(R_PAREN, <<")">>).
 -define(EQUALITY, <<"=">>).
 
+-define(QOS_ANY_STORAGE, <<"anyStorage">>).
 
 % macros used for operations on QoS bounded cache
 -define(CACHE_TABLE_NAME(SpaceId),
     binary_to_atom(<<SpaceId/binary, "_qos_bounded_cache_table">>, utf8)).
 -define(QOS_BOUNDED_CACHE_GROUP, <<"qos_bonded_cache_group">>).
+
+
+% macros with QoS status
+-define(IMPOSSIBLE, impossible).
+-define(PENDING, pending).
+-define(FULFILLED, fulfilled).
 
 
 % Request to remote providers to start QoS traverse.

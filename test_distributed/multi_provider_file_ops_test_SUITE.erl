@@ -63,6 +63,7 @@
     remove_file_on_remote_provider_ceph/1,
     evict_on_ceph/1,
     read_dir_collisions_test/1,
+    check_fs_stats_on_different_providers/1,
     remote_driver_internal_call_test/1
 ]).
 
@@ -93,6 +94,7 @@
     remove_file_on_remote_provider_ceph,
     evict_on_ceph,
     read_dir_collisions_test,
+    check_fs_stats_on_different_providers,
     remote_driver_internal_call_test
 ]).
 
@@ -909,6 +911,86 @@ read_dir_collisions_test(Config0) ->
         {14, 15}, {15, 15}
     ]).
 
+check_fs_stats_on_different_providers(Config) ->
+    [P2, _, P1 | _] = ?config(op_worker_nodes, Config),
+
+    UserId = <<"user3">>,
+    GetSessId = fun(W) -> ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config) end,
+
+    SpaceId = <<"space9">>,
+    SpaceRootDir = <<"/space9/">>,
+
+    % Values set and taken from env_desc.json
+    P1StorageId = <<"cephrados">>,
+    P1SupportSize = 10000,
+    P2StorageId = <<"/mnt/st2">>,
+    P2SupportSize = 50000,
+    ProviderToStorage = #{
+        P1 => {P1StorageId, P1SupportSize},
+        P2 => {P2StorageId, P2SupportSize}
+    },
+
+    % create file on provider1
+    [F1, F2] = Files = lists:map(fun(Node) ->
+        SessId = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(Node)}}, Config),
+        FileName = generator:gen_name(),
+        FilePath = <<SpaceRootDir/binary, FileName/binary>>,
+        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Node, SessId, FilePath, 8#755)),
+        FileGuid
+    end, [P1, P2]),
+
+    AssertEqualFSSTatsFun = fun(Node, Occupied) ->
+        SessId = GetSessId(Node),
+        {StorageId, SupportSize} = maps:get(Node, ProviderToStorage),
+
+        lists:foreach(fun(FileGuid) ->
+            ?assertEqual(
+                {ok, #fs_stats{space_id = SpaceId, storage_stats = [
+                    #storage_stats{
+                        storage_id = StorageId,
+                        size = SupportSize,
+                        occupied = Occupied
+                    }
+                ]}},
+                lfm_proxy:get_fs_stats(Node, SessId, {guid, FileGuid}),
+                ?ATTEMPTS
+            )
+        end, Files)
+    end,
+    WriteToFileFun = fun({Node, FileGuid, Offset, BytesNum}) ->
+        Content = crypto:strong_rand_bytes(BytesNum),
+        {ok, Handle} = lfm_proxy:open(Node, GetSessId(Node), {guid, FileGuid}, write),
+        {ok, _} = lfm_proxy:write(Node, Handle, Offset, Content),
+        ok = lfm_proxy:close(Node, Handle),
+        Content
+    end,
+
+    % Assert empty storages at the beginning of test
+    AssertEqualFSSTatsFun(P1, 0),
+    AssertEqualFSSTatsFun(P2, 0),
+
+    % Write to files and assert that quota was updated
+    lists:foreach(WriteToFileFun, [{P1, F1, 0, 50}, {P2, F2, 0, 80}]),
+    AssertEqualFSSTatsFun(P1, 50),
+    AssertEqualFSSTatsFun(P2, 80),
+
+    % Write to file on P2 and assert that only its quota was updated
+    WrittenContent = WriteToFileFun({P2, F1, 100, 40}),
+    AssertEqualFSSTatsFun(P1, 50),
+    AssertEqualFSSTatsFun(P2, 120),
+
+    % Read file on P1 (force rtransfer) and assert that its quota was updated
+    ExpReadContent = binary:part(WrittenContent, 0, 20),
+    {ok, ReadHandle} = lfm_proxy:open(P1, GetSessId(P1), {guid, F1}, read),
+    ?assertMatch({ok, ExpReadContent}, lfm_proxy:read(P1, ReadHandle, 100, 20), ?ATTEMPTS),
+    ok = lfm_proxy:close(P1, ReadHandle),
+
+    % Quota should be updated not by read 20 bytes but by 40. That is due to
+    % rtransfer fetching larger blocks at once (not only requested bytes)
+    AssertEqualFSSTatsFun(P1, 90),
+    AssertEqualFSSTatsFun(P2, 120).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -1077,6 +1159,9 @@ init_per_testcase(TestCase, Config) when
     TestCase == read_dir_collisions_test
 ->
     init_per_testcase(all, [{?SPACE_ID_KEY, <<"space7">>} | Config]);
+init_per_testcase(check_fs_stats_on_different_providers, Config) ->
+    initializer:unload_quota_mocks(Config),
+    init_per_testcase(all, Config);
 init_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [datastore_doc, datastore_remote_driver], [passthrough]),
@@ -1107,6 +1192,9 @@ end_per_testcase(rtransfer_fetch_test, Config) ->
         ?APP_NAME, rtransfer_min_hole_size, MinHoleSize
     ]),
     end_per_testcase(?DEFAULT_CASE(rtransfer_fetch_test), Config);
+end_per_testcase(check_fs_stats_on_different_providers, Config) ->
+    initializer:disable_quota_limit(Config),
+    end_per_testcase(all, Config);
 end_per_testcase(remote_driver_internal_call_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [datastore_doc, datastore_remote_driver]),
