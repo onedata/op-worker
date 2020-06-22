@@ -38,6 +38,10 @@
 
 -type error() :: {error, Reason :: term()}.
 
+% Macros used when process is waiting for other process to init session
+-define(SESSION_INITIALISATION_CHECK_PERIOD_BASE, 100).
+-define(SESSION_INITIALISATION_RETRIES, 8).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -123,9 +127,7 @@ reuse_or_create_rest_session(Iden = #user_identity{user_id = UserId}, Auth) ->
 reuse_or_create_proxied_session(SessId, ProxyVia, Auth, SessionType) ->
     case user_identity:get_or_fetch(Auth) of
         {ok, #document{value = #user_identity{} = Iden}} ->
-            critical_section:run([?MODULE, SessId], fun() ->
-                reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia)
-            end);
+            reuse_or_create_session(SessId, SessionType, Iden, Auth, ProxyVia);
         Error ->
             Error
     end.
@@ -212,9 +214,7 @@ remove_session(SessId) ->
     session:identity(), session:auth() | undefined) ->
     {ok, SessId :: session:id()} | error().
 reuse_or_create_session(SessId, SessType, Iden, Auth) ->
-    critical_section:run([?MODULE, SessId], fun() ->
-        reuse_or_create_session(SessId, SessType, Iden, Auth, undefined)
-    end).
+    reuse_or_create_session(SessId, SessType, Iden, Auth, undefined).
 
 
 %%%===================================================================
@@ -223,7 +223,8 @@ reuse_or_create_session(SessId, SessType, Iden, Auth) ->
 
 %%--------------------------------------------------------------------
 %% @doc @private
-%% Creates session or if session exists reuses it.
+%% @equiv reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia,
+%%        ?SESSION_INITIALISATION_CHECK_PERIOD_BASE, ?SESSION_INITIALISATION_RETRIES)
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
@@ -231,6 +232,19 @@ reuse_or_create_session(SessId, SessType, Iden, Auth) ->
     ProxyVia :: oneprovider:id() | undefined) ->
     {ok, SessId :: session:id()} | {error, Reason :: term()}.
 reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
+    reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia,
+        ?SESSION_INITIALISATION_CHECK_PERIOD_BASE, ?SESSION_INITIALISATION_RETRIES).
+
+%%--------------------------------------------------------------------
+%% @doc @private
+%% Creates session or if session exists reuses it.
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_session(SessId :: session:id(), SessType :: session:type(),
+    Iden :: session:identity(), Auth :: session:auth() | undefined,
+    ProxyVia :: oneprovider:id() | undefined, non_neg_integer(), non_neg_integer()) ->
+    {ok, SessId :: session:id()} | {error, Reason :: term()}.
+reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia, ErrorSleep, Retries) ->
     Sess = #session{
         type = SessType,
         status = initializing,
@@ -243,6 +257,8 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
             % TODO VFS-5126 - possible race with closing (creation when cleanup
             % is not finished)
             {error, not_found};
+        (#session{status = initializing}) ->
+            {error, initializing};
         (#session{identity = ValidIden} = ExistingSess) ->
             case Iden of
                 ValidIden ->
@@ -261,6 +277,17 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
                 Other ->
                     Other
             end;
+        {error, initializing} = Error ->
+            case Retries of
+                0 ->
+                    % Process that is initializing session probably hangs - return error
+                    Error;
+                _ ->
+                    % Other process is initializing session - wait
+                    timer:sleep(ErrorSleep),
+                    ?debug("Waiting for session ~p init", [SessId]),
+                    reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia, ErrorSleep * 2, Retries - 1)
+            end;
         {error, Reason} ->
             {error, Reason}
     end.
@@ -276,8 +303,19 @@ reuse_or_create_session(SessId, SessType, Iden, Auth, ProxyVia) ->
 start_session(Doc, SessType) ->
     case session:create(Doc) of
         {ok, SessId} ->
-            supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),
-            {ok, SessId};
+            case supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]) of
+                {ok, _} ->
+                    {ok, SessId};
+                {error, already_present} ->
+                    ?warning("Session ~p supervisor already exists", [SessId]),
+                    {ok, SessId};
+                {error, {already_started, _}} ->
+                    ?warning("Session ~p supervisor already exists", [SessId]),
+                    {ok, SessId};
+                Error ->
+                    session:delete_doc(SessId),
+                    Error
+            end;
         Error ->
             Error
     end.
