@@ -30,7 +30,8 @@
                  source_ids := [oneprovider:id()]}.
 -type key() :: datastore:key().
 -type doc() :: datastore:doc().
--type future() :: {ok, clproto_message_id:id()} | {error, term()}.
+-type communicator_ans() :: {ok, clproto_message_id:id()} | {error, term()}.
+-type future() :: {communicator_ans(), session:id()}.
 
 
 %%%===================================================================
@@ -95,12 +96,18 @@ get_async(#{
                     key = Key,
                     routing_key = RoutingKey
                 },
-                communicator:send_to_provider(SessId, Msg, self())
+                SendAns = try
+                    communicator:send_to_provider(SessId, Msg, self(), 1, throw)
+                catch
+                    _:Reason ->
+                        {error, Reason}
+                end,
+                {SendAns, SessId}
         end
     catch
-        _:Reason ->
-            ?error_stacktrace("Datastore remote get failed due to: ~p", [Reason]),
-            {error, not_found}
+        _:Reason2 ->
+            ?error_stacktrace("Datastore remote get failed due to: ~p", [Reason2]),
+            {error, Reason2}
     end.
 
 %%--------------------------------------------------------------------
@@ -109,7 +116,7 @@ get_async(#{
 %% @end
 %%--------------------------------------------------------------------
 -spec wait(future()) -> {ok, doc()} | {error, term()}.
-wait({ok, MsgId}) ->
+wait({{ok, MsgId}, _}) ->
     Timeout = application:get_env(op_worker, datastore_remote_driver_timeout,
         timer:minutes(1)),
     receive
@@ -139,5 +146,12 @@ wait({ok, MsgId}) ->
         % TODO VFS-4025 - multiprovider communication
         Timeout -> {error, timeout}
     end;
-wait({error, Reason}) ->
-    {error, Reason}.
+wait({{error, {badmatch, {error, internal_call}}}, SessId}) ->
+    ?debug("Remote driver internal call"),
+    spawn(fun() ->
+        session_connections:ensure_connected(SessId)
+    end),
+    {error, interrupted_call};
+wait({{error, Reason}, _}) ->
+    ?debug("Remote driver error ~p", [Reason]),
+    {error, interrupted_call}.
