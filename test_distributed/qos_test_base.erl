@@ -81,7 +81,7 @@ simple_key_val_qos_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) ->
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=FR">>],
+                qos_expression = [<<"country=FR">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -104,7 +104,7 @@ qos_with_intersection_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap)
                 worker = WorkerAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
-                expression = <<"type=disk&tier=t2">>,
+                expression = <<"type=disk & tier=t2">>,
                 replicas_num = 1
             }
         ],
@@ -113,7 +113,7 @@ qos_with_intersection_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap)
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=disk">>, <<"tier=t2">>, <<"&">>],
+                qos_expression = [<<"type=disk">>, <<"tier=t2">>, <<"&">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -136,7 +136,7 @@ qos_with_complement_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) -
                 worker = WorkerAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
-                expression = <<"type=disk-country=PT">>,
+                expression = <<"type=disk\\country=PT">>,
                 replicas_num = 1
             }
         ],
@@ -145,7 +145,7 @@ qos_with_complement_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) -
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=disk">>, <<"country=PT">>, <<"-">>],
+                qos_expression = [<<"type=disk">>, <<"country=PT">>, <<"\\">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -177,7 +177,7 @@ qos_with_union_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) ->
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=PL">>, <<"tier=t3">>, <<"|">>],
+                qos_expression = [<<"country=PL">>, <<"tier=t3">>, <<"|">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -209,7 +209,7 @@ qos_with_multiple_replicas_spec(Path, WorkerAddingQos, AssertionWorkers, Provide
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=disk">>],
+                qos_expression = [<<"type=disk">>],
                 replicas_num = 2,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -244,7 +244,7 @@ qos_with_intersection_and_union_spec(Path, WorkerAddingQos, AssertionWorkers, Pr
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=disk">>, <<"tier=t2">>, <<"&">>, <<"country=FR">>, <<"|">>],
+                qos_expression = [<<"type=disk">>, <<"tier=t2">>, <<"&">>, <<"country=FR">>, <<"|">>],
                 replicas_num = 2,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -270,7 +270,7 @@ qos_with_union_and_complement_spec(Path, WorkerAddingQos, AssertionWorkers, Prov
                 worker = WorkerAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
-                expression = <<"country=PL|country=FR-type=tape">>,
+                expression = <<"country=PL|country=FR\\type=tape">>,
                 replicas_num = 1
             }
         ],
@@ -279,7 +279,7 @@ qos_with_union_and_complement_spec(Path, WorkerAddingQos, AssertionWorkers, Prov
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=PL">>, <<"country=FR">>, <<"|">>, <<"type=tape">>, <<"-">>],
+                qos_expression = [<<"country=PL">>, <<"country=FR">>, <<"|">>, <<"type=tape">>, <<"\\">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -302,7 +302,7 @@ qos_with_intersection_and_complement_spec(Path, WorkerAddingQos, AssertionWorker
                 worker = WorkerAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
-                expression = <<"type=disk&param1=val1-country=PL">>,
+                expression = <<"type=disk & param1=val1 \\ country=PL">>,
                 replicas_num = 1
             }
         ],
@@ -311,7 +311,7 @@ qos_with_intersection_and_complement_spec(Path, WorkerAddingQos, AssertionWorker
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=disk">>, <<"param1=val1">>, <<"&">>, <<"country=PL">>, <<"-">>],
+                qos_expression = [<<"type=disk">>, <<"param1=val1">>, <<"&">>, <<"country=PL">>, <<"\\">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -334,7 +334,7 @@ qos_with_multiple_replicas_and_union_spec(Path, WorkerAddingQos, AssertionWorker
                 worker = WorkerAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
-                expression = <<"country=PL|country=FR|country=PT">>,
+                expression = <<"country=PL | country=FR | country=PT">>,
                 replicas_num = 3
             }
         ],
@@ -343,7 +343,7 @@ qos_with_multiple_replicas_and_union_spec(Path, WorkerAddingQos, AssertionWorker
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=PL">>, <<"country=FR">>, <<"|">>, <<"country=PT">>, <<"|">>],
+                qos_expression = [<<"country=PL">>, <<"country=FR">>, <<"|">>, <<"country=PT">>, <<"|">>],
                 replicas_num = 3,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -379,7 +379,7 @@ key_val_qos_that_cannot_be_fulfilled_spec(Path, WorkerAddingQos, AssertionWorker
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=IT">>],
+                qos_expression = [<<"country=IT">>],
                 replicas_num = 1,
                 possibility_check = {impossible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -402,7 +402,7 @@ qos_that_cannot_be_fulfilled_spec(Path, WorkerAddingQos, AssertionWorkers, _Prov
                 worker = WorkerAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
-                expression = <<"country=PL|country=PT-type=disk">>,
+                expression = <<"country=PL|country=PT\\type=disk">>,
                 replicas_num = 1
             }
         ],
@@ -411,7 +411,7 @@ qos_that_cannot_be_fulfilled_spec(Path, WorkerAddingQos, AssertionWorkers, _Prov
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=PL">>, <<"country=PT">>, <<"|">>, <<"type=disk">>, <<"-">>],
+                qos_expression = [<<"country=PL">>, <<"country=PT">>, <<"|">>, <<"type=disk">>, <<"\\">>],
                 replicas_num = 1,
                 possibility_check = {impossible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -434,7 +434,7 @@ qos_with_parens_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) ->
                 worker = WorkerAddingQos,
                 path = Path,
                 qos_name = ?QOS1,
-                expression = <<"country=PL|(country=PT-type=disk)">>,
+                expression = <<"country=PL | (country=PT \\ type=disk)">>,
                 replicas_num = 1
             }
         ],
@@ -443,7 +443,7 @@ qos_with_parens_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) ->
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=PL">>, <<"country=PT">>, <<"type=disk">>, <<"-">>, <<"|">>],
+                qos_expression = [<<"country=PL">>, <<"country=PT">>, <<"type=disk">>, <<"\\">>, <<"|">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
 
@@ -498,7 +498,7 @@ multi_qos_resulting_in_different_storages_spec(
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=disk">>, <<"tier=t2">>, <<"&">>],
+                qos_expression = [<<"type=disk">>, <<"tier=t2">>, <<"&">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos1)}
             },
@@ -506,7 +506,7 @@ multi_qos_resulting_in_different_storages_spec(
                 workers = AssertionWorkers,
                 qos_name = ?QOS2,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=FR">>],
+                qos_expression = [<<"country=FR">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos2)}
             }
@@ -557,7 +557,7 @@ multi_qos_resulting_in_the_same_storages_spec(
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=tape">>],
+                qos_expression = [<<"type=tape">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos1)}
             },
@@ -565,7 +565,7 @@ multi_qos_resulting_in_the_same_storages_spec(
                 workers = AssertionWorkers,
                 qos_name = ?QOS2,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=FR">>],
+                qos_expression = [<<"country=FR">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos2)}
             }
@@ -622,7 +622,7 @@ same_qos_multiple_times_spec(
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=tape">>],
+                qos_expression = [<<"type=tape">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos1)}
             },
@@ -630,7 +630,7 @@ same_qos_multiple_times_spec(
                 workers = AssertionWorkers,
                 qos_name = ?QOS2,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=tape">>],
+                qos_expression = [<<"type=tape">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos2)}
             },
@@ -638,7 +638,7 @@ same_qos_multiple_times_spec(
                 workers = AssertionWorkers,
                 qos_name = ?QOS3,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=tape">>],
+                qos_expression = [<<"type=tape">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos3)}
             }
@@ -671,7 +671,7 @@ contrary_qos_spec(Path, [WorkerAddingQos1, WorkerAddingQos2], AssertionWorkers, 
                 worker = WorkerAddingQos2,
                 path = Path,
                 qos_name = ?QOS2,
-                expression = <<"type=tape-country=PL">>,
+                expression = <<"type=tape \\ country=PL">>,
                 replicas_num = 1
             }
         ],
@@ -680,7 +680,7 @@ contrary_qos_spec(Path, [WorkerAddingQos1, WorkerAddingQos2], AssertionWorkers, 
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=PL">>],
+                qos_expression = [<<"country=PL">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos1)}
             },
@@ -688,7 +688,7 @@ contrary_qos_spec(Path, [WorkerAddingQos1, WorkerAddingQos2], AssertionWorkers, 
                 workers = AssertionWorkers,
                 qos_name = ?QOS2,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=tape">>, <<"country=PL">>, <<"-">>],
+                qos_expression = [<<"type=tape">>, <<"country=PL">>, <<"\\">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos2)}
             }
@@ -739,7 +739,7 @@ multi_qos_where_one_cannot_be_satisfied_spec(
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=FR">>],
+                qos_expression = [<<"country=FR">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos1)}
             },
@@ -747,7 +747,7 @@ multi_qos_where_one_cannot_be_satisfied_spec(
                 workers = AssertionWorkers,
                 qos_name = ?QOS2,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"country=IT">>],
+                qos_expression = [<<"country=IT">>],
                 replicas_num = 1,
                 possibility_check = {impossible, ?GET_DOMAIN_BIN(WorkerAddingQos2)}
             }
@@ -795,7 +795,7 @@ multi_qos_that_overlaps_spec(
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"type=disk">>],
+                qos_expression = [<<"type=disk">>],
                 replicas_num = 2,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos1)}
             },
@@ -803,7 +803,7 @@ multi_qos_that_overlaps_spec(
                 workers = AssertionWorkers,
                 qos_name = ?QOS2,
                 file_key = {path, Path},
-                qos_expression_in_rpn = [<<"tier=t2">>],
+                qos_expression = [<<"tier=t2">>],
                 replicas_num = 2,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos2)}
             }
@@ -843,7 +843,7 @@ effective_qos_for_file_in_directory_spec(DirPath, FilePath, WorkerAddingQos, Ass
             #expected_qos_entry{
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
-                qos_expression_in_rpn = [<<"country=FR">>],
+                qos_expression = [<<"country=FR">>],
                 replicas_num = 1,
                 file_key = {path, DirPath},
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
@@ -900,7 +900,7 @@ effective_qos_for_file_in_nested_directories_spec(
             #expected_qos_entry{
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
-                qos_expression_in_rpn = [<<"country=PL">>],
+                qos_expression = [<<"country=PL">>],
                 replicas_num = 1,
                 file_key = {path, Dir1Path},
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos1)}
@@ -908,7 +908,7 @@ effective_qos_for_file_in_nested_directories_spec(
             #expected_qos_entry{
                 workers = AssertionWorkers,
                 qos_name = ?QOS2,
-                qos_expression_in_rpn = [<<"country=FR">>],
+                qos_expression = [<<"country=FR">>],
                 replicas_num = 1,
                 file_key = {path, Dir2Path},
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos2)}
@@ -916,7 +916,7 @@ effective_qos_for_file_in_nested_directories_spec(
             #expected_qos_entry{
                 workers = AssertionWorkers,
                 qos_name = ?QOS3,
-                qos_expression_in_rpn = [<<"country=PT">>],
+                qos_expression = [<<"country=PT">>],
                 replicas_num = 1,
                 file_key = {path, Dir3Path},
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos3)}
@@ -984,7 +984,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure_spec(
             #expected_qos_entry{
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
-                qos_expression_in_rpn = [<<"country=PL">>],
+                qos_expression = [<<"country=PL">>],
                 replicas_num = 1,
                 file_key = {path, Dir1Path},
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos1)}
@@ -992,7 +992,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure_spec(
             #expected_qos_entry{
                 workers = AssertionWorkers,
                 qos_name = ?QOS2,
-                qos_expression_in_rpn = [<<"country=FR">>],
+                qos_expression = [<<"country=FR">>],
                 replicas_num = 1,
                 file_key = {path, Dir2Path},
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos2)}
@@ -1000,7 +1000,7 @@ effective_qos_for_files_in_different_directories_of_tree_structure_spec(
             #expected_qos_entry{
                 workers = AssertionWorkers,
                 qos_name = ?QOS3,
-                qos_expression_in_rpn = [<<"country=PT">>],
+                qos_expression = [<<"country=PT">>],
                 replicas_num = 1,
                 file_key = {path, Dir3Path},
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos3)}
@@ -1296,7 +1296,7 @@ prepare_qos_status_test_env(Config, DirStructure, SpaceId, Name) ->
                 workers = Workers,
                 qos_name = ?QOS1,
                 file_key = {path, QosRootFilePath},
-                qos_expression_in_rpn = [<<"country=PT">>],
+                qos_expression = [<<"country=PT">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(Worker1)}
             }

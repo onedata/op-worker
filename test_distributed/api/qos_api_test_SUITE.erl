@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This file contains tests concerning OqS basic API (REST + gs).
+%%% This file contains tests concerning QoS basic API (REST + gs).
 %%% @end
 %%%--------------------------------------------------------------------
 -module(qos_api_test_SUITE).
@@ -65,22 +65,14 @@ create_qos_test(Config) ->
         optional = [<<"replicasNum">>],
         correct_values = #{
             <<"expression">> => [
-                <<"key=value">>,
-                <<"key=value | anotherKey=anotherValue">>,
-                <<"key=value & anotherKey=anotherValue">>,
-                <<"key=value - anotherKey=anotherValue">>,
-                <<"(key=value - anotherKey=anotherValue)">>,
-                <<"(key=value - anotherKey=anotherValue) | a=b">>,
-                <<"anyStorage">>
+                % no need to test more correct values as they are checked in unit tests 
+                <<"key=value">>
             ],
             <<"fileId">> => [objectId],
             <<"replicasNum">> => [rand:uniform(10)]
         },
         bad_values = [
             {<<"expression">>, <<"aaa">>, ?ERROR_INVALID_QOS_EXPRESSION},
-            {<<"expression">>, <<"key | value">>, ?ERROR_INVALID_QOS_EXPRESSION},
-            {<<"expression">>, <<"(key = value">>, ?ERROR_INVALID_QOS_EXPRESSION},
-            {<<"expression">>, <<"key = value)">>, ?ERROR_INVALID_QOS_EXPRESSION},
             {<<"fileId">>, <<"gibberish">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"fileId">>)},
             {<<"replicasNum">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"replicasNum">>)},
             {<<"replicasNum">>, 0, ?ERROR_BAD_VALUE_TOO_LOW(<<"replicasNum">>, 1)}
@@ -198,8 +190,8 @@ get_qos_summary_test(Config) ->
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, DirGuid} = api_test_utils:create_file(<<"dir">>, P1, SessIdP1, FilePath),
     {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, filename:join(FilePath, ?RANDOM_FILE_NAME())),
-    {ok, QosEntryIdInherited} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, DirGuid}, [<<"key=value">>], 8),
-    {ok, QosEntryIdDirect} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, Guid}, [<<"key=value">>], 3),
+    {ok, QosEntryIdInherited} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, DirGuid}, <<"key=value">>, 8),
+    {ok, QosEntryIdDirect} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, Guid}, <<"key=value">>, 3),
     % wait for qos entries to be dbsynced to other provider
     ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryIdInherited), 20),
     ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryIdDirect), 20),
@@ -245,15 +237,15 @@ setup_fun(EnvRef, Config, Guid) ->
         SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
         SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
         ReplicasNum = rand:uniform(10),
-        ExpressionRpn = [<<"key=value">>, <<"a=b">>, <<"&">>],
-        {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, Guid}, ExpressionRpn, ReplicasNum),
+        Expression = <<"key=value & a=b">>,
+        {ok, QosEntryId} = lfm_proxy:add_qos_entry(P1, SessIdP1, {guid, Guid}, Expression, ReplicasNum),
         % wait for qos entry to be dbsynced to other provider
         ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
 
         api_test_env:set(EnvRef, guid, Guid),
         api_test_env:set(EnvRef, qos, QosEntryId),
         api_test_env:set(EnvRef, replicas_num, ReplicasNum),
-        api_test_env:set(EnvRef, expression_rpn, ExpressionRpn)
+        api_test_env:set(EnvRef, expression, Expression)
     end.
 
 
@@ -345,12 +337,14 @@ validate_result_fun_rest(EnvRef, get) ->
         Guid = api_test_env:get(EnvRef, guid),
         QosEntryId = api_test_env:get(EnvRef, qos),
         ReplicasNum = api_test_env:get(EnvRef, replicas_num),
-        ExpressionRpn = api_test_env:get(EnvRef, expression_rpn),
+        Expression = api_test_env:get(EnvRef, expression),
 
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+        ReceivedExpression = maps:get(<<"expression">>, RespBody),
         ?assertEqual(?HTTP_200_OK, RespCode),
         ?assertEqual(ObjectId, maps:get(<<"fileId">>, RespBody)),
-        ?assertEqual(qos_expression:rpn_to_infix(ExpressionRpn), {ok, maps:get(<<"expression">>, RespBody)}),
+        % Because of unambiguity of parenthesis and whitespaces check that received expression is equivalent
+        ?assertEqual(qos_expression:parse(Expression), qos_expression:parse(ReceivedExpression)),
         ?assertEqual(ReplicasNum, maps:get(<<"replicasNum">>, RespBody)),
         ?assertEqual(QosEntryId, maps:get(<<"qosRequirementId">>, RespBody)),
         ok
@@ -383,8 +377,9 @@ validate_result_fun_gs(EnvRef, get) ->
         Guid = api_test_env:get(EnvRef, guid),
         QosEntryId = api_test_env:get(EnvRef, qos),
         ReplicasNum = api_test_env:get(EnvRef, replicas_num),
-        ExpressionRpn = api_test_env:get(EnvRef, expression_rpn),
-
+        Expression = api_test_env:get(EnvRef, expression),
+    
+        ExpressionRpn = qos_expression:expression_to_rpn(qos_expression:parse(Expression)),
         ?assertMatch(#gri{type = op_file, id = Guid}, gri:deserialize(maps:get(<<"file">>, Result))),
         ?assertEqual(ExpressionRpn, maps:get(<<"expressionRpn">>, Result)),
         ?assertEqual(ReplicasNum, maps:get(<<"replicasNum">>, Result)),
@@ -422,11 +417,11 @@ verify_fun(EnvRef, Config, create) ->
             Uuid = file_id:guid_to_uuid(Guid),
             ReplicasNum = maps:get(<<"replicasNum">>, Data, 1),
             Expression = maps:get(<<"expression">>, Data),
-            ExpressionRpn = qos_expression:ensure_rpn(Expression),
+            ExpressionTree = qos_expression:parse(Expression),
             {ok, EntryP2} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
             {ok, EntryP1} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
             ?assertEqual(EntryP1#qos_entry{traverse_reqs = #{}}, EntryP2#qos_entry{traverse_reqs = #{}}),
-            ?assertMatch(#qos_entry{file_uuid = Uuid, expression = ExpressionRpn, replicas_num = ReplicasNum}, EntryP1),
+            ?assertMatch(#qos_entry{file_uuid = Uuid, expression = ExpressionTree, replicas_num = ReplicasNum}, EntryP1),
             true;
         (expected_failure, _) ->
             Guid = api_test_env:get(EnvRef, guid),
