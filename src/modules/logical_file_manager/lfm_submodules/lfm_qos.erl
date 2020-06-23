@@ -30,13 +30,15 @@
 %% Adds new qos_entry for file or directory, returns qos_entry ID.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry(session:id(), lfm:file_key(), qos_expression:rpn(),
+-spec add_qos_entry(session:id(), lfm:file_key(), qos_expression:infix() | qos_entry:expression(),
     qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | lfm:error_reply().
-add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) ->
+add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) when is_binary(Expression) ->
+    add_qos_entry(SessId, FileKey, qos_expression:parse(Expression), ReplicasNum, EntryType);
+add_qos_entry(SessId, FileKey, Expression, ReplicasNum, EntryType) ->
     {guid, Guid} = guid_utils:ensure_guid(SessId, FileKey),
     remote_utils:call_fslogic(SessId, provider_request, Guid,
         #add_qos_entry{
-            expression = ExpressionInRpn, 
+            expression = Expression, 
             replicas_num = ReplicasNum, 
             entry_type = EntryType
         },

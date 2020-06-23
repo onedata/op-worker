@@ -19,16 +19,11 @@
 -define(QOS_SYNCHRONIZATION_PRIORITY, 224).
 
 % macros used for operations on QoS expression
--define(UNION, <<"|">>).
--define(INTERSECTION, <<"&">>).
-% TODO: VFS-5712 for now used "-" instead of "\" as backslash is an escape character,
-% have to discuss that
--define(COMPLEMENT, <<"-">>).
--define(OPERATORS, [?UNION, ?INTERSECTION, ?COMPLEMENT]).
+-define(OPERATORS, [<<"|">>, <<"&">>, <<"\\">>]).
+-define(COMPARATORS, [<<"=">>, <<"<">>, <<">">>, <<">=">>, <<"<=">>]).
 
 -define(L_PAREN, <<"(">>).
 -define(R_PAREN, <<")">>).
--define(EQUALITY, <<"=">>).
 
 -define(QOS_ANY_STORAGE, <<"anyStorage">>).
 

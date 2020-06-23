@@ -24,6 +24,7 @@
     handle_qos_entry_change/2,
     handle_entry_delete/1,
     reconcile_qos/1, reconcile_qos/2,
+    calculate_assigned_storages/3,
     reevaluate_all_impossible_qos_in_space/1
 ]).
 
@@ -106,6 +107,24 @@ reconcile_qos(FileUuid, SpaceId) ->
     reconcile_qos(FileCtx).
 
 
+-spec calculate_assigned_storages(od_space:id(), qos_entry:expression(), qos_entry:replicas_num()) ->
+    {true, [storage:id()]} | false.
+calculate_assigned_storages(SpaceId, QosExpression, ReplicasNum) ->
+    {ok, SpaceStorages} = space_logic:get_all_storage_ids(SpaceId),
+    AllStoragesWithParams = lists:foldl(fun(StorageId, Acc) ->
+        Acc#{StorageId => storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId)}
+    end, #{}, SpaceStorages),
+    
+    MatchingStorages = qos_expression:filter(QosExpression, AllStoragesWithParams),
+    CalculatedStorages = lists_utils:random_sublist(MatchingStorages, ReplicasNum, ReplicasNum),
+    case CalculatedStorages of
+        L when length(L) == ReplicasNum ->
+            {true, CalculatedStorages};
+        _ ->
+            false
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% For each impossible QoS entry in given space recalculates target storages
@@ -134,20 +153,17 @@ reevaluate_qos(#document{key = QosEntryId} = QosEntryDoc) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    case qos_expression:calculate_assigned_storages(FileCtx, QosExpression, ReplicasNum) of
+    case calculate_assigned_storages(SpaceId, QosExpression, ReplicasNum) of
         {true, StoragesList} ->
             AllTraverseReqs = qos_traverse_req:build_traverse_reqs(
                 file_ctx:get_uuid_const(FileCtx), StoragesList
             ),
             qos_entry:mark_possible(QosEntryId, SpaceId, AllTraverseReqs),
-            % No need to invalidate QoS cache here; it is invalidated by each provider
-            % that should start traverse task (see qos_traverse_req:start_traverse)
             qos_traverse_req:start_applicable_traverses(
                 QosEntryId, SpaceId, AllTraverseReqs
             );
         false -> ok
     end;
-
 reevaluate_qos(QosEntryId) when is_binary(QosEntryId) ->
     {ok, QosEntryDoc} = qos_entry:get(QosEntryId),
     reevaluate_qos(QosEntryDoc).

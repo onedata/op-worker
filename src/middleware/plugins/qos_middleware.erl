@@ -59,8 +59,8 @@ operation_supported(_, _, _) -> false.
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
-        <<"expression">> => {any, 
-            fun(Expression) -> {true, qos_expression:ensure_rpn(Expression)} end},
+        <<"expression">> => {binary, 
+            fun(Expression) -> {true, qos_expression:parse(Expression)} end},
         <<"fileId">> => {binary, 
             fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)} end}
     },
@@ -164,12 +164,12 @@ validate(#op_req{operation = delete, gri = #gri{
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     SessionId = Auth#auth.session_id,
-    ExpressionInRpn = maps:get(<<"expression">>, Req#op_req.data),
+    ExpressionTree = maps:get(<<"expression">>, Req#op_req.data),
     ReplicasNum = maps:get(<<"replicasNum">>, Req#op_req.data, 1),
     FileGuid = maps:get(<<"fileId">>, Req#op_req.data),
     SpaceId = file_id:guid_to_space_id(FileGuid),
 
-    case lfm:add_qos_entry(SessionId, {guid, FileGuid}, ExpressionInRpn, ReplicasNum) of
+    case lfm:add_qos_entry(SessionId, {guid, FileGuid}, ExpressionTree, ReplicasNum) of
         {ok, QosEntryId} ->
             {ok, QosEntry} = ?check(lfm:get_qos_entry(SessionId, QosEntryId)),
             Status = case qos_entry:is_possible(QosEntry) of
@@ -177,8 +177,6 @@ create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
                 false -> ?IMPOSSIBLE
             end,
             {ok, resource, {GRI#gri{id = QosEntryId}, entry_to_details(QosEntry, Status, SpaceId)}};
-        ?ERROR_INVALID_QOS_EXPRESSION ->
-            ?ERROR_INVALID_QOS_EXPRESSION;
         {error, Errno} ->
             ?ERROR_POSIX(Errno)
     end.
@@ -234,13 +232,13 @@ fetch_qos_entry(_Auth, QosEntryId) ->
 %% @private
 -spec entry_to_details(qos_entry:record(), qos_status:summary(), od_space:id()) -> map().
 entry_to_details(QosEntry, Status, SpaceId) ->
-    {ok, ExpressionInRpn} = qos_entry:get_expression(QosEntry),
+    {ok, Expression} = qos_entry:get_expression(QosEntry),
     {ok, ReplicasNum} = qos_entry:get_replicas_num(QosEntry),
     {ok, QosRootFileUuid} = qos_entry:get_file_uuid(QosEntry),
     QosRootFileGuid = file_id:pack_guid(QosRootFileUuid, SpaceId),
     {ok, QosRootFileObjectId} = file_id:guid_to_objectid(QosRootFileGuid),
     #{
-        <<"expressionRpn">> => ExpressionInRpn,
+        <<"expressionRpn">> => qos_expression:expression_to_rpn(Expression),
         <<"replicasNum">> => ReplicasNum,
         <<"fileId">> => QosRootFileObjectId,
         <<"status">> => Status

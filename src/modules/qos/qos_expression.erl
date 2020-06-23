@@ -1,277 +1,164 @@
 %%%--------------------------------------------------------------------
-%%% @author Michal Cwiertnia
-%%% @copyright (C) 2019 ACK CYFRONET AGH
+%%% @author Michal Stanisz
+%%% @copyright (C) 2020 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains functions operating on QoS expressions.
+%%% This module contains functions operating on QoS expression. 
 %%% @end
 %%%--------------------------------------------------------------------
 -module(qos_expression).
--author("Michal Cwiertnia").
+-author("Michal Stanisz").
 
--include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/qos.hrl").
--include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([rpn_to_infix/1]).
--export([ensure_rpn/1]).
--export([calculate_assigned_storages/3]).
+-export([parse/1, filter/2, expression_to_rpn/1, rpn_to_expression/1, rpn_to_infix/1]).
+-export([to_json/1, from_json/1]).
 
--ifdef(TEST).
--export([infix_to_rpn/1]).
--endif.
-
+-type operator() :: binary(). % all possible listed in macro ?OPERATORS in qos.hrl
+-type comparator() :: binary(). % all possible listed in macro ?COMPARATORS in qos.hrl
+-type expr_token() :: binary().
 
 % The infix type stores expression as single binary. It is used to store input
-% from user. In the process of adding new qos_entry infix expression is
-% parsed to rpn form (list of "key=value" binaries separated by operators)
--type infix() :: binary(). % e.g. <<"country=FR&type=disk">>
--type rpn() :: [binary()]. % e.g. [<<"country=FR">>, <<"type=disk">>, <<"&">>]
+% from user. In the process of adding new qos_entry infix expression is parsed to tree form.
+% Infix: <<"country=FR & type=disk">>
+% RPN: [<<"country">>, <<"FR">>, <<"=">>, <<"type">>, <<"disk">>, <<"=">>, <<"&">>]
+% Tree: {<<"&">>, {<<"=">>, <<"country">>, <<"FR">>}, {<<"=">>, <<"type">>, <<"disk">>}}
+-type infix() :: binary(). 
+-type rpn() :: [expr_token()].
+-type tree() :: 
+    {operator(), tree(), tree()} | 
+    {comparator(), expr_token(), expr_token() | integer()} | 
+    expr_token(). % <<"anyStorage">>
 
--export_type([rpn/0]).
+-opaque expression() :: tree().
 
--type operator_stack() :: [operator_or_paren()].
--type operator_or_paren() :: operator() | paren().
--type paren() :: binary().
--type operator() :: binary().
--type expr_token() :: operator() | binary().
--type storages_with_params() :: #{storage:id() => storage:qos_parameters()}.
+-export_type([expression/0, infix/0]).
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-
--spec rpn_to_infix(rpn()) -> {ok, infix()}.
-rpn_to_infix(RPNExpression) ->
-    rpn_to_infix(RPNExpression, []).
-
-
--spec ensure_rpn(infix() | rpn() | any()) -> rpn() | no_return().
-ensure_rpn(Expression) when is_binary(Expression) ->
-    {ok, ExpressionInRpn} = infix_to_rpn(Expression),
-    ExpressionInRpn;
-ensure_rpn(ExpressionList) when is_list(ExpressionList) ->
-    case lists:all(fun is_binary/1 , ExpressionList) of
-        true -> ExpressionList;
-        false -> throw(?ERROR_INVALID_QOS_EXPRESSION)
-    end;
-ensure_rpn(_) ->
-    throw(?ERROR_INVALID_QOS_EXPRESSION).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Calculate list of storages, on which file should be present according to
-%% given QoS expression and number of replicas.
-%% @end
-%%--------------------------------------------------------------------
--spec calculate_assigned_storages(file_ctx:ctx(), rpn(), qos_entry:replicas_num()) ->
-    {true, [storage:id()]} | false | {error, term()}.
-calculate_assigned_storages(FileCtx, ExpressionInRpn, ReplicasNum) ->
-    % TODO: VFS-5574 add check if storage has enough free space
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    {ok, SpaceStorages} = space_logic:get_all_storage_ids(SpaceId),
-
-    AllStoragesWithParams = lists:foldl(fun(StorageId, Acc) ->
-        Acc#{StorageId => storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId)}
-    end, #{}, SpaceStorages),
-
+-spec parse(infix()) -> expression() | no_return().
+parse(InfixExpression) ->
     try
-        EligibleStorages = filter_storages(AllStoragesWithParams, ExpressionInRpn),
-        choose_storages(EligibleStorages, ReplicasNum)
-    catch
-        throw:?ERROR_INVALID_QOS_EXPRESSION ->
-            ?ERROR_INVALID_QOS_EXPRESSION
+        {ok, Tokens, _} = qos_expression_scanner:string(binary_to_list(InfixExpression)),
+        {ok, Tree} = qos_expression_parser:parse(Tokens),
+        Tree
+    catch _:_ ->
+        throw(?ERROR_INVALID_QOS_EXPRESSION)
     end.
 
+
+-spec filter(expression(), #{storage:id() => storage:qos_parameters()}) -> [storage:id()].
+filter(?QOS_ANY_STORAGE, SM) ->
+    maps:keys(SM);
+filter({<<"|">>, Expr1, Expr2}, SM) ->
+    lists_utils:union(filter(Expr1, SM), filter(Expr2, SM));
+filter({<<"&">>, Expr1, Expr2}, SM) ->
+    lists_utils:intersect(filter(Expr1, SM), filter(Expr2, SM));
+filter({<<"\\">>, Expr1, Expr2}, SM) ->
+    lists_utils:subtract(filter(Expr1, SM), filter(Expr2, SM));
+filter({Comparator, ExprKey, ExprValue}, SM) ->
+    maps:keys(maps:filter(fun(_StorageId, StorageParams) ->
+        case maps:get(ExprKey, StorageParams, undefined) of
+            undefined -> false;
+            StorageValue -> compare(Comparator, StorageValue, ExprValue)
+        end
+    end, SM)).
+
+
+-spec expression_to_rpn(expression()) -> rpn().
+expression_to_rpn(?QOS_ANY_STORAGE) ->
+    [?QOS_ANY_STORAGE];
+expression_to_rpn({Op, Expr1, Expr2}) when is_binary(Expr1) and is_binary(Expr2) -> 
+    [Expr1, Expr2, Op];
+expression_to_rpn({Op, Expr1, Expr2}) when is_binary(Expr1) and is_integer(Expr2) ->
+    [Expr1, Expr2, Op];
+expression_to_rpn({Op, Expr1, Expr2}) ->
+    expression_to_rpn(Expr1) ++ expression_to_rpn(Expr2) ++ [Op].
+
+
+-spec rpn_to_infix(rpn()) -> infix().
+rpn_to_infix(ExpressionRpn) -> 
+    rpn_to_infix(ExpressionRpn, []).
+
+
+-spec rpn_to_expression(rpn()) -> expression().
+rpn_to_expression(RpnExpression) ->
+    rpn_to_expression(RpnExpression, []).
+
+
+-spec to_json(expression()) -> json_utils:json_term().
+to_json(?QOS_ANY_STORAGE) ->
+    ?QOS_ANY_STORAGE;
+to_json({Comparator, Expr1, Expr2}) when is_binary(Expr1) ->
+    [Comparator, Expr1, Expr2];
+to_json({Operator, Expr1, Expr2}) ->
+    [Operator, to_json(Expr1), to_json(Expr2)].
+
+
+-spec from_json(json_utils:json_term()) -> expression().
+from_json(?QOS_ANY_STORAGE) ->  
+    ?QOS_ANY_STORAGE;
+from_json([Comparator, Expr1, Expr2]) when is_binary(Expr1) -> 
+    {Comparator, Expr1, Expr2};
+from_json([Operator, Expr1, Expr2]) ->
+    {Operator, from_json(Expr1), from_json(Expr2)}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 %% @private
--spec infix_to_rpn(infix()) -> {ok, rpn()}.
-infix_to_rpn(Expression) ->
-    OperatorsBin = <<?UNION/binary, ?INTERSECTION/binary, ?COMPLEMENT/binary>>,
-    ParensBin = <<?L_PAREN/binary, ?R_PAREN/binary>>,
-    NormalizedExpression = re:replace(Expression, "\s", "", [global, {return, binary}]),
-    Tokens = re:split(NormalizedExpression, <<"([", ParensBin/binary, OperatorsBin/binary, "])">>),
-    {ok, infix_to_rpn(Tokens, [], [])}.
-
-%% @private
--spec infix_to_rpn([expr_token()], operator_stack(), rpn()) -> rpn().
-infix_to_rpn([<<>>], [], []) ->
-    [];
-infix_to_rpn([<<>> | Expression], Stack, RPNExpression) ->
-    infix_to_rpn(Expression, Stack, RPNExpression);
-infix_to_rpn([], Stack, RPNExpression) ->
-    case lists:member(<<"(">>, Stack) of
-        true -> throw(?ERROR_INVALID_QOS_EXPRESSION);
-        false -> RPNExpression ++ Stack
-    end;
-infix_to_rpn([Operator | Expression], Stack, RPNExpression) when
-    Operator =:= ?INTERSECTION orelse
-        Operator =:= ?UNION orelse
-        Operator =:= ?COMPLEMENT ->
-    {Stack2, RPNExpression2} = handle_operator(Operator, Stack, RPNExpression),
-    infix_to_rpn(Expression, Stack2, RPNExpression2);
-infix_to_rpn([?L_PAREN | Expression], Stack, RPNExpression) ->
-    infix_to_rpn(Expression, [?L_PAREN | Stack], RPNExpression);
-infix_to_rpn([?R_PAREN | Expression], Stack, RPNExpression) ->
-    {Stack2, RPNExpression2} = handle_right_paren(Stack, RPNExpression),
-    infix_to_rpn(Expression, Stack2, RPNExpression2);
-infix_to_rpn([?QOS_ANY_STORAGE | Expression], Stack, RPNExpression) ->
-    infix_to_rpn(Expression, Stack, RPNExpression ++ [?QOS_ANY_STORAGE]);
-infix_to_rpn([Operand | Expression], Stack, RPNExpression) ->
-    case binary:split(Operand, [?EQUALITY], [global]) of
-        [_Key, _Val] ->
-            infix_to_rpn(Expression, Stack, RPNExpression ++ [Operand]);
-        _ ->
-            throw(?ERROR_INVALID_QOS_EXPRESSION)
-    end.
+-spec compare(comparator(), expr_token(), expr_token()) -> boolean().
+compare(<<"<">>, A, B) when is_integer(A) -> A < B;
+compare(<<">">>, A, B) when is_integer(A) -> A > B;
+compare(<<"<=">>, A, B) when is_integer(A) -> A =< B;
+compare(<<">=">>, A, B) when is_integer(A) -> A >= B;
+compare(<<"=">>, A, B) -> A =:= B;
+compare(_, _A, _B) -> false.
 
 
 %% @private
--spec rpn_to_infix(rpn(), [expr_token()]) -> {ok, infix()}.
+-spec rpn_to_infix(rpn(), [expr_token()]) -> infix().
 rpn_to_infix([ExprToken | ExpressionTail], Stack) ->
-    case lists:member(ExprToken, ?OPERATORS) of
+    IsOperator = lists:member(ExprToken, ?OPERATORS),
+    case lists:member(ExprToken, ?COMPARATORS) or IsOperator of
         true ->
             [Operand1, Operand2 | StackTail] = Stack,
             InfixTokens = [Operand2, ExprToken, Operand1],
-            ExtendedInfixTokens = case ExpressionTail of
-                [] -> InfixTokens;
-                _ -> [<<"(">> | InfixTokens] ++ [<<")">>]
+            ExtendedInfixTokens = case IsOperator andalso ExpressionTail of
+                [_|_] -> [<<"(">> | InfixTokens] ++ [<<")">>];
+                _ -> InfixTokens
             end,
-            rpn_to_infix(ExpressionTail, [str_utils:join_binary(ExtendedInfixTokens) | StackTail]);
+            ConvertedTokens = lists:map(fun
+                (Integer) when is_integer(Integer) -> integer_to_binary(Integer);
+                (Binary) when is_binary(Binary) -> Binary
+            end, ExtendedInfixTokens),
+            rpn_to_infix(ExpressionTail, [str_utils:join_binary(ConvertedTokens) | StackTail]);
         false ->
             rpn_to_infix(ExpressionTail, [ExprToken | Stack])
     end;
 rpn_to_infix([], [Res]) ->
-    {ok, Res}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles scanned right paren when transforming expression from infix notation to
-%% reverse polish notation.
-%% When right paren is scanned operators from operator stack should be
-%% popped and moved to result expression as long as left paren is not popped.
-%% Popped left paren should be removed.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_right_paren(operator_stack(), rpn()) -> {operator_stack(), rpn()}.
-handle_right_paren([?L_PAREN | Stack], RPNExpression) ->
-    {Stack, RPNExpression};
-handle_right_paren([Op | Stack], RPNExpression) ->
-    handle_right_paren(Stack, RPNExpression ++ [Op]);
-handle_right_paren([], _RPNExpression) ->
-    throw(?ERROR_INVALID_QOS_EXPRESSION).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles scanned operator when transforming expression from infix notation to
-%% reverse polish notation.
-%% When operator is scanned all operators from operator stack with greater or
-%% equal precedence to this operator should be popped and moved to result expression.
-%% If paren is encountered on operator stack popping should stop there (paren
-%% shouldn't be popped).
-%% Then scanned operator should be pushed to the operator stack.
-%% @end
-%%--------------------------------------------------------------------
--spec handle_operator(operator(), operator_stack(), rpn()) -> {operator_stack(), rpn()}.
-handle_operator(ParsedOp, [StackOperator | Stack], RPNExpression) when
-    StackOperator =:= ?INTERSECTION orelse
-        StackOperator =:= ?UNION orelse
-        StackOperator =:= ?COMPLEMENT ->
-    handle_operator(ParsedOp, Stack, RPNExpression ++ [StackOperator]);
-handle_operator(ParsedOperator, Stack, RPNExpression) ->
-    {[ParsedOperator | Stack], RPNExpression}.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Filters storages list using QoS expression so that only storages
-%% fulfilling QoS are left.
-%% @end
-%%--------------------------------------------------------------------
--spec filter_storages(storages_with_params(), [expr_token()]) -> [storage:id()].
-filter_storages(AllStoragesWithParams, RPNExpression) ->
-    FinalStack = lists:foldl(fun(ExprToken, Stack) ->
-        case lists:member(ExprToken, ?OPERATORS) of
-            true ->
-                apply_operator(ExprToken, Stack);
-            false ->
-                [select_storages_with_param(AllStoragesWithParams, ExprToken) | Stack]
-        end
-    end , [], RPNExpression),
-
-    case FinalStack of
-        [Result] -> Result;
-        _ -> throw(?ERROR_INVALID_QOS_EXPRESSION)
-    end.
+    Res.
 
 
 %% @private
--spec apply_operator(operator(), [[storage:id()]]) ->
-    [[storage:id()]] | no_return().
-apply_operator(?UNION, [StoragesList1, StoragesList2 | StackTail]) ->
-    [lists_utils:union(StoragesList1, StoragesList2)| StackTail];
-apply_operator(?INTERSECTION, [StoragesList1, StoragesList2 | StackTail]) ->
-    [lists_utils:intersect(StoragesList1, StoragesList2) | StackTail];
-apply_operator(?COMPLEMENT, [StoragesList1, StoragesList2 | StackTail]) ->
-    [lists_utils:subtract(StoragesList2, StoragesList1) | StackTail];
-apply_operator(_, _) ->
-    throw(?ERROR_INVALID_QOS_EXPRESSION).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Selects all storages with given parameter("key=value" token).
-%% @end
-%%--------------------------------------------------------------------
--spec select_storages_with_param(storages_with_params(), expr_token()) ->
-    [[storage:id()] | expr_token()].
-select_storages_with_param(AllStoragesWithParams, ?QOS_ANY_STORAGE) ->
-    maps:keys(AllStoragesWithParams);
-select_storages_with_param(AllStoragesWithParams, ExprToken) ->
-    case binary:split(ExprToken, [?EQUALITY], [global]) of
-        [Key, Val] ->
-            maps:keys(maps:filter(fun(_StorageId, StorageQosParameters) ->
-                case maps:find(Key, StorageQosParameters) of
-                    {ok, Val} -> true;
-                    _ -> false
-                end
-            end, AllStoragesWithParams));
-        _ ->
-            throw(?ERROR_INVALID_QOS_EXPRESSION)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Selects required number of storage from list of storages.
-%% If there are no enough storages on list returns false otherwise returns
-%% {true, StorageList}.
-%% @end
-%%--------------------------------------------------------------------
--spec choose_storages([storage:id()], qos_entry:replicas_num()) ->
-    {true, [storage:id()]} | false.
-choose_storages(EligibleStoragesList, ReplicasNum) ->
-    % TODO: VFS-5734 choose storages according to current files distribution
-    StorageSublist = lists:sublist(EligibleStoragesList, ReplicasNum),
-    case length(StorageSublist) of
-        ReplicasNum -> {true, StorageSublist};
-        _ -> false
-    end.
+-spec rpn_to_expression(rpn(), [expr_token()]) -> expression().
+rpn_to_expression([ExprToken | ExpressionTail], Stack) ->
+    case lists:member(ExprToken, ?COMPARATORS ++ ?OPERATORS) of
+        true ->
+            [Operand1, Operand2 | StackTail] = Stack,
+            rpn_to_expression(ExpressionTail, [{ExprToken, Operand2, Operand1} | StackTail]);
+        false ->
+            rpn_to_expression(ExpressionTail, [ExprToken | Stack])
+    end;
+rpn_to_expression([], [Res]) ->
+    Res.

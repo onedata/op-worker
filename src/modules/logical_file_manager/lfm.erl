@@ -862,12 +862,12 @@ check_result({error, Errno}) -> throw(?ERROR_POSIX(Errno)).
 %% Adds new qos_entry for file or directory.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry(session:id(), file_key(), qos_expression:rpn(),
+-spec add_qos_entry(session:id(), file_key(), qos_expression:infix() | qos_entry:expression(),
     qos_entry:replicas_num()) -> {ok, qos_entry:id()} | error_reply().
 add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum) ->
     add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, user_defined).
 
--spec add_qos_entry(session:id(), file_key(), qos_expression:rpn(),
+-spec add_qos_entry(session:id(), file_key(), qos_expression:infix() | qos_entry:expression(),
     qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | error_reply().
 add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) ->
     ?run(fun() -> lfm_qos:add_qos_entry(SessId, FileKey, ExpressionInRpn, ReplicasNum, EntryType) end).
