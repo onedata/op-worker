@@ -416,12 +416,12 @@ verify_fun(EnvRef, Config, create) ->
 
             Uuid = file_id:guid_to_uuid(Guid),
             ReplicasNum = maps:get(<<"replicasNum">>, Data, 1),
-            Expression = maps:get(<<"expression">>, Data),
-            ExpressionTree = qos_expression:parse(Expression),
+            InfixExpression = maps:get(<<"expression">>, Data),
+            Expression = qos_expression:parse(InfixExpression),
             {ok, EntryP2} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
             {ok, EntryP1} = ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
             ?assertEqual(EntryP1#qos_entry{traverse_reqs = #{}}, EntryP2#qos_entry{traverse_reqs = #{}}),
-            ?assertMatch(#qos_entry{file_uuid = Uuid, expression = ExpressionTree, replicas_num = ReplicasNum}, EntryP1),
+            ?assertMatch(#qos_entry{file_uuid = Uuid, expression = Expression, replicas_num = ReplicasNum}, EntryP1),
             true;
         (expected_failure, _) ->
             Guid = api_test_env:get(EnvRef, guid),

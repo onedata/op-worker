@@ -37,12 +37,12 @@
 %%--------------------------------------------------------------------
 -spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:expression(),
     qos_entry:replicas_num(), qos_entry:type()) -> fslogic_worker:provider_response().
-add_qos_entry(UserCtx, FileCtx, BinaryExpression, ReplicasNum, EntryType) ->
+add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx,
         [traverse_ancestors, ?write_metadata]
     ),
-    add_qos_entry_insecure(FileCtx1, BinaryExpression, ReplicasNum, EntryType).
+    add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum, EntryType).
 
 
 %%--------------------------------------------------------------------
@@ -116,9 +116,9 @@ check_status(UserCtx, FileCtx0, QosEntryId) ->
 %% traverse should be run.
 %% @end
 %%--------------------------------------------------------------------
--spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:tree(), qos_entry:replicas_num(), 
+-spec add_qos_entry_insecure(file_ctx:ctx(), qos_entry:expression(), qos_entry:replicas_num(), 
     qos_entry:type()) -> fslogic_worker:provider_response().
-add_qos_entry_insecure(FileCtx, ExpressionTree, ReplicasNum, EntryType) ->
+add_qos_entry_insecure(FileCtx, Expression, ReplicasNum, EntryType) ->
     % TODO: VFS-5567 for now target storage for dir is selected here and
     % does not change in qos traverse task. Have to figure out how to
     % choose different storages for subdirs and/or file if multiple storage
@@ -126,11 +126,11 @@ add_qos_entry_insecure(FileCtx, ExpressionTree, ReplicasNum, EntryType) ->
     
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     
-    case qos_hooks:calculate_assigned_storages(SpaceId, ExpressionTree, ReplicasNum) of
+    case qos_hooks:calculate_assigned_storages(SpaceId, Expression, ReplicasNum) of
         {true, CalculatedStorages} ->
-            add_possible_qos(FileCtx, ExpressionTree, ReplicasNum, EntryType, CalculatedStorages);
+            add_possible_qos(FileCtx, Expression, ReplicasNum, EntryType, CalculatedStorages);
         false ->
-            add_impossible_qos(FileCtx, ExpressionTree, ReplicasNum, EntryType)
+            add_impossible_qos(FileCtx, Expression, ReplicasNum, EntryType)
     end.
 
 

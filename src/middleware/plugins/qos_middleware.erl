@@ -164,12 +164,12 @@ validate(#op_req{operation = delete, gri = #gri{
 -spec create(middleware:req()) -> middleware:create_result().
 create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     SessionId = Auth#auth.session_id,
-    ExpressionTree = maps:get(<<"expression">>, Req#op_req.data),
+    Expression = maps:get(<<"expression">>, Req#op_req.data),
     ReplicasNum = maps:get(<<"replicasNum">>, Req#op_req.data, 1),
     FileGuid = maps:get(<<"fileId">>, Req#op_req.data),
     SpaceId = file_id:guid_to_space_id(FileGuid),
 
-    case lfm:add_qos_entry(SessionId, {guid, FileGuid}, ExpressionTree, ReplicasNum) of
+    case lfm:add_qos_entry(SessionId, {guid, FileGuid}, Expression, ReplicasNum) of
         {ok, QosEntryId} ->
             {ok, QosEntry} = ?check(lfm:get_qos_entry(SessionId, QosEntryId)),
             Status = case qos_entry:is_possible(QosEntry) of
