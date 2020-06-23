@@ -197,7 +197,7 @@ end)()).
 }).
 % Special case -> any user can make requests for shares but if request is
 % being made using credentials by user not supported on specific provider
-% ?ERROR_USER_NOT_SUPPORTED should be returned
+% ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED) should be returned
 -define(CLIENT_SPEC_FOR_SHARE_SCENARIOS(__CONFIG), #client_spec{
     correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [],

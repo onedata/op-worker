@@ -741,7 +741,7 @@ verify_provider_identity(TheirProviderId) ->
             provider_logic:to_printable(TheirProviderId),
             Type, Reason
         ]),
-        ?ERROR_UNAUTHORIZED
+        {error, Reason}
     end.
 
 

@@ -206,7 +206,7 @@ verify_credentials(TokenCredentials) ->
                 ?error_stacktrace("Cannot verify user credentials due to ~p:~p", [
                     Type, Reason
                 ]),
-                ?ERROR_UNAUTHORIZED
+                ?ERROR_INTERNAL_SERVER_ERROR
             end
     end.
 
