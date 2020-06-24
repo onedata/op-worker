@@ -96,6 +96,9 @@ fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
             Error
     end;
 
+fetch_entity(#op_req{auth = ?NOBODY}) ->
+    ?ERROR_UNAUTHORIZED;
+
 fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId, SessionId), gri = #gri{
     id = ShareId,
     aspect = instance,
