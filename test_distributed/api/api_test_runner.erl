@@ -176,7 +176,7 @@ run_invalid_clients_test_cases(Config, InvalidClientError, Clients, #scenario_sp
         fun(TargetNode, Client, DataSet) ->
             ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
                 true -> InvalidClientError;
-                false -> ?ERROR_USER_NOT_SUPPORTED
+                false -> ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED)
             end,
             TestCaseCtx = #api_test_ctx{
                 scenario = ScenarioType,
@@ -247,7 +247,7 @@ run_malformed_data_test_cases(Config, #scenario_spec{
                             true ->
                                 get_expected_malformed_data_error(Error, ScenarioType, TestCaseCtx);
                             false ->
-                                ?ERROR_USER_NOT_SUPPORTED
+                                ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED)
                         end,
                         Args = PrepareArgsFun(TestCaseCtx),
                         RequestResult = make_request(Config, TargetNode, Client, Args),
@@ -338,7 +338,7 @@ run_expected_success_test_cases(Config, #scenario_spec{
                         end,
                         EnvVerifyFun(expected_success, NewTestCaseCtx);
                     false ->
-                        validate_error_result(ScenarioType, ?ERROR_USER_NOT_SUPPORTED, Result),
+                        validate_error_result(ScenarioType, ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED), Result),
                         EnvVerifyFun(expected_failure, TestCaseCtx)
                 end
             catch E:T ->

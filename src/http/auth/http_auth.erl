@@ -33,7 +33,7 @@
     cv_interface:interface(),
     data_access_caveats:policy()
 ) ->
-    {ok, aai:auth()} | errors:error().
+    {ok, aai:auth()} | errors:unauthorized_error().
 authenticate(Req, Interface, DataAccessCaveatsPolicy) ->
     case tokens:parse_access_token_header(Req) of
         undefined ->
@@ -49,18 +49,18 @@ authenticate(Req, Interface, DataAccessCaveatsPolicy) ->
 
 
 -spec authenticate(auth_manager:token_credentials()) ->
-    {ok, aai:auth()} | errors:error().
+    {ok, aai:auth()} | errors:unauthorized_error().
 authenticate(TokenCredentials) ->
     try
         authenticate_insecure(TokenCredentials)
     catch
         throw:Error ->
-            Error;
+            ?ERROR_UNAUTHORIZED(Error);
         Type:Message ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
             ]),
-            ?ERROR_INTERNAL_SERVER_ERROR
+            ?ERROR_UNAUTHORIZED(?ERROR_INTERNAL_SERVER_ERROR)
     end.
 
 
@@ -71,7 +71,7 @@ authenticate(TokenCredentials) ->
 
 %% @private
 -spec authenticate_insecure(auth_manager:token_credentials()) ->
-    {ok, aai:auth()} | no_return().
+    {ok, aai:auth()} | errors:unauthorized_error() | no_return().
 authenticate_insecure(TokenCredentials) ->
     case auth_manager:verify_credentials(TokenCredentials) of
         {ok, #auth{subject = Identity} = Auth, _TokenValidUntil} ->
@@ -81,10 +81,10 @@ authenticate_insecure(TokenCredentials) ->
                     {ok, Auth#auth{session_id = SessionId}};
                 {error, {invalid_identity, _}} ->
                     %% TODO VFS-5895
-                    ?ERROR_UNAUTHORIZED
+                    ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_SUBJECT_INVALID)
             end;
         {error, _} = Error ->
-            Error
+            ?ERROR_UNAUTHORIZED(Error)
     end.
 
 

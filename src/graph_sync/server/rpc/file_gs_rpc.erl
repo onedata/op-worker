@@ -131,5 +131,5 @@ assert_space_membership_and_local_support(Auth, Guid) ->
         true ->
             middleware_utils:assert_space_supported_locally(SpaceId);
         false ->
-            throw(?ERROR_UNAUTHORIZED)
+            throw(?ERROR_FORBIDDEN)
     end.
