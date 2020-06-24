@@ -420,12 +420,16 @@ upgrade_record(1, QosEntry) ->
     } = QosEntry,
     ConvertExpressionFun = fun(PreviousExpression) ->
         % split RPN tokens e.g: <<"a=b">> to [<<"a">>, <<"b">>, <<"=">>]
-        SplitRpnTokens = lists:flatten(lists:map(fun(RpnToken) -> 
-            case binary:split(RpnToken, [<<"=">>], [global]) of
-                [X,Y] -> [X, Y, <<"=">>]; 
-                _ -> RpnToken 
-            end 
-        end, PreviousExpression)),
+        % convert <<"-">> to <<"\\">>
+        SplitRpnTokens = lists:flatten(lists:map(fun
+            (<<"-">>) -> <<"\\">>;
+            (RpnToken) -> 
+                case binary:split(RpnToken, [<<"=">>], [global]) of
+                    [X,Y] -> [X, Y, <<"=">>]; 
+                    _ -> RpnToken 
+                end 
+            end, PreviousExpression)
+        ),
         % convert RPN to tree form
         qos_expression:rpn_to_expression(SplitRpnTokens)
     end, 

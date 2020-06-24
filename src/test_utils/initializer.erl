@@ -48,6 +48,7 @@
 -export([put_into_cache/1]).
 -export([get_storage_id/1, get_supporting_storage_id/2, setup_luma_local_feed/3]).
 -export([local_ip_v4/0]).
+-export([normalize/1]).
 
 
 -record(user_config, {
@@ -701,6 +702,11 @@ get_supporting_storage_id(Worker, SpaceId) ->
     {ok, [StorageId]} = rpc:call(Worker, space_logic, get_local_storage_ids, [SpaceId]),
     StorageId.
 
+
+-spec normalize(binary()) -> binary().
+normalize(Suggestion) -> 
+    re:replace(Suggestion, <<"[^\\w_]">>, <<"">>, [{return, binary}, global]).
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -765,13 +771,14 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
 
     StoragesSetupMap = lists:foldl(fun({P, Storages}, Acc) ->
         StoragesMap = json_utils:list_to_map(Storages),
-        StoragesMap2 = maps:map(fun(_StorageId, Desc) ->
-            case Desc =:= [] of
+        StoragesMapNormalized = maps:fold(fun(StorageId, Desc, Acc) -> 
+            NewDesc = case Desc =:= [] of
                 true -> #{};
                 false -> Desc
-            end
-        end, StoragesMap),
-        Acc#{atom_to_binary(proplists:get_value(P, DomainMappings), utf8) => StoragesMap2}
+            end,
+            Acc#{normalize(StorageId) => NewDesc} 
+        end, #{}, StoragesMap),
+        Acc#{atom_to_binary(proplists:get_value(P, DomainMappings), utf8) => StoragesMapNormalized}
     end, #{}, StoragesSetup),
 
     MasterWorkers = lists:map(fun(Domain) ->
@@ -827,7 +834,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         StorageSupp = maps:from_list(lists:filtermap(fun({PID, Info}) ->
             case proplists:get_value(<<"storage">>, Info) of
                 undefined -> false;
-                StorageName -> {true, {{StorageName, PID}, proplists:get_value(<<"supported_size">>, Info, 0)}}
+                StorageName -> {true, {{normalize(StorageName), PID}, proplists:get_value(<<"supported_size">>, Info, 0)}}
             end
         end, Providers1)),
         case maps:size(StorageSupp) == 0 of

@@ -96,19 +96,19 @@ rpn_to_expression(RpnExpression) ->
 
 
 -spec to_json(expression()) -> json_utils:json_term().
-to_json(?QOS_ANY_STORAGE) ->
-    ?QOS_ANY_STORAGE;
-to_json({Comparator, Expr1, Expr2}) when is_binary(Expr1) ->
-    [Comparator, Expr1, Expr2];
+to_json(Binary) when is_binary(Binary) ->
+    Binary;
+to_json(Integer) when is_integer(Integer) ->
+    Integer;
 to_json({Operator, Expr1, Expr2}) ->
     [Operator, to_json(Expr1), to_json(Expr2)].
 
 
 -spec from_json(json_utils:json_term()) -> expression().
-from_json(?QOS_ANY_STORAGE) ->  
-    ?QOS_ANY_STORAGE;
-from_json([Comparator, Expr1, Expr2]) when is_binary(Expr1) -> 
-    {Comparator, Expr1, Expr2};
+from_json(Binary) when is_binary(Binary) ->
+    Binary;
+from_json(Integer) when is_integer(Integer) ->
+    Integer;
 from_json([Operator, Expr1, Expr2]) ->
     {Operator, from_json(Expr1), from_json(Expr2)}.
 

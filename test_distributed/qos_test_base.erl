@@ -145,7 +145,7 @@ qos_with_complement_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) -
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression = [<<"type=disk">>, <<"country=PT">>, <<"\\">>],
+                qos_expression = [<<"type=disk">>, <<"country=PT">>, <<"-">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -279,7 +279,7 @@ qos_with_union_and_complement_spec(Path, WorkerAddingQos, AssertionWorkers, Prov
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression = [<<"country=PL">>, <<"country=FR">>, <<"|">>, <<"type=tape">>, <<"\\">>],
+                qos_expression = [<<"country=PL">>, <<"country=FR">>, <<"|">>, <<"type=tape">>, <<"-">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -311,7 +311,7 @@ qos_with_intersection_and_complement_spec(Path, WorkerAddingQos, AssertionWorker
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression = [<<"type=disk">>, <<"param1=val1">>, <<"&">>, <<"country=PL">>, <<"\\">>],
+                qos_expression = [<<"type=disk">>, <<"param1=val1">>, <<"&">>, <<"country=PL">>, <<"-">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -411,7 +411,7 @@ qos_that_cannot_be_fulfilled_spec(Path, WorkerAddingQos, AssertionWorkers, _Prov
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression = [<<"country=PL">>, <<"country=PT">>, <<"|">>, <<"type=disk">>, <<"\\">>],
+                qos_expression = [<<"country=PL">>, <<"country=PT">>, <<"|">>, <<"type=disk">>, <<"-">>],
                 replicas_num = 1,
                 possibility_check = {impossible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
             }
@@ -443,7 +443,7 @@ qos_with_parens_spec(Path, WorkerAddingQos, AssertionWorkers, ProviderMap) ->
                 workers = AssertionWorkers,
                 qos_name = ?QOS1,
                 file_key = {path, Path},
-                qos_expression = [<<"country=PL">>, <<"country=PT">>, <<"type=disk">>, <<"\\">>, <<"|">>],
+                qos_expression = [<<"country=PL">>, <<"country=PT">>, <<"type=disk">>, <<"-">>, <<"|">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos)}
 
@@ -688,7 +688,7 @@ contrary_qos_spec(Path, [WorkerAddingQos1, WorkerAddingQos2], AssertionWorkers, 
                 workers = AssertionWorkers,
                 qos_name = ?QOS2,
                 file_key = {path, Path},
-                qos_expression = [<<"type=tape">>, <<"country=PL">>, <<"\\">>],
+                qos_expression = [<<"type=tape">>, <<"country=PL">>, <<"-">>],
                 replicas_num = 1,
                 possibility_check = {possible, ?GET_DOMAIN_BIN(WorkerAddingQos2)}
             }

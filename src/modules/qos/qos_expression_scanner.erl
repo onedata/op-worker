@@ -12,7 +12,7 @@
 -export([format_error/1]).
 
 %% User code. This is placed here to allow extra attributes.
--file("/home/qwerty/Documents/onedata/op-worker/_build/default/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 32).
+-file("/home/qwerty/Documents/onedata/op-worker/_build/test/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 32).
 
 
 -file("/usr/lib/erlang/lib/parsetools-2.1.6/include/leexinc.hrl", 14).
@@ -306,7 +306,7 @@ adjust_line(T, A, [_|Cs], L) ->
 %% return signal either an unrecognised character or end of current
 %% input.
 
--file("/home/qwerty/Documents/onedata/op-worker/_build/default/lib/op_worker/src/modules/qos/qos_expression_scanner.erl", 308).
+-file("/home/qwerty/Documents/onedata/op-worker/_build/test/lib/op_worker/src/modules/qos/qos_expression_scanner.erl", 308).
 yystate() -> 14.
 
 yystate(21, [95|Ics], Line, Tlen, _, _) ->
@@ -636,47 +636,47 @@ yyaction(8, _, _, _) ->
 yyaction(_, _, _, _) -> error.
 
 -compile({inline,yyaction_0/2}).
--file("/home/qwerty/Documents/onedata/op-worker/_build/default/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 19).
+-file("/home/qwerty/Documents/onedata/op-worker/_build/test/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 19).
 yyaction_0(TokenChars, TokenLine) ->
      { token, { operator, TokenLine, list_to_binary (TokenChars) } } .
 
 -compile({inline,yyaction_1/2}).
--file("/home/qwerty/Documents/onedata/op-worker/_build/default/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 20).
+-file("/home/qwerty/Documents/onedata/op-worker/_build/test/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 20).
 yyaction_1(TokenChars, TokenLine) ->
      { token, { eq, TokenLine, list_to_binary (TokenChars) } } .
 
 -compile({inline,yyaction_2/2}).
--file("/home/qwerty/Documents/onedata/op-worker/_build/default/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 21).
+-file("/home/qwerty/Documents/onedata/op-worker/_build/test/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 21).
 yyaction_2(TokenChars, TokenLine) ->
      { token, { comparator, TokenLine, list_to_binary (TokenChars) } } .
 
 -compile({inline,yyaction_3/2}).
--file("/home/qwerty/Documents/onedata/op-worker/_build/default/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 22).
+-file("/home/qwerty/Documents/onedata/op-worker/_build/test/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 22).
 yyaction_3(TokenChars, TokenLine) ->
      { token, { any_storage, TokenLine, list_to_binary (TokenChars) } } .
 
 -compile({inline,yyaction_4/2}).
--file("/home/qwerty/Documents/onedata/op-worker/_build/default/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 23).
+-file("/home/qwerty/Documents/onedata/op-worker/_build/test/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 23).
 yyaction_4(TokenChars, TokenLine) ->
      { token, { integer, TokenLine, list_to_integer (TokenChars) } } .
 
 -compile({inline,yyaction_5/2}).
--file("/home/qwerty/Documents/onedata/op-worker/_build/default/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 24).
+-file("/home/qwerty/Documents/onedata/op-worker/_build/test/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 24).
 yyaction_5(TokenChars, TokenLine) ->
      { token, { string, TokenLine, list_to_binary (TokenChars) } } .
 
 -compile({inline,yyaction_6/2}).
--file("/home/qwerty/Documents/onedata/op-worker/_build/default/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 25).
+-file("/home/qwerty/Documents/onedata/op-worker/_build/test/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 25).
 yyaction_6(TokenChars, TokenLine) ->
      { token, { list_to_atom (TokenChars), TokenLine } } .
 
 -compile({inline,yyaction_7/0}).
--file("/home/qwerty/Documents/onedata/op-worker/_build/default/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 26).
+-file("/home/qwerty/Documents/onedata/op-worker/_build/test/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 26).
 yyaction_7() ->
      skip_token .
 
 -compile({inline,yyaction_8/0}).
--file("/home/qwerty/Documents/onedata/op-worker/_build/default/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 27).
+-file("/home/qwerty/Documents/onedata/op-worker/_build/test/lib/op_worker/src/modules/qos/qos_expression_scanner.xrl", 27).
 yyaction_8() ->
      skip_token .
 
