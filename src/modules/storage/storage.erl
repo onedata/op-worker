@@ -34,12 +34,12 @@
 -export([get_id/1, get_helper/1, get_type/1, get_luma_config/1]).
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
--export([is_readonly/1, is_luma_enabled/1, is_imported_storage/1]).
+-export([is_readonly/1, is_luma_enabled/1, is_imported/1]).
 -export([is_local/1]).
 
 %%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
--export([set_readonly/2, set_imported_storage/2, set_qos_parameters/2]).
+-export([set_readonly/2, set_imported/2, set_qos_parameters/2]).
 -export([set_helper_insecure/2, update_helper_args/2, update_helper_admin_ctx/2,
     update_helper/2]).
 
@@ -49,6 +49,9 @@
 
 %%% Upgrade from 19.02.*
 -export([migrate_to_zone/0]).
+
+%%% Upgrade from 20.02.0-beta3
+-export([migrate_imported_storages_to_zone/0]).
 
 %% Legacy datastore_model callbacks
 -export([get_ctx/0]).
@@ -94,9 +97,9 @@ create(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
 -spec create_insecure(name(), helpers:helper(), boolean(), luma_config:config(),
     boolean(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
-    case storage_logic:create_in_zone(Name) of
+    case storage_logic:create_in_zone(Name, ImportedStorage) of
         {ok, Id} ->
-            case storage_config:create(Id, Helper, Readonly, LumaConfig, ImportedStorage) of
+            case storage_config:create(Id, Helper, Readonly, LumaConfig) of
                 {ok, Id} ->
                     on_storage_created(Id, QosParameters),
                     {ok, Id};
@@ -151,7 +154,7 @@ describe(StorageData) ->
         <<"storagePathType">> => helper:get_storage_path_type(Helper),
         <<"lumaEnabled">> => is_luma_enabled(StorageData),
         <<"lumaUrl">> => LumaUrl,
-        <<"importedStorage">> => is_imported_storage(StorageData),
+        <<"importedStorage">> => is_imported(StorageId),
         <<"qosParameters">> => fetch_qos_parameters_of_local_storage(StorageId)
     }}.
 
@@ -259,9 +262,10 @@ is_readonly(StorageDataOrId) ->
     storage_config:is_readonly(StorageDataOrId).
 
 
--spec is_imported_storage(data() | id()) -> boolean().
-is_imported_storage(StorageDataOrId) ->
-    storage_config:is_imported_storage(StorageDataOrId).
+-spec is_imported(id()) -> boolean().
+is_imported(StorageId) ->
+    {ok, Imported} = ?throw_on_error(storage_logic:is_imported(StorageId)),
+    Imported.
 
 
 -spec is_luma_enabled(data()) -> boolean().
@@ -313,16 +317,9 @@ set_readonly(StorageId, Readonly) ->
     storage_config:set_readonly(StorageId, Readonly).
 
 
--spec set_imported_storage(id(), boolean()) -> ok | {error, term()}.
-set_imported_storage(StorageId, ImportedStorage) ->
-    lock_on_storage_by_id(StorageId, fun() ->
-        case supports_any_space(StorageId) of
-            true ->
-                ?ERROR_STORAGE_IN_USE;
-            false ->
-                storage_config:set_imported_storage(StorageId, ImportedStorage)
-        end
-    end).
+-spec set_imported(id(), boolean()) -> ok | {error, term()}.
+set_imported(StorageId, Imported) ->
+    storage_logic:set_imported(StorageId, Imported).
 
 
 -spec set_qos_parameters(id(), qos_parameters()) -> ok | errors:error().
@@ -385,28 +382,14 @@ update_helper(StorageId, UpdateFun) ->
 -spec support_space(id(), tokens:serialized(), od_space:support_size()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SerializedToken, SupportSize) ->
-    lock_on_storage_by_id(StorageId, fun() ->
-        support_space_insecure(StorageId, SerializedToken, SupportSize)
-    end).
-
-
-%% @private
--spec support_space_insecure(id(), tokens:serialized(), od_space:support_size()) ->
-    {ok, od_space:id()} | errors:error().
-support_space_insecure(StorageId, SpaceSupportToken, SupportSize) ->
-    case validate_support_request(SpaceSupportToken) of
+    case validate_support_request(SerializedToken) of
         ok ->
-            case is_imported_storage(StorageId) andalso supports_any_space(StorageId) of
-                true ->
-                    ?ERROR_STORAGE_IN_USE;
-                false ->
-                    case storage_logic:support_space(StorageId, SpaceSupportToken, SupportSize) of
-                        {ok, SpaceId} ->
-                            on_space_supported(SpaceId, StorageId),
-                            {ok, SpaceId};
-                        {error, _} = Error ->
-                            Error
-                    end
+            case storage_logic:support_space(StorageId, SerializedToken, SupportSize) of
+                {ok, SpaceId} ->
+                    on_space_supported(SpaceId, StorageId),
+                    {ok, SpaceId};
+                {error, _} = Error ->
+                    Error
             end;
         Error ->
             Error
@@ -533,8 +516,6 @@ lock_on_storage_by_name(Identifier, Fun) ->
 %%% Upgrade from 19.02.*
 %%%===================================================================
 
--define(ZONE_CONNECTION_RETRIES, 180).
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Migrates storages and spaces support data to Onezone.
@@ -544,18 +525,6 @@ lock_on_storage_by_name(Identifier, Fun) ->
 %%--------------------------------------------------------------------
 -spec migrate_to_zone() -> ok.
 migrate_to_zone() ->
-    ?info("Checking connection to Onezone..."),
-    migrate_to_zone(oneprovider:is_connected_to_oz(), ?ZONE_CONNECTION_RETRIES).
-
--spec migrate_to_zone(IsConnectedToZone :: boolean(), Retries :: integer()) -> ok.
-migrate_to_zone(false, 0) ->
-    ?critical("Could not establish connection to Onezone. Aborting upgrade procedure."),
-    throw(?ERROR_NO_CONNECTION_TO_ONEZONE);
-migrate_to_zone(false, Retries) ->
-    ?warning("There is no connection to Onezone. Next retry in 10 seconds"),
-    timer:sleep(timer:seconds(10)),
-    migrate_to_zone(oneprovider:is_connected_to_oz(), Retries - 1);
-migrate_to_zone(true, _) ->
     ?info("Starting storage migration procedure..."),
     {ok, StorageDocs} = list_deprecated(),
     lists:foreach(fun migrate_storage_docs/1, StorageDocs),
@@ -586,7 +555,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
         readonly = Readonly,
         luma_config = LumaConfig
     } = Storage,
-    case storage_config:create(StorageId, Helper, Readonly, LumaConfig, false) of
+    case storage_config:create(StorageId, Helper, Readonly, LumaConfig) of
         {ok, _} -> ok;
         {error, already_exists} -> ok;
         Error -> throw(Error)
@@ -594,7 +563,7 @@ migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
     case provider_logic:has_storage(StorageId) of
         true -> ok;
         false ->
-            {ok, StorageId} = storage_logic:create_in_zone(Name, StorageId),
+            {ok, StorageId} = storage_logic:create_in_zone(Name, unknown, StorageId),
             ?notice("Storage ~p created in Onezone", [StorageId])
     end,
     ok = delete_deprecated(StorageId).
@@ -618,10 +587,7 @@ migrate_space_support(SpaceId) ->
                         Error1 -> throw(Error1)
                     end
             end,
-            case lists:member(StorageId, MiR) of
-                true -> ok = storage_config:set_imported_storage(StorageId, true);
-                false -> ok
-            end,
+            ok = storage_logic:set_imported(StorageId, lists:member(StorageId, MiR)),
             case space_storage:delete(SpaceId) of
                 ok -> ok;
                 ?ERROR_NOT_FOUND -> ok;
@@ -631,6 +597,21 @@ migrate_space_support(SpaceId) ->
             ok
     end,
     ?notice("Support of space: ~p successfully migrated", [SpaceId]).
+
+
+%%%===================================================================
+%%% Upgrade from 20.02.0-beta3
+%%%===================================================================
+
+-spec migrate_imported_storages_to_zone() -> ok.
+migrate_imported_storages_to_zone() ->
+    ?info("Starting imported storages migration procedure..."),
+    {ok, StorageIds} = provider_logic:get_storage_ids(),
+    lists:foreach(fun(StorageId) ->
+        ImportedStorage = storage_config:is_imported_storage(StorageId),
+        storage_logic:set_imported(StorageId, ImportedStorage)
+    end, StorageIds),
+    ?notice("Imported storages migration procedure finished succesfully").
 
 
 %% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in 19.09.*.

@@ -73,7 +73,7 @@ handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:consume(FileDownloadCode) of
         false ->
-            send_error_response(?ERROR_UNAUTHORIZED, Req);
+            send_error_response(?ERROR_BAD_DATA(<<"code">>), Req);
         {true, SessionId, FileId} ->
             Req2 = gui_cors:allow_origin(oneprovider:get_oz_url(), Req),
             Req3 = gui_cors:allow_frame_origin(oneprovider:get_oz_url(), Req2),

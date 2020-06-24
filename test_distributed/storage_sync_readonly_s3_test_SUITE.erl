@@ -122,13 +122,13 @@ cancel_scan(Config) ->
     storage_sync_s3_test_base:cancel_scan(Config, true).
 
 update_syncs_files_after_import_failed_test(Config) ->
-    storage_sync_test_base:update_syncs_files_after_import_failed_test(Config, true).
+    storage_sync_s3_test_base:update_syncs_files_after_import_failed_test(Config, true).
 
 update_syncs_files_after_previous_update_failed_test(Config) ->
-    storage_sync_test_base:update_syncs_files_after_previous_update_failed_test(Config, true).
+    storage_sync_s3_test_base:update_syncs_files_after_previous_update_failed_test(Config, true).
 
 sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
-    storage_sync_test_base:sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config, true).
+    storage_sync_s3_test_base:sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config, true).
 
 create_subfiles_and_delete_before_import_is_finished_test(Config) ->
     storage_sync_s3_test_base:create_subfiles_and_delete_before_import_is_finished_test(Config, true).

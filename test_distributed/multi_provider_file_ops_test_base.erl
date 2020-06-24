@@ -55,7 +55,7 @@
 -export([create_doc/4, set_parent_link/4, create_location/4]).
 
 -export([extend_config/4]).
--export([verify/2, verify_workers/2]).
+-export([verify/2, verify_workers/2, verify_stats/3]).
 -export([sync_blocks/4]).
 -export([request_synchronization/3]).
 -export([async_synchronize/3]).

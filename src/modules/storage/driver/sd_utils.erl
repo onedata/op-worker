@@ -304,7 +304,17 @@ create_parent_dirs(FileCtx, ChildrenDirCtxs, SpaceId, StorageId) ->
             %TODO VFS-4297 stop recursion when parent file exists on storage,
             %TODO currently recursion stops in space dir
             {ParentCtx, FileCtx2} = file_ctx:get_parent(FileCtx, undefined),
-            create_parent_dirs(ParentCtx, [FileCtx2 | ChildrenDirCtxs], SpaceId, StorageId)
+            % Infinite loop possible if function is executed on space dir - this case stops such loop
+            case file_ctx:get_uuid_const(FileCtx) =:= file_ctx:get_uuid_const(ParentCtx) of
+                true ->
+                    {Doc, _} = file_ctx:get_file_doc(FileCtx2),
+                    ?info("Infinite loop detected on parent dirs creation for file ~p", [Doc]),
+                    lists:foreach(fun(Ctx) ->
+                        create_dir(Ctx, SpaceId, StorageId)
+                    end, [FileCtx | ChildrenDirCtxs]);
+                false ->
+                    create_parent_dirs(ParentCtx, [FileCtx2 | ChildrenDirCtxs], SpaceId, StorageId)
+            end
     end.
 
 %%-------------------------------------------------------------------

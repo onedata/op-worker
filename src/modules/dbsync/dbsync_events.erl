@@ -124,6 +124,7 @@ change_replicated_internal(_SpaceId, Index = #document{
 change_replicated_internal(_SpaceId, #document{value = #traverse_task{}} = Task) ->
     traverse:on_task_change(Task, oneprovider:get_id_or_undefined());
 change_replicated_internal(_SpaceId, #document{key = JobID, value = #tree_traverse_job{}} = Doc) ->
+    % TODO VFS-6391 fix race with file_meta
     {ok, Job, PoolName, TaskID} = tree_traverse:get_job(Doc),
     traverse:on_job_change(Job, JobID, PoolName, TaskID, oneprovider:get_id_or_undefined());
 change_replicated_internal(SpaceId, QosEntry = #document{

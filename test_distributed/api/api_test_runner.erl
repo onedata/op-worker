@@ -415,7 +415,7 @@ run_exp_error_testcase(
 ) ->
     ExpError = case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
         true -> ScenarioError;
-        false -> ?ERROR_USER_NOT_SUPPORTED
+        false -> ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED)
     end,
     TestCaseCtx = build_test_ctx(ScenarioName, ScenarioType, TargetNode, Client, DataSet),
 
@@ -453,7 +453,9 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, SupportedClient
                         ValidateResultFun(TestCaseCtx, Result),
                         VerifyFun(expected_success, TestCaseCtx);
                     false ->
-                        validate_error_result(ScenarioType, ?ERROR_USER_NOT_SUPPORTED, Result),
+                        validate_error_result(
+                            ScenarioType, ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED), Result
+                        ),
                         VerifyFun(expected_failure, TestCaseCtx)
                 end
             catch T:R ->

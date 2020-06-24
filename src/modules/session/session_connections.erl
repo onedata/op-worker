@@ -93,7 +93,7 @@ get_async_req_manager(SessId) ->
 %% Ensures that outgoing session to peer provider is started.
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_connected(session:id()) -> ok | no_return().
+-spec ensure_connected(session:id()) -> {ok, session:id()} | error() | no_return().
 ensure_connected(SessId) ->
     ProviderId = case session:get(SessId) of
         {ok, #document{
@@ -115,8 +115,7 @@ ensure_connected(SessId) ->
 
     session_manager:reuse_or_create_outgoing_provider_session(
         SessId, ?SUB(?ONEPROVIDER, ProviderId)
-    ),
-    ok.
+    ).
 
 
 %%%===================================================================
