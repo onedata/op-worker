@@ -22,4 +22,18 @@
 -define(ONEDATA_GROUP_SCHEME, <<"onedataGroup">>).
 -define(IDP_ENTITLEMENT_SCHEME, <<"idpEntitlement">>).
 
+% Macros defining LUMA feed types
+-define(AUTO_FEED, auto).
+-define(LOCAL_FEED, local).
+-define(EXTERNAL_FEED, external).
+
+% Macros defining luma_db constraints.
+-define(POSIX_STORAGE, posix_storage).
+-define(IMPORTED_STORAGE, imported_storage).
+-define(NON_IMPORTED_STORAGE, non_imported_storage).
+
+% Macros defining options passed to luma_db:store function
+-define(FORCE_OVERWRITE, force_overwrite).
+-define(NO_OVERWRITE, no_overwrite).
+
 -endif.

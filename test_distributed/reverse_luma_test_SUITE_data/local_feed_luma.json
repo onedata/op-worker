@@ -1,5 +1,5 @@
 {
-    "posixStorageIdLocalFeedLuma": {
+    "posixImportedStorageIdLocalFeedLuma": {
         "onedataUsers": {
             "uids": {
                 "1000": {
@@ -36,7 +36,7 @@
             }
         }
     },
-    "glusterfsStorageIdLocalFeedLuma": {
+    "glusterfsImportedStorageIdLocalFeedLuma": {
         "onedataUsers": {
             "uids": {
                 "1000": {
@@ -73,7 +73,7 @@
             }
         }
     },
-    "nulldeviceStorageIdLocalFeedLuma": {
+    "nulldeviceImportedStorageIdLocalFeedLuma": {
         "onedataUsers": {
             "uids": {
                 "1000": {

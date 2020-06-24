@@ -1,5 +1,5 @@
 {
-    "posixStorageIdExternalFeedLuma": {
+    "posixImportedStorageIdExternalFeedLuma": {
         "onedataUsers": {
             "uids": {
             "1000": {
@@ -186,7 +186,7 @@
                 }
             }
     },
-    "glusterfsStorageIdExternalFeedLuma": {
+    "glusterfsImportedStorageIdExternalFeedLuma": {
         "onedataUsers": {
             "uids": {
             "1000": {
@@ -373,7 +373,7 @@
                 }
             }
     },
-    "nulldeviceStorageIdExternalFeedLuma": {
+    "nulldeviceImportedStorageIdExternalFeedLuma": {
         "onedataUsers": {
             "uids": {
             "1000": {

@@ -15,7 +15,7 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/events/subscriptions.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
--include("modules/storage/storage.hrl").
+-include("modules/storage/luma/luma.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 

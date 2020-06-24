@@ -67,14 +67,14 @@
 map_uid_to_onedata_user(Storage, Uid) ->
    luma_db:get_or_acquire(Storage, ?KEY(ensure_integer(Uid), ?UID), ?MODULE, fun() ->
        acquire(Storage, Uid, ?UID)
-    end).
+    end, [?POSIX_STORAGE, ?IMPORTED_STORAGE]).
 
 -spec map_acl_user_to_onedata_user(storage:data(), luma:acl_who()) ->
     {ok, record()} | {error, term()}.
 map_acl_user_to_onedata_user(Storage, AclUser) ->
     luma_db:get_or_acquire(Storage, ?KEY(AclUser, ?ACL), ?MODULE, fun() ->
         acquire(Storage, AclUser, ?ACL)
-    end).
+    end, [?POSIX_STORAGE, ?IMPORTED_STORAGE]).
 
 -spec store_by_acl_user(storage(), luma:acl_who(), luma_onedata_group:group_map()) -> ok | {error, term()}.
 store_by_acl_user(Storage, AclUser, OnedataUserMap) ->
@@ -111,14 +111,14 @@ update_or_store_uid_mapping(Storage, Uid, OnedataUserMap, Feed) ->
         OnedataUserMap, DefaultRecord, Feed).
 
 
--spec delete_uid_mapping(storage:id(), luma:uid()) -> ok.
+-spec delete_uid_mapping(storage:id(), luma:uid()) -> ok | {error, term()}.
 delete_uid_mapping(StorageId, Uid) ->
     delete_uid_mapping(StorageId, Uid, true).
 
 
--spec delete_uid_mapping(storage:id(), luma:uid(), DeleteReverseMapping :: boolean()) -> ok.
+-spec delete_uid_mapping(storage:id(), luma:uid(), DeleteReverseMapping :: boolean()) -> ok | {error, term()}.
 delete_uid_mapping(StorageId, Uid, false) ->
-    luma_db:delete(StorageId, ?KEY(ensure_integer(Uid), ?UID), ?MODULE);
+    luma_db:delete(StorageId, ?KEY(ensure_integer(Uid), ?UID), ?MODULE, [?POSIX_STORAGE, ?IMPORTED_STORAGE]);
 delete_uid_mapping(StorageId, Uid, true) ->
     Uid2 = ensure_integer(Uid),
     UserId = case luma_db:get(StorageId, ?KEY(Uid2, ?UID), ?MODULE) of
@@ -131,13 +131,15 @@ delete_uid_mapping(StorageId, Uid, true) ->
         ok when UserId =/= undefined ->
             luma_storage_users:delete(StorageId, UserId);
         ok ->
-            ok
+            ok;
+        Error ->
+            Error
     end.
 
 
--spec delete_acl_user_mapping(storage:id(), luma:acl_who()) -> ok.
+-spec delete_acl_user_mapping(storage:id(), luma:acl_who()) ->  ok | {error, term()}.
 delete_acl_user_mapping(StorageId, AclUser) ->
-    luma_db:delete(StorageId, ?KEY(AclUser, ?ACL), ?MODULE).
+    luma_db:delete(StorageId, ?KEY(AclUser, ?ACL), ?MODULE, [?POSIX_STORAGE, ?IMPORTED_STORAGE]).
 
 -spec clear_all(storage:id()) -> ok | {error, term()}.
 clear_all(StorageId) ->
@@ -146,12 +148,12 @@ clear_all(StorageId) ->
 -spec get_by_uid_and_describe(storage(), luma:uid()) ->
     {ok, luma_onedata_user:user_map()} | {error, term()}.
 get_by_uid_and_describe(Storage, Uid) ->
-    luma_db:get_and_describe(Storage, ?KEY(ensure_integer(Uid), ?UID), ?MODULE).
+    luma_db:get_and_describe(Storage, ?KEY(ensure_integer(Uid), ?UID), ?MODULE, [?POSIX_STORAGE, ?IMPORTED_STORAGE]).
 
 -spec get_by_acl_user_and_describe(storage(), luma:acl_who()) ->
     {ok, luma_onedata_user:user_map()} | {error, term()}.
 get_by_acl_user_and_describe(Storage, AclUser) ->
-    luma_db:get_and_describe(Storage, ?KEY(AclUser, ?ACL), ?MODULE).
+    luma_db:get_and_describe(Storage, ?KEY(AclUser, ?ACL), ?MODULE, [?POSIX_STORAGE, ?IMPORTED_STORAGE]).
 
 %%%===================================================================
 %%% Internal functions
@@ -212,7 +214,9 @@ store(Storage, Key, OnedataUser, Feed) ->
     case luma_sanitizer:sanitize_onedata_user(OnedataUser) of
         {ok, OnedataUserMap2} ->
             Record = luma_onedata_user:new(OnedataUserMap2),
-            case luma_db:store(Storage, Key, ?MODULE, Record, Feed) of
+            case luma_db:store(Storage, Key, ?MODULE, Record, Feed, ?FORCE_OVERWRITE,
+                [?POSIX_STORAGE, ?IMPORTED_STORAGE]
+            ) of
                 ok -> {ok, Record};
                 Error -> Error
             end;

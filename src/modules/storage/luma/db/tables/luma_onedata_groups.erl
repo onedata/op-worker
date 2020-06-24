@@ -54,21 +54,22 @@
 map_acl_group_to_onedata_group(Storage, AclGroup) ->
     luma_db:get_or_acquire(Storage, AclGroup, ?MODULE, fun() ->
         acquire(Storage, AclGroup)
-    end).
+    end, [?POSIX_STORAGE, ?IMPORTED_STORAGE]).
 
 -spec store(storage(), key(), luma_onedata_group:group_map()) -> ok | {error, term()}.
 store(Storage, AclGroup, OnedataGroupMap) ->
     case luma_sanitizer:sanitize_onedata_group(OnedataGroupMap) of
         {ok, OnedataGroupMap2} ->
             Record = luma_onedata_group:new(OnedataGroupMap2),
-            luma_db:store(Storage, AclGroup, ?MODULE, Record, ?LOCAL_FEED);
+            luma_db:store(Storage, AclGroup, ?MODULE, Record, ?LOCAL_FEED, ?FORCE_OVERWRITE,
+                [?POSIX_STORAGE, ?IMPORTED_STORAGE]);
         Error ->
             Error
     end.
 
 -spec delete(storage:id(), key()) -> ok.
 delete(StorageId, GroupId) ->
-    luma_db:delete(StorageId, GroupId, ?MODULE).
+    luma_db:delete(StorageId, GroupId, ?MODULE, [?POSIX_STORAGE, ?IMPORTED_STORAGE]).
 
 -spec clear_all(storage:id()) -> ok | {error, term()}.
 clear_all(StorageId) ->
@@ -77,7 +78,7 @@ clear_all(StorageId) ->
 -spec get_and_describe(storage(), key()) ->
     {ok, luma_onedata_group:group_map()} | {error, term()}.
 get_and_describe(Storage, AclGroup) ->
-    luma_db:get_and_describe(Storage, AclGroup, ?MODULE).
+    luma_db:get_and_describe(Storage, AclGroup, ?MODULE, [?POSIX_STORAGE, ?IMPORTED_STORAGE]).
 
 %%%===================================================================
 %%% Internal functions

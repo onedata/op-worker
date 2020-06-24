@@ -28,7 +28,7 @@
     get_params/2, get_proxy_params/2, get_timeout/1,
     get_storage_path_type/1]).
 -export([is_posix_compatible/1, is_rename_supported/1,
-    is_sync_supported/1, is_nfs4_acl_supported/1, is_storage_detection_skipped/1]).
+    is_sync_supported/1, is_nfs4_acl_supported/1, should_skip_storage_detection/1]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1, get_type/1]).
 
@@ -205,8 +205,8 @@ get_timeout(#helper{args = Args}) ->
             get_timeout(undefined)
     end.
 
--spec is_storage_detection_skipped(helpers:helper()) -> boolean().
-is_storage_detection_skipped(#helper{args = Args}) ->
+-spec should_skip_storage_detection(helpers:helper()) -> boolean().
+should_skip_storage_detection(#helper{args = Args}) ->
     case maps:get(<<"skipStorageDetection">>, Args, false) of
         false -> false;
         <<"false">> -> false;

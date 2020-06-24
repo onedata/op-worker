@@ -24,18 +24,17 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/luma/luma.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([
     get/3,
-    get_or_acquire/4,
-    store/5,
-    store/6,
-    update/4,
-    update_or_store/6,
-    delete/3,
+    get_or_acquire/4, get_or_acquire/5,
+    store/5, store/7,
+    update/4, update_or_store/6,
+    delete/3, delete/4,
     clear_all/2,
-    get_and_describe/3,
+    get_and_describe/3, get_and_describe/4,
     delete_if_auto_feed/3
 ]).
 
@@ -87,6 +86,9 @@
 -export_type([db_key/0, db_record/0, table/0, db_acquire_fun/0, db_diff/0]).
 
 -type storage() :: storage:id() | storage:data().
+-type overwrite_opt() :: ?FORCE_OVERWRITE | ?NO_OVERWRITE.
+-type constraint() :: ?POSIX_STORAGE | ?IMPORTED_STORAGE | ?NON_IMPORTED_STORAGE.
+-type constraints() :: [constraint()].
 -define(BATCH_SIZE, 1000).
 
 %%%===================================================================
@@ -105,34 +107,38 @@ get(Storage, Key, Table) ->
             Error
     end.
 
+
+-spec get_or_acquire(storage(), db_key(), table(), db_acquire_fun()) ->
+    {ok, db_record()} | {error, term()}.
+get_or_acquire(Storage, Key, Table, AcquireFun) ->
+    get_or_acquire(Storage, Key, Table, AcquireFun, []).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% This function returns record associated with Key from table Table
 %% associated with Storage.
-%% First, it checks whether record is already in the db.
+%% First, it validates Constraints.
+%% Next, it checks whether record is already in the db.
 %% If it's missing, it calls AcquireFun and stores the result if
 %% it has returned successfully.
 %% @end
 %%--------------------------------------------------------------------
--spec get_or_acquire(storage(), db_key(), table(), db_acquire_fun()) ->
+-spec get_or_acquire(storage(), db_key(), table(), db_acquire_fun(), constraints()) ->
     {ok, db_record()} | {error, term()}.
-get_or_acquire(Storage, Key, Table, AcquireFun) ->
-    case get(Storage, Key, Table) of
-        {ok, Record} ->
-            {ok, Record};
-        {error, not_found} ->
-%%            case storage:is_not_local_luma_feed(Storage) of
-%%                true ->
-                    acquire_and_store(AcquireFun, Storage, Key, Table)
-%%                false ->
-%%                    {error, not_found}
-%%            end
-    end.
+get_or_acquire(Storage, Key, Table, AcquireFun, Constraints) ->
+    validate_constraints_end_execute(Storage, Constraints, fun() ->
+        case get(Storage, Key, Table) of
+            {ok, Record} ->
+                {ok, Record};
+            {error, not_found} ->
+                acquire_and_store(AcquireFun, Storage, Key, Table)
+        end
+    end).
 
 -spec store(storage(), db_key(), table(), db_record(), luma:feed()) ->
     ok | {error, term()}.
 store(Storage, Key, Table, Record, Feed) ->
-    store(Storage, Key, Table, Record, Feed, true).
+    store(Storage, Key, Table, Record, Feed, ?FORCE_OVERWRITE, []).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -142,25 +148,20 @@ store(Storage, Key, Table, Record, Feed) ->
 %% otherwise datastore_model:create will be used.
 %% @end
 %%--------------------------------------------------------------------
--spec store(storage(), db_key(), table(), db_record(), luma:feed(), Force :: boolean()) ->
+-spec store(storage(), db_key(), table(), db_record(), luma:feed(), overwrite_opt(), constraints()) ->
     ok | {error, term()}.
-store(Storage, Key, Table, Record, Feed, Force) ->
-    Id = id(Storage, Table, Key),
-    Doc = new_doc(Id, Storage, Table, Record, Feed),
-    case store_internal(Doc, Force) of
-        ok ->
-            luma_db_links:add_link(Table, Storage, Key, Id),
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec store_internal(doc(), Force :: boolean()) -> ok | {error, term()}.
-store_internal(Doc, true) ->
-    ?extract_ok(datastore_model:save(?CTX, Doc));
-store_internal(Doc, false) ->
-    ?extract_ok(datastore_model:create(?CTX, Doc)).
+store(Storage, Key, Table, Record, Feed, OverwriteFlag, Constraints) ->
+    validate_constraints_end_execute(Storage, Constraints, fun() ->
+        Id = id(Storage, Table, Key),
+        Doc = new_doc(Id, Storage, Table, Record, Feed),
+        case store_internal(Doc, OverwriteFlag) of
+            ok ->
+                luma_db_links:add_link(Table, Storage, Key, Id),
+                ok;
+            {error, _} = Error ->
+                Error
+        end
+    end).
 
 
 -spec update(storage(), db_key(), table(), db_diff()) -> {ok, db_record()} | {error, term()}.
@@ -208,16 +209,22 @@ update_or_store(Storage, Key, Table, Diff, DefaultRecord, Feed) ->
     end.
 
 
+-spec delete(storage:id(), db_key(), table()) -> ok.
+delete(StorageId, Key, Table) ->
+    delete(StorageId, Key, Table, []).
+
 %%--------------------------------------------------------------------
 %% @doc
 %% This function deletes single record associated with Key, that is
 %% stored in table Table associated with StorageId.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(storage:id(), db_key(), table()) -> ok.
-delete(StorageId, Key, Table) ->
-    Id = id(StorageId, Table, Key),
-    delete_doc_and_link(Id, StorageId, Key, Table).
+-spec delete(storage:id(), db_key(), table(), constraints()) -> ok.
+delete(StorageId, Key, Table, Constraints) ->
+    validate_constraints_end_execute(StorageId, Constraints, fun() ->
+        Id = id(StorageId, Table, Key),
+        delete_doc_and_link(Id, StorageId, Key, Table)
+    end).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -247,12 +254,19 @@ clear_all(StorageId, Table) ->
 -spec get_and_describe(storage(), db_key(), table()) ->
     {ok, json_utils:json_map()} | {error, term()}.
 get_and_describe(Storage, Key, Table) ->
-    case get(Storage, Key, Table) of
-        {ok, Record} ->
-            {ok, luma_db_record:to_json(Record)};
-        {error, _} = Error ->
-            Error
-    end.
+    get_and_describe(Storage, Key, Table, []).
+
+-spec get_and_describe(storage(), db_key(), table(), constraints()) ->
+    {ok, json_utils:json_map()} | {error, term()}.
+get_and_describe(Storage, Key, Table, Constraints) ->
+    validate_constraints_end_execute(Storage, Constraints, fun() ->
+        case get(Storage, Key, Table) of
+            {ok, Record} ->
+                {ok, luma_db_record:to_json(Record)};
+            {error, _} = Error ->
+                Error
+        end
+    end).
 
 %%%===================================================================
 %%% Internal functions
@@ -273,6 +287,40 @@ acquire_and_store(AcquireFun, Storage, Key, TableModule) ->
             {ok, Record};
         Error ->
             Error
+    end.
+
+-spec store_internal(doc(), overwrite_opt()) -> ok | {error, term()}.
+store_internal(Doc, ?FORCE_OVERWRITE) ->
+    ?extract_ok(datastore_model:save(?CTX, Doc));
+store_internal(Doc, ?NO_OVERWRITE) ->
+    ?extract_ok(datastore_model:create(?CTX, Doc)).
+
+
+-spec validate_constraints_end_execute(storage(), constraints(), function()) ->
+    ok | {ok, term()} | {error, term()}.
+validate_constraints_end_execute(_Storage, [], Fun) ->
+    Fun();
+validate_constraints_end_execute(Storage, [Constraint | Rest], Fun) ->
+    case validate_constraint(Storage, Constraint) of
+        ok -> validate_constraints_end_execute(Storage, Rest, Fun);
+        {error, _} = Error -> Error
+    end.
+
+-spec validate_constraint(storage(), constraint()) -> ok | {error, term()}.
+validate_constraint(Storage, ?POSIX_STORAGE) ->
+    case storage:is_posix_compatible(Storage) of
+        true -> ok;
+        false -> ?ERROR_REQUIRES_POSIX_COMPATIBLE_STORAGE(storage:get_id(Storage))
+    end;
+validate_constraint(Storage, ?IMPORTED_STORAGE) ->
+    case storage:is_imported(Storage) of
+        true -> ok;
+        false -> ?ERROR_REQUIRES_IMPORTED_STORAGE(storage:get_id(Storage))
+    end;
+validate_constraint(Storage, ?NON_IMPORTED_STORAGE) ->
+    case storage:is_imported(Storage) of
+        false -> ok;
+        true -> ?ERROR_REQUIRES_NON_IMPORTED_STORAGE(storage:get_id(Storage))
     end.
 
 -spec new_doc(doc_id(), storage(), table(), db_record(), luma:feed()) -> doc().

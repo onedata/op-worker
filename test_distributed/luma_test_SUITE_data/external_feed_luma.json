@@ -71,6 +71,74 @@
             }
         }
     },
+    "posixImportedStorageIdExternalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 1000
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "uid": null
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "uid": [1, 2, 3]
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "uid": "string"
+                }
+            },
+            "user7": {
+                "storageCredentials": {
+                    "uid": {
+                        "key": "value"
+                    }
+                }
+            },
+            "user8": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "user9": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": "string"
+            },
+            "user10": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
     "cephStorageIdExternalFeedLuma": {
         "storageUsers": {
             "user1": {
@@ -427,6 +495,74 @@
             }
         }
     },
+    "glusterfsImportedStorageIdExternalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 1000
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "uid": null
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "uid": [1, 2, 3]
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "uid": "string"
+                }
+            },
+            "user7": {
+                "storageCredentials": {
+                    "uid": {
+                        "key": "value"
+                    }
+                }
+            },
+            "user8": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "user9": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": "string"
+            },
+            "user10": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
     "nulldeviceStorageIdExternalFeedLuma": {
         "storageUsers": {
             "user1": {
@@ -492,6 +628,74 @@
                     "uid": 1,
                     "gid": 1
                 },
+                "display": {
+                    "uid": 10,
+                    "gid": 10
+                }
+            }
+        }
+    },
+    "nulldeviceImportedStorageIdExternalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 1000
+                },
+                "displayUid": 1111
+            },
+            "user2": {},
+            "user3": {
+                "storageCredentials": {}
+            },
+            "user4": {
+                "storageCredentials": {
+                    "uid": null
+                }
+            },
+            "user5": {
+                "storageCredentials": {
+                    "uid": [1, 2, 3]
+                }
+            },
+            "user6": {
+                "storageCredentials": {
+                    "uid": "string"
+                }
+            },
+            "user7": {
+                "storageCredentials": {
+                    "uid": {
+                        "key": "value"
+                    }
+                }
+            },
+            "user8": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "user9": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": "string"
+            },
+            "user10": {
+                "storageCredentials": {
+                    "uid": 123
+                },
+                "displayUid": {
+                    "key": "value"
+                }
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
                 "display": {
                     "uid": 10,
                     "gid": 10

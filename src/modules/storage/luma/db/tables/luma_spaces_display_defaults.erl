@@ -48,7 +48,8 @@ get_or_acquire(Storage, SpaceId) ->
 store(Storage, SpaceId, DisplayDefaultsMap) ->
     case luma_sanitizer:sanitize_posix_credentials(DisplayDefaultsMap) of
         {ok, DisplayDefaultsMap2} ->
-            Record = luma_posix_credentials:new(DisplayDefaultsMap2),
+            DisplayDefaultsMap3 = ensure_all_fields_are_defined(DisplayDefaultsMap2, Storage, SpaceId),
+            Record = luma_posix_credentials:new(DisplayDefaultsMap3),
             luma_db:store(Storage, SpaceId, ?MODULE, Record, ?LOCAL_FEED);
         Error ->
             Error
@@ -56,7 +57,6 @@ store(Storage, SpaceId, DisplayDefaultsMap) ->
 
 -spec delete(storage:id(), key()) -> ok.
 delete(StorageId, SpaceId) ->
-    % todo usuwac ale tylko jak jest dobry feed ustaiowny , sprawdzic !!!1
     luma_db:delete(StorageId, SpaceId, ?MODULE).
 
 delete_if_auto_feed(Storage, SpaceId) ->

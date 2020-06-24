@@ -20,7 +20,7 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
-% TODO VFS-6161 divide to smaller test suites
+% TODO VFS-6161 divide to smaller test suites, maybe get rid of readonly test SUITES as all imported storages are mounted in root
 % TODO VFS-6162 move utility functions to storage_sync_test_utils module
 
 % CT functions
@@ -577,7 +577,7 @@ create_delete_import_test(Config, MountSpaceInRoot, ReadBoth) ->
     Attempts = 60,
 
     StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
-    StorageTestFilePath2 = storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath2 = storage_path(?SPACE_ID, ?TEST_FILE1, false),
     RDWRStorage = get_rdwr_storage(Config, W1),
 
     %% Create file on storage
@@ -1257,7 +1257,7 @@ create_file_import_race_test(Config) ->
         meck:passthrough([StorageFileCtx, Info])
     end),
 
-    StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, false),
+    StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, true),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
     %% Create file on storage
     timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
@@ -1337,7 +1337,7 @@ close_file_import_race_test(Config, StorageType) ->
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SyncedStorage = get_synced_storage(Config, W1),
     RDWRStorage = get_rdwr_storage(Config, W1),
-    MountInRoot = false,
+    MountInRoot = true,
 
     {ok, {_, CreateHandle}} = lfm_proxy:create_and_open(W1, SessId, ?SPACE_TEST_FILE_PATH1, 8#777),
     {ok, _} = lfm_proxy:write(W1, CreateHandle, 0, ?WRITE_TEXT),
@@ -1399,7 +1399,7 @@ close_file_import_race_test(Config, StorageType) ->
 delete_file_reimport_race_test(Config, StorageType) ->
     % in this test, we check whether sync does not reimport file that is deleted between checking links and file_location
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    MountInRoot = false,
+    MountInRoot = true,
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -1473,7 +1473,7 @@ delete_opened_file_reimport_race_test(Config, StorageType) ->
     % in this test, we check whether sync does not reimport file that is deleted while still opened,
     % between checking links and file_location
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
-    MountInRoot = false,
+    MountInRoot = true,
     RDWRStorage = get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -1715,7 +1715,7 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
-    StorageSpacePath = storage_path(?SPACE_ID, <<"">>, false),
+    StorageSpacePath = storage_path(?SPACE_ID, <<"">>, true),
     RDWRStorage = get_rdwr_storage(Config, W1),
     SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
 
@@ -1766,7 +1766,7 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
     }, ?SPACE_ID).
 
 sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage(Config) ->
-    MountSpaceInRoot = false,
+    MountSpaceInRoot = true,
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -1857,7 +1857,7 @@ sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storag
         lfm_proxy:stat(W2, SessId2, {path, SpaceTestDirPath}), ?ATTEMPTS).
 
 sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Config, StorageType) ->
-    MountSpaceInRoot = false,
+    MountSpaceInRoot = true,
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -1954,7 +1954,7 @@ sync_should_not_import_recreated_file_with_suffix_on_storage(Config, StorageType
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
-    StorageSpacePath = storage_path(?SPACE_ID, <<"">>, false),
+    StorageSpacePath = storage_path(?SPACE_ID, <<"">>, true),
     SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
     timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
 
@@ -2014,9 +2014,9 @@ sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config, Stora
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
 
-    StorageSpacePath = storage_path(?SPACE_ID, <<"">>, false),
+    StorageSpacePath = storage_path(?SPACE_ID, <<"">>, true),
     SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
-    StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, false),
+    StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, true),
 
     timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
 
@@ -2109,7 +2109,7 @@ sync_should_not_import_replicated_file_with_suffix_on_storage(Config, StorageTyp
     RDWRStorage = get_rdwr_storage(Config, W1),
     timer:sleep(timer:seconds(1)),
 
-    StorageSpacePath = storage_path(?SPACE_ID, <<"">>, false),
+    StorageSpacePath = storage_path(?SPACE_ID, <<"">>, true),
     SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
 
     {ok, G1} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1, 8#644),
@@ -2160,8 +2160,8 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config, StorageType) -
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
-    StorageSpacePath = storage_path(?SPACE_ID, <<"">>, false),
-    StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, false),
+    StorageSpacePath = storage_path(?SPACE_ID, <<"">>, true),
+    StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, true),
     RDWRStorage = get_rdwr_storage(Config, W1),
     SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
 
@@ -2308,7 +2308,7 @@ create_delete_import2_test(Config, MountSpaceInRoot, ReadBoth) ->
     [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
     Attempts = 60,
     StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
-    StorageTestFilePath2 = storage_path(?SPACE_ID, ?TEST_FILE1, MountSpaceInRoot),
+    StorageTestFilePath2 = storage_path(?SPACE_ID, ?TEST_FILE1, false),
     RDWRStorage = get_rdwr_storage(Config, W1),
 
     %% Create file on storage
@@ -5419,7 +5419,6 @@ sync_should_not_invalidate_file_after_replication(Config) ->
 %%%===================================================================
 
 to_storage_file_id(Path, MountPoint) ->
-    % todo remove
     PathSplit = binary:split(Path, <<"/">>, [global]),
     MountPointSplit = binary:split(MountPoint, <<"/">>, [global]),
     StorageFileIdSplit = PathSplit -- MountPointSplit,
@@ -6231,7 +6230,7 @@ init_per_testcase(_Case, Config, Readonly) ->
     ConfigWithProxy = lfm_proxy:init(Config),
     Config2 = add_synced_storages(ConfigWithProxy),
     Config3 = add_rdwr_storages(Config2),
-    create_init_file(Config3, Readonly),
+    create_init_file(Config3, true),
     Config3.
 
 end_per_testcase(Case, Config, Readonly)

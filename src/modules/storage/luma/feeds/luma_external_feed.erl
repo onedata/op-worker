@@ -83,19 +83,21 @@ map_onedata_user_to_credentials(UserId, Storage) ->
                 {ok, StorageUser} -> {ok, StorageUser};
                 {error, _} -> {error, luma_external_feed_error}
             end;
-        {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, RespBody} ->
-            ?error("Mapping user ~p to storage credentials on storage ~p not found.~n"
-            "Request to external LUMA DB feed returned ~p.",
-                [UserId, storage:get_id(Storage), RespBody]),
+        {ok, Code = ?HTTP_404_NOT_FOUND, _RespHeaders, RespBody} ->
+            log_http_error(
+                "Mapping user ~p to storage credentials on storage ~p not found.",
+                [UserId, storage:get_id(Storage)], Code, RespBody),
             {error, not_found};
         {ok, Code, _RespHeaders, RespBody} ->
-            ?error("Mapping user ~p to storage credentials on storage ~p failed .~n"
-            "Request to external LUMA DB feed returned code ~p and body ~p.",
-                [UserId, storage:get_id(Storage), Code, RespBody]),
+            log_http_error(
+                "Mapping user ~p to storage credentials on storage ~p failed.",
+                [UserId, storage:get_id(Storage)], Code, RespBody
+            ),
             {error, luma_external_feed_error};
         {error, Reason} ->
-            ?error("Mapping user ~p to storage credentials on storage ~p failed .~n"
-            "Unexpected error ~p.", [UserId, storage:get_id(Storage), Reason]),
+            log_unexpected_error(
+                "Mapping user ~p to storage credentials on storage ~p failed.",
+                [UserId, storage:get_id(Storage)], Reason),
             {error, luma_external_feed_error}
     end.
 
@@ -116,13 +118,16 @@ fetch_default_posix_credentials(SpaceId, Storage) ->
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
             {error, not_found};
         {ok, Code, _RespHeaders, RespBody} ->
-            ?error("Default storage credentials for storage ~p supporting space ~p could not be fetched.~n"
-            "Request to external LUMA DB feed returned code ~p and body ~p.",
-                [storage:get_id(Storage), SpaceId, Code, RespBody]),
+            log_http_error(
+                "Default storage credentials for storage ~p supporting space ~p could not be fetched.",
+                [storage:get_id(Storage), SpaceId], Code, RespBody
+            ),
             {error, luma_external_feed_error};
         {error, Reason} ->
-            ?error("Default storage credentials for storage ~p supporting space ~p could not be fetched.~n"
-            "Unexpected error ~p.", [storage:get_id(Storage), SpaceId, Reason]),
+            log_unexpected_error(
+                "Default storage credentials for storage ~p supporting space ~p could not be fetched.",
+                [storage:get_id(Storage), SpaceId], Reason
+            ),
             {error, luma_external_feed_error}
     end.
 
@@ -134,7 +139,7 @@ fetch_default_display_credentials(SpaceId, Storage) ->
         <<"storageId">> => storage:get_id(Storage),
         <<"spaceId">> => SpaceId
     },
-    case do_request(?ONECLIENT_DISPLAY_CREDENTIALS_PATH, Body, Storage) of
+    case do_request(?DISPLAY_CREDENTIALS_PATH, Body, Storage) of
         {ok, ?HTTP_200_OK, _RespHeaders, RespBody} ->
             case luma_sanitizer:sanitize_posix_credentials(RespBody) of
                 {ok, PosixCredentials} -> {ok, PosixCredentials};
@@ -143,13 +148,15 @@ fetch_default_display_credentials(SpaceId, Storage) ->
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
             {error, not_found};
         {ok, Code, _RespHeaders, RespBody} ->
-            ?error("Display credentials for storage ~p supporting space ~p could not be fetched.~n"
-            "Request to external LUMA DB feed returned code ~p and body ~p.",
-                [storage:get_id(Storage), SpaceId, Code, RespBody]),
+            log_http_error(
+                "Display credentials for storage ~p supporting space ~p could not be fetched.",
+                [storage:get_id(Storage), SpaceId], Code, RespBody
+            ),
             {error, luma_external_feed_error};
         {error, Reason} ->
-            ?error("Display credentials for storage ~p supporting space ~p could not be fetched.~n"
-            "Unexpected error ~p.", [storage:get_id(Storage), SpaceId, Reason]),
+            log_unexpected_error(
+                "Display credentials for storage ~p supporting space ~p could not be fetched.",
+                [storage:get_id(Storage), SpaceId], Reason),
             {error, luma_external_feed_error}
     end.
 
@@ -174,11 +181,16 @@ map_uid_to_onedata_user(Uid, Storage) ->
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
             {error, not_found};
         {ok, Code, _RespHeaders, RespBody} ->
-            ?error("Mapping uid ~d on storage ~p failed.~n"
-            "Request to external LUMA DB feed returned code ~p and body ~p.",
-                [Uid, storage:get_id(Storage), Code, RespBody]),
+            log_http_error(
+                "Mapping uid ~d on storage ~p failed.",
+                [Uid, storage:get_id(Storage)], Code, RespBody
+            ),
             {error, luma_external_feed_error};
         {error, Reason} ->
+            log_unexpected_error(
+                "Mapping uid ~d on storage ~p failed.",
+                [Uid, storage:get_id(Storage)], Reason
+            ),
             {error, Reason}
     end.
 
@@ -199,11 +211,16 @@ map_acl_user_to_onedata_user(AclUser, Storage) ->
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
             {error, not_found};
         {ok, Code, _RespHeaders, RespBody} ->
-            ?error("Mapping acl user ~s on storage ~p failed.~n"
-            "Request to external LUMA DB feed returned code ~p and body ~p.",
-                [AclUser, storage:get_id(Storage), Code, RespBody]),
+            log_http_error(
+                "Mapping acl user ~s on storage ~p failed.",
+                [AclUser, storage:get_id(Storage)], Code, RespBody
+            ),
             {error, luma_external_feed_error};
         {error, Reason} ->
+            log_unexpected_error(
+                "Mapping acl user ~s on storage ~p failed.",
+                [AclUser, storage:get_id(Storage)], Reason
+            ),
             {error, Reason}
     end.
 
@@ -223,11 +240,16 @@ map_acl_group_to_onedata_group(AclGroup, Storage) ->
         {ok, ?HTTP_404_NOT_FOUND, _RespHeaders, _RespBody} ->
             {error, not_found};
         {ok, Code, _RespHeaders, RespBody} ->
-            ?error("Mapping acl group ~s on storage ~p failed.~n"
-            "Request to external LUMA DB feed returned code ~p and body ~p.",
-                [AclGroup, storage:get_id(Storage), Code, RespBody]),
+            log_http_error(
+                "Mapping acl group ~s on storage ~p failed.",
+                [AclGroup, storage:get_id(Storage)], Code, RespBody
+            ),
             {error, luma_external_feed_error};
         {error, Reason} ->
+            log_unexpected_error(
+                "Mapping acl group ~s on storage ~p failed.",
+                [AclGroup, storage:get_id(Storage)], Reason
+            ),
             {error, Reason}
     end.
 
@@ -336,3 +358,17 @@ get_idp_identities(AdditionalUserDetails) ->
     lists:map(fun(LinkedAccount) ->
         maps:with([<<"idp">>, <<"subjectId">>], LinkedAccount)
     end, maps:get(<<"linkedAccounts">>, AdditionalUserDetails, [])).
+
+-spec log_http_error(string(), [term()], http_client:code(), json_utils:json_term()) -> ok.
+log_http_error(Format, Args, Code, ResponseBody) ->
+    ?error(
+        Format ++ "~nRequest to external LUMA DB feed returned error code ~p and body ~p.",
+        Args ++ [Code, ResponseBody]
+    ).
+
+-spec log_unexpected_error(string(), [term()], term()) -> ok.
+log_unexpected_error(Format, Args, Reason) ->
+    ?error(
+        Format ++ "~nUnexpected error ~p occurred on request to external LUMA DB feed.", 
+        Args ++ [Reason]
+    ).

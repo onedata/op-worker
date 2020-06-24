@@ -6,7 +6,6 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-% TODO update, nowa tabela feedy
 %%% This is API module for Local User Mapping database (aka LUMA DB) .
 %%% It contains functions that should be used for mapping onedata users
 %%% to storage users and the other way round.
@@ -250,16 +249,18 @@ map_to_display_credentials(OwnerId, SpaceId, Storage) ->
     {ok, od_user:id()} | {error, term()}.
 map_uid_to_onedata_user(Uid, SpaceId, StorageId) ->
     {ok, Storage} = storage:get(StorageId),
-    case storage:is_not_auto_luma_feed(Storage) andalso is_reverse_luma_supported(Storage) of
-        true ->
-            case luma_onedata_users:map_uid_to_onedata_user(Storage, Uid) of
-                {ok, OnedataUser} ->
-                    {ok, luma_onedata_user:get_user_id(OnedataUser)};
-                Error ->
+    case luma_onedata_users:map_uid_to_onedata_user(Storage, Uid) of
+        {ok, OnedataUser} ->
+            {ok, luma_onedata_user:get_user_id(OnedataUser)};
+        {error, not_found} = Error ->
+            case storage:has_non_auto_luma_feed(Storage) of
+                false ->
+                    {ok, ?SPACE_OWNER_ID(SpaceId)};
+                true ->
                     Error
-            end;
-        false ->
-            {ok, ?SPACE_OWNER_ID(SpaceId)}
+                end;
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
@@ -273,18 +274,11 @@ map_uid_to_onedata_user(Uid, SpaceId, StorageId) ->
     {ok, od_user:id()} | {error, term()}.
 map_acl_user_to_onedata_user(AclUser, StorageId) ->
     {ok, Storage} = storage:get(StorageId),
-    case {storage:is_not_auto_luma_feed(Storage), is_reverse_luma_supported(Storage)} of
-        {true, true} ->
-            case luma_onedata_users:map_acl_user_to_onedata_user(Storage, AclUser) of
-                {ok, OnedataUser} ->
-                    {ok, luma_onedata_user:get_user_id(OnedataUser)};
-                Error ->
-                    Error
-            end;
-        {_, false} ->
-            {error, reverse_luma_not_supported};
-        {false, _} ->
-            {error, luma_disabled}
+    case luma_onedata_users:map_acl_user_to_onedata_user(Storage, AclUser) of
+        {ok, OnedataUser} ->
+            {ok, luma_onedata_user:get_user_id(OnedataUser)};
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
@@ -298,18 +292,11 @@ map_acl_user_to_onedata_user(AclUser, StorageId) ->
     {ok, od_group:id()} | {error, term()}.
 map_acl_group_to_onedata_group(AclGroup, StorageId) ->
     {ok, Storage} = storage:get(StorageId),
-    case {storage:is_not_auto_luma_feed(Storage), is_reverse_luma_supported(Storage)} of
-        {true, true} ->
-            case luma_onedata_groups:map_acl_group_to_onedata_group(Storage, AclGroup) of
-                {ok, OnedataGroup} ->
-                    {ok, luma_onedata_group:get_group_id(OnedataGroup)};
-                Error ->
-                    Error
-            end;
-        {_, false} ->
-            {error, reverse_luma_not_supported};
-        {false, _} ->
-            {error, luma_disabled}
+    case luma_onedata_groups:map_acl_group_to_onedata_group(Storage, AclGroup) of
+        {ok, OnedataGroup} ->
+            {ok, luma_onedata_group:get_group_id(OnedataGroup)};
+        Error ->
+            Error
     end.
 
 %%%===================================================================
@@ -326,7 +313,6 @@ clear_db(StorageId) ->
 
 -spec clear_db(storage:id(), od_space:id()) -> ok | {error, term()}.
 clear_db(StorageId, SpaceId) ->
-    % todo rename
     luma_spaces_display_defaults:delete(StorageId, SpaceId),
     luma_spaces_posix_storage_defaults:delete(StorageId, SpaceId).
 
@@ -503,8 +489,3 @@ map_normal_user_to_display_credentials(OwnerId, Storage, SpaceId) ->
         Error ->
             Error
     end.
-
--spec is_reverse_luma_supported(storage:data()) -> boolean().
-is_reverse_luma_supported(Storage) ->
-    Helper = storage:get_helper(Storage),
-    helper:is_posix_compatible(Helper).

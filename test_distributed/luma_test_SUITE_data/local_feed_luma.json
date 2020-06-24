@@ -21,6 +21,24 @@
             }
         }
     },
+    "posixImportedStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": "1000"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
     "cephStorageIdLocalFeedLuma": {
         "storageUsers": {
             "user1": {
@@ -119,6 +137,24 @@
             }
         }
     },
+    "glusterfsImportedStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": "1000"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
     "nulldeviceStorageIdLocalFeedLuma": {
         "storageUsers": {
             "user1": {
@@ -134,6 +170,24 @@
                     "uid": 1,
                     "gid": 1
                 },
+                "display": {
+                    "uid": 20,
+                    "gid": 20
+                }
+            }
+        }
+    },
+    "nulldeviceImportedStorageIdLocalFeedLuma": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": "1000"
+                },
+                "displayUid": 2222
+            }
+        },
+        "spacesDefaults": {
+            "space1": {
                 "display": {
                     "uid": 20,
                     "gid": 20

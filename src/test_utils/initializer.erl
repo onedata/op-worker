@@ -1724,8 +1724,8 @@ setup_luma_local_feed_spaces_defaults(Worker, StorageId, SpacesDefaults) ->
     maps:fold(fun(SpaceId, SpaceDefaults, _) ->
         PosixDefaults = maps:get(<<"posix">>, SpaceDefaults, #{}),
         DisplayDefaults = maps:get(<<"display">>, SpaceDefaults, #{}),
-        rpc:call(Worker, rpc_api, luma_spaces_posix_storage_defaults_store, [StorageId, SpaceId, PosixDefaults]),
-        ok = rpc:call(Worker, rpc_api, luma_spaces_display_defaults_store, [StorageId, SpaceId, DisplayDefaults])
+        Result = rpc:call(Worker, rpc_api, luma_spaces_posix_storage_defaults_store, [StorageId, SpaceId, PosixDefaults]),
+        rpc:call(Worker, rpc_api, luma_spaces_display_defaults_store, [StorageId, SpaceId, DisplayDefaults])
     end, undefined, SpacesDefaults).
 
 setup_luma_local_feed_onedata_users(Worker, StorageId, OnedataUsers) ->
@@ -1736,17 +1736,17 @@ setup_luma_local_feed_onedata_users(Worker, StorageId, OnedataUsers) ->
 
 setup_luma_local_feed_onedata_users_by_uids(Worker, StorageId, OnedataUsers) ->
     maps:fold(fun(Uid, OnedataUser, _) ->
-        ok = rpc:call(Worker, rpc_api, luma_onedata_users_store_by_uid, [StorageId, Uid, OnedataUser])
+        rpc:call(Worker, rpc_api, luma_onedata_users_store_by_uid, [StorageId, Uid, OnedataUser])
     end, undefined, OnedataUsers).
 
 setup_luma_local_feed_onedata_users_by_acl_users(Worker, StorageId, OnedataUsers) ->
     maps:fold(fun(AclUser, OnedataUser, _) ->
-        ok = rpc:call(Worker, rpc_api, luma_onedata_users_store_by_acl_user, [StorageId, AclUser, OnedataUser])
+        rpc:call(Worker, rpc_api, luma_onedata_users_store_by_acl_user, [StorageId, AclUser, OnedataUser])
     end, undefined, OnedataUsers).
 
 setup_luma_local_feed_onedata_groups(Worker, StorageId, OnedataGroups) ->
     maps:fold(fun(AclGroup, OnedataGroup, _) ->
-        ok = rpc:call(Worker, rpc_api, luma_onedata_groups_store, [StorageId, AclGroup, OnedataGroup])
+        rpc:call(Worker, rpc_api, luma_onedata_groups_store, [StorageId, AclGroup, OnedataGroup])
     end, undefined, OnedataGroups).
 
 -spec index_of(term(), [term()]) -> not_found | integer().

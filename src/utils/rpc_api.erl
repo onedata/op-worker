@@ -289,7 +289,7 @@ luma_onedata_users_store_by_uid(Storage, Uid, OnedataUser) ->
     luma_onedata_users:store_by_uid(Storage, Uid, OnedataUser).
 
 
--spec luma_onedata_users_delete_uid_mapping(storage:id(), luma:uid()) -> ok.
+-spec luma_onedata_users_delete_uid_mapping(storage:id(), luma:uid()) ->  ok | {error, term()}.
 luma_onedata_users_delete_uid_mapping(Storage, Uid) ->
     luma_onedata_users:delete_uid_mapping(Storage, Uid).
 
@@ -305,7 +305,7 @@ luma_onedata_users_store_by_acl_user(Storage, AclUser, OnedataUser) ->
     luma_onedata_users:store_by_acl_user(Storage, AclUser, OnedataUser).
 
 
--spec luma_onedata_users_delete_acl_user_mapping(storage:id(), luma:acl_who()) -> ok.
+-spec luma_onedata_users_delete_acl_user_mapping(storage:id(), luma:acl_who()) ->  ok | {error, term()}.
 luma_onedata_users_delete_acl_user_mapping(Storage, AclUser) ->
     luma_onedata_users:delete_acl_user_mapping(Storage, AclUser).
 
@@ -322,7 +322,7 @@ luma_onedata_groups_store(Storage, AclGroup, OnedataGroup) ->
     luma_onedata_groups:store(Storage, AclGroup, OnedataGroup).
 
 
--spec luma_onedata_groups_delete(storage:id(), luma:acl_who()) -> ok.
+-spec luma_onedata_groups_delete(storage:id(), luma:acl_who()) ->  ok | {error, term()}.
 luma_onedata_groups_delete(Storage, AclGroup) ->
     luma_onedata_groups:delete(Storage, AclGroup).
 

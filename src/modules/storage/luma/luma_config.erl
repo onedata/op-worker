@@ -118,8 +118,8 @@ describe(#luma_config{
 }) ->
     #{
         <<"lumaFeed">> => ?EXTERNAL_FEED,
-        <<"lumaUrl">> => LumaUrl,
-        <<"apiKey">> => utils:undefined_to_null(ApiKey)
+        <<"lumaFeedUrl">> => LumaUrl,
+        <<"lumaFeedApiKey">> => utils:undefined_to_null(ApiKey)
     };
 describe(#luma_config{feed = LumaFeed}) ->
     #{

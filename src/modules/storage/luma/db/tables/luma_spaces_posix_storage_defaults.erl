@@ -45,23 +45,20 @@ get_or_acquire(Storage, SpaceId) ->
 
 -spec store(storage(), key(), luma_posix_credentials:credentials_map()) -> ok | {error, term()}.
 store(Storage, SpaceId, PosixDefaultsMap) ->
-    case storage:is_imported(Storage) of
-        true ->
-            % ignore user input in case of imported_storage
-            ok;
-        false ->
-            case luma_sanitizer:sanitize_posix_credentials(PosixDefaultsMap) of
-                {ok, PosixDefaultsMap} ->
-                    Record = luma_posix_credentials:new(PosixDefaultsMap),
-                    case luma_db:store(Storage, SpaceId, ?MODULE, Record, ?LOCAL_FEED) of
-                        ok ->
-                            luma_spaces_display_defaults:delete_if_auto_feed(Storage, SpaceId);
-                        Error ->
-                            Error
-                    end;
-                Error2 ->
-                    Error2
-            end
+    case luma_sanitizer:sanitize_posix_credentials(PosixDefaultsMap) of
+        {ok, PosixDefaultsMap2} ->
+            PosixDefaultsMap3 = ensure_all_fields_are_defined(PosixDefaultsMap2, Storage, SpaceId),
+            Record = luma_posix_credentials:new(PosixDefaultsMap3),
+            case luma_db:store(Storage, SpaceId, ?MODULE, Record, ?LOCAL_FEED, ?FORCE_OVERWRITE,
+                [?POSIX_STORAGE, ?NON_IMPORTED_STORAGE])
+            of
+                ok ->
+                    luma_spaces_display_defaults:delete_if_auto_feed(Storage, SpaceId);
+                Error ->
+                    Error
+            end;
+        Error2 ->
+            Error2
     end.
 
 -spec delete(storage:id(), key()) -> ok.
@@ -124,12 +121,12 @@ fetch_default_posix_credentials(Storage, SpaceId) ->
 
 -spec ensure_all_fields_are_defined(luma_posix_credentials:credentials_map(), storage(), od_space:id()) ->
     luma_posix_credentials:credentials_map().
-ensure_all_fields_are_defined(FetchedPosixDefaultsMap, Storage, SpaceId) ->
-    case luma_posix_credentials:all_fields_defined(FetchedPosixDefaultsMap) of
+ensure_all_fields_are_defined(PosixDefaultsMap, Storage, SpaceId) ->
+    case luma_posix_credentials:all_fields_defined(PosixDefaultsMap) of
         true ->
-            FetchedPosixDefaultsMap;
+            PosixDefaultsMap;
         false ->
             {ok, FallbackDefaults} = luma_auto_feed:acquire_default_posix_storage_credentials(Storage, SpaceId),
             FallbackDefaultsJson = luma_posix_credentials:to_json(FallbackDefaults),
-            maps:merge(FallbackDefaultsJson, FetchedPosixDefaultsMap)
+            maps:merge(FallbackDefaultsJson, PosixDefaultsMap)
     end.

@@ -37,8 +37,8 @@
 -export([get_id/1, get_helper/1, get_helper_name/1, get_type/1, get_luma_feed/1, get_luma_config/1]).
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
--export([is_storage_detection_skipped/1, is_imported/1, is_posix_compatible/1]).
--export([is_not_auto_luma_feed/1]).
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1]).
+-export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 
 %%% Functions to modify storage details
@@ -279,9 +279,9 @@ fetch_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(Storag
     QosParameters.
 
 
--spec is_storage_detection_skipped(data() | id()) -> boolean().
-is_storage_detection_skipped(StorageDataOrId) ->
-    storage_config:is_storage_detection_skipped(StorageDataOrId).
+-spec should_skip_storage_detection(data() | id()) -> boolean().
+should_skip_storage_detection(StorageDataOrId) ->
+    storage_config:should_skip_storage_detection(StorageDataOrId).
 
 
 -spec is_imported(id() | data()) -> boolean().
@@ -291,8 +291,8 @@ is_imported(StorageId) when is_binary(StorageId) ->
 is_imported(StorageData) ->
     is_imported(storage:get_id(StorageData)).
 
--spec is_not_auto_luma_feed(data()) -> boolean().
-is_not_auto_luma_feed(Storage) ->
+-spec has_non_auto_luma_feed(data()) -> boolean().
+has_non_auto_luma_feed(Storage) ->
     get_luma_feed(Storage) =/= ?AUTO_FEED.
 
 -spec is_local(id()) -> boolean().
