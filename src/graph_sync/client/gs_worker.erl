@@ -28,7 +28,8 @@
 -export([on_db_and_workers_ready/0]).
 -export([supervisor_flags/0]).
 %% Internal services API
--export([start_gs_client_worker/0, stop_gs_client_worker/0, takeover_gs_client_worker/0, connection_healthcheck/1]).
+-export([start_gs_client_worker_service/0, stop_gs_client_worker/0,
+    takeover_gs_client_worker/0, connection_healthcheck/1]).
 
 -define(GS_WORKER_SUP, gs_worker_sup).
 
@@ -122,31 +123,10 @@ on_db_and_workers_ready() ->
 %%% Internal services API
 %%%===================================================================
 
--spec start_gs_client_worker() -> ok | no_return().
-start_gs_client_worker() ->
-    case supervisor:start_child(?GS_WORKER_SUP, gs_client_worker_spec()) of
-        {ok, _} ->
-            try
-                case node_manager:get_cluster_status() of
-                    {error, cluster_not_ready} ->
-                        ?info("Deferring on-connect-to-oz procedures as the cluster is not ready yet");
-                    {ok, _} ->
-                        run_on_connect_to_oz_procedures()
-                end,
-                ok
-            catch Type:Reason ->
-                ?error_stacktrace(
-                    "Failed to execute on-connect procedures, disconnecting - ~p:~p",
-                    [Type, Reason]
-                ),
-                % Kill the connection to Onezone, which will cause a
-                % connection retry during the next healthcheck
-                gs_client_worker:force_terminate()
-            end;
-        {error, Error} ->
-            ?error("Failed to start gs client worker supervisor child: ~p", [Error]),
-            ok % Ignore error - will be tried again during next healthcheck
-    end.
+-spec start_gs_client_worker_service() -> ok.
+start_gs_client_worker_service() ->
+    start_gs_client_worker(),
+    ok. % Ignore error - will be tried again during next healthcheck
 
 -spec stop_gs_client_worker() -> ok | no_return().
 stop_gs_client_worker() ->
@@ -154,10 +134,10 @@ stop_gs_client_worker() ->
     supervisor:delete_child(?GS_WORKER_SUP, ?GS_CLIENT_WORKER_GLOBAL_NAME),
     ok.
 
--spec takeover_gs_client_worker() -> ok | no_return().
+-spec takeover_gs_client_worker() -> ok.
 takeover_gs_client_worker() ->
     oneprovider:on_disconnect_from_oz(),
-    start_gs_client_worker().
+    start_gs_client_worker_service().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -168,7 +148,9 @@ takeover_gs_client_worker() ->
 connection_healthcheck(LastInterval) ->
     case get_connection_status() of
         unregistered ->
-            ?debug("Checking connection to Onezone - the provider is not registered."),
+            ?debug("The provider is not registered - next Onezone connection attempt in ~B seconds.", [
+                ?GS_HEALTHCHECK_INTERVAL div 1000
+            ]),
             {restart, ?GS_HEALTHCHECK_INTERVAL};
         alive ->
             {ok, ?GS_HEALTHCHECK_INTERVAL};
@@ -177,7 +159,7 @@ connection_healthcheck(LastInterval) ->
                 ?GS_RECONNECT_MAX_BACKOFF,
                 round(LastInterval * ?GS_RECONNECT_BACKOFF_RATE)
             ),
-            ?info("Checking connection to Onezone - next Onezone connection attempt in ~B seconds.", [
+            ?info("Connection to Onezone is not alive - next Onezone connection attempt in ~B seconds.", [
                 Interval2 div 1000
             ]),
             {restart, Interval2}
@@ -196,7 +178,7 @@ connection_healthcheck(LastInterval) ->
     {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     ServiceOptions = #{
-        start_function => start_gs_client_worker,
+        start_function => start_gs_client_worker_service,
         stop_function => stop_gs_client_worker,
         takeover_function => takeover_gs_client_worker,
         healthcheck_fun => connection_healthcheck,
@@ -251,6 +233,33 @@ cleanup() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec start_gs_client_worker() -> ok | error.
+start_gs_client_worker() ->
+    case supervisor:start_child(?GS_WORKER_SUP, gs_client_worker_spec()) of
+        {ok, _} ->
+            try
+                case node_manager:get_cluster_status() of
+                    {error, cluster_not_ready} ->
+                        ?info("Deferring on-connect-to-oz procedures as the cluster is not ready yet");
+                    {ok, _} ->
+                        run_on_connect_to_oz_procedures()
+                end,
+                ok
+            catch Type:Reason ->
+                ?error_stacktrace(
+                    "Failed to execute on-connect procedures, disconnecting - ~p:~p",
+                    [Type, Reason]
+                ),
+                % Kill the connection to Onezone, which will cause a
+                % connection retry during the next healthcheck
+                gs_client_worker:force_terminate()
+            end;
+        {error, Error} ->
+            ?error("Failed to start gs client worker supervisor child: ~p", [Error]),
+            error
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
