@@ -195,10 +195,9 @@ start(SpaceId, Config, CurrentSize) ->
                     case start_service(SpaceId, ARId, AR, Config) of
                         ok ->
                             {ok, ARId};
-                        {error, not_found} ->
+                        aborted ->
                             ?error(
-                                "Could not start autocleaning_run_controller in "
-                                "space ~p because file popularity view was not found",
+                                "Could not start autocleaning_run_controller in space ~p",
                                 [SpaceId]
                             ),
                             ?ERROR_FILE_POPULARITY_DISABLED

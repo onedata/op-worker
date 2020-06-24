@@ -38,7 +38,7 @@
 -export([init/1, name/1, handle_call/3, handle_cast/2, terminate/2, custom_error_handling/2,
     on_end_of_stream/1, on_harvesting_doc_not_found/1]).
 
-%% Services API
+%% Internal services API
 -export([start_service/1, stop_service/1]).
 
 % Revising a harvester means comparing current list of its indices with
@@ -333,7 +333,7 @@ on_harvesting_doc_not_found(State) ->
     {stop, normal, State}.
 
 %%%===================================================================
-%%% Permanent services API
+%%% Internal services API
 %%%===================================================================
 
 -spec start_service(od_space:id()) -> ok | abort.

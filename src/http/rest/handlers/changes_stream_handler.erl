@@ -520,7 +520,7 @@ init_stream(#{last_seq := Since, space_id := SpaceId, triggers := Triggers} = St
 
     % TODO VFS-5570
     % TODO VFS-6389 - maybe restart stream in case of node failure
-    Node = datastore_key:responsible_node(SpaceId),
+    Node = datastore_key:any_responsible_node(SpaceId),
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream, [
         <<"onedata">>,
         SpaceId,

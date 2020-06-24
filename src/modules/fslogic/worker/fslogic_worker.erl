@@ -685,7 +685,7 @@ periodical_spaces_autocleaning_check() ->
         {ok, SpaceIds} ->
             MyNode = node(),
             lists:foreach(fun(SpaceId) ->
-                case datastore_key:responsible_node(SpaceId) of
+                case datastore_key:any_responsible_node(SpaceId) of
                     MyNode -> autocleaning_api:check(SpaceId);
                     _ -> ok
                 end

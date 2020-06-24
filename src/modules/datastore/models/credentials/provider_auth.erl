@@ -186,7 +186,7 @@ delete() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Backups provider identity in a file this node.
+%% Backups provider identity to a file on the node indicated by argument.
 %% @end
 %%--------------------------------------------------------------------
 -spec backup_to_file(node()) -> ok.

@@ -25,7 +25,7 @@
 %% API
 -export([supervisor_flags/0, start_streams/0, start_streams/1]).
 
-%% Services API
+%% Internal services API
 -export([start_in_stream/1, stop_in_stream/1, start_out_stream/1, stop_out_stream/1]).
 
 -define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
@@ -137,7 +137,7 @@ start_streams(Spaces) ->
     end, Spaces).
 
 %%%===================================================================
-%%% Permanent services API
+%%% Internal services API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
@@ -251,7 +251,7 @@ handle_changes_request(ProviderId, #changes_request2{
             ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
         )}
     ]),
-    Node = datastore_key:responsible_node(SpaceId),
+    Node = datastore_key:any_responsible_node(SpaceId),
     rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]).
 
 %%--------------------------------------------------------------------

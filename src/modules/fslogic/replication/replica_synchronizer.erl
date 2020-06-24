@@ -330,7 +330,7 @@ apply_or_run_locally(Uuid, InCacheFun, ApplyOnCacheFun, FallbackFun) ->
 -spec apply_if_alive_no_check(file_meta:uuid(), term()) ->
     term().
 apply_if_alive_no_check(Uuid, FunOrMsg) ->
-    Node = datastore_key:responsible_node(Uuid),
+    Node = datastore_key:any_responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_if_alive_internal, [Uuid, FunOrMsg]).
 
 %%--------------------------------------------------------------------
@@ -343,7 +343,7 @@ apply_if_alive_no_check(Uuid, FunOrMsg) ->
     term().
 apply_no_check(FileCtx, FunOrMsg) ->
     Uuid = file_ctx:get_uuid_const(FileCtx),
-    Node = datastore_key:responsible_node(Uuid),
+    Node = datastore_key:any_responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_internal, [FileCtx, FunOrMsg]).
 
 %%--------------------------------------------------------------------
@@ -355,7 +355,7 @@ apply_no_check(FileCtx, FunOrMsg) ->
 -spec apply_or_run_locally_no_check(file_meta:uuid(), fun(() -> term()), fun(() -> term())) ->
     term().
 apply_or_run_locally_no_check(Uuid, Fun, FallbackFun) ->
-    Node = datastore_key:responsible_node(Uuid),
+    Node = datastore_key:any_responsible_node(Uuid),
     rpc:call(Node, ?MODULE, apply_or_run_locally_internal, [Uuid, Fun, FallbackFun]).
 
 %%%===================================================================
@@ -784,7 +784,7 @@ handle_info(terminate, State) ->
 handle_info({check_and_terminate_slave, ReportTo}, #state{file_ctx = Ctx} = State) ->
     Uuid = file_ctx:get_uuid_const(Ctx),
     LocalNode = node(),
-    case datastore_key:responsible_node(Uuid) of
+    case datastore_key:any_responsible_node(Uuid) of
         LocalNode -> ok;
         _ -> cancel_all_transfers(State)
     end,

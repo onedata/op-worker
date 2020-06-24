@@ -27,7 +27,7 @@
 -export([terminate_connection/0, restart_connection/0]).
 -export([on_db_and_workers_ready/0]).
 -export([supervisor_flags/0]).
-%% Services API
+%% Internal services API
 -export([start_gs_client_worker/0, stop_gs_client_worker/0, takeover_gs_client_worker/0, connection_healthcheck/1]).
 
 -define(GS_WORKER_SUP, gs_worker_sup).
@@ -119,7 +119,7 @@ on_db_and_workers_ready() ->
     end.
 
 %%%===================================================================
-%%% Permanent services API
+%%% Internal services API
 %%%===================================================================
 
 -spec start_gs_client_worker() -> ok | no_return().
@@ -144,8 +144,8 @@ start_gs_client_worker() ->
                 gs_client_worker:force_terminate()
             end;
         {error, Error} ->
-            ?error("Failed to start gs workspace supervisor child: ~p", [Error]),
-            ok
+            ?error("Failed to start gs client worker supervisor child: ~p", [Error]),
+            ok % Ignore error - will be tried again during next healthcheck
     end.
 
 -spec stop_gs_client_worker() -> ok | no_return().

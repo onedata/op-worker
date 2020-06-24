@@ -30,60 +30,60 @@
     routing => local
 }).
 
--define(PROTECTED_LINK_KEY(SessID), ?PROTECTED_LINK_KEY(SessID, node())).
--define(PROTECTED_LINK_KEY(SessID, Node),
-    <<"PROTECTED_LINK_", SessID/binary "_", (atom_to_binary(Node, utf8))/binary>>).
+-define(PROTECTED_LINK_KEY(SessId), ?PROTECTED_LINK_KEY(SessId, node())).
+-define(PROTECTED_LINK_KEY(SessId, Node),
+    <<"PROTECTED_LINK_", SessId/binary, "_", (atom_to_binary(Node, utf8))/binary>>).
 
 %%%===================================================================
 %%% API - local links
 %%% Note: routing of the model is local and the model
-%%% does not use disc_driver so links disappear after node's crush.
+%%% does not use disc_driver so links disappear after node's crash.
 %%%===================================================================
 
 -spec add_links(session:id(), datastore:tree_id(), datastore:link_name(),
     datastore:link_target()) -> ok | {error, term()}.
-add_links(SessId, TreeID, LinkName, LinkValue) ->
-    ?extract_ok(datastore_model:add_links(?CTX, SessId, TreeID, {LinkName, LinkValue})).
+add_links(SessId, TreeId, LinkName, LinkValue) ->
+    ?extract_ok(datastore_model:add_links(?CTX, SessId, TreeId, {LinkName, LinkValue})).
 
 -spec get_link(session:id(), datastore:tree_id(), datastore:link_name()) ->
     {ok, [datastore:link()]} | {error, term()}.
-get_link(SessId, TreeID, LinkName) ->
-    datastore_model:get_links(?CTX, SessId, TreeID, LinkName).
+get_link(SessId, TreeId, LinkName) ->
+    datastore_model:get_links(?CTX, SessId, TreeId, LinkName).
 
 
 -spec fold_links(session:id(), datastore:tree_id(), datastore:fold_fun(datastore:link())) ->
     {ok, datastore:fold_acc()} | {error, term()}.
-fold_links(SessId, TreeID, Fun) ->
-    datastore_model:fold_links(?CTX, SessId, TreeID, Fun, [], #{}).
+fold_links(SessId, TreeId, Fun) ->
+    datastore_model:fold_links(?CTX, SessId, TreeId, Fun, [], #{}).
 
 -spec delete_links
     (session:id(), datastore:tree_id(), datastore:link_name()) -> ok | {error, term()};
     (session:id(), datastore:tree_id(), [datastore:link_name()]) -> [ok | {error, term()}].
-delete_links(SessId, TreeID, LinkName) ->
-    datastore_model:delete_links(?CTX, SessId, TreeID, LinkName).
+delete_links(SessId, TreeId, LinkName) ->
+    datastore_model:delete_links(?CTX, SessId, TreeId, LinkName).
 
 %%%===================================================================
 %%% API - protected local links
 %%% These links are protected by HA (see ha_datastore.hrl in cluster_worker)
-%%% so they are available even after node's crush.
+%%% so they are available even after node's crash.
 %%%===================================================================
 
 -spec add_protected_links(session:id(), datastore:tree_id(), datastore:link_name(),
     datastore:link_target()) -> ok | {error, term()}.
-add_protected_links(SessId, TreeID, LinkName, LinkValue) ->
-    ?extract_ok(datastore_model:add_links(?CTX#{ha_disabled => false},
-        ?PROTECTED_LINK_KEY(SessId), TreeID, {LinkName, LinkValue})).
+add_protected_links(SessId, TreeId, LinkName, LinkValue) ->
+    ?extract_ok(datastore_model:add_links(?CTX#{ha_enabled => true},
+        ?PROTECTED_LINK_KEY(SessId), TreeId, {LinkName, LinkValue})).
 
 -spec fold_protected_links(session:id(), datastore:tree_id(), datastore:fold_fun(datastore:link()), node()) ->
     {ok, datastore:fold_acc()} | {error, term()}.
-fold_protected_links(SessId, TreeID, Fun, FoldNode) ->
-    datastore_model:fold_links(?CTX, ?PROTECTED_LINK_KEY(SessId, FoldNode), TreeID, Fun, [], #{}).
+fold_protected_links(SessId, TreeId, Fun, FoldNode) ->
+    datastore_model:fold_links(?CTX, ?PROTECTED_LINK_KEY(SessId, FoldNode), TreeId, Fun, [], #{}).
 
 -spec delete_protected_links
     (session:id(), datastore:tree_id(), datastore:link_name()) -> ok | {error, term()};
     (session:id(), datastore:tree_id(), [datastore:link_name()]) -> [ok | {error, term()}].
-delete_protected_links(SessId, TreeID, LinkName) ->
-    datastore_model:delete_links(?CTX#{ha_disabled => false}, ?PROTECTED_LINK_KEY(SessId), TreeID, LinkName).
+delete_protected_links(SessId, TreeId, LinkName) ->
+    datastore_model:delete_links(?CTX#{ha_enabled => true}, ?PROTECTED_LINK_KEY(SessId), TreeId, LinkName).
 
 %%%===================================================================
 %%% datastore_model callbacks

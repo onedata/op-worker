@@ -436,5 +436,5 @@ infer_ttl(Caveats) ->
 
     case ValidUntil of
         undefined -> undefined;
-        _ -> ValidUntil - time_utils:cluster_time_seconds()
+        _ -> ValidUntil - provider_logic:zone_time_seconds()
     end.

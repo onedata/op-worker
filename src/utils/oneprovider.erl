@@ -27,7 +27,7 @@
 -export([get_id/0, get_id_or_undefined/0, is_self/1, is_registered/0]).
 -export([get_version/0, get_build/0]).
 -export([trusted_ca_certs/0]).
--export([get_oz_domain/0, set_oz_domain/1, get_oz_url/0, get_oz_version/0]).
+-export([get_oz_domain/0, replicate_oz_domain_to_node/1, get_oz_url/0, get_oz_version/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([is_connected_to_oz/0]).
 -export([terminate_oz_connection/0, force_oz_connection_start/0, restart_oz_connection/0]).
@@ -188,8 +188,8 @@ get_oz_domain() ->
 %% Sets the domain of OZ in env on specified node.
 %% @end
 %%--------------------------------------------------------------------
--spec set_oz_domain(node()) -> ok | no_return().
-set_oz_domain(Node) ->
+-spec replicate_oz_domain_to_node(node()) -> ok | no_return().
+replicate_oz_domain_to_node(Node) ->
     {ok, Domain} = application:get_env(?APP_NAME, oz_domain),
     ok = rpc:call(Node, application, set_env, [?APP_NAME, oz_domain, Domain]).
 

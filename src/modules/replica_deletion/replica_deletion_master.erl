@@ -301,7 +301,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec(start(od_space:id()) -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start(SpaceId) ->
     % TODO VFS-6389 - kill after master node recovery
-    Node = datastore_key:responsible_node(SpaceId),
+    Node = datastore_key:any_responsible_node(SpaceId),
     rpc:call(Node, gen_server2, start, [?SERVER(SpaceId), ?MODULE, [SpaceId], []]).
 
 -spec notify_handled_request_async(od_space:id(), replica_deletion:job_id(), replica_deletion:job_type()) -> ok.

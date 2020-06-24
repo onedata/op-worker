@@ -57,45 +57,45 @@ failure_test(Config) ->
     end, ClusterManagerNodes),
 
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
-    lists:foreach(fun(PanelNode) ->
-        Ctx = rpc:call(PanelNode, service, get_ctx, [op_worker]),
-        ok = rpc:call(PanelNode, service, deregister_healthcheck, [op_worker, Ctx])
-    end, ?config(op_panel_nodes, Config)),
+    % TODO - delete when framework handles node stop properly
+    onenv_test_utils:disable_panel_healthcheck(Config),
 
     timer:sleep(5000), % Give time to flush data saved before HA settings change
 
-    DBsyncWorkerP1 = rpc:call(Worker1P1, datastore_key, responsible_node, [SpaceId]),
+    % Get services nodes to check if everything returns on proper node after all nodes failures
+    DBsyncWorkerP1 = rpc:call(Worker1P1, datastore_key, any_responsible_node, [SpaceId]),
     ?assert(is_atom(DBsyncWorkerP1)),
-    DBsyncWorkerP2 = rpc:call(Worker1P2, datastore_key, responsible_node, [SpaceId]),
+    DBsyncWorkerP2 = rpc:call(Worker1P2, datastore_key, any_responsible_node, [SpaceId]),
     ?assert(is_atom(DBsyncWorkerP2)),
-    GSWorkerP1 = rpc:call(Worker1P1, datastore_key, responsible_node, [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN]),
+    GSWorkerP1 = rpc:call(Worker1P1, datastore_key, any_responsible_node, [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN]),
     ?assert(is_atom(GSWorkerP1)),
-    GSWorkerP2 = rpc:call(Worker1P2, datastore_key, responsible_node, [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN]),
+    GSWorkerP2 = rpc:call(Worker1P2, datastore_key, any_responsible_node, [?GS_CLIENT_WORKER_GLOBAL_NAME_BIN]),
     ?assert(is_atom(GSWorkerP2)),
 
-    ct:print("Check dbsync node down:"),
+    % Execute base test that kill nodes many times to verify if multiple failures will be handled properly
+    ct:pal("Check dbsync node down:"),
     test_base(Config, DBsyncWorkerP1, DBsyncWorkerP2),
 
-    ct:print("Check dbsync node down second time:"),
+    ct:pal("Check dbsync node down second time:"),
     test_base(Config, DBsyncWorkerP1, DBsyncWorkerP2),
 
     [NoDBsyncWorkerP1] = WorkersP1 -- [DBsyncWorkerP1],
     [NoDBsyncWorkerP2] = WorkersP2 -- [DBsyncWorkerP2],
 
-    ct:print("Check second node down:"),
+    ct:pal("Check second node down:"),
     test_base(Config, NoDBsyncWorkerP1, NoDBsyncWorkerP2),
 
-    ct:print("Check second node down second time:"),
+    ct:pal("Check second node down second time:"),
     test_base(Config, NoDBsyncWorkerP1, NoDBsyncWorkerP2),
 
-    ct:print("Check dbsync node down third time:"),
+    ct:pal("Check dbsync node down third time:"),
     test_base(Config, DBsyncWorkerP1, DBsyncWorkerP2),
 
-    ct:print("Check second node down third time:"),
+    ct:pal("Check second node down third time:"),
     test_base(Config, DBsyncWorkerP1, DBsyncWorkerP2),
 
-    ct:print("Check components workers after restarts:"),
-
+    % Verify if everything returns on proper node after all nodes failures
+    ct:pal("Check components workers after restarts:"),
     ?assertEqual(DBsyncWorkerP1, node(rpc:call(Worker1P1, global, whereis_name, [{dbsync_out_stream, SpaceId}]))),
     ?assertEqual(DBsyncWorkerP1, node(rpc:call(Worker1P1, global, whereis_name, [{dbsync_in_stream, SpaceId}]))),
     ?assertEqual(DBsyncWorkerP2, node(rpc:call(Worker1P2, global, whereis_name, [{dbsync_out_stream, SpaceId}]))),
@@ -108,6 +108,8 @@ failure_test(Config) ->
 
     ok.
 
+% Basic test - creates dirs and files and checks if they can be used after node failure
+% Creates also dirs and files when node is down and checks if they can be used after node recovery
 test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     [P1, P2] = test_config:get_providers(Config),
     [User1] = test_config:get_provider_users(Config, P1),
@@ -124,7 +126,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
     ok = onenv_test_utils:disable_panel_healthcheck(Config),
 
-    ct:print("Init tests using node ~p", [WorkerToKillP1]),
+    ct:pal("Init tests using node ~p", [WorkerToKillP1]),
     {Dirs, Files} = create_dirs_and_files(WorkerToKillP1, SpaceGuid, SessId(P1)),
 
     ok = onenv_test_utils:kill_node(Config, WorkerToKillP1),
@@ -133,11 +135,11 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     ?assertEqual({badrpc, nodedown}, rpc:call(WorkerToKillP2, oneprovider, get_id, []), 10),
     ct:pal("Killed nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
 
-    check(WorkerToCheckP2, SessId(P2), Attempts, Dirs, Files),
-    ct:print("Check after kill done"),
+    verify_files_and_dirs(WorkerToCheckP2, SessId(P2), Attempts, Dirs, Files),
+    ct:pal("Check after kill done"),
     timer:sleep(5000),
     {Dirs2, Files2} = create_dirs_and_files(WorkerToCheckP1, SpaceGuid, SessId(P1)),
-    ct:print("New dirs and files created"),
+    ct:pal("New dirs and files created"),
 
     ok = onenv_test_utils:start_node(Config, WorkerToKillP1),
     ok = onenv_test_utils:start_node(Config, WorkerToKillP2),
@@ -146,10 +148,10 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     timer:sleep(3000), % TODO - better check node status to be sure that it is running
     ct:pal("Started nodes: ~n~p~n~p", [WorkerToKillP1, WorkerToKillP2]),
 
-    check(WorkerToKillP1, SessId(P1), Attempts, Dirs2, Files2),
-    ct:print("Check after restart on P1 done"),
-    check(WorkerToKillP2, SessId(P2), Attempts, Dirs2, Files2),
-    ct:print("Check after restart on P2 done"),
+    verify_files_and_dirs(WorkerToKillP1, SessId(P1), Attempts, Dirs2, Files2),
+    ct:pal("Check after restart on P1 done"),
+    verify_files_and_dirs(WorkerToKillP2, SessId(P2), Attempts, Dirs2, Files2),
+    ct:pal("Check after restart on P2 done"),
 
     ok.
 
@@ -208,7 +210,7 @@ create_dirs_and_files(Worker, SpaceGuid, SessId) ->
 
     {Dirs, Files}.
 
-check(Worker, SessId, Attempts, Dirs, Files) ->
+verify_files_and_dirs(Worker, SessId, Attempts, Dirs, Files) ->
     lists:foreach(fun(Dir) ->
         ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
             rpc:call(Worker, lfm, stat, [SessId, {guid, Dir}], 1000), Attempts)
