@@ -179,7 +179,13 @@ init([]) ->
             ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
             oneprovider:on_deregister(),
             {stop, normal};
-        ?ERROR_UNKNOWN_ERROR(#{<<"id">> := <<"tokenInvalid">>}) -> % For future compatibility with 20.02.* Onezone's
+        % For future compatibility with 20.02.0-beta* Onezones
+        ?ERROR_UNKNOWN_ERROR(#{<<"id">> := <<"tokenInvalid">>}) ->
+            ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
+            oneprovider:on_deregister(),
+            {stop, normal};
+        % For future compatibility with Onezones newer than 20.02.0-beta*
+        ?ERROR_UNAUTHORIZED(?ERROR_UNKNOWN_ERROR(#{<<"id">> := <<"tokenInvalid">>})) ->
             ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
             oneprovider:on_deregister(),
             {stop, normal};
