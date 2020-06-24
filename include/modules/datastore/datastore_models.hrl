@@ -194,6 +194,7 @@
     provider :: od_provider:id() | undefined,
     spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
+    imported = false :: boolean(),
     cache_state = #{} :: cache_state()
 }).
 

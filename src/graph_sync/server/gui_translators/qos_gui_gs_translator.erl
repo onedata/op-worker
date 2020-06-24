@@ -36,7 +36,7 @@ translate_resource(#gri{aspect = instance, scope = private}, QosDetails) ->
         <<"expressionRpn">> := ExpressionRpn,
         <<"replicasNum">> := ReplicasNum,
         <<"fileId">> := QosRootFileObjectId,
-        <<"fulfilled">> := Fulfilled
+        <<"status">> := Status
     } = QosDetails,
     {ok, FileGuid} = file_id:objectid_to_guid(QosRootFileObjectId),
     #{
@@ -48,5 +48,5 @@ translate_resource(#gri{aspect = instance, scope = private}, QosDetails) ->
             aspect = instance,
             scope = private
         }),
-        <<"fulfilled">> => Fulfilled
+        <<"status">> => Status
     }.

@@ -204,7 +204,7 @@ init([]) ->
             yes = global:register_name(?GS_CLIENT_WORKER_GLOBAL_NAME, self()),
             ?info("Started connection to Onezone: ~p", [ClientRef]),
             {ok, #state{client_ref = ClientRef}};
-        ?ERROR_TOKEN_INVALID ->
+        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_INVALID) ->
             ?error("Provider's credentials are not valid - assuming it is no longer registered in Onezone"),
             oneprovider:on_deregister(),
             {stop, normal};

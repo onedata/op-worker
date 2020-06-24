@@ -26,12 +26,11 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/5, get/1, exists/1, delete/1]).
+-export([create/4, get/1, exists/1, delete/1]).
 -export([get_id/1, get_helper/1, get_luma_config/1,
     is_readonly/1, is_imported_storage/1]).
 
--export([update_helper/2, update_luma_config/2,
-    set_readonly/2, set_imported_storage/2]).
+-export([update_helper/2, update_luma_config/2, set_readonly/2]).
 
 -export([delete_all/0]).
 
@@ -60,16 +59,15 @@
 %%% API
 %%%===================================================================
 
--spec create(storage:id(), helpers:helper(), boolean(),
-    luma_config:config(), boolean()) -> {ok, storage:id()} | {error, term()}.
-create(StorageId, Helper, Readonly, LumaConfig, ImportedStorage) ->
+-spec create(storage:id(), helpers:helper(), boolean(), luma_config:config()) -> 
+    {ok, storage:id()} | {error, term()}.
+create(StorageId, Helper, Readonly, LumaConfig) ->
     ?extract_key(datastore_model:create(?CTX, #document{
         key = StorageId,
         value = #storage_config{
             helper = Helper,
             readonly = Readonly,
-            luma_config = LumaConfig,
-            imported_storage = ImportedStorage
+            luma_config = LumaConfig
         }
     })).
 
@@ -131,6 +129,7 @@ is_readonly(StorageId) ->
     is_readonly(StorageConfigDoc).
 
 
+%% @TODO VFS-5856 deprecated, included for upgrade procedure
 -spec is_imported_storage(doc() | record() | storage:id()) -> boolean().
 is_imported_storage(#document{value = #storage_config{} = Value}) ->
     is_imported_storage(Value);
@@ -184,13 +183,6 @@ update_luma_config(StorageId, UpdateFun) ->
 set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
     ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
         {ok, Storage#storage_config{readonly = Readonly}}
-    end)).
-
-
--spec set_imported_storage(storage:id(), boolean()) -> ok.
-set_imported_storage(StorageId, Value) ->
-    ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
-        {ok, Storage#storage_config{imported_storage = Value}}
     end)).
 
 
@@ -248,5 +240,5 @@ get_record_struct(1) ->
             {url, string},
             {api_key, string}
         ]}},
-        {imported_storage, boolean}
+        {imported_storage, boolean} % @TODO 5856 deprecated remove in next major version
     ]}.

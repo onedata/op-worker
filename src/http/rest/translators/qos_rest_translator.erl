@@ -33,8 +33,8 @@
     middleware:data_format(), Result :: term() | {gri:gri(), term()} |
     {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = instance}, _, resource, {#gri{id = QosEntryId}, _}) ->
-    PathTokens = [<<"qos-entry">>, QosEntryId],
-    ?CREATED_REPLY(PathTokens, #{<<"qosEntryId">> => QosEntryId}).
+    PathTokens = [<<"qos-requirement">>, QosEntryId],
+    ?CREATED_REPLY(PathTokens, #{<<"qosRequirementId">> => QosEntryId}).
 
 
 %%--------------------------------------------------------------------
@@ -48,5 +48,5 @@ get_response(#gri{id = QosEntryId}, QosData) ->
     {ok, InfixExpression} = qos_expression:rpn_to_infix(ExpressionRpn),
     ?OK_REPLY(QosData1#{
         <<"expression">> => InfixExpression,
-        <<"qosEntryId">> => QosEntryId
+        <<"qosRequirementId">> => QosEntryId
     }).

@@ -22,16 +22,10 @@
         },
         "cfg2": {
             "storages": [
-
                 {
-                    "type": "s3",
-                    "name": "synced_storage",
-                    "bucket": "onedata",
-                    "block_size": "0",
-                    "storage_path_type": "canonical",
-                    "readonly": true
+                    "type": "posix",
+                    "name": "/mnt/st2"
                 }
-
             ],
             "users": [],
             "groups": {}
@@ -109,45 +103,40 @@
     },
     "test_global_setup": {
         "groups": {
-            "group1": {
-                "users": [
-                "user1"
-                ]
-            },
-            "group2": {
-                "users": [
-                    "user2"
-                ]
-            }
         },
         "spaces": {
             "space1": {
-                "displayed_name": "space_name1",
+                "displayed_name": "space1",
                 "users": [
                     "user1",
                     "user2"
                 ],
                 "groups": [
-                    "group1",
-                    "group2"
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st1"
-                    },
-                    "p2": {
-                        "storage": "synced_storage"
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
                     }
                 }
-            }
-        },
-        "storages": {
-            "p1": {
-                "/mnt/st1": {}
             },
-            "p2": {
-                "synced_storage": {
-                    "imported_storage": "true"
+            "space2": {
+                "displayed_name": "space2",
+                "users": [
+                    "user2",
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 10737418240
+                    }
                 }
             }
         }

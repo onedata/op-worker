@@ -398,7 +398,7 @@ setup_storage([Worker | Rest], Config) ->
         ?CANONICAL_STORAGE_PATH
     ),
     StorageName = <<"Test", (atom_to_binary(?GET_DOMAIN(Worker), utf8))/binary>>,
-    {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, false, undefined, false]),
+    {ok, StorageId} = rpc:call(Worker, storage_config, create, [StorageName, Helper, false, undefined]),
     storage_logic_mock_setup(Worker, #{?GET_DOMAIN_BIN(Worker) => #{StorageId => #{}}}, []),
     rpc:call(Worker, storage, on_storage_created, [StorageId]),
     [{{storage_id, ?GET_DOMAIN(Worker)}, StorageId}, {{storage_dir, ?GET_DOMAIN(Worker)}, TmpDir}] ++
@@ -848,19 +848,6 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
     harvester_logic_mock_setup(AllWorkers, HarvestersSetup),
     storage_logic_mock_setup(AllWorkers, StoragesSetupMap, SpacesSupports),
     ok = init_qos_bounded_cache(Config),
-
-    %% Setup storage
-    lists:foreach(fun({_SpaceId, SpaceConfig}) ->
-        Providers0 = proplists:get_value(<<"providers">>, SpaceConfig),
-        lists:foreach(fun({PID, ProviderConfig}) ->
-            Domain = proplists:get_value(PID, DomainMappings),
-            case get_same_domain_workers(Config, Domain) of
-                [Worker | _] ->
-                    setup_storage(Worker, Domain, ProviderConfig, Config);
-                _ -> ok
-            end
-        end, Providers0)
-    end, SpacesSetup),
 
     %% Set expiration time for session to value specified in Config or to 1d.
     FuseSessionTTL = case ?config(fuse_session_grace_period_seconds, Config) of
@@ -1524,7 +1511,8 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
                 {ok, #document{value = #od_storage{
                     % storage name is equal to its id
                     name = StorageId,
-                    qos_parameters = maps:get(<<"qos_parameters">>, StorageDesc, #{})
+                    qos_parameters = maps:get(<<"qos_parameters">>, StorageDesc, #{}),
+                    imported = binary_to_atom(maps:get(<<"imported_storage">>, StorageDesc, <<"false">>), utf8)
                 }}}
         end
     end,
@@ -1558,6 +1546,12 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
 
     ok = test_utils:mock_expect(Workers, storage_logic, get_spaces,
         fun(StorageId) -> {ok, maps:get(StorageId, StoragesToSpaces, [])} end),
+    
+    ok = test_utils:mock_expect(Workers, storage_logic, is_imported,
+        fun(StorageId) ->
+            {ok, #document{value = #od_storage{imported = ImportedStorage}}} = storage_logic:get(StorageId),
+            {ok, ImportedStorage}
+        end),
 
     % NOTE this function changes qos parameters only on the node where it was executed
     ok = test_utils:mock_expect(Workers, storage_logic, set_qos_parameters,
@@ -1574,58 +1568,6 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
 -spec storage_mock_teardown(Workers :: node() | [node()]) -> ok.
 storage_mock_teardown(Workers) ->
     test_utils:mock_unload(Workers, storage_logic).
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns true if storage configured by ProviderConfig should have
-%% imported storage value set to true.
-%% @end
-%%--------------------------------------------------------------------
--spec maybe_set_imported_storage_value(proplists:proplist()) -> boolean().
-maybe_set_imported_storage_value(ProviderConfig) ->
-    case proplists:get_value(<<"imported_storage">>, ProviderConfig) of
-        <<"true">> -> true;
-        _ -> false
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Setup test storage.
-%% @end
-%%--------------------------------------------------------------------
--spec setup_storage(atom(), atom(), proplists:proplist(), list()) -> {ok, od_space:id()} | ok.
-setup_storage(Worker, Domain, ProviderConfig, Config) ->
-    case proplists:get_value(<<"storage">>, ProviderConfig) of
-        undefined ->
-            case ?config({storage_id, Domain}, Config) of
-                undefined ->
-                    ok;
-                StorageId ->
-                    on_space_supported(Worker, StorageId, maybe_set_imported_storage_value(ProviderConfig))
-            end;
-        StorageName ->
-            StorageId = case ?config({storage_id, Domain}, Config) of
-                %if storage is not mocked, get StorageId
-                undefined -> StorageName;
-                StId -> StId
-            end,
-            on_space_supported(Worker, StorageId, maybe_set_imported_storage_value(ProviderConfig))
-    end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Add space storage mapping
-%% @end
-%%--------------------------------------------------------------------
--spec on_space_supported(atom(), storage:id(), boolean()) -> any().
-on_space_supported(Worker, StorageId, ImportedStorage) ->
-    case ImportedStorage of
-        true -> ok = rpc:call(Worker, storage_config, set_imported_storage, [StorageId, true]);
-        false -> ok
-    end.
 
 
 -spec index_of(term(), [term()]) -> not_found | integer().

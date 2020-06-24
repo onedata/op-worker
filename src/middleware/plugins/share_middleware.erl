@@ -63,7 +63,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
     required => #{
         <<"name">> => {binary, non_empty},
         <<"fileId">> => {binary,
-            fun(ObjectId) -> middleware_utils:decode_object_id(ObjectId, <<"fileId">>) end}
+            fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)} end}
     }
 };
 
@@ -95,6 +95,9 @@ fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
         {error, _} = Error ->
             Error
     end;
+
+fetch_entity(#op_req{auth = ?NOBODY}) ->
+    ?ERROR_UNAUTHORIZED;
 
 fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId, SessionId), gri = #gri{
     id = ShareId,

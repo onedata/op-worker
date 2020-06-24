@@ -83,34 +83,29 @@
 -type gs_args() :: #gs_args{}.
 
 -record(api_test_ctx, {
-    scenario :: scenario_type(),
+    scenario_name :: binary(),
+    scenario_type :: scenario_type(),
     node :: node(),
     client :: aai:auth(),
-    env :: api_test_env(),
     data :: map()
 }).
 -type api_test_ctx() :: #api_test_ctx{}.
 
--type api_test_env() :: map().
-
-% Function called before testcase. Can be used to create ephemeral
-% things used in it as returned api_test_env() will be passed to
-% test functions
--type env_setup_fun() :: fun(() -> api_test_env()).
-% Function called after testcase. Can be used to clear up things
-% created in env_setup_fun()
--type env_teardown_fun() :: fun((api_test_env()) -> ok).
-% Function called after testcase. Can be used to check if test had
-% desired effect on environment (e.g. check if resource deleted during
-% test was truly deleted).
+% Function called before testcase. Can be used to create test environment.
+-type setup_fun() :: fun(() -> ok).
+% Function called after testcase. Can be used to clear up environment.
+-type teardown_fun() :: fun(() -> ok).
+% Function called after testcase. Can be used to check if test had desired effect
+% on environment (e.g. check if resource deleted during test was truly deleted).
 % First argument tells whether request made during testcase should succeed
--type env_verify_fun() :: fun(
-    (RequestResultExpectation :: expected_success | expected_failure, api_test_env()) ->
-        boolean()
+-type verify_fun() :: fun(
+    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) -> boolean()
 ).
 
-% Function called during testcase to prepare call/request arguments
--type prepare_args_fun() :: fun((api_test_ctx()) -> rest_args() | gs_args()).
+% Function called during testcase to prepare call/request arguments. If test cannot
+% be run due to e.g invalid combination of client, data and provider 'skip' atom
+% should be returned instead to skip that specific testcase.
+-type prepare_args_fun() :: fun((api_test_ctx()) -> skip | rest_args() | gs_args()).
 % Function called after testcase to validate returned call/request result
 -type validate_call_result_fun() :: fun((api_test_ctx(), Result :: term()) -> ok | no_return()).
 
@@ -120,9 +115,9 @@
     target_nodes :: target_nodes(),
     client_spec :: client_spec(),
 
-    setup_fun = fun() -> #{} end :: env_setup_fun(),
-    teardown_fun = fun(_) -> ok end :: env_teardown_fun(),
-    verify_fun = fun(_, _) -> true end :: env_verify_fun(),
+    setup_fun = fun() -> ok end :: setup_fun(),
+    teardown_fun = fun() -> ok end :: teardown_fun(),
+    verify_fun = fun(_, _) -> true end :: verify_fun(),
 
     prepare_args_fun :: prepare_args_fun(),
     validate_result_fun :: validate_call_result_fun(),
@@ -149,11 +144,21 @@
     target_nodes :: target_nodes(),
     client_spec :: client_spec(),
 
-    setup_fun = fun() -> #{} end :: env_setup_fun(),
-    teardown_fun = fun(_) -> ok end :: env_teardown_fun(),
-    verify_fun = fun(_, _) -> true end :: env_verify_fun(),
+    setup_fun = fun() -> ok end :: setup_fun(),
+    teardown_fun = fun() -> ok end :: teardown_fun(),
+    verify_fun = fun(_, _) -> true end :: verify_fun(),
 
     scenario_templates = [] :: [scenario_template()],
+    % If set then instead of running all scenarios for all clients and data sets
+    % only one scenario will be drawn from 'scenario_templates' for client and
+    % data set combination. For 2 clients (client1, client2), 2 data sets (data1,
+    % data2), 2 providers (provider1, provider2) and 2 scenario_templates (A, B)
+    % only 4 testcase will be run (instead of 8 in case of flag not set), e.g.:
+    % - client1 makes call with data1 on provider1 using scenario B
+    % - client1 makes call with data2 on provider2 using scenario A
+    % - client2 makes call with data1 on provider2 using scenario A
+    % - client2 makes call with data2 on provider1 using scenario B
+    randomly_select_scenarios = false,
 
     data_spec = undefined :: undefined | data_spec()
 }).
@@ -195,7 +200,7 @@ end)()).
 }).
 % Special case -> any user can make requests for shares but if request is
 % being made using credentials by user not supported on specific provider
-% ?ERROR_USER_NOT_SUPPORTED should be returned
+% ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED) should be returned
 -define(CLIENT_SPEC_FOR_SHARE_SCENARIOS(__CONFIG), #client_spec{
     correct = [?NOBODY, ?USER_IN_SPACE_1_AUTH, ?USER_IN_SPACE_2_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [],

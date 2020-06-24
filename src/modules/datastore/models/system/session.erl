@@ -22,7 +22,7 @@
 -include_lib("cluster_worker/include/exometer_utils.hrl").
 
 %% API - basic model function
--export([create/1, save/1, get/1, exists/1, list/0, update/2, delete/1]).
+-export([create/1, save/1, get/1, exists/1, list/0, update/2, delete/1, delete_doc/1]).
 %% API - field access functions
 -export([get_session_supervisor_and_node/1]).
 -export([get_event_manager/1, get_sequencer_manager/1]).
@@ -137,6 +137,15 @@ update(SessId, Diff) when is_function(Diff) ->
         end
     end,
     datastore_model:update(?CTX, SessId, Diff2).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Deletes session document only.
+%% @end
+%%--------------------------------------------------------------------
+-spec delete_doc(id()) -> ok | {error, term()}.
+delete_doc(SessId) ->
+    datastore_model:delete(?CTX, SessId).
 
 %%--------------------------------------------------------------------
 %% @doc

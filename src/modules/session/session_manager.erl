@@ -38,6 +38,9 @@
 
 -type error() :: {error, Reason :: term()}.
 
+% Macros used when process is waiting for other process to init session
+-define(SESSION_INITIALISATION_CHECK_PERIOD_BASE, 100).
+-define(SESSION_INITIALISATION_RETRIES, 8).
 
 %%%===================================================================
 %%% API
@@ -264,13 +267,10 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, ProxyVia) ->
 
     case data_constraints:get(Caveats) of
         {ok, DataConstraints} ->
-            % TODO VFS-5895 check if this critical section is still necessary
-            critical_section:run([?MODULE, SessId], fun() ->
-                reuse_or_create_session(
-                    SessId, SessType, Identity, Credentials,
-                    DataConstraints, ProxyVia
-                )
-            end);
+            reuse_or_create_session(
+                SessId, SessType, Identity, Credentials,
+                DataConstraints, ProxyVia
+            );
         {error, invalid_constraints} ->
             {error, invalid_token}
     end.
@@ -279,10 +279,8 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, ProxyVia) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Creates session or if session exists reuses it.
-%% NOTE !!!
-%% To avoid races during session creation this function should be run in
-%% critical section.
+%% @equiv reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia,
+%%        ?SESSION_INITIALISATION_CHECK_PERIOD_BASE, ?SESSION_INITIALISATION_RETRIES)
 %% @end
 %%--------------------------------------------------------------------
 -spec reuse_or_create_session(
@@ -295,6 +293,28 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, ProxyVia) ->
 ) ->
     {ok, SessId} | error() when SessId :: session:id().
 reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia) ->
+    reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia,
+        ?SESSION_INITIALISATION_CHECK_PERIOD_BASE, ?SESSION_INITIALISATION_RETRIES).
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Creates session or if session exists reuses it.
+%% NOTE !!!
+%% @end
+%%--------------------------------------------------------------------
+-spec reuse_or_create_session(
+    SessId,
+    SessType :: session:type(),
+    Identity :: aai:subject(),
+    Credentials :: undefined | auth_manager:credentials(),
+    DataConstraints :: data_constraints:constraints(),
+    ProxyVia :: undefined | oneprovider:id(),
+    ErrorSleep:: non_neg_integer(),
+    Retries :: non_neg_integer()
+) ->
+    {ok, SessId} | error() when SessId :: session:id().
+reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints, ProxyVia, ErrorSleep, Retries) ->
     Sess = #session{
         type = SessType,
         status = initializing,
@@ -308,6 +328,8 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
             % TODO VFS-5126 - possible race with closing (creation when cleanup
             % is not finished)
             {error, not_found};
+        (#session{status = initializing}) ->
+            {error, initializing};
         (#session{identity = ValidIdentity} = ExistingSess) ->
             case Identity of
                 ValidIdentity ->
@@ -333,6 +355,18 @@ reuse_or_create_session(SessId, SessType, Identity, Credentials, DataConstraints
                     );
                 Other ->
                     Other
+            end;
+        {error, initializing} = Error ->
+            case Retries of
+                0 ->
+                    % Process that is initializing session probably hangs - return error
+                    Error;
+                _ ->
+                    % Other process is initializing session - wait
+                    timer:sleep(ErrorSleep),
+                    ?debug("Waiting for session ~p init", [SessId]),
+                    reuse_or_create_session(SessId, SessType, Identity, Credentials,
+                        DataConstraints, ProxyVia, ErrorSleep * 2, Retries - 1)
             end;
         {error, Reason} ->
             {error, Reason}
@@ -404,8 +438,19 @@ maybe_clear_session_record(#session{supervisor = Sup, connections = Cons} = Sess
 start_session(#document{value = #session{type = SessType}} = Doc) ->
     case session:create(Doc) of
         {ok, SessId} ->
-            supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]),
-            {ok, SessId};
+            case supervisor:start_child(?SESSION_MANAGER_WORKER_SUP, [SessId, SessType]) of
+                {ok, _} ->
+                    {ok, SessId};
+                {error, already_present} ->
+                    ?warning("Session ~p supervisor already exists", [SessId]),
+                    {ok, SessId};
+                {error, {already_started, _}} ->
+                    ?warning("Session ~p supervisor already exists", [SessId]),
+                    {ok, SessId};
+                Error ->
+                    session:delete_doc(SessId),
+                    Error
+            end;
         Error ->
             Error
     end.

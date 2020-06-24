@@ -64,13 +64,13 @@ assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
     end.
 
 
--spec decode_object_id(file_id:objectid(), binary()) -> 
-    {true, file_id:file_guid()} | no_return().
+-spec decode_object_id(file_id:objectid(), binary() | atom()) -> 
+    file_id:file_guid() | no_return().
 decode_object_id(ObjectId, Key) ->
     try
         {ok, Guid} = file_id:objectid_to_guid(ObjectId),
         {_, _, _} = file_id:unpack_share_guid(Guid),
-        {true, Guid}
+        Guid
     catch _:_ ->
         throw(?ERROR_BAD_VALUE_IDENTIFIER(Key))
     end.
