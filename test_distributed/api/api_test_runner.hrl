@@ -91,20 +91,15 @@
 }).
 -type api_test_ctx() :: #api_test_ctx{}.
 
-% Hook called before testcase. Can be used to create ephemeral things and set env
-% vars used in testcase. For that it should use api_test_utils:init_env/set_env_var
-% helper functions.
--type env_setup_fun() :: fun(() -> ok).
-% Hook called after testcase. Can be used to clear up things
-% created in env_setup_fun().
--type env_teardown_fun() :: fun(() -> ok).
-% Function called after testcase. Can be used to check if test had
-% desired effect on environment (e.g. check if resource deleted during
-% test was truly deleted).
+% Function called before testcase. Can be used to create test environment.
+-type setup_fun() :: fun(() -> ok).
+% Function called after testcase. Can be used to clear up environment.
+-type teardown_fun() :: fun(() -> ok).
+% Function called after testcase. Can be used to check if test had desired effect
+% on environment (e.g. check if resource deleted during test was truly deleted).
 % First argument tells whether request made during testcase should succeed
--type env_verify_fun() :: fun(
-    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) ->
-        boolean()
+-type verify_fun() :: fun(
+    (RequestResultExpectation :: expected_success | expected_failure, api_test_ctx()) -> boolean()
 ).
 
 % Function called during testcase to prepare call/request arguments. If test cannot
@@ -120,9 +115,9 @@
     target_nodes :: target_nodes(),
     client_spec :: client_spec(),
 
-    setup_fun = fun() -> ok end :: env_setup_fun(),
-    teardown_fun = fun() -> ok end :: env_teardown_fun(),
-    verify_fun = fun(_, _) -> true end :: env_verify_fun(),
+    setup_fun = fun() -> ok end :: setup_fun(),
+    teardown_fun = fun() -> ok end :: teardown_fun(),
+    verify_fun = fun(_, _) -> true end :: verify_fun(),
 
     prepare_args_fun :: prepare_args_fun(),
     validate_result_fun :: validate_call_result_fun(),
@@ -149,9 +144,9 @@
     target_nodes :: target_nodes(),
     client_spec :: client_spec(),
 
-    setup_fun = fun() -> ok end :: env_setup_fun(),
-    teardown_fun = fun() -> ok end :: env_teardown_fun(),
-    verify_fun = fun(_, _) -> true end :: env_verify_fun(),
+    setup_fun = fun() -> ok end :: setup_fun(),
+    teardown_fun = fun() -> ok end :: teardown_fun(),
+    verify_fun = fun(_, _) -> true end :: verify_fun(),
 
     scenario_templates = [] :: [scenario_template()],
     % If set then instead of running all scenarios for all clients and data sets

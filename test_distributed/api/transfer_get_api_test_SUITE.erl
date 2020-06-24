@@ -98,14 +98,12 @@ get_transfer_status_test_base(Config, TransferType, DataSourceType) ->
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
     % Start transfer and check returned stats for ongoing transfer (transfer is prolonged via mock)
-    EnvRef = api_test_utils:init_env(),
-    SetupEnvFun = transfer_api_test_utils:create_setup_transfer_env_with_started_transfer_fun(
+    EnvRef = api_test_env:init(),
+    SetupFun = transfer_api_test_utils:build_env_with_started_transfer_setup_fun(
         TransferType, EnvRef, DataSourceType, P1, P2, ?USER_IN_SPACE_2, Config
     ),
-    SetupEnvFun(),
-    {ok, #{transfer_id := TransferId} = TransferDetails} = api_test_utils:get_env_var(
-        EnvRef, transfer_details
-    ),
+    SetupFun(),
+    #{transfer_id := TransferId} = TransferDetails = api_test_env:get(EnvRef, transfer_details),
 
     get_transfer_status_test_base(Config, TransferType, DataSourceType, TransferDetails, ongoing),
     transfer_api_test_utils:await_transfer_end(Providers, TransferId, TransferType),
@@ -122,34 +120,29 @@ get_transfer_status_test_base(Config, TransferType, DataSourceType, Env, ExpStat
                 #scenario_template{
                     name = str_utils:format("Get transfer (~p) status using rest endpoint", [TransferType]),
                     type = rest,
-                    prepare_args_fun = create_prepare_transfer_get_status_rest_args_fun(Env),
-                    validate_result_fun = create_validate_transfer_get_status_rest_call_result_fun(
+                    prepare_args_fun = build_get_transfer_status_prepare_rest_args_fun(Env),
+                    validate_result_fun = build_get_transfer_status_validate_rest_call_result_fun(
                         TransferType, DataSourceType, ExpState, Env
                     )
                 },
                 #scenario_template{
                     name = str_utils:format("Get transfer (~p) status using gs transfer api", [TransferType]),
                     type = gs,
-                    prepare_args_fun = create_prepare_transfer_get_status_gs_args_fun(Env),
-                    validate_result_fun = create_validate_transfer_get_status_gs_call_result_fun(DataSourceType, ExpState, Env)
+                    prepare_args_fun = build_get_transfer_status_prepare_gs_args_fun(Env),
+                    validate_result_fun = build_get_transfer_status_validate_gs_call_result_fun(DataSourceType, ExpState, Env)
                 }
             ],
-            data_spec = get_transfer_status_spec()
+            data_spec = #data_spec{bad_values = [
+                {bad_id, <<"NonExistentTransfer">>, ?ERROR_NOT_FOUND}
+            ]}
         }
     ])).
 
 
 %% @private
-get_transfer_status_spec() ->
-    #data_spec{bad_values = [
-        {bad_id, <<"NonExistentTransfer">>, ?ERROR_NOT_FOUND}
-    ]}.
-
-
-%% @private
-create_prepare_transfer_get_status_rest_args_fun(#{transfer_id := TransferId}) ->
+build_get_transfer_status_prepare_rest_args_fun(#{transfer_id := TransferId}) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_id(TransferId, Data),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #rest_args{
             method = get,
@@ -159,9 +152,9 @@ create_prepare_transfer_get_status_rest_args_fun(#{transfer_id := TransferId}) -
 
 
 %% @private
-create_prepare_transfer_get_status_gs_args_fun(#{transfer_id := TransferId}) ->
+build_get_transfer_status_prepare_gs_args_fun(#{transfer_id := TransferId}) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_id(TransferId, Data),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(TransferId, Data),
 
         #gs_args{
             operation = get,
@@ -171,7 +164,7 @@ create_prepare_transfer_get_status_gs_args_fun(#{transfer_id := TransferId}) ->
 
 
 %% @private
-create_validate_transfer_get_status_rest_call_result_fun(TransferType, DataSourceType, ExpState, Env) ->
+build_get_transfer_status_validate_rest_call_result_fun(TransferType, DataSourceType, ExpState, Env) ->
     AlwaysPresentFields = [
         <<"type">>, <<"dataSourceType">>,
         <<"userId">>, <<"rerunId">>, <<"spaceId">>, <<"callback">>,
@@ -361,7 +354,7 @@ assert_proper_times_in_get_status_rest_response(ended, CreationTime, Now, #{
 
 
 %% @private
-create_validate_transfer_get_status_gs_call_result_fun(DataSourceType, ExpState, #{
+build_get_transfer_status_validate_gs_call_result_fun(DataSourceType, ExpState, #{
     user_id := UserId,
     creation_time := CreationTime,
     transfer_id := TransferId,

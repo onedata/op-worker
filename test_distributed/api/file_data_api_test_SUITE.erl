@@ -87,7 +87,7 @@ get_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List normal dir using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(DirObjectId),
+                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(DirObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, rest, undefined, Data, Files)
                     end
@@ -95,7 +95,7 @@ get_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List normal dir using /files/ rest endpoint">>,
                     type = rest_with_file_path,
-                    prepare_args_fun = create_prepare_deprecated_path_get_children_rest_args_fun(DirPath),
+                    prepare_args_fun = build_get_children_prepare_deprecated_path_rest_args_fun(DirPath),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
                     end
@@ -103,7 +103,7 @@ get_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List normal dir using /files-id/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(DirObjectId),
+                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(DirObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, deprecated_rest, undefined, Data, Files)
                     end
@@ -111,7 +111,7 @@ get_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List normal dir using gs api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_children_gs_args_fun(DirGuid, private),
+                    prepare_args_fun = build_get_children_prepare_gs_args_fun(DirGuid, private),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
                         validate_listed_files(Result, gs, undefined, Data, Files)
                     end
@@ -138,7 +138,7 @@ get_shared_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List shared dir using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(ShareDirObjectId),
+                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(ShareDirObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, rest, ShareId, Data, Files)
                     end
@@ -149,7 +149,7 @@ get_shared_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List shared dir using /files-id/ rest endpoint">>,
                     type = rest_not_supported,
-                    prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(ShareDirObjectId),
+                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(ShareDirObjectId),
                     validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_400_BAD_REQUEST, _, Response}) ->
                         ?assertEqual(?REST_ERROR(?ERROR_NOT_SUPPORTED), Response)
                     end
@@ -157,7 +157,7 @@ get_shared_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List shared dir using gs api with public scope">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_children_gs_args_fun(ShareDirGuid, public),
+                    prepare_args_fun = build_get_children_prepare_gs_args_fun(ShareDirGuid, public),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
                         validate_listed_files(Result, gs, ShareId, Data, Files)
                     end
@@ -167,7 +167,7 @@ get_shared_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List shared dir using gs api with private scope">>,
                     type = gs_with_shared_guid_and_aspect_private,
-                    prepare_args_fun = create_prepare_get_children_gs_args_fun(ShareDirGuid, private),
+                    prepare_args_fun = build_get_children_prepare_gs_args_fun(ShareDirGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, Result) ->
                         ?assertEqual(?ERROR_UNAUTHORIZED, Result)
                     end
@@ -230,7 +230,7 @@ get_file_children_test(Config) ->
                 #scenario_template{
                     name = <<"List file using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(FileObjectId),
                     validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
                         ?assertEqual(#{<<"children">> => [#{
                             <<"id">> => FileObjectId,
@@ -241,7 +241,7 @@ get_file_children_test(Config) ->
                 #scenario_template{
                     name = <<"List file using /files/ rest endpoint">>,
                     type = rest_with_file_path,
-                    prepare_args_fun = create_prepare_deprecated_path_get_children_rest_args_fun(FilePath),
+                    prepare_args_fun = build_get_children_prepare_deprecated_path_rest_args_fun(FilePath),
                     validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
                         ?assertEqual(
                             [#{<<"id">> => FileObjectId, <<"path">> => FilePath}],
@@ -252,7 +252,7 @@ get_file_children_test(Config) ->
                 #scenario_template{
                     name = <<"List file using /files-id/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(FileObjectId),
                     validate_result_fun = fun(_TestCaseCtx, {ok, ?HTTP_200_OK, _, Response}) ->
                         ?assertEqual(
                             [#{<<"id">> => FileObjectId, <<"path">> => FilePath}],
@@ -263,7 +263,7 @@ get_file_children_test(Config) ->
                 #scenario_template{
                     name = <<"List file using gs api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_children_gs_args_fun(FileGuid, private),
+                    prepare_args_fun = build_get_children_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = fun(_TestCaseCtx, {ok, Result}) ->
                         ?assertEqual(#{<<"children">> => [FileGuid]}, Result)
                     end
@@ -305,7 +305,7 @@ get_user_root_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List user root dir using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(UserInBothSpacesRootDirObjectId),
+                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(UserInBothSpacesRootDirObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, rest, undefined, Data, Spaces)
                     end
@@ -313,7 +313,7 @@ get_user_root_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List user root dir using /files-id/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(UserInBothSpacesRootDirObjectId),
+                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(UserInBothSpacesRootDirObjectId),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                         validate_listed_files(Response, deprecated_rest, undefined, Data, Spaces)
                     end
@@ -321,7 +321,7 @@ get_user_root_dir_children_test(Config) ->
                 #scenario_template{
                     name = <<"List user root dir using gs api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_children_gs_args_fun(UserInBothSpacesRootDirGuid, private),
+                    prepare_args_fun = build_get_children_prepare_gs_args_fun(UserInBothSpacesRootDirGuid, private),
                     validate_result_fun = fun(#api_test_ctx{data = Data}, {ok, Result}) ->
                         validate_listed_files(Result, gs, undefined, Data, Spaces)
                     end
@@ -342,7 +342,7 @@ get_user_root_dir_children_test(Config) ->
                 forbidden_not_in_space = [],
                 supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(Config)
             },
-            prepare_args_fun = create_prepare_deprecated_path_get_children_rest_args_fun(<<"/">>),
+            prepare_args_fun = build_get_children_prepare_deprecated_path_rest_args_fun(<<"/">>),
             validate_result_fun = fun(#api_test_ctx{client = Client, data = Data}, {ok, ?HTTP_200_OK, _, Response}) ->
                 ClientSpaces = case Client of
                     ?USER_IN_SPACE_1_AUTH ->
@@ -384,25 +384,25 @@ get_dir_children_on_provider_not_supporting_space_test(Config) ->
                 #scenario_template{
                     name = <<"List dir on provider not supporting user using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_get_children_rest_args_fun(Space1ObjectId),
+                    prepare_args_fun = build_get_children_prepare_new_id_rest_args_fun(Space1ObjectId),
                     validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace(#{<<"children">> => []})
                 },
                 #scenario_template{
                     name = <<"List dir on provider not supporting user using /files/ rest endpoint">>,
                     type = rest_with_file_path,
-                    prepare_args_fun = create_prepare_deprecated_path_get_children_rest_args_fun(<<"/", ?SPACE_1/binary>>),
+                    prepare_args_fun = build_get_children_prepare_deprecated_path_rest_args_fun(<<"/", ?SPACE_1/binary>>),
                     validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace([])
                 },
                 #scenario_template{
                     name = <<"List dir on provider not supporting user using /files-id/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_deprecated_id_get_children_rest_args_fun(Space1ObjectId),
+                    prepare_args_fun = build_get_children_prepare_deprecated_id_rest_args_fun(Space1ObjectId),
                     validate_result_fun = ValidateRestListedFilesOnProvidersNotSupportingSpace([])
                 },
                 #scenario_template{
                     name = <<"List dir on provider not supporting user using gs api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_children_gs_args_fun(Space1Guid, private),
+                    prepare_args_fun = build_get_children_prepare_gs_args_fun(Space1Guid, private),
                     validate_result_fun = fun
                         (#api_test_ctx{node = Node, client = Client}, Result) when
                             Node == P2,
@@ -421,25 +421,25 @@ get_dir_children_on_provider_not_supporting_space_test(Config) ->
 
 
 %% @private
-create_prepare_new_id_get_children_rest_args_fun(FileObjectId) ->
-    create_prepare_get_children_rest_args_fun(new_id, FileObjectId).
+build_get_children_prepare_new_id_rest_args_fun(FileObjectId) ->
+    build_get_children_prepare_rest_args_fun(new_id, FileObjectId).
 
 
 %% @private
-create_prepare_deprecated_path_get_children_rest_args_fun(FilePath) ->
-    create_prepare_get_children_rest_args_fun(deprecated_path, FilePath).
+build_get_children_prepare_deprecated_path_rest_args_fun(FilePath) ->
+    build_get_children_prepare_rest_args_fun(deprecated_path, FilePath).
 
 
 %% @private
-create_prepare_deprecated_id_get_children_rest_args_fun(FileObjectId) ->
-    create_prepare_get_children_rest_args_fun(deprecated_id, FileObjectId).
+build_get_children_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
+    build_get_children_prepare_rest_args_fun(deprecated_id, FileObjectId).
 
 
 %% @private
-create_prepare_get_children_rest_args_fun(Endpoint, ValidId) ->
+build_get_children_prepare_rest_args_fun(Endpoint, ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = api_test_utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_id(ValidId, Data1),
+        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         RestPath = case Endpoint of
             new_id -> <<"data/", Id/binary, "/children">>;
@@ -457,9 +457,9 @@ create_prepare_get_children_rest_args_fun(Endpoint, ValidId) ->
 
 
 %% @private
-create_prepare_get_children_gs_args_fun(FileGuid, Scope) ->
+build_get_children_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_id(FileGuid, Data0),
+        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
             operation = get,
@@ -563,26 +563,26 @@ get_file_attrs_test(Config) ->
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_get_attrs_rest_args_fun(FileObjectId),
-                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined)
+                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(FileObjectId),
+                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
                 },
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " using /files/ rest endpoint">>,
                     type = rest_with_file_path,
-                    prepare_args_fun = create_prepare_deprecated_path_get_attrs_rest_args_fun(FilePath),
-                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined)
+                    prepare_args_fun = build_get_attrs_prepare_deprecated_path_rest_args_fun(FilePath),
+                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
                 },
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " using /files-id/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_deprecated_id_get_attrs_rest_args_fun(FileObjectId),
-                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined)
+                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
                 },
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " using gs api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_attrs_gs_args_fun(FileGuid, private),
-                    validate_result_fun = create_validate_get_attrs_gs_call_fun(JsonAttrs, undefined)
+                    prepare_args_fun = build_get_attrs_prepare_gs_args_fun(FileGuid, private),
+                    validate_result_fun = build_get_attrs_validate_gs_call_fun(JsonAttrs, undefined)
                 }
             ],
             randomly_select_scenarios = true,
@@ -623,20 +623,20 @@ get_shared_file_attrs_test(Config) ->
                 #scenario_template{
                     name = <<"Get attrs from shared ", FileType/binary, " using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_get_attrs_rest_args_fun(ShareObjectId),
-                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId1)
+                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(ShareObjectId),
+                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId1)
                 },
                 #scenario_template{
                     name = <<"Get attrs from shared ", FileType/binary, " using /files-id/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_deprecated_id_get_attrs_rest_args_fun(ShareObjectId),
-                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId1)
+                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(ShareObjectId),
+                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId1)
                 },
                 #scenario_template{
                     name = <<"Get attrs from shared ", FileType/binary, " using gs public api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_attrs_gs_args_fun(ShareGuid, public),
-                    validate_result_fun = create_validate_get_attrs_gs_call_fun(JsonAttrs, ShareId1)
+                    prepare_args_fun = build_get_attrs_prepare_gs_args_fun(ShareGuid, public),
+                    validate_result_fun = build_get_attrs_validate_gs_call_fun(JsonAttrs, ShareId1)
                 }
             ],
             randomly_select_scenarios = true,
@@ -649,7 +649,7 @@ get_shared_file_attrs_test(Config) ->
             type = gs_with_shared_guid_and_aspect_private,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
-            prepare_args_fun = create_prepare_get_attrs_gs_args_fun(ShareGuid, private),
+            prepare_args_fun = build_get_attrs_prepare_gs_args_fun(ShareGuid, private),
             validate_result_fun = fun(_, Result) ->
                 ?assertEqual(?ERROR_UNAUTHORIZED, Result)
             end,
@@ -677,26 +677,26 @@ get_attrs_on_provider_not_supporting_space_test(Config) ->
                 #scenario_template{
                     name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_get_attrs_rest_args_fun(Space1ObjectId),
-                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined, P2)
+                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(Space1ObjectId),
+                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined, P2)
                 },
                 #scenario_template{
                     name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /files/ rest endpoint">>,
                     type = rest_with_file_path,
-                    prepare_args_fun = create_prepare_deprecated_path_get_attrs_rest_args_fun(<<"/", ?SPACE_1/binary>>),
-                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined, P2)
+                    prepare_args_fun = build_get_attrs_prepare_deprecated_path_rest_args_fun(<<"/", ?SPACE_1/binary>>),
+                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined, P2)
                 },
                 #scenario_template{
                     name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_deprecated_id_get_attrs_rest_args_fun(Space1ObjectId),
-                    validate_result_fun = create_validate_get_attrs_rest_call_fun(JsonAttrs, undefined, P2)
+                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(Space1ObjectId),
+                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined, P2)
                 },
                 #scenario_template{
                     name = <<"Get attrs from ", ?SPACE_1/binary, " on provider not supporting user using gs api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_attrs_gs_args_fun(Space1Guid, private),
-                    validate_result_fun = create_validate_get_attrs_gs_call_fun(JsonAttrs, undefined, P2)
+                    prepare_args_fun = build_get_attrs_prepare_gs_args_fun(Space1Guid, private),
+                    validate_result_fun = build_get_attrs_validate_gs_call_fun(JsonAttrs, undefined, P2)
                 }
             ],
             randomly_select_scenarios = true,
@@ -768,25 +768,25 @@ attrs_to_json(ShareId, #file_attr{
 
 
 %% @private
-create_prepare_new_id_get_attrs_rest_args_fun(FileObjectId) ->
-    create_prepare_get_attrs_rest_args_fun(new_id, FileObjectId).
+build_get_attrs_prepare_new_id_rest_args_fun(FileObjectId) ->
+    build_get_attrs_prepare_rest_args_fun(new_id, FileObjectId).
 
 
 %% @private
-create_prepare_deprecated_path_get_attrs_rest_args_fun(FilePath) ->
-    create_prepare_get_attrs_rest_args_fun(deprecated_path, FilePath).
+build_get_attrs_prepare_deprecated_path_rest_args_fun(FilePath) ->
+    build_get_attrs_prepare_rest_args_fun(deprecated_path, FilePath).
 
 
 %% @private
-create_prepare_deprecated_id_get_attrs_rest_args_fun(FileObjectId) ->
-    create_prepare_get_attrs_rest_args_fun(deprecated_id, FileObjectId).
+build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
+    build_get_attrs_prepare_rest_args_fun(deprecated_id, FileObjectId).
 
 
 %% @private
-create_prepare_get_attrs_rest_args_fun(Endpoint, ValidId) ->
+build_get_attrs_prepare_rest_args_fun(Endpoint, ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = api_test_utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_id(ValidId, Data1),
+        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         RestPath = case Endpoint of
             new_id -> <<"data/", Id/binary>>;
@@ -804,9 +804,9 @@ create_prepare_get_attrs_rest_args_fun(Endpoint, ValidId) ->
 
 
 %% @private
-create_prepare_get_attrs_gs_args_fun(FileGuid, Scope) ->
+build_get_attrs_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_id(FileGuid, Data0),
+        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
             operation = get,
@@ -817,12 +817,12 @@ create_prepare_get_attrs_gs_args_fun(FileGuid, Scope) ->
 
 
 %% @private
-create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId) ->
-    create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId, undefined).
+build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId) ->
+    build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId, undefined).
 
 
 %% @private
-create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId, ProviderNotSupportingSpace) ->
+build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId, ProviderNotSupportingSpace) ->
     fun
         (#api_test_ctx{node = TestNode}, {ok, RespCode, _RespHeaders, RespBody}) when TestNode == ProviderNotSupportingSpace ->
             ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
@@ -840,12 +840,12 @@ create_validate_get_attrs_rest_call_fun(JsonAttrs, ShareId, ProviderNotSupportin
 
 
 %% @private
-create_validate_get_attrs_gs_call_fun(JsonAttrs, ShareId) ->
-    create_validate_get_attrs_gs_call_fun(JsonAttrs, ShareId, undefined).
+build_get_attrs_validate_gs_call_fun(JsonAttrs, ShareId) ->
+    build_get_attrs_validate_gs_call_fun(JsonAttrs, ShareId, undefined).
 
 
 %% @private
-create_validate_get_attrs_gs_call_fun(JsonAttrs, ShareId, ProviderNotSupportingSpace) ->
+build_get_attrs_validate_gs_call_fun(JsonAttrs, ShareId, ProviderNotSupportingSpace) ->
     fun
         (#api_test_ctx{node = TestNode}, Result) when TestNode == ProviderNotSupportingSpace ->
             ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
@@ -958,25 +958,25 @@ set_file_mode_test(Config) ->
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_set_mode_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_set_mode_prepare_new_id_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestSuccessfulCallFun
                 },
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " using /files/ rest endpoint">>,
                     type = rest_with_file_path,
-                    prepare_args_fun = create_prepare_deprecated_path_set_mode_rest_args_fun(FilePath),
+                    prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
                     validate_result_fun = ValidateRestSuccessfulCallFun
                 },
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " using /files-id/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_deprecated_id_set_mode_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestSuccessfulCallFun
                 },
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " using gs api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_set_mode_gs_args_fun(FileGuid, private),
+                    prepare_args_fun = build_set_mode_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = fun(TestCtx, Result) ->
                         case GetExpectedResultFun(TestCtx) of
                             ok ->
@@ -998,7 +998,7 @@ set_file_mode_test(Config) ->
             type = gs_not_supported,
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
-            prepare_args_fun = create_prepare_set_mode_gs_args_fun(ShareGuid, public),
+            prepare_args_fun = build_set_mode_prepare_gs_args_fun(ShareGuid, public),
             validate_result_fun = fun(_TestCaseCtx, Result) ->
                 ?assertEqual(?ERROR_NOT_SUPPORTED, Result)
             end,
@@ -1047,25 +1047,25 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
                 #scenario_template{
                     name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_set_mode_rest_args_fun(Space1RootObjectId),
+                    prepare_args_fun = build_set_mode_prepare_new_id_rest_args_fun(Space1RootObjectId),
                     validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun
                 },
                 #scenario_template{
                     name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using /files/ rest endpoint">>,
                     type = rest_with_file_path,
-                    prepare_args_fun = create_prepare_deprecated_path_set_mode_rest_args_fun(Space1RootDirPath),
+                    prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(Space1RootDirPath),
                     validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun
                 },
                 #scenario_template{
                     name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_deprecated_id_set_mode_rest_args_fun(Space1RootObjectId),
+                    prepare_args_fun = build_set_mode_prepare_deprecated_id_rest_args_fun(Space1RootObjectId),
                     validate_result_fun = ValidateRestSetMetadataOnProvidersNotSupportingUserFun
                 },
                 #scenario_template{
                     name = <<"Set mode for root dir in ", ?SPACE_1/binary, " on provider not supporting user using gs api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_set_mode_gs_args_fun(Space1RootDirGuid, private),
+                    prepare_args_fun = build_set_mode_prepare_gs_args_fun(Space1RootDirGuid, private),
                     validate_result_fun = fun(_TestCtx, Result) ->
                         ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(Provider2DomainBin), Result)
                     end
@@ -1078,24 +1078,24 @@ set_mode_on_provider_not_supporting_space_test(Config) ->
 
 
 %% @private
-create_prepare_new_id_set_mode_rest_args_fun(FileObjectId) ->
-    create_prepare_set_mode_rest_args_fun(new_id, FileObjectId).
+build_set_mode_prepare_new_id_rest_args_fun(FileObjectId) ->
+    build_set_mode_prepare_rest_args_fun(new_id, FileObjectId).
 
 
 %% @private
-create_prepare_deprecated_path_set_mode_rest_args_fun(FilePath) ->
-    create_prepare_set_mode_rest_args_fun(deprecated_path, FilePath).
+build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath) ->
+    build_set_mode_prepare_rest_args_fun(deprecated_path, FilePath).
 
 
 %% @private
-create_prepare_deprecated_id_set_mode_rest_args_fun(FileObjectId) ->
-    create_prepare_set_mode_rest_args_fun(deprecated_id, FileObjectId).
+build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
+    build_set_mode_prepare_rest_args_fun(deprecated_id, FileObjectId).
 
 
 %% @private
-create_prepare_set_mode_rest_args_fun(Endpoint, ValidId) ->
+build_set_mode_prepare_rest_args_fun(Endpoint, ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {Id, Data1} = api_test_utils:maybe_substitute_id(ValidId, Data0),
+        {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ValidId, Data0),
 
         RestPath = case Endpoint of
             new_id -> <<"data/", Id/binary>>;
@@ -1116,9 +1116,9 @@ create_prepare_set_mode_rest_args_fun(Endpoint, ValidId) ->
 
 
 %% @private
-create_prepare_set_mode_gs_args_fun(FileGuid, Scope) ->
+build_set_mode_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_id(FileGuid, Data0),
+        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         #gs_args{
             operation = create,
@@ -1254,13 +1254,13 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
                 #scenario_template{
                     name = <<"Get distribution for ", FileType/binary, " using /data/FileId/distribution rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_get_distribution_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_get_distribution_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestSuccessfulCallFun
                 },
                 #scenario_template{
                     name = <<"Get distribution for ", FileType/binary, " using op_file gs api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_distribution_gs_args_fun(FileGuid, private),
+                    prepare_args_fun = build_get_distribution_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = CreateValidateGsSuccessfulCallFun(op_file)
                 },
 
@@ -1269,19 +1269,19 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
                 #scenario_template{
                     name = <<"Get distribution for ", FileType/binary, " using /replicas/ rest endpoint">>,
                     type = rest_with_file_path,
-                    prepare_args_fun = create_prepare_get_replicas_rest_args_fun(path, FilePath),
+                    prepare_args_fun = build_get_replicas_prepare_rest_args_fun(path, FilePath),
                     validate_result_fun = ValidateRestSuccessfulCallFun
                 },
                 #scenario_template{
                     name = <<"Get distribution for ", FileType/binary, " using /replicas-id/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_get_replicas_rest_args_fun(id, FileObjectId),
+                    prepare_args_fun = build_get_replicas_prepare_rest_args_fun(id, FileObjectId),
                     validate_result_fun = ValidateRestSuccessfulCallFun
                 },
                 #scenario_template{
                     name = <<"Get distribution for ", FileType/binary, " using op_replica gs api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_replicas_gs_args_fun(FileGuid, private),
+                    prepare_args_fun = build_get_replicas_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = CreateValidateGsSuccessfulCallFun(op_replica)
                 }
             ],
@@ -1293,9 +1293,9 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
 
 
 %% @private
-create_prepare_get_distribution_rest_args_fun(ValidId) ->
+build_get_distribution_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_id(ValidId, Data),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(ValidId, Data),
 
         #rest_args{
             method = get,
@@ -1305,9 +1305,9 @@ create_prepare_get_distribution_rest_args_fun(ValidId) ->
 
 
 %% @private
-create_prepare_get_distribution_gs_args_fun(FileGuid, Scope) ->
+build_get_distribution_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data}) ->
-        {GriId, _} = api_test_utils:maybe_substitute_id(FileGuid, Data),
+        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
 
         #gs_args{
             operation = get,
@@ -1317,9 +1317,9 @@ create_prepare_get_distribution_gs_args_fun(FileGuid, Scope) ->
 
 
 %% @private
-create_prepare_get_replicas_rest_args_fun(Endpoint, ValidId) ->
+build_get_replicas_prepare_rest_args_fun(Endpoint, ValidId) ->
     fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_id(ValidId, Data),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(ValidId, Data),
 
         #rest_args{
             method = get,
@@ -1332,9 +1332,9 @@ create_prepare_get_replicas_rest_args_fun(Endpoint, ValidId) ->
 
 
 %% @private
-create_prepare_get_replicas_gs_args_fun(FileGuid, Scope) ->
+build_get_replicas_prepare_gs_args_fun(FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data}) ->
-        {GriId, _} = api_test_utils:maybe_substitute_id(FileGuid, Data),
+        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
 
         #gs_args{
             operation = get,

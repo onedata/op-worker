@@ -124,11 +124,11 @@ create_file_transfer(Config, Type) ->
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
-    EnvRef = api_test_utils:init_env(),
-    SetupEnvFun = transfer_api_test_utils:create_setup_file_transfer_env_fun(
+    EnvRef = api_test_env:init(),
+    SetupFun = transfer_api_test_utils:build_create_file_transfer_setup_fun(
         Type, EnvRef, P1, P2, ?USER_IN_SPACE_2, Config
     ),
-    VerifyEnvFun = transfer_api_test_utils:create_verify_transfer_env_fun(
+    VerifyFun = transfer_api_test_utils:build_create_transfer_verify_fun(
         Type, EnvRef, P2, ?USER_IN_SPACE_2, P1, P2, Config
     ),
 
@@ -136,25 +136,25 @@ create_file_transfer(Config, Type) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = SetupEnvFun,
-            verify_fun = VerifyEnvFun,
+            setup_fun = SetupFun,
+            verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) view using /transfers rest endpoint", [Type]),
                     type = rest,
-                    prepare_args_fun = create_prepare_transfer_rest_args_fun(EnvRef),
-                    validate_result_fun = create_validate_transfer_rest_call_result_fun(EnvRef)
+                    prepare_args_fun = build_create_transfer_prepare_rest_args_fun(EnvRef),
+                    validate_result_fun = build_create_transfer_validate_rest_call_result_fun(EnvRef)
                 },
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) file using gs transfer api", [Type]),
                     type = gs,
-                    prepare_args_fun = create_prepare_transfer_create_instance_gs_args_fun(EnvRef, private),
-                    validate_result_fun = create_validate_transfer_gs_call_result_fun(EnvRef)
+                    prepare_args_fun = build_create_transfer_prepare_gs_args_fun(EnvRef, private),
+                    validate_result_fun = build_create_transfer_validate_gs_call_result_fun(EnvRef)
                 }
             ],
             data_spec = api_test_utils:add_cdmi_id_errors_for_operations_not_available_in_share_mode(
                 FileGuid, ?SPACE_2, ShareId,
-                op_transfer_spec(Type, <<"file">>, P1, P2)
+                build_op_transfer_spec(Type, <<"file">>, P1, P2)
             )
         },
 
@@ -163,30 +163,30 @@ create_file_transfer(Config, Type) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = SetupEnvFun,
-            verify_fun = VerifyEnvFun,
+            setup_fun = SetupFun,
+            verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) file using /replicas/ rest endpoint", [Type]),
                     type = rest_with_file_path,
-                    prepare_args_fun = create_prepare_replica_rest_args_fun(EnvRef, Type),
-                    validate_result_fun = create_validate_transfer_rest_call_result_fun(EnvRef)
+                    prepare_args_fun = build_replica_prepare_rest_args_fun(EnvRef, Type),
+                    validate_result_fun = build_create_transfer_validate_rest_call_result_fun(EnvRef)
                 },
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) file using /replicas-id/ rest endpoint", [Type]),
                     type = rest,
-                    prepare_args_fun = create_prepare_replica_rest_args_fun(EnvRef, Type),
-                    validate_result_fun = create_validate_transfer_rest_call_result_fun(EnvRef)
+                    prepare_args_fun = build_replica_prepare_rest_args_fun(EnvRef, Type),
+                    validate_result_fun = build_create_transfer_validate_rest_call_result_fun(EnvRef)
                 },
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) file using op_replica gs api", [Type]),
                     type = gs,
-                    prepare_args_fun = create_prepare_replica_gs_args_fun(EnvRef, Type, private),
-                    validate_result_fun = create_validate_transfer_gs_call_result_fun(EnvRef)
+                    prepare_args_fun = build_replica_prepare_gs_args_fun(EnvRef, Type, private),
+                    validate_result_fun = build_create_transfer_validate_gs_call_result_fun(EnvRef)
                 }
             ],
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-                FileGuid, ShareId, op_replica_spec(Type, <<"file">>, P1, P2)
+                FileGuid, ShareId, build_op_replica_spec(Type, <<"file">>, P1, P2)
             )
         }
     ])).
@@ -226,11 +226,11 @@ create_view_transfer(Config, Type) ->
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_SPACE_2, privileges:space_admin() -- RequiredPrivs),
     set_space_privileges(Providers, ?SPACE_2, ?USER_IN_BOTH_SPACES, RequiredPrivs),
 
-    EnvRef = api_test_utils:init_env(),
-    SetupEnvFun = transfer_api_test_utils:create_setup_view_transfer_env_fun(
+    EnvRef = api_test_env:init(),
+    SetupFun = transfer_api_test_utils:build_create_view_transfer_setup_fun(
         Type, EnvRef, P1, P2, ?USER_IN_SPACE_2, Config
     ),
-    VerifyEnvFun = transfer_api_test_utils:create_verify_transfer_env_fun(
+    VerifyFun = transfer_api_test_utils:build_create_transfer_verify_fun(
         Type, EnvRef, P2, ?USER_IN_SPACE_2, P1, P2, Config
     ),
 
@@ -238,23 +238,23 @@ create_view_transfer(Config, Type) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = SetupEnvFun,
-            verify_fun = VerifyEnvFun,
+            setup_fun = SetupFun,
+            verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) view using /transfers rest endpoint", [Type]),
                     type = rest,
-                    prepare_args_fun = create_prepare_transfer_rest_args_fun(EnvRef),
-                    validate_result_fun = create_validate_transfer_rest_call_result_fun(EnvRef)
+                    prepare_args_fun = build_create_transfer_prepare_rest_args_fun(EnvRef),
+                    validate_result_fun = build_create_transfer_validate_rest_call_result_fun(EnvRef)
                 },
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) view using gs transfer gs api", [Type]),
                     type = gs,
-                    prepare_args_fun = create_prepare_transfer_create_instance_gs_args_fun(EnvRef, private),
-                    validate_result_fun = create_validate_transfer_gs_call_result_fun(EnvRef)
+                    prepare_args_fun = build_create_transfer_prepare_gs_args_fun(EnvRef, private),
+                    validate_result_fun = build_create_transfer_validate_gs_call_result_fun(EnvRef)
                 }
             ],
-            data_spec = op_transfer_spec(Type, <<"view">>, P1, P2)
+            data_spec = build_op_transfer_spec(Type, <<"view">>, P1, P2)
         },
 
         %% TEST DEPRECATED REPLICAS ENDPOINTS
@@ -262,23 +262,23 @@ create_view_transfer(Config, Type) ->
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_TRANSFER_SCENARIOS(Config),
-            setup_fun = SetupEnvFun,
-            verify_fun = VerifyEnvFun,
+            setup_fun = SetupFun,
+            verify_fun = VerifyFun,
             scenario_templates = [
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) view using /replicas-view/ rest endpoint", [Type]),
                     type = rest,
-                    prepare_args_fun = create_prepare_replica_rest_args_fun(EnvRef, Type),
-                    validate_result_fun = create_validate_transfer_rest_call_result_fun(EnvRef)
+                    prepare_args_fun = build_replica_prepare_rest_args_fun(EnvRef, Type),
+                    validate_result_fun = build_create_transfer_validate_rest_call_result_fun(EnvRef)
                 },
                 #scenario_template{
                     name = str_utils:format("Transfer (~p) view using op_replica gs api", [Type]),
                     type = gs,
-                    prepare_args_fun = create_prepare_replica_gs_args_fun(EnvRef, Type, private),
-                    validate_result_fun = create_validate_transfer_gs_call_result_fun(EnvRef)
+                    prepare_args_fun = build_replica_prepare_gs_args_fun(EnvRef, Type, private),
+                    validate_result_fun = build_create_transfer_validate_gs_call_result_fun(EnvRef)
                 }
             ],
-            data_spec = op_replica_spec(Type, <<"view">>, P1, P2)
+            data_spec = build_op_replica_spec(Type, <<"view">>, P1, P2)
         }
     ])).
 
@@ -299,7 +299,7 @@ create_view_transfer_required_privs(migration) ->
 
 
 %% @private
-op_replica_spec(replication, DataSourceType, _SrcNode, DstNode) ->
+build_op_replica_spec(replication, DataSourceType, _SrcNode, DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_replica, DataSourceType
     ),
@@ -316,7 +316,7 @@ op_replica_spec(replication, DataSourceType, _SrcNode, DstNode) ->
             BadValues
         ])
     };
-op_replica_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
+build_op_replica_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_replica, DataSourceType
     ),
@@ -331,7 +331,7 @@ op_replica_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
             BadValues
         ])
     };
-op_replica_spec(migration, DataSourceType, SrcNode, DstNode) ->
+build_op_replica_spec(migration, DataSourceType, SrcNode, DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_replica, DataSourceType
     ),
@@ -351,7 +351,7 @@ op_replica_spec(migration, DataSourceType, SrcNode, DstNode) ->
 
 
 %% @private
-op_transfer_spec(replication, DataSourceType, _SrcNode, DstNode) ->
+build_op_transfer_spec(replication, DataSourceType, _SrcNode, DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_transfer, DataSourceType
     ),
@@ -374,7 +374,7 @@ op_transfer_spec(replication, DataSourceType, _SrcNode, DstNode) ->
             BadValues
         ])
     };
-op_transfer_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
+build_op_transfer_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_transfer, DataSourceType
     ),
@@ -397,7 +397,7 @@ op_transfer_spec(eviction, DataSourceType, SrcNode, _DstNode) ->
             BadValues
         ])
     };
-op_transfer_spec(migration, DataSourceType, SrcNode, DstNode) ->
+build_op_transfer_spec(migration, DataSourceType, SrcNode, DstNode) ->
     {Required, Optional, CorrectValues, BadValues} = get_data_source_dependent_data_spec_aspects(
         op_transfer, DataSourceType
     ),
@@ -494,9 +494,9 @@ get_data_source_dependent_data_spec_aspects(op_replica, <<"view">>) ->
 
 
 %% @private
-create_prepare_transfer_rest_args_fun(EnvRef) ->
+build_create_transfer_prepare_rest_args_fun(EnvRef) ->
     fun(#api_test_ctx{data = Data}) ->
-        {ok, TransferDetails} = api_test_utils:get_env_var(EnvRef, transfer_details),
+        TransferDetails = api_test_env:get(EnvRef, transfer_details),
 
         #rest_args{
             method = post,
@@ -508,9 +508,9 @@ create_prepare_transfer_rest_args_fun(EnvRef) ->
 
 
 %% @private
-create_prepare_transfer_create_instance_gs_args_fun(EnvRef, Scope) ->
+build_create_transfer_prepare_gs_args_fun(EnvRef, Scope) ->
     fun(#api_test_ctx{data = Data}) ->
-        {ok, TransferDetails} = api_test_utils:get_env_var(EnvRef, transfer_details),
+        TransferDetails = api_test_env:get(EnvRef, transfer_details),
 
         #gs_args{
             operation = create,
@@ -531,7 +531,7 @@ substitute_transfer_data_source(Env, Data) ->
 
 
 %% @private
-create_prepare_replica_rest_args_fun(EnvRef, Type) ->
+build_replica_prepare_rest_args_fun(EnvRef, Type) ->
     Method = case Type of
         replication -> post;
         _ -> delete
@@ -543,10 +543,10 @@ create_prepare_replica_rest_args_fun(EnvRef, Type) ->
                 skip;
             false ->
                 ProviderId = transfers_test_utils:provider_id(Node),
-                {ok, TransferDetails} = api_test_utils:get_env_var(EnvRef, transfer_details),
+                TransferDetails = api_test_env:get(EnvRef, transfer_details),
 
                 Data1 = api_test_utils:ensure_defined(Data0, #{}),
-                {InvalidId, Data2} = api_test_utils:maybe_substitute_id(undefined, Data1),
+                {InvalidId, Data2} = api_test_utils:maybe_substitute_bad_id(undefined, Data1),
                 RestPath = case TransferDetails of
                     #{root_file_path := FilePath} when Scenario =:= rest_with_file_path  ->
                         <<"replicas", (api_test_utils:ensure_defined(InvalidId, FilePath))/binary>>;
@@ -579,7 +579,7 @@ create_prepare_replica_rest_args_fun(EnvRef, Type) ->
 
 
 %% @private
-create_prepare_replica_gs_args_fun(EnvRef, Type, Scope) ->
+build_replica_prepare_gs_args_fun(EnvRef, Type, Scope) ->
     Operation = case Type of
         replication -> create;
         _ -> delete
@@ -591,7 +591,7 @@ create_prepare_replica_gs_args_fun(EnvRef, Type, Scope) ->
                 skip;
             false ->
                 ProviderId = transfers_test_utils:provider_id(Node),
-                {ok, TransferDetails} = api_test_utils:get_env_var(EnvRef, transfer_details),
+                TransferDetails = api_test_env:get(EnvRef, transfer_details),
 
                 {ValidId, Aspect} = case TransferDetails of
                     #{root_file_guid := FileGuid} ->
@@ -601,7 +601,7 @@ create_prepare_replica_gs_args_fun(EnvRef, Type, Scope) ->
                     #{view_name := ViewName} when Operation == delete ->
                         {ViewName, evict_by_view}
                 end,
-                {GriId, Data1} = api_test_utils:maybe_substitute_id(ValidId, Data0),
+                {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(ValidId, Data0),
 
                 % In case of op_replica api if 'provider_id' is optional - if it is not present
                 % then by default provider receiving request will substitute its id
@@ -625,10 +625,10 @@ create_prepare_replica_gs_args_fun(EnvRef, Type, Scope) ->
 %% create transfer using deprecated replicas endpoints. Nonetheless they were
 %% added to required in data_spec due to following reasons:
 %% - 'provider_id' - if it is not present provider which received request will
-%%                   substitute its id. The field was added to required for tests
-%%                   purposes to always target specific node.
-%% - 'migration_provider_id` - if it is not present rather then migration
-%%                             eviction will be performed.
+%%                   substitute its id, which not always will be the one expected
+%%                   by tests.
+%% - 'migration_provider_id` - if it is not present eviction will be performed
+%%                             instead of expected migration.
 %% Because those fields were added to 'required' in data_spec test cases with
 %% them will be run for run_missing_required_data_test_cases scenario but will
 %% not return expected errors (missing required data) and so they must be skipped.
@@ -643,7 +643,7 @@ should_skip_replica_testcase(Type, Data) ->
 
 
 %% @private
-create_validate_transfer_rest_call_result_fun(EnvRef) ->
+build_create_transfer_validate_rest_call_result_fun(EnvRef) ->
     fun(#api_test_ctx{node = Node} = TestCtx, Result) ->
         {ok, _, Headers, Body} = ?assertMatch(
             {ok, ?HTTP_201_CREATED, #{<<"Location">> := _}, #{<<"transferId">> := _}},
@@ -656,25 +656,25 @@ create_validate_transfer_rest_call_result_fun(EnvRef) ->
         ])),
         ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers)),
 
-        validate_transfer_call_result(EnvRef, TransferId, TestCtx)
+        build_create_transfer_validate_call_result(EnvRef, TransferId, TestCtx)
     end.
 
 
 %% @private
-create_validate_transfer_gs_call_result_fun(EnvRef) ->
+build_create_transfer_validate_gs_call_result_fun(EnvRef) ->
     fun(TestCtx, Result) ->
         {ok, #{<<"transferId">> := TransferId}} = ?assertMatch({ok, _}, Result),
-        validate_transfer_call_result(EnvRef, TransferId, TestCtx)
+        build_create_transfer_validate_call_result(EnvRef, TransferId, TestCtx)
     end.
 
 
 %% @private
-validate_transfer_call_result(EnvRef, TransferId, #api_test_ctx{
+build_create_transfer_validate_call_result(EnvRef, TransferId, #api_test_ctx{
     node = TestNode,
     client = ?USER(UserId),
     data = Data
 }) ->
-    {ok, #{exp_transfer := ExpTransferStats}} = api_test_utils:get_env_var(EnvRef, transfer_details),
+    #{exp_transfer := ExpTransferStats} = api_test_env:get(EnvRef, transfer_details),
 
     ExpTransfer = ExpTransferStats#{
         user_id => UserId,

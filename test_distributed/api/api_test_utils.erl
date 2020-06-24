@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions used in API (REST + gs) tests.
+%%% Utility functions used in API tests.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(api_test_utils).
@@ -15,7 +15,6 @@
 -include("api_test_runner.hrl").
 -include("test_utils/initializer.hrl").
 
--export([init_env/0, set_env_var/3, get_env_var/2]).
 
 -export([load_module_from_test_distributed_dir/2]).
 
@@ -36,13 +35,12 @@
     add_file_id_errors_for_operations_available_in_share_mode/3,
     add_file_id_errors_for_operations_not_available_in_share_mode/3,
     add_cdmi_id_errors_for_operations_not_available_in_share_mode/4,
-    maybe_substitute_id/2
+    maybe_substitute_bad_id/2
 ]).
 
--opaque env_ref() :: integer().
 -type file_type() :: binary(). % <<"file">> | <<"dir">>
 
--export_type([env_ref/0, file_type/0]).
+-export_type([file_type/0]).
 
 
 -define(ATTEMPTS, 30).
@@ -51,22 +49,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec init_env() -> env_ref().
-init_env() ->
-    erlang:unique_integer([positive]).
-
-
--spec set_env_var(env_ref(), Key :: term(), Value :: term()) -> ok.
-set_env_var(EnvRef, Key, Value) ->
-    simple_cache:put({EnvRef, Key}, Value).
-
-
--spec get_env_var(env_ref(), Key :: term()) ->
-    {ok, Value :: term()} | {error, not_found}.
-get_env_var(EnvRef, Key) ->
-    simple_cache:get({EnvRef, Key}).
 
 
 %%% TODO VFS-6385 Reorganize and fix includes and loading modules from other dirs in tests
@@ -322,9 +304,9 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId,
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
 
 
-maybe_substitute_id(ValidId, undefined) ->
+maybe_substitute_bad_id(ValidId, undefined) ->
     {ValidId, undefined};
-maybe_substitute_id(ValidId, Data) ->
+maybe_substitute_bad_id(ValidId, Data) ->
     case maps:take(bad_id, Data) of
         {BadId, LeftoverData} -> {BadId, LeftoverData};
         error -> {ValidId, Data}

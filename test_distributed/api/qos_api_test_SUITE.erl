@@ -51,13 +51,13 @@ create_qos_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, FileToShareGuid}), 20),
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileToShareGuid}, <<"share">>),
 
-    EnvRef = api_test_utils:init_env(),
+    EnvRef = api_test_env:init(),
 
     SetupFun = fun() ->
         FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
         {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
         ?assertMatch({ok, _}, lfm_proxy:stat(P2, SessIdP2, {guid, Guid}), 20),
-        api_test_utils:set_env_var(EnvRef, guid, Guid)
+        api_test_env:set(EnvRef, guid, Guid)
     end, 
     
     CreateDataSpec = #data_spec{
@@ -124,7 +124,7 @@ get_qos_test(Config) ->
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
 
-    EnvRef = api_test_utils:init_env(),
+    EnvRef = api_test_env:init(),
 
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
@@ -160,7 +160,7 @@ delete_qos_test(Config) ->
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, Guid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath),
 
-    EnvRef = api_test_utils:init_env(),
+    EnvRef = api_test_env:init(),
 
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
@@ -205,15 +205,15 @@ get_qos_summary_test(Config) ->
     ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryIdDirect), 20),
     {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, Guid}, <<"share">>),
 
-    EnvRef = api_test_utils:init_env(),
+    EnvRef = api_test_env:init(),
 
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
             target_nodes = [P1, P2],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
             setup_fun = fun() ->
-                api_test_utils:set_env_var(EnvRef, guid, Guid),
-                api_test_utils:set_env_var(EnvRef, qos, [QosEntryIdInherited, QosEntryIdDirect])
+                api_test_env:set(EnvRef, guid, Guid),
+                api_test_env:set(EnvRef, qos, [QosEntryIdInherited, QosEntryIdDirect])
             end,
             scenario_templates = [
                 #scenario_template{
@@ -250,10 +250,10 @@ setup_fun(EnvRef, Config, Guid) ->
         % wait for qos entry to be dbsynced to other provider
         ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
 
-        api_test_utils:set_env_var(EnvRef, guid, Guid),
-        api_test_utils:set_env_var(EnvRef, qos, QosEntryId),
-        api_test_utils:set_env_var(EnvRef, replicas_num, ReplicasNum),
-        api_test_utils:set_env_var(EnvRef, expression_rpn, ExpressionRpn)
+        api_test_env:set(EnvRef, guid, Guid),
+        api_test_env:set(EnvRef, qos, QosEntryId),
+        api_test_env:set(EnvRef, replicas_num, ReplicasNum),
+        api_test_env:set(EnvRef, expression_rpn, ExpressionRpn)
     end.
 
 
@@ -263,7 +263,7 @@ setup_fun(EnvRef, Config, Guid) ->
 
 prepare_args_fun_rest(EnvRef, create) ->
     fun(#api_test_ctx{data = Data}) ->
-        {ok, Guid} = api_test_utils:get_env_var(EnvRef, guid),
+        Guid = api_test_env:get(EnvRef, guid),
 
         #rest_args{
             method = post,
@@ -275,10 +275,10 @@ prepare_args_fun_rest(EnvRef, create) ->
 
 prepare_args_fun_rest(EnvRef, qos_summary) ->
     fun(#api_test_ctx{data = Data}) ->
-        {ok, Guid} = api_test_utils:get_env_var(EnvRef, guid),
+        Guid = api_test_env:get(EnvRef, guid),
 
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        {Id, _} = api_test_utils:maybe_substitute_id(ObjectId, Data),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(ObjectId, Data),
         #rest_args{
             method = get,
             path = <<"data/", Id/binary, "/qos_summary">>
@@ -287,9 +287,9 @@ prepare_args_fun_rest(EnvRef, qos_summary) ->
 
 prepare_args_fun_rest(EnvRef, Method) ->
     fun(#api_test_ctx{data = Data}) ->
-        {ok, QosEntryId} = api_test_utils:get_env_var(EnvRef, qos),
+        QosEntryId = api_test_env:get(EnvRef, qos),
 
-        {Id, _} = api_test_utils:maybe_substitute_id(QosEntryId, Data),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #rest_args{
             method = Method,
             path = <<"qos_requirements/", Id/binary>>
@@ -299,7 +299,7 @@ prepare_args_fun_rest(EnvRef, Method) ->
 
 prepare_args_fun_gs(EnvRef, create) ->
     fun(#api_test_ctx{data = Data}) ->
-        {ok, Guid} = api_test_utils:get_env_var(EnvRef, guid),
+        Guid = api_test_env:get(EnvRef, guid),
 
         #gs_args{
             operation = create,
@@ -310,8 +310,8 @@ prepare_args_fun_gs(EnvRef, create) ->
 
 prepare_args_fun_gs(EnvRef, qos_summary) ->
     fun(#api_test_ctx{data = Data}) ->
-        {ok, Guid} = api_test_utils:get_env_var(EnvRef, guid),
-        {Id, _} = api_test_utils:maybe_substitute_id(Guid, Data),
+        Guid = api_test_env:get(EnvRef, guid),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(Guid, Data),
         #gs_args{
             operation = get,
             gri = #gri{type = op_file, id = Id, aspect = file_qos_summary, scope = private}
@@ -320,8 +320,8 @@ prepare_args_fun_gs(EnvRef, qos_summary) ->
 
 prepare_args_fun_gs(EnvRef, Method) ->
     fun(#api_test_ctx{data = Data}) ->
-        {ok, QosEntryId} = api_test_utils:get_env_var(EnvRef, qos),
-        {Id, _} = api_test_utils:maybe_substitute_id(QosEntryId, Data),
+        QosEntryId = api_test_env:get(EnvRef, qos),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #gs_args{
             operation = Method,
             gri = #gri{type = op_qos, id = Id, aspect = instance, scope = private}
@@ -337,15 +337,15 @@ validate_result_fun_rest(EnvRef, create) ->
     fun(_ApiTestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         ?assertEqual(?HTTP_201_CREATED, RespCode),
         QosEntryId = maps:get(<<"qosRequirementId">>, RespBody),
-        api_test_utils:set_env_var(EnvRef, qos, QosEntryId)
+        api_test_env:set(EnvRef, qos, QosEntryId)
     end;
 
 validate_result_fun_rest(EnvRef, get) ->
     fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-        {ok, Guid} = api_test_utils:get_env_var(EnvRef, guid),
-        {ok, QosEntryId} = api_test_utils:get_env_var(EnvRef, qos),
-        {ok, ReplicasNum} = api_test_utils:get_env_var(EnvRef, replicas_num),
-        {ok, ExpressionRpn} = api_test_utils:get_env_var(EnvRef, expression_rpn),
+        Guid = api_test_env:get(EnvRef, guid),
+        QosEntryId = api_test_env:get(EnvRef, qos),
+        ReplicasNum = api_test_env:get(EnvRef, replicas_num),
+        ExpressionRpn = api_test_env:get(EnvRef, expression_rpn),
 
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         ?assertEqual(?HTTP_200_OK, RespCode),
@@ -358,7 +358,7 @@ validate_result_fun_rest(EnvRef, get) ->
 
 validate_result_fun_rest(EnvRef, qos_summary) ->
     fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-        {ok, [QosEntryIdInherited, QosEntryIdDirect]} = api_test_utils:get_env_var(EnvRef, qos),
+        [QosEntryIdInherited, QosEntryIdDirect] = api_test_env:get(EnvRef, qos),
 
         ?assertEqual(?HTTP_200_OK, RespCode),
         ?assertMatch(#{
@@ -375,15 +375,15 @@ validate_result_fun_rest(EnvRef, qos_summary) ->
 validate_result_fun_gs(EnvRef, create) ->
     fun(_ApiTestCtx, {ok, Result}) ->
         #gri{id = QosEntryId} = ?assertMatch(#gri{type = op_qos}, gri:deserialize(maps:get(<<"gri">>, Result))),
-        api_test_utils:set_env_var(EnvRef, qos, QosEntryId)
+        api_test_env:set(EnvRef, qos, QosEntryId)
     end;
 
 validate_result_fun_gs(EnvRef, get) ->
     fun(_, {ok, Result}) ->
-        {ok, Guid} = api_test_utils:get_env_var(EnvRef, guid),
-        {ok, QosEntryId} = api_test_utils:get_env_var(EnvRef, qos),
-        {ok, ReplicasNum} = api_test_utils:get_env_var(EnvRef, replicas_num),
-        {ok, ExpressionRpn} = api_test_utils:get_env_var(EnvRef, expression_rpn),
+        Guid = api_test_env:get(EnvRef, guid),
+        QosEntryId = api_test_env:get(EnvRef, qos),
+        ReplicasNum = api_test_env:get(EnvRef, replicas_num),
+        ExpressionRpn = api_test_env:get(EnvRef, expression_rpn),
 
         ?assertMatch(#gri{type = op_file, id = Guid}, gri:deserialize(maps:get(<<"file">>, Result))),
         ?assertEqual(ExpressionRpn, maps:get(<<"expressionRpn">>, Result)),
@@ -394,7 +394,7 @@ validate_result_fun_gs(EnvRef, get) ->
 
 validate_result_fun_gs(EnvRef, qos_summary) ->
     fun(_, {ok, Result}) ->
-        {ok, [QosEntryIdInherited, QosEntryIdDirect]} = api_test_utils:get_env_var(EnvRef, qos),
+        [QosEntryIdInherited, QosEntryIdDirect] = api_test_env:get(EnvRef, qos),
 
         ?assertMatch(#{
             <<"requirements">> := #{
@@ -416,8 +416,8 @@ verify_fun(EnvRef, Config, create) ->
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
     fun
         (expected_success, #api_test_ctx{data = Data}) ->
-            {ok, Guid} = api_test_utils:get_env_var(EnvRef, guid),
-            {ok, QosEntryId} = api_test_utils:get_env_var(EnvRef, qos),
+            Guid = api_test_env:get(EnvRef, guid),
+            QosEntryId = api_test_env:get(EnvRef, qos),
 
             Uuid = file_id:guid_to_uuid(Guid),
             ReplicasNum = maps:get(<<"replicasNum">>, Data, 1),
@@ -429,7 +429,7 @@ verify_fun(EnvRef, Config, create) ->
             ?assertMatch(#qos_entry{file_uuid = Uuid, expression = ExpressionRpn, replicas_num = ReplicasNum}, EntryP1),
             true;
         (expected_failure, _) ->
-            {ok, Guid} = api_test_utils:get_env_var(EnvRef, guid),
+            Guid = api_test_env:get(EnvRef, guid),
             ?assertEqual({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P1, SessIdP1, {guid, Guid})),
             ?assertEqual({ok, {#{}, #{}}}, lfm_proxy:get_effective_file_qos(P2, SessIdP2, {guid, Guid})),
             true
@@ -441,12 +441,12 @@ verify_fun(EnvRef, Config, delete) ->
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
     fun
         (expected_success, _) ->
-            {ok, QosEntryId} = api_test_utils:get_env_var(EnvRef, qos),
+            QosEntryId = api_test_env:get(EnvRef, qos),
             ?assertEqual({error, not_found}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
             ?assertEqual({error, not_found}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
             true;
         (expected_failure, _) ->
-            {ok, QosEntryId} = api_test_utils:get_env_var(EnvRef, qos),
+            QosEntryId = api_test_env:get(EnvRef, qos),
             ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P2, SessIdP2, QosEntryId), 20),
             ?assertMatch({ok, _}, lfm_proxy:get_qos_entry(P1, SessIdP1, QosEntryId), 20),
             true

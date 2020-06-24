@@ -77,9 +77,9 @@ run_invalid_clients_test_cases(Config, InvalidClientsType, #suite_spec{
     target_nodes = TargetNodes,
     client_spec = #client_spec{supported_clients_per_node = SupportedClientsPerNode},
 
-    setup_fun = EnvSetupFun,
-    teardown_fun = EnvTeardownFun,
-    verify_fun = EnvVerifyFun,
+    setup_fun = SetupFun,
+    teardown_fun = TeardownFun,
+    verify_fun = VerifyFun,
 
     scenario_templates = ScenarioTemplates,
 
@@ -95,16 +95,16 @@ run_invalid_clients_test_cases(Config, InvalidClientsType, #suite_spec{
         run_exp_error_testcase(
             TargetNode, Client, DataSet,
             get_scenario_specific_error_for_invalid_clients(ScenarioType, InvalidClientsType),
-            EnvVerifyFun, SupportedClientsPerNode, ScenarioTemplate, Config
+            VerifyFun, SupportedClientsPerNode, ScenarioTemplate, Config
         )
     end,
 
-    EnvSetupFun(),
+    SetupFun(),
     TestsPassed = run_scenarios(
         ScenarioTemplates, TargetNodes, InvalidClients, ValidDataSets,
         TestCaseFun
     ),
-    EnvTeardownFun(),
+    TeardownFun(),
 
     TestsPassed.
 
@@ -156,9 +156,9 @@ run_malformed_data_test_cases(Config, #suite_spec{
         supported_clients_per_node = SupportedClientsPerNode
     },
 
-    setup_fun = EnvSetupFun,
-    teardown_fun = EnvTeardownFun,
-    verify_fun = EnvVerifyFun,
+    setup_fun = SetupFun,
+    teardown_fun = TeardownFun,
+    verify_fun = VerifyFun,
 
     scenario_templates = ScenarioTemplates,
 
@@ -183,17 +183,17 @@ run_malformed_data_test_cases(Config, #suite_spec{
                     run_exp_error_testcase(
                         TargetNode, Client, DataSet,
                         get_expected_malformed_data_error(Error, ScenarioType, TestCaseCtx),
-                        EnvVerifyFun, SupportedClientsPerNode, ScenarioTemplate, Config
+                        VerifyFun, SupportedClientsPerNode, ScenarioTemplate, Config
                     )
             end
     end,
 
-    EnvSetupFun(),
+    SetupFun(),
     TestsPassed = run_scenarios(
         ScenarioTemplates, TargetNodes, CorrectClients, bad_data_sets(DataSpec),
         TestCaseFun
     ),
-    EnvTeardownFun(),
+    TeardownFun(),
 
     TestsPassed.
 
@@ -245,9 +245,9 @@ run_missing_required_data_test_cases(Config, #suite_spec{
         supported_clients_per_node = SupportedClientsPerNode
     },
 
-    setup_fun = EnvSetupFun,
-    teardown_fun = EnvTeardownFun,
-    verify_fun = EnvVerifyFun,
+    setup_fun = SetupFun,
+    teardown_fun = TeardownFun,
+    verify_fun = VerifyFun,
 
     scenario_templates = ScenarioTemplates,
 
@@ -277,31 +277,31 @@ run_missing_required_data_test_cases(Config, #suite_spec{
     } = ScenarioTemplate) ->
         run_exp_error_testcase(
             TargetNode, Client, DataSet,
-            get_scenario_specific_error_for_missing_date(ScenarioType, MissingParamError),
-            EnvVerifyFun, SupportedClientsPerNode, ScenarioTemplate, Config
+            get_scenario_specific_error_for_missing_data(ScenarioType, MissingParamError),
+            VerifyFun, SupportedClientsPerNode, ScenarioTemplate, Config
         )
     end,
 
-    EnvSetupFun(),
+    SetupFun(),
     TestsPassed = run_scenarios(
         ScenarioTemplates, TargetNodes, CorrectClients, IncompleteDataSetsAndErrors,
         TestCaseFun
     ),
-    EnvTeardownFun(),
+    TeardownFun(),
 
     TestsPassed.
 
 
 %% @private
-get_scenario_specific_error_for_missing_date(rest_not_supported, _Error) ->
+get_scenario_specific_error_for_missing_data(rest_not_supported, _Error) ->
     % Error thrown by middleware when checking if operation is supported -
     % before sanitization could be performed
     ?ERROR_NOT_SUPPORTED;
-get_scenario_specific_error_for_missing_date(gs_not_supported, _Error) ->
+get_scenario_specific_error_for_missing_data(gs_not_supported, _Error) ->
     % Error thrown by middleware when checking if operation is supported -
     % before sanitization could be performed
     ?ERROR_NOT_SUPPORTED;
-get_scenario_specific_error_for_missing_date(_ScenarioType, Error) ->
+get_scenario_specific_error_for_missing_data(_ScenarioType, Error) ->
     Error.
 
 
@@ -313,9 +313,9 @@ run_expected_success_test_cases(Config, #suite_spec{
         supported_clients_per_node = SupportedClientsPerNode
     },
 
-    setup_fun = EnvSetupFun,
-    teardown_fun = EnvTeardownFun,
-    verify_fun = EnvVerifyFun,
+    setup_fun = SetupFun,
+    teardown_fun = TeardownFun,
+    verify_fun = VerifyFun,
 
     scenario_templates = ScenarioTemplates,
     randomly_select_scenarios = true,
@@ -347,12 +347,12 @@ run_expected_success_test_cases(Config, #suite_spec{
                 OuterAcc and lists:foldl(fun({Scenario, DataSet}, InnerAcc) ->
                     TargetNode = lists_utils:random_element(TargetNodes),
 
-                    EnvSetupFun(),
+                    SetupFun(),
                     TestCasePassed = run_exp_success_testcase(
-                        TargetNode, Client, DataSet, EnvVerifyFun,
+                        TargetNode, Client, DataSet, VerifyFun,
                         SupportedClientsPerNode, Scenario, Config
                     ),
-                    EnvTeardownFun(),
+                    TeardownFun(),
 
                     InnerAcc and TestCasePassed
                 end, true, ScenarioPerDataSet)
@@ -365,9 +365,9 @@ run_expected_success_test_cases(Config, #suite_spec{
         supported_clients_per_node = SupportedClientsPerNode
     },
 
-    setup_fun = EnvSetupFun,
-    teardown_fun = EnvTeardownFun,
-    verify_fun = EnvVerifyFun,
+    setup_fun = SetupFun,
+    teardown_fun = TeardownFun,
+    verify_fun = VerifyFun,
 
     scenario_templates = ScenarioTemplates,
     randomly_select_scenarios = false,
@@ -375,12 +375,12 @@ run_expected_success_test_cases(Config, #suite_spec{
     data_spec = DataSpec
 }) ->
     TestCaseFun = fun(TargetNode, Client, DataSet, ScenarioTemplate) ->
-        EnvSetupFun(),
+        SetupFun(),
         TestCasePassed = run_exp_success_testcase(
-            TargetNode, Client, DataSet, EnvVerifyFun,
+            TargetNode, Client, DataSet, VerifyFun,
             SupportedClientsPerNode, ScenarioTemplate, Config
         ),
-        EnvTeardownFun(),
+        TeardownFun(),
 
         TestCasePassed
     end,
@@ -407,7 +407,7 @@ run_scenarios(ScenarioTemplates, TargetNodes, Clients, DataSets, TestCaseFun) ->
 
 %% @private
 run_exp_error_testcase(
-    TargetNode, Client, DataSet, ScenarioError, EnvVerifyFun, SupportedClientsPerNode, #scenario_template{
+    TargetNode, Client, DataSet, ScenarioError, VerifyFun, SupportedClientsPerNode, #scenario_template{
         name = ScenarioName,
         type = ScenarioType,
         prepare_args_fun = PrepareArgsFun
@@ -426,7 +426,7 @@ run_exp_error_testcase(
             RequestResult = make_request(Config, TargetNode, Client, Args),
             try
                 validate_error_result(ScenarioType, ExpError, RequestResult),
-                EnvVerifyFun(expected_failure, TestCaseCtx)
+                VerifyFun(expected_failure, TestCaseCtx)
             catch T:R ->
                 log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R),
                 false
@@ -435,7 +435,7 @@ run_exp_error_testcase(
 
 
 %% @private
-run_exp_success_testcase(TargetNode, Client, DataSet, EnvVerifyFun, SupportedClientsPerNode, #scenario_template{
+run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, SupportedClientsPerNode, #scenario_template{
     name = ScenarioName,
     type = ScenarioType,
     prepare_args_fun = PrepareArgsFun,
@@ -451,13 +451,13 @@ run_exp_success_testcase(TargetNode, Client, DataSet, EnvVerifyFun, SupportedCli
                 case is_client_supported_by_node(Client, TargetNode, SupportedClientsPerNode) of
                     true ->
                         ValidateResultFun(TestCaseCtx, Result),
-                        EnvVerifyFun(expected_success, TestCaseCtx);
+                        VerifyFun(expected_success, TestCaseCtx);
                     false ->
                         validate_error_result(ScenarioType, ?ERROR_USER_NOT_SUPPORTED, Result),
-                        EnvVerifyFun(expected_failure, TestCaseCtx)
+                        VerifyFun(expected_failure, TestCaseCtx)
                 end
             catch T:R ->
-                log_failure(ScenarioName, TestCaseCtx, Args, succes, Result, T, R),
+                log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R),
                 false
             end
     end.
@@ -649,9 +649,9 @@ scenario_spec_to_suite_spec(#scenario_spec{
     target_nodes = TargetNodes,
     client_spec = ClientSpec,
 
-    setup_fun = EnvSetupFun,
-    teardown_fun = EnvTeardownFun,
-    verify_fun = EnvVerifyFun,
+    setup_fun = SetupFun,
+    teardown_fun = TeardownFun,
+    verify_fun = VerifyFun,
 
     prepare_args_fun = PrepareArgsFun,
     validate_result_fun = ValidateResultFun,
@@ -662,9 +662,9 @@ scenario_spec_to_suite_spec(#scenario_spec{
         target_nodes = TargetNodes,
         client_spec = ClientSpec,
 
-        setup_fun = EnvSetupFun,
-        teardown_fun = EnvTeardownFun,
-        verify_fun = EnvVerifyFun,
+        setup_fun = SetupFun,
+        teardown_fun = TeardownFun,
+        verify_fun = VerifyFun,
 
         scenario_templates = [#scenario_template{
             name = ScenarioName,
