@@ -28,6 +28,9 @@
 -define(EXTERNAL_FEED, external).
 
 % Macros defining luma_db constraints.
+%% These constraints are checked before performing operations on a few LUMA DB tables.
+%% They are checked to ensure that operation (GET/PUT/DELETE) on given table
+%% is relevant taking into consideration type of underlying storage.
 -define(POSIX_STORAGE, posix_storage).
 -define(IMPORTED_STORAGE, imported_storage).
 -define(NON_IMPORTED_STORAGE, non_imported_storage).

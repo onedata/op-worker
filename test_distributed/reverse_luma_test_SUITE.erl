@@ -324,6 +324,9 @@ end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config).
 
 init_per_testcase(Config) ->
+    % Test cases from all/0 function are called many times for different configs
+    % by luma_test_utils:run_test_for_all_storage_configs function.
+    % This init_per_testcase is called before running test on each config.
     init_per_testcase(default, Config).
 
 init_per_testcase(default, Config) ->
@@ -335,6 +338,7 @@ init_per_testcase(default, Config) ->
     luma_test_utils:setup_local_feed_luma(Worker, Config, <<"local_feed_luma.json">>),
     Config;
 init_per_testcase(_Case, Config) ->
+    % this case is called by CT framework before each testcase listed in all/0 function
     Config.
 
 end_per_testcase(Config) ->
