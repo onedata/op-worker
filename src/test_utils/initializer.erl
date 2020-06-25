@@ -348,6 +348,10 @@ teardown_session(Worker, Config) ->
         ({{spaces, _}, Spaces}, Acc) ->
             {SpaceIds, _SpaceNames} = lists:unzip(Spaces),
             lists:foreach(fun(SpaceId) ->
+                rpc:call(Worker, internal_services_manager, stop_service,
+                    [dbsync_worker, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
+                rpc:call(Worker, internal_services_manager, stop_service,
+                    [dbsync_worker, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
                 rpc:call(Worker, file_meta, delete, [fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)])
             end, SpaceIds),
             Acc;
@@ -875,7 +879,7 @@ create_test_users_and_spaces_unsafe(AllWorkers, ConfigPath, Config) ->
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_update_interval, timer:seconds(1)),
         test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, couchbase_changes_stream_update_interval, timer:seconds(1))
     end, AllWorkers),
-    rpc:multicall(AllWorkers, worker_proxy, call, [dbsync_worker, streams_healthcheck]),
+    rpc:multicall(AllWorkers, dbsync_worker, start_streams, []),
 
     lists:foreach(
         fun({_, #user_config{id = UserId, spaces = UserSpaces}}) ->

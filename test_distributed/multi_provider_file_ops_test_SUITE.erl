@@ -63,7 +63,8 @@
     remove_file_on_remote_provider_ceph/1,
     evict_on_ceph/1,
     read_dir_collisions_test/1,
-    check_fs_stats_on_different_providers/1
+    check_fs_stats_on_different_providers/1,
+    remote_driver_internal_call_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -93,7 +94,8 @@
     remove_file_on_remote_provider_ceph,
     evict_on_ceph,
     read_dir_collisions_test,
-    check_fs_stats_on_different_providers
+    check_fs_stats_on_different_providers,
+    remote_driver_internal_call_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -183,6 +185,99 @@ proxy_many_ops_test2_base(Config) ->
 
 proxy_distributed_modification_test2(Config) ->
     multi_provider_file_ops_test_base:distributed_modification_test_base(Config, <<"user3">>, {0,4,1,2}, 0).
+
+remote_driver_internal_call_test(Config0) ->
+    User = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+    SessId = ?config(session, Config),
+    SpaceName = ?config(space_name, Config),
+    Worker1 = ?config(worker1, Config),
+    [Worker2 | _] = Workers2 = ?config(workers2, Config),
+
+    % Init test
+    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
+    Level2Dir = <<Dir/binary, "/", (generator:gen_name())/binary>>,
+
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir, 8#755)),
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Level2Dir, 8#755)),
+    DirUniqueKey = datastore_model:get_unique_key(#{model => file_meta}, file_id:guid_to_uuid(DirGuid)),
+
+    % Verify init and get link doc key
+    Master = self(),
+    test_utils:mock_expect(Workers2, datastore_doc, fetch, fun
+        (Ctx, Key, Batch, true = LinkFetch) ->
+            Ans = meck:passthrough([Ctx#{disc_driver => undefined}, Key, Batch, LinkFetch]),
+            Master ! {link_node, Key, Ctx, Ans},
+            Ans;
+        (Ctx, Key, Batch, false = LinkFetch) ->
+            meck:passthrough([Ctx, Key, Batch, LinkFetch])
+        end),
+
+    multi_provider_file_ops_test_base:verify_stats(Config, Dir, true),
+    multi_provider_file_ops_test_base:verify_stats(Config, Level2Dir, true),
+
+    RecAns = receive
+        {link_node, Key, Ctx, {{ok, #document{value = #links_node{key = DirUniqueKey}}}, _}} -> {ok, Key, Ctx}
+    after
+        1000 -> receive_error
+    end,
+    {ok, LinkKey, LinkCtx} = ?assertMatch({ok, _, _}, RecAns),
+
+    % Check remote driver usage
+    delete_link_from_memory(Workers2, LinkKey, LinkCtx),
+    test_utils:mock_expect(Workers2, datastore_remote_driver, get_async, fun(Ctx, Key) ->
+        Master ! {link_remote_node, Key},
+        put(tp_master, self()), % Mock code is executed in dedicated process so needed variables have to be set here
+        meck:passthrough([Ctx, Key])
+    end),
+    test_utils:mock_expect(Workers2, datastore_remote_driver, wait, fun
+        ({{error, {badmatch, {error, internal_call}}}, _SessId} = Future) ->
+            Master ! internal_call,
+            meck:passthrough([Future]);
+        (Future) ->
+            meck:passthrough([Future])
+    end),
+
+    multi_provider_file_ops_test_base:verify_stats(Config, Level2Dir, true),
+    RecAns2 = receive
+        {link_remote_node, LinkKey} -> ok
+    after
+        1000 -> receive_error
+    end,
+    ?assertEqual(ok, RecAns2),
+
+    % Force datastore internal call in remote driver
+    Worker1ProvId = rpc:call(Worker1, oneprovider, get_id, []),
+    Worker2OutSessId = rpc:call(Worker2, session_utils, get_provider_session_id, [outgoing, Worker1ProvId]),
+    ?assertEqual(ok, rpc:call(Worker2, session, delete, [Worker2OutSessId])),
+
+    % Check remote driver usage
+    delete_link_from_memory(Workers2, LinkKey, LinkCtx),
+    multi_provider_file_ops_test_base:verify_stats(Config, Level2Dir, true),
+    RecAns3 = receive
+        {link_remote_node, LinkKey} -> ok
+    after
+        1000 -> receive_error
+    end,
+    ?assertEqual(ok, RecAns3),
+    RecAns4 = receive
+        internal_call -> ok
+    after
+        1000 -> receive_error
+    end,
+    ?assertEqual(ok, RecAns4),
+
+    ok.
+
+delete_link_from_memory([Worker | _] = Workers, LinkKey, LinkCtx) ->
+    #{memory_driver_ctx := MemoryDriverCtx} = MemoryOnlyDocCtx =
+        LinkCtx#{disc_driver => undefined, remote_driver := undefined},
+    ?assertMatch({ok, _}, rpc:call(Worker, datastore_router, route, [get, [MemoryOnlyDocCtx, LinkKey]])),
+    lists:foreach(fun(W) ->
+        ?assertEqual(ok, rpc:call(W, ets_driver, delete, [MemoryDriverCtx, LinkKey]))
+    end, Workers),
+    ?assertEqual({error, not_found}, rpc:call(Worker, datastore_router, route,
+        [get, [MemoryOnlyDocCtx#{include_deleted => false}, LinkKey]])).
 
 concurrent_create_test(Config) ->
     FileCount = 3,
@@ -1067,6 +1162,10 @@ init_per_testcase(TestCase, Config) when
 init_per_testcase(check_fs_stats_on_different_providers, Config) ->
     initializer:unload_quota_mocks(Config),
     init_per_testcase(all, Config);
+init_per_testcase(remote_driver_internal_call_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Workers, [datastore_doc, datastore_remote_driver], [passthrough]),
+    init_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -1096,5 +1195,9 @@ end_per_testcase(rtransfer_fetch_test, Config) ->
 end_per_testcase(check_fs_stats_on_different_providers, Config) ->
     initializer:disable_quota_limit(Config),
     end_per_testcase(all, Config);
+end_per_testcase(remote_driver_internal_call_test, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, [datastore_doc, datastore_remote_driver]),
+    end_per_testcase(?DEFAULT_CASE(remote_driver_internal_call_test), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

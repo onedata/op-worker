@@ -184,7 +184,7 @@ confined_access_token_test(Config) ->
     % Request should be denied before contacting Onezone because of
     % data access caveat presence
     ?assertMatch(
-        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
+        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
         rpc:call(Node, group_logic, get_shared_data, [TokenCredentials, ?GROUP_1, undefined])
     ),
     % Nevertheless, GraphCalls should be increased by 3 as following requests should be made:

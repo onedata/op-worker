@@ -17,6 +17,7 @@
 
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 %% API
 -export([response/2, error_response/1]).
@@ -61,7 +62,7 @@ response(#op_req{operation = delete} = OpReq, {ok, DataFormat, Result}) ->
 error_response({error, _} = Error) ->
     #rest_resp{
         code = errors:to_http_code(Error),
-        headers = #{<<"content-type">> => <<"application/json">>},
+        headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
         body = #{<<"error">> => errors:to_json(Error)}
     }.
 

@@ -599,7 +599,7 @@ download_file_test(Config) ->
     % Assert file_download_url is one time use only
     {ok, URL1} = rpc:call(OpNode, page_file_download, get_file_download_url, [SessionId, FileGuid]),
     ?assertEqual({ok, <<"DATA">>}, download_file(OpNode, URL1, Config)),
-    ?assertEqual(?ERROR_UNAUTHORIZED, download_file(OpNode, URL1, Config)),
+    ?assertEqual(?ERROR_BAD_DATA(<<"code">>), download_file(OpNode, URL1, Config)),
 
     % Assert that trying to download deleted file should result in ?ENOENT
     {ok, URL2} = rpc:call(OpNode, page_file_download, get_file_download_url, [SessionId, FileGuid]),

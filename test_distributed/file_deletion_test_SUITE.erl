@@ -200,13 +200,13 @@ init_should_clear_open_files_test_base(Config, DeferredFileCreation) ->
     %% One file should be also removed.
     ?assertEqual(ok, rpc:call(Worker, file_handles, mark_to_remove, [FileCtx, ?LOCAL_REMOVE])),
 
-    {ok, OpenFiles} = rpc:call(Worker, file_handles, list_local, []),
+    {ok, OpenFiles} = rpc:call(Worker, file_handles, list, []),
 
     ?assertEqual(3, length(OpenFiles)),
 
     ?assertMatch(ok, rpc:call(Worker, fslogic_delete, cleanup_opened_files, [])),
 
-    {ok, ClearedOpenFiles} = rpc:call(Worker, file_handles, list_local, []),
+    {ok, ClearedOpenFiles} = rpc:call(Worker, file_handles, list, []),
     ?assertEqual(0, length(ClearedOpenFiles)),
 
     test_utils:mock_assert_num_calls(Worker, file_meta, delete_without_link, 1, 1),
@@ -544,7 +544,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    {ok, OpenFiles} = rpc:call(Worker, file_handles, list_local, []),
+    {ok, OpenFiles} = rpc:call(Worker, file_handles, list, []),
     lists:foreach(fun(#document{key = Key}) ->
         rpc:call(Worker, file_handles, delete, [Key])
     end, OpenFiles).

@@ -352,7 +352,21 @@ create_missing_parent_dirs(UserCtx, FileCtx, ParentCtxsToCreate) ->
             end, ParentCtxsToCreate2);
         false ->
             {ParentCtx, FileCtx3} = file_ctx:get_parent(FileCtx2, undefined),
-            create_missing_parent_dirs(UserCtx, ParentCtx, [FileCtx3 | ParentCtxsToCreate])
+            % Infinite loop possible if function is executed on space dir - this case stops such loop
+            case file_ctx:get_uuid_const(FileCtx) =:= file_ctx:get_uuid_const(ParentCtx) of
+                true ->
+                    {Doc, _} = file_ctx:get_file_doc(FileCtx2),
+                    ?info("Infinite loop detected on parent dirs creation for file ~p", [Doc]),
+                    lists:foreach(fun(Ctx) ->
+                        % create missing directories going down the file tree
+                        case create_missing_parent_dir(UserCtx, Ctx) of
+                            {ok, _} -> ok;
+                            {error, Reason} -> throw(Reason)
+                        end
+                    end, [FileCtx | ParentCtxsToCreate]);
+                false ->
+                    create_missing_parent_dirs(UserCtx, ParentCtx, [FileCtx3 | ParentCtxsToCreate])
+            end
     end.
 
 %%-------------------------------------------------------------------

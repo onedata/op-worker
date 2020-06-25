@@ -35,11 +35,11 @@
     revise_space_harvesters/2, space_removed/1, space_unsupported/1, revise_all_spaces/0]).
 
 %% harvesting_stream callbacks
--export([init/1, name/1, handle_call/3, handle_cast/2, custom_error_handling/2,
+-export([init/1, name/1, handle_call/3, handle_cast/2, terminate/2, custom_error_handling/2,
     on_end_of_stream/1, on_harvesting_doc_not_found/1]).
 
-%% RPC
--export([call_internal/2, space_removed_internal/1, space_unsupported_internal/1]).
+%% Internal services API
+-export([start_service/1, stop_service/1]).
 
 % Revising a harvester means comparing current list of its indices with
 % previous list. Indices that are missing in the current list are
@@ -63,25 +63,23 @@
 
 -spec propose_takeover(harvesting_stream:name(), couchbase_changes:seq()) -> ok.
 propose_takeover(Name = ?AUX_HARVESTING_STREAM(SpaceId, _, _), Seq) ->
-    multicall_internal(SpaceId, ?TAKEOVER_PROPOSAL(Name, Seq)).
+    call(SpaceId, ?TAKEOVER_PROPOSAL(Name, Seq)).
 
 -spec revise_harvester(od_space:id(), od_harvester:id(), [od_harvester:index()]) -> ok.
 revise_harvester(SpaceId, HarvesterId, Indices) ->
-    multicall_internal(SpaceId, ?REVISE_HARVESTER(HarvesterId, Indices)).
+    call(SpaceId, ?REVISE_HARVESTER(HarvesterId, Indices)).
 
 -spec revise_space_harvesters(od_space:id(), [od_harvester:id()]) -> ok.
 revise_space_harvesters(SpaceId, Harvesters) ->
-    multicall_internal(SpaceId, ?REVISE_SPACE_HARVESTERS(Harvesters)).
+    call(SpaceId, ?REVISE_SPACE_HARVESTERS(Harvesters)).
 
 -spec space_removed(od_space:id()) -> ok.
 space_removed(SpaceId) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, space_removed_internal, [SpaceId]).
+    gen_server2:cast({global, ?MAIN_HARVESTING_STREAM(SpaceId)}, ?SPACE_REMOVED).
 
 -spec space_unsupported(od_space:id()) -> ok.
 space_unsupported(SpaceId) ->
-    Node = datastore_key:responsible_node(SpaceId),
-    rpc:call(Node, ?MODULE, space_unsupported_internal, [SpaceId]).
+    gen_server2:cast({global, ?MAIN_HARVESTING_STREAM(SpaceId)}, ?SPACE_UNSUPPORTED).
 
 -spec revise_all_spaces() -> ok.
 revise_all_spaces() ->
@@ -154,6 +152,8 @@ name([SpaceId | _]) ->
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     harvesting_stream:state()) -> harvesting_stream:handling_result().
+handle_call(?TERMINATE, _From, State) ->
+    {stop, normal, ok, State};
 handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
     handle_call_async(Request, State).
@@ -180,6 +180,12 @@ handle_cast(?START_AUX_STREAMS(AuxDestination, Until), State = #hs_state{space_i
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
+
+-spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
+    State :: harvesting_stream:state()) -> ok.
+terminate(_Reason, #hs_state{space_id = SpaceId}) ->
+    ok = internal_services_manager:report_service_stop(?MODULE, SpaceId, SpaceId),
+    ok.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -327,49 +333,51 @@ on_harvesting_doc_not_found(State) ->
     {stop, normal, State}.
 
 %%%===================================================================
+%%% Internal services API
+%%%===================================================================
+
+-spec start_service(od_space:id()) -> ok | abort.
+start_service(SpaceId) ->
+    case harvesting_stream_sup:start_main_stream(SpaceId) of
+        ok -> ok;
+        % Nothing to do - harvester stopped in init fun
+        {error, normal} -> abort;
+        {error, {normal, _}} -> abort
+    end.
+
+-spec stop_service(od_space:id()) -> ok.
+stop_service(SpaceId) ->
+    gen_server2:call({global, ?MAIN_HARVESTING_STREAM(SpaceId)}, ?TERMINATE, infinity).
+
+%%%===================================================================
 %%% Internal API
 %%%===================================================================
 
--spec multicall_internal(od_space:id(), term()) -> ok.
-multicall_internal(SpaceId, Request) ->
-    Nodes = consistent_hashing:get_all_nodes(),
-    rpc:multicall(Nodes, ?MODULE, call_internal, [SpaceId, Request]),
-    ok.
-
--spec call_internal(od_space:id(), term()) -> term().
-call_internal(SpaceId, Request) ->
-    case datastore_key:responsible_node(SpaceId) =:= node() of
-        true ->
-            Name = ?MAIN_HARVESTING_STREAM(SpaceId),
-            try
-                ok = gen_server2:call({global, Name}, Request, infinity)
-            catch
-                exit:{Reason, _} when Reason =:= noproc orelse Reason =:= normal ->
-                    ?debug("Stream ~p was stopped, retrying with a new one", [Name]),
-                    case harvesting_stream_sup:start_main_stream(SpaceId) of
-                        ok ->
-                            call_internal(SpaceId, Request);
-                        {error, normal} ->
-                            ok;
-                        {error, {normal, _}} ->
-                            ok
-                    end;
-                Error:Reason2 ->
-                    ?error_stacktrace("
-                    Unexpected error in main_harvesting_stream:call_internal: ~w.",
-                        [{Error, Reason2}])
+-spec call(od_space:id(), term()) -> ok.
+call(SpaceId, Request) ->
+    Name = ?MAIN_HARVESTING_STREAM(SpaceId),
+    try
+        ok = gen_server2:call({global, Name}, Request, infinity)
+    catch
+        exit:{Reason, _} when Reason =:= noproc orelse Reason =:= normal ->
+            ?debug("Stream ~p was stopped, retrying with a new one", [Name]),
+            ServiceOptions = #{
+                start_function => start_service,
+                stop_function => stop_service,
+                start_function_args => [SpaceId],
+                allow_override => true
+            },
+            case internal_services_manager:start_service(?MODULE, SpaceId, SpaceId, ServiceOptions) of
+                ok ->
+                    call(SpaceId, Request);
+                aborted ->
+                    ok
             end;
-        false ->
-            ok
+        Error:Reason2 ->
+            ?error_stacktrace("
+                    Unexpected error in main_harvesting_stream:call: ~w.",
+                [{Error, Reason2}])
     end.
-
--spec space_removed_internal(od_space:id()) -> ok.
-space_removed_internal(SpaceId) ->
-    gen_server2:cast({global, ?MAIN_HARVESTING_STREAM(SpaceId)}, ?SPACE_REMOVED).
-
--spec space_unsupported_internal(od_space:id()) -> ok.
-space_unsupported_internal(SpaceId) ->
-    gen_server2:cast({global, ?MAIN_HARVESTING_STREAM(SpaceId)}, ?SPACE_UNSUPPORTED).
 
 -spec schedule_start_aux_streams(harvesting_destination:destination(),
     couchbase_changes:seq()) -> ok.

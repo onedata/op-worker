@@ -38,6 +38,7 @@ get_models() -> [
     subscription,
     file_subscription,
     session,
+    session_local_links,
     file_meta,
     storage_config,
     file_location,

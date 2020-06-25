@@ -32,6 +32,8 @@
 
 -define(RDF_METADATA_1, <<"<rdf>metadata_1</rdf>">>).
 -define(RDF_METADATA_2, <<"<rdf>metadata_2</rdf>">>).
+-define(RDF_METADATA_3, <<"<rdf>metadata_3</rdf>">>).
+-define(RDF_METADATA_4, <<"<rdf>metadata_4</rdf>">>).
 
 -define(JSON_METADATA_1, #{
     <<"attr1">> => 1,

@@ -425,7 +425,7 @@ confined_access_token_test(Config) ->
     % Request should be denied before contacting Onezone because the space in
     % objectid is different than requested
     ?assertMatch(
-        ?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat),
+        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
         rpc:call(Node, space_logic, get, [TokenCredentials, ?SPACE_2])
     ),
     % Nevertheless, GraphCalls should be increased by 3 as following requests should be made:

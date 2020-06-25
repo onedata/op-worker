@@ -31,6 +31,7 @@
 -define(TAKEOVER_REJECTED(NewUntil), {takeover_rejected, NewUntil}).
 -define(SPACE_REMOVED, space_removed).
 -define(SPACE_UNSUPPORTED, space_unsupported).
+-define(TERMINATE, terminate).
 -define(START_AUX_STREAMS(AuxDestination, Until),
     {start_aux_streams, AuxDestination, Until}).
 

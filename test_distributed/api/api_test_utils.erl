@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions used in API (REST + gs) tests.
+%%% Utility functions used in API tests.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(api_test_utils).
@@ -14,6 +14,7 @@
 
 -include("api_test_runner.hrl").
 -include("test_utils/initializer.hrl").
+
 
 -export([load_module_from_test_distributed_dir/2]).
 
@@ -34,7 +35,7 @@
     add_file_id_errors_for_operations_available_in_share_mode/3,
     add_file_id_errors_for_operations_not_available_in_share_mode/3,
     add_cdmi_id_errors_for_operations_not_available_in_share_mode/4,
-    maybe_substitute_id/2
+    maybe_substitute_bad_id/2
 ]).
 
 -type file_type() :: binary(). % <<"file">> | <<"dir">>
@@ -265,11 +266,11 @@ add_file_id_errors_for_operations_not_available_in_share_mode(FileGuid, ShareId,
 %% All added bad values are in cdmi form and are stored under <<"fileId">> key.
 %% @end
 %%--------------------------------------------------------------------
--spec add_cdmi_id_errors_for_operations_not_available_in_share_mode(file_id:file_guid(), od_space:id(), od_share:id(), data_spec()) ->
-    data_spec().
+-spec add_cdmi_id_errors_for_operations_not_available_in_share_mode(file_id:file_guid(), od_space:id(),
+    od_share:id(), data_spec()) -> data_spec().
 add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId, ShareId, DataSpec) ->
     {ok, DummyObjectId} = file_id:guid_to_objectid(<<"DummyGuid">>),
-    
+
     NonExistentSpaceGuid = file_id:pack_guid(<<"InvalidUuid">>, ?NOT_SUPPORTED_SPACE_ID),
     {ok, NonExistentSpaceObjectId} = file_id:guid_to_objectid(NonExistentSpaceGuid),
     
@@ -299,13 +300,13 @@ add_cdmi_id_errors_for_operations_not_available_in_share_mode(FileGuid, SpaceId,
         {<<"fileId">>, ShareFileObjectId, ?ERROR_POSIX(?EACCES)},
         {<<"fileId">>, NonExistentFileShareObjectId, ?ERROR_POSIX(?EACCES)}
     ],
-    
+
     add_bad_values_to_data_spec(BadFileIdValues, DataSpec).
 
 
-maybe_substitute_id(ValidId, undefined) ->
+maybe_substitute_bad_id(ValidId, undefined) ->
     {ValidId, undefined};
-maybe_substitute_id(ValidId, Data) ->
+maybe_substitute_bad_id(ValidId, Data) ->
     case maps:take(bad_id, Data) of
         {BadId, LeftoverData} -> {BadId, LeftoverData};
         error -> {ValidId, Data}

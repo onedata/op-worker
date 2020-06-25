@@ -214,7 +214,7 @@ is_authorized(Req, State) ->
                     {stop, send_error_response(Req, Error), State}
             end;
         {ok, ?GUEST} ->
-            {stop, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), State};
+            {stop, send_error_response(Req, ?ERROR_UNAUTHORIZED), State};
         {error, _} = Error ->
             {stop, send_error_response(Req, Error), Req}
     end.
@@ -518,7 +518,8 @@ init_stream(#{last_seq := Since, space_id := SpaceId, triggers := Triggers} = St
     Pid = self(),
 
     % TODO VFS-5570
-    Node = datastore_key:responsible_node(SpaceId),
+    % TODO VFS-6389 - maybe restart stream in case of node failure
+    Node = datastore_key:any_responsible_node(SpaceId),
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream, [
         <<"onedata">>,
         SpaceId,
