@@ -51,6 +51,7 @@
 -type idp() ::  binary().
 -type idp_entitlement() ::  idp_entitlement().
 -type group_map() :: json_utils:json_map().
+%% structure of a group_map() is presented below
 %% #{
 %%      <<"mappingScheme">> => ?ONEDATA_GROUP_SCHEME | ?IDP_ENTITLEMENT_SCHEME,
 %%

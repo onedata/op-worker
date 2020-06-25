@@ -51,6 +51,7 @@
 -type idp() ::  binary().
 -type subject_id() ::  subject_id().
 -type user_map() :: json_utils:json_map().
+%% structure of a user_map() is presented below
 %% #{
 %%      <<"mappingScheme">> => ?ONEDATA_USER_SCHEME | ?IDP_USER_SCHEME,
 %%

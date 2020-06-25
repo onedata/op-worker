@@ -1602,6 +1602,8 @@ setup_luma(LumaConfigs, Config) ->
         setup_luma_local_feed(hd(Workers), Config, LocalFeedConfigPath)
     end, undefined, LumaConfigs).
 
+-spec setup_luma_external_feed_mock([node()], proplists:proplist(), undefined | binary()) ->
+    term().
 setup_luma_external_feed_mock(_Workers, _Config, undefined) ->
     ok;
 setup_luma_external_feed_mock(Workers, Config, LumaConfigFile) ->
@@ -1698,6 +1700,7 @@ mock_acl_group_to_onedata_user_endpoint(ReqBody, LumaConfig) ->
             {ok, 200, undefined, json_utils:encode(Response)}
     end.
 
+-spec setup_luma_external_feed_mock(node(), proplists:proplist(), undefined | binary()) -> term().
 setup_luma_local_feed(_Worker, _Config, undefined) ->
     ok;
 setup_luma_local_feed(Worker, Config, LumaConfigFile) ->
@@ -1715,11 +1718,13 @@ setup_luma_local_feed(Worker, Config, LumaConfigFile) ->
         setup_luma_local_feed_onedata_groups(Worker, StorageId, OnedataGroupsLumaConfig)
     end, undefined, LumaConfig).
 
+-spec setup_luma_local_feed_storage_users(node(), binary(), json_utils:json_map()) -> term().
 setup_luma_local_feed_storage_users(Worker, StorageId, StorageUsers) ->
     maps:fold(fun(UserId, StorageUser, _) ->
         {ok, _} = rpc:call(Worker, rpc_api, luma_storage_users_store, [StorageId, UserId, StorageUser])
     end, undefined, StorageUsers).
 
+-spec setup_luma_local_feed_spaces_defaults(node(), binary(), json_utils:json_map()) -> term().
 setup_luma_local_feed_spaces_defaults(Worker, StorageId, SpacesDefaults) ->
     maps:fold(fun(SpaceId, SpaceDefaults, _) ->
         PosixDefaults = maps:get(<<"posix">>, SpaceDefaults, #{}),
@@ -1728,22 +1733,26 @@ setup_luma_local_feed_spaces_defaults(Worker, StorageId, SpacesDefaults) ->
         rpc:call(Worker, rpc_api, luma_spaces_display_defaults_store, [StorageId, SpaceId, DisplayDefaults])
     end, undefined, SpacesDefaults).
 
+-spec setup_luma_local_feed_onedata_users(node(), binary(), json_utils:json_map()) -> term().
 setup_luma_local_feed_onedata_users(Worker, StorageId, OnedataUsers) ->
     OnedataUsersByUids = maps:get(<<"uids">>, OnedataUsers, #{}),
     OnedataUsersByAclUsers = maps:get(<<"aclUsers">>, OnedataUsers, #{}),
     setup_luma_local_feed_onedata_users_by_uids(Worker, StorageId, OnedataUsersByUids),
     setup_luma_local_feed_onedata_users_by_acl_users(Worker, StorageId, OnedataUsersByAclUsers).
 
+-spec setup_luma_local_feed_onedata_users_by_uids(node(), binary(), json_utils:json_map()) -> term().
 setup_luma_local_feed_onedata_users_by_uids(Worker, StorageId, OnedataUsers) ->
     maps:fold(fun(Uid, OnedataUser, _) ->
         rpc:call(Worker, rpc_api, luma_onedata_users_store_by_uid, [StorageId, Uid, OnedataUser])
     end, undefined, OnedataUsers).
 
+-spec setup_luma_local_feed_onedata_users_by_acl_users(node(), binary(), json_utils:json_map()) -> term().
 setup_luma_local_feed_onedata_users_by_acl_users(Worker, StorageId, OnedataUsers) ->
     maps:fold(fun(AclUser, OnedataUser, _) ->
         rpc:call(Worker, rpc_api, luma_onedata_users_store_by_acl_user, [StorageId, AclUser, OnedataUser])
     end, undefined, OnedataUsers).
 
+-spec setup_luma_local_feed_onedata_groups(node(), binary(), json_utils:json_map()) -> term().
 setup_luma_local_feed_onedata_groups(Worker, StorageId, OnedataGroups) ->
     maps:fold(fun(AclGroup, OnedataGroup, _) ->
         rpc:call(Worker, rpc_api, luma_onedata_groups_store, [StorageId, AclGroup, OnedataGroup])

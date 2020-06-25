@@ -8,6 +8,10 @@
 %%% @doc
 %%% This module contains functions for acquiring mappings for LUMA DB
 %%% from external feed.
+%%% WARNING!!!
+%%% Functions from this module shall be called only internally by luma_db
+%%% module to populate the database.
+%%% DO NOT USE IT TO FETCH MAPPINGS!!!
 %%% @end
 %%%-------------------------------------------------------------------
 -module(luma_external_feed).

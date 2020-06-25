@@ -42,6 +42,7 @@
 
 -type user() ::  #luma_storage_user{}.
 -type user_map() :: json_utils:json_map().
+%% structure of a user_map() is presented below
 %% #{
 %%     <<"storageCredentials">> => helpers:user_ctx(),
 %%     <<"displayUid">> => integer() // optional

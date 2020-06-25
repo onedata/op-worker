@@ -24,6 +24,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/storage/luma/luma.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -164,6 +165,14 @@ store(Storage, Key, Table, Record, Feed, OverwriteFlag, Constraints) ->
     end).
 
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Updates record, already existing in the LUMA DB.
+%% NOTE:
+%% callback luma_db_record:update/2 callback must be implemented by
+%% rec
+%% @end
+%%--------------------------------------------------------------------
 -spec update(storage(), db_key(), table(), db_diff()) -> {ok, db_record()} | {error, term()}.
 update(Storage, Key, Table, Diff) ->
     Id = id(Storage, Table, Key),
@@ -310,7 +319,7 @@ validate_constraints_end_execute(Storage, [Constraint | Rest], Fun) ->
 validate_constraint(Storage, ?POSIX_STORAGE) ->
     case storage:is_posix_compatible(Storage) of
         true -> ok;
-        false -> ?ERROR_REQUIRES_POSIX_COMPATIBLE_STORAGE(storage:get_id(Storage))
+        false -> ?ERROR_REQUIRES_POSIX_COMPATIBLE_STORAGE(storage:get_id(Storage), ?POSIX_COMPATIBLE_HELPERS)
     end;
 validate_constraint(Storage, ?IMPORTED_STORAGE) ->
     case storage:is_imported(Storage) of
@@ -366,15 +375,13 @@ delete_doc_and_link(DocId, StorageId, Key, Table, Pred) ->
             ok
     end.
 
+-spec delete(doc_id()) -> ok | {error, term()}.
 delete(DocId) ->
     delete(DocId, fun(_) -> true end).
 
+-spec delete(doc_id(), datastore_doc:pred(doc_record())) -> ok | {error, term()}.
 delete(DocId, Pred) ->
-    case datastore_model:delete(?CTX, DocId, Pred) of
-        ok -> ok;
-        {error, not_found} -> ok;
-        Error -> Error
-    end.
+    datastore_model:delete(?CTX, DocId, Pred).
 
 %%%===================================================================
 %%% datastore_model callbacks

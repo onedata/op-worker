@@ -126,6 +126,10 @@ describe(#luma_config{feed = LumaFeed}) ->
         <<"lumaFeed">> => LumaFeed
     }.
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 -spec ensure_atom(feed() | binary()) -> feed().
 ensure_atom(Atom) when is_atom(Atom) -> Atom;
 ensure_atom(Binary) when is_binary(Binary) -> binary_to_existing_atom(Binary, utf8).

@@ -332,8 +332,7 @@ new_helper(HelperName, Args, AdminCtx) ->
     helper:new_helper(HelperName, Args, AdminCtx).
 
 
--spec new_luma_config(luma_config:feed()) ->
-    luma_config:config().
+-spec new_luma_config(luma_config:feed()) -> luma_config:config().
 new_luma_config(Mode) ->
     luma_config:new(Mode).
 
