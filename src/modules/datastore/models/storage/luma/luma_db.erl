@@ -228,7 +228,7 @@ delete(StorageId, Key, Table) ->
 %% stored in table Table associated with StorageId.
 %% @end
 %%--------------------------------------------------------------------
--spec delete(storage:id(), db_key(), table(), constraints()) -> ok.
+-spec delete(storage:id(), db_key(), table(), constraints()) -> ok | {error, term()}.
 delete(StorageId, Key, Table, Constraints) ->
     validate_constraints_end_execute(StorageId, Constraints, fun() ->
         Id = id(StorageId, Table, Key),

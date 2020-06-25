@@ -67,7 +67,7 @@ store(Storage, AclGroup, OnedataGroupMap) ->
             Error
     end.
 
--spec delete(storage:id(), key()) -> ok.
+-spec delete(storage:id(), key()) -> ok | {error, term()}.
 delete(StorageId, GroupId) ->
     luma_db:delete(StorageId, GroupId, ?MODULE, [?POSIX_STORAGE, ?IMPORTED_STORAGE]).
 
