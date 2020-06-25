@@ -10,24 +10,21 @@
 %%% It contains functions that should be used for mapping onedata users
 %%% to storage users and the other way round.
 %%%
-%%% LUMA DB consists of 4 tables, represented by the following modules:
+%%% LUMA DB consists of 5 tables, represented by the following modules:
 %%%  * luma_storage_users,
-%%%  * luma_spaces_defaults,
+%%%  * luma_spaces_posix_storage_defaults,
+%%%  * luma_spaces_display_defaults,
 %%%  * luma_onedata_users,
 %%%  * luma_onedata_groups.
 %%%
 %%%
-%%% There are 3 modes of LUMA that can be configured for a specific storage:
-%%%  * NO_LUMA - no luma service, default mappings are used
-%%%  * EMBEDDED_LUMA - custom mappings can be set using REST API
-%%%                    and stored in the database.
-%%%                    It must be configured before supporting space with
-%%%                    the storage.
-%%%  * EXTERNAL_LUMA - external HTTP server that implements required
-%%%                    LUMA API (described on onedata.org).
+%%% There are 3 types of feed for LUMA DB that can be configured for a specific storage:
+%%%  * AUTO_FEED - LUMA DB will be automatically filled.
+%%%  * LOCAL_FEED - custom mappings in LUMA DB can be set using REST API.
+%%%                 It must be configured before supporting space with the storage.
+%%%  * EXTERNAL_FEED - external HTTP server that implements required API (described on onedata.org).
 %%%                    The server is lazily queried for custom mappings
-%%%                    which are then stored in the database. This mode
-%%%                    can be treated as a lazy feed for EMBEDDED_LUMA store.
+%%%                    which are then stored in the LUMA DB.
 %%%
 %%% Functions exported by this module can be divided into 3 groups:
 %%%  * LUMA functions
@@ -47,28 +44,30 @@
 %%%    which are returned in getattr response. They are used to present
 %%%    file owners in the result of ls operation in Oneclient.
 %%%
-%%% Credentials are stored in 2 tables:
+%%% Credentials are stored in 3 tables:
 %%%  * luma_storage_users - this model is used for storing
 %%%    storage_credentials() for a pair (storage:id(), od_user:id()).
 %%     It also stores display_uid which is a component of
 %%     display_credentials().
-%%%  * luma_spaces_defaults - this model is used for storing 2 pairs of
-%%%    POSIX credentials (UID & GID) for a given space support
-%%%    identified by pair (storage:id(), od_space:id()).
-%%%    First of them is called display (display_uid, display_gid) and is
-%%%    used to store default display credentials.
-%%%    Second one is called storage (storage_uid, storage_gid) and
-%%%    is used only on POSIX compatible storages (described below
+%%%  * luma_spaces_posix_storage_defaults - this model is used
+%%%    only on POSIX compatible storages (described below
 %%%    in the section considering acquiring of credentials on POSIX
 %%%    compatible storages).
-%%%
-%%%    Please see luma_spaces_defaults.erl and luma_storage_users.erl for
-%%%    more info (i.e. how tables are filled according to LUMA mode
+%%%  * luma_spaces_display_defaults - this model is used for storing
+%%%    default display credentials for a given space support
+%%%    identified by pair (storage:id(), od_space:id()).
+
+%%%    Please see luma_storage_users.erl, luma_spaces_posix_storage_defaults.erl
+%%%    and luma_spaces_display_defaults.erl for more info
+%%%    (i.e. how tables are filled according to LUMA feed
 %%%    for given storage).
 %%%
 %%% On each type of storage, display_credentials() have the
 %%% following structure:
-%%% {#luma_storage_user.display_uid, #luma_space_defaults.display_gid}
+%%% {#luma_storage_user.display_uid, #luma_posix_credentials.gid}
+%%%
+%%% where #luma_posix_credentials record is acquired from luma_spaces_display_defaults table.
+%%%
 %%%
 %%% storage_credentials() are composed differently depending on
 %%% the storage type (whether it is POSIX-compatible).
@@ -88,7 +87,8 @@
 %%% storages are constructed in the following way:
 %%% #{
 %%%     <<"uid">> => maps:get(<<"uid">>, #luma_storage_user.storage_credentials),
-%%%     <<"gid">> => #luma_space_defaults.default_gid
+%%      #luma_posix_credentials record is acquired from luma_spaces_posix_storage_defaults table
+%%%     <<"gid">> => #luma_posix_credentials.gid
 %%% }
 %%%
 %%%-------------------------------------------------------------------
@@ -97,11 +97,11 @@
 %%% This API is used only by storage_sync mechanism.
 %%% It is used to map storage users/groups to users/groups in onedata.
 %%%
-%%% If EMBEDDED_LUMA mode is set for given storage, mappings should
+%%% If LOCAL_FEED mode is set for given storage, mappings should
 %%% be set in the luma_onedata_users and luma_onedata_groups tables
 %%% using REST API.
 %%%
-%%% If EXTERNAL_LUMA mode is set for given storage, external 3rd party
+%%% If EXTERNAL_FEED mode is set for given storage, external 3rd party
 %%% server is queried for mappings and mappings are stored in
 %%% luma_onedata_users and luma_onedata_groups tables.
 %%%
@@ -177,18 +177,21 @@
 -export([
     clear_db/1,
     clear_db/2,
-    add_helper_specific_fields/4
+    add_helper_specific_fields/5
 ]).
 
--type uid() :: non_neg_integer().
--type gid() :: non_neg_integer().
+-type uid() :: luma_posix_credentials:uid().
+-type gid() :: luma_posix_credentials:gid().
 -type acl_who() :: binary().
 -type display_credentials() :: {uid(), gid()}.
 -type storage_credentials() :: helper:user_ctx().
 
+-type feed() :: luma_config:feed().
+
 -export_type([
     uid/0, gid/0, acl_who/0,
-    storage_credentials/0, display_credentials/0
+    storage_credentials/0, display_credentials/0,
+    feed/0
 ]).
 
 %%%===================================================================
@@ -205,7 +208,8 @@ map_to_storage_credentials(UserId, SpaceId, StorageId) ->
 map_to_storage_credentials(SessId, UserId, SpaceId, Storage) ->
     case map_to_storage_credentials_internal(UserId, SpaceId, Storage) of
         {ok, StorageCredentials} ->
-            add_helper_specific_fields(UserId, SessId, StorageCredentials, storage:get_helper(Storage));
+            LumaMode = storage:get_luma_feed(Storage),
+            add_helper_specific_fields(UserId, SessId, StorageCredentials, storage:get_helper(Storage), LumaMode);
         Error ->
             Error
     end.
@@ -217,7 +221,7 @@ map_to_display_credentials(?ROOT_USER_ID, _SpaceId, _Storage) ->
     {ok, {?ROOT_UID, ?ROOT_GID}};
 map_to_display_credentials(OwnerId, SpaceId, undefined) ->
     % unsupported space;
-    {ok, luma_utils:generate_posix_credentials(OwnerId, SpaceId)};
+    {ok, luma_auto_feed:generate_posix_credentials(OwnerId, SpaceId)};
 map_to_display_credentials(OwnerId, SpaceId, Storage) ->
     try
         case fslogic_uuid:is_space_owner(OwnerId) of
@@ -245,16 +249,18 @@ map_to_display_credentials(OwnerId, SpaceId, Storage) ->
     {ok, od_user:id()} | {error, term()}.
 map_uid_to_onedata_user(Uid, SpaceId, StorageId) ->
     {ok, Storage} = storage:get(StorageId),
-    case storage:is_luma_enabled(Storage) andalso is_reverse_luma_supported(Storage) of
-        true ->
-            case luma_onedata_users:map_uid_to_onedata_user(Storage, Uid) of
-                {ok, OnedataUser} ->
-                    {ok, luma_onedata_user:get_user_id(OnedataUser)};
-                Error ->
+    case luma_onedata_users:map_uid_to_onedata_user(Storage, Uid) of
+        {ok, OnedataUser} ->
+            {ok, luma_onedata_user:get_user_id(OnedataUser)};
+        {error, not_found} = Error ->
+            case storage:has_non_auto_luma_feed(Storage) of
+                false ->
+                    {ok, ?SPACE_OWNER_ID(SpaceId)};
+                true ->
                     Error
-            end;
-        false ->
-            {ok, ?SPACE_OWNER_ID(SpaceId)}
+                end;
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
@@ -268,18 +274,11 @@ map_uid_to_onedata_user(Uid, SpaceId, StorageId) ->
     {ok, od_user:id()} | {error, term()}.
 map_acl_user_to_onedata_user(AclUser, StorageId) ->
     {ok, Storage} = storage:get(StorageId),
-    case {storage:is_luma_enabled(Storage), is_reverse_luma_supported(Storage)} of
-        {true, true} ->
-            case luma_onedata_users:map_acl_user_to_onedata_user(Storage, AclUser) of
-                {ok, OnedataUser} ->
-                    {ok, luma_onedata_user:get_user_id(OnedataUser)};
-                Error ->
-                    Error
-            end;
-        {_, false} ->
-            {error, reverse_luma_not_supported};
-        {false, _} ->
-            {error, luma_disabled}
+    case luma_onedata_users:map_acl_user_to_onedata_user(Storage, AclUser) of
+        {ok, OnedataUser} ->
+            {ok, luma_onedata_user:get_user_id(OnedataUser)};
+        Error ->
+            Error
     end.
 
 %%--------------------------------------------------------------------
@@ -293,18 +292,11 @@ map_acl_user_to_onedata_user(AclUser, StorageId) ->
     {ok, od_group:id()} | {error, term()}.
 map_acl_group_to_onedata_group(AclGroup, StorageId) ->
     {ok, Storage} = storage:get(StorageId),
-    case {storage:is_luma_enabled(Storage), is_reverse_luma_supported(Storage)} of
-        {true, true} ->
-            case luma_onedata_groups:map_acl_group_to_onedata_group(Storage, AclGroup) of
-                {ok, OnedataGroup} ->
-                    {ok, luma_onedata_group:get_group_id(OnedataGroup)};
-                Error ->
-                    Error
-            end;
-        {_, false} ->
-            {error, reverse_luma_not_supported};
-        {false, _} ->
-            {error, luma_disabled}
+    case luma_onedata_groups:map_acl_group_to_onedata_group(Storage, AclGroup) of
+        {ok, OnedataGroup} ->
+            {ok, luma_onedata_group:get_group_id(OnedataGroup)};
+        Error ->
+            Error
     end.
 
 %%%===================================================================
@@ -314,21 +306,23 @@ map_acl_group_to_onedata_group(AclGroup, StorageId) ->
 -spec clear_db(storage:id()) -> ok | {error, term()}.
 clear_db(StorageId) ->
     luma_storage_users:clear_all(StorageId),
-    luma_spaces_defaults:clear_all(StorageId),
+    luma_spaces_display_defaults:clear_all(StorageId),
+    luma_spaces_posix_storage_defaults:clear_all(StorageId),
     luma_onedata_users:clear_all(StorageId),
     luma_onedata_groups:clear_all(StorageId).
 
 -spec clear_db(storage:id(), od_space:id()) -> ok | {error, term()}.
 clear_db(StorageId, SpaceId) ->
-    luma_spaces_defaults:delete(StorageId, SpaceId).
+    luma_spaces_display_defaults:delete(StorageId, SpaceId),
+    luma_spaces_posix_storage_defaults:delete(StorageId, SpaceId).
 
 
 -spec add_helper_specific_fields(od_user:id(), session:id(), luma:storage_credentials(),
-    helpers:helper()) -> any().
-add_helper_specific_fields(UserId, SessionId, StorageCredentials, Helper) ->
+    helpers:helper(), luma:feed()) -> any().
+add_helper_specific_fields(UserId, SessionId, StorageCredentials, Helper, LumaFeed) ->
     case helper:get_name(Helper) of
         ?WEBDAV_HELPER_NAME ->
-            add_webdav_specific_fields(UserId, SessionId, StorageCredentials, Helper);
+            add_webdav_specific_fields(UserId, SessionId, StorageCredentials, Helper, LumaFeed);
         _Other ->
             {ok, StorageCredentials}
     end.
@@ -359,11 +353,11 @@ map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
     end.
 
 
--spec add_webdav_specific_fields(od_user:id(), session:id(), storage_credentials(), helpers:helper()) ->
+-spec add_webdav_specific_fields(od_user:id(), session:id(), storage_credentials(), helpers:helper(), feed()) ->
     {ok, luma:storage_credentials()} | {error, term()}.
 add_webdav_specific_fields(UserId, SessionId, StorageCredentials = #{
     <<"credentialsType">> := <<"oauth2">>
-}, Helper) ->
+}, Helper, LumaFeed) ->
     {UserId2, SessionId2} = case fslogic_uuid:is_space_owner(UserId) of
         true ->
             % space owner uses helper admin_ctx
@@ -371,37 +365,39 @@ add_webdav_specific_fields(UserId, SessionId, StorageCredentials = #{
         false ->
             {UserId, SessionId}
     end,
-    fill_in_webdav_oauth2_token(UserId2, SessionId2, StorageCredentials, Helper);
-add_webdav_specific_fields(_UserId, _SessionId, StorageCredentials, _Helper) ->
+    choose_idp_and_fill_in_webdav_oauth2_token(UserId2, SessionId2, StorageCredentials, Helper, LumaFeed);
+add_webdav_specific_fields(_UserId, _SessionId, StorageCredentials, _Helper, _LumaFeed) ->
     {ok, StorageCredentials}.
 
 
--spec fill_in_webdav_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(),
-    helpers:helper()) -> {ok, luma:storage_credentials()} | {error, term()}.
-fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, Helper = #helper{
-    args = #{<<"oauth2IdP">> := OAuth2IdP}
-}) ->
-    fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, Helper, OAuth2IdP);
-fill_in_webdav_oauth2_token(UserId, SessionId, UserCtx, Helper = #helper{}) ->
-    % OAuth2IdP was not explicitly set, try to infer it
-    case provider_logic:zone_get_offline_access_idps() of
-        {ok, [OAuth2IdP]} ->
-            fill_in_webdav_oauth2_token(UserId, SessionId, UserCtx, Helper, OAuth2IdP);
-        {ok, []} ->
-            ?error("Empty list of identity providers retrieved from Onezone"),
-            {error, missing_identity_provider};
-        {ok, _} ->
-            ?error("Ambiguous list of identity providers retrieved from Onezone"),
-            {error, ambiguous_identity_provider}
+-spec choose_idp_and_fill_in_webdav_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(),
+    helpers:helper(), feed()) -> {ok, luma:storage_credentials()} | {error, term()}.
+choose_idp_and_fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, Helper, LumaFeed) ->
+    HelperArgs = helper:get_args(Helper),
+    case maps:get(<<"oauth2IdP">>, HelperArgs, undefined) of
+        undefined ->
+            % OAuth2IdP was not explicitly set, try to infer it
+            case provider_logic:zone_get_offline_access_idps() of
+                {ok, [OAuth2IdP]} ->
+                    fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, OAuth2IdP, LumaFeed);
+                {ok, []} ->
+                    ?error("Empty list of identity providers retrieved from Onezone"),
+                    {error, missing_identity_provider};
+                {ok, _} ->
+                    ?error("Ambiguous list of identity providers retrieved from Onezone"),
+                    {error, ambiguous_identity_provider}
+            end;
+        OAuth2IdP ->
+            fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, OAuth2IdP, LumaFeed)
     end.
 
 
 -spec fill_in_webdav_oauth2_token(od_user:id(), session:id(), luma:storage_credentials(),
-    helpers:helper(), binary()) -> {ok, luma:storage_credentials()} | {error, term()}.
+    binary(), feed()) -> {ok, luma:storage_credentials()} | {error, term()}.
 fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCredentials = #{
     <<"onedataAccessToken">> := OnedataAccessToken,
     <<"adminId">> := AdminId
-}, _Helper, OAuth2IdP) ->
+}, OAuth2IdP, _LumaFeed) ->
     TokenCredentials = auth_manager:build_token_credentials(
         OnedataAccessToken, undefined, undefined,
         undefined, disallow_data_access_caveats
@@ -414,19 +410,11 @@ fill_in_webdav_oauth2_token(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCredentials = #{
         <<"accessToken">> => IdPAccessToken,
         <<"accessTokenTTL">> => integer_to_binary(TTL)
     }};
-fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, #helper{
-    insecure = false
-}, OAuth2IdP) ->
-    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(UserId, SessionId, OAuth2IdP),
-    UserCtx2 = maps:remove(<<"onedataAccessToken">>, StorageCredentials),
-    {ok, UserCtx2#{
-        <<"accessToken">> => IdPAccessToken,
-        <<"accessTokenTTL">> => integer_to_binary(TTL)
-    }};
 fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCredentials = #{
     <<"onedataAccessToken">> := OnedataAccessToken,
     <<"adminId">> := AdminId
-}, #helper{insecure = true}, OAuth2IdP) ->
+}, OAuth2IdP, ?AUTO_FEED) ->
+    % use AdminCtx in case of LUMA ?AUTO_FEED
     TokenCredentials = auth_manager:build_token_credentials(
         OnedataAccessToken, undefined, undefined,
         undefined, disallow_data_access_caveats
@@ -436,6 +424,13 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCredentials = #{
     {ok, AdminCtx2#{
         <<"accessToken">> => IdPAccessToken,
         <<"accessTokenTTL">> => integer_to_binary(TTL)
+    }};
+fill_in_webdav_oauth2_token(UserId, SessionId, StorageCredentials, OAuth2IdP, _LumaFeed) ->
+    {ok, {IdPAccessToken, TTL}} = idp_access_token:acquire(UserId, SessionId, OAuth2IdP),
+    UserCtx2 = maps:remove(<<"onedataAccessToken">>, StorageCredentials),
+    {ok, UserCtx2#{
+        <<"accessToken">> => IdPAccessToken,
+        <<"accessTokenTTL">> => integer_to_binary(TTL)
     }}.
 
 -spec map_space_owner_to_storage_credentials(storage:data(), od_space:id()) ->
@@ -443,9 +438,9 @@ fill_in_webdav_oauth2_token(_UserId, _SessionId, AdminCredentials = #{
 map_space_owner_to_storage_credentials(Storage, SpaceId) ->
     case storage:is_posix_compatible(Storage) of
         true ->
-            {ok, SpaceDefaults} = luma_spaces_defaults:get(Storage, SpaceId),
-            DefaultUid = luma_space_defaults:get_storage_uid(SpaceDefaults),
-            DefaultGid = luma_space_defaults:get_storage_gid(SpaceDefaults),
+            {ok, SpaceDefaults} = luma_spaces_posix_storage_defaults:get_or_acquire(Storage, SpaceId),
+            DefaultUid = luma_posix_credentials:get_uid(SpaceDefaults),
+            DefaultGid = luma_posix_credentials:get_gid(SpaceDefaults),
             {ok, #{
                 <<"uid">> => integer_to_binary(DefaultUid),
                 <<"gid">> => integer_to_binary(DefaultGid)
@@ -458,19 +453,17 @@ map_space_owner_to_storage_credentials(Storage, SpaceId) ->
 -spec map_onedata_user_to_storage_credentials(od_user:id(), storage:data(), od_space:id()) ->
     {ok, storage_credentials()} | {error, term()}.
 map_onedata_user_to_storage_credentials(UserId, Storage, SpaceId) ->
-    case luma_storage_users:get(Storage, UserId) of
+    case luma_storage_users:get_or_acquire(Storage, UserId) of
         {ok, LumaUser} ->
             StorageCredentials = luma_storage_user:get_storage_credentials(LumaUser),
+            StorageCredentials2 = maps:remove(<<"type">>, StorageCredentials),
             case storage:is_posix_compatible(Storage) of
                 true ->
-                    {ok, SpaceDefaults} = luma_spaces_defaults:get(Storage, SpaceId),
-                    Uid = binary_to_integer(maps:get(<<"uid">>, StorageCredentials)),
-                    % store reverse mapping
-                    luma_onedata_users:store_uid_mapping(Storage, Uid, UserId),
-                    DefaultGid = luma_space_defaults:get_storage_gid(SpaceDefaults),
-                    {ok, StorageCredentials#{<<"gid">> => integer_to_binary(DefaultGid)}};
+                    {ok, SpaceDefaults} = luma_spaces_posix_storage_defaults:get_or_acquire(Storage, SpaceId),
+                    DefaultGid = luma_posix_credentials:get_gid(SpaceDefaults),
+                    {ok, StorageCredentials2#{<<"gid">> => integer_to_binary(DefaultGid)}};
                 false ->
-                    {ok, StorageCredentials}
+                    {ok, StorageCredentials2}
             end;
         Error ->
             Error
@@ -479,25 +472,20 @@ map_onedata_user_to_storage_credentials(UserId, Storage, SpaceId) ->
 -spec map_space_owner_to_display_credentials(storage:id() | storage:data(), od_space:id()) ->
     {ok, display_credentials()}.
 map_space_owner_to_display_credentials(Storage, SpaceId) ->
-    {ok, SpaceDefaults} = luma_spaces_defaults:get(Storage, SpaceId),
-    DisplayUid = luma_space_defaults:get_display_uid(SpaceDefaults),
-    DisplayGid = luma_space_defaults:get_display_gid(SpaceDefaults),
+    {ok, SpaceDefaults} = luma_spaces_display_defaults:get_or_acquire(Storage, SpaceId),
+    DisplayUid = luma_posix_credentials:get_uid(SpaceDefaults),
+    DisplayGid = luma_posix_credentials:get_gid(SpaceDefaults),
     {ok, {DisplayUid, DisplayGid}}.
 
 -spec map_normal_user_to_display_credentials(od_user:id(), storage:id() | storage:data(), od_space:id()) ->
     {ok, display_credentials()} | {error, term()}.
 map_normal_user_to_display_credentials(OwnerId, Storage, SpaceId) ->
-    case luma_storage_users:get(Storage, OwnerId) of
+    case luma_storage_users:get_or_acquire(Storage, OwnerId) of
         {ok, LumaUser} ->
-            {ok, SpaceDefaults} = luma_spaces_defaults:get(Storage, SpaceId),
+            {ok, SpaceDefaults} = luma_spaces_display_defaults:get_or_acquire(Storage, SpaceId),
             DisplayUid = luma_storage_user:get_display_uid(LumaUser),
-            DisplayGid = luma_space_defaults:get_display_gid(SpaceDefaults),
+            DisplayGid = luma_posix_credentials:get_gid(SpaceDefaults),
             {ok, {DisplayUid, DisplayGid}};
         Error ->
             Error
     end.
-
--spec is_reverse_luma_supported(storage:data()) -> boolean().
-is_reverse_luma_supported(Storage) ->
-    Helper = storage:get_helper(Storage),
-    helper:is_posix_compatible(Helper).

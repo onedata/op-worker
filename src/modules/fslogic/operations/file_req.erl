@@ -542,16 +542,9 @@ check_and_register_release(_FileCtx, _SessId, _HandleId) ->
 -spec create_location(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
     {file_location:record(), file_ctx:ctx()}.
 create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
-    ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
-    case ExtDIO of
-        true ->
-            {FL, FileCtx2, _} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
-            {FL, FileCtx2};
-        _ ->
-            {#document{value = FL}, FileCtx2} =
-                sd_utils:create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
-            {FL, FileCtx2}
-    end.
+    {#document{value = FL}, FileCtx2} =
+        sd_utils:create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
+    {FL, FileCtx2}.
 
 
 %%--------------------------------------------------------------------

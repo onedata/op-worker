@@ -29,7 +29,7 @@
 %% API
 -export([new/3, new_posix_user/1, get_storage_credentials/1, get_display_uid/1]).
 %% luma_db_record callbacks
--export([to_json/1, from_json/1]).
+-export([to_json/1, from_json/1, update/2]).
 
 
 -record(luma_storage_user, {
@@ -41,13 +41,20 @@
 }).
 
 -type user() ::  #luma_storage_user{}.
--export_type([user/0]).
+-type user_map() :: json_utils:json_map().
+%% structure of a user_map() is presented below
+%% #{
+%%     <<"storageCredentials">> => helpers:user_ctx(),
+%%     <<"displayUid">> => integer() // optional
+%% }
+
+-export_type([user/0, user_map/0]).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec new(od_user:id(), external_luma:storage_user(), storage:id() | storage:data()) ->
+-spec new(od_user:id(), user_map(), storage:id() | storage:data()) ->
     user().
 new(UserId, StorageUserMap, Storage) ->
     StorageUserMap2 = ensure_display_uid_defined(UserId, StorageUserMap, Storage),
@@ -81,8 +88,8 @@ get_display_uid(#luma_storage_user{display_uid = DisplayUid}) ->
 %% - on POSIX incompatible storages generate uid basing on UserId
 %% @end
 %%--------------------------------------------------------------------
--spec ensure_display_uid_defined(od_user:id(), external_luma:storage_user(), storage:id() | storage:data()) ->
-    external_luma:storage_user().
+-spec ensure_display_uid_defined(od_user:id(), user_map(), storage:id() | storage:data()) ->
+    user_map().
 ensure_display_uid_defined(UserId, StorageUserMap, Storage) ->
     case maps:get(<<"displayUid">>, StorageUserMap, undefined) =:= undefined of
         true ->
@@ -91,7 +98,7 @@ ensure_display_uid_defined(UserId, StorageUserMap, Storage) ->
                     StorageCredentials = maps:get(<<"storageCredentials">>, StorageUserMap),
                     binary_to_integer(maps:get(<<"uid">>, StorageCredentials));
                 false ->
-                    luma_utils:generate_uid(UserId)
+                    luma_auto_feed:generate_uid(UserId)
             end,
             StorageUserMap#{<<"displayUid">> => DisplayUid};
         false ->
@@ -103,19 +110,30 @@ ensure_display_uid_defined(UserId, StorageUserMap, Storage) ->
 %%% luma_db_record callbacks
 %%%===================================================================
 
--spec to_json(user()) -> json_utils:json_map().
+-spec to_json(user()) -> user_map().
 to_json(#luma_storage_user{
     storage_credentials = StorageCredentials,
     display_uid = DisplayUid
 }) ->
     #{
-        <<"storage_credentials">> => StorageCredentials,
-        <<"display_uid">> => utils:undefined_to_null(DisplayUid)
+        <<"storageCredentials">> => StorageCredentials,
+        <<"displayUid">> => utils:undefined_to_null(DisplayUid)
     }.
 
--spec from_json(json_utils:json_map()) -> user().
+-spec from_json(user_map()) -> user().
 from_json(UserJson) ->
     #luma_storage_user{
-        storage_credentials = maps:get(<<"storage_credentials">>, UserJson),
-        display_uid = utils:null_to_undefined(maps:get(<<"display_uid">>, UserJson, undefined))
+        storage_credentials = maps:get(<<"storageCredentials">>, UserJson),
+        display_uid = utils:null_to_undefined(maps:get(<<"displayUid">>, UserJson, undefined))
     }.
+
+-spec update(user(), luma_db:db_diff()) -> {ok, user()}.
+update(LSU = #luma_storage_user{
+    storage_credentials = StorageCredentials,
+    display_uid = DisplayUid
+}, Diff) ->
+    NewStorageCredentials = maps:get(<<"storageCredentials">>, Diff, #{}),
+    {ok, LSU#luma_storage_user{
+        storage_credentials = maps:merge(StorageCredentials, NewStorageCredentials),
+        display_uid = maps:get(<<"displayUid">>, Diff, DisplayUid)
+    }}.

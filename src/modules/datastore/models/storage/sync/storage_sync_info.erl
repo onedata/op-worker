@@ -168,7 +168,7 @@ mark_processed_batch(StorageFileId, SpaceId, Mtime, Offset, BatchSize, BatchHash
                     batches_processed = BatchesProcessed2,
                     hashes_to_update = #{},
                     children_hashes = maps:merge(ChildrenHashes, HashesToUpdate),
-                    mtime = utils:ensure_defined(Mtime, undefined, OldMtime)
+                    mtime = utils:ensure_defined(Mtime, OldMtime)
                 }};
             false ->
                 {ok, SSI#storage_sync_info{

@@ -18,15 +18,13 @@
 
 -export([apply/2]).
 -export([
-    storage_create/6,
+    storage_create/5,
     storage_safe_remove/1,
     storage_supports_any_space/1,
     storage_list_ids/0,
     storage_get_helper/1,
     storage_update_admin_ctx/2,
     storage_update_helper_args/2,
-    storage_set_insecure/2,
-    storage_set_readonly/2,
     storage_set_imported_storage/2,
     storage_set_qos_parameters/2,
     storage_update_luma_config/2,
@@ -34,10 +32,31 @@
     storage_exists/1,
     storage_describe/1,
     storage_is_imported_storage/1,
+    storage_get_luma_feed/1,
     luma_clear_db/1,
-    new_helper/5,
-    new_luma_config/2,
-    verify_storage_on_all_nodes/1,
+    luma_storage_users_get_and_describe/2,
+    luma_storage_users_store/3,
+    luma_storage_users_update/3,
+    luma_storage_users_delete/2,
+    luma_spaces_display_defaults_get_and_describe/2,
+    luma_spaces_display_defaults_delete/2,
+    luma_spaces_display_defaults_store/3,
+    luma_spaces_posix_storage_defaults_get_and_describe/2,
+    luma_spaces_posix_storage_defaults_store/3,
+    luma_spaces_posix_storage_defaults_delete/2,
+    luma_onedata_users_get_by_uid_and_describe/2,
+    luma_onedata_users_store_by_uid/3,
+    luma_onedata_users_delete_uid_mapping/2,
+    luma_onedata_users_get_by_acl_user_and_describe/2,
+    luma_onedata_users_store_by_acl_user/3,
+    luma_onedata_users_delete_acl_user_mapping/2,
+    luma_onedata_groups_get_and_describe/2,
+    luma_onedata_groups_store/3,
+    luma_onedata_groups_delete/2,
+    new_helper/3,
+    new_luma_config/1,
+    new_luma_config_with_external_feed/2,
+    verify_storage_on_all_nodes/2,
     prepare_helper_args/2,
     prepare_user_ctx_params/2,
     space_logic_get_storage_ids/1,
@@ -113,11 +132,11 @@ apply(Function, Args) ->
 %%% Exposed functions
 %%%===================================================================
 
--spec storage_create(storage:name(), helpers:helper(), boolean(),
-    undefined | luma_config:config(), boolean(), storage:qos_parameters()) ->
+-spec storage_create(storage:name(), helpers:helper(),
+    storage:luma_config(), boolean(), storage:qos_parameters()) ->
     storage:id() | {error, term()}.
-storage_create(Name, Helpers, ReadOnly, LumaConfig, ImportedStorage, QosParameters) ->
-    storage:create(Name, Helpers, ReadOnly, LumaConfig, ImportedStorage, QosParameters).
+storage_create(Name, Helpers, LumaConfig, ImportedStorage, QosParameters) ->
+    storage:create(Name, Helpers, LumaConfig, ImportedStorage, QosParameters).
 
 
 -spec storage_safe_remove(storage:id()) -> ok | {error, storage_in_use | term()}.
@@ -152,18 +171,6 @@ storage_update_helper_args(StorageId, Changes) ->
     storage:update_helper_args(StorageId, Changes).
 
 
--spec storage_set_insecure(storage:id(), Insecure :: boolean()) ->
-    ok | {error, term()}.
-storage_set_insecure(StorageId, Insecure) ->
-    storage:set_helper_insecure(StorageId, Insecure).
-
-
--spec storage_set_readonly(storage:id(), Readonly :: boolean()) ->
-    ok | {error, term()}.
-storage_set_readonly(StorageId, Readonly) ->
-    storage:set_readonly(StorageId, Readonly).
-
-
 -spec storage_set_imported_storage(storage:id(), boolean()) ->
     ok | {error, term()}.
 storage_set_imported_storage(StorageId, Value) ->
@@ -176,8 +183,8 @@ storage_set_qos_parameters(StorageId, QosParameters) ->
     storage:set_qos_parameters(StorageId, QosParameters).
 
 
--spec storage_update_luma_config(storage:id(), Changes) -> ok | {error, term()}
-    when Changes :: #{url => luma_config:url(), api_key => luma_config:api_key()}.
+-spec storage_update_luma_config(storage:id(),
+    Changes :: luma_config:config() | luma_config:diff() ) -> ok | {error, term()}.
 storage_update_luma_config(StorageId, Changes) ->
     storage:update_luma_config(StorageId, Changes).
 
@@ -202,26 +209,143 @@ storage_describe(StorageId) ->
 storage_is_imported_storage(StorageId) ->
     storage:is_imported(StorageId).
 
+-spec storage_get_luma_feed(storage:id() | storage:data()) -> luma:feed().
+storage_get_luma_feed(Storage) ->
+    storage:get_luma_feed(Storage).
+
+
 -spec luma_clear_db(storage:id()) -> ok.
 luma_clear_db(StorageId) ->
     luma:clear_db(StorageId).
 
 
--spec new_helper(helper:name(), helper:args(), helper:user_ctx(), Insecure :: boolean(),
-    helper:storage_path_type()) -> {ok, helpers:helper()}.
-new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType) ->
-    helper:new_helper(HelperName, Args, AdminCtx, Insecure, StoragePathType).
+-spec luma_storage_users_get_and_describe(storage:id(), od_user:id()) ->
+    {ok, luma_storage_user:user_map()} | {error, term()}.
+luma_storage_users_get_and_describe(Storage, UserId) ->
+    luma_storage_users:get_and_describe(Storage, UserId).
 
 
--spec new_luma_config(luma_config:url(), luma_config:api_key()) ->
+-spec luma_storage_users_store(storage:id(), od_user:id() | luma_onedata_user:user_map(),
+    luma_storage_user:user_map()) ->
+    {ok, od_user:id()} | {error, term()}.
+luma_storage_users_store(Storage, OnedataUserMap, StorageUserMap) ->
+    luma_storage_users:store(Storage, OnedataUserMap, StorageUserMap).
+
+
+-spec luma_storage_users_update(storage:id(), od_user:id(), luma_storage_user:user_map()) ->
+    ok | {error, term()}.
+luma_storage_users_update(Storage, UserId, StorageUserMap) ->
+    luma_storage_users:update(Storage, UserId, StorageUserMap).
+
+
+-spec luma_storage_users_delete(storage:id(), od_user:id()) -> ok.
+luma_storage_users_delete(Storage, UserId) ->
+    luma_storage_users:delete(Storage, UserId).
+
+
+-spec luma_spaces_display_defaults_get_and_describe(storage:id(), od_space:id()) ->
+    {ok, luma_posix_credentials:credentials_map()} | {error, term()}.
+luma_spaces_display_defaults_get_and_describe(Storage, SpaceId) ->
+    luma_spaces_display_defaults:get_and_describe(Storage, SpaceId).
+
+
+-spec luma_spaces_display_defaults_store(storage:id() | storage:data(), od_space:id(),
+    luma_posix_credentials:credentials_map()) -> ok | {error, term()}.
+luma_spaces_display_defaults_store(Storage, SpaceId, DisplayDefaults) ->
+    luma_spaces_display_defaults:store(Storage, SpaceId, DisplayDefaults).
+
+
+-spec luma_spaces_display_defaults_delete(storage:id(), od_space:id()) -> ok.
+luma_spaces_display_defaults_delete(Storage, SpaceId) ->
+    luma_spaces_display_defaults:delete(Storage, SpaceId).
+
+
+-spec luma_spaces_posix_storage_defaults_get_and_describe(storage:id(), od_space:id()) ->
+    {ok, luma_posix_credentials:credentials_map()} | {error, term()}.
+luma_spaces_posix_storage_defaults_get_and_describe(Storage, SpaceId) ->
+    luma_spaces_posix_storage_defaults:get_and_describe(Storage, SpaceId).
+
+
+-spec luma_spaces_posix_storage_defaults_store(storage:id() | storage:data(), od_space:id(),
+    luma_posix_credentials:credentials_map()) -> ok | {error, term()}.
+luma_spaces_posix_storage_defaults_store(Storage, SpaceId, PosixDefaults) ->
+    luma_spaces_posix_storage_defaults:store(Storage, SpaceId, PosixDefaults).
+
+
+-spec luma_spaces_posix_storage_defaults_delete(storage:id(), od_space:id()) -> ok.
+luma_spaces_posix_storage_defaults_delete(Storage, SpaceId) ->
+    luma_spaces_posix_storage_defaults:delete(Storage, SpaceId).
+
+
+-spec luma_onedata_users_get_by_uid_and_describe(storage:id() | storage:data(), luma:uid()) ->
+    {ok, luma_onedata_user:user_map()} | {error, term()}.
+luma_onedata_users_get_by_uid_and_describe(Storage, Uid) ->
+    luma_onedata_users:get_by_uid_and_describe(Storage, Uid).
+
+
+-spec luma_onedata_users_store_by_uid(storage:id() | storage:data(), luma:uid(),
+    luma_onedata_user:user_map()) -> ok | {error, term()}.
+luma_onedata_users_store_by_uid(Storage, Uid, OnedataUser) ->
+    luma_onedata_users:store_by_uid(Storage, Uid, OnedataUser).
+
+
+-spec luma_onedata_users_delete_uid_mapping(storage:id(), luma:uid()) ->  ok | {error, term()}.
+luma_onedata_users_delete_uid_mapping(Storage, Uid) ->
+    luma_onedata_users:delete_uid_mapping(Storage, Uid).
+
+-spec luma_onedata_users_get_by_acl_user_and_describe(storage:id() | storage:data(), luma:acl_who()) ->
+    {ok, luma_onedata_user:user_map()} | {error, term()}.
+luma_onedata_users_get_by_acl_user_and_describe(Storage, AclUser) ->
+    luma_onedata_users:get_by_acl_user_and_describe(Storage, AclUser).
+
+
+-spec luma_onedata_users_store_by_acl_user(storage:id() | storage:data(), luma:acl_who(),
+    luma_onedata_user:user_map()) -> ok | {error, term()}.
+luma_onedata_users_store_by_acl_user(Storage, AclUser, OnedataUser) ->
+    luma_onedata_users:store_by_acl_user(Storage, AclUser, OnedataUser).
+
+
+-spec luma_onedata_users_delete_acl_user_mapping(storage:id(), luma:acl_who()) ->  ok | {error, term()}.
+luma_onedata_users_delete_acl_user_mapping(Storage, AclUser) ->
+    luma_onedata_users:delete_acl_user_mapping(Storage, AclUser).
+
+
+-spec luma_onedata_groups_get_and_describe(storage:id() | storage:data(), luma:acl_who()) -> 
+    {ok, luma_onedata_group:group_map()} | {error, term()}.
+luma_onedata_groups_get_and_describe(Storage, AclGroup) ->
+    luma_onedata_groups:get_and_describe(Storage, AclGroup).
+
+
+-spec luma_onedata_groups_store(storage:id() | storage:data(), luma:acl_who(),
+    luma_onedata_group:group_map()) -> ok | {error, term()}.
+luma_onedata_groups_store(Storage, AclGroup, OnedataGroup) ->
+    luma_onedata_groups:store(Storage, AclGroup, OnedataGroup).
+
+
+-spec luma_onedata_groups_delete(storage:id(), luma:acl_who()) ->  ok | {error, term()}.
+luma_onedata_groups_delete(Storage, AclGroup) ->
+    luma_onedata_groups:delete(Storage, AclGroup).
+
+
+-spec new_helper(helper:name(), helper:args(), helper:user_ctx()) -> {ok, helpers:helper()}.
+new_helper(HelperName, Args, AdminCtx) ->
+    helper:new_helper(HelperName, Args, AdminCtx).
+
+
+-spec new_luma_config(luma_config:feed()) -> luma_config:config().
+new_luma_config(Mode) ->
+    luma_config:new(Mode).
+
+
+-spec new_luma_config_with_external_feed(luma_config:url(), luma_config:api_key()) ->
     luma_config:config().
-new_luma_config(URL, ApiKey) ->
-    luma_config:new(URL, ApiKey).
+new_luma_config_with_external_feed(URL, ApiKey) ->
+    luma_config:new_with_external_feed(URL, ApiKey).
 
 
--spec verify_storage_on_all_nodes(helpers:helper()) -> ok | errors:error().
-verify_storage_on_all_nodes(Helper) ->
-    storage_detector:verify_storage_on_all_nodes(Helper).
+-spec verify_storage_on_all_nodes(helpers:helper(), luma_config:feed()) -> ok | errors:error().
+verify_storage_on_all_nodes(Helper, LumaMode) ->
+    storage_detector:verify_storage_on_all_nodes(Helper, LumaMode).
 
 
 -spec prepare_helper_args(helper:name(), helper:args()) -> helper:args().

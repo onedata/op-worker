@@ -1,6 +1,6 @@
 {
     "/mnt/st2": {
-        "users": {
+        "storageUsers": {
             "user1": {
                 "storageCredentials": {
                     "uid": 2001
@@ -18,60 +18,60 @@
                 }
             }
         },
-        "spaces": {
+        "spacesDefaults": {
             "space2": {
-                "defaultOwner": {
+                "posix": {
                     "uid": 2000,
                     "gid": 2000
                 },
-                "displayOwner": {
+                "display": {
                     "uid": 2222,
                     "gid": 2222
                 }
             }
         }
     },
-    "/mnt/st4": {
-        "users": {
+    "/mnt/st5": {
+        "storageUsers": {
             "user1": {
                 "storageCredentials": {
-                    "uid": 4001
+                    "uid": 5001
                 },
-                "displayUid": 4441
+                "displayUid": 5551
             },
             "user2": {
                 "storageCredentials": {
-                    "uid": 4002
+                    "uid": 5002
                 }
             },
             "user4": {
                 "storageCredentials": {
-                    "uid": 4004
+                    "uid": 5004
                 },
                 "displayUid": "forbidden type"
             }
         },
-        "spaces": {
-            "space4": {
-                "defaultOwner": {
-                    "uid": 4000,
-                    "gid": 4000
+        "spacesDefaults": {
+            "space5": {
+                "posix": {
+                    "uid": 5000,
+                    "gid": 5000
                 },
-                "displayOwner": {
-                    "uid": 4444,
-                    "gid": 4444
+                "display": {
+                    "uid": 5555,
+                    "gid": 5555
                 }
             }
         }
     },
-    "s3_luma": {
-        "users": {
+    "s3_external_feed_luma_8": {
+        "storageUsers": {
             "user1": {
                 "storageCredentials": {
                     "accessKey": "AccessKey",
                     "secretKey": "SecretKey"
                 },
-                "displayUid": 6661
+                "displayUid": 8881
             },
             "user2": {
                 "storageCredentials": {
@@ -85,21 +85,21 @@
                 }
             }
         },
-        "spaces": {
-            "space6": {
-                "displayOwner": {
-                    "uid": 6666,
-                    "gid": 6666
+        "spacesDefaults": {
+            "space8": {
+                "display": {
+                    "uid": 8888,
+                    "gid": 8888
                 }
             } 
         }
     },
-    "/mnt/st7": {
-        "users": {},
-        "spaces": {
-            "space7": {
-                "defaultOwner": { 
-                    "gid": 7000
+    "/mnt/st10": {
+        "storageUsers": {},
+        "spacesDefaults": {
+            "space10": {
+                "posix": {
+                    "gid": 10000
                 }
             }
         }

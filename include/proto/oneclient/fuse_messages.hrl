@@ -176,7 +176,6 @@
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
-    extended_direct_io :: boolean(),
     file_request :: file_request_type()
 }).
 
@@ -238,8 +237,7 @@
 
 -record(helper_params, {
     helper_name :: helper:name(),
-    helper_args :: [#helper_arg{}],
-    extended_direct_io :: boolean()
+    helper_args :: [#helper_arg{}]
 }).
 
 -record(storage_test_file, {

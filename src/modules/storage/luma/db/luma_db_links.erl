@@ -65,7 +65,7 @@ delete_link(ForestType, StorageId, Key) ->
 -spec list(forest_type(), storage:id(), undefined | token(), limit()) ->
     {{ok, [{key(), doc_id()}]}, token()} | {error, term()}.
 list(ForestType, StorageId, Token, Limit) ->
-    Token2 = utils:ensure_defined(Token, undefined, #link_token{}),
+    Token2 = utils:ensure_defined(Token, #link_token{}),
     Opts = #{token => Token2},
     Opts2 = case Limit of
         all -> Opts;

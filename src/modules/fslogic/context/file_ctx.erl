@@ -46,8 +46,6 @@
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
     is_space_synced :: undefined | boolean(),
-    extended_direct_io = false :: boolean(),
-    storage_path_type :: undefined | helpers:storage_path_type(),
     is_imported_storage :: undefined | boolean()
 }).
 
@@ -57,12 +55,11 @@
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, add_file_location/2, set_file_id/2,
-    set_is_dir/2, set_extended_direct_io/2]).
+    set_is_dir/2]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
-    get_guid_const/1, get_uuid_const/1, get_extended_direct_io_const/1,
-    get_storage_path_type_const/1, get_dir_location_doc_const/1
+    get_guid_const/1, get_uuid_const/1, get_dir_location_doc_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
     is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
@@ -89,7 +86,7 @@
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
     get_file_size_from_remote_locations/1, get_owner/1, get_local_storage_file_size/1,
-    is_space_synced/1, get_and_cache_file_doc_including_deleted/1, set_storage_path_type/2]).
+    is_space_synced/1, get_and_cache_file_doc_including_deleted/1]).
 -export([is_dir/1, is_imported_storage/1, is_storage_file_created/1]).
 
 %%%===================================================================
@@ -191,42 +188,6 @@ set_file_id(FileCtx, FileId) ->
 -spec set_is_dir(ctx(), boolean()) -> ctx().
 set_is_dir(FileCtx, IsDir) ->
     FileCtx#file_ctx{is_dir = IsDir}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets extended_direct_io field in context record
-%% @end
-%%--------------------------------------------------------------------
--spec set_extended_direct_io(ctx(), boolean()) -> ctx().
-set_extended_direct_io(FileCtx, Created) ->
-    FileCtx#file_ctx{extended_direct_io = Created}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns value of extended_direct_io field.
-%% @end
-%%--------------------------------------------------------------------
--spec get_extended_direct_io_const(ctx()) -> boolean().
-get_extended_direct_io_const(#file_ctx{extended_direct_io = Ans}) ->
-    Ans.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets storage_path_type field in context record
-%% @end
-%%--------------------------------------------------------------------
--spec set_storage_path_type(ctx(), helpers:storage_path_type()) -> ctx().
-set_storage_path_type(FileCtx, StoragePathType) ->
-    FileCtx#file_ctx{storage_path_type = StoragePathType}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns value of storage_path_type field.
-%% @end
-%%--------------------------------------------------------------------
--spec get_storage_path_type_const(ctx()) -> helpers:storage_path_type().
-get_storage_path_type_const(#file_ctx{storage_path_type = StoragePathType}) ->
-    StoragePathType.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -624,16 +585,20 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = undefined}) ->
     {FileMetaDoc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
     OwnerId = file_meta:get_owner(FileMetaDoc),
     {Storage, FileCtx3} = get_storage(FileCtx2),
-    {ok, DisplayCredentials = {Uid, Gid}} = luma:map_to_display_credentials(OwnerId, SpaceId, Storage),
-    case Storage =:= undefined of
-        true ->
-            {DisplayCredentials, FileCtx3#file_ctx{display_credentials = DisplayCredentials}};
-        false ->
-            {SyncedGid, FileCtx4} = get_synced_gid(FileCtx3),
-            % if SyncedGid =/= undefined override display Gid
-            FinalGid = utils:ensure_defined(SyncedGid, undefined, Gid),
-            FinalDisplayCredentials = {Uid, FinalGid},
-            {FinalDisplayCredentials, FileCtx4#file_ctx{display_credentials = FinalDisplayCredentials}}
+    case luma:map_to_display_credentials(OwnerId, SpaceId, Storage) of
+        {ok, DisplayCredentials = {Uid, Gid}} ->
+            case Storage =:= undefined of
+                true ->
+                    {DisplayCredentials, FileCtx3#file_ctx{display_credentials = DisplayCredentials}};
+                false ->
+                    {SyncedGid, FileCtx4} = get_synced_gid(FileCtx3),
+                    % if SyncedGid =/= undefined override display Gid
+                    FinalGid = utils:ensure_defined(SyncedGid, Gid),
+                    FinalDisplayCredentials = {Uid, FinalGid},
+                    {FinalDisplayCredentials, FileCtx4#file_ctx{display_credentials = FinalDisplayCredentials}}
+            end;
+        {error, not_found} ->
+            {error, ?EACCES}
     end;
 get_display_credentials(FileCtx = #file_ctx{display_credentials = DisplayCredentials}) ->
     {DisplayCredentials, FileCtx}.
@@ -883,8 +848,7 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     [file_location:doc()], file_location:id()) -> #file_location{}.
 fill_location_gaps(ReqRange0, #document{value = FileLocation = #file_location{
     size = Size}} = FileLocationDoc, Locations, Uuid) ->
-    ReqRange = utils:ensure_defined(ReqRange0, undefined,
-        [#file_block{offset = 0, size = Size}]),
+    ReqRange = utils:ensure_defined(ReqRange0, [#file_block{offset = 0, size = Size}]),
     Blocks = fslogic_location_cache:get_blocks(FileLocationDoc,
         #{overlapping_blocks => ReqRange}),
 

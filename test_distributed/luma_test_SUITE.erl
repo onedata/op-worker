@@ -20,55 +20,58 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% export for ct
--export([all/0, init_per_testcase/2, end_per_testcase/2, init_per_suite/1, end_per_suite/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1]).
+-export([init_per_testcase/1, init_per_testcase/2, end_per_testcase/1, end_per_testcase/2]).
 
 -export([
     % tests of mapping user to storage credentials
     map_root_to_storage_creds_returns_admin_creds/1,
-    map_space_owner_to_storage_creds_on_storage_without_luma_posix_compatible/1,
-    map_space_owner_to_storage_creds_on_storage_with_ext_luma_posix_compatible/1,
+    map_space_owner_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible/1,
+    map_space_owner_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible/1,
     map_space_owner_to_storage_creds_posix_incompatible/1,
-    map_user_to_storage_creds_on_storage_without_luma_posix_compatible/1,
-    map_user_to_storage_creds_on_storage_without_luma_posix_incompatible/1,
-    map_user_to_storage_creds_on_storage_with_external_luma_posix_compatible/1,
-    map_user_to_storage_creds_on_storage_with_external_luma_posix_incompatible/1,
-    map_user_to_storage_creds_fails_on_invalid_response_from_external_luma/1,
-    map_user_to_storage_creds_fails_when_mapping_is_not_found_in_external_luma/1,
+    map_user_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible/1,
+    map_user_to_storage_creds_on_storage_with_auto_feed_luma_posix_incompatible/1,
+    map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible/1,
+    map_user_to_storage_creds_on_storage_with_user_defined_luma_imported/1,
+    map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_incompatible/1,
+    map_user_to_storage_creds_fails_on_invalid_response_from_external_feed/1,
+    map_user_to_storage_creds_fails_when_mapping_is_not_found_in_luma/1,
 
     % tests of mapping user to display (oneclient) credentials
     map_root_to_display_creds_returns_root_creds/1,
-    map_space_owner_to_display_creds_on_storage_without_luma_posix_compatible/1,
-    map_space_owner_to_display_creds_on_storage_with_ext_luma_posix_compatible/1,
+    map_space_owner_to_display_creds_on_storage_with_auto_feed_luma_posix_compatible/1,
+    map_space_owner_to_display_creds_on_storage_with_user_defined_luma_posix_compatible/1,
     map_space_owner_to_display_creds_posix_incompatible/1,
-    map_user_to_display_creds_on_storage_without_luma/1,
-    map_user_to_display_creds_on_storage_with_external_luma/1,
-    map_user_to_display_creds_fails_on_invalid_response_from_external_luma/1,
-    map_user_to_display_creds_fails_when_mapping_is_not_found_in_external_luma/1
+    map_user_to_display_creds_on_storage_with_auto_feed_luma/1,
+    map_user_to_display_creds_on_storage_with_user_defined_luma/1,
+    map_user_to_display_creds_fails_on_invalid_response_from_external_feed/1,
+    map_user_to_display_creds_fails_when_mapping_is_not_found_in_user_defined_luma/1
 ]).
 
 all() ->
     ?ALL([
         % tests of mapping user to storage credentials
         map_root_to_storage_creds_returns_admin_creds,
-        map_space_owner_to_storage_creds_on_storage_without_luma_posix_compatible,
-        map_space_owner_to_storage_creds_on_storage_with_ext_luma_posix_compatible,
+        map_space_owner_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible,
+        map_space_owner_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible,
         map_space_owner_to_storage_creds_posix_incompatible,
-        map_user_to_storage_creds_on_storage_without_luma_posix_compatible,
-        map_user_to_storage_creds_on_storage_without_luma_posix_incompatible,
-        map_user_to_storage_creds_on_storage_with_external_luma_posix_compatible,
-        map_user_to_storage_creds_on_storage_with_external_luma_posix_incompatible,
-        map_user_to_storage_creds_fails_on_invalid_response_from_external_luma,
-        map_user_to_storage_creds_fails_when_mapping_is_not_found_in_external_luma,
+        map_user_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible,
+        map_user_to_storage_creds_on_storage_with_auto_feed_luma_posix_incompatible,
+        map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible,
+        map_user_to_storage_creds_on_storage_with_user_defined_luma_imported,
+        map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_incompatible,
+        map_user_to_storage_creds_fails_on_invalid_response_from_external_feed,
+        map_user_to_storage_creds_fails_when_mapping_is_not_found_in_luma,
 
         % tests of mapping user to display (oneclient) credentials
         map_root_to_display_creds_returns_root_creds,
-        map_space_owner_to_display_creds_on_storage_without_luma_posix_compatible,
-        map_space_owner_to_display_creds_on_storage_with_ext_luma_posix_compatible,
+        map_space_owner_to_display_creds_on_storage_with_auto_feed_luma_posix_compatible,
+        map_space_owner_to_display_creds_on_storage_with_user_defined_luma_posix_compatible,
         map_space_owner_to_display_creds_posix_incompatible,
-        map_user_to_display_creds_on_storage_without_luma,
-        map_user_to_display_creds_on_storage_with_external_luma,
-        map_user_to_display_creds_fails_on_invalid_response_from_external_luma,
-        map_user_to_display_creds_fails_when_mapping_is_not_found_in_external_luma
+        map_user_to_display_creds_on_storage_with_auto_feed_luma,
+        map_user_to_display_creds_on_storage_with_user_defined_luma,
+        map_user_to_display_creds_fails_on_invalid_response_from_external_feed,
+        map_user_to_display_creds_fails_when_mapping_is_not_found_in_user_defined_luma
     ]).
 
 % users for which mappings defined in luma.json are incorrect
@@ -83,14 +86,14 @@ map_root_to_storage_creds_returns_admin_creds(Config) ->
         fun map_root_to_storage_creds_returns_admin_creds_base/2
     ).
 
-map_space_owner_to_storage_creds_on_storage_without_luma_posix_compatible(Config) ->
-    ?RUN(Config, ?NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_space_owner_to_storage_creds_on_storage_without_luma_posix_compatible_base/2
+map_space_owner_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible(Config) ->
+    ?RUN(Config, ?AUTO_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_space_owner_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible_base/2
     ).
 
-map_space_owner_to_storage_creds_on_storage_with_ext_luma_posix_compatible(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_space_owner_to_storage_creds_on_storage_with_ext_luma_posix_compatible_base/2
+map_space_owner_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_space_owner_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible_base/2
     ).
 
 map_space_owner_to_storage_creds_posix_incompatible(Config) ->
@@ -98,34 +101,39 @@ map_space_owner_to_storage_creds_posix_incompatible(Config) ->
         fun map_space_owner_to_storage_creds_posix_incompatible_base/2
     ).
 
-map_user_to_storage_creds_on_storage_without_luma_posix_compatible(Config) ->
-    ?RUN(Config, ?NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_user_to_storage_creds_on_storage_without_luma_posix_compatible_base/2
+map_user_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible(Config) ->
+    ?RUN(Config, ?AUTO_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_user_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible_base/2
     ).
 
-map_user_to_storage_creds_on_storage_without_luma_posix_incompatible(Config) ->
-    ?RUN(Config, ?NO_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS,
-        fun map_user_to_storage_creds_on_storage_without_luma_not_posix_incompatible_base/2
+map_user_to_storage_creds_on_storage_with_auto_feed_luma_posix_incompatible(Config) ->
+    ?RUN(Config, ?AUTO_FEED_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS,
+        fun map_user_to_storage_creds_on_storage_with_auto_feed_luma_not_posix_incompatible_base/2
     ).
 
-map_user_to_storage_creds_on_storage_with_external_luma_posix_compatible(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_user_to_storage_creds_on_storage_with_external_luma_posix_compatible_base/2
+map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible_base/2
     ).
 
-map_user_to_storage_creds_on_storage_with_external_luma_posix_incompatible(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS,
-        fun map_user_to_storage_creds_on_storage_with_external_luma_posix_incompatible_base/2
+map_user_to_storage_creds_on_storage_with_user_defined_luma_imported(Config) ->
+    ?RUN(Config, ?IMPORTED_STORAGE_CONFIGS,
+        fun map_user_to_storage_creds_on_storage_with_user_defined_luma_imported_base/2
     ).
 
-map_user_to_storage_creds_fails_on_invalid_response_from_external_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_STORAGE_CONFIGS,
-        fun map_user_to_storage_creds_fails_on_invalid_response_from_external_luma_base/2
+map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_incompatible(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_POSIX_INCOMPATIBLE_STORAGE_CONFIGS,
+        fun map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_incompatible_base/2
     ).
 
-map_user_to_storage_creds_fails_when_mapping_is_not_found_in_external_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_STORAGE_CONFIGS,
-        fun map_user_to_storage_creds_fails_when_mapping_is_not_found_in_external_luma_base/2
+map_user_to_storage_creds_fails_on_invalid_response_from_external_feed(Config) ->
+    ?RUN(Config, ?EXTERNAL_FEED_LUMA_STORAGE_CONFIGS,
+        fun map_user_to_storage_creds_fails_on_invalid_response_from_external_feed_base/2
+    ).
+
+map_user_to_storage_creds_fails_when_mapping_is_not_found_in_luma(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_STORAGE_CONFIGS,
+        fun map_user_to_storage_creds_fails_when_mapping_is_not_found_in_luma_base/2
     ).
 
 %%%===================================================================
@@ -137,14 +145,14 @@ map_root_to_display_creds_returns_root_creds(Config) ->
         fun map_root_to_display_creds_returns_root_creds_base/2
     ).
 
-map_space_owner_to_display_creds_on_storage_without_luma_posix_compatible(Config) ->
-    ?RUN(Config, ?NO_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_space_owner_to_display_creds_on_storage_without_luma_posix_compatible_base/2
+map_space_owner_to_display_creds_on_storage_with_auto_feed_luma_posix_compatible(Config) ->
+    ?RUN(Config, ?AUTO_FEED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_space_owner_to_display_creds_on_storage_with_auto_feed_luma_posix_compatible_base/2
     ).
 
-map_space_owner_to_display_creds_on_storage_with_ext_luma_posix_compatible(Config) ->
-    ?RUN(Config, ?EXT_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
-        fun map_space_owner_to_display_creds_on_storage_with_ext_luma_posix_compatible_base/2
+map_space_owner_to_display_creds_on_storage_with_user_defined_luma_posix_compatible(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_POSIX_COMPATIBLE_STORAGE_CONFIGS,
+        fun map_space_owner_to_display_creds_on_storage_with_user_defined_luma_posix_compatible_base/2
     ).
 
 map_space_owner_to_display_creds_posix_incompatible(Config) ->
@@ -152,24 +160,24 @@ map_space_owner_to_display_creds_posix_incompatible(Config) ->
         fun map_space_owner_to_display_creds_posix_incompatible_base/2
     ).
 
-map_user_to_display_creds_on_storage_without_luma(Config) ->
-    ?RUN(Config, ?NO_LUMA_STORAGE_CONFIGS,
-        fun map_user_to_display_creds_on_storage_without_luma_base/2
+map_user_to_display_creds_on_storage_with_auto_feed_luma(Config) ->
+    ?RUN(Config, ?AUTO_FEED_LUMA_STORAGE_CONFIGS,
+        fun map_user_to_display_creds_on_storage_with_auto_feed_luma_base/2
     ).
 
-map_user_to_display_creds_on_storage_with_external_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_STORAGE_CONFIGS,
-        fun map_user_to_display_creds_on_storage_with_external_luma_base/2
+map_user_to_display_creds_on_storage_with_user_defined_luma(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_STORAGE_CONFIGS,
+        fun map_user_to_display_creds_on_storage_with_user_defined_luma_base/2
     ).
 
-map_user_to_display_creds_fails_on_invalid_response_from_external_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_STORAGE_CONFIGS,
-        fun map_user_to_display_creds_fails_on_invalid_response_from_external_luma_base/2
+map_user_to_display_creds_fails_on_invalid_response_from_external_feed(Config) ->
+    ?RUN(Config, ?EXTERNAL_FEED_LUMA_STORAGE_CONFIGS,
+        fun map_user_to_display_creds_fails_on_invalid_response_from_external_feed_base/2
     ).
 
-map_user_to_display_creds_fails_when_mapping_is_not_found_in_external_luma(Config) ->
-    ?RUN(Config, ?EXT_LUMA_STORAGE_CONFIGS,
-        fun map_user_to_display_creds_fails_when_mapping_is_not_found_in_external_luma_base/2
+map_user_to_display_creds_fails_when_mapping_is_not_found_in_user_defined_luma(Config) ->
+    ?RUN(Config, ?USER_DEFINED_LUMA_STORAGE_CONFIGS,
+        fun map_user_to_display_creds_fails_when_mapping_is_not_found_in_user_defined_luma_base/2
     ).
 
 %%%===================================================================
@@ -183,14 +191,14 @@ map_root_to_storage_creds_returns_admin_creds_base(Config, StorageLumaConfig) ->
     ?assertEqual({ok, AdminCreds},
         luma_test_utils:map_to_storage_creds(Worker, ?ROOT_SESS_ID, ?ROOT_USER_ID, ?SPACE_ID, Storage)).
 
-map_space_owner_to_storage_creds_on_storage_without_luma_posix_compatible_base(Config, StorageLumaConfig) ->
+map_space_owner_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     DefaultCreds = maps:get(default_credentials, StorageLumaConfig),
     ?assertEqual({ok, DefaultCreds},
         luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)).
 
-map_space_owner_to_storage_creds_on_storage_with_ext_luma_posix_compatible_base(Config, StorageLumaConfig) ->
+map_space_owner_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     DefaultCreds = maps:get(default_credentials, StorageLumaConfig),
@@ -204,39 +212,46 @@ map_space_owner_to_storage_creds_posix_incompatible_base(Config, StorageLumaConf
     ?assertEqual({ok, AdminCreds},
         luma_test_utils:map_to_storage_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)).
 
-map_user_to_storage_creds_on_storage_without_luma_posix_compatible_base(Config, StorageLumaConfig) ->
+map_user_to_storage_creds_on_storage_with_auto_feed_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     UserCreds = maps:get(user_credentials, StorageLumaConfig),
     ?assertMatch({ok, UserCreds},
         luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)).
 
-map_user_to_storage_creds_on_storage_without_luma_not_posix_incompatible_base(Config, StorageLumaConfig) ->
+map_user_to_storage_creds_on_storage_with_auto_feed_luma_not_posix_incompatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     AdminCreds = maps:get(admin_credentials, StorageLumaConfig),
     ?assertMatch({ok, AdminCreds},
         luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)).
 
-map_user_to_storage_creds_on_storage_with_external_luma_posix_compatible_base(Config, StorageLumaConfig) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    Storage = maps:get(storage_record, StorageLumaConfig),
-    ExpectedUserCreds = maps:get(user_credentials, StorageLumaConfig),
-    ?assertMatch({ok, ExpectedUserCreds},
-        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)),
-    Uid = binary_to_integer(maps:get(<<"uid">>, ExpectedUserCreds)),
-    % reverse mapping should be cached automatically,
-    ?assertMatch({ok, ?USER_ID},
-        luma_test_utils:map_uid_to_onedata_user(Worker, Uid, ?SPACE_ID, Storage)).
-
-map_user_to_storage_creds_on_storage_with_external_luma_posix_incompatible_base(Config, StorageLumaConfig) ->
+map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ExpectedUserCreds = maps:get(user_credentials, StorageLumaConfig),
     ?assertMatch({ok, ExpectedUserCreds},
         luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)).
 
-map_user_to_storage_creds_fails_on_invalid_response_from_external_luma_base(Config, StorageLumaConfig) ->
+map_user_to_storage_creds_on_storage_with_user_defined_luma_imported_base(Config, StorageLumaConfig) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    ExpectedUserCreds = maps:get(user_credentials, StorageLumaConfig),
+    ?assertMatch({ok, ExpectedUserCreds},
+        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)),
+    Uid = binary_to_integer(maps:get(<<"uid">>, ExpectedUserCreds)),
+    % reverse mapping should be stored automatically,
+    ?assertMatch({ok, ?USER_ID},
+        luma_test_utils:map_uid_to_onedata_user(Worker, Uid, ?SPACE_ID, Storage)).
+
+map_user_to_storage_creds_on_storage_with_user_defined_luma_posix_incompatible_base(Config, StorageLumaConfig) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Storage = maps:get(storage_record, StorageLumaConfig),
+    ExpectedUserCreds = maps:get(user_credentials, StorageLumaConfig),
+    ?assertMatch({ok, ExpectedUserCreds},
+        luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, ?USER_ID, ?SPACE_ID, Storage)).
+
+map_user_to_storage_creds_fails_on_invalid_response_from_external_feed_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     lists:foreach(fun(User) ->
@@ -244,7 +259,7 @@ map_user_to_storage_creds_fails_on_invalid_response_from_external_luma_base(Conf
             luma_test_utils:map_to_storage_creds(Worker, ?SESS_ID, User, ?SPACE_ID, Storage))
     end, ?ERR_USERS).
 
-map_user_to_storage_creds_fails_when_mapping_is_not_found_in_external_luma_base(Config, StorageLumaConfig) ->
+map_user_to_storage_creds_fails_when_mapping_is_not_found_in_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({error, not_found},
@@ -260,14 +275,14 @@ map_root_to_display_creds_returns_root_creds_base(Config, StorageLumaConfig) ->
     ?assertEqual({ok, ?ROOT_DISPLAY_CREDS},
         luma_test_utils:map_to_display_creds(Worker, ?ROOT_USER_ID, ?SPACE_ID, Storage)).
 
-map_space_owner_to_display_creds_on_storage_without_luma_posix_compatible_base(Config, StorageLumaConfig) ->
+map_space_owner_to_display_creds_on_storage_with_auto_feed_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     DisplayCreds = maps:get(default_credentials, StorageLumaConfig),
     ?assertEqual({ok, ?POSIX_CREDS_TO_TUPLE(DisplayCreds)},
         luma_test_utils:map_to_display_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)).
 
-map_space_owner_to_display_creds_on_storage_with_ext_luma_posix_compatible_base(Config, StorageLumaConfig) ->
+map_space_owner_to_display_creds_on_storage_with_user_defined_luma_posix_compatible_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     DisplayCreds = maps:get(display_credentials, StorageLumaConfig),
@@ -281,21 +296,21 @@ map_space_owner_to_display_creds_posix_incompatible_base(Config, StorageLumaConf
     ?assertEqual({ok, ?POSIX_CREDS_TO_TUPLE(DispCreds)},
         luma_test_utils:map_to_display_creds(Worker, ?SPACE_OWNER_ID(?SPACE_ID), ?SPACE_ID, Storage)).
 
-map_user_to_display_creds_on_storage_without_luma_base(Config, StorageLumaConfig) ->
+map_user_to_display_creds_on_storage_with_auto_feed_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     DispCreds = maps:get(user_display_credentials, StorageLumaConfig),
     ?assertMatch({ok, DispCreds},
         luma_test_utils:map_to_display_creds(Worker, ?USER_ID, ?SPACE_ID, Storage)).
 
-map_user_to_display_creds_on_storage_with_external_luma_base(Config, StorageLumaConfig) ->
+map_user_to_display_creds_on_storage_with_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ExpectedUserCreds = maps:get(user_display_credentials, StorageLumaConfig),
     ?assertMatch({ok, ExpectedUserCreds},
         luma_test_utils:map_to_display_creds(Worker, ?USER_ID, ?SPACE_ID, Storage)).
 
-map_user_to_display_creds_fails_on_invalid_response_from_external_luma_base(Config, StorageLumaConfig) ->
+map_user_to_display_creds_fails_on_invalid_response_from_external_feed_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     lists:foreach(fun(User) ->
@@ -303,7 +318,7 @@ map_user_to_display_creds_fails_on_invalid_response_from_external_luma_base(Conf
             luma_test_utils:map_to_display_creds(Worker, User, ?SPACE_ID, Storage))
     end, ?ERR_USERS).
 
-map_user_to_display_creds_fails_when_mapping_is_not_found_in_external_luma_base(Config, StorageLumaConfig) ->
+map_user_to_display_creds_fails_when_mapping_is_not_found_in_user_defined_luma_base(Config, StorageLumaConfig) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Storage = maps:get(storage_record, StorageLumaConfig),
     ?assertEqual({error, not_found},
@@ -327,9 +342,17 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config).
 
-init_per_testcase(_Case, Config) ->
+init_per_testcase(Config) ->
+    % Test cases from all/0 function are called many times for different configs
+    % by luma_test_utils:run_test_for_all_storage_configs function.
+    % This init_per_testcase is called before running test on each config.
+    init_per_testcase(default, Config).
+
+init_per_testcase(default, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
+    luma_test_utils:mock_storage_is_imported(Worker),
     luma_test_utils:mock_stat_on_space_mount_dir(Worker),
+    luma_test_utils:setup_local_feed_luma(Worker, Config, <<"local_feed_luma.json">>),
     ok = test_utils:mock_new(Worker, [idp_access_token]),
     ok = test_utils:mock_expect(Worker, idp_access_token, acquire, fun
         (?ADMIN_ID, TokenCredentials, ?OAUTH2_IDP) when element(1, TokenCredentials) == token_credentials ->
@@ -337,10 +360,17 @@ init_per_testcase(_Case, Config) ->
         (?USER_ID, ?SESS_ID, ?OAUTH2_IDP) ->
             {ok, {?IDP_USER_TOKEN, ?TTL}}
     end),
+    Config;
+init_per_testcase(_Case, Config) ->
+    % this case is called by CT framework before each testcase listed in all/0 function
     Config.
 
+end_per_testcase(Config) ->
+    end_per_testcase(default, Config).
 
-end_per_testcase(_Case, Config) ->
+end_per_testcase(default, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     luma_test_utils:clear_luma_db_for_all_storages(Worker),
-    ok = test_utils:mock_unload(Worker, [storage_file_ctx, idp_access_token]).
+    ok = test_utils:mock_unload(Worker, [storage_file_ctx, idp_access_token, storage_config]);
+end_per_testcase(_Case, Config) ->
+    Config.

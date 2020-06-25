@@ -150,7 +150,7 @@ process_file_internal(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                             {?PROCESSED, undefined, StorageFileCtx}
                     end;
                 {ok, ResolvedUuid} ->
-                    FileUuid2 = utils:ensure_defined(FileUuid, undefined, ResolvedUuid),
+                    FileUuid2 = utils:ensure_defined(FileUuid, ResolvedUuid),
                     case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                         {error, not_found} ->
                             FileGuid = file_id:pack_guid(FileUuid2, SpaceId),
@@ -646,16 +646,22 @@ create_times(FileUuid, StorageFileCtx) ->
 %% @private
 %% @doc
 %% Returns owner id of given file, acquired from reverse LUMA.
+%% On POSIX incompatible storage returns virtual ?SPACE_OWNER_ID(SpaceId)
 %% @end
 %%-------------------------------------------------------------------
 -spec get_owner_id(storage_file_ctx:ctx()) -> {od_user:id(), storage_file_ctx:ctx()}.
 get_owner_id(StorageFileCtx) ->
-    {StatBuf, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx2),
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx2),
-    #statbuf{st_uid = Uid} = StatBuf,
-    {ok, OwnerId} = luma:map_uid_to_onedata_user(Uid, SpaceId, StorageId),
-    {OwnerId, StorageFileCtx2}.
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    case storage:is_posix_compatible(StorageId) of
+        true ->
+            {StatBuf, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+            #statbuf{st_uid = Uid} = StatBuf,
+            {ok, OwnerId} = luma:map_uid_to_onedata_user(Uid, SpaceId, StorageId),
+            {OwnerId, StorageFileCtx2};
+        false ->
+            {?SPACE_OWNER_ID(SpaceId), StorageFileCtx}
+    end.
 
 
 -spec maybe_import_nfs4_acl(file_ctx:ctx(), storage_file_ctx:ctx(), storage_sync_traverse:info()) ->

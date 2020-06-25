@@ -209,12 +209,12 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
 -spec add_storage(storage:id()) -> any().
 add_storage(StorageId) ->
     Helper = storage:get_helper(StorageId),
-    HelperParams = helper:get_params(Helper, helper:get_admin_ctx(Helper)),
-    HelperName = helper:get_name(HelperParams),
-    HelperArgs = maps:to_list(helper:get_args(HelperParams)),
+    AdminCtx = helper:get_admin_ctx(Helper),
+    {ok, HelperArgs} = helper:get_args_with_user_ctx(Helper, AdminCtx),
+    HelperName = helper:get_name(Helper),
     {_, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, add_storage,
-                                  [StorageId, HelperName, HelperArgs]),
+                                  [StorageId, HelperName, maps:to_list(HelperArgs)]),
     BadNodes =/= [] andalso
         ?error("Failed to add storage ~p on nodes ~p", [StorageId, BadNodes]).
 

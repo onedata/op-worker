@@ -386,11 +386,11 @@ new_helper(Config) ->
             <<"timeoutProbability">> => <<"0.0">>,
             <<"filter">> => <<"*">>,
             <<"simulatedFilesystemParameters">> => <<"">>,
-            <<"simulatedFilesystemGrowSpeed">> => <<"0.0">>
+            <<"simulatedFilesystemGrowSpeed">> => <<"0.0">>,
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
+            <<"skipStorageDetection">> => <<"false">>
         },
-        UserCtx,
-        true,
-        ?CANONICAL_STORAGE_PATH
+        UserCtx
       ),
     spawn_link(Node, fun() ->
         helper_loop(Helper, UserCtx)

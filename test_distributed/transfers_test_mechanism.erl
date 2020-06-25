@@ -817,7 +817,7 @@ create_files(Config, #setup{
     timeout = Timetrap
 }) ->
     validate_root_directory(RootDirectory),
-    RootDirectory2 = utils:ensure_defined(RootDirectory, undefined, <<"">>),
+    RootDirectory2 = utils:ensure_defined(RootDirectory, <<"">>),
     SessionId = ?USER_SESSION(SetupNode, User, Config),
     SpaceId = ?config(?SPACE_ID_KEY, Config),
     {DirsToCreate, FilesToCreate} = count_files_and_dirs(FilesStructure),
@@ -932,9 +932,9 @@ prereplicate_file(Node, SessionId, FileGuid, CounterRef, ExpectedSize, Attempts)
 cast_files_visible_assertion(Config, Node, User, Attempts) ->
     RootDirGuidAndPath = ?config(?ROOT_DIR_KEY, Config),
     FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    FilesGuidsAndPaths2 = utils:ensure_defined(FilesGuidsAndPaths, undefined, []),
+    FilesGuidsAndPaths2 = utils:ensure_defined(FilesGuidsAndPaths, []),
     DirsGuidsAndPaths = ?config(?DIRS_KEY, Config),
-    DirsGuidsAndPaths2 = utils:ensure_defined(DirsGuidsAndPaths, undefined, []),
+    DirsGuidsAndPaths2 = utils:ensure_defined(DirsGuidsAndPaths, []),
     SessionId = ?USER_SESSION(Node, User, Config),
 
     GuidsAndPaths = FilesGuidsAndPaths2 ++ [RootDirGuidAndPath | DirsGuidsAndPaths2],

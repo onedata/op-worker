@@ -145,11 +145,6 @@
             }
         },
         "storages": {
-            "p1": {
-                "/mnt/st1": {
-                    "imported_storage": true
-                }
-            },
             "p2": {
                 "/mnt/synced_storage": {
                     "imported_storage": true

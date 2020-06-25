@@ -133,13 +133,13 @@ update(SpaceId, Name, MapFunction, ReduceFunction, Options, Spatial, Providers) 
         providers = OldProviders
     }) ->
         {ok, OldIndex#index{
-            spatial = utils:ensure_defined(Spatial, undefined, OldSpatial),
+            spatial = utils:ensure_defined(Spatial, OldSpatial),
             map_function = utils:ensure_defined(
                 view_utils:escape_js_function(MapFunction), undefined, OldMap
             ),
-            reduce_function = utils:ensure_defined(ReduceFunction, undefined, OldReduce),
+            reduce_function = utils:ensure_defined(ReduceFunction, OldReduce),
             index_options = utils:ensure_defined(Options, [], OldOptions),
-            providers = utils:ensure_defined(Providers, undefined, OldProviders)
+            providers = utils:ensure_defined(Providers, OldProviders)
         }}
     end,
     case update(Name, Diff, SpaceId) of

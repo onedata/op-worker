@@ -637,8 +637,7 @@ init_memory(SessionID) ->
     ets_state:init_collection(?STATE_ID, sub_to_guid),
     ets_state:save(?STATE_ID, self(), session_id, SessionID),
     {ok, #document{value = #session{proxy_via = ProxyVia}}} = session:get(SessionID),
-    ets_state:save(?STATE_ID, self(), proxy_via,
-        utils:ensure_defined(ProxyVia, undefined, self)).
+    ets_state:save(?STATE_ID, self(), proxy_via, utils:ensure_defined(ProxyVia, self)).
 
 %%--------------------------------------------------------------------
 %% @private

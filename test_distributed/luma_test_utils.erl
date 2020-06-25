@@ -15,7 +15,8 @@
 -include("luma_test_utils.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 
--export([run_test_for_all_storage_configs/5, clear_luma_db_for_all_storages/1, mock_stat_on_space_mount_dir/1]).
+-export([run_test_for_all_storage_configs/5, clear_luma_db_for_all_storages/1,
+    mock_stat_on_space_mount_dir/1, setup_local_feed_luma/3, mock_storage_is_imported/1]).
 
 % LUMA API
 -export([map_to_storage_creds/4, map_to_storage_creds/5, map_to_display_creds/4,
@@ -36,7 +37,7 @@ run_test_for_all_storage_configs(TestCase, TestFun, Module, Config, StorageConfi
     lists:foreach(fun(StorageLumaConfig) ->
         Name = maps:get(name, StorageLumaConfig),
         try
-            run_test(TestCase, TestFun, Module, Config, StorageLumaConfig)
+            run_test(TestFun, Module, Config, StorageLumaConfig)
         catch
             Error:Reason ->
                 ct:pal("Testcase \"~p\" failed for config ~p due to ~p:~p~nStacktrace: ~p",
@@ -48,16 +49,19 @@ run_test_for_all_storage_configs(TestCase, TestFun, Module, Config, StorageConfi
 run_test_for_all_storage_configs(TestCase, TestFun, Module, Config, StorageConfig) ->
     run_test_for_all_storage_configs(TestCase, TestFun, Module, Config, [StorageConfig]).
 
-run_test(TestCase, TestFun, Module, Config, StorageConfig) ->
-    Config2 = Module:init_per_testcase(TestCase, Config),
-    TestFun(Config, StorageConfig),
-    Module:end_per_testcase(TestCase, Config2).
+run_test(TestFun, Module, Config, StorageConfig) ->
+    Config2 = Module:init_per_testcase(Config),
+    try
+        TestFun(Config, StorageConfig)
+    after
+        Module:end_per_testcase(Config2)
+    end.
 
 clear_luma_db_for_all_storages(Worker) ->
     StorageIds = lists:usort(lists:map(fun(StorageLumaConfig) ->
         Storage = maps:get(storage_record, StorageLumaConfig),
         storage:get_id(Storage)
-    end, ?ALL_STORAGE_CONFIGS)),
+    end, ?ALL_STORAGE_CONFIGS )),
 
     lists:foreach(fun(StorageId) ->
         clear_luma_db(Worker, StorageId)
@@ -68,6 +72,31 @@ mock_stat_on_space_mount_dir(Worker) ->
     ok = test_utils:mock_expect(Worker, storage_file_ctx, stat, fun(StFileCtx) ->
         {#statbuf{st_uid = ?SPACE_MOUNT_UID, st_gid = ?SPACE_MOUNT_GID}, StFileCtx}
     end).
+
+mock_storage_is_imported(Worker) ->
+    IsImportedFun = fun(StorageId) ->
+        ImportedStorageDocs = [maps:get(storage_record, SC) || SC <- ?IMPORTED_STORAGE_CONFIGS],
+        ImportedStorageIds = [Id || #document{key = Id} <- ImportedStorageDocs],
+        lists:member(StorageId, ImportedStorageIds)
+    end,
+    ok = test_utils:mock_new(Worker, storage),
+    ok = test_utils:mock_expect(Worker, storage, is_imported, fun
+        (#document{key = StorageId}) -> IsImportedFun(StorageId);
+        (StorageId) when is_binary(StorageId) -> IsImportedFun(StorageId)
+    end).
+
+setup_local_feed_luma(Worker, Config, LocalFeedConfigFile) ->
+    % in this test suite storages are mocked, therefore we have to call
+    % function for setting mappings in LUMA with local feed manually
+    StorageDocs = lists:foldl(fun(StorageConfig, Acc) ->
+        Doc = maps:get(storage_record, StorageConfig),
+        Acc#{storage:get_id(Doc) => Doc}
+    end, #{}, ?LOCAL_FEED_LUMA_STORAGE_CONFIGS),
+    ok = test_utils:mock_new(Worker, storage_config),
+    ok = test_utils:mock_expect(Worker, storage_config, get, fun(StorageId) ->
+        {ok, maps:get(StorageId, StorageDocs)}
+    end),
+    initializer:setup_luma_local_feed(Worker, Config, LocalFeedConfigFile).
 
 %%%===================================================================
 %%% LUMA API functions

@@ -190,6 +190,7 @@ generic_create_deferred(UserCtx, FileCtx, VerifyDeletionLink) ->
             % eacces is possible because there is race condition
             % on creating and chowning parent dir
             % for this reason it is acceptable to try chowning parent once
+             % TODO VFS-6432 in case of changing default credentials in LUMA we should not chown parent dir
             {ParentCtx, FileCtx4} = file_ctx:get_parent(FileCtx3, UserCtx),
              case file_ctx:is_root_dir_const(ParentCtx) of
                  true -> ok;

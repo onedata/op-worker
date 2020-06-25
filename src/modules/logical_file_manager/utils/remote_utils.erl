@@ -35,8 +35,7 @@
     Return when Return :: term().
 call_fslogic(SessId, file_request, ContextGuid, Request, OKHandle) ->
     call_fslogic(SessId, fuse_request,
-        #file_request{context_guid = ContextGuid, extended_direct_io = false,
-            file_request = Request}, OKHandle);
+        #file_request{context_guid = ContextGuid, file_request = Request}, OKHandle);
 call_fslogic(SessId, provider_request, ContextGuid, Request, OKHandle) ->
     Uuid = file_id:guid_to_uuid(ContextGuid),
     case worker_proxy:call({id, fslogic_worker, Uuid}, {provider_request, SessId,
