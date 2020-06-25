@@ -253,6 +253,10 @@
     direct_io = #{} :: #{od_space:id() => boolean()}
 }).
 
+% An empty model used for creating session local links
+% For more information see session_local_links.erl
+-record(session_local_links, {}).
+
 % Model used to cache idp access tokens
 -record(idp_access_token, {
     token :: idp_access_token:token(),

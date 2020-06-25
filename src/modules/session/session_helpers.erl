@@ -74,7 +74,7 @@ get_local_handles_by_storage(SessId, StorageId) ->
                 {ok, Acc}
         end
     end,
-    session:fold_local_links(SessId, ?HELPER_HANDLES_TREE_ID, FoldFun).
+    session_local_links:fold_links(SessId, ?HELPER_HANDLES_TREE_ID, FoldFun).
 
 
 %%%===================================================================
@@ -88,14 +88,14 @@ get_local_handles_by_storage(SessId, StorageId) ->
 %%--------------------------------------------------------------------
 -spec delete_helpers_on_node(SessId :: session:id()) -> ok.
 delete_helpers_on_node(SessId) ->
-    {ok, Links} = session:fold_local_links(SessId, ?HELPER_HANDLES_TREE_ID,
+    {ok, Links} = session_local_links:fold_links(SessId, ?HELPER_HANDLES_TREE_ID,
         fun(Link = #link{}, Acc) -> {ok, [Link | Acc]} end
     ),
     Names = lists:map(fun(#link{name = Name, target = HandleId}) ->
         helper_handle:delete(HandleId),
         Name
     end, Links),
-    session:delete_local_links(SessId, ?HELPER_HANDLES_TREE_ID, Names),
+    session_local_links:delete_links(SessId, ?HELPER_HANDLES_TREE_ID, Names),
     ok.
 
 %%%===================================================================
@@ -118,7 +118,7 @@ delete_helpers_on_node(SessId) ->
     {ok, helpers:helper_handle()} | {error, term()}.
 get_helper(SessId, SpaceId, StorageId, InCriticalSection) ->
     LinkName = make_link_name(StorageId, SpaceId),
-    FetchResult = case session:get_local_link(SessId,
+    FetchResult = case session_local_links:get_link(SessId,
         ?HELPER_HANDLES_TREE_ID, LinkName) of
         {ok, [#link{target = Key}]} ->
             helper_handle:get(Key);
@@ -146,7 +146,7 @@ get_helper(SessId, SpaceId, StorageId, InCriticalSection) ->
 
         {{error, not_found}, true} ->
             %todo this is just temporary fix, VFS-4301
-            session:delete_local_links(SessId, ?HELPER_HANDLES_TREE_ID, LinkName),
+            session_local_links:delete_links(SessId, ?HELPER_HANDLES_TREE_ID, LinkName),
             add_missing_helper(SessId, SpaceId, StorageId);
 
         {Error2, _} ->
@@ -168,7 +168,7 @@ add_missing_helper(SessId, SpaceId, StorageId) ->
     {ok, #document{key = HandleId, value = HelperHandle}} =
         helper_handle:create(SessId, UserId, SpaceId, StorageId),
 
-    case session:add_local_links(SessId, ?HELPER_HANDLES_TREE_ID,
+    case session_local_links:add_links(SessId, ?HELPER_HANDLES_TREE_ID,
         make_link_name(StorageId, SpaceId), HandleId
     ) of
         ok ->

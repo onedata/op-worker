@@ -27,7 +27,7 @@
 -export([get_id/0, get_id_or_undefined/0, is_self/1, is_registered/0]).
 -export([get_version/0, get_build/0]).
 -export([trusted_ca_certs/0]).
--export([get_oz_domain/0, get_oz_url/0, get_oz_version/0]).
+-export([get_oz_domain/0, replicate_oz_domain_to_node/1, get_oz_url/0, get_oz_version/0]).
 -export([get_oz_login_page/0, get_oz_logout_page/0, get_oz_providers_page/0]).
 -export([is_connected_to_oz/0]).
 -export([terminate_oz_connection/0, force_oz_connection_start/0, restart_oz_connection/0]).
@@ -183,6 +183,16 @@ get_oz_domain() ->
         _ -> error({missing_env_variable, oz_domain})
     end.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Sets the domain of OZ in env on specified node.
+%% @end
+%%--------------------------------------------------------------------
+-spec replicate_oz_domain_to_node(node()) -> ok | no_return().
+replicate_oz_domain_to_node(Node) ->
+    {ok, Domain} = application:get_env(?APP_NAME, oz_domain),
+    ok = rpc:call(Node, application, set_env, [?APP_NAME, oz_domain, Domain]).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -305,7 +315,8 @@ on_connect_to_oz() ->
     ok = main_harvesting_stream:revise_all_spaces(),
     ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
     ok = rtransfer_config:add_storages(),
-    storage_sync_worker:notify_connection_to_oz().
+    ok = storage_sync_worker:notify_connection_to_oz(),
+    ok = dbsync_worker:start_streams().
 
 
 %%--------------------------------------------------------------------

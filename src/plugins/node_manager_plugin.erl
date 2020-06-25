@@ -31,6 +31,7 @@
 -export([listeners/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
+-export([master_node_down/1, master_node_up/1, master_node_ready/1]).
 
 -type model() :: datastore_model:model().
 -type record_version() :: datastore_model:record_version().
@@ -186,6 +187,7 @@ custom_workers() -> filter_disabled_workers([
 %% @end
 %%--------------------------------------------------------------------
 on_db_and_workers_ready() ->
+    fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
     gs_worker:on_db_and_workers_ready().
 
@@ -237,6 +239,37 @@ filter_disabled_workers(WorkersSpecs) ->
         ({singleton, Worker, _WorkerArgs}) ->
             not sets:is_element(Worker, DisabledWorkersSet)
     end, WorkersSpecs).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback used to customize behavior in case of master node failure.
+%% @end
+%%--------------------------------------------------------------------
+-spec master_node_down(FailedNode :: node()) -> ok.
+master_node_down(_FailedNode) ->
+    session_manager:restart_dead_sessions().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback used to customize behavior when master node recovers after failure.
+%% It is called after basic workers (especially datastore) have been restarted.
+%% @end
+%%--------------------------------------------------------------------
+-spec master_node_up(node()) -> ok.
+master_node_up(RecoveredNode) ->
+    oneprovider:replicate_oz_domain_to_node(RecoveredNode),
+    provider_auth:backup_to_file(RecoveredNode),
+    replica_synchronizer:cancel_and_terminate_slaves().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback used to customize behavior when master node recovers after failure.
+%% It is called after all workers and listeners have been restarted.
+%% @end
+%%--------------------------------------------------------------------
+-spec master_node_ready(node()) -> ok.
+master_node_ready(_RecoveredNode) ->
+    qos_bounded_cache:ensure_exists_for_all_spaces().
 
 
 -define(ZONE_CONNECTION_RETRIES, 180).
