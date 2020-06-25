@@ -1700,7 +1700,7 @@ mock_acl_group_to_onedata_user_endpoint(ReqBody, LumaConfig) ->
             {ok, 200, undefined, json_utils:encode(Response)}
     end.
 
--spec setup_luma_external_feed_mock(node(), proplists:proplist(), undefined | binary()) -> term().
+-spec setup_luma_local_feed(node(), proplists:proplist(), undefined | binary()) -> term().
 setup_luma_local_feed(_Worker, _Config, undefined) ->
     ok;
 setup_luma_local_feed(Worker, Config, LumaConfigFile) ->
@@ -1729,7 +1729,7 @@ setup_luma_local_feed_spaces_defaults(Worker, StorageId, SpacesDefaults) ->
     maps:fold(fun(SpaceId, SpaceDefaults, _) ->
         PosixDefaults = maps:get(<<"posix">>, SpaceDefaults, #{}),
         DisplayDefaults = maps:get(<<"display">>, SpaceDefaults, #{}),
-        Result = rpc:call(Worker, rpc_api, luma_spaces_posix_storage_defaults_store, [StorageId, SpaceId, PosixDefaults]),
+        rpc:call(Worker, rpc_api, luma_spaces_posix_storage_defaults_store, [StorageId, SpaceId, PosixDefaults]),
         rpc:call(Worker, rpc_api, luma_spaces_display_defaults_store, [StorageId, SpaceId, DisplayDefaults])
     end, undefined, SpacesDefaults).
 
