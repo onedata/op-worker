@@ -118,7 +118,7 @@ view_querying_chunk_size() ->
 -spec enqueue_data_transfer(file_ctx:ctx(), transfer_params(),
     undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
 enqueue_data_transfer(FileCtx, TransferParams, RetriesLeft, NextRetry) ->
-    RetriesLeft2 = utils:ensure_defined(RetriesLeft, undefined, max_transfer_retries()),
+    RetriesLeft2 = utils:ensure_defined(RetriesLeft, max_transfer_retries()),
     worker_pool:cast(?REPLICA_EVICTION_WORKERS_POOL, ?TRANSFER_DATA_REQ(
         FileCtx, TransferParams, RetriesLeft2, NextRetry
     )),

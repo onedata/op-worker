@@ -1280,7 +1280,7 @@ create_list_race_test(Config, MountSpaceInRoot) ->
     TestPid = self(),
     ok = test_utils:mock_new(W1, storage_driver),
     ok = test_utils:mock_expect(W1, storage_driver, listobjects, fun(SDHandle, Marker, Offset, BatchSize) ->
-        case SDHandle#sd_handle.file =:= <<"/", ?SPACE_ID/binary>> of
+        case SDHandle#sd_handle.file =:= <<"/">> of
             true ->
                 % hold on sync
                 TestPid ! {waiting, self(), Offset, meck:passthrough([SDHandle, Marker, Offset, BatchSize])},

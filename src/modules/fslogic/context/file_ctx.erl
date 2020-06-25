@@ -593,7 +593,7 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = undefined}) ->
                 false ->
                     {SyncedGid, FileCtx4} = get_synced_gid(FileCtx3),
                     % if SyncedGid =/= undefined override display Gid
-                    FinalGid = utils:ensure_defined(SyncedGid, undefined, Gid),
+                    FinalGid = utils:ensure_defined(SyncedGid, Gid),
                     FinalDisplayCredentials = {Uid, FinalGid},
                     {FinalDisplayCredentials, FileCtx4#file_ctx{display_credentials = FinalDisplayCredentials}}
             end;
@@ -848,8 +848,7 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     [file_location:doc()], file_location:id()) -> #file_location{}.
 fill_location_gaps(ReqRange0, #document{value = FileLocation = #file_location{
     size = Size}} = FileLocationDoc, Locations, Uuid) ->
-    ReqRange = utils:ensure_defined(ReqRange0, undefined,
-        [#file_block{offset = 0, size = Size}]),
+    ReqRange = utils:ensure_defined(ReqRange0, [#file_block{offset = 0, size = Size}]),
     Blocks = fslogic_location_cache:get_blocks(FileLocationDoc,
         #{overlapping_blocks => ReqRange}),
 

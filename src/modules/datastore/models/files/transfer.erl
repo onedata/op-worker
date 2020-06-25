@@ -251,7 +251,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 query_view_params = QueryViewParams
             } = Transfer,
 
-            NewUserId = utils:ensure_defined(UserId, undefined, OldUserId),
+            NewUserId = utils:ensure_defined(UserId, OldUserId),
             FileGuid = file_id:pack_guid(FileUuid, SpaceId),
 
             {ok, NewTransferId} = start_for_user(NewUserId, FileGuid, FilePath,

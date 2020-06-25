@@ -160,7 +160,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         {ok, ParentDoc} = file_meta:get({uuid, ParentUuid}),
         {ok, ParentScopeId} = get_scope_id(ParentDoc),
         {ok, ScopeId} = get_scope_id(FileDoc2),
-        ScopeId2 = utils:ensure_defined(ScopeId, undefined, ParentScopeId),
+        ScopeId2 = utils:ensure_defined(ScopeId, ParentScopeId),
         FileDoc3 = FileDoc2#document{
             scope = ScopeId2,
             value = FileMeta#file_meta{

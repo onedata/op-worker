@@ -150,7 +150,7 @@ process_file_internal(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                             {?PROCESSED, undefined, StorageFileCtx}
                     end;
                 {ok, ResolvedUuid} ->
-                    FileUuid2 = utils:ensure_defined(FileUuid, undefined, ResolvedUuid),
+                    FileUuid2 = utils:ensure_defined(FileUuid, ResolvedUuid),
                     case link_utils:try_to_resolve_child_deletion_link(FileName, ParentCtx) of
                         {error, not_found} ->
                             FileGuid = file_id:pack_guid(FileUuid2, SpaceId),

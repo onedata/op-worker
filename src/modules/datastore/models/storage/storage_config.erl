@@ -76,7 +76,7 @@ create(StorageId, StorageConfig) ->
 create(StorageId, Helper, LumaConfig) ->
     create(StorageId, #storage_config{
         helper = Helper,
-        luma_config = utils:ensure_defined(LumaConfig, undefined, luma_config:new(?AUTO_FEED))
+        luma_config = utils:ensure_defined(LumaConfig, luma_config:new(?AUTO_FEED))
     }).
 
 
