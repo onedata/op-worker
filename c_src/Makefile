@@ -23,9 +23,9 @@ endif
 
 CXXFLAGS += -fPIC -std=c++14 -O3 -Wall -D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE \
     -DWITH_CEPH=1 -DWITH_S3=1 -DWITH_SWIFT=1 -DWITH_GLUSTERFS=1 -DWITH_WEBDAV=1 \
-    $(shell pkg-config --cflags botan-1.10 tbb fuse) \
+    -DFMT_HEADER_ONLY=1 $(shell pkg-config --cflags botan-1.10 tbb fuse) \
     -isystem $(HELPERS_DIR)/priv/include -isystem $(HELPERS_DIR)/deps/cppmetrics \
-    -isystem $(ERTS_INCLUDE_DIR)
+    -isystem $(HELPERS_DIR)/deps/spdlog -isystem $(ERTS_INCLUDE_DIR)
 
 all: ../priv/helpers_nif.so
 
