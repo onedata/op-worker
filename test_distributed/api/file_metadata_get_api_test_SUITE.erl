@@ -132,12 +132,13 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, Config) ->
     get_metadata_test_base(
         <<"rdf">>,
         FileType, FilePath, FileGuid, ShareId,
-        create_validate_get_metadata_rest_call_fun(GetExpCallResultFun),
-        create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun),
         _Providers = ?config(op_worker_nodes, Config),
         ClientSpec,
         DataSpec,
         _QsParams = [],
+        _RandomlySelectScenario = false,
         Config
     ).
 
@@ -156,12 +157,13 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(Config) ->
     get_metadata_test_base(
         <<"rdf">>,
         FileType, FilePath, FileGuid, undefined,
-        create_validate_get_metadata_rest_call_fun(GetExpCallResultFun, P2),
-        create_validate_get_metadata_gs_call_fun(GetExpCallResultFun, P2),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2),
         Providers,
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
         _DataSpec = undefined,
         _QsParams = [],
+        _RandomlySelectScenario = false,
         Config
     ).
 
@@ -228,12 +230,13 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
     get_metadata_test_base(
         <<"json">>,
         FileType, FileLayer5Path, FileLayer5Guid, ShareId,
-        create_validate_get_metadata_rest_call_fun(GetExpCallResultFun),
-        create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun),
         _Providers = ?config(op_worker_nodes, Config),
         ClientSpec,
         DataSpec,
         QsParams,
+        _RandomlySelectScenario = true,
         Config
     ).
 
@@ -391,12 +394,13 @@ get_file_json_metadata_on_provider_not_supporting_space_test(Config) ->
     get_metadata_test_base(
         <<"json">>,
         FileType, FilePath, FileGuid, undefined,
-        create_validate_get_metadata_rest_call_fun(GetExpCallResultFun, P2),
-        create_validate_get_metadata_gs_call_fun(GetExpCallResultFun, P2),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2),
         Providers,
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
         _DataSpec = undefined,
         _QsParams = [],
+        _RandomlySelectScenario = false,
         Config
     ).
 
@@ -466,12 +470,13 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
     get_metadata_test_base(
         <<"xattrs">>,
         FileType, FileLayer3Path, FileLayer3Guid, ShareId,
-        create_validate_get_metadata_rest_call_fun(GetExpCallResultFun),
-        create_validate_get_metadata_gs_call_fun(GetExpCallResultFun),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun),
         _Providers = ?config(op_worker_nodes, Config),
         ClientSpec,
         DataSpec,
         QsParams,
+        _RandomlySelectScenario = true,
         Config
     ).
 
@@ -683,12 +688,13 @@ get_file_xattrs_on_provider_not_supporting_space_test(Config) ->
     get_metadata_test_base(
         <<"xattrs">>,
         FileType, FilePath, FileGuid, undefined,
-        create_validate_get_metadata_rest_call_fun(GetExpCallResultFun, P2),
-        create_validate_get_metadata_gs_call_fun(GetExpCallResultFun, P2),
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2),
         Providers,
         ?CLIENT_SPEC_FOR_SPACE_1_SCENARIOS(Config),
         _DataSpec = undefined,
         _QsParams = [],
+        _RandomlySelectScenario = false,
         Config
     ).
 
@@ -699,12 +705,12 @@ get_file_xattrs_on_provider_not_supporting_space_test(Config) ->
 
 
 %% @private
-create_validate_get_metadata_rest_call_fun(GetExpResultFun) ->
-    create_validate_get_metadata_rest_call_fun(GetExpResultFun, undefined).
+build_get_metadata_validate_rest_call_fun(GetExpResultFun) ->
+    build_get_metadata_validate_rest_call_fun(GetExpResultFun, undefined).
 
 
 %% @private
-create_validate_get_metadata_rest_call_fun(GetExpResultFun, ProviderNotSupportingSpace) ->
+build_get_metadata_validate_rest_call_fun(GetExpResultFun, ProviderNotSupportingSpace) ->
     fun
         (#api_test_ctx{node = TestNode}, {ok, RespCode, _RespHeaders, RespBody}) when TestNode == ProviderNotSupportingSpace ->
             ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
@@ -722,12 +728,12 @@ create_validate_get_metadata_rest_call_fun(GetExpResultFun, ProviderNotSupportin
 
 
 %% @private
-create_validate_get_metadata_gs_call_fun(GetExpResultFun) ->
-    create_validate_get_metadata_gs_call_fun(GetExpResultFun, undefined).
+build_get_metadata_validate_gs_call_fun(GetExpResultFun) ->
+    build_get_metadata_validate_gs_call_fun(GetExpResultFun, undefined).
 
 
 %% @private
-create_validate_get_metadata_gs_call_fun(GetExpResultFun, ProviderNotSupportingSpace) ->
+build_get_metadata_validate_gs_call_fun(GetExpResultFun, ProviderNotSupportingSpace) ->
     fun
         (#api_test_ctx{node = TestNode}, Result) when TestNode == ProviderNotSupportingSpace ->
             ProviderDomain = ?GET_DOMAIN_BIN(ProviderNotSupportingSpace),
@@ -756,13 +762,14 @@ create_validate_get_metadata_gs_call_fun(GetExpResultFun, ProviderNotSupportingS
     client_spec(),
     data_spec(),
     QsParameters :: [binary()],
+    RandomlySelectScenario :: boolean(),
     Config :: proplists:proplist()
 ) ->
     ok.
 get_metadata_test_base(
     MetadataType, FileType, FilePath, FileGuid, _ShareId = undefined,
     ValidateRestCallResultFun, ValidateGsCallResultFun,
-    Providers, ClientSpec, DataSpec, QsParameters, Config
+    Providers, ClientSpec, DataSpec, QsParameters, RandomlySelectScenario, Config
 ) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
@@ -774,35 +781,36 @@ get_metadata_test_base(
                 #scenario_template{
                     name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParameters),
+                    prepare_args_fun = build_get_metadata_create_prepare_new_id_rest_args_fun(MetadataType, FileObjectId, QsParameters),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
                     name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using deprecated path rest endpoint">>,
                     type = rest_with_file_path,
-                    prepare_args_fun = create_prepare_deprecated_path_get_metadata_rest_args_fun(MetadataType, FilePath, QsParameters),
+                    prepare_args_fun = build_get_metadata_prepare_deprecated_path_rest_args_fun(MetadataType, FilePath, QsParameters),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
                     name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using deprecated id rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_deprecated_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParameters),
+                    prepare_args_fun = build_get_metadata_prepare_deprecated_id_rest_args_fun(MetadataType, FileObjectId, QsParameters),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
                     name = <<"Get ", MetadataType/binary, " metadata from ", FileType/binary, " using gs api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_metadata_gs_args_fun(MetadataType, FileGuid, private),
+                    prepare_args_fun = build_get_metadata_prepare_gs_args_fun(MetadataType, FileGuid, private),
                     validate_result_fun = ValidateGsCallResultFun
                 }
             ],
+            randomly_select_scenarios = RandomlySelectScenario,
             data_spec = DataSpec
         }
     ]));
 get_metadata_test_base(
     MetadataType, FileType, _FilePath, FileGuid, ShareId,
     ValidateRestCallResultFun, ValidateGsCallResultFun,
-    Providers, ClientSpec, DataSpec, QsParameters, Config
+    Providers, ClientSpec, DataSpec, QsParameters, RandomlySelectScenario, Config
 ) ->
     FileShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
     {ok, FileShareObjectId} = file_id:guid_to_objectid(FileShareGuid),
@@ -815,55 +823,56 @@ get_metadata_test_base(
                 #scenario_template{
                     name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_new_id_get_metadata_rest_args_fun(MetadataType, FileShareObjectId, QsParameters),
+                    prepare_args_fun = build_get_metadata_create_prepare_new_id_rest_args_fun(MetadataType, FileShareObjectId, QsParameters),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
                     name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using deprecated id rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = create_prepare_deprecated_id_get_metadata_rest_args_fun(MetadataType, FileShareObjectId, QsParameters),
+                    prepare_args_fun = build_get_metadata_prepare_deprecated_id_rest_args_fun(MetadataType, FileShareObjectId, QsParameters),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
                     name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using gs public api">>,
                     type = gs,
-                    prepare_args_fun = create_prepare_get_metadata_gs_args_fun(MetadataType, FileShareGuid, public),
+                    prepare_args_fun = build_get_metadata_prepare_gs_args_fun(MetadataType, FileShareGuid, public),
                     validate_result_fun = ValidateGsCallResultFun
                 },
                 #scenario_template{
                     name = <<"Get ", MetadataType/binary, " metadata from shared ", FileType/binary, " using gs private api">>,
                     type = gs_with_shared_guid_and_aspect_private,
-                    prepare_args_fun = create_prepare_get_metadata_gs_args_fun(MetadataType, FileShareGuid, private),
+                    prepare_args_fun = build_get_metadata_prepare_gs_args_fun(MetadataType, FileShareGuid, private),
                     validate_result_fun = fun(_, Result) ->
                         ?assertEqual(?ERROR_UNAUTHORIZED, Result)
                     end
                 }
             ],
+            randomly_select_scenarios = RandomlySelectScenario,
             data_spec = DataSpec
         }
     ])).
 
 
 %% @private
-create_prepare_new_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    create_prepare_get_metadata_rest_args_fun(new_id, MetadataType, FileObjectId, QsParams).
+build_get_metadata_create_prepare_new_id_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
+    build_get_metadata_prepare_rest_args_fun(new_id, MetadataType, FileObjectId, QsParams).
 
 
 %% @private
-create_prepare_deprecated_path_get_metadata_rest_args_fun(MetadataType, FilePath, QsParams) ->
-    create_prepare_get_metadata_rest_args_fun(deprecated_path, MetadataType, FilePath, QsParams).
+build_get_metadata_prepare_deprecated_path_rest_args_fun(MetadataType, FilePath, QsParams) ->
+    build_get_metadata_prepare_rest_args_fun(deprecated_path, MetadataType, FilePath, QsParams).
 
 
 %% @private
-create_prepare_deprecated_id_get_metadata_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    create_prepare_get_metadata_rest_args_fun(deprecated_id, MetadataType, FileObjectId, QsParams).
+build_get_metadata_prepare_deprecated_id_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
+    build_get_metadata_prepare_rest_args_fun(deprecated_id, MetadataType, FileObjectId, QsParams).
 
 
 %% @private
-create_prepare_get_metadata_rest_args_fun(Endpoint, MetadataType, ValidId, QsParams) ->
+build_get_metadata_prepare_rest_args_fun(Endpoint, MetadataType, ValidId, QsParams) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = api_test_utils:ensure_defined(Data0, #{}),
-        {Id, Data2} = api_test_utils:maybe_substitute_id(ValidId, Data1),
+        {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
         Id = case maps:find(bad_id, Data1) of
             {ok, BadId} -> BadId;
@@ -882,9 +891,9 @@ create_prepare_get_metadata_rest_args_fun(Endpoint, MetadataType, ValidId, QsPar
 
 
 %% @private
-create_prepare_get_metadata_gs_args_fun(MetadataType, FileGuid, Scope) ->
+build_get_metadata_prepare_gs_args_fun(MetadataType, FileGuid, Scope) ->
     fun(#api_test_ctx{data = Data0}) ->
-        {GriId, Data1} = api_test_utils:maybe_substitute_id(FileGuid, Data0),
+        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
 
         Aspect = case MetadataType of
             <<"json">> -> json_metadata;

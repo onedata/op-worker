@@ -147,7 +147,7 @@
 ]).
 
 -define(FILE_META_FIELDS, [
-    <<"name">>, <<"type">>, <<"mode">>, <<"owner">>, <<"group_owner">>,
+    <<"name">>, <<"type">>, <<"mode">>, <<"owner">>,
     <<"provider_id">>, <<"shares">>, <<"deleted">>
 ]).
 
@@ -214,7 +214,7 @@ is_authorized(Req, State) ->
                     {stop, send_error_response(Req, Error), State}
             end;
         {ok, ?GUEST} ->
-            {stop, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), State};
+            {stop, send_error_response(Req, ?ERROR_UNAUTHORIZED), State};
         {error, _} = Error ->
             {stop, send_error_response(Req, Error), Req}
     end.
@@ -479,7 +479,6 @@ file_meta_field_idx(<<"name">>) -> #file_meta.name;
 file_meta_field_idx(<<"type">>) -> #file_meta.type;
 file_meta_field_idx(<<"mode">>) -> #file_meta.mode;
 file_meta_field_idx(<<"owner">>) -> #file_meta.owner;
-file_meta_field_idx(<<"group_owner">>) -> #file_meta.group_owner;
 file_meta_field_idx(<<"provider_id">>) -> #file_meta.provider_id;
 file_meta_field_idx(<<"shares">>) -> #file_meta.shares;
 file_meta_field_idx(<<"deleted">>) -> #file_meta.deleted;
@@ -519,7 +518,8 @@ init_stream(#{last_seq := Since, space_id := SpaceId, triggers := Triggers} = St
     Pid = self(),
 
     % TODO VFS-5570
-    Node = datastore_key:responsible_node(SpaceId),
+    % TODO VFS-6389 - maybe restart stream in case of node failure
+    Node = datastore_key:any_responsible_node(SpaceId),
     {ok, Stream} = rpc:call(Node, couchbase_changes, stream, [
         <<"onedata">>,
         SpaceId,

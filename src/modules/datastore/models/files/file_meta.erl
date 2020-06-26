@@ -42,8 +42,9 @@
 -export([get_name/1]).
 -export([get_active_perms_type/1, update_mode/2, update_acl/2]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
-    make_space_exist/1, new_doc/8, type/1, get_ancestors/1,
-    get_locations_by_uuid/1, rename/4, get_type/1]).
+    make_space_exist/1, new_doc/6, new_doc/7, type/1, get_ancestors/1,
+    get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1,
+    get_mode/1]).
 -export([check_name/3, has_suffix/1, is_deleted/1]).
 % For tests
 -export([get_all_links/2]).
@@ -78,12 +79,15 @@
     size => limit(),
     offset => offset(),
     prev_link_name => name(),
-    prev_tree_id => od_provider:id()}.
+    prev_tree_id => od_provider:id()
+}.
+
 % Map returned from listing functions, containing information needed for next batch listing
 -type list_extended_info() :: #{
     token => datastore_links_iter:token(),
     last_name => name(),
-    last_tree => od_provider:id()}.
+    last_tree => od_provider:id()
+}.
 %% @formatter:on
 
 -export_type([
@@ -156,7 +160,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         {ok, ParentDoc} = file_meta:get({uuid, ParentUuid}),
         {ok, ParentScopeId} = get_scope_id(ParentDoc),
         {ok, ScopeId} = get_scope_id(FileDoc2),
-        ScopeId2 = utils:ensure_defined(ScopeId, undefined, ParentScopeId),
+        ScopeId2 = utils:ensure_defined(ScopeId, ParentScopeId),
         FileDoc3 = FileDoc2#document{
             scope = ScopeId2,
             value = FileMeta#file_meta{
@@ -248,7 +252,7 @@ get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
         value = #file_meta{
             name = ?GLOBAL_ROOT_DIR_NAME,
             is_scope = true,
-            mode = 8#111,
+            mode = ?DEFAULT_DIR_PERMS,
             owner = ?ROOT_USER_ID,
             parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
@@ -693,6 +697,18 @@ get_type(#file_meta{type = Type}) ->
 get_type(#document{value = FileMeta}) ->
     get_type(FileMeta).
 
+-spec get_owner(file_meta() | doc()) -> od_user:id().
+get_owner(#document{value = FileMeta}) ->
+    get_owner(FileMeta) ;
+get_owner(#file_meta{owner = Owner}) ->
+    Owner.
+
+-spec get_mode(file_meta() | doc()) -> mode().
+get_mode(#document{value = FileMeta}) ->
+    get_mode(FileMeta) ;
+get_mode(#file_meta{mode = Mode}) ->
+    Mode.
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Initializes files metadata for onedata user.
@@ -778,11 +794,12 @@ remove_share(FileCtx, ShareId) ->
         end
     end).
 
--spec get_shares(doc() | file_meta()) -> {ok, [od_share:id()]}.
+-spec get_shares(doc() | file_meta()) -> [od_share:id()].
 get_shares(#document{value = FileMeta}) ->
     get_shares(FileMeta);
 get_shares(#file_meta{shares = Shares}) ->
-    {ok, Shares}.
+    Shares.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -796,9 +813,11 @@ make_space_exist(SpaceId) ->
     FileDoc = #document{
         key = SpaceDirUuid,
         value = #file_meta{
-            name = SpaceId, type = ?DIRECTORY_TYPE,
-            mode = ?DEFAULT_SPACE_DIR_MODE,
-            owner = ?ROOT_USER_ID, is_scope = true,
+            name = SpaceId,
+            type = ?DIRECTORY_TYPE,
+            mode = ?DEFAULT_DIR_PERMS,
+            owner = ?SPACE_OWNER_ID(SpaceId),
+            is_scope = true,
             parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     },
@@ -818,15 +837,13 @@ make_space_exist(SpaceId) ->
             ok
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Return file_meta doc.
-%% @end
-%%--------------------------------------------------------------------
--spec new_doc(undefined | uuid(), undefined | name(), undefined | type(),
-    posix_permissions(), undefined | od_user:id(), undefined | od_group:id(),
+-spec new_doc(name(), type(), posix_permissions(), od_user:id(), uuid(), od_space:id()) -> doc().
+new_doc(FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
+    new_doc(undefined, FileName, FileType, Mode, Owner, ParentUuid, SpaceId).
+
+-spec new_doc(undefined | uuid(), name(), type(), posix_permissions(), od_user:id(),
     uuid(), od_space:id()) -> doc().
-new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, ParentUuid, SpaceId) ->
+new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
     #document{
         key = FileUuid,
         value = #file_meta{
@@ -834,7 +851,6 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, GroupOwner, ParentUuid, Space
             type = FileType,
             mode = Mode,
             owner = Owner,
-            group_owner = GroupOwner,
             parent_uuid = ParentUuid,
             provider_id = oneprovider:get_id()
         },
@@ -1230,7 +1246,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    9.
+    10.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1239,169 +1255,8 @@ get_record_version() ->
 %%--------------------------------------------------------------------
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {name, string},
-        {type, atom},
-        {mode, integer},
-        {uid, string},
-        {size, integer},
-        {version, integer},
-        {is_scope, boolean},
-        {scope, string},
-        {provider_id, string},
-        {link_value, string},
-        {shares, [string]}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {name, string},
-        {type, atom},
-        {mode, integer},
-        {owner, string},
-        {size, integer},
-        {version, integer},
-        {is_scope, boolean},
-        {scope, string},
-        {provider_id, string},
-        {link_value, string},
-        {shares, [string]}
-    ]};
-get_record_struct(3) ->
-    {record, [
-        {name, string},
-        {type, atom},
-        {mode, integer},
-        {owner, string},
-        {size, integer},
-        {version, integer},
-        {is_scope, boolean},
-        {scope, string},
-        {provider_id, string},
-        {link_value, string},
-        {shares, [string]},
-        {deleted, boolean},
-        {storage_sync_info, {record, [
-            {children_attrs_hash, #{integer => binary}},
-            {last_synchronized_mtime, integer}
-        ]}}
-    ]};
-get_record_struct(4) ->
-    {record, [
-        {name, string},
-        {type, atom},
-        {mode, integer},
-        {owner, string},
-        {size, integer},
-        {version, integer},
-        {is_scope, boolean},
-        {scope, string},
-        {provider_id, string},
-        {link_value, string},
-        {shares, [string]},
-        {deleted, boolean},
-        {storage_sync_info, {record, [
-            {children_attrs_hash, #{integer => binary}},
-            {last_synchronized_mtime, integer}
-        ]}},
-        {parent_uuid, string}
-    ]};
-get_record_struct(5) ->
-    {record, [
-        {name, string},
-        {type, atom},
-        {mode, integer},
-        {owner, string},
-        {group_owner, string},
-        {size, integer},
-        {version, integer},
-        {is_scope, boolean},
-        {scope, string},
-        {provider_id, string},
-        {link_value, string},
-        {shares, [string]},
-        {deleted, boolean},
-        {storage_sync_info, {record, [
-            {children_attrs_hash, #{integer => binary}},
-            {last_synchronized_mtime, integer}
-        ]}},
-        {parent_uuid, string}
-    ]};
-get_record_struct(6) ->
-    {record, [
-        {name, string},
-        {type, atom},
-        {mode, integer},
-        {owner, string},
-        {group_owner, string},
-        {size, integer},
-        {version, integer},
-        {is_scope, boolean},
-        {scope, string},
-        {provider_id, string},
-        {link_value, string},
-        {shares, [string]},
-        {deleted, boolean},
-        {parent_uuid, string}
-    ]};
-get_record_struct(7) ->
-    {record, [
-        {name, string},
-        {type, atom},
-        {mode, integer},
-        {owner, string},
-        {group_owner, string},
-        % size field  has been removed in this version
-        {is_scope, boolean},
-        {scope, string},
-        {provider_id, string},
-        {shares, [string]},
-        {deleted, boolean},
-        {parent_uuid, string}
-    ]};
-get_record_struct(8) ->
-    {record, [
-        {name, string},
-        {type, atom},
-        {mode, integer},
-        % acl has been added in this version
-        {acl, [{record, [
-            {acetype, integer},
-            {aceflags, integer},
-            {identifier, string},
-            {name, string},
-            {acemask, integer}
-        ]}]},
-        {owner, string},
-        {group_owner, string},
-        {is_scope, boolean},
-        {scope, string},
-        {provider_id, string},
-        {shares, [string]},
-        {deleted, boolean},
-        {parent_uuid, string}
-    ]};
-get_record_struct(9) ->
-    {record, [
-        {name, string},
-        {type, atom},
-        {mode, integer},
-        {acl, [{record, [
-            {acetype, integer},
-            {aceflags, integer},
-            {identifier, string},
-            {name, string},
-            {acemask, integer}
-        ]}]},
-        {owner, string},
-        {group_owner, string},
-        {is_scope, boolean},
-        % scope field has been deleted in this version
-        {provider_id, string},
-        {shares, [string]},
-        {deleted, boolean},
-        {parent_uuid, string}
-    ]}.
+get_record_struct(Version) ->
+    file_meta_model:get_record_struct(Version).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1410,55 +1265,8 @@ get_record_struct(9) ->
 %%--------------------------------------------------------------------
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {?MODULE, Name, Type, Mode, Uid, Size, Version, IsScope,
-    Scope, ProviderId, LinkValue, Shares}
-) ->
-    {2, {?MODULE, Name, Type, Mode, Uid, Size, Version, IsScope, Scope,
-        ProviderId, LinkValue, Shares}};
-upgrade_record(2, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
-    Scope, ProviderId, LinkValue, Shares}
-) ->
-    {3, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
-        Scope, ProviderId, LinkValue, Shares, false, {storage_sync_info, #{}, undefined}}};
-upgrade_record(3, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
-    Scope, ProviderId, LinkValue, Shares, Deleted, StorageSyncInfo}
-) ->
-    {4, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
-        Scope, ProviderId, LinkValue, Shares, Deleted, StorageSyncInfo, undefined}
-    };
-upgrade_record(4, {?MODULE, Name, Type, Mode, Owner, Size, Version, IsScope,
-    Scope, ProviderId, LinkValue, Shares, Deleted, StorageSyncInfo, ParentUuid}
-) ->
-    {5, {?MODULE, Name, Type, Mode, Owner, undefined, Size, Version, IsScope,
-        Scope, ProviderId, LinkValue, Shares, Deleted, StorageSyncInfo, ParentUuid}
-    };
-upgrade_record(5, {?MODULE, Name, Type, Mode, Owner, GroupOwner, Size, Version, IsScope,
-    Scope, ProviderId, LinkValue, Shares, Deleted, _StorageSyncInfo, ParentUuid}
-) ->
-    {6, {?MODULE, Name, Type, Mode, Owner, GroupOwner, Size, Version, IsScope,
-        Scope, ProviderId, LinkValue, Shares, Deleted, ParentUuid}
-    };
-upgrade_record(6, {?MODULE, Name, Type, Mode, Owner, GroupOwner, _Size, _Version, IsScope,
-    Scope, ProviderId, _LinkValue, Shares, Deleted, ParentUuid}
-) ->
-    {7, {?MODULE, Name, Type, Mode, Owner, GroupOwner, IsScope,
-        Scope, ProviderId, Shares, Deleted, ParentUuid}
-    };
-upgrade_record(7, {
-    ?MODULE, Name, Type, Mode, Owner, GroupOwner, IsScope,
-    Scope, ProviderId, Shares, Deleted, ParentUuid
-}) ->
-    {8, {?MODULE, Name, Type, Mode, [],
-        Owner, GroupOwner, IsScope, Scope,
-        ProviderId, Shares, Deleted, ParentUuid
-    }};
-upgrade_record(8, {
-    ?MODULE, Name, Type, Mode, ACL, Owner, GroupOwner, IsScope,
-    _Scope, ProviderId, Shares, Deleted, ParentUuid
-}) ->
-    {9, {?MODULE, Name, Type, Mode, ACL, Owner, GroupOwner, IsScope,
-        ProviderId, Shares, Deleted, ParentUuid
-    }}.
+upgrade_record(Version, Record) ->
+    file_meta_model:upgrade_record(Version, Record).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1468,19 +1276,5 @@ upgrade_record(8, {
 %% @end
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) -> default.
-resolve_conflict(_Ctx, #document{key = Uuid, value = #file_meta{name = NewName, parent_uuid = NewParentUuid}},
-    #document{value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}}) ->
-    case NewName =/= PrevName of
-        true ->
-            spawn(fun() ->
-                FileCtx = file_ctx:new_by_guid(fslogic_uuid:uuid_to_guid(Uuid)),
-                OldParentGuid = fslogic_uuid:uuid_to_guid(PrevParentUuid),
-                NewParentGuid = fslogic_uuid:uuid_to_guid(NewParentUuid),
-                fslogic_event_emitter:emit_file_renamed_no_exclude(
-                    FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName)
-            end);
-        _ ->
-            ok
-    end,
-
-    default.
+resolve_conflict(Ctx, Doc1, Doc2) ->
+    file_meta_model:resolve_conflict(Ctx, Doc1, Doc2).

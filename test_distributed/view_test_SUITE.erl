@@ -144,7 +144,7 @@ query_view_using_file_meta(Config) ->
         }
     ">>,
     create_view(Worker, SpaceId, ViewName, SimpleMapFunction, undefined, [], false, [ProviderId]),
-
+    SpaceOwnerId = ?SPACE_OWNER_ID(SpaceId),
     ?assertQuery([#{
         <<"id">> := _,
         <<"key">> := CdmiId,
@@ -152,8 +152,7 @@ query_view_using_file_meta(Config) ->
             <<"name">> := ?SPACE_ID,
             <<"type">> := <<"DIR">>,
             <<"mode">> := 8#775,
-            <<"owner">> := ?ROOT_USER_ID,
-            <<"group_owner">> := null,
+            <<"owner">> := SpaceOwnerId,
             <<"provider_id">> := ProviderId,
             <<"shares">> := [],
             <<"deleted">> := false,

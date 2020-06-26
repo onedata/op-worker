@@ -164,9 +164,9 @@ release(UserCtx, FileCtx, HandleId) ->
     SessId = user_ctx:get_session_id(UserCtx),
     ok = file_handles:register_release(FileCtx, SessId, 1),
     ok = case session_handles:get(SessId, HandleId) of
-        {ok, SfmHandle} ->
+        {ok, SDHandle} ->
             ok = session_handles:remove(SessId, HandleId),
-            ok = storage_driver:release(SfmHandle);
+            ok = storage_driver:release(SDHandle);
         {error, {not_found, _}} ->
             ok;
         {error, not_found} ->
@@ -228,7 +228,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, _Flag) ->
         Error:Reason ->
             ?error_stacktrace("create_file_insecure error: ~p:~p",
                 [Error, Reason]),
-            sd_utils:delete_storage_file(FileCtx, UserCtx),
+            sd_utils:unlink(FileCtx, UserCtx),
             FileUuid = file_ctx:get_uuid_const(FileCtx),
             fslogic_location_cache:delete_local_location(FileUuid),
             file_meta:delete(FileUuid),
@@ -542,16 +542,9 @@ check_and_register_release(_FileCtx, _SessId, _HandleId) ->
 -spec create_location(file_ctx:ctx(), user_ctx:ctx(), boolean(), boolean()) ->
     {file_location:record(), file_ctx:ctx()}.
 create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
-    ExtDIO = file_ctx:get_extended_direct_io_const(FileCtx),
-    case ExtDIO of
-        true ->
-            {{ok, FL}, FileCtx2} = location_and_link_utils:get_new_file_location_doc(FileCtx, false, true),
-            {FL, FileCtx2};
-        _ ->
-            {#document{value = FL}, FileCtx2} =
-                sd_utils:create_delayed_storage_file(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
-            {FL, FileCtx2}
-    end.
+    {#document{value = FL}, FileCtx2} =
+        sd_utils:create_deferred(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists),
+    {FL, FileCtx2}.
 
 
 %%--------------------------------------------------------------------
@@ -565,17 +558,12 @@ create_location(FileCtx, UserCtx, VerifyDeletionLink, CheckLocationExists) ->
 create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
     case file_ctx:is_dir(ParentFileCtx) of
         {true, ParentFileCtx2} ->
-            File = #document{value = #file_meta{
-                name = Name,
-                type = ?REGULAR_FILE_TYPE,
-                mode = Mode,
-                owner = user_ctx:get_user_id(UserCtx)
-            }},
-            ParentFileUuid = file_ctx:get_uuid_const(ParentFileCtx2),
-            {ok, FileUuid} = file_meta:create({uuid, ParentFileUuid}, File), %todo pass file_ctx
-
-            CTime = time_utils:cluster_time_seconds(),
+            Owner = user_ctx:get_user_id(UserCtx),
+            ParentUuid = file_ctx:get_uuid_const(ParentFileCtx2),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
+            File = file_meta:new_doc(Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId),
+            {ok, FileUuid} = file_meta:create({uuid, ParentUuid}, File), %todo pass file_ctx
+            CTime = time_utils:cluster_time_seconds(),
             {ok, _} = times:save(#document{key = FileUuid, value = #times{
                 mtime = CTime, atime = CTime, ctime = CTime
             }, scope = SpaceId}),

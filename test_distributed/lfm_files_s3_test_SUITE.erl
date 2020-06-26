@@ -52,8 +52,8 @@
     share_child_read_test/1,
     share_permission_denied_test/1,
     echo_loop_test/1,
-    delayed_creation_should_not_prevent_mv/1,
-    delayed_creation_should_not_prevent_truncate/1,
+    deferred_creation_should_not_prevent_mv/1,
+    deferred_creation_should_not_prevent_truncate/1,
     new_file_should_not_have_popularity_doc/1,
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
@@ -118,13 +118,13 @@
     share_child_read_test,
     share_permission_denied_test,
     echo_loop_test,
-    delayed_creation_should_not_prevent_mv,
-    delayed_creation_should_not_prevent_truncate,
+    deferred_creation_should_not_prevent_mv,
+    deferred_creation_should_not_prevent_truncate,
     new_file_should_not_have_popularity_doc,
     new_file_should_have_zero_popularity,
     opening_file_should_increase_file_popularity,
     file_popularity_should_have_correct_file_size,
-    delayed_creation_should_not_prevent_truncate,
+    deferred_creation_should_not_prevent_truncate,
     readdir_plus_should_return_empty_result_for_empty_dir,
     readdir_plus_should_return_empty_result_zero_size,
     readdir_plus_should_work_with_zero_offset,
@@ -340,11 +340,11 @@ share_child_read_test(Config) ->
 share_permission_denied_test(Config) ->
     lfm_files_test_base:share_permission_denied(Config).
 
-delayed_creation_should_not_prevent_mv(Config) ->
-    lfm_files_test_base:delayed_creation_should_not_prevent_mv(Config).
+deferred_creation_should_not_prevent_mv(Config) ->
+    lfm_files_test_base:deferred_creation_should_not_prevent_mv(Config).
 
-delayed_creation_should_not_prevent_truncate(Config) ->
-    lfm_files_test_base:delayed_creation_should_not_prevent_truncate(Config).
+deferred_creation_should_not_prevent_truncate(Config) ->
+    lfm_files_test_base:deferred_creation_should_not_prevent_truncate(Config).
 
 new_file_should_not_have_popularity_doc(Config) ->
     lfm_files_test_base:new_file_should_not_have_popularity_doc(Config).

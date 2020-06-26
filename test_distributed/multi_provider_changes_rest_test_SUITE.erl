@@ -86,7 +86,9 @@ token_auth_test(Config) ->
     % Request containing data caveats should be rejected
     DataCaveat = #cv_data_path{whitelist = [<<"/", SpaceId/binary>>]},
     TokenWithDataCaveat = tokens:confine(Token, DataCaveat),
-    ExpRestError1 = rest_test_utils:get_rest_error(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat)),
+    ExpRestError1 = rest_test_utils:get_rest_error(
+        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(DataCaveat))
+    ),
     ?assertMatch(ExpRestError1, get_changes(
         [{{access_token, ?USER_1}, TokenWithDataCaveat} | Config],
         WorkerP1, SpaceId, Json
@@ -96,7 +98,9 @@ token_auth_test(Config) ->
     GRIPattern = #gri_pattern{type = op_metrics, id = SpaceId, aspect = changes},
     InvalidApiCaveat = #cv_api{whitelist = [{all, all, GRIPattern#gri_pattern{id = <<"ASD">>}}]},
     TokenWithInvalidApiCaveat = tokens:confine(Token, InvalidApiCaveat),
-    ExpRestError2 = rest_test_utils:get_rest_error(?ERROR_TOKEN_CAVEAT_UNVERIFIED(InvalidApiCaveat)),
+    ExpRestError2 = rest_test_utils:get_rest_error(
+        ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(InvalidApiCaveat))
+    ),
     ?assertMatch(ExpRestError2, get_changes(
         [{{access_token, ?USER_1}, TokenWithInvalidApiCaveat} | Config],
         WorkerP1, SpaceId, Json
@@ -126,7 +130,7 @@ invalid_request_should_fail(Config) ->
         {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERROR_BAD_DATA(<<"fielMeta">>)},
         {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"fileMeta.fields">>)},
         {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"fileMeta.fields">>, [
-            <<"name">>, <<"type">>, <<"mode">>, <<"owner">>, <<"group_owner">>,
+            <<"name">>, <<"type">>, <<"mode">>, <<"owner">>,
             <<"provider_id">>, <<"shares">>, <<"deleted">>
         ])},
         {#{<<"fileMeta">> => #{<<"always">> => <<"true">>}}, ?ERROR_BAD_VALUE_BOOLEAN(<<"fileMeta.always">>)}

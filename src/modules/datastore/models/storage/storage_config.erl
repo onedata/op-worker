@@ -23,20 +23,25 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/storage/helpers/helpers.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([create/4, get/1, exists/1, delete/1]).
--export([get_id/1, get_helper/1, get_luma_config/1,
-    is_readonly/1, is_imported_storage/1]).
+-export([create/2, create/3, get/1, exists/1, delete/1]).
+-export([get_id/1, get_helper/1,
+    get_luma_feed/1, get_luma_config/1,
+    should_skip_storage_detection/1, is_imported_storage/1]).
 
--export([update_helper/2, update_luma_config/2, set_readonly/2]).
+-export([update_helper/2, update_luma_config/2, set_luma_config/2]).
 
 -export([delete_all/0]).
 
+%% function for migrating old #storage{} record
+-export([migrate_to_storage_config_v1/1]).
+
 %% datastore_model callbacks
 -export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 -type record() :: #storage_config{}.
 -type doc() :: datastore_doc:doc(record()).
@@ -59,17 +64,20 @@
 %%% API
 %%%===================================================================
 
--spec create(storage:id(), helpers:helper(), boolean(), luma_config:config()) -> 
-    {ok, storage:id()} | {error, term()}.
-create(StorageId, Helper, Readonly, LumaConfig) ->
+-spec create(storage:id(), record()) -> {ok, storage:id()} | {error, term()}.
+create(StorageId, StorageConfig) ->
     ?extract_key(datastore_model:create(?CTX, #document{
         key = StorageId,
-        value = #storage_config{
-            helper = Helper,
-            readonly = Readonly,
-            luma_config = LumaConfig
-        }
+        value = StorageConfig
     })).
+
+-spec create(storage:id(), helpers:helper(), undefined | storage:luma_config()) ->
+    {ok, storage:id()} | {error, term()}.
+create(StorageId, Helper, LumaConfig) ->
+    create(StorageId, #storage_config{
+        helper = Helper,
+        luma_config = utils:ensure_defined(LumaConfig, luma_config:new(?AUTO_FEED))
+    }).
 
 
 -spec get(storage:id()) -> {ok, doc()} | {error, term()}.
@@ -108,26 +116,27 @@ get_helper(#document{value = StorageConfig}) ->
 get_helper(#storage_config{helper = Helper}) ->
     Helper;
 get_helper(StorageId) ->
-    {ok, StorageDoc} = get(StorageId),
+    {ok, StorageDoc} = storage_config:get(StorageId),
     get_helper(StorageDoc).
 
+-spec get_luma_feed(storage:id() | doc() | record()) -> storage:luma_feed().
+get_luma_feed(Storage) ->
+    LumaConfig = get_luma_config(Storage),
+    luma_config:get_feed(LumaConfig).
 
--spec get_luma_config(doc() | record()) -> undefined | luma_config:config().
+-spec get_luma_config(storage:id() | doc() | record()) -> storage:luma_config().
 get_luma_config(#document{value = Storage = #storage_config{}}) ->
     get_luma_config(Storage);
 get_luma_config(#storage_config{luma_config = LumaConfig}) ->
-    LumaConfig.
+    LumaConfig;
+get_luma_config(StorageId) ->
+    {ok, StorageDoc} = get(StorageId),
+    get_luma_config(StorageDoc).
 
-
--spec is_readonly(doc() | record() | storage:id()) -> boolean().
-is_readonly(#document{value = #storage_config{} = Value}) ->
-    is_readonly(Value);
-is_readonly(#storage_config{readonly = ReadOnly}) ->
-    ReadOnly;
-is_readonly(StorageId) ->
-    {ok, StorageConfigDoc} = get(StorageId),
-    is_readonly(StorageConfigDoc).
-
+-spec should_skip_storage_detection(doc() | record() | storage:id()) -> boolean().
+should_skip_storage_detection(Storage) ->
+    Helper = get_helper(Storage),
+    helper:should_skip_storage_detection(Helper).
 
 %% @TODO VFS-5856 deprecated, included for upgrade procedure
 -spec is_imported_storage(doc() | record() | storage:id()) -> boolean().
@@ -165,7 +174,7 @@ update_helper(StorageId, UpdateFun) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_luma_config(storage:id(), UpdateFun) -> ok | {error, term()}
-    when UpdateFun :: fun((luma_config:config()) -> {ok, luma_config:config()} | {error, term()}).
+    when UpdateFun :: fun((storage:luma_config()) -> {ok, storage:luma_config()} | {error, term()}).
 update_luma_config(StorageId, UpdateFun) ->
     ?extract_ok(update(StorageId, fun
         (#storage_config{luma_config = PreviousLumaConfig} = StorageConfig) ->
@@ -178,11 +187,10 @@ update_luma_config(StorageId, UpdateFun) ->
     end)).
 
 
--spec set_readonly(storage:id(), Readonly :: boolean()) ->
-    ok | {error, term()}.
-set_readonly(StorageId, Readonly) when is_boolean(Readonly) ->
+-spec set_luma_config(storage:id(), storage:luma_config()) -> ok.
+set_luma_config(StorageId, LumaConfig) ->
     ?extract_ok(update(StorageId, fun(#storage_config{} = Storage) ->
-        {ok, Storage#storage_config{readonly = Readonly}}
+        {ok, Storage#storage_config{luma_config = LumaConfig}}
     end)).
 
 
@@ -193,6 +201,23 @@ delete_all() ->
         delete(StorageId)
     end, StorageList).
 
+%%%===================================================================
+%%% Migration functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% This function upgrades old `storage` record to `storage_config`
+%% in version 1.
+%% @end
+%%--------------------------------------------------------------------
+-spec migrate_to_storage_config_v1(#storage{}) -> tuple().
+migrate_to_storage_config_v1(#storage{
+    helpers = [Helper],
+    readonly = Readonly,
+    luma_config = LumaConfig
+}) ->
+    {?MODULE, Helper, Readonly, LumaConfig, false}.
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -215,7 +240,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
 
 
 %%--------------------------------------------------------------------
@@ -241,4 +266,56 @@ get_record_struct(1) ->
             {api_key, string}
         ]}},
         {imported_storage, boolean} % @TODO 5856 deprecated remove in next major version
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {helper, {record, [
+            {name, string},
+            {args, #{string => string}},
+            {admin_ctx, #{string => string}}
+            % deleted insecure field
+            % deleted extended_direct_io field
+            % storage_path_type{ field renamed to storagePathType and moved to args
+        ]}},
+        % field readonly was rename to skipStorageDetection and moved to helper args
+        {luma_config, {record, [
+            % added field feed in luma_config record
+            {feed, atom},
+            {url, string},
+            {api_key, string}
+        ]}},
+        {imported_storage, boolean} % @TODO 5856 deprecated remove in next major version
     ]}.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Upgrades model's record from provided version to the next one.
+%% @end
+%%--------------------------------------------------------------------
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, {?MODULE, Helper, Readonly, LumaConfig, ImportedStorage}) ->
+    LumaConfig2 = case LumaConfig =:= undefined of
+        true -> luma_config:new(?AUTO_FEED);
+        false -> luma_config:set_feed(LumaConfig, ?EXTERNAL_FEED)
+    end,
+    {helper,
+        HelperName,
+        Args,
+        AdminCtx,
+        _Insecure,
+        _ExtendedDirectIO,
+        StoragePathType
+    } = Helper,
+    NewArgs = Args#{
+        % readonly field was used to notify that detecting storage should be skipped
+        % it was renamed and moved to helper args
+        <<"skipStorageDetection">> => atom_to_binary(Readonly, utf8),
+        % storagePathType field was moved to helper args
+        <<"storagePathType">> => StoragePathType
+    },
+    {2, {?MODULE,
+        {helper, HelperName, NewArgs, AdminCtx},
+        LumaConfig2,
+        ImportedStorage
+    }}.

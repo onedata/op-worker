@@ -23,11 +23,16 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([supervisor_flags/0, get_on_demand_changes_stream_id/2]).
+-export([supervisor_flags/0, get_on_demand_changes_stream_id/2,
+    start_streams/0, start_streams/1]).
+
+%% Internal services API
+-export([start_in_stream/1, stop_in_stream/1, start_out_stream/1, stop_out_stream/1]).
 
 -define(DBSYNC_WORKER_SUP, dbsync_worker_sup).
--define(STREAMS_HEALTHCHECK_INTERVAL, application:get_env(?APP_NAME,
-    dbsync_streams_healthcheck_interval, timer:seconds(5))).
+
+-define(IN_STREAM_ID(ID), {dbsync_in_stream, ID}).
+-define(OUT_STREAM_ID(ID), {dbsync_out_stream, ID}).
 
 %%%===================================================================
 %%% worker_plugin_behaviour callbacks
@@ -43,7 +48,6 @@
 init(_Args) ->
     couchbase_changes:enable([dbsync_utils:get_bucket()]),
     start_streams(),
-    erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(), {sync_timer, streams_healthcheck}),
     {ok, #{}}.
 
 %%--------------------------------------------------------------------
@@ -55,15 +59,6 @@ init(_Args) ->
 handle(ping) ->
     pong;
 handle(healthcheck) ->
-    ok;
-handle(streams_healthcheck) ->
-    try
-        start_streams()
-    catch
-        Type:Reason ->
-            ?error_stacktrace("Failed to start streams due to ~p:~p", [Type, Reason])
-    end,
-    erlang:send_after(?STREAMS_HEALTHCHECK_INTERVAL, self(), {sync_timer, streams_healthcheck}),
     ok;
 handle({dbsync_message, _SessId, Msg = #tree_broadcast2{}}) ->
     handle_tree_broadcast(Msg);
@@ -94,7 +89,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec supervisor_flags() -> supervisor:sup_flags().
 supervisor_flags() ->
-    #{strategy => one_for_one, intensity => 0, period => 1}.
+    #{strategy => one_for_one, intensity => 1000, period => 3600}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -104,9 +99,9 @@ supervisor_flags() ->
 -spec dbsync_in_stream_spec(od_space:id()) -> supervisor:child_spec().
 dbsync_in_stream_spec(SpaceId) ->
     #{
-        id => {dbsync_in_stream, SpaceId},
+        id => ?IN_STREAM_ID(SpaceId),
         start => {dbsync_in_stream, start_link, [SpaceId]},
-        restart => temporary,
+        restart => transient,
         shutdown => timer:seconds(10),
         type => worker,
         modules => [dbsync_in_stream]
@@ -121,64 +116,57 @@ dbsync_in_stream_spec(SpaceId) ->
     [dbsync_out_stream:option()]) -> supervisor:child_spec().
 dbsync_out_stream_spec(ReqId, SpaceId, Opts) ->
     #{
-        id => {dbsync_out_stream, ReqId},
+        id => ?OUT_STREAM_ID(ReqId),
         start => {dbsync_out_stream, start_link, [ReqId, SpaceId, Opts]},
-        restart => temporary,
+        restart => transient,
         shutdown => timer:seconds(10),
         type => worker,
         modules => [dbsync_out_stream]
     }.
+
+-spec start_streams() -> ok.
+start_streams() ->
+    start_streams(dbsync_utils:get_spaces()).
+
+-spec start_streams([od_space:id()]) -> ok.
+start_streams(Spaces) ->
+    lists:foreach(fun(SpaceId) ->
+        ok = internal_services_manager:start_service(?MODULE, <<"dbsync_in_stream", SpaceId/binary>>,
+            start_in_stream, stop_in_stream, [SpaceId], SpaceId),
+        ok = internal_services_manager:start_service(?MODULE, <<"dbsync_out_stream", SpaceId/binary>>,
+            start_out_stream, stop_out_stream, [SpaceId], SpaceId)
+    end, Spaces).
 
 -spec get_on_demand_changes_stream_id(od_space:id(), od_provider:id()) -> binary().
 get_on_demand_changes_stream_id(SpaceId, ProviderId) ->
     <<SpaceId/binary, "_", ProviderId/binary>>.
 
 %%%===================================================================
-%%% Internal functions
+%%% Internal services API
 %%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Starts incoming and outgoing DBSync streams for all supported spaces.
-%% Ignores spaces for which given stream is already present.
-%% @end
-%%--------------------------------------------------------------------
--spec start_streams() -> ok.
-start_streams() ->
-    lists:foreach(fun(Module) ->
-        lists:foreach(fun(SpaceId) ->
-            Name = {Module, SpaceId},
-            Pid = global:whereis_name(Name),
-            case {Pid, is_this_responsible_node(SpaceId), Module} of
-                {undefined, true, dbsync_in_stream} ->
-                    start_in_stream(SpaceId);
-                {undefined, true, dbsync_out_stream} ->
-                    start_out_stream(SpaceId);
-                _ ->
-                    ok
-            end
-        end, dbsync_utils:get_spaces())
-    end, [dbsync_in_stream, dbsync_out_stream]).
-
-%%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Starts incoming DBSync stream for a given space.
 %% @end
 %%--------------------------------------------------------------------
--spec start_in_stream(od_space:id()) -> supervisor:startchild_ret().
+-spec start_in_stream(od_space:id()) -> ok.
 start_in_stream(SpaceId) ->
     Spec = dbsync_in_stream_spec(SpaceId),
-    supervisor:start_child(?DBSYNC_WORKER_SUP, Spec).
+    {ok, _} = supervisor:start_child(?DBSYNC_WORKER_SUP, Spec),
+    ok.
+
+-spec stop_in_stream(od_space:id()) -> ok | no_return().
+stop_in_stream(SpaceId) ->
+    ok = supervisor:terminate_child(?DBSYNC_WORKER_SUP, ?IN_STREAM_ID(SpaceId)),
+    ok = supervisor:delete_child(?DBSYNC_WORKER_SUP, ?IN_STREAM_ID(SpaceId)).
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Starts outgoing DBSync stream for a given space.
 %% @end
 %%--------------------------------------------------------------------
--spec start_out_stream(od_space:id()) -> supervisor:startchild_ret().
+-spec start_out_stream(od_space:id()) -> ok.
 start_out_stream(SpaceId) ->
     Filter = fun
         (#document{mutators = [Mutator | _]}) ->
@@ -202,7 +190,17 @@ start_out_stream(SpaceId) ->
             ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(5)
         )}
     ]),
-    supervisor:start_child(?DBSYNC_WORKER_SUP, Spec).
+    {ok, _} = supervisor:start_child(?DBSYNC_WORKER_SUP, Spec),
+    ok.
+
+-spec stop_out_stream(od_space:id()) -> ok | no_return().
+stop_out_stream(SpaceId) ->
+    ok = supervisor:terminate_child(?DBSYNC_WORKER_SUP, ?OUT_STREAM_ID(SpaceId)),
+    ok = supervisor:delete_child(?DBSYNC_WORKER_SUP, ?OUT_STREAM_ID(SpaceId)).
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
@@ -260,7 +258,7 @@ handle_changes_request(ProviderId, #changes_request2{
                 )},
                 {register, true}
             ]),
-            Node = datastore_key:responsible_node(SpaceId),
+            Node = datastore_key:any_responsible_node(SpaceId),
             try
                 case rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]) of
                     {ok, _} -> ok;
@@ -290,8 +288,3 @@ handle_tree_broadcast(BroadcastMsg = #tree_broadcast2{
 }) ->
     handle_changes_batch(SrcProviderId, MsgId, Msg),
     dbsync_communicator:forward(BroadcastMsg).
-
-%% @private
--spec is_this_responsible_node(od_space:id()) -> boolean().
-is_this_responsible_node(SpaceId) ->
-    node() == datastore_key:responsible_node(SpaceId).

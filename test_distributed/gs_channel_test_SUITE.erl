@@ -246,7 +246,11 @@ init_per_testcase(oz_connection_test, Config) ->
     test_utils:set_env(Nodes, ?APP_NAME, graph_sync_path, ?PATH_CAUSING_CONN_ERROR),
     Config;
 init_per_testcase(async_request_handling_test, Config) ->
+    logic_tests_common:invalidate_all_test_records(Config),
     NewConfig = logic_tests_common:init_per_testcase(Config),
+    [Node | _] = ?config(op_worker_nodes, NewConfig),
+    UserIncRevSess = logic_tests_common:get_user_session(NewConfig, ?USER_INCREASING_REV),
+    rpc:call(Node, user_logic, get, [UserIncRevSess, ?USER_INCREASING_REV]),
     init_per_testcase(default, NewConfig);
 init_per_testcase(_, Config) ->
     Nodes = ?config(op_worker_nodes, Config),

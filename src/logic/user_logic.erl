@@ -25,7 +25,6 @@
 -include_lib("ctool/include/aai/aai.hrl").
 
 -export([get/2, get_protected_data/2, get_shared_data/3]).
--export([exists/2]).
 -export([get_full_name/1, get_full_name/3]).
 -export([fetch_idp_access_token/3]).
 -export([has_eff_group/2, has_eff_group/3]).
@@ -111,21 +110,6 @@ get_shared_data(Client, UserId, AuthHint) ->
         auth_hint = AuthHint,
         subscribe = true
     }).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Determines if given user exists.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(gs_client_worker:client(), od_user:id()) -> boolean().
-exists(Client, UserId) ->
-    % Shared scope is enough to determine existence, provider has access to
-    % shared scope of all supported users.
-    case get_protected_data(Client, UserId, ?THROUGH_PROVIDER(oneprovider:get_id())) of
-        {ok, _} -> true;
-        _ -> false
-    end.
 
 
 -spec get_full_name(od_user:id()) -> {ok, od_user:full_name()} | errors:error().

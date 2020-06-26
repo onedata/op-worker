@@ -96,5 +96,6 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 
 -spec start(od_space:id()) -> {ok, Pid :: pid()} | ignore | {error, Reason :: term()}.
 start(SpaceId) ->
-    Node = datastore_key:responsible_node(SpaceId),
+    % TODO VFS-6389 - maybe kill checkers when master is recovered to migrate them?
+    Node = datastore_key:any_responsible_node(SpaceId),
     rpc:call(Node, gen_server2, start, [?SERVER(SpaceId), ?MODULE, [SpaceId], []]).

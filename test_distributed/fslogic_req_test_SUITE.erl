@@ -186,12 +186,12 @@ fslogic_get_file_children_attrs_test(Config) ->
             end, lists:seq(1, length(AttrsList) + 1))
     end,
 
-    TestFun = fun({SessionId, Path, NameList, UserRootGuid}) ->
-        Files = lists:map(fun(Name) ->
-            {SessionId, Name, 8#775, 0, <<"/", Name/binary>>, UserRootGuid}
-        end, NameList),
+    TestFun = fun({SessionId, Path, NameList, OwnersList, UserRootGuid}) ->
+        Files = lists:map(fun({Name, Owner}) ->
+            {SessionId, Name, 8#775, ?ROOT_UID, <<"/", Name/binary>>, Owner, UserRootGuid}
+        end, lists:zip(NameList, OwnersList)),
 
-        FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, P, ParentGuid}) ->
+        FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, P, Owner, ParentGuid}) ->
             #fuse_response{fuse_response = #guid{guid = Guid}} =
                 ?assertMatch(
                     #fuse_response{status = #status{code = ?OK}},
@@ -201,7 +201,7 @@ fslogic_get_file_children_attrs_test(Config) ->
             #file_attr{
                 guid = Guid, name = Name, type = ?DIRECTORY_TYPE, mode = Mode,
                 uid = UID, parent_uuid = ParentGuid, provider_id = ProviderID,
-                owner_id = <<"0">>
+                owner_id = Owner
             }
         end, Files),
 
@@ -209,12 +209,22 @@ fslogic_get_file_children_attrs_test(Config) ->
     end,
 
     lists:foreach(TestFun, [
-        {SessId1, <<"/">>, [<<"space_name1">>, <<"space_name2">>,
-            <<"space_name3">>, <<"space_name4">>], UserRootGuid1},
-        {SessId2, <<"/">>, [<<"space_name2">>, <<"space_name3">>,
-            <<"space_name4">>], UserRootGuid2},
-        {SessId3, <<"/">>, [<<"space_name3">>, <<"space_name4">>], UserRootGuid3},
-        {SessId4, <<"/">>, [<<"space_name4">>], UserRootGuid4}
+        {SessId1, <<"/">>, 
+            [<<"space_name1">>, <<"space_name2">>, <<"space_name3">>, <<"space_name4">>], 
+            [?SPACE_OWNER_ID(SpaceId) || SpaceId <- [<<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>]],
+            UserRootGuid1
+        },
+        {SessId2, <<"/">>, 
+            [<<"space_name2">>, <<"space_name3">>, <<"space_name4">>],
+            [?SPACE_OWNER_ID(SpaceId) || SpaceId <- [<<"space_id2">>, <<"space_id3">>, <<"space_id4">>]],
+            UserRootGuid2
+        },
+        {SessId3, <<"/">>, 
+            [<<"space_name3">>, <<"space_name4">>],
+            [?SPACE_OWNER_ID(SpaceId) || SpaceId <- [<<"space_id3">>, <<"space_id4">>]],
+            UserRootGuid3
+        },
+        {SessId4, <<"/">>, [<<"space_name4">>], [?SPACE_OWNER_ID(<<"space_id4">>)], UserRootGuid4}
     ]),
 
     ?assertMatch(ok, test_utils:set_env(Worker, ?APP_NAME,

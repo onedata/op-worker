@@ -29,8 +29,7 @@
 -export_type([doc/0]).
 
 -define(CTX, #{
-    model => ?MODULE,
-    routing => local
+    model => ?MODULE
 }).
 -define(SYNC_CTX, #{
     model => ?MODULE,

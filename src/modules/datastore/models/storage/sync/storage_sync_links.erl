@@ -152,7 +152,7 @@ add_link_recursive(RootId, StorageFileId, StorageId, [ChildName | RestChildren],
 -spec list_internal(root_id(), undefined | datastore_links_iter:token(), non_neg_integer()) ->
     {{ok, [{link_name(), link_target()}]}, datastore_links_iter:token()} | {error, term()}.
 list_internal(RootId, Token, Limit) ->
-    Token2 = utils:ensure_defined(Token, undefined, #link_token{}),
+    Token2 = utils:ensure_defined(Token, #link_token{}),
     Opts = #{token => Token2},
     Opts2 = case Limit of
         all -> Opts;

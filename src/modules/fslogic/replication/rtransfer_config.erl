@@ -110,9 +110,9 @@ get_nodes(ProviderId) ->
 %%--------------------------------------------------------------------
 -spec open(FileUUID :: binary(), read | write) ->
     {ok, Handle :: term()} | {error, Reason :: any()}.
-open(FileGUID, _OpenFlag) ->
+open(FileGuid, _OpenFlag) ->
     % TODO vfs-4412 - delete second arg and change name
-    sd_utils:create_delayed_storage_file(file_ctx:new_by_guid(FileGUID)),
+    sd_utils:create_deferred(file_ctx:new_by_guid(FileGuid)),
     {ok, undefined}.
 
 %%--------------------------------------------------------------------
@@ -209,12 +209,12 @@ get_connection_secret(ProviderId, {_Host, _Port}) ->
 -spec add_storage(storage:id()) -> any().
 add_storage(StorageId) ->
     Helper = storage:get_helper(StorageId),
-    HelperParams = helper:get_params(Helper, helper:get_admin_ctx(Helper)),
-    HelperName = helper:get_name(HelperParams),
-    HelperArgs = maps:to_list(helper:get_args(HelperParams)),
+    AdminCtx = helper:get_admin_ctx(Helper),
+    {ok, HelperArgs} = helper:get_args_with_user_ctx(Helper, AdminCtx),
+    HelperName = helper:get_name(Helper),
     {_, BadNodes} = rpc:multicall(consistent_hashing:get_all_nodes(),
                                   rtransfer_link, add_storage,
-                                  [StorageId, HelperName, HelperArgs]),
+                                  [StorageId, HelperName, maps:to_list(HelperArgs)]),
     BadNodes =/= [] andalso
         ?error("Failed to add storage ~p on nodes ~p", [StorageId, BadNodes]).
 

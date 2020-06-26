@@ -16,12 +16,19 @@
 -include("proto/oneclient/common_messages.hrl").
 
 % API
--export([local_id/1, id/2, save_and_bump_version/2,
-    is_storage_file_created/1, get/2, get_local/1, get_version_vector/1]).
--export([create/1, create/2, create_and_update_quota/2, save/1,
-    save_and_update_quota/2, get/1, update/2,
-    delete/1, delete_and_update_quota/1, get_owner_id/1,
-    set_last_replication_timestamp/2, get_last_replication_timestamp/1]).
+-export([local_id/1, id/2]).
+-export([
+    get/1, get/2, get_local/1,
+    get_version_vector/1, get_owner_id/1, get_synced_gid/1,
+    get_last_replication_timestamp/1, is_storage_file_created/1
+]).
+-export([
+    create/2, create_and_update_quota/2,
+    save/1, save_and_bump_version/2, save_and_update_quota/2,
+    update/2, set_last_replication_timestamp/2,
+    delete/1, delete_and_update_quota/1
+]).
+
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -63,31 +70,7 @@ local_id(FileUuid) ->
 id(FileUuid, ProviderId) ->
     datastore_key:build_adjacent(ProviderId, FileUuid).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Increases version in version_vector and save document.
-%% @end
-%%--------------------------------------------------------------------
--spec save_and_bump_version(doc(), od_user:id()) -> {ok, doc()} | {error, term()}.
-save_and_bump_version(FileLocationDoc, UserId) ->
-    fslogic_location_cache:save_location(
-        version_vector:bump_version(FileLocationDoc), UserId).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates file location.
-%% @equiv create(Doc, false)
-%% @end
-%%--------------------------------------------------------------------
--spec create(doc()) -> {ok, doc()} | {error, term()}.
-create(Doc) ->
-    create(Doc, false).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates file location.
-%% @end
-%%--------------------------------------------------------------------
 -spec create(doc(), boolean()) -> {ok, doc()} | {error, term()}.
 create(Doc = #document{value = #file_location{space_id = SpaceId}}, true) ->
     datastore_model:save(?CTX#{generated_key => true},
@@ -95,11 +78,7 @@ create(Doc = #document{value = #file_location{space_id = SpaceId}}, true) ->
 create(Doc = #document{value = #file_location{space_id = SpaceId}}, _) ->
     datastore_model:create(?CTX, Doc#document{scope = SpaceId}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates file location and updates quota.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec create_and_update_quota(doc(), boolean()) -> {ok, doc()} | {error, term()}.
 create_and_update_quota(Doc = #document{value = #file_location{
     uuid = FileUuid,
@@ -123,20 +102,18 @@ create_and_update_quota(Doc = #document{value = #file_location{
                 Doc#document{scope = SpaceId})
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves file location.
-%% @end
-%%--------------------------------------------------------------------
+
+-spec save_and_bump_version(doc(), od_user:id()) -> {ok, doc()} | {error, term()}.
+save_and_bump_version(FileLocationDoc, UserId) ->
+    fslogic_location_cache:save_location(
+        version_vector:bump_version(FileLocationDoc), UserId).
+
+
 -spec save(doc()) -> {ok, id()} | {error, term()}.
 save(Doc = #document{value = #file_location{space_id = SpaceId}}) ->
     ?extract_key(datastore_model:save(?CTX, Doc#document{scope = SpaceId})).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Saves file location and updates quota.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec save_and_update_quota(doc(), od_user:id() | undefined) -> {ok, id()} | {error, term()}.
 save_and_update_quota(Doc = #document{
     value = #file_location{uuid = FileUuid}
@@ -171,14 +148,11 @@ save_and_update_quota(Doc = #document{
     end,
     ?extract_key(datastore_model:save(?CTX, Doc#document{scope = SpaceId})).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file location.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
     datastore_model:get(?CTX, Key).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -198,30 +172,18 @@ get(FileUuid, ProviderId) ->
 get_local(FileUuid) ->
     ?MODULE:get(FileUuid, oneprovider:get_id()).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates file location.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(Key, Diff) ->
     datastore_model:update(?CTX, Key, Diff).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes file location.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec delete(id()) -> ok | {error, term()}.
 delete(Key) ->
    % TODO VFS-4739 - delete links
    datastore_model:delete(?CTX, Key).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes file location and updates quota.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec delete_and_update_quota(id()) -> ok | {error, term()}.
 delete_and_update_quota(Key) ->
     case datastore_model:get(?CTX, Key) of
@@ -239,46 +201,35 @@ delete_and_update_quota(Key) ->
     end,
     datastore_model:delete(?CTX, Key).
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns value of storage_file_created field
-%% @end
-%%-------------------------------------------------------------------
--spec is_storage_file_created(doc() | record() | undefined) -> boolean().
-is_storage_file_created(undefined) ->
-    false;
+
+-spec is_storage_file_created(doc() | record()) -> boolean().
 is_storage_file_created(#file_location{storage_file_created = StorageFileCreated}) ->
     StorageFileCreated;
 is_storage_file_created(#document{value=FileLocation}) ->
     is_storage_file_created(FileLocation).
 
-%-------------------------------------------------------------------
-%% @doc
-%% Getter for version_vector field of #file_location{} record.
-%% @end
-%%-------------------------------------------------------------------
+
 -spec get_version_vector(doc() | record()) -> version_vector:version_vector().
 get_version_vector(#document{value = FileLocation}) ->
     get_version_vector(FileLocation);
 get_version_vector(#file_location{version_vector = VV}) ->
     VV.
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Sets last_replication_timestamp field in the doc.
-%% @end
-%%-------------------------------------------------------------------
+
 -spec get_last_replication_timestamp(doc() | record()) -> non_neg_integer() | undefined.
 get_last_replication_timestamp(#document{value = FL}) ->
     get_last_replication_timestamp(FL);
 get_last_replication_timestamp(FL = #file_location{}) ->
     FL#file_location.last_replication_timestamp.
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Sets last_replication_timestamp field in the doc.
-%% @end
-%%-------------------------------------------------------------------
+
+-spec get_synced_gid(doc() | record()) -> luma:gid() | undefined.
+get_synced_gid(#document{value = FL}) ->
+    get_synced_gid(FL);
+get_synced_gid(#file_location{synced_gid = SyncedGid}) ->
+    SyncedGid.
+
+
 -spec set_last_replication_timestamp(doc(), non_neg_integer()) -> doc().
 set_last_replication_timestamp(Doc = #document{value = FL}, Timestamp) ->
     Doc#document{
@@ -348,7 +299,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    5.
+    6.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -431,6 +382,24 @@ get_record_struct(5) ->
         {last_rename, {{string, string}, integer}},
         {storage_file_created, boolean},
         {last_replication_timestamp, integer}
+    ]};
+get_record_struct(6) ->
+    {record, [
+        {uuid, string},
+        {provider_id, string},
+        {storage_id, string},
+        {file_id, string},
+        {rename_src_file_id, string},
+        {blocks, [term]},
+        {version_vector, #{term => integer}},
+        {size, integer},
+        {space_id, string},
+        {recent_changes, {[term], [term]}},
+        {last_rename, {{string, string}, integer}},
+        {storage_file_created, boolean},
+        {last_replication_timestamp, integer},
+        % added field synced_gid
+        {synced_gid, integer}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -463,4 +432,10 @@ upgrade_record(4, {?MODULE, Uuid, ProviderId, StorageId, FileId, Blocks,
     {5, {?MODULE,
         Uuid, ProviderId, StorageId, FileId, undefined, Blocks, VersionVector, Size,
         SpaceId, RecentChanges, LastRename, StorageFileCreated, LastReplicationTimestamp
+    }};
+upgrade_record(5, {?MODULE, Uuid, ProviderId, StorageId, FileId, RenameSrcFileId, Blocks,
+    VersionVector, Size, SpaceId, RecentChanges, LastRename, StorageFileCreated, LastReplicationTimestamp}) ->
+    {6, {?MODULE,
+        Uuid, ProviderId, StorageId, FileId, RenameSrcFileId, Blocks, VersionVector, Size,
+        SpaceId, RecentChanges, LastRename, StorageFileCreated, LastReplicationTimestamp, undefined
     }}.

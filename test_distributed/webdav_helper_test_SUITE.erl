@@ -345,11 +345,11 @@ new_helper(Config) ->
         ?WEBDAV_HELPER_NAME,
         #{
             <<"endpoint">> => atom_to_binary(?config(endpoint, WebDAVConfig), utf8),
-            <<"rangeWriteSupport">> => atom_to_binary(?config(range_write_support, WebDAVConfig), utf8)
+            <<"rangeWriteSupport">> => atom_to_binary(?config(range_write_support, WebDAVConfig), utf8),
+            <<"storagePathType">> => ?CANONICAL_STORAGE_PATH,
+            <<"skipStorageDetection">> => <<"false">>
         },
-        UserCtx,
-        true,
-        ?CANONICAL_STORAGE_PATH
+        UserCtx
       ),
     spawn_link(Node, fun() ->
         helper_loop(Helper, UserCtx)

@@ -15,6 +15,7 @@
 -include("modules/datastore/qos.hrl").
 -include("modules/events/subscriptions.hrl").
 -include("modules/fslogic/fslogic_delete.hrl").
+-include("modules/storage/luma/luma.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
@@ -253,6 +254,10 @@
     direct_io = #{} :: #{od_space:id() => boolean()}
 }).
 
+% An empty model used for creating session local links
+% For more information see session_local_links.erl
+-record(session_local_links, {}).
+
 % Model used to cache idp access tokens
 -record(idp_access_token, {
     token :: idp_access_token:token(),
@@ -334,7 +339,7 @@
     possibility_check :: {possible | impossible, od_provider:id()}
 }).
 
-% This model holds information of QoS traverse state in a directory subtree in order 
+% This model holds information of QoS traverse state in a directory subtree in order
 % to calculate entry status.
 -record(qos_status, {
     % Initialize with empty binary so it always compares as lower than any actual filename
@@ -351,8 +356,7 @@
     type :: undefined | file_meta:type(),
     mode = 0 :: file_meta:posix_permissions(),
     acl = [] :: acl:acl(),
-    owner :: undefined | od_user:id(),
-    group_owner :: undefined | od_group:id(),
+    owner :: od_user:id(),
     is_scope = false :: boolean(),
     provider_id :: undefined | oneprovider:id(), %% ID of provider that created this file
     shares = [] :: [od_share:id()],
@@ -362,8 +366,7 @@
 
 -record(storage_config, {
     helper :: helpers:helper(),
-    readonly = false :: boolean(),
-    luma_config = undefined :: undefined | luma_config:config(),
+    luma_config :: storage:luma_config(),
     imported_storage = false :: boolean()
 }).
 
@@ -376,9 +379,12 @@
     luma_config = undefined :: undefined | luma_config:config()
 }).
 
--record(luma_config, {
-    url :: luma_config:url(),
-    api_key :: luma_config:api_key()
+
+-record(luma_db, {
+    table :: luma_db:table(),
+    record :: luma_db:db_record(),
+    storage_id :: storage:id(),
+    feed :: luma:feed()
 }).
 
 %% Model that maps space to storage
@@ -522,7 +528,12 @@
     },
     last_rename :: undefined | replica_changes:last_rename(),
     storage_file_created = false :: boolean(),
-    last_replication_timestamp :: non_neg_integer() | undefined
+    last_replication_timestamp :: non_neg_integer() | undefined,
+    % synced_gid field is set by storage_sync, only on POSIX-compatible storages.
+    % It is used to override display gid, only in
+    % the syncing provider, with the gid that file
+    % belongs to on synced storage.
+    synced_gid :: undefined | luma:gid()
 }).
 
 %% Model for storing file's blocks
@@ -533,7 +544,12 @@
 
 %% Model for storing dir's location data
 -record(dir_location, {
-    storage_file_created = false :: boolean()
+    storage_file_created = false :: boolean(),
+    % synced_gid field is set by storage_sync, only on POSIX-compatible storages.
+    % It is used to override display gid, only in
+    % the syncing provider, with the gid that file
+    % belongs to on synced storage.
+    synced_gid :: undefined | luma:gid()
 }).
 
 %% Model that stores configuration of storage_sync mechanism
@@ -697,8 +713,6 @@
     ctime = 0 :: times:time(),
     mtime = 0 :: times:time()
 }).
-
--record(luma_cache, {}).
 
 %% Model that tracks popularity of file
 -record(file_popularity, {

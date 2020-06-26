@@ -375,7 +375,7 @@ delegate_request_insecure(proc, HandlerFun, ReqId, RespondVia) ->
     delegate_proc_request_insecure(node(), HandlerFun, ReqId, RespondVia);
 
 delegate_request_insecure({proc, Key}, HandlerFun, ReqId, RespondVia) ->
-    Node = datastore_key:responsible_node(Key),
+    Node = datastore_key:any_responsible_node(Key),
     delegate_proc_request_insecure(Node, HandlerFun, ReqId, RespondVia);
 
 delegate_request_insecure(WorkerRef, Req, ReqId, RespondVia) ->

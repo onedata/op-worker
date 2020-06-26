@@ -28,8 +28,7 @@
 %% #{
 %%     <<"idp">> => binary(),
 %%     <<"subjectId">> => binary(),
-%%     <<"name">> => undefined | binary(),
-%%     <<"login">> => undefined | binary(),
+%%     <<"username">> => undefined | binary(),
 %%     <<"emails">> => [binary()],
 %%     <<"entitlements">> => [binary()],
 %%     <<"custom">> => jiffy:json_value()
@@ -94,7 +93,7 @@ run_after(_Function, _Args, Result) ->
 run_after(Doc = #document{key = UserId, value = #od_user{eff_spaces = EffSpaces}}) ->
     ok = file_meta:setup_onedata_user(UserId, EffSpaces),
     ok = permissions_cache:invalidate(),
-    ok = files_to_chown:chown_pending_files(UserId),
+    ok = files_to_chown:chown_deferred_files(UserId),
     {ok, Doc}.
 
 %%%===================================================================

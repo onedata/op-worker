@@ -54,7 +54,7 @@ fslogic_ref_by_context_guid(ContextGuid) ->
 -spec gen_key_node(node()) -> datastore:key().
 gen_key_node(TargetNode) ->
     Key = datastore_key:new(),
-    case datastore_key:responsible_node(Key) of
+    case datastore_key:any_responsible_node(Key) of
         TargetNode ->
             Key;
         _ ->

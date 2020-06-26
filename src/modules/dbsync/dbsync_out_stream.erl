@@ -311,5 +311,7 @@ handle_doc_change(#document{seq = Seq} = Doc, _Filter,
 -spec get_batch_timestamp([datastore:doc()]) -> dbsync_changes:timestamp().
 get_batch_timestamp([]) ->
     undefined;
+get_batch_timestamp([#document{timestamp = null} | _]) ->
+    undefined;
 get_batch_timestamp([#document{timestamp = Timestamp} | _]) ->
     Timestamp.

@@ -134,7 +134,8 @@ cleanup_traverse_stage_test(Config) ->
     
     % Relative paths to space dir. Empty binary represents space dir.
     AllPaths = [<<"">>, DirPath, F1Path, F2Path],
-    check_files_on_storage(Worker1, AllPaths, true),
+    AllPathsWithoutSpace = [DirPath, F1Path, F2Path],
+    check_files_on_storage(Worker1, AllPaths, true, true),
     
     StageJob = #space_unsupport_job{
         stage = cleanup_traverse,
@@ -143,8 +144,7 @@ cleanup_traverse_stage_test(Config) ->
     },
     
     ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
-    
-    check_files_on_storage(Worker1, AllPaths, false),
+    check_files_on_storage(Worker1, AllPathsWithoutSpace, false, true),
     assert_storage_cleaned_up(Worker1, StorageId),
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
@@ -165,7 +165,7 @@ cleanup_traverse_stage_with_import_test(Config) ->
     
     % Relative paths to space dir. Empty binary represents space dir.
     AllPaths = [<<"">>, DirPath, F1Path, F2Path],
-    check_files_on_storage(Worker1, AllPaths, true),
+    check_files_on_storage(Worker1, AllPaths, true, true),
     
     StageJob = #space_unsupport_job{
         stage = cleanup_traverse,
@@ -175,7 +175,7 @@ cleanup_traverse_stage_with_import_test(Config) ->
     
     ok = rpc:call(Worker1, space_unsupport, do_slave_job, [StageJob, ?TASK_ID]),
     
-    check_files_on_storage(Worker1, AllPaths, true),
+    check_files_on_storage(Worker1, AllPaths, true, true),
     check_distribution(Workers, SessId, [], G1),
     check_distribution(Workers, SessId, [], G2),
     
@@ -385,10 +385,12 @@ assert_local_documents_cleaned_up(Worker, SpaceId, StorageId) ->
 assert_local_documents_cleaned_up(Worker) ->
     AllModels = datastore_config_plugin:get_models(),
     ModelsToCheck = AllModels
-        -- [storage_config, provider_auth, % Models not connected with space support
-            file_meta, times, %% These documents without scope are related to user root dir, which is not cleaned up during unsupport
+        -- [storage_config, provider_auth, % Models not associated with space support
+            file_meta, times, %% These documents without scope are related to user root dir,
+                              %% which is not cleaned up during unsupport
             dbsync_state,
-            file_local_blocks %% @TODO VFS-6275 check after file_local_blocks cleanup is properly implemented
+            file_local_blocks, %% @TODO VFS-6275 check after file_local_blocks cleanup is properly implemented
+            luma_db % These documents are associated with storage, not with space support
         ],
     assert_documents_cleaned_up(Worker, <<>>, ModelsToCheck).
 
@@ -528,16 +530,19 @@ check_distribution(Workers, SessId, Desc, Guid) ->
         )
     end, Workers).
 
-check_files_on_storage(Worker, FilesList, ShouldExist) ->
+check_files_on_storage(Worker, FilesList, ShouldExist, IsImportedStorage) ->
     lists:foreach(fun(FileRelativePath) ->
-        StoragePath = storage_file_path(Worker, ?SPACE_ID, FileRelativePath),
+        StoragePath = storage_file_path(Worker, ?SPACE_ID, FileRelativePath, IsImportedStorage),
         ?assertEqual(ShouldExist, check_exists_on_storage(Worker, StoragePath))
     end, FilesList).
 
 check_exists_on_storage(Worker, StorageFilePath) ->
     rpc:call(Worker, filelib, is_file, [StorageFilePath]).
 
-storage_file_path(Worker, SpaceId, FilePath) ->
+storage_file_path(Worker, SpaceId, FilePath, true) ->
+    SpaceMnt = get_space_mount_point(Worker, SpaceId),
+    filename:join([SpaceMnt, FilePath]);
+storage_file_path(Worker, SpaceId, FilePath, false) ->
     SpaceMnt = get_space_mount_point(Worker, SpaceId),
     filename:join([SpaceMnt, SpaceId, FilePath]).
 

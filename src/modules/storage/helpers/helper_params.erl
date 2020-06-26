@@ -8,6 +8,7 @@
 %%% @doc
 %%% Module used for creation and validation of helper
 %%% argument and user/group ctx maps.
+%%% TODO VFS-6312 use middleware_sanitizer to parse helper params instead of custom functions
 %%% @end
 %%%-------------------------------------------------------------------
 -module(helper_params).
@@ -21,7 +22,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([validate_args/2, validate_user_ctx/2, validate_group_ctx/2]).
+-export([validate_args/2, validate_user_ctx/2]).
 -export([default_admin_ctx/1]).
 
 %% Onepanel RPC API
@@ -30,8 +31,6 @@
 -type name() :: helper:name().
 -type args() :: helper:args().
 -type user_ctx() :: helper:user_ctx().
--type group_ctx() :: helper:group_ctx().
--type ctx() :: user_ctx() | group_ctx().
 
 -type field() :: binary().
 -type optional_field() :: {optional, field()}.
@@ -81,7 +80,7 @@ derive_scheme_from_url(Params) -> Params.
 %% but is not verified to contain all required fields.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_user_ctx_params(name(), ctx()) -> ctx().
+-spec prepare_user_ctx_params(name(), user_ctx()) -> user_ctx().
 prepare_user_ctx_params(?WEBDAV_HELPER_NAME = HelperName, Params) ->
     Ctx1 = clear_unused_webdav_credentials(Params),
     Ctx2 = resolve_user_by_token(Ctx1),
@@ -154,25 +153,6 @@ validate_user_ctx(StorageType, UserCtx) ->
 
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether user context is valid for the storage helper.
-%% @end
-%%--------------------------------------------------------------------
--spec validate_group_ctx(helpers:helper(), group_ctx()) ->
-    ok | {error, Reason :: term()}.
-validate_group_ctx(#helper{name = ?POSIX_HELPER_NAME}, GroupCtx) ->
-    validate_fields([<<"gid">>], GroupCtx);
-validate_group_ctx(#helper{name = ?GLUSTERFS_HELPER_NAME}, GroupCtx) ->
-    validate_fields([<<"gid">>], GroupCtx);
-validate_group_ctx(#helper{name = ?NULL_DEVICE_HELPER_NAME}, GroupCtx) ->
-    validate_fields([<<"gid">>], GroupCtx);
-validate_group_ctx(#helper{name = ?WEBDAV_HELPER_NAME}, _GroupCtx) ->
-    ok;
-validate_group_ctx(#helper{name = HelperName}, _GroupCtx) ->
-    {error, {group_ctx_not_supported, HelperName}}.
-
-
 -spec default_admin_ctx(name()) -> user_ctx().
 default_admin_ctx(HelperName) when
     HelperName == ?POSIX_HELPER_NAME;
@@ -190,43 +170,55 @@ default_admin_ctx(_) ->
 %% @private
 -spec expected_helper_args(name()) ->
     [field() | optional_field()].
-expected_helper_args(?CEPH_HELPER_NAME) -> [
+expected_helper_args(HelperName) ->
+    expected_custom_helper_args(HelperName) ++ expected_generic_helper_args().
+
+%% @private
+-spec expected_custom_helper_args(name()) ->
+    [field() | optional_field()].
+expected_custom_helper_args(?CEPH_HELPER_NAME) -> [
+    <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>];
+expected_custom_helper_args(?CEPHRADOS_HELPER_NAME) -> [
     <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>,
-    {optional, <<"timeout">>}];
-expected_helper_args(?CEPHRADOS_HELPER_NAME) -> [
-    <<"monitorHostname">>, <<"clusterName">>, <<"poolName">>,
-    {optional, <<"timeout">>}, {optional, <<"blockSize">>}];
-expected_helper_args(?POSIX_HELPER_NAME) -> [
-    <<"mountPoint">>,
-    {optional, <<"timeout">>}];
-expected_helper_args(?S3_HELPER_NAME) -> [
+    {optional, <<"blockSize">>}];
+expected_custom_helper_args(?POSIX_HELPER_NAME) -> [
+    <<"mountPoint">>];
+expected_custom_helper_args(?S3_HELPER_NAME) -> [
     <<"hostname">>, <<"bucketName">>, <<"scheme">>,
-    {optional, <<"timeout">>}, {optional, <<"signatureVersion">>},
+    {optional, <<"signatureVersion">>},
     {optional, <<"maximumCanonicalObjectSize">>},
     {optional, <<"fileMode">>}, {optional, <<"dirMode">>},
     {optional, <<"blockSize">>}];
-expected_helper_args(?SWIFT_HELPER_NAME) -> [
+expected_custom_helper_args(?SWIFT_HELPER_NAME) -> [
     <<"authUrl">>, <<"containerName">>, <<"tenantName">>,
-    {optional, <<"timeout">>}, {optional, <<"blockSize">>}];
-expected_helper_args(?GLUSTERFS_HELPER_NAME) -> [
+    {optional, <<"blockSize">>}];
+expected_custom_helper_args(?GLUSTERFS_HELPER_NAME) -> [
     <<"volume">>, <<"hostname">>,
     {optional, <<"port">>}, {optional, <<"mountPoint">>},
     {optional, <<"transport">>}, {optional, <<"xlatorOptions">>},
-    {optional, <<"timeout">>}, {optional, <<"blockSize">>}];
-expected_helper_args(?WEBDAV_HELPER_NAME) -> [
+    {optional, <<"blockSize">>}];
+expected_custom_helper_args(?WEBDAV_HELPER_NAME) -> [
     <<"endpoint">>,
     {optional, <<"oauth2IdP">>},
-    {optional, <<"timeout">>}, {optional, <<"verifyServerCertificate">>},
+    {optional, <<"verifyServerCertificate">>},
     {optional, <<"authorizationHeader">>}, {optional, <<"rangeWriteSupport">>},
     {optional, <<"connectionPoolSize">>}, {optional, <<"maximumUploadSize">>},
     {optional, <<"fileMode">>}, {optional, <<"dirMode">>}];
-expected_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
-    {optional, <<"timeout">>}, {optional, <<"latencyMin">>},
-    {optional, <<"latencyMax">>}, {optional, <<"timeoutProbability">>},
+expected_custom_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
+    {optional, <<"latencyMin">>},
+    {optional, <<"latencyMax">>},
+    {optional, <<"timeoutProbability">>},
     {optional, <<"filter">>},
     {optional, <<"simulatedFilesystemParameters">>},
     {optional, <<"simulatedFilesystemGrowSpeed">>}].
 
+
+-spec expected_generic_helper_args() -> [field() | optional_field()].
+expected_generic_helper_args() -> [
+    <<"storagePathType">>,
+    {optional, <<"skipStorageDetection">>},
+    {optional, <<"timeout">>}
+].
 
 %%--------------------------------------------------------------------
 %% @private
@@ -240,13 +232,13 @@ expected_user_ctx_params(?CEPH_HELPER_NAME) ->
 expected_user_ctx_params(?CEPHRADOS_HELPER_NAME) ->
     [<<"username">>, <<"key">>];
 expected_user_ctx_params(?POSIX_HELPER_NAME) ->
-    [<<"uid">>, <<"gid">>];
+    [<<"uid">>, {optional, <<"gid">>}];
 expected_user_ctx_params(?S3_HELPER_NAME) ->
     [<<"accessKey">>, <<"secretKey">>];
 expected_user_ctx_params(?SWIFT_HELPER_NAME) ->
     [<<"username">>, <<"password">>];
 expected_user_ctx_params(?GLUSTERFS_HELPER_NAME) ->
-    [<<"uid">>, <<"gid">>];
+    [<<"uid">>, {optional, <<"gid">>}];
 expected_user_ctx_params(?WEBDAV_HELPER_NAME) ->
     [<<"credentialsType">>,
         {optional, <<"credentials">>}, {optional, <<"adminId">>},
@@ -254,7 +246,7 @@ expected_user_ctx_params(?WEBDAV_HELPER_NAME) ->
         {optional, <<"accessTokenTTL">>}
     ];
 expected_user_ctx_params(?NULL_DEVICE_HELPER_NAME) ->
-    [<<"uid">>, <<"gid">>].
+    [<<"uid">>, {optional, <<"gid">>}].
 
 %%%===================================================================
 %%% Internal helpers
@@ -267,7 +259,7 @@ expected_user_ctx_params(?NULL_DEVICE_HELPER_NAME) ->
 %% Removes unknown fields from args or ctx map.
 %% @end
 %%--------------------------------------------------------------------
--spec filter_fields([field_spec()], args() | ctx()) -> args() | ctx().
+-spec filter_fields([field_spec()], args() | user_ctx()) -> args() | user_ctx().
 filter_fields(AllowedFields, Map) ->
     Fields = strip_optional_modifier(AllowedFields),
     maps:with(Fields, Map).

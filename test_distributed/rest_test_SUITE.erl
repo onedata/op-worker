@@ -290,16 +290,6 @@ mock_user_logic(Config) ->
     initializer:mock_auth_manager(Config),
 
     test_utils:mock_expect(Workers, user_logic, get, GetUserFun),
-    test_utils:mock_expect(Workers, user_logic, exists,
-        fun(Auth, UserId) ->
-            case GetUserFun(Auth, UserId) of
-                {ok, _} ->
-                    true;
-                _ ->
-                    false
-            end
-        end
-    ),
     [rpc:call(W, file_meta, setup_onedata_user, [?USER_ID, []]) || W <- Workers].
 
 

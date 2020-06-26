@@ -251,7 +251,7 @@ rerun_ended(UserId, #document{key = TransferId, value = Transfer}) ->
                 query_view_params = QueryViewParams
             } = Transfer,
 
-            NewUserId = utils:ensure_defined(UserId, undefined, OldUserId),
+            NewUserId = utils:ensure_defined(UserId, OldUserId),
             FileGuid = file_id:pack_guid(FileUuid, SpaceId),
 
             {ok, NewTransferId} = start_for_user(NewUserId, FileGuid, FilePath,
@@ -913,7 +913,7 @@ get_posthooks() ->
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(Version) ->
-    transfer_upgrader:get_record_struct(Version).
+    transfer_model:get_record_struct(Version).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -923,7 +923,7 @@ get_record_struct(Version) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(Version, Record) ->
-    transfer_upgrader:upgrade_record(Version, Record).
+    transfer_model:upgrade_record(Version, Record).
 
 %%--------------------------------------------------------------------
 %% @doc

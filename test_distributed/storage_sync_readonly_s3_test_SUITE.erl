@@ -16,6 +16,8 @@
 
 -include_lib("ctool/include/test/performance.hrl").
 
+% TODO VFS-6161 divide to smaller test suites, maybe get rid of readonly test SUITES as all imported storages are mounted in root
+
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 

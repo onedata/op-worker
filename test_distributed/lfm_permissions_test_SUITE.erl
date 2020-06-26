@@ -974,7 +974,13 @@ create_and_open_test(Config) ->
         root_dir = ?SCENARIO_NAME,
         files = [#dir{
             name = <<"dir1">>,
-            perms = [?traverse_container, ?add_object]
+            perms = [?traverse_container, ?add_object],
+            on_create = fun(OwnerSessId, Guid) ->
+                % Create dummy file to ensure that directory is created on storage.
+                % Otherwise it may be not possible during tests without necessary perms.
+                create_dummy_file(W, OwnerSessId, Guid),
+                {guid, Guid}
+            end
         }],
         posix_requires_space_privs = [?SPACE_WRITE_DATA],
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
@@ -2195,6 +2201,12 @@ fill_file_with_dummy_data(Node, SessId, Guid) ->
     ?assertMatch(ok, lfm_proxy:fsync(Node, FileHandle)),
     ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
 
+-spec create_dummy_file(node(), session:id(), file_id:file_guid()) -> ok.
+create_dummy_file(Node, SessId, DirGuid) ->
+    RandomFileName = <<"DUMMY_FILE_", (integer_to_binary(rand:uniform(1024)))/binary>>,
+    {ok, {_Guid, FileHandle}} =
+        lfm_proxy:create_and_open(Node, SessId, DirGuid, RandomFileName, 8#664),
+    ?assertMatch(ok, lfm_proxy:close(Node, FileHandle)).
 
 -spec extract_ok
     (ok | {ok, term()} | {ok, term(), term()} | {ok, term(), term(), term()}) -> ok;
