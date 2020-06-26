@@ -49,27 +49,32 @@ upgrade_from_19_02_x_storages(Config) ->
     SpaceId = <<"space_id1">>,
 
     St = <<"storage1">>,
-    Helper = #helper{
-        name = <<"HelperName">>,
-        args = #{},
-        admin_ctx = #{},
-        insecure = false,
-        extended_direct_io = true,
-        storage_path_type = <<"storage_path_type">>
+    Readonly = false,
+    Helper = {helper,
+        <<"HelperName">>,
+        Args = #{}, % args
+        AdminCtx = #{}, % admin_ctx
+        false, % insecure
+        true, % extended_direct_io
+        StoragePathType = <<"storage_path_type">> % storage_path_type
     },
-    LumaConfig = #luma_config{
-        url = <<"https://example.com">>,
-        api_key = <<"api_key">>
+    ExpectedHelper = {helper,
+        <<"HelperName">>,
+        Args#{
+            <<"skipStorageDetection">> => atom_to_binary(Readonly, utf8),
+            <<"storagePathType">> => StoragePathType
+        }, % args
+        AdminCtx
     },
+    LumaConfig = luma_config:new_with_external_feed(<<"https://example.com">>, <<"api_key">>),
     Storage = #storage{
         name = St,
         helpers = [Helper],
-        readonly = false,
+        readonly = Readonly,
         luma_config = LumaConfig
     },
     ExpectedStorageConfig = #storage_config{
-        helper = Helper,
-        readonly = false,
+        helper = ExpectedHelper,
         luma_config = LumaConfig,
         imported_storage = false
     },
@@ -99,8 +104,8 @@ upgrade_from_20_02_0_beta3_storages(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     
     St = <<"storage2">>,
-    rpc:call(Worker, storage_config, create, [St, #helper{}, false, undefined]),
-    rpc:call(Worker, datastore_model, update, [storage_config:get_ctx(), St, 
+    {ok, _} = rpc:call(Worker, storage_config, create, [St, #helper{}, undefined]),
+    {ok, _} = rpc:call(Worker, datastore_model, update, [storage_config:get_ctx(), St,
         fun(StorageConfig) -> {ok, StorageConfig#storage_config{imported_storage = true}} end]),
     test_utils:mock_expect(Worker, provider_logic, get_storage_ids, fun() -> {ok, [St]} end),
     

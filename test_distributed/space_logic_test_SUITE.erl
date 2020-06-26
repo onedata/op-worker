@@ -48,34 +48,34 @@ get_test(Config) ->
     % User 3 does not have access to the space
     User3Sess = logic_tests_common:get_user_session(Config, ?USER_3),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_space),
 
     ?assertMatch(
         {ok, ?SPACE_PRIVATE_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Space private data should now be cached
     ?assertMatch(
         {ok, ?SPACE_PRIVATE_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Make sure that provider can access cached data
     ?assertMatch(
         {ok, ?SPACE_PRIVATE_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get, [?ROOT_SESS_ID, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Make sure that other users cannot access cached data
     ?assertMatch(
         ?ERROR_FORBIDDEN,
         rpc:call(Node, space_logic, get, [User3Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Make sure that provider can access non-cached data
     logic_tests_common:invalidate_cache(Config, od_space, ?SPACE_1),
@@ -83,7 +83,7 @@ get_test(Config) ->
         {ok, ?SPACE_PRIVATE_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get, [?ROOT_SESS_ID, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Make sure that other users cannot access non-cached data
     logic_tests_common:invalidate_cache(Config, od_space, ?SPACE_1),
@@ -91,7 +91,7 @@ get_test(Config) ->
         ?ERROR_FORBIDDEN,
         rpc:call(Node, space_logic, get, [User3Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     ok.
 
@@ -103,27 +103,26 @@ get_protected_data_test(Config) ->
     % User 3 does not have access to the space
     User3Sess = logic_tests_common:get_user_session(Config, ?USER_3),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_space),
     ?assertMatch(
         {ok, ?SPACE_PROTECTED_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get_protected_data, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Space protected data should now be cached
     ?assertMatch(
         {ok, ?SPACE_PROTECTED_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get_protected_data, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Make sure that provider can access cached data
     ?assertMatch(
         {ok, ?SPACE_PROTECTED_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get_protected_data, [?ROOT_SESS_ID, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Provider should also be able to fetch non-cached data
     logic_tests_common:invalidate_cache(Config, od_space, ?SPACE_1),
@@ -131,14 +130,14 @@ get_protected_data_test(Config) ->
         {ok, ?SPACE_PROTECTED_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get_protected_data, [?ROOT_SESS_ID, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Make sure that other users cannot access cached data
     ?assertMatch(
         ?ERROR_FORBIDDEN,
         rpc:call(Node, space_logic, get, [User3Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Make sure that other users cannot access non-cached data
     logic_tests_common:invalidate_cache(Config, od_space, ?SPACE_1),
@@ -146,7 +145,7 @@ get_protected_data_test(Config) ->
         ?ERROR_FORBIDDEN,
         rpc:call(Node, space_logic, get, [User3Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     ok.
 
@@ -156,23 +155,23 @@ mixed_get_test(Config) ->
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
-    UnsubCalls = logic_tests_common:count_reqs(Config, unsub),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_space),
+    UnsubCalls = logic_tests_common:count_reqs(Config, unsub, od_space),
 
     % Fetching rising scopes should cause an unsub and new fetch every time
     ?assertMatch(
         {ok, ?SPACE_PROTECTED_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get_protected_data, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
+    ?assertEqual(UnsubCalls, logic_tests_common:count_reqs(Config, unsub, od_space)),
 
     ?assertMatch(
         {ok, ?SPACE_PRIVATE_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_space)),
 
     % When private data is cached, any scope should always be fetched from cache
 
@@ -180,15 +179,15 @@ mixed_get_test(Config) ->
         {ok, ?SPACE_PRIVATE_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_space)),
 
     ?assertMatch(
         {ok, ?SPACE_PROTECTED_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get_protected_data, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
-    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
+    ?assertEqual(UnsubCalls + 1, logic_tests_common:count_reqs(Config, unsub, od_space)),
 
     ok.
 
@@ -202,14 +201,14 @@ subscribe_test(Config) ->
     Space1PrivateGRI = #gri{type = od_space, id = ?SPACE_1, aspect = instance, scope = private},
     Space1PrivateData = ?SPACE_PRIVATE_DATA_VALUE(?SPACE_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_space),
 
     % protected scope
     ?assertMatch(
         {ok, ?SPACE_PROTECTED_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get_protected_data, [?ROOT_SESS_ID, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     ChangedData1 = Space1ProtectedData#{
         <<"revision">> => 12,
@@ -225,7 +224,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, space_logic, get_protected_data, [?ROOT_SESS_ID, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % private scope
     logic_tests_common:invalidate_cache(Config, od_space, ?SPACE_1),
@@ -233,7 +232,7 @@ subscribe_test(Config) ->
         {ok, ?SPACE_PRIVATE_DATA_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get, [?ROOT_SESS_ID, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     ChangedData2 = Space1PrivateData#{
         <<"revision">> => 23,
@@ -249,14 +248,14 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, space_logic, get, [?ROOT_SESS_ID, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
     ?assertMatch(
         {ok, #document{key = ?SPACE_1, value = #od_space{
             name = <<"changedName2">>
         }}},
         rpc:call(Node, space_logic, get_protected_data, [?ROOT_SESS_ID, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Simulate a 'deleted' push and see if cache was invalidated
     PushMessage4 = #gs_push_graph{gri = Space1PrivateGRI, change_type = deleted},
@@ -289,7 +288,7 @@ convenience_functions_test(Config) ->
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_space),
 
     % Test convenience functions and if they fetch correct scopes
 
@@ -298,21 +297,21 @@ convenience_functions_test(Config) ->
         {ok, ?SPACE_NAME(?SPACE_1)},
         rpc:call(Node, space_logic, get_name, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Eff users are within private scope
     ?assertMatch(
         {ok, ?SPACE_EFF_USERS_MATCHER(?SPACE_1)},
         rpc:call(Node, space_logic, get_eff_users, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Shares are within private scope
     ?assertMatch(
         {ok, ?SPACE_SHARES(?SPACE_1)},
         rpc:call(Node, space_logic, get_shares, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Providers are within private scope
     ExpProviderIds = maps:keys(?SPACE_PROVIDERS_VALUE(?SPACE_1)),
@@ -320,19 +319,19 @@ convenience_functions_test(Config) ->
         {ok, ExpProviderIds},
         rpc:call(Node, space_logic, get_provider_ids, [User1Sess, ?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % Eff users are within private scope
     ?assertMatch(
         true,
         rpc:call(Node, space_logic, has_eff_user, [User1Sess, ?SPACE_1, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
     ?assertMatch(
         false,
         rpc:call(Node, space_logic, has_eff_user, [User1Sess, ?SPACE_1, ?USER_3])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % User eff privileges are within private scope,
     % mocked users only have SPACE_VIEW privileges
@@ -340,56 +339,56 @@ convenience_functions_test(Config) ->
         true,
         rpc:call(Node, space_logic, has_eff_privilege, [?SPACE_1, ?USER_1, ?SPACE_VIEW])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
     ?assertMatch(
         false,
         rpc:call(Node, space_logic, has_eff_privilege, [?SPACE_1, ?USER_3, ?SPACE_VIEW])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
     ?assertMatch(
         false,
         rpc:call(Node, space_logic, has_eff_privilege, [?SPACE_1, ?USER_1, ?SPACE_ADD_USER])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     % can_view_user_through_space and can_view_group_through_space require private scope
     ?assertMatch(
         true,
         rpc:call(Node, space_logic, can_view_user_through_space, [User1Sess, ?SPACE_1, ?USER_1, ?USER_2])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
     ?assertMatch(
         false,
         rpc:call(Node, space_logic, can_view_user_through_space, [User1Sess, ?SPACE_1, ?USER_1, ?USER_3])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
     ?assertMatch(
         false,
         rpc:call(Node, space_logic, can_view_user_through_space, [User1Sess, ?SPACE_1, ?USER_3, ?USER_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     ?assertMatch(
         true,
         rpc:call(Node, space_logic, can_view_group_through_space, [User1Sess, ?SPACE_1, ?USER_1, ?GROUP_2])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
     ?assertMatch(
         false,
         rpc:call(Node, space_logic, can_view_group_through_space, [User1Sess, ?SPACE_1, ?USER_1, <<"wrongId">>])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
     ?assertMatch(
         false,
         rpc:call(Node, space_logic, can_view_group_through_space, [User1Sess, ?SPACE_1, ?USER_3, ?GROUP_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     ?assertMatch(
         {ok, ?SPACE_HARVESTERS(?SPACE_1)},
         rpc:call(Node, space_logic, get_harvesters, [?SPACE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     ok.
 
@@ -397,16 +396,16 @@ convenience_functions_test(Config) ->
 harvest_metadata_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_space),
 
     ?assertMatch(ok, rpc:call(Node, space_logic, harvest_metadata,
         [?SPACE_1, #{}, [], 100, 100])),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     ?assertMatch(ok, rpc:call(Node, space_logic, harvest_metadata,
         [?SPACE_1, #{}, [], 100, 100])),
 
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
     ok.
 
@@ -429,10 +428,11 @@ confined_access_token_test(Config) ->
         ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(Caveat)),
         rpc:call(Node, space_logic, get, [TokenCredentials, ?SPACE_2])
     ),
-    % Nevertheless, GraphCalls should be increased by 2 as:
-    % 1) TokenCredentials was verified to retrieve caveats
-    % 2) auth_manager fetched token data to subscribe itself for updates from oz
-    ?assertEqual(GraphCalls+2, logic_tests_common:count_reqs(Config, graph)).
+    % Nevertheless, GraphCalls should be increased by 3 as following requests should be made:
+    % - first to verify token credentials,
+    % - second to subscribe for token revocation notifications in oz,
+    % - third to fetch user data to initialize userRootDir, etc.
+    ?assertEqual(GraphCalls+3, logic_tests_common:count_reqs(Config, graph)).
 
 %%%===================================================================
 %%% SetUp and TearDown functions

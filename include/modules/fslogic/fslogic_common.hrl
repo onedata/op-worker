@@ -18,9 +18,6 @@
 -include("modules/storage/helpers/helpers.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 
-%% helper macro for not implemented functions
--define(NOT_IMPLEMENTED, erlang:error(not_yet_implemented)).
-
 %% Common names
 -define(DIRECTORY_SEPARATOR, "/").
 -define(DIRECTORY_SEPARATOR_BINARY, list_to_binary(?DIRECTORY_SEPARATOR)).
@@ -41,6 +38,10 @@
 -define(ROOT_USER_ID, <<"0">>).
 -define(ROOT_IDENTITY, ?SUB(root, ?ROOT_USER_ID)).
 -define(ROOT_SESS_ID, <<"0">>).
+%% posix compatible display credentials of root user
+-define(ROOT_UID, 0).
+-define(ROOT_GID, 0).
+
 %% guest user definitions
 -define(GUEST_CREDENTIALS, guest_credentials).
 -define(GUEST_USER_ID, <<"nobody">>).
@@ -48,10 +49,15 @@
 -define(GUEST_SESS_ID, <<"nobody">>).
 -define(GUEST, #auth{subject = ?GUEST_IDENTITY, session_id = ?GUEST_SESS_ID}).
 
--define(DEFAULT_SPACE_DIR_MODE, 8#775).
+%% Virtual space owner
+-define(SPACE_OWNER_PREFIX_STR, "VIRTUAL_SPACE_OWNER_").
+-define(SPACE_OWNER_ID(SpaceId), <<?SPACE_OWNER_PREFIX_STR, SpaceId/binary>>).
 
-%% Mode for automatically created parent directory while creating file/directory.
--define(AUTO_CREATED_PARENT_DIR_MODE, 8#333).
+%% Default mode for regular files
+-define(DEFAULT_FILE_PERMS, 8#664).
+
+%% Default mode for directories
+-define(DEFAULT_DIR_PERMS, 8#775).
 
 %% Mode of deleted opened files directory
 -define(DELETED_OPENED_FILES_DIR_MODE, 8#700).

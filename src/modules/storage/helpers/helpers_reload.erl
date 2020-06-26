@@ -54,7 +54,7 @@ refresh_handle_params(Handle, SessionId, SpaceId, Storage) ->
     % gather information
     Helper = storage:get_helper(Storage),
     {ok, UserId} = session:get_user_id(SessionId),
-    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, Storage),
+    {ok, UserCtx} = luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage),
     {ok, ArgsWithUserCtx} = helper:get_args_with_user_ctx(Helper, UserCtx),
     % do the refresh
     helpers:refresh_params(Handle, ArgsWithUserCtx).

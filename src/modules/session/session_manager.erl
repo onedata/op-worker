@@ -110,7 +110,7 @@ reuse_or_create_proxied_session(SessId, ProxyVia, Credentials, SessionType) ->
     {ok, session:id()} | error().
 reuse_or_create_rest_session(?SUB(user, UserId) = Identity, Credentials) ->
     SessId = datastore_key:new_from_digest([<<"rest">>, Credentials]),
-    case user_logic:exists(?ROOT_SESS_ID, UserId) of
+    case provider_logic:has_eff_user(UserId) of
         true ->
             reuse_or_create_session(SessId, rest, Identity, Credentials);
         false ->

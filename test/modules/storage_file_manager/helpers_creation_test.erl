@@ -43,23 +43,31 @@
 new_helper_test_() ->
     lists:map(fun({HelperName, ArgsKeys}) ->
         Args = keys_to_map(ArgsKeys),
+        Args2 = Args#{
+            <<"storagePathType">> => <<"flat">>,
+            <<"skipStorageDetection">> => <<"false">>
+        },
         AdminCtx = keys_to_map(proplists:get_value(HelperName, ?USER_CTXS)),
 
         {str_utils:format("~s helper should be created", [HelperName]),
             ?_assertMatch({ok, #helper{}},
-                helper:new_helper(HelperName, Args, AdminCtx, false, <<"flat">>))}
+                helper:new_helper(HelperName, Args2, AdminCtx))}
     end, ?HELPER_ARGS).
 
 
 user_ctx_validation_test_() ->
     lists:flatmap(fun({HelperName, AdminCtxKeys}) ->
         Args = keys_to_map(proplists:get_value(HelperName, ?HELPER_ARGS)),
+        Args2 = Args#{
+            <<"storagePathType">> => <<"flat">>,
+            <<"skipStorageDetection">> => <<"false">>
+        },
         AdminCtx = keys_to_map(AdminCtxKeys),
 
         lists:map(fun(Remove) ->
             BadCtx = maps:without([Remove], AdminCtx),
             {ctx_test_name(HelperName, Remove), ?_assertError(_,
-                helper:new_helper(HelperName, Args, BadCtx, false, <<"flat">>)
+                helper:new_helper(HelperName, Args2, BadCtx)
             )}
         end, maps:keys(AdminCtx))
     end, ?USER_CTXS).
@@ -72,12 +80,16 @@ ctx_test_name(HelperName, Key) ->
 helper_args_validation_test_() ->
     lists:flatmap(fun({HelperName, ArgsKeys}) ->
         Args = keys_to_map(ArgsKeys),
+        Args2 = Args#{
+            <<"storagePathType">> => <<"flat">>,
+            <<"skipStorageDetection">> => <<"false">>
+        },
         AdminCtx = keys_to_map(proplists:get_value(HelperName, ?USER_CTXS)),
 
         lists:map(fun(Remove) ->
-            BadArgs = maps:without([Remove], Args),
+            BadArgs = maps:without([Remove], Args2),
             {args_test_name(HelperName, Remove), ?_assertError(_,
-                helper:new_helper(HelperName, BadArgs, AdminCtx, false, <<"flat">>)
+                helper:new_helper(HelperName, BadArgs, AdminCtx)
             )}
         end, maps:keys(Args))
     end, ?HELPER_ARGS).

@@ -1,0 +1,107 @@
+{
+    "/mnt/st2": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 2001
+                },
+                "displayUid": 2221
+            },
+            "user2": {
+                "storageCredentials": {
+                    "uid": 2002
+                }
+            },
+            "user4": {
+                "storageCredentials": {
+                    "uid": "forbidden type"
+                }
+            }
+        },
+        "spacesDefaults": {
+            "space2": {
+                "posix": {
+                    "uid": 2000,
+                    "gid": 2000
+                },
+                "display": {
+                    "uid": 2222,
+                    "gid": 2222
+                }
+            }
+        }
+    },
+    "/mnt/st5": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "uid": 5001
+                },
+                "displayUid": 5551
+            },
+            "user2": {
+                "storageCredentials": {
+                    "uid": 5002
+                }
+            },
+            "user4": {
+                "storageCredentials": {
+                    "uid": 5004
+                },
+                "displayUid": "forbidden type"
+            }
+        },
+        "spacesDefaults": {
+            "space5": {
+                "posix": {
+                    "uid": 5000,
+                    "gid": 5000
+                },
+                "display": {
+                    "uid": 5555,
+                    "gid": 5555
+                }
+            }
+        }
+    },
+    "s3_external_feed_luma_8": {
+        "storageUsers": {
+            "user1": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey",
+                    "secretKey": "SecretKey"
+                },
+                "displayUid": 8881
+            },
+            "user2": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey",
+                    "secretKey": "SecretKey"
+                }
+            },
+            "user4": {
+                "storageCredentials": {
+                    "accessKey": "AccessKey"
+                }
+            }
+        },
+        "spacesDefaults": {
+            "space8": {
+                "display": {
+                    "uid": 8888,
+                    "gid": 8888
+                }
+            } 
+        }
+    },
+    "/mnt/st10": {
+        "storageUsers": {},
+        "spacesDefaults": {
+            "space10": {
+                "posix": {
+                    "gid": 10000
+                }
+            }
+        }
+    }
+}

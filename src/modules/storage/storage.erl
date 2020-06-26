@@ -28,19 +28,23 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create/6, get/1, describe/1, exists/1, delete/1, clear_storages/0]).
+-export([create/5, get/1, exists/1, delete/1, clear_storages/0]).
+
+%% Functions to retrieve storage details in Onepanel compatible format
+-export([describe/1, describe_luma_config/1]).
 
 %%% Functions to retrieve storage details
--export([get_id/1, get_helper/1, get_type/1, get_luma_config/1]).
+-export([get_id/1, get_helper/1, get_helper_name/1, get_type/1, get_luma_feed/1, get_luma_config/1]).
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
--export([is_readonly/1, is_luma_enabled/1, is_imported/1]).
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1]).
+-export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 
 %%% Functions to modify storage details
 -export([update_name/2, update_luma_config/2]).
--export([set_readonly/2, set_imported/2, set_qos_parameters/2]).
--export([set_helper_insecure/2, update_helper_args/2, update_helper_admin_ctx/2,
+-export([set_imported/2, set_qos_parameters/2]).
+-export([update_helper_args/2, update_helper_admin_ctx/2,
     update_helper/2]).
 
 %%% Support related functions
@@ -65,8 +69,10 @@
 -opaque data() :: storage_config:doc().
 -type name() :: od_storage:name().
 -type qos_parameters() :: od_storage:qos_parameters().
+-type luma_feed() :: luma:feed().
+-type luma_config() :: luma_config:config().
 
--export_type([id/0, data/0, name/0, qos_parameters/0]).
+-export_type([id/0, data/0, name/0, qos_parameters/0, luma_config/0, luma_feed/0]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -80,26 +86,26 @@ end).
 %%% API
 %%%===================================================================
 
--spec create(name(), helpers:helper(), boolean(), luma_config:config(),
+-spec create(name(), helpers:helper(), luma_config(),
     boolean(), qos_parameters()) -> {ok, id()} | {error, term()}.
-create(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
+create(Name, Helper, LumaConfig, ImportedStorage, QosParameters) ->
     lock_on_storage_by_name(Name, fun() ->
         case is_name_occupied(Name) of
             true ->
                 ?ERROR_ALREADY_EXISTS;
             false ->
-                create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters)
+                create_insecure(Name, Helper, LumaConfig, ImportedStorage, QosParameters)
         end
     end).
 
 
 %% @private
--spec create_insecure(name(), helpers:helper(), boolean(), luma_config:config(),
+-spec create_insecure(name(), helpers:helper(), luma_config(),
     boolean(), qos_parameters()) -> {ok, id()} | {error, term()}.
-create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParameters) ->
+create_insecure(Name, Helper, LumaConfig, ImportedStorage, QosParameters) ->
     case storage_logic:create_in_zone(Name, ImportedStorage) of
         {ok, Id} ->
-            case storage_config:create(Id, Helper, Readonly, LumaConfig) of
+            case storage_config:create(Id, Helper, LumaConfig) of
                 {ok, Id} ->
                     on_storage_created(Id, QosParameters),
                     {ok, Id};
@@ -117,9 +123,11 @@ create_insecure(Name, Helper, Readonly, LumaConfig, ImportedStorage, QosParamete
     end.
 
 
--spec get(id()) -> {ok, data()} | {error, term()}.
+-spec get(id() | data()) -> {ok, data()} | {error, term()}.
 get(StorageId) when is_binary(StorageId) ->
-    storage_config:get(StorageId).
+    storage_config:get(StorageId);
+get(StorageData) ->
+    {ok, StorageData}.
 
 
 %%-------------------------------------------------------------------
@@ -137,26 +145,29 @@ describe(StorageId) when is_binary(StorageId) ->
 describe(StorageData) ->
     StorageId = get_id(StorageData),
     Helper = get_helper(StorageData),
-    LumaConfig = get_luma_config(StorageData),
-    LumaUrl = case LumaConfig of
-        undefined -> undefined;
-        _ -> luma_config:get_url(LumaConfig)
-    end,
     AdminCtx = helper:get_redacted_admin_ctx(Helper),
     HelperArgs = helper:get_args(Helper),
     Base = maps:merge(HelperArgs, AdminCtx),
-    {ok, Base#{
+    {ok, LumaConfigDescription} = describe_luma_config(StorageData),
+    BaseWithLuma = maps:merge(Base, LumaConfigDescription),
+    {ok, BaseWithLuma#{
         <<"id">> => StorageId,
         <<"name">> => fetch_name(StorageId),
         <<"type">> => helper:get_name(Helper),
-        <<"readonly">> => is_readonly(StorageData),
-        <<"insecure">> => helper:is_insecure(Helper),
-        <<"storagePathType">> => helper:get_storage_path_type(Helper),
-        <<"lumaEnabled">> => is_luma_enabled(StorageData),
-        <<"lumaUrl">> => LumaUrl,
         <<"importedStorage">> => is_imported(StorageId),
         <<"qosParameters">> => fetch_qos_parameters_of_local_storage(StorageId)
     }}.
+
+
+-spec describe_luma_config(id() | data()) -> {ok, json_utils:json_map()}.
+describe_luma_config(StorageId) when is_binary(StorageId) ->
+    case get(StorageId) of
+        {ok, StorageData} -> describe(StorageData);
+        {error, _} = Error -> Error
+    end;
+describe_luma_config(StorageData)  ->
+    LumaConfig = get_luma_config(StorageData),
+    {ok, luma_config:describe(LumaConfig)}.
 
 
 -spec exists(id()) -> boolean().
@@ -188,7 +199,8 @@ delete(StorageId) ->
 delete_insecure(StorageId) ->
     case storage_logic:delete_in_zone(StorageId) of
         ok ->
-            storage_config:delete(StorageId);
+            ok = storage_config:delete(StorageId),
+            luma:clear_db(StorageId);
         Error ->
             Error
     end.
@@ -210,7 +222,9 @@ clear_storages() ->
 %%% Functions to retrieve storage details
 %%%===================================================================
 
--spec get_id(data()) -> id().
+-spec get_id(id() | data()) -> id().
+get_id(StorageId) when is_binary(StorageId) ->
+    StorageId;
 get_id(StorageData) ->
     storage_config:get_id(StorageData).
 
@@ -219,8 +233,16 @@ get_id(StorageData) ->
 get_helper(StorageDataOrId)  ->
     storage_config:get_helper(StorageDataOrId).
 
+-spec get_helper_name(data() | id()) -> helper:name().
+get_helper_name(StorageDataOrId)  ->
+    Helper = storage_config:get_helper(StorageDataOrId),
+    helper:get_name(Helper).
 
--spec get_luma_config(data()) -> luma_config:config() | undefined.
+-spec get_luma_feed(id() | data()) -> luma_feed().
+get_luma_feed(Storage) ->
+    storage_config:get_luma_feed(Storage).
+
+-spec get_luma_config(id() | data()) -> luma_config().
 get_luma_config(StorageData) ->
     storage_config:get_luma_config(StorageData).
 
@@ -257,21 +279,21 @@ fetch_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(Storag
     QosParameters.
 
 
--spec is_readonly(data() | id()) -> boolean().
-is_readonly(StorageDataOrId) ->
-    storage_config:is_readonly(StorageDataOrId).
+-spec should_skip_storage_detection(data() | id()) -> boolean().
+should_skip_storage_detection(StorageDataOrId) ->
+    storage_config:should_skip_storage_detection(StorageDataOrId).
 
 
--spec is_imported(id()) -> boolean().
-is_imported(StorageId) ->
+-spec is_imported(id() | data()) -> boolean().
+is_imported(StorageId) when is_binary(StorageId) ->
     {ok, Imported} = ?throw_on_error(storage_logic:is_imported(StorageId)),
-    Imported.
+    Imported;
+is_imported(StorageData) ->
+    is_imported(storage:get_id(StorageData)).
 
-
--spec is_luma_enabled(data()) -> boolean().
-is_luma_enabled(Storage) ->
-    get_luma_config(Storage) =/= undefined.
-
+-spec has_non_auto_luma_feed(data()) -> boolean().
+has_non_auto_luma_feed(Storage) ->
+    get_luma_feed(Storage) =/= ?AUTO_FEED.
 
 -spec is_local(id()) -> boolean().
 is_local(StorageId) ->
@@ -281,6 +303,10 @@ is_local(StorageId) ->
         {ok, ProviderId} -> oneprovider:is_self(ProviderId)
     end.
 
+-spec is_posix_compatible(id() | data()) -> boolean().
+is_posix_compatible(StorageDataOrId) ->
+    Helper = get_helper(StorageDataOrId),
+    helper:is_posix_compatible(Helper).
 
 %%%===================================================================
 %%% Functions to modify storage details
@@ -291,30 +317,20 @@ update_name(StorageId, NewName) ->
     storage_logic:update_name(StorageId, NewName).
 
 
--spec update_luma_config(id(), ChangesOrNewConfig) -> ok | {error, term()}
-    when ChangesOrNewConfig :: #{url => luma_config:url(), api_key => luma_config:api_key()}
-                               | luma_config:config() | undefined.
-update_luma_config(StorageId, DiffOrNewConfig) ->
-    UpdateFun = case is_map(DiffOrNewConfig) of
-        false ->
-            % New config is given explicitly. May enable/disable luma.
-            fun (_) -> {ok, DiffOrNewConfig} end;
-        _ ->
-            % Changes to existing luma config are given. Only eligible if luma enabled.
-            fun (undefined) -> {error, luma_disabled};
-                (PreviousConfig) ->
-                    {ok, luma_config:new(
-                        maps:get(url, DiffOrNewConfig, luma_config:get_url(PreviousConfig)),
-                        maps:get(api_key, DiffOrNewConfig, luma_config:get_api_key(PreviousConfig))
-                    )}
-            end
+-spec update_luma_config(id(), Diff :: luma_config:diff()) ->
+    ok | {error, term()}.
+update_luma_config(StorageId, Diff) ->
+    UpdateFun = fun(LumaConfig) ->
+        luma_config:update(LumaConfig, Diff)
     end,
-    storage_config:update_luma_config(StorageId, UpdateFun).
-
-
--spec set_readonly(id(), boolean()) -> ok | {error, term()}.
-set_readonly(StorageId, Readonly) ->
-    storage_config:set_readonly(StorageId, Readonly).
+    case storage_config:update_luma_config(StorageId, UpdateFun) of
+        ok ->
+            luma:clear_db(StorageId);
+        {error, no_update} ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec set_imported(id(), boolean()) -> ok | {error, term()}.
@@ -356,12 +372,6 @@ update_helper_args(StorageId, Changes) when is_map(Changes) ->
 -spec update_helper_admin_ctx(id(), helper:user_ctx()) -> ok | {error, term()}.
 update_helper_admin_ctx(StorageId, Changes) ->
     UpdateFun = fun(Helper) -> helper:update_admin_ctx(Helper, Changes) end,
-    update_helper(StorageId, UpdateFun).
-
-
--spec set_helper_insecure(id(), Insecure :: boolean()) -> ok | {error, term()}.
-set_helper_insecure(StorageId, Insecure) when is_boolean(Insecure) ->
-    UpdateFun = fun(Helper) -> helper:update_insecure(Helper, Insecure) end,
     update_helper(StorageId, UpdateFun).
 
 
@@ -548,14 +558,10 @@ migrate_to_zone() ->
 %% @end
 %%--------------------------------------------------------------------
 -spec migrate_storage_docs(storage_config:doc()) -> ok.
-migrate_storage_docs(#document{key = StorageId, value = Storage}) ->
-    #storage{
-        name = Name,
-        helpers = [Helper],
-        readonly = Readonly,
-        luma_config = LumaConfig
-    } = Storage,
-    case storage_config:create(StorageId, Helper, Readonly, LumaConfig) of
+migrate_storage_docs(#document{key = StorageId, value = Storage = #storage{name = Name}}) ->
+    StorageConfigV1 = storage_config:migrate_to_storage_config_v1(Storage),
+    {_, StorageConfig} = datastore_versions:upgrade_record(1, storage_config, StorageConfigV1),
+    case storage_config:create(StorageId, StorageConfig) of
         {ok, _} -> ok;
         {error, already_exists} -> ok;
         Error -> throw(Error)
@@ -794,13 +800,13 @@ upgrade_record(4, {_, Name, Helpers, Readonly, LumaConfig}) ->
     {5, {storage,
         Name,
         [
-            #helper{
-                name = HelperName,
-                args = HelperArgs,
-                admin_ctx = AdminCtx,
-                insecure = Insecure,
-                extended_direct_io = ExtendedDirectIO,
-                storage_path_type = ?CANONICAL_STORAGE_PATH
+            {helper,
+                HelperName,
+                HelperArgs,
+                AdminCtx,
+                Insecure,
+                ExtendedDirectIO,
+                ?CANONICAL_STORAGE_PATH
             } || {_, HelperName, HelperArgs, AdminCtx, Insecure,
             ExtendedDirectIO} <- Helpers
         ],

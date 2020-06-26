@@ -14,6 +14,7 @@
 -define(FUSE_MESSAGES_HRL, 1).
 
 -include("common_messages.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include_lib("ctool/include/posix/file_attr.hrl").
@@ -63,7 +64,7 @@
 
 -record(create_dir, {
     name :: file_meta:name(),
-    mode :: file_meta:mode()
+    mode = ?DEFAULT_DIR_PERMS :: file_meta:mode()
 }).
 
 -record(delete_file, {
@@ -87,13 +88,13 @@
 
 -record(create_file, {
     name :: file_meta:name(),
-    mode = 8#644 :: file_meta:posix_permissions(),
+    mode = ?DEFAULT_FILE_PERMS :: file_meta:posix_permissions(),
     flag = rdwr :: fslogic_worker:open_flag()
 }).
 
 -record(make_file, {
     name :: file_meta:name(),
-    mode = 8#644 :: file_meta:posix_permissions()
+    mode = ?DEFAULT_FILE_PERMS :: file_meta:posix_permissions()
 }).
 
 -record(open_file, {
@@ -175,7 +176,6 @@
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
-    extended_direct_io :: boolean(),
     file_request :: file_request_type()
 }).
 
@@ -237,8 +237,7 @@
 
 -record(helper_params, {
     helper_name :: helper:name(),
-    helper_args :: [#helper_arg{}],
-    extended_direct_io :: boolean()
+    helper_args :: [#helper_arg{}]
 }).
 
 -record(storage_test_file, {

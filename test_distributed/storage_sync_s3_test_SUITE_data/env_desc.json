@@ -139,6 +139,13 @@
                     }
                 }
             }
+        },
+        "storages": {
+            "p2": {
+                "synced_storage": {
+                    "imported_storage": true
+                }
+            }
         }
     }
 }

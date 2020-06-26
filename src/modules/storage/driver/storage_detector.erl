@@ -22,7 +22,7 @@
     update_test_file/3, remove_test_file/4]).
 
 %% Onepanel RPC
--export([verify_storage_on_all_nodes/1]).
+-export([verify_storage_on_all_nodes/2]).
 
 %% exported for RPC
 -export([verify_test_file/4]).
@@ -114,12 +114,11 @@ remove_test_file(Helper, UserCtx, FileId, Size) ->
 %% This function is called by onepanel, BEFORE adding new storage.
 %% @end
 %%-------------------------------------------------------------------
--spec verify_storage_on_all_nodes(helpers:helper()) ->
+-spec verify_storage_on_all_nodes(helpers:helper(), luma_config:feed()) ->
     ok | ?ERROR_STORAGE_TEST_FAILED(_).
-verify_storage_on_all_nodes(Helper) ->
-    {ok, AdminCtx} = luma:get_admin_ctx(?ROOT_USER_ID, Helper),
-    {ok, AdminCtx2} = luma:add_helper_specific_fields(?ROOT_USER_ID,
-        ?ROOT_SESS_ID, AdminCtx, Helper),
+verify_storage_on_all_nodes(Helper, LumaFeed) ->
+    AdminCtx = helper:get_admin_ctx(Helper),
+    {ok, AdminCtx2} = luma:add_helper_specific_fields(?ROOT_USER_ID, ?ROOT_SESS_ID, AdminCtx, Helper, LumaFeed),
     [Node | Nodes] = consistent_hashing:get_all_nodes(),
     FileId = generate_file_id(),
     case create_test_file(Node, Helper, AdminCtx2, FileId) of

@@ -51,10 +51,7 @@
 -record(helper, {
     name :: helper:name(),
     args = #{} :: helper:args(),
-    admin_ctx = #{} :: helper:user_ctx(),
-    insecure = false :: boolean(),
-    extended_direct_io = true :: boolean(),
-    storage_path_type :: storage_path_type()
+    admin_ctx = #{} :: helper:user_ctx()
 }).
 
 -endif.

@@ -42,14 +42,18 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec create(session:id(), od_user:id(), od_space:id(), storage:id()) ->
-    {ok, doc()}.
+    {ok, doc()} | {error, term()}.
 create(SessionId, UserId, SpaceId, StorageId) ->
     {ok, Storage} = storage:get(StorageId),
     Helper = storage:get_helper(Storage),
-    {ok, UserCtx} = luma:get_server_user_ctx(SessionId, UserId, undefined, SpaceId, Storage),
-    HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
-    HelperDoc = #document{value = HelperHandle},
-    datastore_model:create(?CTX, HelperDoc).
+    case luma:map_to_storage_credentials(SessionId, UserId, SpaceId, Storage) of
+        {ok, UserCtx} ->
+            HelperHandle = helpers:get_helper_handle(Helper, UserCtx),
+            HelperDoc = #document{value = HelperHandle},
+            datastore_model:create(?CTX, HelperDoc);
+        Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

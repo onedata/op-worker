@@ -26,8 +26,7 @@
         {ok, Result} = storage_sync_links_test_utils:list_recursive(Worker, RootStorageFileId, StorageId),
         lists:sort(Result)
     catch
-        E:R ->
-            ct:pal("ERROR: ~p", [{E, R}]),
+        _:_ ->
             error
     end, Timeout)).
 

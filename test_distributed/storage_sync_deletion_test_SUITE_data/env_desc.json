@@ -143,8 +143,8 @@
         },
         "storages": {
             "p1": {
-                "s32": { "imported_storage": "true" },
-                "/mnt/st2": { "imported_storage": "true" }
+                "s32": { "imported_storage": true },
+                "/mnt/st2": { "imported_storage": true }
             }
         }
     }

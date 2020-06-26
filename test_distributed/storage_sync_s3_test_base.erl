@@ -19,6 +19,8 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("kernel/include/file.hrl").
 
+% TODO VFS-6161 divide to smaller test suites, maybe get rid of readonly test SUITES as all imported storages are mounted in root
+
 %% export for ct
 -export([init_per_suite/1, end_per_suite/1, init_per_testcase/3, end_per_testcase/3]).
 
@@ -640,7 +642,7 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
-    StorageSpacePath = storage_sync_test_base:storage_path(?SPACE_ID, <<"">>, false),
+    StorageSpacePath = storage_sync_test_base:storage_path(?SPACE_ID, <<"">>, true),
     RDWRStorage = storage_sync_test_base:get_rdwr_storage(Config, W1),
     SpaceSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageSpacePath, RDWRStorage),
 
@@ -1278,7 +1280,7 @@ create_list_race_test(Config, MountSpaceInRoot) ->
     TestPid = self(),
     ok = test_utils:mock_new(W1, storage_driver),
     ok = test_utils:mock_expect(W1, storage_driver, listobjects, fun(SDHandle, Marker, Offset, BatchSize) ->
-        case SDHandle#sd_handle.file =:= <<"/", ?SPACE_ID/binary>> of
+        case SDHandle#sd_handle.file =:= <<"/">> of
             true ->
                 % hold on sync
                 TestPid ! {waiting, self(), Offset, meck:passthrough([SDHandle, Marker, Offset, BatchSize])},

@@ -37,21 +37,21 @@ all() -> ?ALL([
 get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_storage),
 
     ?assertMatch(
         {ok, ?STORAGE_PRIVATE_DATA_MATCHER(?STORAGE_1)},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
 
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_storage)),
 
     % Storage private data should now be cached
     ?assertMatch(
         {ok, ?STORAGE_PRIVATE_DATA_MATCHER(?STORAGE_1)},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_storage)),
 
     % Make sure that provider can access non-cached data
     logic_tests_common:invalidate_cache(Config, od_storage, ?STORAGE_1),
@@ -59,7 +59,7 @@ get_test(Config) ->
         {ok, ?STORAGE_PRIVATE_DATA_MATCHER(?STORAGE_1)},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
-    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_storage)),
     ok.
 
 
@@ -71,14 +71,14 @@ subscribe_test(Config) ->
     Storage1PrivateGRI = #gri{type = od_storage, id = ?STORAGE_1, aspect = instance, scope = private},
     Storage1PrivateData = ?STORAGE_PRIVATE_DATA_VALUE(?STORAGE_1),
 
-    GraphCalls = logic_tests_common:count_reqs(Config, graph),
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, od_storage),
 
     % private scope
     ?assertMatch(
         {ok, ?STORAGE_PRIVATE_DATA_MATCHER(?STORAGE_1)},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_storage)),
 
     NewQosParams = #{<<"key">> => <<"value">>},
     ChangedData1 = Storage1PrivateData#{
@@ -96,7 +96,7 @@ subscribe_test(Config) ->
         }}},
         rpc:call(Node, storage_logic, get, [?STORAGE_1])
     ),
-    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph)),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, od_storage)),
 
 
     % Simulate a 'deleted' push and see if cache was invalidated

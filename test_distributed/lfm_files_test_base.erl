@@ -56,9 +56,9 @@
     share_permission_denied/1,
     echo_loop/1,
     echo_loop_base/1,
-    storage_file_creation_should_be_delayed_until_open/1,
-    delayed_creation_should_not_prevent_mv/1,
-    delayed_creation_should_not_prevent_truncate/1,
+    storage_file_creation_should_be_deferred_until_open/1,
+    deferred_creation_should_not_prevent_mv/1,
+    deferred_creation_should_not_prevent_truncate/1,
     new_file_should_not_have_popularity_doc/1,
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
@@ -1025,8 +1025,8 @@ lfm_basic_rdwr_after_file_delete(Config) ->
 
     %remove file
     FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
-    {SfmHandle, _} = rpc:call(W, storage_driver, new_handle, [SessId1, FileCtx]),
-    ok = rpc:call(W, storage_driver, unlink, [SfmHandle, size(FileContent)]),
+    {SDHandle, _} = rpc:call(W, storage_driver, new_handle, [SessId1, FileCtx]),
+    ok = rpc:call(W, storage_driver, unlink, [SDHandle, size(FileContent)]),
 
     %read opened file
     ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, FileContent)),
@@ -1578,27 +1578,27 @@ share_permission_denied(Config) ->
 
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W, ?GUEST_SESS_ID, {guid, Guid})).
 
-storage_file_creation_should_be_delayed_until_open(Config) ->
+storage_file_creation_should_be_deferred_until_open(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read1">>, 8#755),
     FileCtx = rpc:call(W, file_ctx, new_by_guid, [FileGuid]),
-    {SfmHandle, _} = rpc:call(W, storage_driver, new_handle, [SessId1, FileCtx]),
+    {SDHandle, _} = rpc:call(W, storage_driver, new_handle, [SessId1, FileCtx]),
 
     % verify that storage file does not exist
-    ?assertEqual({error, ?ENOENT}, rpc:call(W, storage_driver, stat, [SfmHandle])),
+    ?assertEqual({error, ?ENOENT}, rpc:call(W, storage_driver, stat, [SDHandle])),
 
     % open file
     {ok, Handle} = lfm_proxy:open(W, SessId1, {guid, FileGuid}, rdwr),
     ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
 
     % verify that storage file exists
-    ?assertMatch({ok, _}, rpc:call(W, storage_driver, stat, [SfmHandle])),
+    ?assertMatch({ok, _}, rpc:call(W, storage_driver, stat, [SDHandle])),
     verify_file_content(Config, Handle, <<"test_data">>),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
-delayed_creation_should_not_prevent_mv(Config) ->
+deferred_creation_should_not_prevent_mv(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
@@ -1613,7 +1613,7 @@ delayed_creation_should_not_prevent_mv(Config) ->
     verify_file_content(Config, Handle, <<"test_data">>),
     ?assertEqual(ok, lfm_proxy:close(W, Handle)).
 
-delayed_creation_should_not_prevent_truncate(Config) ->
+deferred_creation_should_not_prevent_truncate(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},

@@ -130,7 +130,7 @@ invalid_request_should_fail(Config) ->
         {#{<<"fielMeta">> => #{<<"fields">> => [<<"owner">>]}}, ?ERROR_BAD_DATA(<<"fielMeta">>)},
         {#{<<"fileMeta">> => #{<<"fields">> => <<"owner">>}}, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"fileMeta.fields">>)},
         {#{<<"fileMeta">> => #{<<"fields">> => [<<"HEH">>]}}, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"fileMeta.fields">>, [
-            <<"name">>, <<"type">>, <<"mode">>, <<"owner">>, <<"group_owner">>,
+            <<"name">>, <<"type">>, <<"mode">>, <<"owner">>,
             <<"provider_id">>, <<"shares">>, <<"deleted">>
         ])},
         {#{<<"fileMeta">> => #{<<"always">> => <<"true">>}}, ?ERROR_BAD_VALUE_BOOLEAN(<<"fileMeta.always">>)}

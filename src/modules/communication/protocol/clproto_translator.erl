@@ -398,12 +398,10 @@ translate_from_protobuf(#'VerifyStorageTestFile'{
     };
 translate_from_protobuf(#'FileRequest'{
     context_guid = ContextGuid,
-    extended_direct_io = ExtDIO,
     file_request = {_, Record}
 }) ->
     #file_request{
         context_guid = ContextGuid,
-        extended_direct_io = ExtDIO,
         file_request = translate_from_protobuf(Record)
     };
 translate_from_protobuf(#'GetFileAttr'{}) ->
@@ -623,13 +621,11 @@ translate_from_protobuf(#'FileLocationChanged'{
     };
 translate_from_protobuf(#'HelperParams'{
     helper_name = HelperName,
-    helper_args = HelpersArgs,
-    extended_direct_io = ExtendedDirectIO
+    helper_args = HelpersArgs
 }) ->
     #helper_params{
         helper_name = HelperName,
-        helper_args = [translate_from_protobuf(Arg) || Arg <- HelpersArgs],
-        extended_direct_io = ExtendedDirectIO
+        helper_args = [translate_from_protobuf(Arg) || Arg <- HelpersArgs]
     };
 translate_from_protobuf(#'HelperArg'{
     key = Key,
@@ -1448,12 +1444,10 @@ translate_to_protobuf(#get_fs_stats{
     }};
 translate_to_protobuf(#file_request{
     context_guid = ContextGuid,
-    extended_direct_io = ExtDIO,
     file_request = Record
 }) ->
     {file_request, #'FileRequest'{
         context_guid = ContextGuid,
-        extended_direct_io = ExtDIO,
         file_request = translate_to_protobuf(Record)}
     };
 translate_to_protobuf(#get_file_attr{}) ->
@@ -1672,13 +1666,11 @@ translate_to_protobuf(#file_location_changed{
     }};
 translate_to_protobuf(#helper_params{
     helper_name = HelperName,
-    helper_args = HelpersArgs,
-    extended_direct_io = ExtendedDirectIO
+    helper_args = HelpersArgs
 }) ->
     {helper_params, #'HelperParams'{
         helper_name = HelperName,
-        helper_args = [translate_to_protobuf(Arg) || Arg <- HelpersArgs],
-        extended_direct_io = ExtendedDirectIO
+        helper_args = [translate_to_protobuf(Arg) || Arg <- HelpersArgs]
     }};
 translate_to_protobuf(#helper_arg{
     key = Key,

@@ -22,7 +22,7 @@
 %% API
 -export([get_new_file_location_doc/3, is_location_created/2,
     mark_location_created/3]).
--export([create_imported_file_location/6, update_imported_file_location/2]).
+-export([create_imported_file_location/7, update_imported_file_location/2]).
 -export([get_canonical_paths_cache_name/1, get_uuid_based_paths_cache_name/1,
     invalidate_paths_caches/1, init_paths_cache_group/0, init_paths_caches/1]).
 
@@ -106,8 +106,8 @@ mark_location_created(FileUuid, FileLocationId, StorageFileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_imported_file_location(od_space:id(), storage:id(), file_meta:uuid(),
-    file_meta:path(), file_meta:size(), od_user:id()) -> ok.
-create_imported_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size, OwnerId) ->
+    file_meta:path(), file_meta:size(), od_user:id(), luma:gid() | undefined) -> ok.
+create_imported_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size, OwnerId, SyncedGid) ->
     Location = #file_location{
         provider_id = oneprovider:get_id(),
         file_id = CanonicalPath,
@@ -115,7 +115,8 @@ create_imported_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size,
         uuid = FileUuid,
         space_id = SpaceId,
         size = Size,
-        storage_file_created = true
+        storage_file_created = true,
+        synced_gid = SyncedGid
     },
     LocationDoc = #document{
         key = file_location:local_id(FileUuid),

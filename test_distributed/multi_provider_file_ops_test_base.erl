@@ -1868,7 +1868,7 @@ create_location(Doc, _ParentDoc, LocId, Path) ->
 
     LeafLess = filename:dirname(FileId),
     SDHandle0 = storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, FileUuid, StorageId, LeafLess),
-    case storage_driver:mkdir(SDHandle0, ?AUTO_CREATED_PARENT_DIR_MODE, true) of
+    case storage_driver:mkdir(SDHandle0, ?DEFAULT_DIR_PERMS, true) of
         ok -> ok;
         {error, eexist} ->
             ok

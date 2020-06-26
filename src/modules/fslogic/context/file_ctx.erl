@@ -39,15 +39,13 @@
     parent :: undefined | ctx(),
     storage_file_id :: undefined | helpers:file_id(),
     space_name :: undefined | od_space:name(),
-    storage_posix_user_context :: undefined | luma:posix_user_ctx(),
+    display_credentials :: undefined | luma:display_credentials(),
     times :: undefined | times:times(),
     file_name :: undefined | file_meta:name(),
     storage :: undefined | storage:data(),
     file_location_ids :: undefined | [file_location:id()],
     is_dir :: undefined | boolean(),
     is_space_synced :: undefined | boolean(),
-    extended_direct_io = false :: boolean(),
-    storage_path_type :: undefined | helpers:storage_path_type(),
     is_imported_storage :: undefined | boolean()
 }).
 
@@ -57,12 +55,11 @@
 %% Functions creating context and filling its data
 -export([new_by_canonical_path/2, new_by_guid/1, new_by_doc/3, new_root_ctx/0]).
 -export([reset/1, new_by_partial_context/1, add_file_location/2, set_file_id/2,
-    set_is_dir/2, set_extended_direct_io/2]).
+    set_is_dir/2]).
 
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
-    get_guid_const/1, get_uuid_const/1, get_extended_direct_io_const/1,
-    set_storage_path_type/2, get_storage_path_type_const/1, is_imported_storage/1
+    get_guid_const/1, get_uuid_const/1, get_dir_location_doc_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_user_root_dir_const/2,
     is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
@@ -71,14 +68,14 @@
 
 %% Functions that do not modify context but does not have _const suffix and return context.
 % TODO VFS-6119 missing _const suffix in function name
--export([get_local_file_location_doc/1, get_local_file_location_doc/2, get_dir_location_doc/1]).
+-export([get_local_file_location_doc/1, get_local_file_location_doc/2]).
 
 %% Functions modifying context
 -export([get_canonical_path/1, get_canonical_path_tokens/1, get_uuid_based_path/1, get_file_doc/1,
     get_file_doc_including_deleted/1, get_parent/2, get_and_check_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
-    get_posix_storage_user_context/2, get_times/1,
+    get_display_credentials/1, get_times/1,
     get_parent_guid/2, get_child/3,
     get_file_children/4, get_file_children/5, get_file_children/6, get_file_children_whitelisted/5,
     get_logical_path/2,
@@ -88,9 +85,9 @@
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_child_canonical_path/2, get_file_size/1,
-    get_file_size_from_remote_locations/1, get_owner/1, get_group_owner/1, get_local_storage_file_size/1,
-    is_space_synced/1, get_and_cache_file_doc_including_deleted/1, is_storage_file_created/1]).
--export([is_dir/1]).
+    get_file_size_from_remote_locations/1, get_owner/1, get_local_storage_file_size/1,
+    is_space_synced/1, get_and_cache_file_doc_including_deleted/1]).
+-export([is_dir/1, is_imported_storage/1, is_storage_file_created/1]).
 
 %%%===================================================================
 %%% API
@@ -191,42 +188,6 @@ set_file_id(FileCtx, FileId) ->
 -spec set_is_dir(ctx(), boolean()) -> ctx().
 set_is_dir(FileCtx, IsDir) ->
     FileCtx#file_ctx{is_dir = IsDir}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets extended_direct_io field in context record
-%% @end
-%%--------------------------------------------------------------------
--spec set_extended_direct_io(ctx(), boolean()) -> ctx().
-set_extended_direct_io(FileCtx, Created) ->
-    FileCtx#file_ctx{extended_direct_io = Created}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns value of extended_direct_io field.
-%% @end
-%%--------------------------------------------------------------------
--spec get_extended_direct_io_const(ctx()) -> boolean().
-get_extended_direct_io_const(#file_ctx{extended_direct_io = Ans}) ->
-    Ans.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets storage_path_type field in context record
-%% @end
-%%--------------------------------------------------------------------
--spec set_storage_path_type(ctx(), helpers:storage_path_type()) -> ctx().
-set_storage_path_type(FileCtx, StoragePathType) ->
-    FileCtx#file_ctx{storage_path_type = StoragePathType}.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns value of storage_path_type field.
-%% @end
-%%--------------------------------------------------------------------
--spec get_storage_path_type_const(ctx()) -> helpers:storage_path_type().
-get_storage_path_type_const(#file_ctx{storage_path_type = StoragePathType}) ->
-    StoragePathType.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -615,33 +576,33 @@ get_aliased_name(FileCtx = #file_ctx{file_name = FileName}, _UserCtx) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns posix storage user context, holding UID and GID of file on posix storage.
+%% Returns POSIX compatible display credentials.
 %% @end
 %%--------------------------------------------------------------------
--spec get_posix_storage_user_context(ctx(), user_ctx:ctx()) ->
-    {luma:posix_user_ctx(), ctx()}.
-get_posix_storage_user_context(
-    FileCtx = #file_ctx{storage_posix_user_context = undefined}, UserCtx) ->
-    IsSpaceDir = is_space_dir_const(FileCtx),
-    IsUserRootDir = is_root_dir_const(FileCtx),
+-spec get_display_credentials(ctx()) -> {luma:display_credentials(), ctx()}.
+get_display_credentials(FileCtx = #file_ctx{display_credentials = undefined}) ->
     SpaceId = get_space_id_const(FileCtx),
-    NewUserCtx = case IsSpaceDir orelse IsUserRootDir of
-        true ->
-            FileCtx2 = FileCtx,
-            luma:get_posix_user_ctx(?ROOT_SESS_ID, ?ROOT_USER_ID, SpaceId);
-        false ->
-            {#document{
-                value = #file_meta{
-                    owner = OwnerId,
-                    group_owner = GroupOwnerId
-            }}, FileCtx2} = get_file_doc_including_deleted(FileCtx),
-            SessionId = user_ctx:get_session_id(UserCtx),
-            luma:get_posix_user_ctx(SessionId, OwnerId, GroupOwnerId, SpaceId)
-    end,
-    {NewUserCtx, FileCtx2#file_ctx{storage_posix_user_context = NewUserCtx}};
-get_posix_storage_user_context(
-    FileCtx = #file_ctx{storage_posix_user_context = UserCtx}, _UserCtx) ->
-    {UserCtx, FileCtx}.
+    {FileMetaDoc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
+    OwnerId = file_meta:get_owner(FileMetaDoc),
+    {Storage, FileCtx3} = get_storage(FileCtx2),
+    case luma:map_to_display_credentials(OwnerId, SpaceId, Storage) of
+        {ok, DisplayCredentials = {Uid, Gid}} ->
+            case Storage =:= undefined of
+                true ->
+                    {DisplayCredentials, FileCtx3#file_ctx{display_credentials = DisplayCredentials}};
+                false ->
+                    {SyncedGid, FileCtx4} = get_synced_gid(FileCtx3),
+                    % if SyncedGid =/= undefined override display Gid
+                    FinalGid = utils:ensure_defined(SyncedGid, Gid),
+                    FinalDisplayCredentials = {Uid, FinalGid},
+                    {FinalDisplayCredentials, FileCtx4#file_ctx{display_credentials = FinalDisplayCredentials}}
+            end;
+        {error, not_found} ->
+            {error, ?EACCES}
+    end;
+get_display_credentials(FileCtx = #file_ctx{display_credentials = DisplayCredentials}) ->
+    {DisplayCredentials, FileCtx}.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -823,12 +784,26 @@ get_storage_id(FileCtx) ->
 %% Returns record of storage supporting space in which file was created.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storage(ctx()) -> {storage:data(), ctx()}.
+-spec get_storage(ctx()) -> {storage:data() | undefined, ctx()}.
 get_storage(FileCtx = #file_ctx{storage = undefined}) ->
-    SpaceId = get_space_id_const(FileCtx),
-    {ok, [StorageId | _]} = space_logic:get_local_storage_ids(SpaceId),
-    {ok, Storage} = storage:get(StorageId),
-    {Storage, FileCtx#file_ctx{storage = Storage}};
+    case file_ctx:is_root_dir_const(FileCtx) of
+        true ->
+            {undefined, FileCtx};
+        false ->
+            SpaceId = get_space_id_const(FileCtx),
+            case space_logic:get_local_storage_ids(SpaceId) of
+                {ok, []} ->
+                    {undefined, FileCtx};
+                {ok, [StorageId | _]} ->
+                    Storage2 = case storage:get(StorageId) of
+                        {ok, Storage} -> Storage;
+                        {error, not_found} -> undefined
+                    end,
+                    {Storage2, FileCtx#file_ctx{storage = Storage2}};
+                {error, _} ->
+                    {undefined, FileCtx}
+            end
+    end;
 get_storage(FileCtx = #file_ctx{storage = Storage}) ->
     {Storage, FileCtx}.
 
@@ -873,8 +848,7 @@ get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     [file_location:doc()], file_location:id()) -> #file_location{}.
 fill_location_gaps(ReqRange0, #document{value = FileLocation = #file_location{
     size = Size}} = FileLocationDoc, Locations, Uuid) ->
-    ReqRange = utils:ensure_defined(ReqRange0, undefined,
-        [#file_block{offset = 0, size = Size}]),
+    ReqRange = utils:ensure_defined(ReqRange0, [#file_block{offset = 0, size = Size}]),
     Blocks = fslogic_location_cache:get_blocks(FileLocationDoc,
         #{overlapping_blocks => ReqRange}),
 
@@ -954,21 +928,14 @@ get_local_file_location_doc(FileCtx, GetDocOpts) ->
             {undefined, FileCtx}
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns local dir location doc.
-%% @end
-%%--------------------------------------------------------------------
--spec get_dir_location_doc(ctx()) ->
-    {dir_location:doc() | undefined, ctx()}.
-get_dir_location_doc(FileCtx) ->
-    % TODO VFS-6119 missing _const suffix in function name
+-spec get_dir_location_doc_const(ctx()) -> dir_location:doc() | undefined.
+get_dir_location_doc_const(FileCtx) ->
     FileUuid = get_uuid_const(FileCtx),
     case dir_location:get(FileUuid) of
         {ok, Location} ->
-            {Location, FileCtx};
+            Location;
         {error, not_found} ->
-            {undefined, FileCtx}
+            undefined
     end.
 
 %%--------------------------------------------------------------------
@@ -1055,16 +1022,26 @@ get_active_perms_type_from_doc(#document{value = #file_meta{acl = []}}, FileCtx)
 get_active_perms_type_from_doc(#document{value = #file_meta{}}, FileCtx) ->
     {acl, FileCtx}.
 
+
 -spec is_storage_file_created(ctx()) -> {boolean(), ctx()}.
 is_storage_file_created(FileCtx) ->
     case is_dir(FileCtx) of
         {true, FileCtx2} ->
-            {DirLocation, _} = get_dir_location_doc(FileCtx2),
-            {dir_location:is_storage_file_created(DirLocation), FileCtx2};
+            case get_dir_location_doc_const(FileCtx2) of
+                undefined ->
+                    {false, FileCtx2};
+                DirLocation ->
+                    {dir_location:is_storage_file_created(DirLocation), FileCtx2}
+            end;
         {false, FileCtx2} ->
-            {FileLocation, _} = get_local_file_location_doc(FileCtx2, false),
-            {file_location:is_storage_file_created(FileLocation), FileCtx2}
+            case get_local_file_location_doc(FileCtx2, false) of
+                {undefined, _} ->
+                    {false, FileCtx2};
+                {FileLocation, _} ->
+                    {file_location:is_storage_file_created(FileLocation), FileCtx2}
+            end
     end.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1146,21 +1123,6 @@ get_owner(FileCtx = #file_ctx{
 get_owner(FileCtx) ->
     {_, FileCtx2} = get_file_doc(FileCtx),
     get_owner(FileCtx2).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns id of file's group_owner.
-%% @end
-%%--------------------------------------------------------------------
--spec get_group_owner(ctx()) -> {od_group:id() | undefined, ctx()}.
-get_group_owner(FileCtx = #file_ctx{
-    file_doc = #document{
-        value = #file_meta{group_owner = GroupOwnerId}
-    }}) ->
-    {GroupOwnerId, FileCtx};
-get_group_owner(FileCtx) ->
-    {_, FileCtx2} = get_file_doc(FileCtx),
-    get_group_owner(FileCtx2).
 
 
 %%--------------------------------------------------------------------
@@ -1448,4 +1410,31 @@ list_user_spaces(UserCtx, Offset, Limit, SpaceWhiteList) ->
             Children;
         false ->
             []
+    end.
+
+-spec get_synced_gid(ctx()) -> {luma:gid() | undefined, ctx()}.
+get_synced_gid(FileCtx) ->
+    case is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            {get_dir_synced_gid_const(FileCtx), FileCtx2};
+        {false, FileCtx2} ->
+            {get_file_synced_gid_const(FileCtx2), FileCtx2}
+    end.
+
+-spec get_file_synced_gid_const(ctx()) -> luma:gid() | undefined.
+get_file_synced_gid_const(FileCtx) ->
+    case get_local_file_location_doc(FileCtx, skip_local_blocks) of
+        {undefined, _} ->
+            undefined;
+        {FileLocation, _} ->
+            file_location:get_synced_gid(FileLocation)
+    end.
+
+-spec get_dir_synced_gid_const(ctx()) -> luma:gid() | undefined.
+get_dir_synced_gid_const(FileCtx) ->
+    case get_dir_location_doc_const(FileCtx) of
+        undefined ->
+            undefined;
+        DirLocation ->
+            dir_location:get_synced_gid(DirLocation)
     end.

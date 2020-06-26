@@ -55,11 +55,11 @@ is_applicable(#document{key = UserId}, FileCtx, #access_control_entity{
     {OwnerId, FileCtx2} = file_ctx:get_owner(FileCtx),
     {OwnerId == UserId, FileCtx2};
 
-is_applicable(#document{value = User}, FileCtx, #access_control_entity{
+is_applicable(UserDoc, FileCtx, #access_control_entity{
     identifier = ?group
 }) ->
-    {GroupOwnerId, FileCtx2} = file_ctx:get_group_owner(FileCtx),
-    {lists:member(GroupOwnerId, User#od_user.eff_groups), FileCtx2};
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    {user_logic:has_eff_space(UserDoc, SpaceId), FileCtx};
 
 is_applicable(_UserDoc, FileCtx, #access_control_entity{
     identifier = ?everyone

@@ -264,7 +264,7 @@ ensure_proper_file_name(FuseResponse = #fuse_response{
 -spec chmod_insecure(user_ctx:ctx(), file_ctx:ctx(), fslogic_worker:posix_permissions()) ->
     fslogic_worker:fuse_response().
 chmod_insecure(UserCtx, FileCtx, Mode) ->
-    sd_utils:chmod_storage_file(UserCtx, FileCtx, Mode),
+    sd_utils:chmod(UserCtx, FileCtx, Mode),
     chmod_attrs_only_insecure(FileCtx, Mode),
     fslogic_times:update_ctime(FileCtx),
 
@@ -333,11 +333,9 @@ update_times_insecure(_UserCtx, FileCtx, ATime, MTime, CTime) ->
     }.
 resolve_file_attr(UserCtx, FileCtx, Opts) ->
     FileGuid = file_ctx:get_guid_const(FileCtx),
-    {FileUuid, _SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
+    {_FileUuid, _SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
 
-    {#document{key = FileUuid, value = #file_meta{
-        type = Type
-    }} = FileDoc, FileCtx2} = case maps:get(allow_deleted_files, Opts, false) of
+    {FileDoc, FileCtx2} = case maps:get(allow_deleted_files, Opts, false) of
         true ->
             file_ctx:get_file_doc_including_deleted(FileCtx);
         false ->
@@ -348,7 +346,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
     {ParentGuid, FileCtx4} = file_ctx:get_parent_guid(FileCtx3, UserCtx),
 
     {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx5} = case ShareId of
-        undefined -> get_private_attrs(UserCtx, FileCtx4, FileDoc);
+        undefined -> get_private_attrs(FileCtx4, FileDoc);
         _ -> get_masked_private_attrs(ShareId, FileCtx4, FileDoc)
     end,
     {Size, FileCtx6} = case maps:get(include_size, Opts, true) of
@@ -370,7 +368,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         atime = ATime,
         mtime = MTime,
         ctime = CTime,
-        type = Type,
+        type = file_meta:get_type(FileDoc),
         size = Size,
         shares = Shares,
         provider_id = ProviderId,
@@ -380,9 +378,9 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
 
 
 %% @private
--spec get_private_attrs(user_ctx:ctx(), file_ctx:ctx(), file_meta:doc()) ->
+-spec get_private_attrs(file_ctx:ctx(), file_meta:doc()) ->
     file_private_attrs_and_ctx().
-get_private_attrs(UserCtx, FileCtx0, #document{
+get_private_attrs(FileCtx0, #document{
     value = #file_meta{
         mode = Mode,
         provider_id = ProviderId,
@@ -390,7 +388,7 @@ get_private_attrs(UserCtx, FileCtx0, #document{
         shares = Shares
     }
 }) ->
-    {{Uid, Gid}, FileCtx1} = file_ctx:get_posix_storage_user_context(FileCtx0, UserCtx),
+    {{Uid, Gid}, FileCtx1} = file_ctx:get_display_credentials(FileCtx0),
     {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx1}.
 
 

@@ -40,8 +40,6 @@ get_documents_diff(Worker, After, Before, SessionClosed) ->
     end, After, Before)),
 
     Ans2 = lists:filter(fun
-                            ({ok, #document{value = #links_node{model = luma_cache}}}) -> false;
-                            ({ok, #document{value = #links_forest{model = luma_cache}}}) -> false;
                             ({ok, #document{value = #links_node{model = task_pool}}}) -> false;
                             ({ok, #document{value = #links_forest{model = task_pool}}}) -> false;
                             ({ok, #document{value = #task_pool{}}}) -> false;

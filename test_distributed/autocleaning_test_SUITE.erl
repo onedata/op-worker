@@ -147,9 +147,7 @@ end, __Distributions))).
                    ?assertReport(Expected, Worker, __ARId),
                     true
                 catch
-                    E:R ->
-                        % todo remove this log
-                        ct:pal("ERROR: ~p~nStacktrace:~n~p", [{E, R}, erlang:get_stacktrace()]),
+                    _:_ ->
                         false
                 end
         end, false, __ARIds)

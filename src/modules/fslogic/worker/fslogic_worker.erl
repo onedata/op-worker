@@ -366,12 +366,11 @@ get_operation(#proxyio_request{proxyio_request = Req}) ->
 %%--------------------------------------------------------------------
 -spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
 handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
-    file_request = Req, extended_direct_io = ExtDIO}}, FileCtx) ->
+    file_request = Req}}, FileCtx) ->
     [ReqName | _] = tuple_to_list(Req),
     ?update_counter(?EXOMETER_NAME(ReqName)),
     Now = os:timestamp(),
-    FileCtx2 = file_ctx:set_extended_direct_io(FileCtx, ExtDIO),
-    Ans = handle_file_request(UserCtx, Req, FileCtx2),
+    Ans = handle_file_request(UserCtx, Req, FileCtx),
     Time = timer:now_diff(os:timestamp(), Now),
     ?update_counter(?EXOMETER_TIME_NAME(ReqName), Time),
     Ans;

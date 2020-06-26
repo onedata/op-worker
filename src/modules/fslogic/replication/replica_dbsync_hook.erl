@@ -245,7 +245,7 @@ reconcile_replicas(FileCtx,
         {{renamed, RenamedDoc, Uuid, TargetSpaceId}, _} ->
             {ok, _} = fslogic_location_cache:save_location(RenamedDoc),
             RenamedFileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, TargetSpaceId)),
-            files_to_chown:chown_file(RenamedFileCtx),
+            files_to_chown:chown_or_defer(RenamedFileCtx),
             notify_block_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc),
             notify_size_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc)
     end.
