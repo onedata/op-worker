@@ -292,7 +292,6 @@ maybe_schedule_next_batch_job(_CurrentMasterJob, _NextBatchMasterJob, _Args) ->
 
 -spec process_children_batch(master_job(), children_batch()) -> {[master_job()], [slave_job()], fold_children_result()}.
 process_children_batch(CurrentMasterJob = #storage_traverse_master{
-    storage_file_ctx = StorageFileCtx,
     iterator_module = Iterator,
     max_depth = MaxDepth,
     children_master_job_prehook = ChildrenMasterJobPrehook,

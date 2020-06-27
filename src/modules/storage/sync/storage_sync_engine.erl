@@ -184,8 +184,8 @@ find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_s
             MissingParentTokens = DirectParentStorageFileIdTokens -- ParentStorageFileIdTokens,
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
-            % TODO TUTAJ SPOKOJNIE MOZNA WYMYSLIC I PODAWAC STATA
-            ParentStorageFileCtx = storage_file_ctx:new(ParentStorageFileId, SpaceId, StorageId),
+            % TODO PRZETESTOWAĆ poniższe
+            ParentStorageFileCtx = flat_storage_iterator:get_virtual_directory_ctx(ParentStorageFileId, SpaceId, StorageId),
             Info2 = Info#{parent_ctx => ParentCtx2},
             ensure_all_parents_exist_and_are_dirs(ParentStorageFileCtx, Info2, MissingParentTokens)
     end.
@@ -194,8 +194,14 @@ find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_s
 ensure_all_parents_exist_and_are_dirs(_ParentStorageFileCtx, Info, []) ->
     {ok, Info};
 ensure_all_parents_exist_and_are_dirs(ParentStorageFileCtx, Info, [MissingParentName | Rest]) ->
-    % TODO TUTAJ SPOKOJNIE MOZNA WYMYSLIC I PODAWAC STATA
-    MissingParentStorageCtx = storage_file_ctx:get_child_ctx_const(ParentStorageFileCtx, MissingParentName),
+    % TODO PRZETESTOWAĆ poniższe
+%%    MissingParentStorageCtx = storage_file_ctx:get_child_ctx_const(ParentStorageFileCtx, MissingParentName),
+    ParentStorageFileId = storage_file_ctx:get_storage_file_id_const(ParentStorageFileCtx),
+    SpaceId = storage_file_ctx:get_space_id_const(ParentStorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(ParentStorageFileCtx),
+    MissingParentStorageFileId = filename:join([ParentStorageFileId, MissingParentName]),
+    MissingParentStorageCtx = flat_storage_iterator:get_virtual_directory_ctx(MissingParentStorageFileId, SpaceId, StorageId),
+
     case ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info) of
         undefined ->
             {error, ?ENOENT};
