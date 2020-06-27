@@ -666,7 +666,7 @@ get_owner_id(StorageFileCtx) ->
 
 -spec maybe_import_nfs4_acl(file_ctx:ctx(), storage_file_ctx:ctx(), storage_sync_traverse:info()) ->
     {ok, storage_file_ctx:ctx()}.
-maybe_import_nfs4_acl(FileCtx, StorageFileCtx, #{storage_type := ?BLOCK_STORAGE, sync_acl := true}) ->
+maybe_import_nfs4_acl(FileCtx, StorageFileCtx, #{is_posix_storage := true, sync_acl := true}) ->
     import_nfs4_acl(FileCtx, StorageFileCtx);
 maybe_import_nfs4_acl(_FileCtx, StorageFileCtx, _Info) ->
     {ok, StorageFileCtx}.
@@ -896,7 +896,7 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
 
 -spec maybe_update_mode(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_mode(StorageFileCtx, #file_attr{}, FileCtx, #{storage_type := ?OBJECT_STORAGE}) ->
+maybe_update_mode(StorageFileCtx, #file_attr{}, FileCtx, #{is_posix_storage := false}) ->
     {false, FileCtx, StorageFileCtx, ?MODE_ATTR_NAME};
 maybe_update_mode(StorageFileCtx, #file_attr{mode = OldMode}, FileCtx, _Info) ->
     {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
@@ -953,7 +953,7 @@ update_times(FileCtx, #statbuf{st_atime = StorageATime, st_mtime = StorageMTime,
 
 -spec maybe_update_owner(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_owner(StorageFileCtx, #file_attr{}, FileCtx, #{storage_type := ?OBJECT_STORAGE}) ->
+maybe_update_owner(StorageFileCtx, #file_attr{}, FileCtx, #{is_posix_storage := false}) ->
     {false, FileCtx, StorageFileCtx, ?OWNER_ATTR_NAME};
 maybe_update_owner(StorageFileCtx, #file_attr{owner_id = OldOwnerId}, FileCtx, _Info) ->
     {Updated, StorageFileCtx3} = case file_ctx:is_space_dir_const(FileCtx) of
@@ -984,7 +984,7 @@ update_owner(FileCtx, NewOwnerId) ->
 %%-------------------------------------------------------------------
 -spec maybe_update_nfs4_acl(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{storage_type := ?OBJECT_STORAGE}) ->
+maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{is_posix_storage := false}) ->
     {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME};
 maybe_update_nfs4_acl(StorageFileCtx, _FileAttr, FileCtx, #{sync_acl := false}) ->
     {false, FileCtx, StorageFileCtx, ?NFS4_ACL_ATTR_NAME};

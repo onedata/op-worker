@@ -175,7 +175,7 @@
   {git,"https://github.com/inaka/worker_pool",
        {ref,"ae5aa2e5819f7cce3aa3fbc50d39743de3515cdc"}},
   1},
- {<<"yamerl">>,{pkg,<<"yamerl">>,<<"0.7.0">>},0}]}.
+ {<<"yamerl">>,{pkg,<<"yamerl">>,<<"0.7.0">>},1}]}.
 [
 {pkg_hash,[
  {<<"backoff">>, <<"83B72ED2108BA1EE8F7D1C22E0B4A00CFE3593A67DBC792799E8CCE9F42F796B">>},

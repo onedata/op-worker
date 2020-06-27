@@ -37,8 +37,8 @@
 -type info() :: term(). % additional info used by specific module that uses storage_traverse framework
 -type master_job() :: #storage_traverse_master{}.
 -type slave_job() :: #storage_traverse_slave{}.
--type children_batch() :: [{helpers:file_id(), Depth :: non_neg_integer()}].
--type iterator_module() :: block_storage_iterator | canonical_object_storage_iterator.
+-type children_batch() :: [{storage_file_ctx:ctx(), Depth :: non_neg_integer()}].
+-type iterator_type() :: ?FLAT_ITERATOR | ?TREE_ITERATOR.
 -type next_batch_job_prehook() :: fun((TraverseJob :: master_job()) -> ok).
 -type children_master_job_prehook() :: fun((TraverseJob :: master_job()) -> ok).
 -type fold_children_init() :: term().
@@ -82,7 +82,7 @@
 %% @formatter:on
 
 -export_type([run_opts/0, info/0, master_job/0, slave_job/0, children_batch/0, next_batch_job_prehook/0, fold_children_fun/0,
-    children_master_job_prehook/0, iterator_module/0, fold_children_init/0, fold_children_result/0, callback_module/0]).
+    children_master_job_prehook/0, iterator_type/0, fold_children_init/0, fold_children_result/0, callback_module/0]).
 
 %%%===================================================================
 %%% Definitions of optional storage_traverse behaviour callbacks
@@ -121,13 +121,12 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) when is_atom(Pool) 
     run(atom_to_binary(Pool, utf8), TaskId, SpaceId, StorageId, TraverseInfo, RunOpts);
 run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
     RootStorageFileId = storage_file_id:space_dir_id(SpaceId, StorageId),
-    RootStorageFileCtx = storage_file_ctx:new(RootStorageFileId, SpaceId, StorageId),
-    StorageType = storage:get_type(StorageId),
+    Iterator = get_iterator(StorageId),
+    RootStorageFileCtx = Iterator:init_root_storage_file_ctx(RootStorageFileId, SpaceId, StorageId),
     DefinedTaskId = case TaskId =:= undefined of
         true -> datastore_key:new();
         false -> TaskId
     end,
-    Iterator = get_iterator(StorageType),
     ChildrenMasterJobPrehook = maps:get(children_master_job_prehook, RunOpts, ?DEFAULT_CHILDREN_BATCH_JOB_PREHOOK),
     StorageTraverse = #storage_traverse_master{
         storage_file_ctx = RootStorageFileCtx,
@@ -149,6 +148,27 @@ run(Pool, TaskId, SpaceId, StorageId, TraverseInfo, RunOpts) ->
     ChildrenMasterJobPrehook(StorageTraverse),
     traverse:run(Pool, DefinedTaskId, StorageTraverse).
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns type of iterator, which is also the name of a module
+%% implementing storage_iterator behaviour.
+%% Iterator type is associated with helper type.
+%% @end
+%%-------------------------------------------------------------------
+-spec get_iterator(storage:id()) -> iterator_type().
+get_iterator(Storage) ->
+    HelperName = storage:get_helper_name(Storage),
+    case HelperName of
+        ?POSIX_HELPER_NAME -> ?TREE_ITERATOR;
+        ?WEBDAV_HELPER_NAME -> ?TREE_ITERATOR;
+        ?GLUSTERFS_HELPER_NAME -> ?TREE_ITERATOR;
+        ?NULL_DEVICE_HELPER_NAME -> ?TREE_ITERATOR;
+        ?CEPH_HELPER_NAME -> ?FLAT_ITERATOR;
+        ?CEPHRADOS_HELPER_NAME -> ?FLAT_ITERATOR;
+        ?S3_HELPER_NAME -> ?FLAT_ITERATOR;
+        ?SWIFT_HELPER_NAME -> ?FLAT_ITERATOR
+    end.
+
 %%%===================================================================
 %%% Pool callbacks
 %%%===================================================================
@@ -162,8 +182,8 @@ do_master_job(MasterJob = #storage_traverse_master{
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     case Iterator:get_children_and_next_batch_job(MasterJob) of
-        {ok, ChildrenIdsWithDepths, NextBatchMasterJob} ->
-            generate_master_and_slave_jobs(MasterJob, NextBatchMasterJob, ChildrenIdsWithDepths, Args);
+        {ok, ChildrenBatch, NextBatchMasterJob} ->
+            generate_master_and_slave_jobs(MasterJob, NextBatchMasterJob, ChildrenBatch, Args);
         Error = {error, ?ENOENT} ->
             ?warning("Getting children of ~p on storage ~p failed due to ~w", [StorageFileId, StorageId, Error]),
             Error;
@@ -199,20 +219,7 @@ reset_info(MasterJob = #storage_traverse_master{callback_module = CallbackModule
         false -> Info
     end.
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Returns module implementing storage_iterator associated
-%% with passed helper type.
-%% @end
-%%-------------------------------------------------------------------
--spec get_iterator(helper:type()) -> iterator_module().
-get_iterator(?BLOCK_STORAGE) ->
-    block_storage_iterator;
-get_iterator(?OBJECT_STORAGE) ->
-    canonical_object_storage_iterator.
-
--spec generate_master_and_slave_jobs(master_job(), master_job() | undefined, [{helpers:file_id(), Depth :: non_neg_integer()}],
+-spec generate_master_and_slave_jobs(master_job(), master_job() | undefined, children_batch(),
     traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()} |
     {ok, traverse:master_job_map(), fold_children_result()}.
@@ -295,14 +302,12 @@ process_children_batch(CurrentMasterJob = #storage_traverse_master{
     info = Info
 }, ChildrenBatch) ->
     ResetInfo = reset_info(CurrentMasterJob),
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     {MasterJobsRev, SlaveJobsRev, ComputeResult} = lists:foldl(
-        fun({ChildStorageFileId, ChildDepth}, Acc = {MasterJobsIn, SlaveJobsIn, ComputeAcc}) ->
+        fun({ChildCtx, ChildDepth}, Acc = {MasterJobsIn, SlaveJobsIn, ComputeAcc}) ->
+            ChildStorageFileId = storage_file_ctx:get_storage_file_id_const(ChildCtx),
             ChildName = filename:basename(ChildStorageFileId),
             case {ChildDepth =< MaxDepth, file_meta:is_hidden(ChildName)} of
                 {true, false} ->
-                    ChildCtx = storage_file_ctx:new(ChildStorageFileId, SpaceId, StorageId),
                     {ComputePartialResult, ChildCtx2} = compute(FoldChildrenFun, ChildCtx, Info, ComputeAcc,
                         FoldChildrenEnabled),
                     case Iterator:is_dir(ChildCtx2) of

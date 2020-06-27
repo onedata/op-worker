@@ -40,7 +40,7 @@
 -export_type([ctx/0]).
 
 %% API
--export([new/3]).
+-export([new/3, new/4]).
 -export([
     get_file_name_const/1, get_storage_file_id_const/1,
     get_storage_id_const/1, get_space_id_const/1,
@@ -62,6 +62,17 @@ new(StorageFileId, SpaceId, StorageId) ->
         space_id = SpaceId,
         storage_id = StorageId
     }.
+-spec new(file_meta:name(), od_space:id(), storage:id(), helpers:stat()) -> ctx().
+new(StorageFileId, SpaceId, StorageId, Stat) ->
+    FileName = filename:basename(StorageFileId),
+    #storage_file_ctx{
+        storage_file_id = StorageFileId,
+        name = FileName,
+        space_id = SpaceId,
+        storage_id = StorageId,
+        stat = Stat
+    }.
+
 
 -spec get_file_name_const(ctx()) -> helpers:file_id().
 get_file_name_const(#storage_file_ctx{name = FileName}) ->
