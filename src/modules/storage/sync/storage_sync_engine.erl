@@ -184,6 +184,7 @@ find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_s
             MissingParentTokens = DirectParentStorageFileIdTokens -- ParentStorageFileIdTokens,
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+            % TODO TUTAJ SPOKOJNIE MOZNA WYMYSLIC I PODAWAC STATA
             ParentStorageFileCtx = storage_file_ctx:new(ParentStorageFileId, SpaceId, StorageId),
             Info2 = Info#{parent_ctx => ParentCtx2},
             ensure_all_parents_exist_and_are_dirs(ParentStorageFileCtx, Info2, MissingParentTokens)
@@ -193,6 +194,7 @@ find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_s
 ensure_all_parents_exist_and_are_dirs(_ParentStorageFileCtx, Info, []) ->
     {ok, Info};
 ensure_all_parents_exist_and_are_dirs(ParentStorageFileCtx, Info, [MissingParentName | Rest]) ->
+    % TODO TUTAJ SPOKOJNIE MOZNA WYMYSLIC I PODAWAC STATA
     MissingParentStorageCtx = storage_file_ctx:get_child_ctx_const(ParentStorageFileCtx, MissingParentName),
     case ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info) of
         undefined ->
