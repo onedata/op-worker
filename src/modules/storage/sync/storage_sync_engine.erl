@@ -184,6 +184,7 @@ find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_s
             MissingParentTokens = DirectParentStorageFileIdTokens -- ParentStorageFileIdTokens,
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
             StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+            % TODO TUTAJ SPOKOJNIE MOZNA WYMYSLIC I PODAWAC STATA
             ParentStorageFileCtx = storage_file_ctx:new(ParentStorageFileId, SpaceId, StorageId),
             Info2 = Info#{parent_ctx => ParentCtx2},
             ensure_all_parents_exist_and_are_dirs(ParentStorageFileCtx, Info2, MissingParentTokens)
@@ -193,6 +194,7 @@ find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_s
 ensure_all_parents_exist_and_are_dirs(_ParentStorageFileCtx, Info, []) ->
     {ok, Info};
 ensure_all_parents_exist_and_are_dirs(ParentStorageFileCtx, Info, [MissingParentName | Rest]) ->
+    % TODO TUTAJ SPOKOJNIE MOZNA WYMYSLIC I PODAWAC STATA
     MissingParentStorageCtx = storage_file_ctx:get_child_ctx_const(ParentStorageFileCtx, MissingParentName),
     case ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info) of
         undefined ->
@@ -234,12 +236,11 @@ ensure_parent_exist_and_is_dir(MissingParentName, MissingParentStorageCtx, Info 
                     {true, MissingParentCtx3} ->
                         MissingParentCtx3;
                     {false, _} ->
-                        case import_file_recreated_with_different_type(MissingParentStorageCtx, MissingParentCtx2, Info) of
-                            {?IMPORTED, MissingParentCtx4, _} ->
-                                MissingParentCtx4;
-                            {?PROCESSED, undefined, _} ->
-                                undefined
-                        end
+                        % if it's not a directory first delete stalled file, and create missing parent
+                        {?IMPORTED, MissingParentCtx4} =
+                            delete_stalled_file_and_create_missing_parent(MissingParentStorageCtx,
+                                MissingParentCtx2, Info),
+                            MissingParentCtx4
                 end;
             {error, ?ENOENT} ->
                 undefined
@@ -261,9 +262,8 @@ ensure_missing_parent_exist(MissingParentName, MissingParentStorageCtx, Info = #
             case get_child_safe(ParentCtx, MissingParentName) of
                 {ok, MissingParentCtx} -> MissingParentCtx;
                 {error, ?ENOENT} ->
-                    case maybe_import_file(MissingParentStorageCtx, Info) of
-                        {?IMPORTED, MissingParentCtx, _StorageFileCtx} -> MissingParentCtx;
-                        {?PROCESSED, undefined, _} -> undefined;
+                    case create_missing_parent(MissingParentStorageCtx, Info) of
+                        {?IMPORTED, MissingParentCtx} -> MissingParentCtx;
                         {error, ?ENOENT} -> undefined
                     end
             end
@@ -460,6 +460,25 @@ import_file_recreated_with_different_type(StorageFileCtx, FileCtx, Info) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
+%% This functions is used to create missing parent on object storages.
+%% It's used when sync detected that regular file was deleted from
+%% storage and directory was created with the same name.
+%% It first deletes the stalled file and then creates metadata for
+%% directory.
+%% @end
+%%-------------------------------------------------------------------
+-spec delete_stalled_file_and_create_missing_parent(storage_file_ctx:ctx(), file_ctx:ctx(), info()) ->
+    {result(), file_ctx:ctx() | undefined}.
+delete_stalled_file_and_create_missing_parent(StorageFileCtx, FileCtx, Info) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, 1),
+    storage_sync_deletion:delete_file_and_update_counters(FileCtx, SpaceId, StorageId),
+    create_missing_parent(StorageFileCtx, Info).
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
 %% This functions import the file, if it hasn't been synchronized yet.
 %% It checks whether file that is to be imported is still visible on
 %% the storage.
@@ -496,6 +515,27 @@ import_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             {error, Reason}
     end.
 
+
+-spec create_missing_parent(storage_file_ctx:ctx(), info()) ->
+    {result(), file_ctx:ctx()} | {error, term()}.
+create_missing_parent(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
+    try
+        create_missing_parent_unsafe(StorageFileCtx, Info)
+    catch
+        throw:?ENOENT ->
+            cleanup_file(ParentCtx, StorageFileCtx),
+            {error, ?ENOENT};
+        Error:Reason ->
+            FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+            SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+            StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+            ?error_stacktrace("importing file ~p on storage ~p in space ~p failed due to ~w:~w",
+                [FileName, StorageId, SpaceId, Error, Reason]),
+            cleanup_file(ParentCtx, StorageFileCtx),
+            {error, Reason}
+    end.
+
+
 -spec cleanup_file(file_ctx:ctx(), storage_file_ctx:ctx()) -> ok.
 cleanup_file(ParentCtx, StorageFileCtx) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
@@ -515,13 +555,34 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     FileUuid = datastore_key:new(),
     {ok, StorageFileCtx3} = create_location(FileUuid, StorageFileCtx2, OwnerId),
     {ok, FileCtx, StorageFileCtx4} = create_file_meta(FileUuid, StorageFileCtx3, OwnerId, ParentUuid),
-    {ok, StorageFileCtx5} = create_times(FileUuid, StorageFileCtx4),
+    {ok, StorageFileCtx5} = create_times_from_stat_timestamps(FileUuid, StorageFileCtx4),
     {ok, StorageFileCtx6} = maybe_import_nfs4_acl(FileCtx, StorageFileCtx5, Info),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     storage_sync_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
     {?IMPORTED, FileCtx2, StorageFileCtx6}.
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% This functions creates metadata for missing parent of file on
+%% object storage.
+%% @end
+%%-------------------------------------------------------------------
+-spec create_missing_parent_unsafe(storage_file_ctx:ctx(), info()) ->
+    {result(), file_ctx:ctx()}.
+create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
+    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    FileUuid = datastore_key:new(),
+    create_dir_location(FileUuid),
+    {ok, FileCtx} = create_missing_parent_file_meta(FileUuid, StorageFileCtx, ParentUuid),
+    create_times_from_current_time(FileUuid, SpaceId),
+    {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+    storage_sync_logger:log_import(StorageFileId, CanonicalPath, FileUuid, SpaceId),
+    {?IMPORTED, FileCtx2}.
 
 
 -spec create_location(file_meta:uuid(), storage_file_ctx:ctx(), od_user:id()) -> {ok, storage_file_ctx:ctx()}.
@@ -541,6 +602,16 @@ create_location(FileUuid, StorageFileCtx, OwnerId) ->
             create_dir_location(FileUuid, StorageFileCtx2)
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function shall be called only on non-posix storage where there
+%% is no GID in file's attrs on storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec create_dir_location(file_meta:uuid()) -> ok.
+create_dir_location(FileUuid) ->
+    ok = dir_location:mark_dir_synced_from_storage(FileUuid, undefined).
 
 -spec create_dir_location(file_meta:uuid(), storage_file_ctx:ctx()) -> {ok, storage_file_ctx:ctx()}.
 create_dir_location(FileUuid, StorageFileCtx) ->
@@ -615,8 +686,8 @@ create_file_meta(FileUuid, StorageFileCtx, OwnerId, ParentUuid) ->
             % there was race with creating file by lfm
             % file will be imported with suffix
             FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
-            FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, file_meta:type(Mode),
-                Mode band 8#1777, OwnerId, ParentUuid, SpaceId),
+            FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, file_meta:type(Mode), Mode band 8#1777,
+                OwnerId, ParentUuid, SpaceId),
             {ok, FileUuid} = file_meta:create({uuid, ParentUuid}, FileMetaDoc2),
             {ok, FileMetaDoc2};
         {ok, FileUuid} ->
@@ -626,22 +697,62 @@ create_file_meta(FileUuid, StorageFileCtx, OwnerId, ParentUuid) ->
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
     {ok, FileCtx, StorageFileCtx2}.
 
--spec create_times(file_meta:uuid(), storage_file_ctx:ctx()) ->
+
+-spec create_missing_parent_file_meta(file_meta:uuid(), storage_file_ctx:ctx(), file_meta:uuid()) ->
+    {ok, file_ctx:ctx()}.
+create_missing_parent_file_meta(FileUuid, StorageFileCtx, ParentUuid) ->
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
+    FileMetaDoc = file_meta:new_doc(FileUuid, FileName, ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS,
+        ?SPACE_OWNER_ID(SpaceId), ParentUuid, SpaceId),
+    {ok, FinalDoc} = case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
+        {error, already_exists} ->
+            % there was race with creating file by lfm
+            % file will be imported with suffix
+            FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
+            FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS,
+                ?SPACE_OWNER_ID(SpaceId), ParentUuid, SpaceId),
+            {ok, FileUuid} = file_meta:create({uuid, ParentUuid}, FileMetaDoc2),
+            {ok, FileMetaDoc2};
+        {ok, FileUuid} ->
+            {ok, FileMetaDoc}
+    end,
+    FileCtx = file_ctx:new_by_doc(FinalDoc, SpaceId, undefined),
+    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
+    {ok, FileCtx}.
+
+
+-spec create_times_from_stat_timestamps(file_meta:uuid(), storage_file_ctx:ctx()) ->
     {ok, storage_file_ctx:ctx()}.
-create_times(FileUuid, StorageFileCtx) ->
-    {StatBuf, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+create_times_from_stat_timestamps(FileUuid, StorageFileCtx) ->
+    {#statbuf{
+        st_mtime = StMtime,
+        st_atime = StAtime,
+        st_ctime = StCtime
+    }, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx2),
-    {ok, _} = times:save(#document{
-        key = FileUuid,
-        value = #times{
-            mtime = StatBuf#statbuf.st_mtime,
-            atime = StatBuf#statbuf.st_atime,
-            ctime = StatBuf#statbuf.st_ctime
-        },
-        scope = SpaceId}
-    ),
+    create_times_doc(FileUuid, SpaceId, StMtime, StAtime, StCtime),
     {ok, StorageFileCtx2}.
 
+
+-spec create_times_from_current_time(file_meta:uuid(), od_space:id()) -> ok.
+create_times_from_current_time(FileUuid, SpaceId) ->
+    CurrentTime = time_utils:system_time_seconds(),
+    create_times_doc(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime).
+
+
+-spec create_times_doc(file_meta:uuid(), od_space:id(), non_neg_integer(),
+    non_neg_integer(), non_neg_integer()) -> ok.
+create_times_doc(FileUuid, SpaceId, Mtime, Atime, Ctime) ->
+    ok = ?extract_ok(times:save(#document{
+        key = FileUuid,
+        value = #times{
+            mtime = Mtime,
+            atime = Atime,
+            ctime = Ctime
+        },
+        scope = SpaceId}
+    )).
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -703,7 +814,6 @@ import_nfs4_acl(FileCtx, StorageFileCtx) ->
                     {ok, StorageFileCtx}
             end
     end.
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -771,12 +881,11 @@ maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info) ->
 -spec maybe_update_file_location(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
 maybe_update_file_location(StorageFileCtx, _FileAttr, FileCtx, _Info) ->
-    {#statbuf{st_mode = StMode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
-    case file_meta:type(StMode) of
-        ?DIRECTORY_TYPE ->
-            {false, FileCtx, StorageFileCtx2, ?FILE_LOCATION_ATTR_NAME};
-        ?REGULAR_FILE_TYPE ->
-            maybe_update_file_location(StorageFileCtx2, FileCtx)
+    case file_ctx:is_dir(FileCtx) of
+        {true, FileCtx2} ->
+            {false, FileCtx2, StorageFileCtx, ?FILE_LOCATION_ATTR_NAME};
+        {false, FileCtx2} ->
+            maybe_update_file_location(StorageFileCtx, FileCtx2)
     end.
 
 %%--------------------------------------------------------------------
