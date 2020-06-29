@@ -8,8 +8,8 @@
 %%% @doc
 %%% This module is responsible for aggregation and broadcasting changes from
 %%% a space to all supporting providers. It works in two modes: default
-%%% and recovery. Default outgoing streams are globally registered and they
-%%% broadcast changes infinitely for all spaces supported by this provider.
+%%% and recovery. Main outgoing streams broadcast changes infinitely for
+%%% all spaces supported by this provider.
 %%% Recovery streams are started ad hoc, when remote provider spots that he
 %%% is missing some changes, that have already been broadcast by this provider.
 %%% @end
@@ -34,7 +34,7 @@
                         couchbase_changes:until() | end_of_stream,
                         dbsync_changes:timestamp(),
                         [datastore:doc()]) -> any()).
--type option() :: {register, boolean()} |
+-type option() :: {main_stream, boolean()} |
                   {filter, filter()} |
                   {handler, handler()} |
                   {handling_interval, non_neg_integer()} |
@@ -67,12 +67,7 @@
 -spec start_link(binary(), od_space:id(), [option()]) ->
     {ok, pid()} | {error, Reason :: term()}.
 start_link(Name, SpaceId, Opts) ->
-    case proplists:get_value(register, Opts, false) of
-        true ->
-            gen_server2:start_link({global, {?MODULE, Name}}, ?MODULE, [SpaceId, Opts], []);
-        false ->
-            gen_server2:start_link(?MODULE, [SpaceId, Opts], [])
-    end.
+    gen_server2:start_link({global, {?MODULE, Name}}, ?MODULE, [SpaceId, Opts], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -92,15 +87,18 @@ init([SpaceId, Opts]) ->
     Bucket = dbsync_utils:get_bucket(),
     Since = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
     Callback = fun(Change) -> gen_server:cast(Stream, {change, Change}) end,
-    case proplists:get_value(register, Opts, false) of
-        true -> {ok, _} = couchbase_changes_worker:start_link(Bucket, SpaceId);
-        false -> ok
+
+    {ok, _} = case proplists:get_value(main_stream, Opts, false) of
+        true ->
+            couchbase_changes_worker:start_link(Bucket, SpaceId, Callback);
+        false ->
+            couchbase_changes_stream:start_link(Bucket, SpaceId, Callback, [
+                {since, proplists:get_value(since, Opts, Since)},
+                {until, proplists:get_value(until, Opts, infinity)},
+                {except_mutator, proplists:get_value(except_mutator, Opts, <<>>)}
+            ], [])
     end,
-    {ok, _} = couchbase_changes_stream:start_link(Bucket, SpaceId, Callback, [
-        {since, proplists:get_value(since, Opts, Since)},
-        {until, proplists:get_value(until, Opts, infinity)},
-        {except_mutator, proplists:get_value(except_mutator, Opts, <<>>)}
-    ], []),
+
     {ok, schedule_docs_handling(#state{
         since = proplists:get_value(since, Opts, Since),
         until = proplists:get_value(since, Opts, Since),

@@ -183,7 +183,7 @@ start_out_stream(SpaceId) ->
             dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp)
     end,
     Spec = dbsync_out_stream_spec(SpaceId, SpaceId, [
-        {register, true},
+        {main_stream, true},
         {filter, Filter},
         {handler, Handler},
         {handling_interval, application:get_env(
@@ -255,8 +255,7 @@ handle_changes_request(ProviderId, #changes_request2{
                 {handler, Handler},
                 {handling_interval, application:get_env(
                     ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
-                )},
-                {register, true}
+                )}
             ]),
             Node = datastore_key:any_responsible_node(SpaceId),
             try
