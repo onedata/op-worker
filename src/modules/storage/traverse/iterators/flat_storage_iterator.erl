@@ -22,25 +22,16 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% storage_iterator callbacks
--export([init_root_storage_file_ctx/3, get_children_and_next_batch_job/1, is_dir/1, get_virtual_directory_ctx/3]).
+-export([init_root_storage_file_ctx/3, get_children_and_next_batch_job/1, is_dir/1]).
+
+%% API
+-export([get_virtual_directory_ctx/3]).
 
 %%%===================================================================
 %%% storage_iterator callbacks
 %%%===================================================================
 
-get_virtual_directory_ctx(StorageFileId, SpaceId, StorageId) ->
-    CurrentTime = time_utils:system_time_seconds(),
-    Stat = #statbuf{
-        st_uid = ?ROOT_UID,
-        st_gid = ?ROOT_GID,
-        st_mode = ?DEFAULT_DIR_PERMS bor 8#40000,
-        st_mtime = CurrentTime,
-        st_atime = CurrentTime,
-        st_ctime = CurrentTime,
-        st_size = 0
-    },
-    storage_file_ctx:new(StorageFileId, SpaceId, StorageId, Stat).
-
+-spec init_root_storage_file_ctx(helpers:file_id(), od_space:id(), storage:id()) -> storage_file_ctx:ctx().
 init_root_storage_file_ctx(RootStorageFileId, SpaceId, StorageId) ->
     get_virtual_directory_ctx(RootStorageFileId, SpaceId, StorageId).
 
@@ -96,6 +87,24 @@ get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{
     {boolean(), StorageFileCtx2 :: storage_file_ctx:ctx()}.
 is_dir(StorageFileCtx) ->
     {false, StorageFileCtx}.
+
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+
+-spec get_virtual_directory_ctx(helpers:file_id(), od_space:id(), storage:id()) -> storage_file_ctx:ctx().
+get_virtual_directory_ctx(StorageFileId, SpaceId, StorageId) ->
+    CurrentTime = time_utils:system_time_seconds(),
+    Stat = #statbuf{
+        st_uid = ?ROOT_UID,
+        st_gid = ?ROOT_GID,
+        st_mode = ?DEFAULT_DIR_PERMS bor 8#40000,
+        st_mtime = CurrentTime,
+        st_atime = CurrentTime,
+        st_ctime = CurrentTime,
+        st_size = 0
+    },
+    storage_file_ctx:new(StorageFileId, SpaceId, StorageId, Stat).
 
 %%%===================================================================
 %%% Internal functions

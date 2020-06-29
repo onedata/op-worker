@@ -1294,10 +1294,10 @@ create_list_race_test(Config, MountSpaceInRoot) ->
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage),
 
     ListedFiles = [FileToDeleteOnStorage, FileToDeleteByLFM] = receive
-        {waiting, Pid, 0, {ok, Files}} ->
+        {waiting, Pid, 0, {ok, FilesAndStats}} ->
             % continue sync
             Pid ! continue,
-            [filename:basename(F) || F <- Files]
+            [filename:basename(F) || {F, _} <- FilesAndStats]
     end,
 
     FileToDeleteByLFMPath = ?SPACE_TEST_FILE_PATH(FileToDeleteByLFM),

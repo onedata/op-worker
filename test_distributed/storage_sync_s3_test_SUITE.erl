@@ -148,11 +148,6 @@ all() -> ?ALL(?TEST_CASES).
 %%% Test functions
 %%%===================================================================
 
-% TODO ogarnac, bo wali jakimis logami przy unlinku
-% TODO ogarnac wymyslania stata dla katalogów w locie - chyba done
-% TODO srawdzic czy faktycznie nie jest wolany ani jeden stat
-% TODO srawdzic bo jakos dziala wolniej niz z samym olewaniem statów, czmeu ? powinno byc szybicje
-
 empty_import_test(Config) ->
     storage_sync_test_base:empty_import_test(Config).
 
