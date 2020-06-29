@@ -5430,16 +5430,15 @@ create_init_file(Config, Readonly) ->
     RDWRStorage = get_rdwr_storage(Config, W1),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, SpaceDir, RDWRStorage),
     case sd_test_utils:mkdir(W1, SDHandle, 8#777) of
-        ok ->
-            ok;
-        {error, eexist} ->
-            ?assertMatch({ok, []}, is_empty(W1, SDHandle), ?ATTEMPTS)
+        ok -> ok;
+        {error, eexist} -> is_empty(W1, SDHandle)
     end.
 
 is_empty(Worker, SDHandle = #sd_handle{storage_id = StorageId}) ->
     Helper = rpc:call(Worker, storage, get_helper, [StorageId]),
     HelperName = helper:get_name(Helper),
-    sd_test_utils:storage_ls(Worker, SDHandle, 0, 1, HelperName).
+    ?assertMatch({ok, []},
+        sd_test_utils:storage_ls(Worker, SDHandle, 0, 1, HelperName), ?ATTEMPTS).
 
 cancel(Worker, SpaceId, StorageId) when is_binary(StorageId) ->
     ?assertMatch(ok, rpc:call(Worker, storage_sync, cancel, [SpaceId, StorageId]));

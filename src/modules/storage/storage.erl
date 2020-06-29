@@ -34,7 +34,7 @@
 -export([describe/1, describe_luma_config/1]).
 
 %%% Functions to retrieve storage details
--export([get_id/1, get_helper/1, get_helper_name/1, get_type/1, get_luma_feed/1, get_luma_config/1]).
+-export([get_id/1, get_helper/1, get_helper_name/1, get_luma_feed/1, get_luma_config/1]).
 -export([fetch_name/1, fetch_qos_parameters_of_local_storage/1,
     fetch_qos_parameters_of_remote_storage/2]).
 -export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1]).
@@ -245,12 +245,6 @@ get_luma_feed(Storage) ->
 -spec get_luma_config(id() | data()) -> luma_config().
 get_luma_config(StorageData) ->
     storage_config:get_luma_config(StorageData).
-
-
--spec get_type(data() | id()) -> helper:type().
-get_type(StorageDataOrId) ->
-    Helper = get_helper(StorageDataOrId),
-    helper:get_type(Helper).
 
 
 -spec fetch_name(id()) -> name().

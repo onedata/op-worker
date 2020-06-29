@@ -30,7 +30,7 @@
 -export([is_posix_compatible/1, is_rename_supported/1,
     is_sync_supported/1, is_nfs4_acl_supported/1, should_skip_storage_detection/1]).
 -export([get_args_with_user_ctx/2]).
--export([translate_name/1, translate_arg_name/1, get_type/1]).
+-export([translate_name/1, translate_arg_name/1]).
 
 -type name() :: binary().
 
@@ -144,17 +144,6 @@ get_redacted_admin_ctx(Helper) ->
 -spec get_storage_path_type(helpers:helper()) -> helper:storage_path_type().
 get_storage_path_type(#helper{args = Args}) ->
     maps:get(<<"storagePathType">>, Args).
-
-
--spec get_type(helpers:helper()) -> helper:type().
-get_type(#helper{name = ?POSIX_HELPER_NAME}) -> ?BLOCK_STORAGE;
-get_type(#helper{name = ?WEBDAV_HELPER_NAME}) -> ?BLOCK_STORAGE;
-get_type(#helper{name = ?GLUSTERFS_HELPER_NAME}) -> ?BLOCK_STORAGE;
-get_type(#helper{name = ?NULL_DEVICE_HELPER_NAME}) -> ?BLOCK_STORAGE;
-get_type(#helper{name = ?CEPH_HELPER_NAME}) -> ?OBJECT_STORAGE;
-get_type(#helper{name = ?CEPHRADOS_HELPER_NAME}) -> ?OBJECT_STORAGE;
-get_type(#helper{name = ?S3_HELPER_NAME}) -> ?OBJECT_STORAGE;
-get_type(#helper{name = ?SWIFT_HELPER_NAME}) -> ?OBJECT_STORAGE.
 
 %%--------------------------------------------------------------------
 %% @doc

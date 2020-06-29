@@ -49,6 +49,7 @@
 #endif
 #include <cassert>
 #include <cstring>
+#include <sys/stat.h>
 
 #include <folly/FBString.h>
 #include <folly/FBVector.h>
@@ -191,6 +192,8 @@ template <typename... Ts>
 int get(ErlNifEnv *env, ERL_NIF_TERM term, std::tuple<Ts...> &var);
 template <typename... Ts>
 TERM make(ErlNifEnv *env, const std::tuple<Ts...> &var);
+
+TERM make(ErlNifEnv *env, const struct stat &var);
 
 template <typename T>
 int get(ErlNifEnv *env, ERL_NIF_TERM term, std::vector<T> &var);
@@ -831,6 +834,16 @@ TERM make(ErlNifEnv *env, const std::tuple<Ts...> &var)
     return TERM(enif_make_tuple_from_array(env, array.begin(), array.size()));
 }
 
+TERM make(ErlNifEnv *env, const struct stat &s)
+{
+    auto record =
+        std::make_tuple(nifpp::str_atom("statbuf"), s.st_dev, s.st_ino,
+            s.st_mode, s.st_nlink, s.st_uid, s.st_gid, s.st_rdev, s.st_size,
+            s.st_atime, s.st_mtime, s.st_ctime, s.st_blksize, s.st_blocks);
+
+    return make(env, std::move(record));
+}
+
 /*
   Disabling for now.  These feel too "loose".  Just use an explicit tuple
 template<typename T0, typename T1, typename ...Ts>
@@ -1128,7 +1141,7 @@ inline typename std::enable_if<
     std::is_same<typename Vector::value_type, TERM>::value, TERM>::type
 makeVector(ErlNifEnv *env, const Vector &var)
 {
-    if(var.empty())
+    if (var.empty())
         return TERM(enif_make_list(env, 0));
     return TERM(
         enif_make_list_from_array(env, (ERL_NIF_TERM *)&var[0], var.size()));

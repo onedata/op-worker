@@ -10,20 +10,35 @@
 %%% with canonical storage path type.
 %%% @end
 %%%-------------------------------------------------------------------
--module(canonical_object_storage_iterator).
+-module(flat_storage_iterator).
 -author("Jakub Kudzia").
 
 -behaviour(storage_iterator).
 
 -include("global_definitions.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/storage/helpers/helpers.hrl").
 -include("modules/storage/traverse/storage_traverse.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% storage_iterator callbacks
--export([get_children_and_next_batch_job/1, is_dir/1]).
+-export([init_root_storage_file_ctx/3, get_children_and_next_batch_job/1, is_dir/1]).
+
+%% API
+-export([get_virtual_directory_ctx/3]).
 
 %%%===================================================================
 %%% storage_iterator callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link storage_iterator} callback init_root_storage_file_ctx/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_root_storage_file_ctx(helpers:file_id(), od_space:id(), storage:id()) -> storage_file_ctx:ctx().
+init_root_storage_file_ctx(RootStorageFileId, SpaceId, StorageId) ->
+    get_virtual_directory_ctx(RootStorageFileId, SpaceId, StorageId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -41,19 +56,24 @@ get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{
     marker = Marker
 }) ->
     Handle = storage_file_ctx:get_handle_const(StorageFileCtx),
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     case storage_driver:listobjects(Handle, Marker, Offset, BatchSize) of
         {ok, []} ->
             {ok, [], undefined};
-        {ok, ChildrenIds} ->
+        {ok, ChildrenIdsAndStats} ->
             ParentStorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             ParentTokens = filename:split(ParentStorageFileId),
-            ChildrenBatch = [{ChildId, depth(ChildId, ParentTokens)} || ChildId <- ChildrenIds],
+            ChildrenBatch = lists:map(fun({ChildId, ChildStat}) ->
+                ChildCtx = storage_file_ctx:new(ChildId, SpaceId, StorageId, ChildStat),
+                {ChildCtx, depth(ChildId, ParentTokens)}
+            end, ChildrenIdsAndStats),
             case length(ChildrenBatch) < BatchSize of
                 true ->
                     {ok, ChildrenBatch, undefined};
                 false ->
-                    NextOffset = Offset + length(ChildrenIds),
-                    NextMarker = lists:last(ChildrenIds),
+                    NextOffset = Offset + length(ChildrenIdsAndStats),
+                    {NextMarker, _} = lists:last(ChildrenIdsAndStats),
                     {ok, ChildrenBatch, StorageTraverse#storage_traverse_master{
                         offset = NextOffset,
                         marker = NextMarker
@@ -72,6 +92,24 @@ get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{
     {boolean(), StorageFileCtx2 :: storage_file_ctx:ctx()}.
 is_dir(StorageFileCtx) ->
     {false, StorageFileCtx}.
+
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+
+-spec get_virtual_directory_ctx(helpers:file_id(), od_space:id(), storage:id()) -> storage_file_ctx:ctx().
+get_virtual_directory_ctx(StorageFileId, SpaceId, StorageId) ->
+    CurrentTime = time_utils:system_time_seconds(),
+    Stat = #statbuf{
+        st_uid = ?ROOT_UID,
+        st_gid = ?ROOT_GID,
+        st_mode = ?DEFAULT_DIR_PERMS bor 8#40000,
+        st_mtime = CurrentTime,
+        st_atime = CurrentTime,
+        st_ctime = CurrentTime,
+        st_size = 0
+    },
+    storage_file_ctx:new(StorageFileId, SpaceId, StorageId, Stat).
 
 %%%===================================================================
 %%% Internal functions

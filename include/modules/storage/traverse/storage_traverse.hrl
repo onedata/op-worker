@@ -36,12 +36,12 @@
     % the module must implement functions required by traverse.erl
     callback_module :: traverse:callback_module(),
     % storage specific module that encapsulates details of listing files on specific storage helpers
-    iterator_module :: storage_traverse:iterator_module(),
+    iterator_module :: storage_traverse:iterator_type(),
     % offset from which children files are listed in order to produce master and slave jobs
     offset = ?DEFAULT_OFFSET :: non_neg_integer(),
     % size of batch used to list children files on storage
     batch_size = ?DEFAULT_BATCH_SIZE :: non_neg_integer(),
-    % marker passed to helpers:listobjects function when iterator=canonical_object_storage_iterator
+    % marker passed to helpers:listobjects function when iterator=flat_storage_iterator
     marker = ?DEFAULT_MARKER :: helpers:marker(),
     % depth of directory in the tree structure
     depth = 0 :: non_neg_integer(),
@@ -79,5 +79,9 @@
         end
     end
 ).
+
+% Iterator types
+-define(FLAT_ITERATOR, flat_storage_iterator).
+-define(TREE_ITERATOR, tree_storage_iterator).
 
 -endif.

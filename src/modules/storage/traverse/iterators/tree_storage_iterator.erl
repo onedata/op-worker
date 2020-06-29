@@ -10,7 +10,7 @@
 %%% helpers.
 %%% @end
 %%%-------------------------------------------------------------------
--module(block_storage_iterator).
+-module(tree_storage_iterator).
 -author("Jakub Kudzia").
 
 -behaviour(storage_iterator).
@@ -20,11 +20,20 @@
 -include("modules/fslogic/fslogic_common.hrl").
 
 %% storage_iterator callbacks
--export([get_children_and_next_batch_job/1, is_dir/1]).
+-export([init_root_storage_file_ctx/3, get_children_and_next_batch_job/1, is_dir/1]).
 
 %%%===================================================================
 %%% storage_iterator callbacks
 %%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link storage_iterator} callback init_root_storage_file_ctx/3.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_root_storage_file_ctx(helpers:file_id(), od_space:id(), storage:id()) -> storage_file_ctx:ctx().
+init_root_storage_file_ctx(RootStorageFileId, SpaceId, StorageId) ->
+    storage_file_ctx:new(RootStorageFileId, SpaceId, StorageId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -42,11 +51,17 @@ get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{
     batch_size = BatchSize
 }) ->
     Handle = storage_file_ctx:get_handle_const(StorageFileCtx),
+    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     case storage_driver:readdir(Handle, Offset, BatchSize) of
         {ok, ChildrenNames} ->
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             ChildDepth = ParentDepth + 1,
-            ChildrenBatch = [{filename:join([StorageFileId, ChildName]), ChildDepth} || ChildName <- ChildrenNames],
+            ChildrenBatch = lists:map(fun(ChildName) ->
+                ChildId = filename:join([StorageFileId, ChildName]),
+                ChildCtx = storage_file_ctx:new(ChildId, SpaceId, StorageId),
+                {ChildCtx, ChildDepth}
+            end, ChildrenNames),
             case length(ChildrenBatch) < BatchSize of
                 true ->
                     {ok, ChildrenBatch, undefined};
