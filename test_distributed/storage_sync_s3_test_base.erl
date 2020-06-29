@@ -136,7 +136,7 @@ create_subfiles_import_many_test(Config, MountSpaceInRoot) ->
     storage_sync_test_base:enable_import(Config, ?SPACE_ID, SyncedStorage),
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID, 60),
     End = time_utils:system_time_millis(),
-    ct:print("Import took ~p", [(End - Start) / 1000]),
+    ct:pal("Import took ~p", [(End - Start) / 1000]),
 
     storage_sync_test_base:parallel_assert(storage_sync_test_base, verify_file_in_dir, [W1, SessId, 60], lists:seq(1, DirsNumber), 60),
 
@@ -179,7 +179,7 @@ create_subfiles_import_many2_test(Config, MountSpaceInRoot) ->
     Timeout = 600,
     storage_sync_test_base:assertImportTimes(W1, ?SPACE_ID, Timeout),
     End = time_utils:system_time_millis(),
-    ct:print("Import took ~p", [(End - Start) / 1000]),
+    ct:pal("Import took ~p", [(End - Start) / 1000]),
     storage_sync_test_base:parallel_assert(storage_sync_test_base, verify_file, [W1, SessId, Timeout], Files, Timeout),
 
     ?assertMonitoring(W1, #{

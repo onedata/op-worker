@@ -263,7 +263,7 @@ generate_deletion_jobs(Job = #storage_traverse_master{info = #{iterator_type := 
     % it means that it's a directory's link therefore we schedule master job for this directory,
     % as with ?FLAT_ITERATOR deletion_jobs for root traverses whole file system
     % for more info read the function's doc
-    ChildMasterJob = new_child_master_job(Job, Name, Uuid),
+    ChildMasterJob = new_flat_iterator_child_master_job(Job, Name, Uuid),
     generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMToken, [ChildMasterJob | MasterJobs], SlaveJobs);
 generate_deletion_jobs(Job, AllSLChildren = [{SLName, _} | _], SLToken,
     [#child_link_uuid{name = FMName, uuid = ChildUuid} | RestFMChildren], FMToken, MasterJobs, SlaveJobs)
@@ -300,14 +300,18 @@ next_batch_master_job(Job = #storage_traverse_master{info = Info}, SLChildrenToP
             file_meta_children => FMChildrenToProcess
     }}.
 
--spec new_child_master_job(master_job(), file_meta:name(), file_meta:uuid()) -> master_job().
-new_child_master_job(Job = #storage_traverse_master{
+-spec new_flat_iterator_child_master_job(master_job(), file_meta:name(), file_meta:uuid()) -> master_job().
+new_flat_iterator_child_master_job(Job = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = #{iterator_type := IteratorType}
 }, ChildName, ChildUuid) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+    ChildStorageFileId = filename:join([StorageFileId, ChildName]),
+    ChildCtx = flat_storage_iterator:get_virtual_directory_ctx(ChildStorageFileId, SpaceId, StorageId),
     ChildMasterJob = Job#storage_traverse_master{
-        storage_file_ctx = storage_file_ctx:get_child_ctx_const(StorageFileCtx, ChildName),
+        storage_file_ctx = ChildCtx,
         info = #{
             iterator_type => IteratorType,
             file_ctx => file_ctx:new_by_guid(file_id:pack_guid(ChildUuid, SpaceId))}
@@ -444,7 +448,6 @@ delete_file(FileCtx) ->
 
 -spec finish_callback(storage_file_ctx:ctx()) -> function().
 finish_callback(StorageFileCtx) ->
-    % todo sprawdzic czy to jest wolane dla wirtualnych katalogow, jak tak to trzeba temu zaradzic !!!!
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     MTime = try
         {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),

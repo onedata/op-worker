@@ -70,7 +70,8 @@ new(StorageFileId, SpaceId, StorageId, Stat) ->
         name = FileName,
         space_id = SpaceId,
         storage_id = StorageId,
-        stat = Stat
+        stat = Stat,
+        stat_timestamp = time_utils:system_time_seconds()
     }.
 
 
