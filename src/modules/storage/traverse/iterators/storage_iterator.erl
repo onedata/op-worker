@@ -32,7 +32,8 @@
 
 %%-------------------------------------------------------------------
 %% @doc
-%% WRITEME
+%% This function should return initialized storage_file_ctx:ctx()
+%% for root directory from which traverse should be started.
 %% @end
 %%-------------------------------------------------------------------
 -callback init_root_storage_file_ctx(RootStorageFileId :: helpers:file_id(),

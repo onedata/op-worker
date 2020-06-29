@@ -31,6 +31,11 @@
 %%% storage_iterator callbacks
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% {@link storage_iterator} callback init_root_storage_file_ctx/3.
+%% @end
+%%--------------------------------------------------------------------
 -spec init_root_storage_file_ctx(helpers:file_id(), od_space:id(), storage:id()) -> storage_file_ctx:ctx().
 init_root_storage_file_ctx(RootStorageFileId, SpaceId, StorageId) ->
     get_virtual_directory_ctx(RootStorageFileId, SpaceId, StorageId).

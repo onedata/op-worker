@@ -281,6 +281,8 @@ get_child_safe(FileCtx, ChildName) ->
         {ChildCtx, _} = file_ctx:get_child(FileCtx, ChildName, user_ctx:new(?ROOT_SESS_ID)),
         {ok, ChildCtx}
     catch
+        error:{badmatch,{error,not_found}} ->
+            {error, ?ENOENT};
         throw:?ENOENT ->
             {error, ?ENOENT}
     end.

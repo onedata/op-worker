@@ -62,6 +62,7 @@ new(StorageFileId, SpaceId, StorageId) ->
         space_id = SpaceId,
         storage_id = StorageId
     }.
+
 -spec new(file_meta:name(), od_space:id(), storage:id(), helpers:stat()) -> ctx().
 new(StorageFileId, SpaceId, StorageId, Stat) ->
     FileName = filename:basename(StorageFileId),
