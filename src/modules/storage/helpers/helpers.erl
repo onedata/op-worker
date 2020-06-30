@@ -114,7 +114,7 @@ readdir(Handle, FileId, Offset, Count) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec listobjects(helper_handle(), file_id(), marker(), Offset :: non_neg_integer(),
-    Count :: non_neg_integer()) -> {ok, [file_id()]} | {error, Reason :: term()}.
+    Count :: non_neg_integer()) -> {ok, [{file_id(), stat()}]} | {error, Reason :: term()}.
 listobjects(Handle, FileId, Marker, Offset, Count) ->
     ?MODULE:apply_helper_nif(Handle, listobjects, [FileId, Marker, Offset, Count]).
 

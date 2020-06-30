@@ -62,10 +62,14 @@ get_master_job(Job = #storage_traverse_master{info = Info}) ->
 %% Files that are missing on the storage_sync_links list are scheduled to be
 %% deleted in slave jobs.
 %% NOTE!!!
-%% On posix storages, only direct children are compared.
-%% On canonical object storages, whole file strucuture is compared.
-%% Traversing whole file structure (on canonical object storages) is performed
-%% by scheduling master jobs for directories.
+%% On storages traversed using ?TREE_ITERATOR (posix storages), only direct children are compared.
+%% On storages traverse using ?FLAT_ITERATOR (object storages), whole file structure is compared.
+%% Traversing whole file structure (on object storages) is performed
+%% by scheduling master jobs for directories (virtual directories as they do not exist on storage but exist in
+%% the Onedata file system)
+%% NOTE!!!
+%% Object storage must have ?CANONICAL_PATH_TYPE so the mechanism can understand the structure of files on
+%% the storage.
 %% @end
 %%--------------------------------------------------------------------
 -spec do_master_job(master_job(), traverse:master_job_extended_args()) -> {ok, traverse:master_job_map()}.
@@ -77,7 +81,7 @@ do_master_job(Job = #storage_traverse_master{
         sync_links_children := SLChildren,
         file_meta_token := FMToken,
         file_meta_children := FMChildren,
-        storage_type := StorageType
+        iterator_type := IteratorType
 }}, _Args) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
@@ -108,13 +112,15 @@ do_master_job(Job = #storage_traverse_master{
         throw:?ENOENT ->
             {ok, #{}}
     end,
-    case StorageType of
-        ?OBJECT_STORAGE ->
-            % on object storage, whole tree structure is processed recursively,
-            % therefore we cannot delete whole tree now (see storage_sync_links.erl for more details)
+    case IteratorType of
+        ?FLAT_ITERATOR ->
+            % with ?FLAT_ITERATOR, deletion master_job for root triggers traverse of whole storage (which is
+            % compared with whole space file system) therefore we cannot delete whole storage_sync_links
+            % tree now (see storage_sync_links.erl for more details)
             ok;
-        ?BLOCK_STORAGE ->
-            % each directory on block storage is processed separately so we can safely delete its links tree
+        ?TREE_ITERATOR ->
+            % with ?TREE_ITERATOR each directory is processed separately (separate deletion master_jobs)
+            % so we can safely delete its links tree
             storage_sync_links:delete_recursive(StorageFileId, StorageId)
     end,
     storage_sync_monitoring:mark_processed_file(SpaceId, StorageId),
@@ -232,30 +238,32 @@ generate_deletion_jobs(Job, [], SLToken, FMChildren, FMToken, MasterJobs, SlaveJ
     % all left file_meta children must be processed after refilling sl children
     NextBatchJob = next_batch_master_job(Job, [], SLToken, FMChildren, FMToken),
     {[NextBatchJob | MasterJobs], SlaveJobs};
-generate_deletion_jobs(Job = #storage_traverse_master{info = #{storage_type := ?BLOCK_STORAGE}},
+generate_deletion_jobs(Job = #storage_traverse_master{info = #{iterator_type := ?TREE_ITERATOR}},
     [{Name, _} | RestSLChildren], SLToken, [#child_link_uuid{name = Name} | RestFMChildren], FMToken,
     MasterJobs, SlaveJobs
 ) ->
     % file with name Name is on both lists therefore we cannot delete it
-    % on block storage we process only direct children of a directory,
-    % we do not go deeper in the files' structure
+    % on storage iterated using ?TREE_ITERATOR (block storage) we process only direct children of a directory,
+    % we do not go deeper in the files' structure as separate deletion_jobs will be scheduled for subdirectories
     generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMToken, MasterJobs, SlaveJobs);
-generate_deletion_jobs(Job = #storage_traverse_master{info = #{storage_type := ?OBJECT_STORAGE}},
+generate_deletion_jobs(Job = #storage_traverse_master{info = #{iterator_type := ?FLAT_ITERATOR}},
     [{Name, undefined} | RestSLChildren], SLToken, [#child_link_uuid{name = Name} | RestFMChildren], FMToken,
     MasterJobs, SlaveJobs
 ) ->
     % file with name Name is on both lists therefore we cannot delete it
-    % on object storage if child link's target is undefined it means that it's a regular file's link
+    % on storage iterated using ?FLAT_ITERATOR (object storage) if child link's target is undefined it
+    % means that it's a regular file's link
     generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMToken, MasterJobs, SlaveJobs);
-generate_deletion_jobs(Job = #storage_traverse_master{info = #{storage_type := ?OBJECT_STORAGE}},
+generate_deletion_jobs(Job = #storage_traverse_master{info = #{iterator_type := ?FLAT_ITERATOR}},
     [{Name, _} | RestSLChildren], SLToken, [#child_link_uuid{name = Name, uuid = Uuid} | RestFMChildren], FMToken,
     MasterJobs, SlaveJobs
 ) ->
     % file with name Name is on both lists therefore we cannot delete it
-    % on object storage if child link's target is NOT undefined it means that it's a directory's link
-    % therefore we schedule master job for this directory, as on object storage we traverse whole file system
+    % on storage iterated using ?FLAT_ITERATOR (object storage) if child link's target is NOT undefined
+    % it means that it's a directory's link therefore we schedule master job for this directory,
+    % as with ?FLAT_ITERATOR deletion_jobs for root traverses whole file system
     % for more info read the function's doc
-    ChildMasterJob = new_child_master_job(Job, Name, Uuid),
+    ChildMasterJob = new_flat_iterator_child_master_job(Job, Name, Uuid),
     generate_deletion_jobs(Job, RestSLChildren, SLToken, RestFMChildren, FMToken, [ChildMasterJob | MasterJobs], SlaveJobs);
 generate_deletion_jobs(Job, AllSLChildren = [{SLName, _} | _], SLToken,
     [#child_link_uuid{name = FMName, uuid = ChildUuid} | RestFMChildren], FMToken, MasterJobs, SlaveJobs)
@@ -292,16 +300,20 @@ next_batch_master_job(Job = #storage_traverse_master{info = Info}, SLChildrenToP
             file_meta_children => FMChildrenToProcess
     }}.
 
--spec new_child_master_job(master_job(), file_meta:name(), file_meta:uuid()) -> master_job().
-new_child_master_job(Job = #storage_traverse_master{
+-spec new_flat_iterator_child_master_job(master_job(), file_meta:name(), file_meta:uuid()) -> master_job().
+new_flat_iterator_child_master_job(Job = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
-    info = #{storage_type := StorageType}
+    info = #{iterator_type := IteratorType}
 }, ChildName, ChildUuid) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
+    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+    ChildStorageFileId = filename:join([StorageFileId, ChildName]),
+    ChildCtx = flat_storage_iterator:get_virtual_directory_ctx(ChildStorageFileId, SpaceId, StorageId),
     ChildMasterJob = Job#storage_traverse_master{
-        storage_file_ctx = storage_file_ctx:get_child_ctx_const(StorageFileCtx, ChildName),
+        storage_file_ctx = ChildCtx,
         info = #{
-            storage_type => StorageType,
+            iterator_type => IteratorType,
             file_ctx => file_ctx:new_by_guid(file_id:pack_guid(ChildUuid, SpaceId))}
     },
     get_master_job(ChildMasterJob).

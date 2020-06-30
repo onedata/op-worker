@@ -32,6 +32,17 @@
 
 %%-------------------------------------------------------------------
 %% @doc
+%% This function should return initialized storage_file_ctx:ctx()
+%% for root directory from which traverse should be started.
+%% @end
+%%-------------------------------------------------------------------
+-callback init_root_storage_file_ctx(RootStorageFileId :: helpers:file_id(),
+    SpaceId :: od_space:id(), StorageId :: storage:id()) ->
+    RootStorageFileCtx :: storage_file_ctx:ctx().
+
+
+%%-------------------------------------------------------------------
+%% @doc
 %% Returns next batch of children of directory associated with
 %% StorageFileCtx stored in StorageTraverse record.
 %% Each ChildId is associated with its depth in the tree structure.

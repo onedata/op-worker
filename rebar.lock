@@ -91,7 +91,7 @@
   1},
  {<<"helpers">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/helpers.git",
-       {ref,"655afab475f90b516ca94b692d34d1b5c24c63ad"}},
+       {ref,"c9ccac747b047fdd507b00986ac4bf39f821abf2"}},
   0},
  {<<"hut">>,
   {git,"git://github.com/tolbrino/hut.git",
@@ -162,7 +162,7 @@
   0},
  {<<"rtransfer_link">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/rtransfer_link.git",
-       {ref,"02f1fc026a3597d19aaf27fa879d268394fda012"}},
+       {ref,"9d3b70e245669bf1b0cee94812a7ac035810dac8"}},
   0},
  {<<"setup">>,
   {git,"git://github.com/uwiger/setup.git",
@@ -175,7 +175,7 @@
   {git,"https://github.com/inaka/worker_pool",
        {ref,"ae5aa2e5819f7cce3aa3fbc50d39743de3515cdc"}},
   1},
- {<<"yamerl">>,{pkg,<<"yamerl">>,<<"0.7.0">>},0}]}.
+ {<<"yamerl">>,{pkg,<<"yamerl">>,<<"0.7.0">>},1}]}.
 [
 {pkg_hash,[
  {<<"backoff">>, <<"83B72ED2108BA1EE8F7D1C22E0B4A00CFE3593A67DBC792799E8CCE9F42F796B">>},

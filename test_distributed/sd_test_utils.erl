@@ -195,11 +195,13 @@ recursive_rm_posix(Worker, SDHandle, Offset, Count, DoNotDeleteRoot) ->
     end.
 
 recursive_rm_s3(Worker, SDHandle, Marker, Offset, Count) ->
-    case listobjects(Worker, SDHandle, Marker, Offset, Count) of
-        {ok, Children} when length(Children) < Count ->
+    {ok, ChildrenAndStats} =  listobjects(Worker, SDHandle, Marker, Offset, Count),
+    Children = [ChildId || {ChildId, _} <- ChildrenAndStats],
+    case length(Children) < Count of
+        true ->
             rm_children(Worker, SDHandle, Children),
             ok;
-        {ok, Children} ->
+        false ->
             rm_children(Worker, SDHandle, Children),
             NewMarker = lists:last(Children),
             recursive_rm_s3(Worker, SDHandle, NewMarker, Offset, Count)

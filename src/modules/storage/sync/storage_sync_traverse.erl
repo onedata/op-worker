@@ -284,7 +284,8 @@ run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx) ->
     TraverseInfo = Config2#{
         scan_num => ScanNum,
         parent_ctx => file_ctx:new_root_ctx(),
-        storage_type => storage:get_type(StorageId),
+        is_posix_storage => storage:is_posix_compatible(StorageId),
+        iterator_type => storage_traverse:get_iterator(StorageId),
         space_storage_file_id => SpaceStorageFileId,
         file_ctx => FileCtx,
         detect_deletions => true,
@@ -327,7 +328,8 @@ run(SpaceId, StorageId, ScanNum, Config) ->
     TraverseInfo = Config2#{
         scan_num => ScanNum,
         parent_ctx => file_ctx:new_root_ctx(),
-        storage_type => storage:get_type(StorageId),
+        is_posix_storage => storage:is_posix_compatible(StorageId),
+        iterator_type => storage_traverse:get_iterator(StorageId),
         space_storage_file_id => SpaceStorageFileId
     },
     RunOpts = #{
@@ -682,13 +684,13 @@ maybe_add_deletion_detection_link(StorageFileCtx, Info = #{space_storage_file_id
             StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             ParentStorageFileCtx = storage_file_ctx:get_parent_ctx_const(StorageFileCtx),
             ParentStorageFileId = storage_file_ctx:get_storage_file_id_const(ParentStorageFileCtx),
-            {ParentStorageFileId2, MarkLeaves} = case maps:get(storage_type, Info) of
-                ?OBJECT_STORAGE ->
+            {ParentStorageFileId2, MarkLeaves} = case maps:get(iterator_type, Info) of
+                ?FLAT_ITERATOR ->
                     %% When storage_sync is run on object storages we set MarkLeaves parameter to true
                     %% in the below call which allows to determine when link is associated with
                     %% a regular file which is necessary for storage_sync_deletion on object storages
                     {SpaceStorageFileId, true};
-                ?BLOCK_STORAGE ->
+                ?TREE_ITERATOR ->
                     %% On the other hand, on block storages MarkLeaves = false.
                     %% storage_sync_deletion on block storages processes only direct children of a directory
                     %% so it does not need to traverse recursively down the file structure.
