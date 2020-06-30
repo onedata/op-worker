@@ -440,11 +440,11 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(SpaceId) ->
-        rpc:call(Worker, internal_services_manager, stop_service,
+        ok = rpc:call(Worker, internal_services_manager, stop_service,
             [dbsync_worker, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
-        rpc:call(Worker, internal_services_manager, stop_service,
+        ok = rpc:call(Worker, internal_services_manager, stop_service,
             [dbsync_worker, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
-        rpc:call(Worker, dbsync_state, delete, [SpaceId])
+        ok = rpc:call(Worker, dbsync_state, delete, [SpaceId])
     end, ?config(spaces, Config)),
     initializer:unmock_provider_ids(Workers),
     test_utils:mock_unload(Worker, [

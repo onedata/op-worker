@@ -128,8 +128,11 @@ flush(Type) ->
 
     Saved = lists:foldl(fun(Key, Acc) ->
         case flush_key(Key, Type) of
-            ok -> [Key | Acc];
-            _ -> Acc
+            ok ->
+                [Key | Acc];
+            FlushError ->
+                ?warning("Fslogic cache flush error: ~p for key", [FlushError, Key]),
+                Acc
         end
     end, [], KeysToFlush),
     NewKM = KM -- Saved,
@@ -142,7 +145,7 @@ flush(Type) ->
         0 ->
             ok;
         _ ->
-            ?warning("Not flushed keys: ~p", [NewKM ++ (NewKBM -- NewKM)]),
+            ?warning("Fslogic cache not flushed keys: ~p", [NewKM ++ (NewKBM -- NewKM)]),
             init_flush_check(),
             flush_error
     end.
