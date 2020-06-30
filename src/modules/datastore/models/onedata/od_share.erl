@@ -25,6 +25,7 @@
 -type diff() :: datastore_doc:diff(record()).
 
 -type name() :: binary().
+-type description() :: binary().
 -type file_type() :: file | dir.
 % guid of special 'share' type, which when used as guest user, allows for read
 % only access to file (when used as normal user it behaves like normal guid).
@@ -32,7 +33,7 @@
 -type root_file_guid() :: fslogic_worker:file_guid().
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([name/0, file_type/0, root_file_guid/0]).
+-export_type([name/0, description/0, file_type/0, root_file_guid/0]).
 
 -define(CTX, #{
     model => ?MODULE,

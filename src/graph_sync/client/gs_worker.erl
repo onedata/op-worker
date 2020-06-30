@@ -125,7 +125,7 @@ on_db_and_workers_ready() ->
 
 -spec start_gs_client_worker_service() -> ok.
 start_gs_client_worker_service() ->
-    start_gs_client_worker(),
+    oneprovider:is_registered() andalso start_gs_client_worker(),
     ok. % Ignore error - will be tried again during next healthcheck
 
 -spec stop_gs_client_worker() -> ok | no_return().
@@ -151,7 +151,7 @@ connection_healthcheck(LastInterval) ->
             ?debug("The provider is not registered - next Onezone connection attempt in ~B seconds.", [
                 ?GS_HEALTHCHECK_INTERVAL div 1000
             ]),
-            {restart, ?GS_HEALTHCHECK_INTERVAL};
+            {ok, ?GS_HEALTHCHECK_INTERVAL};
         alive ->
             {ok, ?GS_HEALTHCHECK_INTERVAL};
         not_started ->

@@ -125,7 +125,8 @@
 }).
 
 -record(create_share, {
-    name :: od_share:name()
+    name :: od_share:name(),
+    description :: od_share:description()
 }).
 
 -record(remove_share, {

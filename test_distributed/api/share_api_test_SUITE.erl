@@ -633,9 +633,10 @@ mock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, share_logic),
 
-    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid, FileType) ->
+    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, Description, SpaceId, ShareFileGuid, FileType) ->
         ShareDoc = #document{key = ShareId, value = #od_share{
             name = Name,
+            description = Description,
             space = SpaceId,
             root_file = ShareFileGuid,
             public_url = ?SHARE_PUBLIC_URL(ShareId),
@@ -661,11 +662,14 @@ mock_share_logic(Config) ->
         end
     end),
 
-    test_utils:mock_expect(Workers, share_logic, update_name, fun(Auth, ShareId, NewName) ->
+    test_utils:mock_expect(Workers, share_logic, update, fun(Auth, ShareId, Data) ->
         {ok, #document{key = ShareId, value = Share}} = share_logic:get(Auth, ShareId),
         rpc:call(TestNode, ?MODULE, update_share, [Workers, #document{
             key = ShareId,
-            value = Share#od_share{name = NewName}}
+            value = Share#od_share{
+                name = maps:get(<<"name">>, Data, Share#od_share.name),
+                description = maps:get(<<"description">>, Data, Share#od_share.description)
+            }}
         ])
     end),
 

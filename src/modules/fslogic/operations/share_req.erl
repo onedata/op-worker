@@ -27,7 +27,7 @@ catch
 end).
 
 %% API
--export([create_share/3, remove_share/3]).
+-export([create_share/4, remove_share/3]).
 
 
 %%%===================================================================
@@ -39,16 +39,16 @@ end).
 %% @equiv create_share_insecure/3 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
+-spec create_share(user_ctx:ctx(), file_ctx:ctx(), od_share:name(), od_share:description()) ->
     fslogic_worker:provider_response().
-create_share(UserCtx, FileCtx0, Name) ->
+create_share(UserCtx, FileCtx0, Name, Description) ->
     data_constraints:assert_not_readonly_mode(UserCtx),
 
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
         [traverse_ancestors]
     ),
-    create_share_internal(UserCtx, FileCtx1, Name).
+    create_share_internal(UserCtx, FileCtx1, Name, Description).
 
 
 %%--------------------------------------------------------------------
@@ -77,10 +77,10 @@ remove_share(UserCtx, FileCtx0, ShareId) ->
 %% Shares a given file, catches known errors.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share_internal(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
+-spec create_share_internal(user_ctx:ctx(), file_ctx:ctx(), od_share:name(), od_share:description()) ->
     fslogic_worker:provider_response().
-create_share_internal(UserCtx, FileCtx, Name) ->
-    ?CATCH_ERRORS(create_share_insecure(UserCtx, FileCtx, Name)).
+create_share_internal(UserCtx, FileCtx, Name, Description) ->
+    ?CATCH_ERRORS(create_share_insecure(UserCtx, FileCtx, Name, Description)).
 
 
 %%--------------------------------------------------------------------
@@ -96,9 +96,9 @@ remove_share_internal(UserCtx, FileCtx, ShareId) ->
 
 
 %% @private
--spec create_share_insecure(user_ctx:ctx(), file_ctx:ctx(), od_share:name()) ->
+-spec create_share_insecure(user_ctx:ctx(), file_ctx:ctx(), od_share:name(), od_share:description()) ->
     fslogic_worker:provider_response().
-create_share_insecure(UserCtx, FileCtx0, Name) ->
+create_share_insecure(UserCtx, FileCtx0, Name, Description) ->
     Guid = file_ctx:get_guid_const(FileCtx0),
     ShareId = datastore_key:new(),
     ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
@@ -114,7 +114,7 @@ create_share_insecure(UserCtx, FileCtx0, Name) ->
 
     assert_has_space_privilege(SpaceId, UserId, ?SPACE_MANAGE_SHARES),
 
-    case share_logic:create(SessionId, ShareId, Name, SpaceId, ShareGuid, FileType) of
+    case share_logic:create(SessionId, ShareId, Name, Description, SpaceId, ShareGuid, FileType) of
         {ok, _} ->
             case file_meta:add_share(FileCtx1, ShareId) of
                 {error, _} ->

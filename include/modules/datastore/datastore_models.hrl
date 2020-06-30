@@ -121,6 +121,7 @@
 %% Model for caching share details fetched from OZ
 -record(od_share, {
     name :: binary(),
+    description :: binary(),
     public_url :: binary(),
 
     % Direct relations to other entities

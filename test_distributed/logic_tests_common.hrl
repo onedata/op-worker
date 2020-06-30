@@ -121,6 +121,7 @@
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
+-define(SHARE_DESCRIPTION(__Share), __Share).
 -define(SHARE_PUBLIC_URL(__Share), __Share).
 -define(SHARE_FILE_TYPE(__Share), dir).
 -define(SHARE_SPACE(__Share), ?SPACE_1).
@@ -272,6 +273,7 @@
 
 -define(SHARE_PRIVATE_DATA_MATCHER(__Share), #document{key = __Share, value = #od_share{
     name = ?SHARE_NAME(__Share),
+    description = ?SHARE_DESCRIPTION(__Share),
     public_url = ?SHARE_PUBLIC_URL(__Share),
     file_type = ?SHARE_FILE_TYPE(__ShareId),
     space = ?SHARE_SPACE(__Share),
@@ -280,6 +282,7 @@
 }}).
 -define(SHARE_PUBLIC_DATA_MATCHER(__Share), #document{key = __Share, value = #od_share{
     name = ?SHARE_NAME(__Share),
+    description = ?SHARE_DESCRIPTION(__Share),
     public_url = ?SHARE_PUBLIC_URL(__Share),
     file_type = ?SHARE_FILE_TYPE(__ShareId),
     space = undefined,
@@ -419,6 +422,7 @@ end).
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_share, id = __ShareId, aspect = instance, scope = public}),
     <<"name">> => ?SHARE_NAME(__ShareId),
+    <<"description">> => ?SHARE_DESCRIPTION(__ShareId),
     <<"publicUrl">> => ?SHARE_PUBLIC_URL(__ShareId),
     <<"fileType">> => atom_to_binary(?SHARE_FILE_TYPE(__ShareId), utf8),
     <<"handleId">> => ?SHARE_HANDLE(__ShareId),

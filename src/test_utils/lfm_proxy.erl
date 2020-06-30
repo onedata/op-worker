@@ -654,7 +654,8 @@ remove_metadata(Worker, SessId, FileKey, Type) ->
 -spec create_share(node(), session:id(), lfm:file_key(), od_share:name()) ->
     {ok, od_share:id()} | {error, term()}.
 create_share(Worker, SessId, FileKey, Name) ->
-    ?EXEC(Worker, lfm:create_share(SessId, FileKey, Name)).
+    RandomDescription = str_utils:rand_hex(100),
+    ?EXEC(Worker, lfm:create_share(SessId, FileKey, Name, RandomDescription)).
 
 
 -spec remove_share(node(), session:id(), od_share:id()) ->

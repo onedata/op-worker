@@ -73,7 +73,7 @@
 -export([get_transfer_encoding/2, set_transfer_encoding/3, get_cdmi_completion_status/2,
     set_cdmi_completion_status/3, get_mimetype/2, set_mimetype/3]).
 %% Functions concerning file shares
--export([create_share/3, remove_share/2]).
+-export([create_share/4, remove_share/2]).
 %% Functions concerning metadata
 -export([get_metadata/5, set_metadata/5, has_custom_metadata/2, remove_metadata/3]).
 %% Utility functions
@@ -788,10 +788,10 @@ set_mimetype(SessId, FileKey, Mimetype) ->
 %% only specified group of users.
 %% @end
 %%--------------------------------------------------------------------
--spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name()) ->
+-spec create_share(session:id(), fslogic_worker:file_guid_or_path(), od_share:name(), od_share:description()) ->
     {ok, od_share:id()} | error_reply().
-create_share(SessId, FileKey, Name) ->
-    ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name) end).
+create_share(SessId, FileKey, Name, Description) ->
+    ?run(fun() -> lfm_shares:create_share(SessId, FileKey, Name, Description) end).
 
 %%--------------------------------------------------------------------
 %% @doc
