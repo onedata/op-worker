@@ -90,7 +90,8 @@ init([SpaceId, Opts]) ->
 
     {ok, _} = case proplists:get_value(main_stream, Opts, false) of
         true ->
-            couchbase_changes_worker:start_link(Bucket, SpaceId, Callback);
+            couchbase_changes_worker:start_link(Bucket, SpaceId, Callback,
+                proplists:get_value(since, Opts, Since));
         false ->
             couchbase_changes_stream:start_link(Bucket, SpaceId, Callback, [
                 {since, proplists:get_value(since, Opts, Since)},
