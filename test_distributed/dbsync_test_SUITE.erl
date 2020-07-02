@@ -350,10 +350,7 @@ changes_request_should_be_handled(Config) ->
         ProviderIds = lists:usort(get_providers(SpaceId)),
         ProviderIds2 = lists:delete(<<"p1">>, ProviderIds),
         lists:foreach(fun(ProviderId) ->
-            StreamId = <<SpaceId/binary, "-", ProviderId/binary>>,
-            test_utils:mock_expect(Worker, dbsync_utils, gen_request_id, fun() ->
-                StreamId
-            end),
+            StreamId = dbsync_worker:get_on_demand_changes_stream_id(SpaceId, ProviderId),
             Request = #changes_request2{
                 space_id = SpaceId,
                 since = 1,
@@ -443,11 +440,11 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(_Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     lists:foreach(fun(SpaceId) ->
-        rpc:call(Worker, internal_services_manager, stop_service,
+        ok = rpc:call(Worker, internal_services_manager, stop_service,
             [dbsync_worker, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
-        rpc:call(Worker, internal_services_manager, stop_service,
+        ok = rpc:call(Worker, internal_services_manager, stop_service,
             [dbsync_worker, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
-        rpc:call(Worker, dbsync_state, delete, [SpaceId])
+        ok = rpc:call(Worker, dbsync_state, delete, [SpaceId])
     end, ?config(spaces, Config)),
     initializer:unmock_provider_ids(Workers),
     test_utils:mock_unload(Worker, [

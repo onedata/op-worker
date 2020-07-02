@@ -49,6 +49,9 @@
 
 -define(PREFETCH_PRIORITY,
     application:get_env(?APP_NAME, default_prefetch_priority, 96)).
+-define(MIN_BACKOFF, application:get_env(?APP_NAME, synchronizer_min_backoff, timer:seconds(1))).
+-define(BACKOFF_RATE, application:get_env(?APP_NAME, synchronizer_backoff_rate, 1.5)).
+-define(MAX_BACKOFF, application:get_env(?APP_NAME, synchronizer_max_backoff, timer:minutes(5))).
 
 -define(FLUSH_STATS, flush_stats).
 -define(FLUSH_BLOCKS, flush_blocks).
@@ -83,7 +86,8 @@
     cached_blocks = [] :: [block()],
     caching_stats_timer :: undefined | reference(),
     caching_blocks_timer :: undefined | reference(),
-    caching_events_timer :: undefined | reference()
+    caching_events_timer :: undefined | reference(),
+    backoffs = #{} :: #{fetch_ref() => number()}
 }).
 
 -define(BLOCK(__Offset, __Size), #file_block{offset = __Offset, size = __Size}).
@@ -715,9 +719,17 @@ handle_info({Ref, complete, {ok, _} = _Status}, State) ->
     end,
 
     State5 = associate_ref_with_tids(Ref, EndedTransfers, State4),
-    {noreply, State5, ?DIE_AFTER};
+    {noreply, State5#state{backoffs = #{}}, ?DIE_AFTER};
 
-handle_info({FailedRef, complete, {error, disconnected}}, State) ->
+handle_info({FailedRef, complete, {error, disconnected}}, #state{backoffs = DelaysMap} = State) ->
+    Delay = maps:get(FailedRef, DelaysMap, ?MIN_BACKOFF),
+    ?warning("Failed transfer ~p, replacing with new transfers after ~p seconds", [
+        FailedRef, Delay
+    ]),
+    erlang:send_after(round(Delay), self(), {replace_failed_transfer, FailedRef}),
+    {noreply, State, ?DIE_AFTER};
+
+handle_info({replace_failed_transfer, FailedRef}, #state{backoffs = DelaysMap} = State) ->
     try
         {Block, Priority, AffectedFroms, _FinishedFroms, State1} =
             disassociate_ref(FailedRef, State),
@@ -734,7 +746,16 @@ handle_info({FailedRef, complete, {error, disconnected}}, State) ->
                 {_, NewRefs, _} = lists:unzip3(NewTransfers),
                 State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
                 State3 = add_in_progress(NewTransfers, State2),
-                {noreply, State3}
+
+                NewDelay = min(
+                    ?MAX_BACKOFF,
+                    ?BACKOFF_RATE * maps:get(FailedRef, DelaysMap, ?MIN_BACKOFF)
+                ),
+                NewDelaysMap = lists:foldl(fun(Ref, Acc) ->
+                    Acc#{Ref => NewDelay}
+                end, DelaysMap, NewRefs),
+
+                {noreply, State3#state{backoffs = NewDelaysMap}, ?DIE_AFTER}
         end
     catch
         E1:E2 ->

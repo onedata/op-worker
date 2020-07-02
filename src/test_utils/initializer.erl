@@ -604,7 +604,7 @@ mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
 
     % Mock cached auth and identity tokens with large TTL
     ExpirationTime = time_utils:system_time_seconds() + 999999999,
-    rpc:multicall(Workers, datastore_model, save, [#{model => provider_auth}, #document{
+    {RpcAns, []} = rpc:multicall(Workers, datastore_model, save, [#{model => provider_auth}, #document{
         key = <<"provider_auth">>,
         value = #provider_auth{
             provider_id = ProviderId,
@@ -612,6 +612,10 @@ mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
             cached_access_token = {ExpirationTime, AccessToken},
             cached_identity_token = {ExpirationTime, IdentityToken}
         }}]),
+    [] = lists:filter(fun
+        ({ok, _}) -> false;
+        (_) -> true
+    end, RpcAns),
     ok.
 
 %%--------------------------------------------------------------------
@@ -621,7 +625,11 @@ mock_provider_id(Workers, ProviderId, AccessToken, IdentityToken) ->
 %%--------------------------------------------------------------------
 -spec unmock_provider_ids(proplists:proplist()) -> ok.
 unmock_provider_ids(Workers) ->
-    rpc:multicall(Workers, provider_auth, delete, []),
+    {RpcAns, []} = rpc:multicall(Workers, provider_auth, delete, []),
+    [] = lists:filter(fun
+        (ok) -> false;
+        (_) -> true
+    end, RpcAns),
     ok.
 
 -spec testmaster_mock_space_user_privileges([node()], od_space:id(), od_user:id(),
