@@ -82,11 +82,14 @@ get(Key) ->
 
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
-    ?ok_if_not_found(datastore_model:delete(?CTX, Key)).
+    datastore_model:delete(?CTX, Key).
 
 -spec delete(key(), pred()) -> ok | {error, term()}.
 delete(Key, Pred) ->
-    ?ok_if_not_found(datastore_model:delete(?CTX, Key, Pred)).
+    case datastore_model:delete(?CTX, Key, Pred) of
+        {error, {not_satisfied, _}} -> ok;
+        Other -> Other
+    end.
 
 %%%===================================================================
 %%% Higher-level functions operating on file_qos document.

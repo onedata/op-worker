@@ -23,7 +23,8 @@
 -export([init/1, handle/1, cleanup/0]).
 
 %% API
--export([supervisor_flags/0, start_streams/0, start_streams/1]).
+-export([supervisor_flags/0, get_on_demand_changes_stream_id/2,
+    start_streams/0, start_streams/1]).
 
 %% Internal services API
 -export([start_in_stream/1, stop_in_stream/1, start_out_stream/1, stop_out_stream/1]).
@@ -116,7 +117,7 @@ dbsync_in_stream_spec(SpaceId) ->
 dbsync_out_stream_spec(ReqId, SpaceId, Opts) ->
     #{
         id => ?OUT_STREAM_ID(ReqId),
-        start => {dbsync_out_stream, start_link, [SpaceId, Opts]},
+        start => {dbsync_out_stream, start_link, [ReqId, SpaceId, Opts]},
         restart => transient,
         shutdown => timer:seconds(10),
         type => worker,
@@ -135,6 +136,10 @@ start_streams(Spaces) ->
         ok = internal_services_manager:start_service(?MODULE, <<"dbsync_out_stream", SpaceId/binary>>,
             start_out_stream, stop_out_stream, [SpaceId], SpaceId)
     end, Spaces).
+
+-spec get_on_demand_changes_stream_id(od_space:id(), od_provider:id()) -> binary().
+get_on_demand_changes_stream_id(SpaceId, ProviderId) ->
+    <<SpaceId/binary, "_", ProviderId/binary>>.
 
 %%%===================================================================
 %%% Internal services API
@@ -178,7 +183,7 @@ start_out_stream(SpaceId) ->
             dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp)
     end,
     Spec = dbsync_out_stream_spec(SpaceId, SpaceId, [
-        {register, true},
+        {main_stream, true},
         {filter, Filter},
         {handler, Handler},
         {handling_interval, application:get_env(
@@ -224,8 +229,7 @@ handle_changes_batch(ProviderId, MsgId, #changes_batch{
 %% Starts outgoing DBSync recovery stream.
 %% @end
 %%--------------------------------------------------------------------
--spec handle_changes_request(od_provider:id(),
-    dbsync_communicator:changes_request()) -> supervisor:startchild_ret().
+-spec handle_changes_request(od_provider:id(), dbsync_communicator:changes_request()) -> ok.
 handle_changes_request(ProviderId, #changes_request2{
     space_id = SpaceId,
     since = Since,
@@ -241,18 +245,33 @@ handle_changes_request(ProviderId, #changes_request2{
                 ProviderId, SpaceId, BatchSince, BatchUntil, Timestamp, Docs
             )
     end,
-    ReqId = dbsync_utils:gen_request_id(),
-    Spec = dbsync_out_stream_spec(ReqId, SpaceId, [
-        {since, Since},
-        {until, Until},
-        {except_mutator, ProviderId},
-        {handler, Handler},
-        {handling_interval, application:get_env(
-            ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
-        )}
-    ]),
-    Node = datastore_key:any_responsible_node(SpaceId),
-    rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]).
+    Name = get_on_demand_changes_stream_id(SpaceId, ProviderId),
+    case global:whereis_name({dbsync_out_stream, Name}) of
+        undefined ->
+            Spec = dbsync_out_stream_spec(Name, SpaceId, [
+                {since, Since},
+                {until, Until},
+                {except_mutator, ProviderId},
+                {handler, Handler},
+                {handling_interval, application:get_env(
+                    ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
+                )}
+            ]),
+            Node = datastore_key:any_responsible_node(SpaceId),
+            try
+                case rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]) of
+                    {ok, _} -> ok;
+                    % Errors in case of race between two processes that handle #changes_request2{}
+                    {error, already_present} -> ok;
+                    {error, {already_started, _}} -> ok
+                end
+            catch
+                Error:Reason  ->
+                    ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
+            end;
+        _ ->
+            ok
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

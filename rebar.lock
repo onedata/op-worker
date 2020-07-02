@@ -24,7 +24,7 @@
   0},
  {<<"cluster_worker">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/cluster-worker.git",
-       {ref,"105a4d186a3bed5374df3d6475eb7366cf855a05"}},
+       {ref,"c8e4946414df467b8b61de083f534818e9b89583"}},
   0},
  {<<"cowboy">>,
   {git,"git://github.com/ninenines/cowboy.git",
