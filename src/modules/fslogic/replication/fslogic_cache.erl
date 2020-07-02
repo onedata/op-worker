@@ -128,8 +128,11 @@ flush(Type) ->
 
     Saved = lists:foldl(fun(Key, Acc) ->
         case flush_key(Key, Type) of
-            ok -> [Key | Acc];
-            _ -> Acc
+            ok ->
+                [Key | Acc];
+            FlushError ->
+                ?warning("Fslogic cache flush error: ~p for key", [FlushError, Key]),
+                Acc
         end
     end, [], KeysToFlush),
     NewKM = KM -- Saved,
@@ -142,7 +145,7 @@ flush(Type) ->
         0 ->
             ok;
         _ ->
-            ?warning("Not flushed keys: ~p", [NewKM ++ (NewKBM -- NewKM)]),
+            ?warning("Fslogic cache not flushed keys: ~p", [NewKM ++ (NewKBM -- NewKM)]),
             init_flush_check(),
             flush_error
     end.
@@ -777,6 +780,8 @@ flush_key(Key, Type) ->
 %%-------------------------------------------------------------------
 -spec flush_local_blocks(file_location:doc(), list(), list(), flush_type()) ->
     ok | {error, term()} | [{error, term()}].
+flush_local_blocks(_, [], [], _) ->
+    ok;
 flush_local_blocks(#document{key = Key,
     value = #file_location{blocks = PublicBlocks}}, DelBlocks, AddBlocks, Type) ->
     Proceed = case ?LOCAL_BLOCKS_FLUSH of

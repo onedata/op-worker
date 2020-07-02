@@ -36,7 +36,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_new_file_location_doc(file_ctx:ctx(), StorageFileCreated :: boolean(),
-    GeneratedKey :: boolean()) -> {file_location:record(), file_ctx:ctx(), boolean()}.
+    GeneratedKey :: boolean()) -> {{ok, file_location:record()} | {error, already_exists}, file_ctx:ctx()}.
 get_new_file_location_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx),
@@ -59,11 +59,9 @@ get_new_file_location_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
     }, GeneratedKey) of
         {ok, _LocId} ->
             FileCtx5 = file_ctx:add_file_location(FileCtx4, LocId),
-            {Location, FileCtx5, true};
-        {error, already_exists} ->
-            {#document{value = FileLocation}, FileCtx5} =
-                file_ctx:get_local_file_location_doc(FileCtx4),
-            {FileLocation, FileCtx5, false}
+            {{ok, Location}, FileCtx5};
+        {error, already_exists} = Error ->
+            {Error, FileCtx4}
     end.
 
 %%--------------------------------------------------------------------
