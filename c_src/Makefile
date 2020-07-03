@@ -10,8 +10,8 @@ LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L $(HELPERS_DIR)/priv/l
 	-lPocoNet -lPocoFoundation -lpthread -lfolly -lproxygenlib -lwangle -lz \
 	-lglog -lnss3 -lnspr4 -lboost_system -lboost_filesystem -lboost_log -lboost_thread \
 	-lboost_context -liberty -levent -ldouble-conversion -lboost_iostreams -lboost_regex \
-	-lacl -lgfapi -lglusterfs -lgfrpc -lgfxdr -lXrdCl.so.3 -lXrdPosixPreload.so.2 \
-	-lXrdXml.so.3 -lXrdUtils.so.3 -lXrdPosix.so.3
+	-lacl -lgfapi -lglusterfs -lgfrpc -lgfxdr -lXrdCl -lXrdPosixPreload -lXrdXml \
+	-lXrdUtils -lXrdPosix
 
 
 # Add ceph-common library, if X_SCLS is defined, the library is installed

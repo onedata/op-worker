@@ -74,8 +74,8 @@ struct HelpersNIF {
         webDAVExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
             std::stoul(args["webdav_helper_threads_number"].toStdString()));
 
-        xrootExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
-            std::stoul(args["xroot_helper_threads_number"].toStdString()));
+        xrootdExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
+            std::stoul(args["xrootd_helper_threads_number"].toStdString()));
 
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
             services[CEPH_HELPER_NAME]->service,
