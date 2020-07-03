@@ -205,6 +205,8 @@ get_xattr(StorageFileCtx = #storage_file_ctx{xattr = undefined}, XattrName) ->
             {Xattr, StorageFileCtx#storage_file_ctx{xattr = Xattr}};
         {error, ?ENOTSUP} ->
             throw(?ENOTSUP);
+        {error, ?ENOSYS} ->
+            throw(?ENOTSUP);
         {error, ?ENOENT} ->
             throw(?ENOENT);
         {error, ?ENODATA} ->
