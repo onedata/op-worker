@@ -116,7 +116,7 @@ get_async(#{
 %% @end
 %%--------------------------------------------------------------------
 -spec wait(future()) -> {ok, doc()} | {error, term()}.
-wait({{ok, MsgId}, _}) ->
+wait({{ok, MsgId}, _} = Future) ->
     Timeout = application:get_env(op_worker, datastore_remote_driver_timeout,
         timer:minutes(1)),
     receive
@@ -141,7 +141,11 @@ wait({{ok, MsgId}, _}) ->
                     description = Description
                 }
             }
-        } -> {error, binary_to_term(Description)}
+        } -> {error, binary_to_term(Description)};
+        #server_message{
+            message_id = MsgId,
+            message_body = #processing_status{code = 'IN_PROGRESS'}
+        } -> wait(Future)
     after
         % TODO VFS-4025 - multiprovider communication
         Timeout -> {error, timeout}
