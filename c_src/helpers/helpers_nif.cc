@@ -74,6 +74,9 @@ struct HelpersNIF {
         webDAVExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
             std::stoul(args["webdav_helper_threads_number"].toStdString()));
 
+        xrootExecutor = std::make_shared<folly::IOThreadPoolExecutor>(
+            std::stoul(args["xroot_helper_threads_number"].toStdString()));
+
         SHCreator = std::make_unique<one::helpers::StorageHelperCreator>(
             services[CEPH_HELPER_NAME]->service,
             services[CEPHRADOS_HELPER_NAME]->service,
@@ -81,7 +84,7 @@ struct HelpersNIF {
             services[S3_HELPER_NAME]->service,
             services[SWIFT_HELPER_NAME]->service,
             services[GLUSTERFS_HELPER_NAME]->service, webDAVExecutor,
-            services[NULL_DEVICE_HELPER_NAME]->service,
+            xrootdExecutor, services[NULL_DEVICE_HELPER_NAME]->service,
             std::stoul(args["buffer_scheduler_threads_number"].toStdString()),
             buffering::BufferLimits{
                 std::stoul(args["read_buffer_min_size"].toStdString()),
@@ -105,12 +108,14 @@ struct HelpersNIF {
             }
         }
         webDAVExecutor->stop();
+        xrootdExecutor->stop();
     }
 
     bool bufferingEnabled = false;
     std::unordered_map<folly::fbstring, std::unique_ptr<HelperIOService>>
         services;
     std::shared_ptr<folly::IOThreadPoolExecutor> webDAVExecutor;
+    std::shared_ptr<folly::IOThreadPoolExecutor> xrootdExecutor;
     std::unique_ptr<one::helpers::StorageHelperCreator> SHCreator;
 };
 
