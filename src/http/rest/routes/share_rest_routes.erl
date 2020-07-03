@@ -64,7 +64,7 @@ routes() -> [
             scope = private
         }
     }},
-    %% Rename share
+    %% Update share
     {<<"/shares/:shid">>, rest_handler, #rest_req{
         method = 'PATCH',
         parse_body = as_json_params,

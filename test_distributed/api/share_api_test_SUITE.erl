@@ -97,12 +97,15 @@ create_share_test(Config) ->
                 % valid share id
                 FileGuid, ?SPACE_2, <<"NonExistentShare">>, #data_spec{
                     required = [<<"name">>, <<"fileId">>],
+                    optional = [<<"description">>],
                     correct_values = #{
                         <<"name">> => [<<"share1">>, <<"share2">>],
+                        <<"description">> => [<<"">>, <<"# Some description">>],
                         <<"fileId">> => [FileObjectId]
                     },
                     bad_values = [
-                        {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)}
+                        {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)},
+                        {<<"description">>, 14, ?ERROR_BAD_VALUE_BINARY(<<"description">>)}
                     ]
                 }
             )
@@ -134,8 +137,9 @@ build_create_share_validate_rest_call_result_fun(EnvRef, Providers, FileType, Sp
     fun(#api_test_ctx{
         node = Node,
         client = ?USER(UserId),
-        data = #{<<"name">> := ShareName, <<"fileId">> := FileObjectId}
+        data = Data = #{<<"name">> := ShareName, <<"fileId">> := FileObjectId}
     }, Result) ->
+        Description = maps:get(<<"description">>, Data, <<"">>),
         {ok, _, Headers, Body} = ?assertMatch(
             {ok, ?HTTP_201_CREATED, #{<<"Location">> := _}, #{<<"shareId">> := _}},
             Result
@@ -151,7 +155,7 @@ build_create_share_validate_rest_call_result_fun(EnvRef, Providers, FileType, Sp
         ?assertEqual(ExpLocation, maps:get(<<"Location">>, Headers)),
 
         verify_share_doc(
-            Providers, ShareId, ShareName, SpaceId,
+            Providers, ShareId, ShareName, Description, SpaceId,
             FileGuid, FileType, UserId, Config
         )
     end.
@@ -161,8 +165,9 @@ build_create_share_validate_rest_call_result_fun(EnvRef, Providers, FileType, Sp
 build_create_share_validate_gs_call_result_fun(EnvRef, Providers, FileType, Config) ->
     fun(#api_test_ctx{
         client = ?USER(UserId),
-        data = #{<<"name">> := ShareName, <<"fileId">> := FileObjectId}
+        data = Data = #{<<"name">> := ShareName, <<"fileId">> := FileObjectId}
     }, Result) ->
+        Description = maps:get(<<"description">>, Data, <<"">>),
         {ok, FileGuid} = file_id:objectid_to_guid(FileObjectId),
         {ok, #{<<"gri">> := ShareGri} = ShareData} = ?assertMatch({ok, _}, Result),
 
@@ -172,10 +177,10 @@ build_create_share_validate_gs_call_result_fun(EnvRef, Providers, FileType, Conf
         ),
         api_test_env:set(EnvRef, shares, [ShareId | api_test_env:get(EnvRef, shares, [])]),
 
-        assert_proper_gs_share_translation(ShareId, ShareName, private, FileGuid, FileType, ShareData),
+        assert_proper_gs_share_translation(ShareId, ShareName, Description, private, FileGuid, FileType, ShareData),
 
         verify_share_doc(
-            Providers, ShareId, ShareName, ?SPACE_2,
+            Providers, ShareId, ShareName, Description, ?SPACE_2,
             FileGuid, FileType, UserId, Config
         )
     end.
@@ -191,7 +196,8 @@ get_share_test(Config) ->
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
 
     ShareName = <<"share">>,
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, ShareName),
+    Description = <<"# Collection ABC\nThis collection contains elements.">>,
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, ShareName, Description),
     api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
 
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
@@ -214,6 +220,7 @@ get_share_test(Config) ->
                         ExpShareData = #{
                             <<"shareId">> => ShareId,
                             <<"name">> => ShareName,
+                            <<"description">> => Description,
                             <<"fileType">> => FileType,
                             <<"publicUrl">> => ?SHARE_PUBLIC_URL(ShareId),
                             <<"rootFileId">> => ShareObjectId,
@@ -228,7 +235,7 @@ get_share_test(Config) ->
                     type = gs,
                     prepare_args_fun = build_get_share_prepare_gs_args_fun(ShareId, private),
                     validate_result_fun = fun(_, {ok, Result}) ->
-                        assert_proper_gs_share_translation(ShareId, ShareName, private, FileGuid, FileType, Result)
+                        assert_proper_gs_share_translation(ShareId, ShareName, Description, private, FileGuid, FileType, Result)
                     end
                 }
             ],
@@ -241,7 +248,7 @@ get_share_test(Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SHARE_SCENARIOS(Config),
             prepare_args_fun = build_get_share_prepare_gs_args_fun(ShareId, public),
             validate_result_fun = fun(_, {ok, Result}) ->
-                assert_proper_gs_share_translation(ShareId, ShareName, public, FileGuid, FileType, Result)
+                assert_proper_gs_share_translation(ShareId, ShareName, Description, public, FileGuid, FileType, Result)
             end,
             data_spec = DataSpec
         }
@@ -282,9 +289,14 @@ update_share_test(Config) ->
     FilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
     {ok, FileGuid} = api_test_utils:create_file(FileType, P1, SessIdP1, FilePath, 8#777),
 
+    OriginalDescription = <<"### Nested heading at the beginning - total markdown anarchy.">>,
     OriginalShareName = <<"share">>,
-    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, OriginalShareName),
+    {ok, ShareId} = lfm_proxy:create_share(P1, SessIdP1, {guid, FileGuid}, OriginalShareName, OriginalDescription),
     api_test_utils:wait_for_file_sync(P2, SessIdP2, FileGuid),
+
+    EnvRef = api_test_env:init(),
+    api_test_env:set(EnvRef, previous_name, OriginalShareName),
+    api_test_env:set(EnvRef, previous_description, OriginalDescription),
 
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
@@ -292,13 +304,24 @@ update_share_test(Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
             verify_fun = fun
                 (expected_failure, _) ->
+                    PreviousName = api_test_env:get(EnvRef, previous_name),
+                    PreviousDescription = api_test_env:get(EnvRef, previous_description),
                     verify_share_doc(
-                        Providers, ShareId, OriginalShareName, ?SPACE_2, FileGuid, FileType,
-                        ?USER_IN_BOTH_SPACES, Config
+                        Providers, ShareId, PreviousName, PreviousDescription, ?SPACE_2,
+                        FileGuid, FileType, ?USER_IN_BOTH_SPACES, Config
                     ),
                     true;
-                (expected_success, #api_test_ctx{client = ?USER(UserId), data = #{<<"name">> := ShareName}}) ->
-                    verify_share_doc(Providers, ShareId, ShareName, ?SPACE_2, FileGuid, FileType, UserId, Config),
+                (expected_success, #api_test_ctx{client = ?USER(UserId), data = Data}) ->
+                    PreviousName = api_test_env:get(EnvRef, previous_name),
+                    PreviousDescription = api_test_env:get(EnvRef, previous_description),
+                    ExpectedName = maps:get(<<"name">>, Data, PreviousName),
+                    ExpectedDescription = maps:get(<<"description">>, Data, PreviousDescription),
+                    verify_share_doc(
+                        Providers, ShareId, ExpectedName, ExpectedDescription, ?SPACE_2,
+                        FileGuid, FileType, UserId, Config
+                    ),
+                    api_test_env:set(EnvRef, previous_name, ExpectedName),
+                    api_test_env:set(EnvRef, previous_description, ExpectedDescription),
                     true
             end,
             scenario_templates = [
@@ -320,13 +343,15 @@ update_share_test(Config) ->
                 }
             ],
             data_spec = #data_spec{
-                required = [<<"name">>],
+                at_least_one = [<<"description">>, <<"name">>],
                 correct_values = #{
-                    <<"name">> => [<<"szer">>, OriginalShareName]
+                    <<"name">> => [<<"szer">>, OriginalShareName],
+                    <<"description">> => [<<"">>, OriginalDescription]
                 },
                 bad_values = [
                     {<<"name">>, 100, ?ERROR_BAD_VALUE_BINARY(<<"name">>)},
                     {<<"name">>, <<>>, ?ERROR_BAD_VALUE_EMPTY(<<"name">>)},
+                    {<<"description">>, 90, ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
                     {bad_id, <<"NonExistentShare">>, ?ERROR_NOT_FOUND}
                 ]
             }
@@ -478,7 +503,7 @@ build_validate_delete_share_result(EnvRef, UserId, Providers, Config) ->
 
 
 %% @private
-verify_share_doc(Providers, ShareId, ShareName, SpaceId, FileGuid, FileType, UserId, Config) ->
+verify_share_doc(Providers, ShareId, ShareName, Description, SpaceId, FileGuid, FileType, UserId, Config) ->
     ExpPublicUrl = ?SHARE_PUBLIC_URL(ShareId),
     ExpHandle = ?SHARE_HANDLE(ShareId),
     ExpFileType = binary_to_atom(FileType, utf8),
@@ -488,6 +513,7 @@ verify_share_doc(Providers, ShareId, ShareName, SpaceId, FileGuid, FileType, Use
         ?assertMatch(
             {ok, #document{key = ShareId, value = #od_share{
                 name = ShareName,
+                description = Description,
                 space = SpaceId,
                 root_file = ShareFileGuid,
                 public_url = ExpPublicUrl,
@@ -500,7 +526,7 @@ verify_share_doc(Providers, ShareId, ShareName, SpaceId, FileGuid, FileType, Use
 
 
 %% @private
-assert_proper_gs_share_translation(ShareId, ShareName, Scope, FileGuid, FileType, GsShareData) ->
+assert_proper_gs_share_translation(ShareId, ShareName, Description, Scope, FileGuid, FileType, GsShareData) ->
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
     % Unfortunately there is no oz in api tests and so all *_logic modules are
@@ -515,6 +541,7 @@ assert_proper_gs_share_translation(ShareId, ShareName, Scope, FileGuid, FileType
             scope = Scope
         }),
         <<"name">> => ShareName,
+        <<"description">> => Description,
         <<"fileType">> => FileType,
         <<"publicUrl">> => <<ShareId/binary, "_public_url">>,
         <<"rootFile">> => gri:serialize(#gri{
@@ -633,9 +660,10 @@ mock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, share_logic),
 
-    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid, FileType) ->
+    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, Description, SpaceId, ShareFileGuid, FileType) ->
         ShareDoc = #document{key = ShareId, value = #od_share{
             name = Name,
+            description = Description,
             space = SpaceId,
             root_file = ShareFileGuid,
             public_url = ?SHARE_PUBLIC_URL(ShareId),
@@ -661,11 +689,14 @@ mock_share_logic(Config) ->
         end
     end),
 
-    test_utils:mock_expect(Workers, share_logic, update_name, fun(Auth, ShareId, NewName) ->
+    test_utils:mock_expect(Workers, share_logic, update, fun(Auth, ShareId, Data) ->
         {ok, #document{key = ShareId, value = Share}} = share_logic:get(Auth, ShareId),
         rpc:call(TestNode, ?MODULE, update_share, [Workers, #document{
             key = ShareId,
-            value = Share#od_share{name = NewName}}
+            value = Share#od_share{
+                name = maps:get(<<"name">>, Data, Share#od_share.name),
+                description = maps:get(<<"description">>, Data, Share#od_share.description)
+            }}
         ])
     end),
 

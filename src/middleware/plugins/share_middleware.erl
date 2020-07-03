@@ -64,14 +64,21 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
         <<"name">> => {binary, non_empty},
         <<"fileId">> => {binary,
             fun(ObjectId) -> {true, middleware_utils:decode_object_id(ObjectId, <<"fileId">>)} end}
+    },
+    optional => #{
+        <<"description">> => {binary, any}
     }
 };
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
 
-data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) ->
-    #{required => #{<<"name">> => {binary, non_empty}}};
+data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
+    at_least_one => #{
+        <<"name">> => {binary, non_empty},
+        <<"description">> => {binary, any}
+    }
+};
 
 data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
     undefined.
@@ -178,9 +185,10 @@ validate(#op_req{operation = Op, gri = #gri{aspect = instance}},
 create(#op_req{auth = Auth, gri = #gri{aspect = instance} = GRI} = Req) ->
     SessionId = Auth#auth.session_id,
     Name = maps:get(<<"name">>, Req#op_req.data),
+    Description = maps:get(<<"description">>, Req#op_req.data, <<"">>),
     FileGuid = maps:get(<<"fileId">>, Req#op_req.data),
 
-    case lfm:create_share(SessionId, {guid, FileGuid}, Name) of
+    case lfm:create_share(SessionId, {guid, FileGuid}, Name, Description) of
         {ok, ShareId} ->
             case share_logic:get(SessionId, ShareId) of
                 {ok, #document{value = ShareRec}} ->
@@ -211,8 +219,7 @@ get(#op_req{gri = #gri{id = ShareId, aspect = instance}}, Share) ->
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}} = Req) ->
-    NewName = maps:get(<<"name">>, Req#op_req.data),
-    share_logic:update_name(Auth#auth.session_id, ShareId, NewName).
+    share_logic:update(Auth#auth.session_id, ShareId, Req#op_req.data).
 
 
 %%--------------------------------------------------------------------
@@ -234,8 +241,9 @@ delete(#op_req{auth = Auth, gri = #gri{id = ShareId, aspect = instance}}) ->
 -spec share_to_json(od_share:id(), od_share:record()) -> map().
 share_to_json(ShareId, #od_share{
     space = SpaceId,
-    root_file = RootFileGuid,
     name = ShareName,
+    description = Description,
+    root_file = RootFileGuid,
     public_url = SharePublicUrl,
     file_type = FileType,
     handle = Handle
@@ -243,6 +251,7 @@ share_to_json(ShareId, #od_share{
     #{
         <<"shareId">> => ShareId,
         <<"name">> => ShareName,
+        <<"description">> => Description,
         <<"fileType">> => FileType,
         <<"publicUrl">> => SharePublicUrl,
         <<"rootFileId">> => RootFileGuid,

@@ -298,6 +298,7 @@ create_update_delete_test(Config) ->
             User1Sess,
             ?MOCK_CREATED_SHARE_ID,
             ?SHARE_NAME(<<"newShare">>),
+            ?SHARE_DESCRIPTION(<<"newShare">>),
             ?SHARE_SPACE(<<"newShare">>),
             ?SHARE_ROOT_FILE(<<"newShare">>),
             dir
@@ -310,6 +311,7 @@ create_update_delete_test(Config) ->
             User1Sess,
             ?MOCK_CREATED_SHARE_ID,
             ?SHARE_NAME(<<"newShare">>),
+            ?SHARE_DESCRIPTION(<<"newShare">>),
             <<"badSpaceId">>,
             ?SHARE_ROOT_FILE(<<"newShare">>),
             dir
@@ -320,26 +322,39 @@ create_update_delete_test(Config) ->
     % Update
     ?assertMatch(
         ok,
-        rpc:call(Node, share_logic, update_name, [User1Sess, ?SHARE_1, <<"newName">>])
+        rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{
+            <<"name">> => <<"newName">>,
+            <<"description">> => <<"New share description">>
+        }])
     ),
     ?assertEqual(GraphCalls + 3, logic_tests_common:count_reqs(Config, graph, od_share)),
     ?assertMatch(
         ?ERROR_BAD_VALUE_BINARY(<<"name">>),
-        rpc:call(Node, share_logic, update_name, [User1Sess, ?SHARE_1, 1234])
+        rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{<<"name">> => 1234}])
     ),
     ?assertEqual(GraphCalls + 4, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertMatch(
+        ?ERROR_BAD_VALUE_BINARY(<<"description">>),
+        rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{<<"description">> => 87.9}])
+    ),
+    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertMatch(
+        ?ERROR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]),
+        rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{}])
+    ),
+    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph, od_share)),
 
     % Delete
     ?assertMatch(
         ok,
         rpc:call(Node, share_logic, delete, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 7, logic_tests_common:count_reqs(Config, graph, od_share)),
     ?assertMatch(
         ?ERROR_NOT_FOUND,
         rpc:call(Node, share_logic, delete, [User1Sess, <<"wrongId">>])
     ),
-    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 8, logic_tests_common:count_reqs(Config, graph, od_share)),
 
     ok.
 

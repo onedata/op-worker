@@ -58,7 +58,7 @@
     has_custom_metadata/3,
     get_metadata/6, set_metadata/6, remove_metadata/4,
 
-    create_share/4, remove_share/3,
+    create_share/4, create_share/5, remove_share/3,
 
     schedule_file_replication/4, schedule_replication_by_view/6,
     schedule_file_replica_eviction/5, schedule_replica_eviction_by_view/7,
@@ -654,7 +654,14 @@ remove_metadata(Worker, SessId, FileKey, Type) ->
 -spec create_share(node(), session:id(), lfm:file_key(), od_share:name()) ->
     {ok, od_share:id()} | {error, term()}.
 create_share(Worker, SessId, FileKey, Name) ->
-    ?EXEC(Worker, lfm:create_share(SessId, FileKey, Name)).
+    RandomDescription = str_utils:rand_hex(100),
+    create_share(Worker, SessId, FileKey, Name, RandomDescription).
+
+
+-spec create_share(node(), session:id(), lfm:file_key(), od_share:name(), od_share:description()) ->
+    {ok, od_share:id()} | {error, term()}.
+create_share(Worker, SessId, FileKey, Name, Description) ->
+    ?EXEC(Worker, lfm:create_share(SessId, FileKey, Name, Description)).
 
 
 -spec remove_share(node(), session:id(), od_share:id()) ->

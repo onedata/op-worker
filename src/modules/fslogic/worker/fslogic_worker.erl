@@ -615,8 +615,8 @@ handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
     metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
     permission_req:check_perms(UserCtx, FileCtx, Flag);
-handle_provider_request(UserCtx, #create_share{name = Name}, FileCtx) ->
-    share_req:create_share(UserCtx, FileCtx, Name);
+handle_provider_request(UserCtx, #create_share{name = Name, description = Description}, FileCtx) ->
+    share_req:create_share(UserCtx, FileCtx, Name, Description);
 handle_provider_request(UserCtx, #remove_share{share_id = ShareId}, FileCtx) ->
     share_req:remove_share(UserCtx, FileCtx, ShareId);
 handle_provider_request(UserCtx, #add_qos_entry{

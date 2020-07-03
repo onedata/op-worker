@@ -28,6 +28,7 @@
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
 translate_resource(#gri{aspect = instance, scope = Scope}, #{
     <<"name">> := ShareName,
+    <<"description">> := Description,
     <<"publicUrl">> := SharePublicUrl,
     <<"fileType">> := FileType,
     <<"rootFileId">> := RootFileShareGuid,
@@ -51,6 +52,7 @@ translate_resource(#gri{aspect = instance, scope = Scope}, #{
 
     ShareInfo#{
         <<"name">> => ShareName,
+        <<"description">> => Description,
         <<"publicUrl">> => SharePublicUrl,
         <<"fileType">> => FileType,
         <<"rootFile">> => gri:serialize(#gri{

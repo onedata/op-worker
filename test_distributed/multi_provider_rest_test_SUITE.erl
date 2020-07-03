@@ -507,7 +507,7 @@ update_share_name(Config) ->
 
     % request without new share name should fail
     ?assertMatch(true, rest_test_utils:assert_request_error(
-        ?ERROR_MISSING_REQUIRED_VALUE(<<"name">>),
+        ?ERROR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]),
         {SupportingProviderNode, RestPath, patch, Headers, <<>>}
     )),
 

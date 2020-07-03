@@ -263,8 +263,11 @@ run_missing_required_data_test_cases(Config, #suite_spec{
         {maps:remove(RequiredParam, RequiredDataSet), ?ERROR_MISSING_REQUIRED_VALUE(RequiredParam)}
     end, RequiredParams),
     MissingAtLeastOneParamsDataSetAndError = case AtLeastOneParams of
-        [] -> [];
-        _ -> [{maps:without(AtLeastOneParams, RequiredDataSet), ?ERROR_MISSING_AT_LEAST_ONE_VALUE(AtLeastOneParams)}]
+        [] ->
+            [];
+        _ ->
+            ExpectedError = ?ERROR_MISSING_AT_LEAST_ONE_VALUE(lists:sort(AtLeastOneParams)),
+            [{maps:without(AtLeastOneParams, RequiredDataSet), ExpectedError}]
     end,
 
     IncompleteDataSetsAndErrors = lists:flatten([

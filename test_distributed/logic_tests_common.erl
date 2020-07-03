@@ -94,7 +94,7 @@ mock_gs_client(Config) ->
     ok = test_utils:mock_expect(Nodes, provider_logic, has_eff_user, fun(UserId) ->
         lists:member(UserId, [?USER_1, ?USER_2, ?USER_3, ?USER_INCREASING_REV])
     end),
-    
+
     % adding dummy storages to rtransfer would fail
     ok = test_utils:mock_expect(Nodes, rtransfer_config, add_storages, fun() -> ok end),
 
@@ -131,7 +131,7 @@ wait_for_mocked_connection(Config) ->
     ?assertMatch(ok, CheckConnection(), 60).
 
 
-simulate_push(Config, PushMessage) when is_list(Config)->
+simulate_push(Config, PushMessage) when is_list(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
     simulate_push(Node, PushMessage);
 simulate_push(Node, PushMessage) when is_atom(Node) ->
@@ -342,6 +342,7 @@ mock_graph_create(#gri{type = od_user, id = UserId, aspect = {idp_access_token, 
 mock_graph_create(#gri{type = od_share, id = undefined, aspect = instance}, #auth_override{client_auth = {token, _}}, Data) ->
     #{
         <<"shareId">> := ShareId,
+        <<"description">> := _Description,
         <<"name">> := _Name,
         <<"rootFileId">> := _RootFileId,
         <<"spaceId">> := SpaceId
@@ -370,11 +371,29 @@ mock_graph_create(#gri{type = od_space, id = _, aspect = harvest_metadata}, unde
     {ok, #gs_resp_graph{data_format = undefined}}.
 
 mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, #auth_override{client_auth = {token, _}}, Data) ->
-    case Data of
-        #{<<"name">> := Name} when is_binary(Name) ->
-            {ok, #gs_resp_graph{}};
-        _ ->
-            ?ERROR_BAD_VALUE_BINARY(<<"name">>)
+    NameArgCheck = case maps:find(<<"name">>, Data) of
+        error ->
+            none;
+        {ok, Name} ->
+            case is_binary(Name) of
+                true -> ok;
+                false -> bad
+            end
+    end,
+    DescriptionArgCheck = case maps:find(<<"description">>, Data) of
+        error ->
+            none;
+        {ok, Description} ->
+            case is_binary(Description) of
+                true -> ok; 
+                false -> bad
+            end
+    end,
+    case {NameArgCheck, DescriptionArgCheck} of
+        {bad, _} -> ?ERROR_BAD_VALUE_BINARY(<<"name">>);
+        {_, bad} -> ?ERROR_BAD_VALUE_BINARY(<<"description">>);
+        {none, none} -> ?ERROR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]);
+        _ -> {ok, #gs_resp_graph{}}
     end;
 mock_graph_update(#gri{type = od_cluster, id = _ShareId, aspect = instance}, undefined, Data) ->
     % undefined Authorization means asking with provider's auth

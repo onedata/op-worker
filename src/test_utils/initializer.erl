@@ -648,9 +648,10 @@ node_get_mocked_space_user_privileges(SpaceId, UserId) ->
 mock_share_logic(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, share_logic),
-    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, SpaceId, ShareFileGuid, FileType) ->
+    test_utils:mock_expect(Workers, share_logic, create, fun(_Auth, ShareId, Name, Description, SpaceId, ShareFileGuid, FileType) ->
         {ok, _} = put_into_cache(#document{key = ShareId, value = #od_share{
             name = Name,
+            description = Description,
             space = SpaceId,
             root_file = ShareFileGuid,
             public_url = <<ShareId/binary, "_public_url">>,
@@ -665,10 +666,13 @@ mock_share_logic(Config) ->
     test_utils:mock_expect(Workers, share_logic, delete, fun(_Auth, ShareId) ->
         ok = od_share:invalidate_cache(ShareId)
     end),
-    test_utils:mock_expect(Workers, share_logic, update_name, fun(Auth, ShareId, NewName) ->
+    test_utils:mock_expect(Workers, share_logic, update, fun(Auth, ShareId, Data) ->
         {ok, #document{key = ShareId, value = Share}} = share_logic:get(Auth, ShareId),
         ok = od_share:invalidate_cache(ShareId),
-        {ok, _} = put_into_cache(#document{key = ShareId, value = Share#od_share{name = NewName}}),
+        {ok, _} = put_into_cache(#document{key = ShareId, value = Share#od_share{
+            name = maps:get(<<"name">>, Data, Share#od_share.name),
+            description = maps:get(<<"description">>, Data, Share#od_share.description)
+        }}),
         ok
     end).
 
