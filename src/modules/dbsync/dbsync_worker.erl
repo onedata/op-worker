@@ -252,32 +252,34 @@ handle_changes_request(ProviderId, #changes_request2{
             )
     end,
     Name = get_on_demand_changes_stream_id(SpaceId, ProviderId),
-    case global:whereis_name({dbsync_out_stream, Name}) of
-        undefined ->
-            Spec = dbsync_out_stream_spec(ReqId, SpaceId, [
-                {since, Since},
-                {until, Until},
-                {except_mutator, ProviderId},
-                {handler, Handler},
-                {handling_interval, application:get_env(
-                    ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
-                )}
-            ]),
-            Node = datastore_key:responsible_node(SpaceId),
-            try
-                case rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]) of
-                    {ok, _} -> ok;
-                    % Errors in case of race between two processes that handle #changes_request2{}
-                    {error, already_present} -> ok;
-                    {error, {already_started, _}} -> ok
-                end
-            catch
-                Error:Reason  ->
-                    ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
-            end;
-        _ ->
-            ok
-    end.
+    StreamID = {dbsync_out_stream, Name},
+    critical_section:run([?MODULE, StreamID], fun() ->
+        case global:whereis_name(StreamID) of
+            undefined ->
+                % Delete child from supervisor if it has not deregistered properly
+                supervisor:terminate_child(?DBSYNC_WORKER_SUP, StreamID),
+                supervisor:delete_child(?DBSYNC_WORKER_SUP, StreamID),
+
+                Spec = dbsync_out_stream_spec(Name, SpaceId, [
+                    {since, Since},
+                    {until, Until},
+                    {except_mutator, ProviderId},
+                    {handler, Handler},
+                    {handling_interval, application:get_env(
+                        ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
+                    )}
+                ]),
+                Node = datastore_key:responsible_node(SpaceId),
+                try
+                    {ok, _} = rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec])
+                catch
+                    Error:Reason  ->
+                        ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
+                end;
+            _ ->
+                ok
+        end
+    end).
 
 %%--------------------------------------------------------------------
 %% @private
