@@ -105,7 +105,7 @@ sanitize_data(RawData, DataSpec) ->
         {0, false} ->
             ok;
         {_, false} ->
-            throw(?ERROR_MISSING_AT_LEAST_ONE_VALUE(maps:keys(AtLeastOneParamsSpec)))
+            throw(?ERROR_MISSING_AT_LEAST_ONE_VALUE(lists:sort(maps:keys(AtLeastOneParamsSpec))))
     end,
 
     SanitizedData3.

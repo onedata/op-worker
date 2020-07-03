@@ -342,7 +342,7 @@ mock_graph_create(#gri{type = od_user, id = UserId, aspect = {idp_access_token, 
 mock_graph_create(#gri{type = od_share, id = undefined, aspect = instance}, #auth_override{client_auth = {token, _}}, Data) ->
     #{
         <<"shareId">> := ShareId,
-        <<"description">> := _Name,
+        <<"description">> := _Description,
         <<"name">> := _Name,
         <<"rootFileId">> := _RootFileId,
         <<"spaceId">> := SpaceId
@@ -371,24 +371,29 @@ mock_graph_create(#gri{type = od_space, id = _, aspect = harvest_metadata}, unde
     {ok, #gs_resp_graph{data_format = undefined}}.
 
 mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, #auth_override{client_auth = {token, _}}, Data) ->
-    NameOk = case maps:find(<<"name">>, Data) of
-        error -> true;
-        {ok, Name} -> is_binary(Name)
+    NameArgCheck = case maps:find(<<"name">>, Data) of
+        error ->
+            none;
+        {ok, Name} ->
+            case is_binary(Name) of
+                true -> ok;
+                false -> bad
+            end
     end,
-    DescriptionOk = case maps:find(<<"description">>, Data) of
-        error -> true;
-        {ok, Description} -> is_binary(Description)
+    DescriptionArgCheck = case maps:find(<<"description">>, Data) of
+        error ->
+            none;
+        {ok, Description} ->
+            case is_binary(Description) of
+                true -> ok; 
+                false -> bad
+            end
     end,
-    case NameOk of
-        true ->
-            case DescriptionOk of
-                true ->
-                    {ok, #gs_resp_graph{}};
-                false ->
-                    ?ERROR_BAD_VALUE_BINARY(<<"description">>)
-            end;
-        false ->
-            ?ERROR_BAD_VALUE_BINARY(<<"name">>)
+    case {NameArgCheck, DescriptionArgCheck} of
+        {bad, _} -> ?ERROR_BAD_VALUE_BINARY(<<"name">>);
+        {_, bad} -> ?ERROR_BAD_VALUE_BINARY(<<"description">>);
+        {none, none} -> ?ERROR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]);
+        _ -> {ok, #gs_resp_graph{}}
     end;
 mock_graph_update(#gri{type = od_cluster, id = _ShareId, aspect = instance}, undefined, Data) ->
     % undefined Authorization means asking with provider's auth

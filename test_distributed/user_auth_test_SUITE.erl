@@ -311,10 +311,12 @@ auth_cache_oz_conn_status_test(Config) ->
     ?assertEqual(1, get_auth_cache_size(Worker1)),
     ?assertEqual(1, get_auth_cache_size(Worker2)),
 
-    % Connection start should cause immediate cache purge
+    % Connection start should cause cache purge as soon as the restart event
+    % reaches auth_cache workers - retry the check several times as the
+    % broadcast is asynchronous
     simulate_oz_connection_start(Worker1),
-    ?assertEqual(0, get_auth_cache_size(Worker1)),
-    ?assertEqual(0, get_auth_cache_size(Worker2)),
+    ?assertEqual(0, get_auth_cache_size(Worker1), 10),
+    ?assertEqual(0, get_auth_cache_size(Worker2), 10),
 
     lists:foreach(fun({TokenCredentials, Worker, ExpUserId}) ->
         ?assertMatch({ok, ?USER(ExpUserId), undefined}, verify_credentials(Worker, TokenCredentials))

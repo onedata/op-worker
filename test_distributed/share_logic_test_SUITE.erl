@@ -338,18 +338,23 @@ create_update_delete_test(Config) ->
         rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{<<"description">> => 87.9}])
     ),
     ?assertEqual(GraphCalls + 5, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertMatch(
+        ?ERROR_MISSING_AT_LEAST_ONE_VALUE([<<"description">>, <<"name">>]),
+        rpc:call(Node, share_logic, update, [User1Sess, ?SHARE_1, #{}])
+    ),
+    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph, od_share)),
 
     % Delete
     ?assertMatch(
         ok,
         rpc:call(Node, share_logic, delete, [User1Sess, ?SHARE_1])
     ),
-    ?assertEqual(GraphCalls + 6, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 7, logic_tests_common:count_reqs(Config, graph, od_share)),
     ?assertMatch(
         ?ERROR_NOT_FOUND,
         rpc:call(Node, share_logic, delete, [User1Sess, <<"wrongId">>])
     ),
-    ?assertEqual(GraphCalls + 7, logic_tests_common:count_reqs(Config, graph, od_share)),
+    ?assertEqual(GraphCalls + 8, logic_tests_common:count_reqs(Config, graph, od_share)),
 
     ok.
 
