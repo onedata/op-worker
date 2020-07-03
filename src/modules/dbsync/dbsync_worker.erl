@@ -246,12 +246,12 @@ handle_changes_request(ProviderId, #changes_request2{
             )
     end,
     Name = get_on_demand_changes_stream_id(SpaceId, ProviderId),
-    FullName = {dbsync_out_stream, Name},
-    case global:whereis_name(FullName) of
+    StreamID = ?OUT_STREAM_ID(Name),
+    case global:whereis_name(StreamID) of
         undefined ->
             % Delete child from supervisor if it has not deregistered properly
-            supervisor:terminate_child(?DBSYNC_WORKER_SUP, FullName),
-            supervisor:delete_child(?DBSYNC_WORKER_SUP, FullName),
+            supervisor:terminate_child(?DBSYNC_WORKER_SUP, StreamID),
+            supervisor:delete_child(?DBSYNC_WORKER_SUP, StreamID),
 
             Spec = dbsync_out_stream_spec(Name, SpaceId, [
                 {since, Since},
