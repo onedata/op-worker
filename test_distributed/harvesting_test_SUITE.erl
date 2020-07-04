@@ -36,6 +36,7 @@
 %% tests
 -export([
     create_file/1,
+    rename_file/1,
     delete_file/1,
     set_json_metadata/1,
     modify_json_metadata/1,
@@ -52,6 +53,7 @@
     delete_xattr_metadata/1,
     delete_file_with_xattr_metadata/1,
     modify_xattr_many_times/1,
+    modify_metadata_and_rename_file/1,
     changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_space/1,
     changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester/1,
     each_provider_should_submit_only_local_changes_to_the_harvester/1,
@@ -63,6 +65,7 @@
 all() ->
     ?ALL([
         create_file,
+        rename_file,
         delete_file,
         set_json_metadata,
         modify_json_metadata,
@@ -79,6 +82,7 @@ all() ->
         delete_xattr_metadata,
         delete_file_with_xattr_metadata,
         modify_xattr_many_times,
+        modify_metadata_and_rename_file,
         changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_space,
         changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester,
         each_provider_should_submit_only_local_changes_to_the_harvester,
@@ -264,6 +268,38 @@ create_file(Config) ->
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName,
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId2).
+
+rename_file(Config) ->
+    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+    FileName = ?FILE_NAME,
+    FileName2 = ?FILE_NAME,
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    ProviderId = ?PROVIDER_ID(Worker),
+    ProviderId2 = ?PROVIDER_ID(Worker2),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{}
+    }], ProviderId),
+
+    {ok, Guid} = lfm_proxy:mv(Worker, SessId, {guid, Guid}, ?PATH(FileName2, ?SPACE_ID1)),
+
+    % check whether operation of rename was harvested
+    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName2,
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
     }], ProviderId2).
@@ -820,6 +856,49 @@ modify_xattr_many_times(Config) ->
             <<"xattrs">> => ExpectedFinalXattrs
         }
     }], ProviderId).
+
+modify_metadata_and_rename_file(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = ?SESS_ID(Worker),
+
+    FileName = ?FILE_NAME,
+    FileName2 = ?FILE_NAME,
+    JSON = #{<<"color">> => <<"blue">>},
+
+    {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1), 8#600),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON, []),
+    {ok, FileId} = file_id:guid_to_objectid(Guid),
+
+    Destination = #{?HARVESTER1 => [?INDEX11]},
+    EncodedJSON = json_utils:encode(JSON),
+    ProviderId = ?PROVIDER_ID(Worker),
+
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName,
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{
+            <<"json">> => EncodedJSON
+        }
+    }], ProviderId),
+
+    JSON2 = #{<<"color">> => <<"blue">>, <<"size">> => <<"big">>},
+    EncodedJSON2 = json_utils:encode(JSON2),
+    {ok, Guid} = lfm_proxy:mv(Worker, SessId, {guid, Guid}, ?PATH(FileName2, ?SPACE_ID1)),
+    ok = lfm_proxy:set_metadata(Worker, SessId, {guid, Guid}, json, JSON2, []),
+
+    % both updates should be aggregated and sent in one batch
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+        <<"fileId">> => FileId,
+        <<"spaceId">> => ?SPACE_ID1,
+        <<"fileName">> => FileName2,
+        <<"operation">> => <<"submit">>,
+        <<"payload">> => #{
+            <<"json">> => EncodedJSON2
+        }
+    }], ProviderId).
+
 
 changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_space(Config) ->
     % ?HARVESTER1 and ?HARVESTER2 are subscribed for ?SPACE_ID2
