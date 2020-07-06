@@ -296,13 +296,13 @@ rename_file(Config) ->
     {ok, Guid} = lfm_proxy:mv(Worker, SessId, {guid, Guid}, ?PATH(FileName2, ?SPACE_ID1)),
 
     % check whether operation of rename was harvested
-    ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
+    ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
         <<"spaceId">> => ?SPACE_ID1,
         <<"fileName">> => FileName2,
         <<"operation">> => <<"submit">>,
         <<"payload">> => #{}
-    }], ProviderId2).
+    }], ProviderId).
 
 delete_file(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
