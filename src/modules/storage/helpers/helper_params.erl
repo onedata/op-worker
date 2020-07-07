@@ -204,6 +204,9 @@ expected_custom_helper_args(?WEBDAV_HELPER_NAME) -> [
     {optional, <<"authorizationHeader">>}, {optional, <<"rangeWriteSupport">>},
     {optional, <<"connectionPoolSize">>}, {optional, <<"maximumUploadSize">>},
     {optional, <<"fileMode">>}, {optional, <<"dirMode">>}];
+expected_custom_helper_args(?XROOTD_HELPER_NAME) -> [
+    <<"url">>,
+    {optional, <<"fileModeMask">>}, {optional, <<"dirModeMask">>}];
 expected_custom_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
     {optional, <<"latencyMin">>},
     {optional, <<"latencyMax">>},
@@ -245,6 +248,8 @@ expected_user_ctx_params(?WEBDAV_HELPER_NAME) ->
         {optional, <<"onedataAccessToken">>}, {optional, <<"accessToken">>},
         {optional, <<"accessTokenTTL">>}
     ];
+expected_user_ctx_params(?XROOTD_HELPER_NAME) ->
+    [<<"credentialsType">>, {optional, <<"credentials">>}];
 expected_user_ctx_params(?NULL_DEVICE_HELPER_NAME) ->
     [<<"uid">>, {optional, <<"gid">>}].
 
