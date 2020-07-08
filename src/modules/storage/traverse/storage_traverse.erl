@@ -229,15 +229,28 @@ generate_master_and_slave_jobs(#storage_traverse_master{
     max_depth = MaxDepth,
     depth = MaxDepth,
     execute_slave_on_dir = true,
+    fold_children_fun = FoldChildrenFun,
+    fold_enabled = FoldChildrenEnabled,
+    fold_init = FoldInit,
     info = Info
 }, _NextBatchMaterJob, _ChildrenIds, _Args) ->
-    {ok, #{sequential_slave_jobs => [get_slave_job(StorageFileCtx, Info)]}};
+    MasterJobsMap = #{sequential_slave_jobs => [get_slave_job(StorageFileCtx, Info)]},
+    case FoldChildrenFun =:= undefined orelse FoldChildrenEnabled =:= false of
+        true -> {ok, MasterJobsMap};
+        false -> {ok, MasterJobsMap, FoldInit}
+    end;
 generate_master_and_slave_jobs(#storage_traverse_master{
     depth = MaxDepth,
     max_depth = MaxDepth,
-    execute_slave_on_dir = false
+    execute_slave_on_dir = false,
+    fold_children_fun = FoldChildrenFun,
+    fold_enabled = FoldChildrenEnabled,
+    fold_init = FoldInit
 }, _NextBatchMaterJob, _ChildrenIds, _Args) ->
-    {ok, #{}};
+    case FoldChildrenFun =:= undefined orelse FoldChildrenEnabled =:= false of
+        true -> {ok, #{}};
+        false -> {ok, #{}, FoldInit}
+    end;
 generate_master_and_slave_jobs(CurrentMasterJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     execute_slave_on_dir = OnDir,

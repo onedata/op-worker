@@ -32,6 +32,7 @@
 -spec routes() -> [{binary(), module(), map()}].
 routes() ->
     AllRoutes = lists:flatten([
+        file_registration_rest_routes:routes(),
         basic_file_operations_rest_routes:routes(),
         custom_file_metadata_rest_routes:routes(),
         deprecated_file_api_rest_routes:routes(),

@@ -8,6 +8,7 @@
 %%% This module is responsible for syncing a single file found on storage
 %%% to Onedata filesystem.
 %%% For more info please see doc of process_file/2 function.
+%%% TODO VFS-6508 abstract mechanisms used by sync and file_registration to a separate module
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_engine).
@@ -24,7 +25,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([process_file/2]).
+-export([find_direct_parent_and_sync_file/2, sync_file/2]).
 
 % exported for mocking in CT tests
 -export([import_file_unsafe/2, check_location_and_maybe_sync/3]).
@@ -75,23 +76,19 @@
 %%    * StorageFileCtx which is updated StorageFileCtx passed to the function.
 %% @end
 %%--------------------------------------------------------------------
--spec process_file(storage_file_ctx:ctx(), info()) ->
+-spec find_direct_parent_and_sync_file(storage_file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
-process_file(StorageFileCtx, Info) ->
+find_direct_parent_and_sync_file(StorageFileCtx, Info) ->
     case find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info) of
         {ok, Info2} ->
-            process_file_internal(StorageFileCtx, Info2);
+            sync_file(StorageFileCtx, Info2);
         {error, ?ENOENT} ->
             {?PROCESSED, undefined, StorageFileCtx}
     end.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
--spec process_file_internal(storage_file_ctx:ctx(), info()) -> {result(),
+-spec sync_file(storage_file_ctx:ctx(), info()) -> {result(),
     file_ctx:ctx() | undefined, storage_file_ctx:ctx()} | {error, term()}.
-process_file_internal(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
+sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
@@ -162,6 +159,10 @@ process_file_internal(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                     end
             end
     end.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 -spec find_direct_parent_and_ensure_all_parents_exist(storage_file_ctx:ctx(), info()) -> {ok, info()} | {error, term()}.
 find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_storage_file_id := SpaceStorageFileId}) ->
@@ -581,11 +582,10 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
 -spec create_missing_parent_unsafe(storage_file_ctx:ctx(), info()) ->
     {result(), file_ctx:ctx()}.
 create_missing_parent_unsafe(StorageFileCtx, #{parent_ctx := ParentCtx}) ->
-    ParentUuid = file_ctx:get_uuid_const(ParentCtx),
+    ParentName = storage_file_ctx:get_file_name_const(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
+    {ok, FileCtx} = file_registration:create_missing_directory(ParentCtx, ParentName, ?SPACE_OWNER_ID(SpaceId)),
     FileUuid = datastore_key:new(),
-    create_dir_location(FileUuid),
-    {ok, FileCtx} = create_missing_parent_file_meta(FileUuid, StorageFileCtx, ParentUuid),
     create_times_from_current_time(FileUuid, SpaceId),
     {CanonicalPath, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
@@ -609,17 +609,6 @@ create_location(FileUuid, StorageFileCtx, OwnerId) ->
         _ ->
             create_dir_location(FileUuid, StorageFileCtx2)
     end.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function shall be called only on non-posix storage where there
-%% is no GID in file's attrs on storage.
-%% @end
-%%--------------------------------------------------------------------
--spec create_dir_location(file_meta:uuid()) -> ok.
-create_dir_location(FileUuid) ->
-    ok = dir_location:mark_dir_synced_from_storage(FileUuid, undefined).
 
 -spec create_dir_location(file_meta:uuid(), storage_file_ctx:ctx()) -> {ok, storage_file_ctx:ctx()}.
 create_dir_location(FileUuid, StorageFileCtx) ->
@@ -708,30 +697,6 @@ create_file_meta(FileUuid, StorageFileCtx, OwnerId, ParentUuid, #{iterator_type 
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
     {ok, FileCtx, StorageFileCtx2}.
 
--spec create_missing_parent_file_meta(file_meta:uuid(), storage_file_ctx:ctx(), file_meta:uuid()) ->
-    {ok, file_ctx:ctx()}.
-create_missing_parent_file_meta(FileUuid, StorageFileCtx, ParentUuid) ->
-    SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-    FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
-    FileMetaDoc = file_meta:new_doc(FileUuid, FileName, ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS,
-        ?SPACE_OWNER_ID(SpaceId), ParentUuid, SpaceId),
-    {ok, FinalDoc} = case file_meta:create({uuid, ParentUuid}, FileMetaDoc) of
-        {error, already_exists} ->
-            % there was race with creating file by lfm
-            % file will be imported with suffix
-            FileName2 = ?IMPORTED_CONFLICTING_FILE_NAME(FileName),
-            FileMetaDoc2 = file_meta:new_doc(FileUuid, FileName2, ?DIRECTORY_TYPE, ?DEFAULT_DIR_PERMS,
-                ?SPACE_OWNER_ID(SpaceId), ParentUuid, SpaceId),
-            {ok, FileUuid} = file_meta:create({uuid, ParentUuid}, FileMetaDoc2),
-            {ok, FileMetaDoc2};
-        {ok, FileUuid} ->
-            {ok, FileMetaDoc}
-    end,
-    FileCtx = file_ctx:new_by_doc(FinalDoc, SpaceId, undefined),
-    ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-    {ok, FileCtx}.
-
-
 -spec create_times_from_stat_timestamps(file_meta:uuid(), storage_file_ctx:ctx()) ->
     {ok, storage_file_ctx:ctx()}.
 create_times_from_stat_timestamps(FileUuid, StorageFileCtx) ->
@@ -741,28 +706,15 @@ create_times_from_stat_timestamps(FileUuid, StorageFileCtx) ->
         st_ctime = StCtime
     }, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx2),
-    create_times_doc(FileUuid, SpaceId, StMtime, StAtime, StCtime),
+    times:save(FileUuid, SpaceId, StAtime, StMtime, StCtime),
     {ok, StorageFileCtx2}.
 
 
 -spec create_times_from_current_time(file_meta:uuid(), od_space:id()) -> ok.
 create_times_from_current_time(FileUuid, SpaceId) ->
     CurrentTime = time_utils:system_time_seconds(),
-    create_times_doc(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime).
+    times:save(FileUuid, SpaceId, CurrentTime, CurrentTime, CurrentTime).
 
-
--spec create_times_doc(file_meta:uuid(), od_space:id(), non_neg_integer(),
-    non_neg_integer(), non_neg_integer()) -> ok.
-create_times_doc(FileUuid, SpaceId, Mtime, Atime, Ctime) ->
-    ok = ?extract_ok(times:save(#document{
-        key = FileUuid,
-        value = #times{
-            mtime = Mtime,
-            atime = Atime,
-            ctime = Ctime
-        },
-        scope = SpaceId}
-    )).
 %%-------------------------------------------------------------------
 %% @private
 %% @doc

@@ -33,7 +33,9 @@
     middleware:data_format(), Result :: term() | {gri:gri(), term()} |
     {gri:gri(), middleware:auth_hint(), term()}) -> #rest_resp{}.
 create_response(#gri{aspect = object_id}, _, value, ObjectId) ->
-    ?OK_REPLY(#{<<"fileId">> => ObjectId}).
+    ?OK_REPLY(#{<<"fileId">> => ObjectId});
+create_response(#gri{aspect = file_registration}, _, value, ObjectId) ->
+    ?CREATED_REPLY([<<"data">>, ObjectId],  #{<<"fileId">> => ObjectId}).
 
 
 %%--------------------------------------------------------------------

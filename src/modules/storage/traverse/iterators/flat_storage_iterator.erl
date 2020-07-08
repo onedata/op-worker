@@ -65,7 +65,7 @@ get_children_and_next_batch_job(StorageTraverse = #storage_traverse_master{
             ParentStorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
             ParentTokens = filename:split(ParentStorageFileId),
             ChildrenBatch = lists:map(fun({ChildId, ChildStat}) ->
-                ChildCtx = storage_file_ctx:new(ChildId, SpaceId, StorageId, ChildStat),
+                ChildCtx = storage_file_ctx:new_with_stat(ChildId, SpaceId, StorageId, ChildStat),
                 {ChildCtx, depth(ChildId, ParentTokens)}
             end, ChildrenIdsAndStats),
             case length(ChildrenBatch) < BatchSize of
@@ -109,7 +109,7 @@ get_virtual_directory_ctx(StorageFileId, SpaceId, StorageId) ->
         st_ctime = CurrentTime,
         st_size = 0
     },
-    storage_file_ctx:new(StorageFileId, SpaceId, StorageId, Stat).
+    storage_file_ctx:new_with_stat(StorageFileId, SpaceId, StorageId, Stat).
 
 %%%===================================================================
 %%% Internal functions

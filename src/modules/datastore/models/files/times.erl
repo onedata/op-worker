@@ -21,7 +21,7 @@
 
 %% API
 -export([get_or_default/1, save/1, get/1, exists/1, delete/1, update/2, create/1,
-    create_or_update/2]).
+    create_or_update/2, save/5]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -67,6 +67,18 @@ get_or_default(FileUuid) ->
         Error ->
             Error
     end.
+
+-spec save(file_meta:uuid(), od_space:id(), a_time(), m_time(), c_time()) -> ok | {error, term()}.
+save(FileUuid, SpaceId, ATime, MTime, CTime) ->
+    ?extract_ok(save(#document{
+        key = FileUuid,
+        value = #times{
+            atime = ATime,
+            mtime = MTime,
+            ctime = CTime
+        },
+        scope = SpaceId}
+    )).
 
 %%--------------------------------------------------------------------
 %% @doc

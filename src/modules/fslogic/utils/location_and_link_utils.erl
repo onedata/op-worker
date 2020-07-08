@@ -104,11 +104,11 @@ mark_location_created(FileUuid, FileLocationId, StorageFileId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_imported_file_location(od_space:id(), storage:id(), file_meta:uuid(),
-    file_meta:path(), file_meta:size(), od_user:id(), luma:gid() | undefined) -> ok.
-create_imported_file_location(SpaceId, StorageId, FileUuid, CanonicalPath, Size, OwnerId, SyncedGid) ->
+    helpers:file_id(), file_meta:size(), od_user:id(), luma:gid() | undefined) -> ok.
+create_imported_file_location(SpaceId, StorageId, FileUuid, StorageFileId, Size, OwnerId, SyncedGid) ->
     Location = #file_location{
         provider_id = oneprovider:get_id(),
-        file_id = CanonicalPath,
+        file_id = StorageFileId,
         storage_id = StorageId,
         uuid = FileUuid,
         space_id = SpaceId,

@@ -625,7 +625,7 @@ process_storage_file(StorageFileCtx, Info) ->
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
     try
-        case storage_sync_engine:process_file(StorageFileCtx, Info) of
+        case storage_sync_engine:find_direct_parent_and_sync_file(StorageFileCtx, Info) of
             Result = {SyncResult, _, _}
                 when SyncResult =:= ?IMPORTED
                 orelse SyncResult =:= ?UPDATED

@@ -53,11 +53,13 @@
 -define(SPACE_OWNER_PREFIX_STR, "VIRTUAL_SPACE_OWNER_").
 -define(SPACE_OWNER_ID(SpaceId), <<?SPACE_OWNER_PREFIX_STR, SpaceId/binary>>).
 
-%% Default mode for regular files
+%% Default permissions for regular files
 -define(DEFAULT_FILE_PERMS, 8#664).
+-define(DEFAULT_FILE_MODE, ?DEFAULT_FILE_PERMS bor 8#100000).
 
-%% Default mode for directories
+%% Default permissions for directories
 -define(DEFAULT_DIR_PERMS, 8#775).
+-define(DEFAULT_DIR_MODE, ?DEFAULT_DIR_PERMS bor 8#40000).
 
 %% Mode of deleted opened files directory
 -define(DELETED_OPENED_FILES_DIR_MODE, 8#700).

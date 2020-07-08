@@ -40,7 +40,7 @@
 -export_type([ctx/0]).
 
 %% API
--export([new/3, new/4]).
+-export([new/3, new/4, new_with_stat/4, new_with_stat/5, set_stat/2]).
 -export([
     get_file_name_const/1, get_storage_file_id_const/1,
     get_storage_id_const/1, get_space_id_const/1,
@@ -56,6 +56,9 @@
 -spec new(file_meta:name(), od_space:id(), storage:id()) -> ctx().
 new(StorageFileId, SpaceId, StorageId) ->
     FileName = filename:basename(StorageFileId),
+    new(StorageFileId, FileName, SpaceId, StorageId).
+
+new(StorageFileId, FileName, SpaceId, StorageId) ->
     #storage_file_ctx{
         storage_file_id = StorageFileId,
         name = FileName,
@@ -63,9 +66,12 @@ new(StorageFileId, SpaceId, StorageId) ->
         storage_id = StorageId
     }.
 
--spec new(file_meta:name(), od_space:id(), storage:id(), helpers:stat()) -> ctx().
-new(StorageFileId, SpaceId, StorageId, Stat) ->
+-spec new_with_stat(file_meta:name(), od_space:id(), storage:id(), helpers:stat()) -> ctx().
+new_with_stat(StorageFileId, SpaceId, StorageId, Stat) ->
     FileName = filename:basename(StorageFileId),
+    new_with_stat(StorageFileId, FileName, SpaceId, StorageId, Stat).
+
+new_with_stat(StorageFileId, FileName, SpaceId, StorageId, Stat) ->
     #storage_file_ctx{
         storage_file_id = StorageFileId,
         name = FileName,
@@ -74,7 +80,6 @@ new(StorageFileId, SpaceId, StorageId, Stat) ->
         stat = Stat,
         stat_timestamp = time_utils:system_time_seconds()
     }.
-
 
 -spec get_file_name_const(ctx()) -> helpers:file_id().
 get_file_name_const(#storage_file_ctx{name = FileName}) ->
@@ -153,7 +158,12 @@ get_handle_const(#storage_file_ctx{
 }) ->
     storage_driver:new_handle(?ROOT_SESS_ID, SpaceId, undefined, StorageId, StorageFileId).
 
-
+-spec set_stat(ctx(), helpers:stat()) -> ctx().
+set_stat(StorageFileCtx, Statbuf) ->
+    StorageFileCtx#storage_file_ctx{
+        stat = Statbuf,
+        stat_timestamp = time_utils:system_time_seconds()
+    }.
 
 -spec stat(ctx()) -> {helpers:stat(), ctx()}.
 stat(StorageFileCtx = #storage_file_ctx{stat = undefined}) ->
@@ -166,7 +176,9 @@ stat(StorageFileCtx = #storage_file_ctx{stat = undefined}) ->
                 stat_timestamp = Timestamp
             }};
         {error, ?ENOENT} ->
-            throw(?ENOENT)
+            throw(?ENOENT);
+        {error, ?ENOTSUP} ->
+            throw(?ENOTSUP)
     end;
 stat(StorageFileCtx = #storage_file_ctx{stat = StatBuf}) ->
     {StatBuf, StorageFileCtx}.

@@ -233,6 +233,8 @@ handle_cast(?DECREASE_BY_VALUE(Value, CounterId), State = #state{
 }) ->
     Counter = maps:get(CounterId, Counters),
     Counter2 = decrease_by_value(Counter, Value),
+    ct:pal("Decreased value: ~p", [Counter2]),
+    ?alert("Decreased value: ~p", [Counter2]),
     case Counter2#counter.value of
         0 ->
             notify_parent(Parent, Node, CounterId, Counter2#counter.data),
@@ -247,6 +249,8 @@ handle_cast(?DECREASE(Data, CounterId), State = #state{
 }) ->
     Counter = maps:get(CounterId, Counters),
     Counter2 = decrease_and_save_data(Counter, Data),
+    ct:pal("Decreased value2: ~p", [Counter2]),
+    ?alert("Decreased value2: ~p", [Counter2]),
     case Counter2#counter.value of
         0 ->
             notify_parent(Parent, Node, CounterId, Counter2#counter.data),

@@ -27,8 +27,8 @@
 -export([get_name/1, get_args/1, get_admin_ctx/1, get_redacted_admin_ctx/1,
     get_params/2, get_proxy_params/2, get_timeout/1,
     get_storage_path_type/1]).
--export([is_posix_compatible/1, is_rename_supported/1,
-    is_sync_supported/1, is_nfs4_acl_supported/1, should_skip_storage_detection/1]).
+-export([is_posix_compatible/1, is_rename_supported/1, is_sync_supported/1,
+    is_file_registration_supported/1, is_nfs4_acl_supported/1, should_skip_storage_detection/1]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
 
@@ -209,21 +209,39 @@ is_posix_compatible(?NULL_DEVICE_HELPER_NAME) -> true;
 is_posix_compatible(#helper{name = HelperName}) -> is_posix_compatible(HelperName);
 is_posix_compatible(_) -> false.
 
+
 -spec is_sync_supported(helpers:helper()) -> boolean().
-is_sync_supported(Helper = #helper{name = ?POSIX_HELPER_NAME}) ->
+is_sync_supported(Helper = #helper{name = HelperName})
+    when HelperName =:= ?POSIX_HELPER_NAME
+    orelse HelperName =:= ?GLUSTERFS_HELPER_NAME
+    orelse HelperName =:= ?NULL_DEVICE_HELPER_NAME
+    orelse HelperName =:= ?WEBDAV_HELPER_NAME
+    orelse HelperName =:= ?XROOTD_HELPER_NAME
+->
     is_canonical_helper(Helper);
-is_sync_supported(Helper = #helper{name = ?GLUSTERFS_HELPER_NAME}) ->
-    is_canonical_helper(Helper);
-is_sync_supported(Helper = #helper{name = ?NULL_DEVICE_HELPER_NAME}) ->
-    is_canonical_helper(Helper);
-is_sync_supported(Helper = #helper{name = ?WEBDAV_HELPER_NAME}) ->
-    is_canonical_helper(Helper);
-is_sync_supported(Helper = #helper{name = ?XROOTD_HELPER_NAME}) ->
-    is_canonical_helper(Helper);
-is_sync_supported(Helper = #helper{name = ?S3_HELPER_NAME, args = Args}) ->
-    is_canonical_helper(Helper) andalso
-        (<<"0">> =:= maps:get(<<"blockSize">>, Args, undefined));
+is_sync_supported(Helper = #helper{name = ?S3_HELPER_NAME}) ->
+    is_canonical_helper(Helper) andalso block_size_equals_0(Helper);
 is_sync_supported(_) -> false.
+
+
+-spec is_file_registration_supported(helpers:helper()) -> boolean().
+is_file_registration_supported(Helper = #helper{name = HelperName})
+    when HelperName =:= ?POSIX_HELPER_NAME
+    orelse HelperName =:= ?GLUSTERFS_HELPER_NAME
+    orelse HelperName =:= ?NULL_DEVICE_HELPER_NAME
+    orelse HelperName =:= ?WEBDAV_HELPER_NAME
+    orelse HelperName =:= ?XROOTD_HELPER_NAME
+->
+    is_canonical_helper(Helper);
+is_file_registration_supported(Helper = #helper{name = HelperName})
+    when HelperName =:= ?S3_HELPER_NAME
+    orelse HelperName =:= ?SWIFT_HELPER_NAME
+    orelse HelperName =:= ?CEPH_HELPER_NAME
+    orelse HelperName =:= ?CEPHRADOS_HELPER_NAME
+->
+    is_canonical_helper(Helper) andalso block_size_equals_0(Helper);
+is_file_registration_supported(_) -> false.
+
 
 -spec is_nfs4_acl_supported(helpers:helper() | name()) -> boolean().
 is_nfs4_acl_supported(?POSIX_HELPER_NAME) -> true;
@@ -244,6 +262,10 @@ is_rename_supported(_) -> false.
 -spec is_canonical_helper(helpers:helper()) -> boolean().
 is_canonical_helper(Helper) ->
     get_storage_path_type(Helper) =:= ?CANONICAL_STORAGE_PATH.
+
+-spec block_size_equals_0(helpers:helper()) -> boolean().
+block_size_equals_0(#helper{args = Args}) ->
+    (<<"0">> =:= maps:get(<<"blockSize">>, Args, undefined)).
 
 %%%===================================================================
 %%% Upgrade functions
