@@ -147,10 +147,22 @@ validate_user_ctx(StorageType = ?WEBDAV_HELPER_NAME, UserCtx) ->
     end,
     validate_fields(Fields, UserCtx);
 
+validate_user_ctx(StorageType = ?HTTP_HELPER_NAME, UserCtx) ->
+    FieldsBase = expected_user_ctx_params(StorageType),
+    Fields = case UserCtx of
+        #{<<"credentialsType">> := <<"none">>} ->
+            FieldsBase;
+        #{<<"credentialsType">> := _} ->
+            % make "credentials" required rather than optional
+            [<<"credentials">> | remove_field(<<"credentials">>, FieldsBase)];
+        _ ->
+            FieldsBase
+    end,
+    validate_fields(Fields, UserCtx);
+
 validate_user_ctx(StorageType, UserCtx) ->
     Fields = expected_user_ctx_params(StorageType),
     validate_fields(Fields, UserCtx).
-
 
 
 -spec default_admin_ctx(name()) -> user_ctx().
@@ -204,6 +216,11 @@ expected_custom_helper_args(?WEBDAV_HELPER_NAME) -> [
     {optional, <<"authorizationHeader">>}, {optional, <<"rangeWriteSupport">>},
     {optional, <<"connectionPoolSize">>}, {optional, <<"maximumUploadSize">>},
     {optional, <<"fileMode">>}, {optional, <<"dirMode">>}];
+expected_custom_helper_args(?HTTP_HELPER_NAME) -> [
+    <<"endpoint">>,
+    {optional, <<"oauth2IdP">>}, {optional, <<"verifyServerCertificate">>},
+    {optional, <<"authorizationHeader">>}, {optional, <<"connectionPoolSize">>},
+    {optional, <<"fileMode">>}];
 expected_custom_helper_args(?XROOTD_HELPER_NAME) -> [
     <<"url">>,
     {optional, <<"fileModeMask">>}, {optional, <<"dirModeMask">>}];
@@ -243,6 +260,12 @@ expected_user_ctx_params(?SWIFT_HELPER_NAME) ->
 expected_user_ctx_params(?GLUSTERFS_HELPER_NAME) ->
     [<<"uid">>, {optional, <<"gid">>}];
 expected_user_ctx_params(?WEBDAV_HELPER_NAME) ->
+    [<<"credentialsType">>,
+        {optional, <<"credentials">>}, {optional, <<"adminId">>},
+        {optional, <<"onedataAccessToken">>}, {optional, <<"accessToken">>},
+        {optional, <<"accessTokenTTL">>}
+    ];
+expected_user_ctx_params(?HTTP_HELPER_NAME) ->
     [<<"credentialsType">>,
         {optional, <<"credentials">>}, {optional, <<"adminId">>},
         {optional, <<"onedataAccessToken">>}, {optional, <<"accessToken">>},
