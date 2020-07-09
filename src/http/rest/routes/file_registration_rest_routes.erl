@@ -39,7 +39,7 @@ routes() -> [
         b_gri = #b_gri{
             type = op_file,
             id = undefined,
-            aspect = file_registration,
+            aspect = register_file,
             scope = private
         }
     }}

@@ -136,7 +136,7 @@ create_operation_supported(attrs, private) -> true;
 create_operation_supported(xattrs, private) -> true;
 create_operation_supported(json_metadata, private) -> true;
 create_operation_supported(rdf_metadata, private) -> true;
-create_operation_supported(file_registration, private) -> true;
+create_operation_supported(register_file, private) -> true;
 create_operation_supported(_, _) -> false.
 
 
@@ -201,7 +201,7 @@ data_spec_create(#gri{aspect = rdf_metadata}) -> #{
     }
 };
 
-data_spec_create(#gri{aspect = file_registration}) -> #{
+data_spec_create(#gri{aspect = register_file}) -> #{
     required => #{
         <<"spaceId">> => {binary, any},
         <<"storageId">> => {binary, any},
@@ -240,7 +240,7 @@ authorize_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
     % File path must have been resolved to guid by rest_handler already (to
     % get to this point), so authorization is surely granted.
     true;
-authorize_create(#op_req{auth = Auth = ?USER(UserId), data = Data, gri = #gri{aspect = file_registration}}, _) ->
+authorize_create(#op_req{auth = Auth = ?USER(UserId), data = Data, gri = #gri{aspect = register_file}}, _) ->
     SpaceId = maps:get(<<"spaceId">>, Data),
     middleware_utils:is_eff_space_member(Auth, SpaceId) andalso
     % TODO VFS-6511 use space_register_file privilege
@@ -266,7 +266,7 @@ validate_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
     % get to this point), so file must be managed locally.
     ok;
 
-validate_create(#op_req{data = Data, gri = #gri{aspect = file_registration}}, _) ->
+validate_create(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
     SpaceId = maps:get(<<"spaceId">>, Data),
     StorageId = maps:get(<<"storageId">>, Data),
     middleware_utils:assert_space_supported_locally(SpaceId),
@@ -335,7 +335,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_meta
     Rdf = maps:get(<<"metadata">>, Data),
     ?check(lfm:set_metadata(Auth#auth.session_id, {guid, Guid}, rdf, Rdf, []));
 
-create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = file_registration}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     SpaceId = maps:get(<<"spaceId">>, Data),
     DestinationPath = maps:get(<<"destinationPath">>, Data),
     StorageId = maps:get(<<"storageId">>, Data),

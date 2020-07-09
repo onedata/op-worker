@@ -59,12 +59,11 @@ assert_space_supported_by(SpaceId, ProviderId) ->
 
 -spec assert_space_supported_with_storage(od_space:id(), storage:id()) -> ok | no_return().
 assert_space_supported_with_storage(SpaceId, StorageId) ->
-    {ok, StorageIds} = space_logic:get_local_storage_ids(SpaceId),
-    case lists:member(StorageId, StorageIds) of
+    case storage_logic:is_local_storage_supporting_space(StorageId, SpaceId) of
         true ->
             ok;
         false ->
-            throw(?ERROR_SPACE_NOT_SUPPORTED_WITH(StorageId))
+            throw(?ERROR_NOT_A_LOCAL_STORAGE_SUPPORTING_SPACE(oneprovider:get_id(), StorageId, SpaceId))
     end.
 
 
@@ -103,7 +102,7 @@ assert_sync_not_enabled(SpaceId, StorageId) ->
         false ->
             ok;
         true ->
-            throw(?ERROR_STORAGE_IMPORT_STARTED)
+            throw(?ERROR_STORAGE_IMPORT_ENABLED)
     end.
 
 -spec decode_object_id(file_id:objectid(), binary() | atom()) -> 

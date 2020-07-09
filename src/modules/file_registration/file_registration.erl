@@ -91,7 +91,7 @@ register(SessionId, SpaceId, Path, StorageId, StorageFileId, Spec) ->
             ?error_stacktrace(
                 "Ingestion of file ~p failed. "
                 "stat operation is not supported by the storage ~p", [Path, StorageId]),
-            ?ERROR_STORAGE_NOT_SUPPORTING_STAT;
+            ?ERROR_STAT_OPERATION_NOT_SUPPORTED(StorageId);
         Error:Reason ->
             ?error_stacktrace("Ingestion of file ~p failed due to: ~p", [Path, {Error, Reason}]),
             {error, Reason}
@@ -109,7 +109,7 @@ create_missing_directory(ParentCtx, DirName, UserId) ->
     {ok, DirCtx}.
 
 %%%===================================================================
-%%% Internal functions% todo rename
+%%% Internal functions
 %%%===================================================================
 
 -spec ensure_all_parents_exist_and_are_dirs(file_partial_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
