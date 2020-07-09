@@ -69,7 +69,8 @@ end).
 register(SessionId, SpaceId, Path, StorageId, StorageFileId, Spec) ->
     try
         FileName = filename:basename(Path),
-        StorageFileCtx = storage_file_ctx:new(StorageFileId, FileName, SpaceId, StorageId),
+        StorageFileId2 = normalize_storage_file_id(StorageId, StorageFileId),
+        StorageFileCtx = storage_file_ctx:new(StorageFileId2, FileName, SpaceId, StorageId),
         StorageFileCtx2 = maybe_verify_existence(StorageFileCtx, Spec),
         StorageFileCtx3 = prepare_stat(StorageFileCtx2, Spec),
         UserCtx = user_ctx:new(SessionId),
@@ -111,6 +112,41 @@ create_missing_directory(ParentCtx, DirName, UserId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec normalize_storage_file_id(storage:id(), helpers:file_id()) -> helpers:file_id().
+normalize_storage_file_id(StorageId, StorageFileId) ->
+    Helper = storage:get_helper(StorageId),
+    case helper:get_name(Helper) of
+        ?XROOTD_HELPER_NAME ->
+            normalize_xrootd_storage_file_id(Helper, StorageFileId);
+        _ ->
+            StorageFileId
+    end.
+
+-spec normalize_xrootd_storage_file_id(helpers:helper(), helpers:file_id()) -> helpers:file_id().
+normalize_xrootd_storage_file_id(Helper, StorageFileId) ->
+    case is_url(StorageFileId) of
+        true ->
+            Args = helper:get_args(Helper),
+            HelperUrl = maps:get(<<"url">>, Args),
+            HelperUrlSize = byte_size(HelperUrl),
+            case binary:match(StorageFileId, HelperUrl) of
+                {0, HelperUrlSize} ->
+                    % StorageFileId is prefixed with HelperUrl, we can strip it
+                    binary:part(StorageFileId, {HelperUrlSize, byte_size(StorageFileId) - HelperUrlSize});
+                _ ->
+                    throw(?ERROR_BAD_VALUE_IDENTIFIER(StorageFileId))
+            end;
+        false ->
+            StorageFileId
+    end.
+
+-spec is_url(binary()) -> boolean().
+is_url(<<"root://", _/binary>>) -> true;
+is_url(<<"http://", _/binary>>) -> true;
+is_url(<<"https://", _/binary>>) -> true;
+is_url(_) -> false.
+
 
 -spec ensure_all_parents_exist_and_are_dirs(file_partial_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
 ensure_all_parents_exist_and_are_dirs(FilePartialCtx, UserCtx) ->

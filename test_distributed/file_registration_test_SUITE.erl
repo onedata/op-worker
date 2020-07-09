@@ -141,7 +141,6 @@ register_file_test(Config) ->
     ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
     {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
 
-
     ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
         <<"spaceId">> => ?SPACE_ID,
         <<"destinationPath">> => FileName,
@@ -149,6 +148,7 @@ register_file_test(Config) ->
         <<"storageId">> => StorageId,
         <<"mtime">> => time_utils:system_time_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
+        <<"mode">> => 8#664,
         <<"xattrs">> => ?XATTRS
     })),
 
@@ -179,6 +179,7 @@ register_file_and_create_parents_test(Config) ->
         <<"storageId">> => StorageId,
         <<"mtime">> => time_utils:system_time_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
+        <<"mode">> => 8#664,
         <<"xattrs">> => ?XATTRS
     })),
 
@@ -209,6 +210,7 @@ update_registered_file_test(Config) ->
         <<"storageId">> => StorageId,
         <<"mtime">> => time_utils:system_time_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
+        <<"mode">> => 8#664,
         <<"xattrs">> => ?XATTRS
     })),
 
