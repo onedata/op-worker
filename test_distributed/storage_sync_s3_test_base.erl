@@ -22,7 +22,7 @@
 % TODO VFS-6161 divide to smaller test suites, maybe get rid of readonly test SUITES as all imported storages are mounted in root
 
 %% export for ct
--export([init_per_suite/1, end_per_suite/1, init_per_testcase/3, end_per_testcase/3]).
+-export([init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -1613,8 +1613,8 @@ end_per_suite(Config) ->
     initializer:unmock_provider_ids(Config),
     ssl:stop().
 
-init_per_testcase(Case, Config, Readonly) ->
-    storage_sync_test_base:init_per_testcase(Case, Config, Readonly).
+init_per_testcase(Case, Config) ->
+    storage_sync_test_base:init_per_testcase(Case, Config).
 
-end_per_testcase(Case, Config, Readonly) ->
-    storage_sync_test_base:end_per_testcase(Case, Config, Readonly).
+end_per_testcase(Case, Config) ->
+    storage_sync_test_base:end_per_testcase(Case, Config).

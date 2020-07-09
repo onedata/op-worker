@@ -24,11 +24,11 @@
 % TODO VFS-6162 move utility functions to storage_sync_test_utils module
 
 % CT functions
--export([init_per_suite/1, init_per_testcase/3, end_per_suite/1, end_per_testcase/3]).
+-export([init_per_suite/1, init_per_testcase/2, end_per_suite/1, end_per_testcase/2]).
 
 %% util functions
 -export([disable_storage_sync/1,
-    add_synced_storages/1, clean_synced_storage/2, storage_path/4, create_init_file/2,
+    add_synced_storages/1, clean_synced_storage/1, storage_path/4, create_init_file/2,
     enable_import/3, enable_update/3, clean_luma_db/1,
     clean_space/1, verify_file_deleted/4, cleanup_storage_sync_monitoring_model/2,
     assertImportTimes/2, assertImportTimes/3, assertUpdateTimes/2, assertUpdateTimes/3, assertUpdateTimes/4,
@@ -5506,10 +5506,10 @@ disable_storage_sync(Config) ->
     disable_import(Config),
     disable_update(Config).
 
-clean_synced_storage(Config, Readonly) ->
+clean_synced_storage(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     Storage = get_rdwr_storage(Config, W1),
-    SpaceDir = storage_path(?SPACE_ID, <<"">>, Readonly),
+    SpaceDir = storage_path(?SPACE_ID, <<"">>, true),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, SpaceDir, Storage),
     ok = sd_test_utils:recursive_rm(W1, SDHandle, true).
 
@@ -6045,7 +6045,7 @@ end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config).
 
 
-init_per_testcase(Case, Config, Readonly)
+init_per_testcase(Case, Config)
     when Case =:= create_directory_import_check_user_id_test
     orelse Case =:= create_file_import_check_user_id_test ->
 
@@ -6057,9 +6057,9 @@ init_per_testcase(Case, Config, Readonly)
     ok = test_utils:mock_expect(W1, luma, map_to_display_credentials, fun(_, _, _) ->
         {ok, {?TEST_UID, ?MOUNT_GID}}
     end),
-    init_per_testcase(default, Config, Readonly);
+    init_per_testcase(default, Config);
 
-init_per_testcase(Case, Config, Readonly)
+init_per_testcase(Case, Config)
     when Case =:= create_directory_import_check_user_id_error_test
     orelse Case =:= create_file_import_check_user_id_error_test ->
 
@@ -6068,9 +6068,9 @@ init_per_testcase(Case, Config, Readonly)
     ok = test_utils:mock_expect(Workers, luma, map_uid_to_onedata_user, fun(_, _, _) ->
         error(test_error)
     end),
-    init_per_testcase(default, Config, Readonly);
+    init_per_testcase(default, Config);
 
-init_per_testcase(cancel_scan, Config, Readonly) ->
+init_per_testcase(cancel_scan, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_sync_dir_batch_size),
     test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, 1),
@@ -6081,9 +6081,9 @@ init_per_testcase(cancel_scan, Config, Readonly) ->
         {old_storage_sync_dir_batch_size, OldDirBatchSize}
         | Config
     ],
-    init_per_testcase(default, Config2, Readonly);
+    init_per_testcase(default, Config2);
 
-init_per_testcase(Case, Config, Readonly)
+init_per_testcase(Case, Config)
     when Case =:= create_file_in_dir_update_test
     orelse Case =:= should_not_detect_timestamp_update_test ->
 
@@ -6092,9 +6092,9 @@ init_per_testcase(Case, Config, Readonly)
             delete_enable => false,
             write_once => true}} | Config
     ],
-    init_per_testcase(default, Config2, Readonly);
+    init_per_testcase(default, Config2);
 
-init_per_testcase(Case, Config, Readonly)
+init_per_testcase(Case, Config)
     when Case =:= delete_empty_directory_update_test
     orelse Case =:= delete_non_empty_directory_update_test
     orelse Case =:= delete_file_update_test
@@ -6108,9 +6108,9 @@ init_per_testcase(Case, Config, Readonly)
             delete_enable => true,
             write_once => true}} | Config
     ],
-    init_per_testcase(default, Config2, Readonly);
+    init_per_testcase(default, Config2);
 
-init_per_testcase(Case, Config, Readonly)
+init_per_testcase(Case, Config)
     when Case =:= delete_and_update_files_simultaneously_update_test
     orelse Case =:= create_delete_import2_test
     orelse Case =:= recreate_file_deleted_by_sync_test
@@ -6126,9 +6126,9 @@ init_per_testcase(Case, Config, Readonly)
             delete_enable => true,
             write_once => false}} | Config
     ],
-    init_per_testcase(default, Config2, Readonly);
+    init_per_testcase(default, Config2);
 
-init_per_testcase(create_file_in_dir_exceed_batch_update_test, Config, Readonly) ->
+init_per_testcase(create_file_in_dir_exceed_batch_update_test, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_sync_dir_batch_size),
     test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, 2),
@@ -6139,16 +6139,16 @@ init_per_testcase(create_file_in_dir_exceed_batch_update_test, Config, Readonly)
         {old_storage_sync_dir_batch_size, OldDirBatchSize}
         | Config
     ],
-    init_per_testcase(default, Config2, Readonly);
+    init_per_testcase(default, Config2);
 
-init_per_testcase(chmod_file_update2_test, Config, Readonly) ->
+init_per_testcase(chmod_file_update2_test, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_sync_dir_batch_size),
     test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, 2),
     Config2 = [{old_storage_sync_dir_batch_size, OldDirBatchSize} | Config],
-    init_per_testcase(default, Config2, Readonly);
+    init_per_testcase(default, Config2);
 
-init_per_testcase(Case, Config, Readonly)
+init_per_testcase(Case, Config)
     when Case =:= import_nfs_acl_test
     orelse Case =:= update_nfs_acl_test ->
 
@@ -6171,9 +6171,9 @@ init_per_testcase(Case, Config, Readonly)
         (#sd_handle{}, _) ->
             {ok, EncACL}
     end),
-    init_per_testcase(default, Config, Readonly);
+    init_per_testcase(default, Config);
 
-init_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config, Readonly) ->
+init_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, [storage_driver]),
     EncACL = storage_sync_acl:encode(?ACL),
@@ -6183,19 +6183,19 @@ init_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config, Re
         (#sd_handle{}, _) ->
             {ok, EncACL}
     end),
-    init_per_testcase(default, Config, Readonly);
+    init_per_testcase(default, Config);
 
-init_per_testcase(sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage, Config, Readonly) ->
+init_per_testcase(sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage, Config) ->
     % generate random dir name
     TestDir = <<"random_dir", (integer_to_binary(rand:uniform(1000)))/binary>>,
-    init_per_testcase(default, [{test_dir, TestDir} | Config], Readonly);
+    init_per_testcase(default, [{test_dir, TestDir} | Config]);
 
-init_per_testcase(sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage, Config, Readonly) ->
+init_per_testcase(sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage, Config) ->
     % generate random dir name
     TestFile = <<"random_file", (integer_to_binary(rand:uniform(1000)))/binary>>,
-    init_per_testcase(default, [{test_file, TestFile} | Config], Readonly);
+    init_per_testcase(default, [{test_file, TestFile} | Config]);
 
-init_per_testcase(create_list_race_test, Config, Readonly) ->
+init_per_testcase(create_list_race_test, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_sync_dir_batch_size),
     test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, 2),
@@ -6206,9 +6206,9 @@ init_per_testcase(create_list_race_test, Config, Readonly) ->
         {old_storage_sync_dir_batch_size, OldDirBatchSize}
         | Config
     ],
-    init_per_testcase(default, Config2, Readonly);
+    init_per_testcase(default, Config2);
 
-init_per_testcase(should_not_sync_file_during_replication, Config, Readonly) ->
+init_per_testcase(should_not_sync_file_during_replication, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     {ok, OldInterval} = test_utils:get_env(W1, op_worker, storage_sync_check_interval),
     test_utils:set_env(W1, op_worker, storage_sync_check_interval, 1),
@@ -6220,9 +6220,9 @@ init_per_testcase(should_not_sync_file_during_replication, Config, Readonly) ->
         {old_storage_sync_check_interval, OldInterval}
         | Config
     ],
-    init_per_testcase(default, Config2, Readonly);
+    init_per_testcase(default, Config2);
 
-init_per_testcase(_Case, Config, Readonly) ->
+init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ct:timetrap({minutes, 20}),
     mock_link_handling_method(Workers),
@@ -6232,7 +6232,7 @@ init_per_testcase(_Case, Config, Readonly) ->
     create_init_file(Config3, true),
     Config3.
 
-end_per_testcase(Case, Config, Readonly)
+end_per_testcase(Case, Config)
     when Case =:= chmod_file_update2_test
     orelse Case =:= create_file_in_dir_exceed_batch_update_test
     orelse Case =:= create_list_race_test ->
@@ -6241,9 +6241,9 @@ end_per_testcase(Case, Config, Readonly)
     OldDirBatchSize = ?config(old_storage_sync_dir_batch_size, Config),
     test_utils:mock_unload(Workers, [storage_driver]),
     test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, OldDirBatchSize),
-    end_per_testcase(default, Config, Readonly);
+    end_per_testcase(default, Config);
 
-end_per_testcase(Case, Config, Readonly)
+end_per_testcase(Case, Config)
     when Case =:= create_directory_import_check_user_id_test
     orelse Case =:= create_directory_import_check_user_id_error_test
     orelse Case =:= create_file_import_check_user_id_test
@@ -6251,77 +6251,77 @@ end_per_testcase(Case, Config, Readonly)
 
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [luma]),
-    end_per_testcase(default, Config, Readonly);
+    end_per_testcase(default, Config);
 
-end_per_testcase(Case, Config, Readonly)
+end_per_testcase(Case, Config)
     when Case =:= import_nfs_acl_test
     orelse Case =:= update_nfs_acl_test ->
 
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [luma, storage_driver]),
-    end_per_testcase(default, Config, Readonly);
+    end_per_testcase(default, Config);
 
-end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config, Readonly) ->
+end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [storage_driver]),
-    end_per_testcase(default, Config, Readonly);
+    end_per_testcase(default, Config);
 
-end_per_testcase(cancel_scan, Config, Readonly) ->
+end_per_testcase(cancel_scan, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     OldDirBatchSize = ?config(old_storage_sync_dir_batch_size, Config),
     test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, OldDirBatchSize),
-    end_per_testcase(default, Config, Readonly);
+    end_per_testcase(default, Config);
 
-end_per_testcase(sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed, Config, Readonly) ->
+end_per_testcase(sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [fslogic_path]),
-    end_per_testcase(default, Config, Readonly);
+    end_per_testcase(default, Config);
 
-end_per_testcase(create_remote_dir_import_race_test, Config, Readonly) ->
+end_per_testcase(create_remote_dir_import_race_test, Config) ->
     [W1| _] = ?config(op_worker_nodes, Config),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
     remove_link(W1, SpaceUuid, ?TEST_DIR),
-    end_per_testcase(default, Config, Readonly);
+    end_per_testcase(default, Config);
 
-end_per_testcase(create_remote_file_import_race_test, Config, Readonly) ->
+end_per_testcase(create_remote_file_import_race_test, Config) ->
     [W1| _] = ?config(op_worker_nodes, Config),
     SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
     remove_link(W1, SpaceUuid, ?TEST_FILE1),
-    end_per_testcase(default, Config, Readonly);
+    end_per_testcase(default, Config);
 
-end_per_testcase(sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage, Config, Readonly) ->
+end_per_testcase(sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage, Config) ->
     [W1| _] = ?config(op_worker_nodes, Config),
     % remove stalled deletion link
     TestDir = ?config(test_dir, Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     remove_deletion_link(W1, ?SPACE_ID, TestDir, SpaceCtx),
-    end_per_testcase(default, Config, Readonly);
+    end_per_testcase(default, Config);
 
-end_per_testcase(sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage, Config, Readonly) ->
+end_per_testcase(sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage, Config) ->
     [W1| _] = ?config(op_worker_nodes, Config),
     % remove stalled deletion link
     TestFile = ?config(test_file, Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     remove_deletion_link(W1, ?SPACE_ID, TestFile, SpaceCtx),
-    end_per_testcase(default, Config, Readonly);
+    end_per_testcase(default, Config);
 
-end_per_testcase(should_not_sync_file_during_replication, Config, Readonly) ->
+end_per_testcase(should_not_sync_file_during_replication, Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(W1, [rtransfer_config]),
     OldInterval = ?config(old_storage_sync_check_interval, Config),
     test_utils:set_env(W1, op_worker, storage_sync_dir_batch_size, OldInterval),
-    end_per_testcase(default, Config, Readonly);
+    end_per_testcase(default, Config);
 
-end_per_testcase(_Case, Config, Readonly) ->
+end_per_testcase(_Case, Config) ->
     Workers = [W1 | _] = ?config(op_worker_nodes, Config),
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     clean_luma_db(W1),
     disable_storage_sync(Config),
     clean_traverse_tasks(W1),
     clean_space(Config),
-    clean_synced_storage(Config, Readonly),
+    clean_synced_storage(Config),
     cleanup_storage_sync_monitoring_model(W1, ?SPACE_ID),
     test_utils:mock_unload(Workers, [storage_sync_engine, storage_sync_hash, link_utils,
         storage_sync_traverse, storage_sync_deletion, storage_driver, helpers]),

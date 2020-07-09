@@ -313,7 +313,7 @@ end_per_suite(Config) ->
     storage_sync_s3_test_base:end_per_suite(Config).
 
 init_per_testcase(Case, Config) ->
-    storage_sync_s3_test_base:init_per_testcase(Case, Config, true).
+    storage_sync_s3_test_base:init_per_testcase(Case, Config).
 
 end_per_testcase(Case, Config) ->
-    storage_sync_s3_test_base:end_per_testcase(Case, Config, true).
+    storage_sync_s3_test_base:end_per_testcase(Case, Config).
