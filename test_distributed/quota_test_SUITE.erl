@@ -81,7 +81,6 @@ all() ->
     ]).
 
 -define(ATTEMPTS, 60).
--define(DEFAULT_FILE_MODE, 8#664).
 
 -record(env, {
     p1, p2, user1, user2, file1, file2, file3, dir1

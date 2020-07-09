@@ -71,7 +71,12 @@
     posix_files_and_dirs_synchronous_next_batch_test/1,
     posix_files_and_dirs_synchronous_next_batch_imported_storage_test/1,
     posix_custom_compute_test/1,
-    canonical_s3_custom_compute_test/1]).
+    posix_custom_compute_max_depth0_test/1,
+    posix_custom_compute_max_depth1_test/1,
+    canonical_s3_custom_compute_test/1,
+    canonical_s3_custom_compute_max_depth0_test/1,
+    canonical_s3_custom_compute_max_depth1_test/1
+]).
 
 
 %% Pool callbacks
@@ -121,7 +126,11 @@ all() -> ?ALL([
     posix_files_and_dirs_synchronous_next_batch_test,
     posix_files_and_dirs_synchronous_next_batch_imported_storage_test,
     posix_custom_compute_test,
-    canonical_s3_custom_compute_test
+    posix_custom_compute_max_depth0_test,
+    posix_custom_compute_max_depth1_test,
+    canonical_s3_custom_compute_test,
+    canonical_s3_custom_compute_max_depth0_test,
+    canonical_s3_custom_compute_max_depth1_test
 ]).
 
 -define(SPACES, [<<"space1">>, <<"space2">>, <<"space3">>, <<"space1">>, <<"space4">>]).
@@ -262,10 +271,22 @@ posix_files_and_dirs_synchronous_next_batch_imported_storage_test(Config) ->
     traverse_and_execute_jobs_on_files_and_dirs_test_base(Config, <<"space2">>, #{async_next_batch_job => false}).
 
 posix_custom_compute_test(Config) ->
-    custom_compute_test_base(Config, <<"space1">>, #{}, 110).
+    custom_compute_test_base(Config, <<"space1">>, #{}, 120).
+
+posix_custom_compute_max_depth0_test(Config) ->
+    custom_compute_test_base(Config, <<"space1">>, #{max_depth => 0}, 0).
+
+posix_custom_compute_max_depth1_test(Config) ->
+    custom_compute_test_base(Config, <<"space1">>, #{max_depth => 1}, 20).
 
 canonical_s3_custom_compute_test(Config) ->
-    custom_compute_test_base(Config, <<"space3">>, #{}, 100).
+    custom_compute_test_base(Config, <<"space3">>, #{}, 110).
+
+canonical_s3_custom_compute_max_depth0_test(Config) ->
+    custom_compute_test_base(Config, <<"space3">>, #{max_depth => 0}, 0).
+
+canonical_s3_custom_compute_max_depth1_test(Config) ->
+    custom_compute_test_base(Config, <<"space3">>, #{max_depth => 1}, 10).
 
 %%%===================================================================
 %%% Test bases
@@ -326,7 +347,7 @@ custom_compute_test_base(Config, SpaceId, Opts, ExpectedComputeValue) ->
     SpaceDir = space_dir(W, SpaceId, StorageId),
     Handle = sd_test_utils:new_handle(W, SpaceId, SpaceDir, StorageId),
     {ok, CSPid} = countdown_server:start_link(self(), W),
-    TestFilesStructure = [{10, 0}, {0, 10}],
+    TestFilesStructure = [{10, 10}, {0, 10}],
     sd_test_utils:setup_test_files_structure(W, Handle, TestFilesStructure),
     MaxDepth = maps:get(max_depth, Opts, ?INF_MAX_DEPTH),
     StrippedTestFilesStructure = lists:sublist(TestFilesStructure, MaxDepth),

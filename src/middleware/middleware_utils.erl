@@ -18,7 +18,11 @@
 -export([
     is_eff_space_member/2,
     assert_space_supported_locally/1, assert_space_supported_by/2,
+    assert_space_supported_with_storage/2,
     assert_file_exists/2,
+    assert_imported_storage/1,
+    assert_file_registration_supported/1,
+    assert_sync_not_enabled/2,
     decode_object_id/2,
 
     is_shared_file_request/3
@@ -53,6 +57,16 @@ assert_space_supported_by(SpaceId, ProviderId) ->
     end.
 
 
+-spec assert_space_supported_with_storage(od_space:id(), storage:id()) -> ok | no_return().
+assert_space_supported_with_storage(SpaceId, StorageId) ->
+    case storage_logic:is_local_storage_supporting_space(StorageId, SpaceId) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_NOT_A_LOCAL_STORAGE_SUPPORTING_SPACE(oneprovider:get_id(), StorageId, SpaceId))
+    end.
+
+
 -spec assert_file_exists(aai:auth(), file_id:file_guid()) ->
     ok | no_return().
 assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
@@ -63,6 +77,33 @@ assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
             throw(?ERROR_POSIX(Errno))
     end.
 
+-spec assert_imported_storage(storage:id()) -> ok | no_return().
+assert_imported_storage(StorageId) ->
+    case storage:is_imported(StorageId) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_REQUIRES_IMPORTED_STORAGE(StorageId))
+    end.
+
+-spec assert_file_registration_supported(storage:id()) -> ok | no_return().
+assert_file_registration_supported(StorageId) ->
+    Helper = storage:get_helper(StorageId),
+    case helper:is_file_registration_supported(Helper) of
+        true ->
+            ok;
+        false ->
+            throw(?ERROR_FILE_REGISTRATION_NOT_SUPPORTED(StorageId, ?OBJECT_HELPERS))
+    end.
+
+-spec assert_sync_not_enabled(od_space:id(), storage:id()) -> ok | no_return().
+assert_sync_not_enabled(SpaceId, StorageId) ->
+    case storage_sync:is_import_enabled(SpaceId, StorageId) of
+        false ->
+            ok;
+        true ->
+            throw(?ERROR_STORAGE_IMPORT_ENABLED)
+    end.
 
 -spec decode_object_id(file_id:objectid(), binary() | atom()) -> 
     file_id:file_guid() | no_return().

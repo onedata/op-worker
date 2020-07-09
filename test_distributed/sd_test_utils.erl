@@ -19,7 +19,7 @@
 
 
 %% API
--export([get_storage_record/2, new_handle/4, new_child_handle/2,
+-export([get_storage_record/2, new_handle/3, new_handle/4, new_child_handle/2,
     setup_test_files_structure/3, setup_test_files_structure/4, recursive_rm/3, get_storage_mountpoint_handle/3]).
 -export([mkdir/3, create_file/3, write_file/4, read_file/4, unlink/3, chown/4,
     chmod/3, stat/2, ls/4, rmdir/2, truncate/4, recursive_rm/2, open/3, listobjects/5, storage_ls/5]).
@@ -35,6 +35,10 @@ get_storage_record(Worker, StorageId) ->
 
 get_storage_mountpoint_handle(Worker, SpaceId, Storage) ->
     new_handle(Worker, SpaceId, <<"">>, Storage).
+
+new_handle(Worker, SpaceId, StorageFileId) ->
+    StorageId = initializer:get_supporting_storage_id(Worker, SpaceId),
+    new_handle(Worker, SpaceId, StorageFileId, StorageId).
 
 new_handle(Worker, SpaceId, StorageFileId, StorageId) when is_binary(StorageId) ->
     rpc:call(Worker, storage_driver, new_handle, [?ROOT_SESS_ID, SpaceId, undefined, StorageId, StorageFileId]);

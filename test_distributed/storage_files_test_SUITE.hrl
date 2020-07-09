@@ -65,10 +65,7 @@
 ).
 
 -define(FILE_MODE(Perms), Perms bor 8#100000).
--define(DEFAULT_FILE_MODE, ?FILE_MODE(?DEFAULT_FILE_PERMS)).
-
 -define(DIR_MODE(Perms), Perms bor 8#40000).
--define(DEFAULT_DIR_MODE, ?DIR_MODE(?DEFAULT_DIR_PERMS)).
 
 % Macros used to define posix compatible ownerships (UID, GID)
 -define(UID(UserId), luma_auto_feed:generate_posix_identifier(UserId, ?UID_RANGE)).

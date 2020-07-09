@@ -136,6 +136,7 @@ create_operation_supported(attrs, private) -> true;
 create_operation_supported(xattrs, private) -> true;
 create_operation_supported(json_metadata, private) -> true;
 create_operation_supported(rdf_metadata, private) -> true;
+create_operation_supported(register_file, private) -> true;
 create_operation_supported(_, _) -> false.
 
 
@@ -198,6 +199,26 @@ data_spec_create(#gri{aspect = rdf_metadata}) -> #{
         id => {binary, guid},
         <<"metadata">> => {binary, any}
     }
+};
+
+data_spec_create(#gri{aspect = register_file}) -> #{
+    required => #{
+        <<"spaceId">> => {binary, any},
+        <<"storageId">> => {binary, any},
+        <<"storageFileId">> => {binary, any},
+        <<"destinationPath">> => {binary, any}
+    },
+    optional => #{
+        <<"size">> => {integer, {not_lower_than, 0}},
+        <<"mode">> => {integer, {not_lower_than, 0}},
+        <<"atime">> => {integer, {not_lower_than, 0}},
+        <<"mtime">> => {integer, {not_lower_than, 0}},
+        <<"ctime">> => {integer, {not_lower_than, 0}},
+        <<"uid">> => {integer, {not_lower_than, 0}},
+        <<"gid">> => {integer, {not_lower_than, 0}},
+        <<"verifyExistence">> => {boolean, any},
+        <<"xattrs">> => {json, any}
+    }
 }.
 
 
@@ -218,7 +239,12 @@ authorize_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
 authorize_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
     % File path must have been resolved to guid by rest_handler already (to
     % get to this point), so authorization is surely granted.
-    true.
+    true;
+authorize_create(#op_req{auth = Auth = ?USER(UserId), data = Data, gri = #gri{aspect = register_file}}, _) ->
+    SpaceId = maps:get(<<"spaceId">>, Data),
+    middleware_utils:is_eff_space_member(Auth, SpaceId) andalso
+    % TODO VFS-6511 use space_register_file privilege
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_WRITE_DATA).
 
 
 %% @private
@@ -238,7 +264,16 @@ validate_create(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
 validate_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
     % File path must have been resolved to guid by rest_handler already (to
     % get to this point), so file must be managed locally.
-    ok.
+    ok;
+
+validate_create(#op_req{data = Data, gri = #gri{aspect = register_file}}, _) ->
+    SpaceId = maps:get(<<"spaceId">>, Data),
+    StorageId = maps:get(<<"storageId">>, Data),
+    middleware_utils:assert_space_supported_locally(SpaceId),
+    middleware_utils:assert_space_supported_with_storage(SpaceId, StorageId),
+    middleware_utils:assert_imported_storage(StorageId),
+    middleware_utils:assert_file_registration_supported(StorageId),
+    middleware_utils:assert_sync_not_enabled(SpaceId, StorageId).
 
 
 %%--------------------------------------------------------------------
@@ -298,7 +333,16 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = json_met
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = Guid, aspect = rdf_metadata}}) ->
     Rdf = maps:get(<<"metadata">>, Data),
-    ?check(lfm:set_metadata(Auth#auth.session_id, {guid, Guid}, rdf, Rdf, [])).
+    ?check(lfm:set_metadata(Auth#auth.session_id, {guid, Guid}, rdf, Rdf, []));
+
+create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
+    SpaceId = maps:get(<<"spaceId">>, Data),
+    DestinationPath = maps:get(<<"destinationPath">>, Data),
+    StorageId = maps:get(<<"storageId">>, Data),
+    StorageFileId = maps:get(<<"storageFileId">>, Data),
+    {ok, FileGuid} = ?check(file_registration:register(Auth#auth.session_id, SpaceId, DestinationPath, StorageId, StorageFileId, Data)),
+    {ok, FileId} = file_id:guid_to_objectid(FileGuid),
+    {ok, value, FileId}.
 
 
 %%%===================================================================
