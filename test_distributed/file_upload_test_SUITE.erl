@@ -48,7 +48,6 @@ all() ->
     ]).
 
 -define(ATTEMPTS, 60).
--define(DEFAULT_FILE_MODE, 8#664).
 
 -define(SPACE_ID, <<"space1">>).
 -define(FILE_PATH, <<"/", ?SPACE_ID/binary, "/", (atom_to_binary(?FUNCTION_NAME, utf8))/binary>>).
