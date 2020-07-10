@@ -26,6 +26,7 @@
     any |
     non_empty |
     guid |
+    octal |
     [term()] | % A list of accepted values
     {between, integer(), integer()} |
     {not_lower_than, integer()} | {not_greater_than, integer()} | custom_value_constraint().
@@ -305,6 +306,13 @@ check_value(binary, guid, Param, Value) ->
         ok
     catch _:_ ->
         throw(?ERROR_BAD_VALUE_IDENTIFIER(Param))
+    end;
+
+check_value(binary, octal, Param, Value) ->
+    try
+        {ok, binary_to_integer(Value, 8)}
+    catch _:_->
+        throw(?ERROR_BAD_VALUE_OCTAL(Param))
     end;
 
 check_value(_, {not_lower_than, Threshold}, Param, Value) ->

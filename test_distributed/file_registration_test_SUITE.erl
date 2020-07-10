@@ -148,7 +148,7 @@ register_file_test(Config) ->
         <<"storageId">> => StorageId,
         <<"mtime">> => time_utils:system_time_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
-        <<"mode">> => 8#664,
+        <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS
     })),
 
@@ -179,7 +179,7 @@ register_file_and_create_parents_test(Config) ->
         <<"storageId">> => StorageId,
         <<"mtime">> => time_utils:system_time_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
-        <<"mode">> => 8#664,
+        <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS
     })),
 
@@ -210,7 +210,7 @@ update_registered_file_test(Config) ->
         <<"storageId">> => StorageId,
         <<"mtime">> => time_utils:system_time_seconds(),
         <<"size">> => byte_size(?TEST_DATA),
-        <<"mode">> => 8#664,
+        <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS
     })),
 

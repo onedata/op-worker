@@ -85,16 +85,24 @@ register(SessionId, SpaceId, Path, StorageId, StorageFileId, Spec) ->
                 is_posix_storage => storage:is_posix_compatible(StorageId),
                 sync_acl => false
             }),
-        set_xattrs(UserCtx, FileCtx, maps:get(<<"xattrs">>, Spec, #{})),
-        {ok, file_ctx:get_guid_const(FileCtx)}
+        case FileCtx =/= undefined of
+            true ->
+                set_xattrs(UserCtx, FileCtx, maps:get(<<"xattrs">>, Spec, #{})),
+                {ok, file_ctx:get_guid_const(FileCtx)};
+            false ->
+                % TODO VFS-6508 find better error
+                % this can happen if sync mechanisms decide not to synchronize file
+                ?error("Registration of file ~p was skipped."),
+                {error, ?ENOENT}
+        end
     catch
         throw:?ENOTSUP ->
             ?error_stacktrace(
-                "Ingestion of file ~p failed. "
+                "Registration of file ~p failed. "
                 "stat operation is not supported by the storage ~p", [Path, StorageId]),
             ?ERROR_STAT_OPERATION_NOT_SUPPORTED(StorageId);
         Error:Reason ->
-            ?error_stacktrace("Ingestion of file ~p failed due to: ~p", [Path, {Error, Reason}]),
+            ?error_stacktrace("Registration of file ~p failed due to: ~p", [Path, {Error, Reason}]),
             {error, Reason}
     end.
 
@@ -162,7 +170,7 @@ ensure_all_parents_exist_and_are_dirs(PartialCtx, UserCtx, ChildrenPartialCtxs) 
             {true, FileCtx2} ->
                 % first directory on the path that exists in db
                 create_missing_directories(FileCtx2, ChildrenPartialCtxs, user_ctx:get_user_id(UserCtx));
-            {false, FileCtx2} ->
+            {false, _} ->
                 {error, ?ENOTDIR}
         end
     catch

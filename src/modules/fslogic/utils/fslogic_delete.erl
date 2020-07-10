@@ -309,6 +309,9 @@ maybe_remove_file_on_storage(FileCtx, UserCtx) ->
         case sd_utils:delete(FileCtx, UserCtx) of
             {ok, FileCtx2} -> {ok, FileCtx2};
             {error, ?ENOENT} -> {ok, FileCtx};
+            % TODO VFS-6524 do not ignore below errors
+            {error, ?EACCES} -> {ok, FileCtx};
+            {error, ?EROFS} -> {ok, FileCtx};
             {error, _} = OtherError -> OtherError
         end
     catch
