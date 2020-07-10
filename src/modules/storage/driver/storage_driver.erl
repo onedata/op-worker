@@ -483,7 +483,8 @@ unlink(SDHandle = #sd_handle{file = FileId}, CurrentSize) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         case helpers:unlink(HelperHandle, FileId, CurrentSize) of
             ok -> ok;
-            {error, ?ENOENT} -> ok
+            {error, ?ENOENT} -> ok;
+            {error, __} = Error -> Error
         end
     end).
 
