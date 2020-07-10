@@ -427,7 +427,7 @@ end_per_suite(Config) ->
     storage_sync_test_base:end_per_suite(Config).
 
 init_per_testcase(Case, Config) ->
-    storage_sync_test_base:init_per_testcase(Case, Config, true).
+    storage_sync_test_base:init_per_testcase(Case, Config).
 
 end_per_testcase(_Case, Config) ->
-    storage_sync_test_base:end_per_testcase(_Case, Config, true).
+    storage_sync_test_base:end_per_testcase(_Case, Config).

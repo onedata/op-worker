@@ -273,7 +273,7 @@ create_file(Config) ->
     }], ProviderId2).
 
 rename_file(Config) ->
-    [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESS_ID(Worker),
     FileName = ?FILE_NAME,
     FileName2 = ?FILE_NAME,
@@ -283,7 +283,6 @@ rename_file(Config) ->
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
-    ProviderId2 = ?PROVIDER_ID(Worker2),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,

@@ -66,15 +66,15 @@ end).
 
 -spec register(session:id(), od_space:id(), file_meta:path(), storage:id(), helpers:file_id(), spec()) ->
     {ok, fslogic_worker:file_guid()} | {error, term()}.
-register(SessionId, SpaceId, Path, StorageId, StorageFileId, Spec) ->
+register(SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
     try
-        FileName = filename:basename(Path),
+        FileName = filename:basename(DestinationPath),
         StorageFileId2 = normalize_storage_file_id(StorageId, StorageFileId),
         StorageFileCtx = storage_file_ctx:new(StorageFileId2, FileName, SpaceId, StorageId),
         StorageFileCtx2 = maybe_verify_existence(StorageFileCtx, Spec),
         StorageFileCtx3 = prepare_stat(StorageFileCtx2, Spec),
         UserCtx = user_ctx:new(SessionId),
-        CanonicalPath = destination_path_to_canonical_path(SpaceId, Path),
+        CanonicalPath = destination_path_to_canonical_path(SpaceId, DestinationPath),
         FilePartialCtx = file_partial_ctx:new_by_canonical_path(UserCtx, CanonicalPath),
         DirectParentCtx = ensure_all_parents_exist_and_are_dirs(FilePartialCtx, UserCtx),
         % TODO VFS-6508 do not use TraverseInfo as its associated with storage_traverse
@@ -85,16 +85,29 @@ register(SessionId, SpaceId, Path, StorageId, StorageFileId, Spec) ->
                 is_posix_storage => storage:is_posix_compatible(StorageId),
                 sync_acl => false
             }),
-        set_xattrs(UserCtx, FileCtx, maps:get(<<"xattrs">>, Spec, #{})),
-        {ok, file_ctx:get_guid_const(FileCtx)}
+        case FileCtx =/= undefined of
+            true ->
+                set_xattrs(UserCtx, FileCtx, maps:get(<<"xattrs">>, Spec, #{})),
+                {ok, file_ctx:get_guid_const(FileCtx)};
+            false ->
+                % TODO VFS-6508 find better error
+                % this can happen if sync mechanisms decide not to synchronize file
+                ?error("Skipped registration of file ~s located on storage ~s in space ~s under path ~s.",
+                    [StorageFileId2, StorageId, SpaceId, DestinationPath]),
+                {error, ?ENOENT}
+        end
     catch
         throw:?ENOTSUP ->
             ?error_stacktrace(
-                "Ingestion of file ~p failed. "
-                "stat operation is not supported by the storage ~p", [Path, StorageId]),
+                "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
+                "stat (or equivalent) operation is not supported by the storage.",
+                [StorageFileId, StorageId, SpaceId, DestinationPath]),
             ?ERROR_STAT_OPERATION_NOT_SUPPORTED(StorageId);
         Error:Reason ->
-            ?error_stacktrace("Ingestion of file ~p failed due to: ~p", [Path, {Error, Reason}]),
+            ?error_stacktrace(
+                "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
+                "Operation failed due to ~p:~p",
+                [StorageFileId, StorageId, SpaceId, DestinationPath, Error, Reason]),
             {error, Reason}
     end.
 
@@ -162,7 +175,7 @@ ensure_all_parents_exist_and_are_dirs(PartialCtx, UserCtx, ChildrenPartialCtxs) 
             {true, FileCtx2} ->
                 % first directory on the path that exists in db
                 create_missing_directories(FileCtx2, ChildrenPartialCtxs, user_ctx:get_user_id(UserCtx));
-            {false, FileCtx2} ->
+            {false, _} ->
                 {error, ?ENOTDIR}
         end
     catch

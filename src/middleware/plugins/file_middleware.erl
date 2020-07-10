@@ -210,7 +210,7 @@ data_spec_create(#gri{aspect = register_file}) -> #{
     },
     optional => #{
         <<"size">> => {integer, {not_lower_than, 0}},
-        <<"mode">> => {integer, {not_lower_than, 0}},
+        <<"mode">> => {binary, octal},
         <<"atime">> => {integer, {not_lower_than, 0}},
         <<"mtime">> => {integer, {not_lower_than, 0}},
         <<"ctime">> => {integer, {not_lower_than, 0}},
