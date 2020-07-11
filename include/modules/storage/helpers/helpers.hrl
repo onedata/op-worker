@@ -28,6 +28,7 @@
 -define(GLUSTERFS_HELPER_NAME, <<"glusterfs">>).
 -define(WEBDAV_HELPER_NAME, <<"webdav">>).
 -define(XROOTD_HELPER_NAME, <<"xrootd">>).
+-define(HTTP_HELPER_NAME, <<"http">>).
 -define(NULL_DEVICE_HELPER_NAME, <<"nulldevice">>).
 
 -define(POSIX_COMPATIBLE_HELPERS, [?POSIX_HELPER_NAME, ?GLUSTERFS_HELPER_NAME, ?NULL_DEVICE_HELPER_NAME]).

@@ -231,6 +231,7 @@ is_file_registration_supported(Helper = #helper{name = HelperName})
     orelse HelperName =:= ?NULL_DEVICE_HELPER_NAME
     orelse HelperName =:= ?WEBDAV_HELPER_NAME
     orelse HelperName =:= ?XROOTD_HELPER_NAME
+    orelse HelperName =:= ?HTTP_HELPER_NAME
 ->
     is_canonical_helper(Helper);
 is_file_registration_supported(Helper = #helper{name = HelperName})
@@ -286,6 +287,7 @@ translate_name(<<"Swift">>) -> ?SWIFT_HELPER_NAME;
 translate_name(<<"GlusterFS">>) -> ?GLUSTERFS_HELPER_NAME;
 translate_name(<<"WebDAV">>) -> ?WEBDAV_HELPER_NAME;
 translate_name(<<"XRootD">>) -> ?XROOTD_HELPER_NAME;
+translate_name(<<"HTTP">>) -> ?HTTP_HELPER_NAME;
 translate_name(<<"NullDevice">>) -> ?NULL_DEVICE_HELPER_NAME;
 translate_name(Name) -> Name.
 
