@@ -253,7 +253,7 @@ unlink(FileCtx, UserCtx) ->
             {error, ?ENOENT};
         {SDHandle, FileCtx2} ->
             {Size, FileCtx3} = file_ctx:get_file_size(FileCtx2),
-            storage_driver:unlink(SDHandle, Size),
+            ok = storage_driver:unlink(SDHandle, Size),
             {ok, FileCtx3}
     end.
 
