@@ -228,8 +228,9 @@ update_registered_file_test(Config) ->
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
         <<"mtime">> => time_utils:system_time_seconds(),
-        <<"size">> => byte_size(?TEST_DATA2)
-    })),
+        <<"size">> => byte_size(?TEST_DATA2),
+        <<"mode">> => <<"664">>
+        })),
 
     % check whether file has been properly updated
     ?assertFile(W1, SessId, FilePath, ?TEST_DATA2, ?XATTRS),
@@ -243,7 +244,8 @@ update_registered_file_test(Config) ->
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
         <<"xattrs">> => ?XATTRS2,
-        <<"size">> => byte_size(?TEST_DATA2)
+        <<"size">> => byte_size(?TEST_DATA2),
+        <<"mode">> => <<"664">>
     })),
 
     XATTRS3 = maps:merge(?XATTRS, ?XATTRS2),
