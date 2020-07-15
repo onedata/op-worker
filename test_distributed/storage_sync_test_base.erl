@@ -29,7 +29,7 @@
 %% util functions
 -export([disable_storage_sync/1,
     add_synced_storages/1, clean_synced_storage/1, storage_path/4, create_init_file/2,
-    enable_import/3, enable_update/3, clean_luma_db/1,
+    enable_import/3, enable_update/3, enable_update/4, clean_luma_db/1,
     clean_space/1, verify_file_deleted/4, cleanup_storage_sync_monitoring_model/2,
     assertImportTimes/2, assertImportTimes/3, assertUpdateTimes/2, assertUpdateTimes/3, assertUpdateTimes/4,
     disable_update/1, disable_import/1, assertNoImportInProgress/3,
@@ -88,6 +88,7 @@
     create_delete_import2_test/3,
     create_subfiles_and_delete_before_import_is_finished_test/2,
     create_file_in_dir_update_test/2,
+    changing_max_depth_test/1,
     create_file_in_dir_exceed_batch_update_test/2,
 
     delete_empty_directory_update_test/2,
@@ -2521,6 +2522,155 @@ create_file_in_dir_update_test(Config, MountSpaceInRoot) ->
         lfm_proxy:open(W2, SessId2, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
+
+
+changing_max_depth_test(Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    RDWRStorage = get_rdwr_storage(Config, W1),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+
+    StorageTestDirPath = storage_path(?SPACE_ID, ?TEST_DIR, true),
+
+    Dir2Path = filename:join([?TEST_DIR, ?TEST_DIR2]),
+    StorageTestDirPath2 = storage_path(?SPACE_ID, Dir2Path, true),
+    SpaceTestDirPath2 = ?SPACE_TEST_DIR_PATH(Dir2Path),
+
+    StorageTestFilePath = storage_path(?SPACE_ID, ?TEST_FILE1, true),
+    StorageTestFileinDirPath = storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1]), true),
+
+    File2Path = filename:join([?TEST_DIR, ?TEST_DIR2, ?TEST_FILE1]),
+    StorageTestFileinDirPath2 = storage_path(?SPACE_ID, File2Path, true),
+    SpaceTestFilePath2 = ?SPACE_TEST_DIR_PATH(File2Path),
+
+    %% Create directories and files on storage
+    SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath, RDWRStorage),
+    ok = sd_test_utils:mkdir(W1, SDHandle, 8#775),
+    SDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestDirPath2, RDWRStorage),
+    ok = sd_test_utils:mkdir(W1, SDHandle2, 8#775),
+    FileSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
+    ok = sd_test_utils:create_file(W1, FileSDHandle, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, FileSDHandle, 0, ?TEST_DATA),
+    FileInDirSDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath, RDWRStorage),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle, 0, ?TEST_DATA),
+    FileInDirSDHandle2 = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFileinDirPath2, RDWRStorage),
+    ok = sd_test_utils:create_file(W1, FileInDirSDHandle2, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, FileInDirSDHandle2, 0, ?TEST_DATA),
+
+    SyncedStorage = get_synced_storage(Config, W1),
+    % in init_per_testcase, max_depth for import is set to 1
+    enable_import(Config, ?SPACE_ID, SyncedStorage),
+
+    assertImportTimes(W1, ?SPACE_ID),
+
+    %% Only directory and file on 1st level should be imported
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
+    ?assertMatch({ok, [_, _]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, []},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, SpaceTestDirPath2}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:get_children(W1, SessId, {path, SpaceTestDirPath2}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 1,
+        <<"toProcess">> => 3,
+        <<"imported">> => 2,
+        <<"updated">> => 1,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 0,
+        <<"importedSum">> => 2,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 2,
+        <<"importedHourHist">> => 2,
+        <<"importedDayHist">> => 2,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+    % in init_per_testcase, max_depth for update is set to 2, so new file should be detected
+    enable_update(Config, ?SPACE_ID, SyncedStorage),
+    assertUpdateTimes(W1, ?SPACE_ID),
+    disable_update(Config),
+
+    %% Directory and file on 2nd level should be imported
+    ?assertMatch({ok, [_, _]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, SpaceTestDirPath2}), ?ATTEMPTS),
+    ?assertMatch({ok, []},
+        lfm_proxy:get_children(W1, SessId, {path, SpaceTestDirPath2}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 2,
+        <<"toProcess">> => 4,
+        <<"imported">> => 2,
+        <<"updated">> => 0,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 2,
+        <<"importedSum">> => 4,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 2,
+        <<"importedHourHist">> => 4,
+        <<"importedDayHist">> => 4,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID),
+
+
+    % run another scan with max_depth = 3
+    enable_update(Config, ?SPACE_ID, SyncedStorage, #{max_depth => 3}),
+    assertUpdateTimes(W1, ?SPACE_ID, 3),
+    disable_update(Config),
+
+    %% Directory and file on 3rd level should be imported
+    ?assertMatch({ok, [_]},
+        lfm_proxy:get_children(W1, SessId, {path, SpaceTestDirPath2}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, SpaceTestFilePath2}), ?ATTEMPTS),
+
+    ?assertMonitoring(W1, #{
+        <<"scans">> => 3,
+        <<"toProcess">> => 4,
+        <<"imported">> => 1,
+        <<"updated">> => 0,
+        <<"deleted">> => 0,
+        <<"failed">> => 0,
+        <<"otherProcessed">> => 3,
+        <<"importedSum">> => 5,
+        <<"updatedSum">> => 1,
+        <<"deletedSum">> => 0,
+        <<"importedMinHist">> => 1,
+        <<"importedHourHist">> => 5,
+        <<"importedDayHist">> => 5,
+        <<"updatedMinHist">> => 1,
+        <<"updatedHourHist">> => 1,
+        <<"updatedDayHist">> => 1,
+        <<"deletedMinHist">> => 0,
+        <<"deletedHourHist">> => 0,
+        <<"deletedDayHist">> => 0
+    }, ?SPACE_ID).
 
 create_file_in_dir_exceed_batch_update_test(Config, MountSpaceInRoot) ->
     % in this test storage_sync_dir_batch_size is set in init_per_testcase to 2
@@ -5451,8 +5601,11 @@ schedule_spaces_check(Worker, IntervalSeconds) ->
 
 enable_import(Config, SpaceId, StorageId) when is_binary(StorageId) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
+    ImportConfig = ?config(import_config, Config, #{}),
+    MaxDepth = maps:get(max_depth, ImportConfig, ?MAX_DEPTH),
+    SyncAcl = maps:get(sync_acl, ImportConfig, ?SYNC_ACL),
     ?assertMatch(ok, rpc:call(W1, storage_sync, enable_import,
-        [SpaceId, StorageId, #{max_depth => ?MAX_DEPTH, sync_acl => ?SYNC_ACL}]));
+        [SpaceId, StorageId, #{max_depth => MaxDepth, sync_acl => SyncAcl}]));
 enable_import(Config, SpaceId, Storage) ->
     StorageId = storage:get_id(Storage),
     enable_import(Config, SpaceId, StorageId).
@@ -5460,13 +5613,14 @@ enable_import(Config, SpaceId, Storage) ->
 enable_update(Config, SpaceId, StorageId) when is_binary(StorageId) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     UpdateConfig = ?config(update_config, Config, #{}),
+    MaxDepth = maps:get(max_depth, UpdateConfig, ?MAX_DEPTH),
     ScanInterval = maps:get(scan_interval, UpdateConfig, ?SCAN_INTERVAL),
     WriteOnce = maps:get(write_once, UpdateConfig, ?WRITE_ONCE),
     DeleteEnable = maps:get(delete_enable, UpdateConfig, ?DELETE_ENABLE),
     SyncAcl = maps:get(sync_acl, UpdateConfig, ?SYNC_ACL),
     ok = rpc:call(W1, storage_sync, configure_update,
         [SpaceId, StorageId, true, #{
-            max_depth => ?MAX_DEPTH,
+            max_depth => MaxDepth,
             scan_interval => ScanInterval,
             write_once => WriteOnce,
             delete_enable => DeleteEnable,
@@ -5475,6 +5629,26 @@ enable_update(Config, SpaceId, StorageId) when is_binary(StorageId) ->
 enable_update(Config, SpaceId, Storage) ->
     StorageId = storage:get_id(Storage),
     enable_update(Config, SpaceId, StorageId).
+
+enable_update(Config, SpaceId, StorageId, Opts) when is_binary(StorageId) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    UpdateConfig = ?config(update_config, Config, #{}),
+    MaxDepth = maps:get(max_depth, UpdateConfig, ?MAX_DEPTH),
+    ScanInterval = maps:get(scan_interval, UpdateConfig, ?SCAN_INTERVAL),
+    WriteOnce = maps:get(write_once, UpdateConfig, ?WRITE_ONCE),
+    DeleteEnable = maps:get(delete_enable, UpdateConfig, ?DELETE_ENABLE),
+    SyncAcl = maps:get(sync_acl, UpdateConfig, ?SYNC_ACL),
+    DefaultOpts = #{
+        max_depth => MaxDepth,
+        scan_interval => ScanInterval,
+        write_once => WriteOnce,
+        delete_enable => DeleteEnable,
+        sync_acl => SyncAcl
+    },
+    ok = rpc:call(W1, storage_sync, configure_update, [SpaceId, StorageId, true, maps:merge(DefaultOpts, Opts)]);
+enable_update(Config, SpaceId, Storage, Opts) ->
+    StorageId = storage:get_id(Storage),
+    enable_update(Config, SpaceId, StorageId, Opts).
 
 disable_import(Config) ->
     [W1, _] = ?config(op_worker_nodes, Config),
@@ -6218,6 +6392,20 @@ init_per_testcase(should_not_sync_file_during_replication, Config) ->
             delete_enable => false,
             write_once => true}},
         {old_storage_sync_check_interval, OldInterval}
+        | Config
+    ],
+    init_per_testcase(default, Config2);
+
+init_per_testcase(changing_max_depth_test, Config) ->
+    Config2 = [
+        {import_config, #{
+            max_depth => 1
+        }},
+        {update_config, #{
+            max_depth => 2,
+            scan_interval => 1,
+            delete_enable => false,
+            write_once => true}}
         | Config
     ],
     init_per_testcase(default, Config2);
