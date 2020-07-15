@@ -501,7 +501,10 @@ on_helper_changed(StorageId) ->
 -spec is_name_occupied(name()) -> boolean().
 is_name_occupied(Name) ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
-    lists:member(Name, lists:map(fun storage_logic:get_name/1, StorageIds)).
+    lists:member(Name, lists:map(fun(StorageId) ->
+        {ok, Name} = storage_logic:get_name(StorageId),
+        Name
+    end, StorageIds)).
 
 
 %% @private
