@@ -502,8 +502,8 @@ on_helper_changed(StorageId) ->
 is_name_occupied(Name) ->
     {ok, StorageIds} = provider_logic:get_storage_ids(),
     lists:member(Name, lists:map(fun(StorageId) ->
-        {ok, Name} = storage_logic:get_name(StorageId),
-        Name
+        {ok, OccupiedName} = storage_logic:get_name(StorageId),
+        OccupiedName
     end, StorageIds)).
 
 
