@@ -43,7 +43,7 @@ translate_value(#gri{aspect = {transfers_throughput_charts, _}}, Charts) ->
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
-translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space) ->
+translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, {Space, AdditionalInfo}) ->
     RootDir = case space_logic:is_supported(Space, oneprovider:get_id()) of
         true ->
             Guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
@@ -57,7 +57,7 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             null
     end,
 
-    Result = #{
+    Result = AdditionalInfo#{
         <<"name">> => Space#od_space.name,
         <<"effUserList">> => gri:serialize(#gri{
             type = op_space,

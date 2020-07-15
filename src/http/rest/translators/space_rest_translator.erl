@@ -30,10 +30,10 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
+get_response(#gri{id = SpaceId, aspect = instance, scope = private}, {#od_space{
     name = Name,
     providers = ProvidersIds
-}) ->
+}, _}) ->
     Providers = lists:map(fun(ProviderId) ->
         {ok, ProviderName} = provider_logic:get_name(ProviderId),
         #{

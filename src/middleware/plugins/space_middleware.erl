@@ -449,7 +449,13 @@ get(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{aspect = list}}, _) ->
 get(#op_req{auth = Auth, gri = #gri{id = SpaceId, aspect = instance}}, _) ->
     case space_logic:get(Auth#auth.session_id, SpaceId) of
         {ok, #document{value = Space}} ->
-            {ok, Space};
+            {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+            Helper = storage:get_helper(StorageId),
+            PreferableWriteBlockSize = helper:get_block_size(Helper),
+
+            {ok, {Space, #{
+                <<"preferableWriteBlockSize">> => utils:undefined_to_null(PreferableWriteBlockSize)
+            }}};
         {error, _} = Error ->
             Error
     end;
