@@ -243,8 +243,7 @@ authorize_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
 authorize_create(#op_req{auth = Auth = ?USER(UserId), data = Data, gri = #gri{aspect = register_file}}, _) ->
     SpaceId = maps:get(<<"spaceId">>, Data),
     middleware_utils:is_eff_space_member(Auth, SpaceId) andalso
-    % TODO VFS-6511 use space_register_file privilege
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_WRITE_DATA).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_REGISTER_FILES).
 
 
 %% @private
