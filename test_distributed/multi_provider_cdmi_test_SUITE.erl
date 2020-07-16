@@ -183,11 +183,13 @@ init_per_suite(Config) ->
         ssl:start(),
         hackney:start(),
         NewConfig3 = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
+        mock_get_preferable_write_block_size(Config),
         NewConfig3
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 end_per_suite(Config) ->
+    unmock_get_preferable_write_block_size(Config),
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     hackney:stop(),
@@ -212,3 +214,14 @@ end_per_testcase(_Case, Config) ->
 %%% Internal functions
 %%%===================================================================
 
+mock_get_preferable_write_block_size(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+
+    ok = test_utils:mock_new(Workers, guid_utils, [passthrough]),
+    ok = test_utils:mock_expect(Workers, guid_utils, get_preferable_write_block_size, fun(_) ->
+        10485760
+    end).
+
+unmock_get_preferable_write_block_size(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, guid_utils).
