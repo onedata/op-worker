@@ -253,6 +253,8 @@ init_per_suite(Config) ->
         test_utils:mock_new(Nodes, oneprovider),
         % Set op version to old one, that for sure is not compatible with current one
         test_utils:mock_expect(Nodes, oneprovider, get_version, fun() -> <<"16.04-rc5">> end),
+        % do not attempt fetching new compatibility registry during the tests
+        test_utils:set_env(Nodes, ctool, compatibility_registry_mirrors, []),
         NewConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
