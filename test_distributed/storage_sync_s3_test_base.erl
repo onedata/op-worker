@@ -401,11 +401,7 @@ changing_max_depth_test(Config) ->
     ?assertMatch({error, ?ENOENT},
         lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, SpaceTestDirPath2}), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:get_children(W1, SessId, {path, SpaceTestDirPath2}, 0, 10), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
@@ -435,15 +431,20 @@ changing_max_depth_test(Config) ->
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID),
     storage_sync_test_base:disable_update(Config),
 
-    %% Directory and file on 2nd level should be imported
+    %% File on 2nd level and directory on 1 st level should be imported
     ?assertMatch({ok, [_, _]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
+    ?assertMatch({ok, [_]},
         lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, SpaceTestDirPath2}), ?ATTEMPTS),
-    ?assertMatch({ok, []},
-        lfm_proxy:get_children(W1, SessId, {path, SpaceTestDirPath2}, 0, 10), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
+    {ok, Handle5} = ?assertMatch({ok, _},
+        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle5),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 2,
@@ -467,26 +468,25 @@ changing_max_depth_test(Config) ->
         <<"deletedDayHist">> => 0
     }, ?SPACE_ID),
 
-    ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch({ok, [_]},
-        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS),
-    {ok, Handle5} = ?assertMatch({ok, _},
-        lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}, read)),
-    ?assertMatch({ok, ?TEST_DATA},
-        lfm_proxy:read(W1, Handle5, 0, byte_size(?TEST_DATA))),
-    lfm_proxy:close(W1, Handle5),
-
     % run another scan with max_depth = 3
     storage_sync_test_base:enable_update(Config, ?SPACE_ID, SyncedStorage, #{max_depth => 3}),
     storage_sync_test_base:assertUpdateTimes(W1, ?SPACE_ID, 3),
     storage_sync_test_base:disable_update(Config),
 
-    %% Directory and file on 3rd level should be imported
+    %% Directory on 2nd and file on 3rd level should be imported
+    ?assertMatch({ok, [_, _]},
+        lfm_proxy:get_children(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, 0, 10), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{}},
+        lfm_proxy:stat(W1, SessId, {path, SpaceTestDirPath2}), ?ATTEMPTS),
     ?assertMatch({ok, [_]},
         lfm_proxy:get_children(W1, SessId, {path, SpaceTestDirPath2}, 0, 10), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W1, SessId, {path, SpaceTestFilePath2}), ?ATTEMPTS),
+    {ok, Handle6} = ?assertMatch({ok, _},
+        lfm_proxy:open(W1, SessId, {path, SpaceTestFilePath2}, read)),
+    ?assertMatch({ok, ?TEST_DATA},
+        lfm_proxy:read(W1, Handle6, 0, byte_size(?TEST_DATA))),
+    lfm_proxy:close(W1, Handle6),
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 3,

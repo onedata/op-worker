@@ -406,4 +406,4 @@ decode(Config) ->
     DecodedConfig = json_utils:decode(Config),
     maps:fold(fun(K, V, AccIn) ->
         AccIn#{binary_to_atom(K, utf8) => V}
-    end, DecodedConfig, DecodedConfig).
+    end, #{}, DecodedConfig).
