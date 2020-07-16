@@ -31,8 +31,6 @@
 %% For test purpose
 -export([handle_multipart_req/3]).
 
--define(CONN_CLOSE_HEADERS, #{?HDR_CONNECTION => <<"close">>}).
-
 
 %% ====================================================================
 %% dynamic_page_behaviour API functions
@@ -96,7 +94,7 @@ handle_multipart_req(Req, Auth, Params) ->
                         FieldName => FieldValue
                     });
                 {file, _FieldName, _Filename, _CType} ->
-                    Req3 = write_chunk(Req2, Auth, Params),
+                    {ok, Req3} = write_chunk(Req2, Auth, Params),
                     handle_multipart_req(Req3, Auth, Params)
             end;
         {done, Req2} ->
@@ -105,7 +103,8 @@ handle_multipart_req(Req, Auth, Params) ->
 
 
 %% @private
--spec write_chunk(cowboy_req:req(), aai:auth(), map()) -> cowboy_req:req().
+-spec write_chunk(cowboy_req:req(), aai:auth(), map()) ->
+    {ok, cowboy_req:req()} | no_return().
 write_chunk(Req, ?USER(UserId, SessionId), Params) ->
     SanitizedParams = middleware_sanitizer:sanitize_data(Params, #{
         required => #{
@@ -118,85 +117,19 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
     ChunkSize = maps:get(<<"resumableChunkSize">>, SanitizedParams),
     ChunkNumber = maps:get(<<"resumableChunkNumber">>, SanitizedParams),
 
-    PreferableWriteBlockSize = guid_utils:get_preferable_write_block_size(FileGuid),
-    ReadBodyOpts = read_body_opts(PreferableWriteBlockSize),
-
     assert_file_upload_registered(UserId, FileGuid),
 
-    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, FileGuid}, write)),
+    SpaceId = file_id:guid_to_space_id(FileGuid),
     Offset = ChunkSize * (ChunkNumber - 1),
+    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, FileGuid}, write)),
 
     try
-        write_chunk(Req, FileHandle, Offset, ReadBodyOpts, PreferableWriteBlockSize)
+        file_upload_utils:upload_file(
+            FileHandle, Offset, Req,
+            fun cowboy_req:read_part_body/2, read_body_opts(SpaceId)
+        )
     after
         lfm:release(FileHandle) % release if possible
-    end.
-
-
-%% @private
--spec write_chunk(
-    cowboy_req:req(),
-    lfm:handle(),
-    Offset :: non_neg_integer(),
-    cowboy_req:read_body_opts(),
-    MaxBlockSize :: undefined | non_neg_integer()
-) ->
-    cowboy_req:req().
-write_chunk(Req, FileHandle, Offset, ReadBodyOpts, undefined) ->
-    write_binary_in_stream(Req, FileHandle, Offset, ReadBodyOpts);
-write_chunk(Req, FileHandle, Offset, ReadBodyOpts, MaxBlockSize) ->
-    write_binary_in_blocks(Req, FileHandle, Offset, ReadBodyOpts, <<>>, MaxBlockSize).
-
-
-%% @private
--spec write_binary_in_stream(cowboy_req:req(), lfm:handle(), non_neg_integer(),
-    cowboy_req:read_body_opts()) -> cowboy_req:req().
-write_binary_in_stream(Req, FileHandle, Offset, ReadBodyOpts) ->
-    case cowboy_req:read_part_body(Req, ReadBodyOpts) of
-        {ok, Body, Req2} ->
-            ?check(lfm:write(FileHandle, Offset, Body)),
-            Req2;
-        {more, Body, Req2} ->
-            {ok, NewHandle, Written} = ?check(lfm:write(FileHandle, Offset, Body)),
-            write_binary_in_stream(Req2, NewHandle, Offset + Written, ReadBodyOpts)
-    end.
-
-
-%% @private
--spec write_binary_in_blocks(
-    cowboy_req:req(),
-    lfm:handle(),
-    Offset :: non_neg_integer(),
-    cowboy_req:read_body_opts(),
-    Buffer :: binary(),
-    MaxBlockSize:: non_neg_integer()
-) ->
-    cowboy_req:req().
-write_binary_in_blocks(Req, FileHandle, Offset, ReadBodyOpts, Buffer0, MaxBlockSize) ->
-    case cowboy_req:read_part_body(Req, ReadBodyOpts) of
-        {ok, Body, Req2} ->
-            ?check(lfm:write(FileHandle, Offset, <<Buffer0/binary, Body/binary>>)),
-            Req2;
-        {more, Body, Req2} ->
-            Buffer1 = <<Buffer0/binary, Body/binary>>,
-            Buffer1Size = byte_size(Buffer1),
-
-            case Buffer1Size >= MaxBlockSize of
-                true ->
-                    ChunkSize = MaxBlockSize * (Buffer1Size div MaxBlockSize),
-                    <<Chunk:ChunkSize/binary, Buffer2/binary>> = Buffer1,
-                    {ok, NewHandle, Written} = ?check(lfm:write(FileHandle, Offset, Chunk)),
-
-                    write_binary_in_blocks(
-                        Req2, NewHandle, Offset + Written, ReadBodyOpts,
-                        Buffer2, MaxBlockSize
-                    );
-                false ->
-                    write_binary_in_blocks(
-                        Req2, FileHandle, Offset, ReadBodyOpts,
-                        Buffer1, MaxBlockSize
-                    )
-            end
     end.
 
 
@@ -211,9 +144,10 @@ assert_file_upload_registered(UserId, FileGuid) ->
 
 
 %% @private
--spec read_body_opts(StorageWriteBlockSize :: undefined | non_neg_integer()) ->
-    cowboy_req:read_body_opts().
-read_body_opts(StorageWriteBlockSize) ->
+-spec read_body_opts(od_space:id()) -> cowboy_req:read_body_opts().
+read_body_opts(SpaceId) ->
+    WriteBlockSize = file_upload_utils:get_preferable_write_block_size(SpaceId),
+
     {ok, UploadWriteSize} = application:get_env(?APP_NAME, upload_write_size),
     {ok, UploadReadTimeout} = application:get_env(?APP_NAME, upload_read_timeout),
     {ok, UploadPeriod} = application:get_env(?APP_NAME, upload_read_period),
@@ -221,7 +155,7 @@ read_body_opts(StorageWriteBlockSize) ->
     #{
         % length is chunk size - how much the cowboy read
         % function returns at once.
-        length => utils:ensure_defined(StorageWriteBlockSize, UploadWriteSize),
+        length => utils:ensure_defined(WriteBlockSize, UploadWriteSize),
         % Maximum timeout after which body read from request
         % is passed to upload handler process.
         % Note that the body is returned immediately
@@ -239,7 +173,7 @@ reply_with_error(Error, Req) ->
     ErrorResp = rest_translator:error_response(Error),
     cowboy_req:reply(
         ErrorResp#rest_resp.code,
-        maps:merge(ErrorResp#rest_resp.headers, ?CONN_CLOSE_HEADERS),
+        maps:merge(ErrorResp#rest_resp.headers, #{?HDR_CONNECTION => <<"close">>}),
         json_utils:encode(ErrorResp#rest_resp.body),
         Req
     ).

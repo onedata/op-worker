@@ -386,9 +386,10 @@ write_req_body_to_file(Req, SessId, FileKey, Truncate, Offset, CdmiPartialFlag) 
     ),
     Truncate andalso ?check(lfm:truncate(SessId, FileKey, 0)),
 
-    {guid, FileGuid} = guid_utils:ensure_guid(SessId, FileKey),
-    PreferableWriteBlockSize = guid_utils:get_preferable_write_block_size(FileGuid),
-    {ok, Req2} = write_req_body_to_file(Req, Offset, FileHandle, PreferableWriteBlockSize),
+    {ok, Req2} = file_upload_utils:upload_file(
+        FileHandle, Offset, Req,
+        fun cowboy_req:read_body/2, #{}
+    ),
 
     ?check(lfm:fsync(FileHandle)),
     ?check(lfm:release(FileHandle)),
@@ -398,67 +399,6 @@ write_req_body_to_file(Req, SessId, FileKey, Truncate, Offset, CdmiPartialFlag) 
         CdmiPartialFlag
     ),
     Req2.
-
-
-%% @private
--spec write_req_body_to_file(
-    cowboy_req:req(),
-    Offset :: integer(),
-    lfm:handle(),
-    MaxBlockSize :: undefined | non_neg_integer()
-) ->
-    {ok, cowboy_req:req()}.
-write_req_body_to_file(Req, Offset, FileHandle, undefined) ->
-    write_req_body_to_file_in_stream(Req, Offset, FileHandle);
-write_req_body_to_file(Req, Offset, FileHandle, MaxBlockSize) ->
-    write_req_body_to_file_in_blocks(Req, FileHandle, Offset, <<>>, MaxBlockSize).
-
-
-%% @private
--spec write_req_body_to_file_in_stream(cowboy_req:req(), integer(), lfm:handle()) ->
-    {ok, cowboy_req:req()}.
-write_req_body_to_file_in_stream(Req0, Offset, FileHandle) ->
-    {Status, Chunk, Req1} = cowboy_req:read_body(Req0),
-    {ok, _NewHandle, Bytes} = ?check(lfm:write(FileHandle, Offset, Chunk)),
-    case Status of
-        more -> write_req_body_to_file_in_stream(Req1, Offset + Bytes, FileHandle);
-        ok -> {ok, Req1}
-    end.
-
-
-%% @private
--spec write_req_body_to_file_in_blocks(
-    cowboy_req:req(),
-    lfm:handle(),
-    Offset :: non_neg_integer(),
-    Buffer :: binary(),
-    MaxBlockSize:: non_neg_integer()
-) ->
-    cowboy_req:req().
-write_req_body_to_file_in_blocks(Req0, FileHandle, Offset, Buffer0, MaxBlockSize) ->
-    case cowboy_req:read_body(Req0) of
-        {ok, Body, Req1} ->
-            ?check(lfm:write(FileHandle, Offset, <<Buffer0/binary, Body/binary>>)),
-            {ok, Req1};
-        {more, Body, Req1} ->
-            Buffer1 = <<Buffer0/binary, Body/binary>>,
-            Buffer1Size = byte_size(Buffer1),
-
-            case Buffer1Size >= MaxBlockSize of
-                true ->
-                    ChunkSize = MaxBlockSize * (Buffer1Size div MaxBlockSize),
-                    <<Chunk:ChunkSize/binary, Buffer2/binary>> = Buffer1,
-                    {ok, NewHandle, Written} = ?check(lfm:write(FileHandle, Offset, Chunk)),
-
-                    write_req_body_to_file_in_blocks(
-                        Req1, NewHandle, Offset + Written, Buffer2, MaxBlockSize
-                    );
-                false ->
-                    write_req_body_to_file_in_blocks(
-                        Req1, FileHandle, Offset, Buffer1, MaxBlockSize
-                    )
-            end
-    end.
 
 
 %% @private

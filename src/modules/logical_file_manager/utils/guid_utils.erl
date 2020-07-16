@@ -15,7 +15,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 %% API
--export([ensure_guid/2, get_preferable_write_block_size/1]).
+-export([ensure_guid/2]).
 
 %%%===================================================================
 %%% API
@@ -37,16 +37,6 @@ ensure_guid(SessionId, {path, Path}) ->
         fun(#guid{guid = Guid}) ->
             {guid, Guid}
         end).
-
-
-%% @private
--spec get_preferable_write_block_size(file_id:file_guid()) ->
-    undefined | non_neg_integer().
-get_preferable_write_block_size(FileGuid) ->
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
-    Helper = storage:get_helper(StorageId),
-    helper:get_block_size(Helper).
 
 
 %%%===================================================================
