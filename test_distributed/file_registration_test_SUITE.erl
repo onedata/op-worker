@@ -27,13 +27,19 @@
 -export([
     register_file_test/1,
     register_file_and_create_parents_test/1,
-    update_registered_file_test/1
+    update_registered_file_test/1,
+    stat_on_storage_should_not_be_performed_if_verify_existence_is_disabled/1,
+    registration_should_fail_if_size_is_not_passed/1,
+    registration_should_succeed_if_size_is_passed/1
 ]).
 
 -define(TEST_CASES, [
     register_file_test,
     register_file_and_create_parents_test,
-    update_registered_file_test
+    update_registered_file_test,
+    stat_on_storage_should_not_be_performed_if_verify_existence_is_disabled,
+    registration_should_fail_if_size_is_not_passed,
+    registration_should_succeed_if_size_is_passed
 ]).
 
 all() -> ?ALL(?TEST_CASES).
@@ -256,6 +262,97 @@ update_registered_file_test(Config) ->
     % check whether file was updated on 2nd provider
     ?assertFile(W2, SessId2, FilePath, ?TEST_DATA2, XATTRS3, ?ATTEMPTS).
 
+stat_on_storage_should_not_be_performed_if_verify_existence_is_disabled(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
+
+    FileName = ?FILE_NAME,
+    FilePath = ?PATH(FileName),
+    StorageFileId = filename:join(["/", FileName]),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
+    SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
+    Timestamp = time_utils:system_time_seconds(),
+
+    ok = test_utils:mock_new(W1, [storage_driver], [passthrough]),
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
+        <<"spaceId">> => ?SPACE_ID,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"mtime">> => Timestamp,
+        <<"atime">> => Timestamp,
+        <<"ctime">> => Timestamp,
+        <<"uid">> => 0,
+        <<"gid">> => 0,
+        <<"size">> => byte_size(?TEST_DATA),
+        <<"mode">> => <<"664">>,
+        <<"xattrs">> => ?XATTRS,
+        <<"verifyExistence">> => false
+    })),
+
+    test_utils:mock_assert_num_calls(W1, storage_driver, stat, ['_'], 0),
+
+    % check whether file has been properly registered
+    ?assertFile(W1, SessId, FilePath, ?TEST_DATA, ?XATTRS),
+
+    % check whether file is visible on 2nd provider
+    ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, ?XATTRS, ?ATTEMPTS).
+
+registration_should_fail_if_size_is_not_passed(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
+
+    FileName = ?FILE_NAME,
+    FilePath = ?PATH(FileName),
+    StorageFileId = filename:join(["/", FileName]),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
+    SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
+
+    ?assertMatch({ok, ?HTTP_400_BAD_REQUEST, _, _}, register_file(W1, Config, #{
+        <<"spaceId">> => ?SPACE_ID,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId
+    })),
+
+    % check whether file has been properly registered
+    ?assertFile(W1, SessId, FilePath, ?TEST_DATA, #{}),
+
+    % check whether file is visible on 2nd provider
+    ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, #{}, ?ATTEMPTS).
+
+registration_should_succeed_if_size_is_passed(Config) ->
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
+    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
+
+    FileName = ?FILE_NAME,
+    FilePath = ?PATH(FileName),
+    StorageFileId = filename:join(["/", FileName]),
+    StorageId = initializer:get_supporting_storage_id(W1, ?SPACE_ID),
+    SDFileHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageFileId),
+    ok = sd_test_utils:create_file(W1, SDFileHandle, 8#664),
+    {ok, _} = sd_test_utils:write_file(W1, SDFileHandle, 0, ?TEST_DATA),
+
+    ?assertMatch({ok, ?HTTP_201_CREATED, _, _}, register_file(W1, Config, #{
+        <<"spaceId">> => ?SPACE_ID,
+        <<"destinationPath">> => FileName,
+        <<"storageFileId">> => StorageFileId,
+        <<"storageId">> => StorageId,
+        <<"size">> => byte_size(?TEST_DATA)
+    })),
+
+    % check whether file has been properly registered
+    ?assertFile(W1, SessId, FilePath, ?TEST_DATA, #{}),
+
+    % check whether file is visible on 2nd provider
+    ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, #{}, ?ATTEMPTS).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -285,6 +382,8 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config).
 
 end_per_testcase(_Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, storage_driver),
     lfm_proxy:teardown(Config).
 
 register_file(Worker, Config, Body) ->
