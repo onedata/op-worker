@@ -16,6 +16,9 @@
 
 %% API
 -export([get_preferable_write_block_size/1, upload_file/5]).
+%% Exported for tests- TODO rm after switching to use onenv and real storages in tests
+-export([get_storage_preferable_write_block_size/1]).
+
 
 -type read_req_body_fun() :: fun((cowboy_req:req(), cowboy_req:read_body_opts()) ->
     {ok, binary(), cowboy_req:req()} | {more, binary(), cowboy_req:req()}
@@ -38,7 +41,7 @@
     {ok, cowboy_req:req()}.
 upload_file(FileHandle, Offset, Req, ReadReqBodyFun, ReadReqBodyOpts) ->
     StorageId = lfm_context:get_storage_id(FileHandle),
-    case get_storage_preferable_write_block_size(StorageId) of
+    case ?MODULE:get_storage_preferable_write_block_size(StorageId) of
         undefined ->
             write_req_body_to_file_in_stream(
                 FileHandle, Offset, Req,
@@ -56,7 +59,7 @@ upload_file(FileHandle, Offset, Req, ReadReqBodyFun, ReadReqBodyOpts) ->
     undefined | non_neg_integer().
 get_preferable_write_block_size(SpaceId) ->
     {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
-    get_storage_preferable_write_block_size(StorageId).
+    ?MODULE:get_storage_preferable_write_block_size(StorageId).
 
 
 %%%===================================================================
