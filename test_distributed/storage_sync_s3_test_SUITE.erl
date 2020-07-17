@@ -57,6 +57,7 @@
     create_delete_import2_test/1,
     create_subfiles_and_delete_before_import_is_finished_test/1,
     create_file_in_dir_update_test/1,
+    changing_max_depth_test/1,
     create_file_in_dir_exceed_batch_update_test/1,
 
     delete_non_empty_directory_update_test/1,
@@ -115,6 +116,7 @@
     create_delete_import2_test,
     create_subfiles_and_delete_before_import_is_finished_test,
     create_file_in_dir_update_test,
+    changing_max_depth_test,
     create_file_in_dir_exceed_batch_update_test,
 
     delete_non_empty_directory_update_test,
@@ -229,6 +231,9 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
 
 create_file_in_dir_update_test(Config) ->
     storage_sync_s3_test_base:create_file_in_dir_update_test(Config, true).
+
+changing_max_depth_test(Config) ->
+    storage_sync_s3_test_base:changing_max_depth_test(Config).
 
 create_file_in_dir_exceed_batch_update_test(Config) ->
     storage_sync_s3_test_base:create_file_in_dir_exceed_batch_update_test(Config, true).

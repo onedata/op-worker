@@ -351,7 +351,9 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     info = Info,
     offset = Offset,
-    batch_size = BatchSize
+    batch_size = BatchSize,
+    depth = Depth,
+    max_depth = MaxDepth
 }, Args) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
@@ -376,8 +378,13 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
                     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, ToProcess),
                     FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
                         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-                        BatchHash = storage_sync_hash:hash(lists:reverse(HashesReversed)),
-                        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, MTime, Offset, BatchSize, BatchHash)
+                        case Depth =:= MaxDepth of
+                            true ->
+                                storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, undefined);
+                            false ->
+                                BatchHash = storage_sync_hash:hash(lists:reverse(HashesReversed)),
+                                storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, MTime, Offset, BatchSize, BatchHash)
+                        end
                     end),
                     {ok, MasterJobMap#{finish_callback => FinishCallback}};
                 Error = {error, _} ->
@@ -497,20 +504,33 @@ traverse(TraverseJob = #storage_traverse_master{
 
 -spec schedule_jobs_for_directories_only(master_job(), traverse:master_job_map(), boolean()) ->
     {ok, traverse:master_job_map()}.
-schedule_jobs_for_directories_only(#storage_traverse_master{storage_file_ctx = StorageFileCtx}, MasterJobMap, false) ->
+schedule_jobs_for_directories_only(#storage_traverse_master{
+    storage_file_ctx = StorageFileCtx,
+    depth = Depth,
+    max_depth = MaxDepth
+}, MasterJobMap, false) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     StorageId = storage_file_ctx:get_storage_id_const(StorageFileCtx),
     MasterJobMap2 = maps:remove(slave_jobs, MasterJobMap),
     {#statbuf{st_mtime = STMtime}, _StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     FinishCallback = fun(_MasterJobExtendedArgs, _SlaveJobsDescription) ->
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime)
+        case Depth =:= MaxDepth of
+            true ->
+                storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, undefined);
+            false ->
+                storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime)
+        end
     end,
     AsyncMasterJobs = maps:get(async_master_jobs, MasterJobMap2, []),
     ToProcess = length(AsyncMasterJobs),
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, ToProcess),
     {ok, MasterJobMap2#{finish_callback => FinishCallback}};
-schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{storage_file_ctx = StorageFileCtx},
+schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
+    storage_file_ctx = StorageFileCtx,
+    depth = Depth,
+    max_depth = MaxDepth
+},
     MasterJobMap, true
 ) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -523,7 +543,12 @@ schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{storag
             0 ->
                 StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                 {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
-                {ok, SSI} = storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime),
+                {ok, SSI} = case Depth =:= MaxDepth of
+                    true ->
+                        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, undefined);
+                    false ->
+                        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime)
+                end,
                 case storage_sync_info:are_all_batches_processed(SSI) of
                     true ->
                         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId),
@@ -546,7 +571,9 @@ schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{storag
 schedule_jobs_for_all_files(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     offset = Offset,
-    batch_size = BatchSize
+    batch_size = BatchSize,
+    depth = Depth,
+    max_depth = MaxDepth
 }, MasterJobMap, BatchHash, false
 ) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -557,14 +584,21 @@ schedule_jobs_for_all_files(#storage_traverse_master{
     storage_sync_monitoring:increase_to_process_counter(SpaceId, StorageId, ToProcess),
     FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-        {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
-        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime, Offset, BatchSize, BatchHash)
+        case Depth =:= MaxDepth of
+            true ->
+                storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, undefined);
+            false ->
+                {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
+                storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime, Offset, BatchSize, BatchHash)
+        end
     end),
     {ok, MasterJobMap#{finish_callback => FinishCallback}};
 schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     offset = Offset,
-    batch_size = BatchSize
+    batch_size = BatchSize,
+    depth = Depth,
+    max_depth = MaxDepth
 }, MasterJobMap, BatchHash, true
 ) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
@@ -578,7 +612,12 @@ schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{
             0 ->
                 StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                 {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
-                {ok, SSI} = storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime, Offset, BatchSize, BatchHash, false),
+                {ok, SSI} = case Depth =:= MaxDepth of
+                    true ->
+                        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, undefined);
+                    false ->
+                        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, STMtime, Offset, BatchSize, BatchHash, false)
+                end,
                 case storage_sync_info:are_all_batches_processed(SSI) of
                     true ->
                         storage_sync_info:increase_batches_to_process(StorageFileId, SpaceId),
