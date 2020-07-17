@@ -83,7 +83,8 @@ register(SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
                 space_storage_file_id => storage_file_id:space_dir_id(SpaceId, StorageId),
                 iterator_type => storage_traverse:get_iterator(StorageId),
                 is_posix_storage => storage:is_posix_compatible(StorageId),
-                sync_acl => false
+                sync_acl => false,
+                verify_existence => maps:get(<<"verifyExistence">>, Spec, true)
             }),
         case FileCtx =/= undefined of
             true ->
