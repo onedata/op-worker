@@ -967,8 +967,6 @@ maybe_update_file_location(StorageFileCtx, FileCtx, FileLocationDoc) ->
 
 -spec maybe_update_mode(storage_file_ctx:ctx(), #file_attr{}, file_ctx:ctx(), info()) ->
     {Updated :: boolean(), file_ctx:ctx(), storage_file_ctx:ctx(), file_attr_name()}.
-maybe_update_mode(StorageFileCtx, #file_attr{}, FileCtx, #{is_posix_storage := false}) ->
-    {false, FileCtx, StorageFileCtx, ?MODE_ATTR_NAME};
 maybe_update_mode(StorageFileCtx, #file_attr{mode = OldMode}, FileCtx, _Info) ->
     {#statbuf{st_mode = Mode}, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     Result = case file_ctx:is_space_dir_const(FileCtx) of
