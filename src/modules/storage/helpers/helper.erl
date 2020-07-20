@@ -156,8 +156,8 @@ get_storage_path_type(#helper{args = Args}) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns preferable size of block when writing to file using helper on
-%% object storages. For posix-compatible ones 'undefined' is returned.
+%% Returns size of block used by underlying object storage. For posix-compatible
+%% ones 'undefined' is returned.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_block_size(helpers:helper()) -> non_neg_integer() | undefined.
