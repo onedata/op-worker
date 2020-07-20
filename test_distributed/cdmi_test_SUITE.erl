@@ -173,20 +173,27 @@ create_cdmi_dir_without_cdmi_version_header_should_fail_test(Config) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{?LOAD_MODULES, [initializer]} | Config].
+    Posthook = fun(NewConfig) ->
+        ssl:start(),
+        hackney:start(),
+        initializer:disable_quota_limit(NewConfig),
+        initializer:mock_provider_ids(NewConfig),
+        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
+    end,
+    [{?LOAD_MODULES, [initializer]}, {?ENV_UP_POSTHOOK, Posthook} | Config].
 
-end_per_suite(_) ->
-    ok.
+end_per_suite(Config) ->
+    %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
+    initializer:clean_test_users_and_spaces_no_validate(Config),
+    hackney:stop(),
+    ssl:stop().
 
 init_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler], [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
-    ssl:start(),
-    hackney:start(),
-    ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
-    lfm_proxy:init(ConfigWithSessionInfo).
+    lfm_proxy:init(Config).
 
 end_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -195,11 +202,7 @@ end_per_testcase(choose_adequate_handler_test = Case, Config) ->
     rpc:multicall(Workers, code, ensure_loaded, [cdmi_container_handler]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config),
-     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
-    initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
-    ssl:stop().
+    lfm_proxy:teardown(Config).
 
 %%%===================================================================
 %%% Internal functions
