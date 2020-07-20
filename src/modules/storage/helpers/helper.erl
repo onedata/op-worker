@@ -24,11 +24,15 @@
 %% API
 -export([new_helper/3]).
 -export([update_args/2, update_admin_ctx/2]).
--export([get_name/1, get_args/1, get_admin_ctx/1, get_redacted_admin_ctx/1,
+-export([
+    get_name/1, get_args/1, get_admin_ctx/1, get_redacted_admin_ctx/1,
     get_params/2, get_proxy_params/2, get_timeout/1,
-    get_storage_path_type/1]).
--export([is_posix_compatible/1, is_rename_supported/1, is_sync_supported/1,
-    is_file_registration_supported/1, is_nfs4_acl_supported/1, should_skip_storage_detection/1]).
+    get_storage_path_type/1, get_block_size/1
+]).
+-export([
+    is_posix_compatible/1, is_rename_supported/1, is_sync_supported/1,
+    is_file_registration_supported/1, is_nfs4_acl_supported/1, should_skip_storage_detection/1
+]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
 
@@ -40,6 +44,10 @@
 -type type() :: object_storage | block_storage.
 
 -export_type([name/0, args/0, params/0, user_ctx/0, type/0]).
+
+-define(DEFAULT_CEPHRADOS_BLOCK_SIZE, 4194304).
+-define(DEFAULT_SWIFT_BLOCK_SIZE, 10485760).
+-define(DEFAULT_S3_BLOCK_SIZE, 10485760).
 
 %%%===================================================================
 %%% API
@@ -144,6 +152,24 @@ get_redacted_admin_ctx(Helper) ->
 -spec get_storage_path_type(helpers:helper()) -> helper:storage_path_type().
 get_storage_path_type(#helper{args = Args}) ->
     maps:get(<<"storagePathType">>, Args).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns size of block used by underlying object storage. For posix-compatible
+%% ones 'undefined' is returned.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_block_size(helpers:helper()) -> non_neg_integer() | undefined.
+get_block_size(#helper{name = ?CEPHRADOS_HELPER_NAME, args = Args}) ->
+    sanitize_int(maps:get(<<"blockSize">>, Args, ?DEFAULT_CEPHRADOS_BLOCK_SIZE));
+get_block_size(#helper{name = ?SWIFT_HELPER_NAME, args = Args}) ->
+    sanitize_int(maps:get(<<"blockSize">>, Args, ?DEFAULT_SWIFT_BLOCK_SIZE));
+get_block_size(#helper{name = ?S3_HELPER_NAME, args = Args}) ->
+    sanitize_int(maps:get(<<"blockSize">>, Args, ?DEFAULT_S3_BLOCK_SIZE));
+get_block_size(_) ->
+    undefined.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -326,3 +352,11 @@ translate_arg_name(<<"simulated_filesystem_grow_speed">>) ->
     <<"simulatedFilesystemGrowSpeed">>;
 translate_arg_name(<<"storage_path_type">>) -> <<"storagePathType">>;
 translate_arg_name(Name) -> Name.
+
+
+%% @private
+-spec sanitize_int(integer() | binary()) -> integer().
+sanitize_int(Int) when is_integer(Int) ->
+    Int;
+sanitize_int(Bin) when is_binary(Bin) ->
+    binary_to_integer(Bin).

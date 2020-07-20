@@ -13,6 +13,7 @@
 -module(user_ctx).
 -author("Rafal Slota").
 
+-include("global_definitions.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
@@ -48,8 +49,21 @@
 -spec new(session:id()) -> ctx() | no_return().
 new(SessId) ->
     case session:get(SessId) of
-        {ok, Session} -> #user_ctx{session = Session};
-        {error, not_found} -> throw(?EACCES)
+        {ok, #document{value = #session{type = rest, accessed = LastAccess}} = Session} ->
+            Now = time_utils:cluster_time_seconds(),
+            {ok, TTL} = application:get_env(?APP_NAME, rest_session_grace_period_seconds),
+            % TODO VFS-6586 - refactor rest session expiration
+            case Now > LastAccess + 0.6 * TTL of
+                true ->
+                    session:update(SessId, fun(Rec) -> {ok, Rec} end);
+                false ->
+                    ok
+            end,
+            #user_ctx{session = Session};
+        {ok, Session} ->
+            #user_ctx{session = Session};
+        {error, not_found} ->
+            throw(?EACCES)
     end.
 
 %%--------------------------------------------------------------------
