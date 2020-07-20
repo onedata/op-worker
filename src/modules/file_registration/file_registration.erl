@@ -90,7 +90,9 @@ register(SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
                 "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
                 "stat (or equivalent) operation is not supported by the storage.",
                 [StorageFileId, StorageId, SpaceId, DestinationPath]),
-            ?ERROR_STAT_OPERATION_NOT_SUPPORTED(StorageId);
+            throw(?ERROR_STAT_OPERATION_NOT_SUPPORTED(StorageId));
+        throw:Error ->
+            throw(Error);
         Error:Reason ->
             ?error_stacktrace(
                 "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
@@ -325,7 +327,7 @@ ensure_stat_defined(Stat, DefaultStat) ->
 
 -spec get_default_file_stat(storage_file_ctx:ctx()) -> {helpers:stat(), storage_file_ctx:ctx()}.
 get_default_file_stat(StorageFileCtx) ->
-    {Storage, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
+    {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
     CurrentTimestamp = time_utils:system_time_seconds(),
     DefaultStat = #statbuf{
         % st_size is not set intentionally as we cannot assume default size
@@ -340,10 +342,13 @@ get_default_file_stat(StorageFileCtx) ->
 
 
 -spec get_default_file_mode(helpers:helper()) -> file_meta:mode().
-%%get_default_file_mode(#helper{name = HelperName}) ->
-%%fileMode storageHttp
-%%fileMode webdav
-%%fileModeMask xrrtoot
-get_default_file_mode(#helper{name = HelperName}) ->
-    % posix, gluster, null, s3, ceph, cepharados, swift
+get_default_file_mode(#helper{name = HelperName, args = Args})
+    when HelperName =:= ?HTTP_HELPER_NAME
+    orelse HelperName =:= ?S3_HELPER_NAME
+    orelse HelperName =:= ?WEBDAV_HELPER_NAME
+->
+    maps:get(<<"fileMode">>, Args, ?DEFAULT_FILE_MODE);
+get_default_file_mode(#helper{name = ?XROOTD_HELPER_NAME, args = Args}) ->
+    maps:get(<<"fileModeMask">>, Args, ?DEFAULT_FILE_MODE);
+get_default_file_mode(_) ->
     ?DEFAULT_FILE_MODE.

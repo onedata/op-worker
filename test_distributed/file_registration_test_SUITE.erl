@@ -18,6 +18,8 @@
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/errors.hrl").
+
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
@@ -302,9 +304,8 @@ stat_on_storage_should_not_be_performed_if_verify_existence_is_disabled(Config) 
     ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, ?XATTRS, ?ATTEMPTS).
 
 registration_should_fail_if_size_is_not_passed(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
 
     FileName = ?FILE_NAME,
     FilePath = ?PATH(FileName),
@@ -318,14 +319,12 @@ registration_should_fail_if_size_is_not_passed(Config) ->
         <<"spaceId">> => ?SPACE_ID,
         <<"destinationPath">> => FileName,
         <<"storageFileId">> => StorageFileId,
-        <<"storageId">> => StorageId
+        <<"storageId">> => StorageId,
+        <<"verifyExistence">> => false
     })),
 
-    % check whether file has been properly registered
-    ?assertFile(W1, SessId, FilePath, ?TEST_DATA, #{}),
-
-    % check whether file is visible on 2nd provider
-    ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, #{}, ?ATTEMPTS).
+    % file shouldn't have been registered
+    ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, FilePath})).
 
 registration_should_succeed_if_size_is_passed(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
