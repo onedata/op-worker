@@ -162,11 +162,11 @@ get_storage_path_type(#helper{args = Args}) ->
 %%--------------------------------------------------------------------
 -spec get_block_size(helpers:helper()) -> non_neg_integer() | undefined.
 get_block_size(#helper{name = ?CEPHRADOS_HELPER_NAME, args = Args}) ->
-    maps:get(<<"blockSize">>, Args, ?DEFAULT_CEPHRADOS_BLOCK_SIZE);
+    sanitize_int(maps:get(<<"blockSize">>, Args, ?DEFAULT_CEPHRADOS_BLOCK_SIZE));
 get_block_size(#helper{name = ?SWIFT_HELPER_NAME, args = Args}) ->
-    maps:get(<<"blockSize">>, Args, ?DEFAULT_SWIFT_BLOCK_SIZE);
+    sanitize_int(maps:get(<<"blockSize">>, Args, ?DEFAULT_SWIFT_BLOCK_SIZE));
 get_block_size(#helper{name = ?S3_HELPER_NAME, args = Args}) ->
-    maps:get(<<"blockSize">>, Args, ?DEFAULT_S3_BLOCK_SIZE);
+    sanitize_int(maps:get(<<"blockSize">>, Args, ?DEFAULT_S3_BLOCK_SIZE));
 get_block_size(_) ->
     undefined.
 
@@ -352,3 +352,11 @@ translate_arg_name(<<"simulated_filesystem_grow_speed">>) ->
     <<"simulatedFilesystemGrowSpeed">>;
 translate_arg_name(<<"storage_path_type">>) -> <<"storagePathType">>;
 translate_arg_name(Name) -> Name.
+
+
+%% @private
+-spec sanitize_int(integer() | binary()) -> integer().
+sanitize_int(Int) when is_integer(Int) ->
+    Int;
+sanitize_int(Bin) when is_binary(Bin) ->
+    binary_to_integer(Bin).

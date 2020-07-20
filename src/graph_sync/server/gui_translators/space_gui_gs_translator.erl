@@ -43,7 +43,7 @@ translate_value(#gri{aspect = {transfers_throughput_charts, _}}, Charts) ->
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
     gs_protocol:data() | fun((aai:auth()) -> gs_protocol:data()).
-translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, {Space, AdditionalInfo}) ->
+translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space) ->
     IsSpaceSupportedLocally = space_logic:is_supported(Space, oneprovider:get_id()),
 
     {RootDir, PreferableWriteBlockSize} = case IsSpaceSupportedLocally of
@@ -59,7 +59,7 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, {Spac
             {undefined, undefined}
     end,
 
-    Result = AdditionalInfo#{
+    Result = #{
         <<"name">> => Space#od_space.name,
         <<"effUserList">> => gri:serialize(#gri{
             type = op_space,

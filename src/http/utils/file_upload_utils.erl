@@ -6,7 +6,20 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Utility functions for handling file upload.
+%%% Utility functions for handling file upload. Depending on underlying storage
+%%% file can be uploaded using one of the following modes:
+%%% - block/buffered - request body will be read and buffered. When the buffer
+%%%                    accumulates one or more full blocks, they are flushed
+%%%                    and the excess bytes stay in buffer.
+%%%                    The exception may be the first block, which may be of smaller
+%%%                    size so that offset (for next writes) will be aligned to
+%%%                    smallest multiple of block size (accessing blocks at well
+%%%                    defined boundaries improves write performance on object
+%%%                    storages as it minimizes blocks access).
+%%%                    When the end of data stream is reached, the remaining data
+%%%                    in the buffer is flushed.
+%%% - stream - request body will be read and received bytes will be immediately
+%%%            written without buffering until entire request has been processed.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_upload_utils).
@@ -33,7 +46,6 @@
 %%%===================================================================
 
 
-%% @private
 -spec upload_file(
     lfm:handle(),
     Offset :: non_neg_integer(),
@@ -118,7 +130,7 @@ write_req_body_to_file_in_blocks(
     FileHandle, Offset, Req, MaxBlockSize,
     ReadReqBodyFun, ReadReqBodyOpts
 ) ->
-    AlignmentResult = align_offset_to_multiple_of_block(
+    AlignmentResult = write_first_block_if_partial(
         FileHandle, Offset, Req, <<>>, MaxBlockSize,
         ReadReqBodyFun, ReadReqBodyOpts
     ),
@@ -134,7 +146,7 @@ write_req_body_to_file_in_blocks(
 
 
 %% @private
--spec align_offset_to_multiple_of_block(
+-spec write_first_block_if_partial(
     lfm:handle(),
     offset(),
     cowboy_req:req(),
@@ -145,7 +157,7 @@ write_req_body_to_file_in_blocks(
 ) ->
     {ok, cowboy_req:req()} |
     {more, lfm:handle(), offset(), cowboy_req:req(), ExcessBytes :: binary()}.
-align_offset_to_multiple_of_block(
+write_first_block_if_partial(
     FileHandle, Offset, Req, Buffer, MaxBlockSize,
     ReadReqBodyFun, ReadReqBodyOpts
 ) ->
