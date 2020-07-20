@@ -24,8 +24,10 @@
 %% API
 -export([new_helper/5]).
 -export([update_args/2, update_admin_ctx/2, update_insecure/2]).
--export([get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
-    get_proxy_params/2, get_timeout/1, get_storage_path_type/1]).
+-export([
+    get_name/1, get_args/1, get_admin_ctx/1, is_insecure/1, get_params/2,
+    get_proxy_params/2, get_timeout/1, get_storage_path_type/1, get_block_size/1
+]).
 -export([get_args_with_user_ctx/2]).
 -export([translate_name/1, translate_arg_name/1]).
 
@@ -38,6 +40,10 @@
 -type params() :: #helper_params{}.
 
 -export_type([name/0, args/0, params/0, user_ctx/0, group_ctx/0]).
+
+-define(DEFAULT_CEPHRADOS_BLOCK_SIZE, 4194304).
+-define(DEFAULT_SWIFT_BLOCK_SIZE, 10485760).
+-define(DEFAULT_S3_BLOCK_SIZE, 10485760).
 
 %%%===================================================================
 %%% API
@@ -173,6 +179,24 @@ is_insecure(#helper{insecure = Insecure}) ->
 get_storage_path_type(#helper{storage_path_type = StoragePathType}) ->
     StoragePathType.
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns size of block used by underlying object storage. For posix-compatible
+%% ones 'undefined' is returned.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_block_size(helpers:helper()) -> non_neg_integer() | undefined.
+get_block_size(#helper{name = ?CEPHRADOS_HELPER_NAME, args = Args}) ->
+    sanitize_int(maps:get(<<"blockSize">>, Args, ?DEFAULT_CEPHRADOS_BLOCK_SIZE));
+get_block_size(#helper{name = ?SWIFT_HELPER_NAME, args = Args}) ->
+    sanitize_int(maps:get(<<"blockSize">>, Args, ?DEFAULT_SWIFT_BLOCK_SIZE));
+get_block_size(#helper{name = ?S3_HELPER_NAME, args = Args}) ->
+    sanitize_int(maps:get(<<"blockSize">>, Args, ?DEFAULT_S3_BLOCK_SIZE));
+get_block_size(_) ->
+    undefined.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns helper parameters.
@@ -282,3 +306,11 @@ translate_arg_name(<<"simulated_filesystem_grow_speed">>) ->
     <<"simulatedFilesystemGrowSpeed">>;
 translate_arg_name(<<"storage_path_type">>) -> <<"storagePathType">>;
 translate_arg_name(Name) -> Name.
+
+
+%% @private
+-spec sanitize_int(integer() | binary()) -> integer().
+sanitize_int(Int) when is_integer(Int) ->
+    Int;
+sanitize_int(Bin) when is_binary(Bin) ->
+    binary_to_integer(Bin).

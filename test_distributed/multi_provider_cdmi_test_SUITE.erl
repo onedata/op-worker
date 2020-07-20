@@ -198,6 +198,7 @@ init_per_testcase(choose_adequate_handler_test = Case, Config) ->
     test_utils:mock_new(Workers, [cdmi_object_handler, cdmi_container_handler], [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
+    mock_get_preferable_write_block_size(Config),
     lfm_proxy:init(Config).
 
 end_per_testcase(choose_adequate_handler_test = Case, Config) ->
@@ -205,9 +206,21 @@ end_per_testcase(choose_adequate_handler_test = Case, Config) ->
     test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
+    unmock_get_preferable_write_block_size(Config),
     lfm_proxy:teardown(Config).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
+mock_get_preferable_write_block_size(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+
+    ok = test_utils:mock_new(Workers, file_upload_utils, [passthrough]),
+    ok = test_utils:mock_expect(Workers, file_upload_utils, get_storage_preferable_write_block_size, fun(_) ->
+        10485760
+    end).
+
+unmock_get_preferable_write_block_size(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, file_upload_utils).
