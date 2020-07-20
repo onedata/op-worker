@@ -30,8 +30,8 @@
     register_file_test/1,
     register_file_and_create_parents_test/1,
     update_registered_file_test/1,
-    stat_on_storage_should_not_be_performed_if_verify_existence_is_disabled/1,
-    registration_should_fail_if_size_is_not_passed/1,
+    stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_disabled/1,
+    registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled/1,
     registration_should_succeed_if_size_is_passed/1
 ]).
 
@@ -39,8 +39,8 @@
     register_file_test,
     register_file_and_create_parents_test,
     update_registered_file_test,
-    stat_on_storage_should_not_be_performed_if_verify_existence_is_disabled,
-    registration_should_fail_if_size_is_not_passed,
+    stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_disabled,
+    registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled,
     registration_should_succeed_if_size_is_passed
 ]).
 
@@ -264,7 +264,7 @@ update_registered_file_test(Config) ->
     % check whether file was updated on 2nd provider
     ?assertFile(W2, SessId2, FilePath, ?TEST_DATA2, XATTRS3, ?ATTEMPTS).
 
-stat_on_storage_should_not_be_performed_if_verify_existence_is_disabled(Config) ->
+stat_on_storage_should_not_be_performed_if_automatic_detection_of_attributes_is_disabled(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -292,7 +292,7 @@ stat_on_storage_should_not_be_performed_if_verify_existence_is_disabled(Config) 
         <<"size">> => byte_size(?TEST_DATA),
         <<"mode">> => <<"664">>,
         <<"xattrs">> => ?XATTRS,
-        <<"verifyExistence">> => false
+        <<"autoDetectAttributes">> => false
     })),
 
     test_utils:mock_assert_num_calls(W1, storage_driver, stat, ['_'], 0),
@@ -303,7 +303,7 @@ stat_on_storage_should_not_be_performed_if_verify_existence_is_disabled(Config) 
     % check whether file is visible on 2nd provider
     ?assertFile(W2, SessId2, FilePath, ?TEST_DATA, ?XATTRS, ?ATTEMPTS).
 
-registration_should_fail_if_size_is_not_passed(Config) ->
+registration_should_fail_if_size_is_not_passed_and_automatic_detection_of_attributes_is_disabled(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
@@ -320,7 +320,7 @@ registration_should_fail_if_size_is_not_passed(Config) ->
         <<"destinationPath">> => FileName,
         <<"storageFileId">> => StorageFileId,
         <<"storageId">> => StorageId,
-        <<"verifyExistence">> => false
+        <<"autoDetectAttributes">> => false
     })),
 
     % file shouldn't have been registered

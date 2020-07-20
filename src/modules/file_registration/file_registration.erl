@@ -43,7 +43,7 @@
 %%       <<"ctime">> => non_neg_integer(),
 %%       <<"uid">> => non_neg_integer(),
 %%       <<"gid">> => non_neg_integer(),
-%%       <<"verifyExistence">> => boolean(),
+%%       <<"autoDetectAttributes">> => boolean(),
 %%       <<"xattrs">> => json_utils:json_map()
 %% }
 
@@ -71,7 +71,7 @@ register(SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
                 iterator_type => storage_traverse:get_iterator(StorageId),
                 is_posix_storage => storage:is_posix_compatible(StorageId),
                 sync_acl => false,
-                verify_existence => maps:get(<<"verifyExistence">>, Spec, true)
+                verify_existence => maps:get(<<"autoDetectAttributes">>, Spec, true)
             }),
         case FileCtx =/= undefined of
             true ->
@@ -210,7 +210,7 @@ destination_path_to_canonical_path(SpaceId, DestinationPath) ->
 
 -spec maybe_verify_existence(storage_file_ctx:ctx(), spec()) -> storage_file_ctx:ctx().
 maybe_verify_existence(StorageFileCtx, Spec) ->
-    case maps:get(<<"verifyExistence">>, Spec, true) of
+    case maps:get(<<"autoDetectAttributes">>, Spec, true) of
         true ->
             {_, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
             StorageFileCtx2;
@@ -278,7 +278,7 @@ fill_in_missing_stat_fields(StorageFileCtx, UserDefinedStat, Spec) ->
 -spec get_stat_from_storage_or_throw_missing_size(storage_file_ctx:ctx(), spec()) ->
     {helpers:stat(), storage_file_ctx:ctx()}.
 get_stat_from_storage_or_throw_missing_size(StorageFileCtx, Spec) ->
-    case maps:get(<<"verifyExistence">>, Spec, true) of
+    case maps:get(<<"autoDetectAttributes">>, Spec, true) of
         false ->
             throw(?ERROR_MISSING_REQUIRED_VALUE(<<"size">>));
         true ->
@@ -296,7 +296,7 @@ get_stat_from_storage_or_throw_missing_size(StorageFileCtx, Spec) ->
 -spec get_stat_from_storage_or_return_defaults(storage_file_ctx:ctx(), spec()) ->
     {helpers:stat(), storage_file_ctx:ctx()}.
 get_stat_from_storage_or_return_defaults(StorageFileCtx, Spec) ->
-    case maps:get(<<"verifyExistence">>, Spec, true) of
+    case maps:get(<<"autoDetectAttributes">>, Spec, true) of
         false ->
             get_default_file_stat(StorageFileCtx);
         true ->

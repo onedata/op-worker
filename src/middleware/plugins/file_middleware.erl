@@ -216,7 +216,7 @@ data_spec_create(#gri{aspect = register_file}) -> #{
         <<"ctime">> => {integer, {not_lower_than, 0}},
         <<"uid">> => {integer, {not_lower_than, 0}},
         <<"gid">> => {integer, {not_lower_than, 0}},
-        <<"verifyExistence">> => {boolean, any},
+        <<"autoDetectAttributes">> => {boolean, any},
         <<"xattrs">> => {json, any}
     }
 }.
