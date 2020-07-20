@@ -16,9 +16,12 @@
 
 %% API
 -export([get_preferable_write_block_size/1, upload_file/5]).
-%% Exported for tests- TODO rm after switching to use onenv and real storages in tests
+%% Exported for tests - TODO rm after switching to use onenv and real storages in tests
 -export([get_storage_preferable_write_block_size/1]).
 
+
+-type offset() :: non_neg_integer().
+-type block_multiples_policy() :: allow_block_multiples | disallow_block_multiples.
 
 -type read_req_body_fun() :: fun((cowboy_req:req(), cowboy_req:read_body_opts()) ->
     {ok, binary(), cowboy_req:req()} | {more, binary(), cowboy_req:req()}
@@ -49,7 +52,7 @@ upload_file(FileHandle, Offset, Req, ReadReqBodyFun, ReadReqBodyOpts) ->
             );
         MaxBlockSize ->
             write_req_body_to_file_in_blocks(
-                FileHandle, Offset, Req, <<>>, MaxBlockSize,
+                FileHandle, Offset, Req, MaxBlockSize,
                 ReadReqBodyFun, ReadReqBodyOpts
             )
     end.
@@ -104,16 +107,105 @@ write_req_body_to_file_in_stream(
 %% @private
 -spec write_req_body_to_file_in_blocks(
     lfm:handle(),
-    Offset :: non_neg_integer(),
+    offset(),
     cowboy_req:req(),
-    Buffer :: binary(),
-    MaxBlockSize:: non_neg_integer(),
+    MaxBlockSize :: non_neg_integer(),
     ReadReqBodyFun :: read_req_body_fun(),
     ReadReqBodyOpts :: cowboy_req:read_body_opts()
 ) ->
     {ok, cowboy_req:req()}.
 write_req_body_to_file_in_blocks(
+    FileHandle, Offset, Req, MaxBlockSize,
+    ReadReqBodyFun, ReadReqBodyOpts
+) ->
+    AlignmentResult = align_offset_to_multiple_of_block(
+        FileHandle, Offset, Req, <<>>, MaxBlockSize,
+        ReadReqBodyFun, ReadReqBodyOpts
+    ),
+    case AlignmentResult of
+        {ok, _} ->
+            AlignmentResult;
+        {more, NewHandle, NewOffset, Req1, Buffer} ->
+            write_remaining_blocks_to_file(
+                NewHandle, NewOffset, Req1, Buffer, MaxBlockSize,
+                ReadReqBodyFun, ReadReqBodyOpts
+            )
+    end.
+
+
+%% @private
+-spec align_offset_to_multiple_of_block(
+    lfm:handle(),
+    offset(),
+    cowboy_req:req(),
+    Buffer :: binary(),
+    MaxBlockSize :: non_neg_integer(),
+    ReadReqBodyFun :: read_req_body_fun(),
+    ReadReqBodyOpts :: cowboy_req:read_body_opts()
+) ->
+    {ok, cowboy_req:req()} |
+    {more, lfm:handle(), offset(), cowboy_req:req(), ExcessBytes :: binary()}.
+align_offset_to_multiple_of_block(
+    FileHandle, Offset, Req, Buffer, MaxBlockSize,
+    ReadReqBodyFun, ReadReqBodyOpts
+) ->
+    case Offset rem MaxBlockSize of
+        0 ->
+            {more, FileHandle, Offset, Req, Buffer};
+        FirstBlockCurrentSize ->
+            write_next_block_to_file(
+                FileHandle, Offset, Req, Buffer,
+                MaxBlockSize - FirstBlockCurrentSize, disallow_block_multiples,
+                ReadReqBodyFun, ReadReqBodyOpts
+            )
+    end.
+
+
+%% @private
+-spec write_remaining_blocks_to_file(
+    lfm:handle(),
+    offset(),
+    cowboy_req:req(),
+    Buffer :: binary(),
+    MaxBlockSize :: non_neg_integer(),
+    ReadReqBodyFun :: read_req_body_fun(),
+    ReadReqBodyOpts :: cowboy_req:read_body_opts()
+) ->
+    {ok, cowboy_req:req()}.
+write_remaining_blocks_to_file(
     FileHandle, Offset, Req0, Buffer, MaxBlockSize,
+    ReadReqBodyFun, ReadReqBodyOpts
+) ->
+    NextBlockWriteResult = write_next_block_to_file(
+        FileHandle, Offset, Req0, Buffer, MaxBlockSize, allow_block_multiples,
+        ReadReqBodyFun, ReadReqBodyOpts
+    ),
+    case NextBlockWriteResult of
+        {ok, _} ->
+            NextBlockWriteResult;
+        {more, NewHandle, NewOffset, Req1, NewBuffer} ->
+            write_remaining_blocks_to_file(
+                NewHandle, NewOffset, Req1, NewBuffer, MaxBlockSize,
+                ReadReqBodyFun, ReadReqBodyOpts
+            )
+    end.
+
+
+%% @private
+-spec write_next_block_to_file(
+    lfm:handle(),
+    offset(),
+    cowboy_req:req(),
+    Buffer :: binary(),
+    MaxBlockSize :: non_neg_integer(),
+    block_multiples_policy(),
+    ReadReqBodyFun :: read_req_body_fun(),
+    ReadReqBodyOpts :: cowboy_req:read_body_opts()
+) ->
+    {ok, cowboy_req:req()} |
+    {more, lfm:handle(), offset(), cowboy_req:req(), ExcessBytes :: binary()}.
+write_next_block_to_file(
+    FileHandle, Offset, Req0, Buffer, MaxBlockSize, BlockMultiplesPolicy,
     ReadReqBodyFun, ReadReqBodyOpts
 ) ->
     case ReadReqBodyFun(Req0, ReadReqBodyOpts) of
@@ -126,18 +218,22 @@ write_req_body_to_file_in_blocks(
 
             case DataToWriteSize >= MaxBlockSize of
                 true ->
-                    ChunkSize = MaxBlockSize * (DataToWriteSize div MaxBlockSize),
+                    ChunkSize = case BlockMultiplesPolicy of
+                        allow_block_multiples ->
+                            MaxBlockSize * (DataToWriteSize div MaxBlockSize);
+                        disallow_block_multiples ->
+                            MaxBlockSize
+                    end,
                     <<Chunk:ChunkSize/binary, ExcessBytes/binary>> = DataToWrite,
-                    {ok, NewHandle, Written} = ?check(lfm:write(FileHandle, Offset, Chunk)),
 
-                    write_req_body_to_file_in_blocks(
-                        NewHandle, Offset + Written, Req1, ExcessBytes, MaxBlockSize,
-                        ReadReqBodyFun, ReadReqBodyOpts
-                    );
+                    {ok, NewHandle, ChunkSize} = ?check(lfm:write(
+                        FileHandle, Offset, Chunk
+                    )),
+                    {more, NewHandle, Offset + ChunkSize, Req1, ExcessBytes};
                 false ->
-                    write_req_body_to_file_in_blocks(
+                    write_next_block_to_file(
                         FileHandle, Offset, Req1, DataToWrite, MaxBlockSize,
-                        ReadReqBodyFun, ReadReqBodyOpts
+                        BlockMultiplesPolicy, ReadReqBodyFun, ReadReqBodyOpts
                     )
             end
     end.
