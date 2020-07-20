@@ -216,7 +216,7 @@ data_spec_create(#gri{aspect = register_file}) -> #{
         <<"ctime">> => {integer, {not_lower_than, 0}},
         <<"uid">> => {integer, {not_lower_than, 0}},
         <<"gid">> => {integer, {not_lower_than, 0}},
-        <<"verifyExistence">> => {boolean, any},
+        <<"autoDetectAttributes">> => {boolean, any},
         <<"xattrs">> => {json, any}
     }
 }.
@@ -339,7 +339,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     DestinationPath = maps:get(<<"destinationPath">>, Data),
     StorageId = maps:get(<<"storageId">>, Data),
     StorageFileId = maps:get(<<"storageFileId">>, Data),
-    {ok, FileGuid} = ?check(file_registration:register(Auth#auth.session_id, SpaceId, DestinationPath, StorageId, StorageFileId, Data)),
+    {ok, FileGuid} = file_registration:register(Auth#auth.session_id, SpaceId, DestinationPath, StorageId, StorageFileId, Data),
     {ok, FileId} = file_id:guid_to_objectid(FileGuid),
     {ok, value, FileId}.
 

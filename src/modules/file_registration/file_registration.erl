@@ -43,22 +43,9 @@
 %%       <<"ctime">> => non_neg_integer(),
 %%       <<"uid">> => non_neg_integer(),
 %%       <<"gid">> => non_neg_integer(),
-%%       <<"verifyExistence">> => boolean(),
+%%       <<"autoDetectAttributes">> => boolean(),
 %%       <<"xattrs">> => json_utils:json_map()
 %% }
-
--define(DEFAULT_STAT, begin
-    __T = time_utils:system_time_seconds(),
-    #statbuf{
-        % st_size is not set intentionally as we cannot assume default size
-        st_mtime = __T,
-        st_atime = __T,
-        st_ctime = __T,
-        st_mode = ?DEFAULT_FILE_MODE,
-        st_uid = ?ROOT_UID,
-        st_gid = ?ROOT_GID
-    }
-end).
 
 %%%===================================================================
 %%% API functions
@@ -83,7 +70,8 @@ register(SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
                 space_storage_file_id => storage_file_id:space_dir_id(SpaceId, StorageId),
                 iterator_type => storage_traverse:get_iterator(StorageId),
                 is_posix_storage => storage:is_posix_compatible(StorageId),
-                sync_acl => false
+                sync_acl => false,
+                verify_existence => maps:get(<<"autoDetectAttributes">>, Spec, true)
             }),
         case FileCtx =/= undefined of
             true ->
@@ -102,7 +90,9 @@ register(SessionId, SpaceId, DestinationPath, StorageId, StorageFileId, Spec) ->
                 "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
                 "stat (or equivalent) operation is not supported by the storage.",
                 [StorageFileId, StorageId, SpaceId, DestinationPath]),
-            ?ERROR_STAT_OPERATION_NOT_SUPPORTED(StorageId);
+            throw(?ERROR_STAT_OPERATION_NOT_SUPPORTED(StorageId));
+        throw:Error ->
+            throw(Error);
         Error:Reason ->
             ?error_stacktrace(
                 "Failed registration of file ~s located on storage ~s in space ~s under path ~s.~n"
@@ -220,7 +210,7 @@ destination_path_to_canonical_path(SpaceId, DestinationPath) ->
 
 -spec maybe_verify_existence(storage_file_ctx:ctx(), spec()) -> storage_file_ctx:ctx().
 maybe_verify_existence(StorageFileCtx, Spec) ->
-    case maps:get(<<"verifyExistence">>, Spec, true) of
+    case maps:get(<<"autoDetectAttributes">>, Spec, true) of
         true ->
             {_, StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
             StorageFileCtx2;
@@ -239,7 +229,8 @@ prepare_stat(StorageFileCtx, Spec) ->
         st_uid = maps:get(<<"uid">>, Spec, undefined),
         st_gid = maps:get(<<"gid">>, Spec, undefined)
     },
-    fill_in_missing_stat_fields(StorageFileCtx, Stat).
+    fill_in_missing_stat_fields(StorageFileCtx, Stat, Spec).
+
 
 -spec set_xattrs(user_ctx:ctx(), file_ctx:ctx(), json_utils:json_map()) -> ok.
 set_xattrs(UserCtx, FileCtx, Xattrs) ->
@@ -248,7 +239,8 @@ set_xattrs(UserCtx, FileCtx, Xattrs) ->
     end, undefined, Xattrs),
     ok.
 
--spec fill_in_missing_stat_fields(storage_file_ctx:ctx(), helpers:stat()) -> storage_file_ctx:ctx().
+
+-spec fill_in_missing_stat_fields(storage_file_ctx:ctx(), helpers:stat(), spec()) -> storage_file_ctx:ctx().
 fill_in_missing_stat_fields(StorageFileCtx, Stat = #statbuf{
     st_size = Size,
     st_mtime = Mtime,
@@ -257,7 +249,7 @@ fill_in_missing_stat_fields(StorageFileCtx, Stat = #statbuf{
     st_mode = Mode,
     st_uid = Uid,
     st_gid = Gid
-}) when Size =/= undefined
+}, _Spec) when Size =/= undefined
     andalso Mtime =/= undefined
     andalso Atime =/= undefined
     andalso Ctime =/= undefined
@@ -266,43 +258,58 @@ fill_in_missing_stat_fields(StorageFileCtx, Stat = #statbuf{
     andalso Gid =/= undefined
 ->
     % all fields were passed by user
-    storage_file_ctx:set_stat(StorageFileCtx, Stat);
-fill_in_missing_stat_fields(StorageFileCtx, UserDefinedStat = #statbuf{st_size = Size}) when Size =/= undefined ->
+    % ensure flag for regular file is set in mode
+    Stat2 = Stat#statbuf{st_mode = Mode  bor 8#100000},
+    storage_file_ctx:set_stat(StorageFileCtx, Stat2);
+fill_in_missing_stat_fields(StorageFileCtx, UserDefinedStat = #statbuf{st_size = Size}, Spec) when Size =/= undefined ->
     % perform stat on storage to fill missing values
     % size is defined, other missing values can be filled with predefined defaults
     % even if stat operation is not supported
-    {Stat2, StorageFileCtx2} = stat_or_return_defaults(StorageFileCtx),
+    {Stat2, StorageFileCtx2} = get_stat_from_storage_or_return_defaults(StorageFileCtx, Spec),
     FinalStat = ensure_stat_defined(UserDefinedStat, Stat2),
     storage_file_ctx:set_stat(StorageFileCtx2, FinalStat);
-fill_in_missing_stat_fields(StorageFileCtx, UserDefinedStat) ->
+fill_in_missing_stat_fields(StorageFileCtx, UserDefinedStat, Spec) ->
     % if stat operation is not supported, below call will throw ?ENOTSUP
-    {Stat2, StorageFileCtx2} = stat_or_throw_missing_size(StorageFileCtx),
+    {Stat2, StorageFileCtx2} = get_stat_from_storage_or_throw_missing_size(StorageFileCtx, Spec),
     FinalStat = ensure_stat_defined(UserDefinedStat, Stat2),
     storage_file_ctx:set_stat(StorageFileCtx2, FinalStat).
 
--spec stat_or_throw_missing_size(storage_file_ctx:ctx()) ->
+
+-spec get_stat_from_storage_or_throw_missing_size(storage_file_ctx:ctx(), spec()) ->
     {helpers:stat(), storage_file_ctx:ctx()}.
-stat_or_throw_missing_size(StorageFileCtx) ->
-    try
-        storage_file_ctx:stat(StorageFileCtx)
-    catch
-        throw:?ENOTSUP ->
+get_stat_from_storage_or_throw_missing_size(StorageFileCtx, Spec) ->
+    case maps:get(<<"autoDetectAttributes">>, Spec, true) of
+        false ->
             throw(?ERROR_MISSING_REQUIRED_VALUE(<<"size">>));
-        Error:Reason ->
-            erlang:Error(Reason)
+        true ->
+            try
+                storage_file_ctx:stat(StorageFileCtx)
+            catch
+                throw:?ENOTSUP ->
+                    throw(?ERROR_MISSING_REQUIRED_VALUE(<<"size">>));
+                Error:Reason ->
+                    erlang:Error(Reason)
+            end
     end.
 
--spec stat_or_return_defaults(storage_file_ctx:ctx()) ->
+
+-spec get_stat_from_storage_or_return_defaults(storage_file_ctx:ctx(), spec()) ->
     {helpers:stat(), storage_file_ctx:ctx()}.
-stat_or_return_defaults(StorageFileCtx) ->
-    try
-        storage_file_ctx:stat(StorageFileCtx)
-    catch
-        throw:?ENOTSUP ->
-            {?DEFAULT_STAT, StorageFileCtx};
-        Error:Reason ->
-            erlang:Error(Reason)
+get_stat_from_storage_or_return_defaults(StorageFileCtx, Spec) ->
+    case maps:get(<<"autoDetectAttributes">>, Spec, true) of
+        false ->
+            get_default_file_stat(StorageFileCtx);
+        true ->
+            try
+                storage_file_ctx:stat(StorageFileCtx)
+            catch
+                throw:?ENOTSUP ->
+                    get_default_file_stat(StorageFileCtx);
+                Error:Reason ->
+                    erlang:Error(Reason)
+            end
     end.
+
 
 -spec ensure_stat_defined(helpers:stat(), helpers:stat()) -> helpers:stat().
 ensure_stat_defined(Stat, DefaultStat) ->
@@ -316,3 +323,32 @@ ensure_stat_defined(Stat, DefaultStat) ->
         st_uid = utils:ensure_defined(Stat#statbuf.st_uid, DefaultStat#statbuf.st_uid),
         st_gid = utils:ensure_defined(Stat#statbuf.st_gid, DefaultStat#statbuf.st_gid)
     }.
+
+
+-spec get_default_file_stat(storage_file_ctx:ctx()) -> {helpers:stat(), storage_file_ctx:ctx()}.
+get_default_file_stat(StorageFileCtx) ->
+    {Storage, StorageFileCtx2} = storage_file_ctx:get_storage(StorageFileCtx),
+    CurrentTimestamp = time_utils:system_time_seconds(),
+    DefaultStat = #statbuf{
+        % st_size is not set intentionally as we cannot assume default size
+        st_mtime = CurrentTimestamp,
+        st_atime = CurrentTimestamp,
+        st_ctime = CurrentTimestamp,
+        st_mode = get_default_file_mode(storage:get_helper(Storage)),
+        st_uid = ?ROOT_UID,
+        st_gid = ?ROOT_GID
+    },
+    {DefaultStat, storage_file_ctx:set_stat(StorageFileCtx2, DefaultStat)}.
+
+
+-spec get_default_file_mode(helpers:helper()) -> file_meta:mode().
+get_default_file_mode(#helper{name = HelperName, args = Args})
+    when HelperName =:= ?HTTP_HELPER_NAME
+    orelse HelperName =:= ?S3_HELPER_NAME
+    orelse HelperName =:= ?WEBDAV_HELPER_NAME
+->
+    maps:get(<<"fileMode">>, Args, ?DEFAULT_FILE_MODE);
+get_default_file_mode(#helper{name = ?XROOTD_HELPER_NAME, args = Args}) ->
+    maps:get(<<"fileModeMask">>, Args, ?DEFAULT_FILE_MODE);
+get_default_file_mode(_) ->
+    ?DEFAULT_FILE_MODE.

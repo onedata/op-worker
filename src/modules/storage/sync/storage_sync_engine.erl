@@ -500,9 +500,15 @@ maybe_import_file(StorageFileCtx, Info) ->
     % We must ensure that there was no race with deleting file.
     % We check whether file that we found on storage and that we want to import
     % is not associated with file that has been deleted from the system.
-    case storage_driver:exists(SDHandle) of
-        true -> import_file(StorageFileCtx, Info);
-        false -> {?PROCESSED, undefined, StorageFileCtx}
+    VerifyExistence = maps:get(verify_existence, Info, true),
+    case VerifyExistence of
+        true ->
+            case storage_driver:exists(SDHandle) of
+                true -> import_file(StorageFileCtx, Info);
+                false -> {?PROCESSED, undefined, StorageFileCtx}
+            end;
+        false ->
+            import_file(StorageFileCtx, Info)
     end.
 
 -spec import_file(storage_file_ctx:ctx(), info()) ->
