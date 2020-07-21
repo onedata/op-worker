@@ -70,7 +70,7 @@ all() ->
     ?USER_AUTH_HEADERS(Config, ?USER_1, OtherHeaders)
 ).
 
--define(ATTEMPTS, 3).
+-define(ATTEMPTS, 5).
 
 %%%===================================================================
 %%% Test functions
@@ -493,7 +493,7 @@ changes_stream_request_several_records_test(Config) ->
 
     ?assertMatch(
         [
-            % Update times event event
+            % Update times event
             #{
                 <<"fileMeta">> := #{
                     <<"changed">> := false,
