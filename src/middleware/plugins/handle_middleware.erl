@@ -101,6 +101,9 @@ fetch_entity(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
+authorize(#op_req{auth = ?GUEST, operation = get, gri = #gri{aspect = instance, scope = public}}, _) ->
+    true;
+
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
