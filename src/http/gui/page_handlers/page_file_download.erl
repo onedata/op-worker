@@ -19,22 +19,23 @@
 -include("http/gui_paths.hrl").
 -include("http/rest.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
--include_lib("ctool/include/errors.hrl").
 
-% Default buffer size used to send file to a client. It is used if env variable
-% gui_download_buffer cannot be found.
--define(DOWNLOAD_BUFFER_SIZE, application:get_env(?APP_NAME, gui_download_buffer, 4194304)). % 4MB
+-define(DEFAULT_READ_BLOCK_SIZE, 10485760). % 10 MB
 
 -define(CONN_CLOSE_HEADERS, #{?HDR_CONNECTION => <<"close">>}).
 
 -export([get_file_download_url/2, handle/2]).
 
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -72,17 +73,20 @@ get_file_download_url(SessionId, FileGuid) ->
 handle(<<"GET">>, Req) ->
     FileDownloadCode = cowboy_req:binding(code, Req),
     case file_download_code:consume(FileDownloadCode) of
+        {true, SessionId, FileGuid} ->
+            OzUrl = oneprovider:get_oz_url(),
+            Req2 = gui_cors:allow_origin(OzUrl, Req),
+            Req3 = gui_cors:allow_frame_origin(OzUrl, Req2),
+            handle_http_download(Req3, SessionId, FileGuid);
         false ->
-            send_error_response(?ERROR_BAD_DATA(<<"code">>), Req);
-        {true, SessionId, FileId} ->
-            Req2 = gui_cors:allow_origin(oneprovider:get_oz_url(), Req),
-            Req3 = gui_cors:allow_frame_origin(oneprovider:get_oz_url(), Req2),
-            handle_http_download(Req3, SessionId, FileId)
+            send_error_response(?ERROR_BAD_DATA(<<"code">>), Req)
     end.
 
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -94,93 +98,62 @@ handle(<<"GET">>, Req) ->
 %%--------------------------------------------------------------------
 -spec handle_http_download(cowboy_req:req(), session:id(), fslogic_worker:file_guid()) ->
     cowboy_req:req().
-handle_http_download(Req, SessionId, FileId) ->
-    case lfm:open(SessionId, {guid, FileId}, read) of
+handle_http_download(Req, SessionId, FileGuid) ->
+    case lfm:open(SessionId, {guid, FileGuid}, read) of
         {ok, FileHandle} ->
             try
-                {ok, #file_attr{
-                    size = Size, name = FileName
-                }} = lfm:stat(SessionId, {guid, FileId}),
-                Headers = attachment_headers(FileName),
-                % Reply with attachment headers and a streaming function
-                Req2 = cowboy_req:stream_reply(?HTTP_200_OK, Headers#{
-                    ?HDR_CONTENT_LENGTH => integer_to_binary(Size)
-                }, Req),
-                stream_file(Req2, FileHandle, Size)
-            catch
-                Type:Reason ->
-                    {ok, UserId2} = session:get_user_id(SessionId),
-                    ?error_stacktrace("Error while processing file download "
-                    "for user ~p - ~p:~p", [UserId2, Type, Reason]),
-                    lfm:release(FileHandle), % release if possible
-                    send_error_response(Reason, Req)
+                stream_file(FileGuid, FileHandle, SessionId, Req)
+            catch Type:Reason ->
+                {ok, UserId} = session:get_user_id(SessionId),
+                ?error_stacktrace("Error while processing file (~p) download "
+                                  "for user ~p - ~p:~p", [
+                    FileGuid, UserId, Type, Reason
+                ]),
+                send_error_response(Reason, Req)
+            after
+                lfm:release(FileHandle)
             end;
         {error, Errno} ->
             send_error_response(?ERROR_POSIX(Errno), Req)
     end.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Streams given file chunk by chunk.
-%% @end
-%%--------------------------------------------------------------------
--spec stream_file(cowboy_req:req(), FileHandle :: lfm_context:ctx(), Size :: integer()) ->
+-spec stream_file(
+    file_id:file_guid(),
+    FileHandle :: lfm_context:ctx(),
+    session:id(),
+    cowboy_req:req()
+) ->
     cowboy_req:req().
-stream_file(Req, FileHandle, Size) ->
-    try
-        stream_file(Req, FileHandle, Size, ?DOWNLOAD_BUFFER_SIZE)
-    catch Type:Message ->
-        % Any exceptions that occur during file streaming must be caught
-        % here for cowboy to close the connection cleanly.
-        ?error_stacktrace("Error while streaming file '~p' - ~p:~p",
-            [lfm_context:get_guid(FileHandle), Type, Message]),
-        ok
-    end,
-    Req.
+stream_file(FileGuid, FileHandle, SessionId, Req) ->
+    {ok, #file_attr{size = FileSize, name = FileName}} = ?check(lfm:stat(
+        SessionId, {guid, FileGuid}
+    )),
+    ReadBlockSize = get_read_block_size(FileHandle),
+
+    % Reply with attachment headers and a streaming function
+    AttachmentHeaders = attachment_headers(FileName),
+    Req2 = cowboy_req:stream_reply(?HTTP_200_OK, AttachmentHeaders#{
+        ?HDR_CONTENT_LENGTH => integer_to_binary(FileSize)
+    }, Req),
+
+    stream_file_content(FileHandle, FileSize, 0, Req2, ReadBlockSize),
+    Req2.
+
+
+%% @private
+-spec get_read_block_size(lfm_context:ctx()) -> non_neg_integer().
+get_read_block_size(FileHandle) ->
+    StorageId = lfm_context:get_storage_id(FileHandle),
+    Helper = storage:get_helper(StorageId),
+    utils:ensure_defined(helper:get_block_size(Helper), ?DEFAULT_READ_BLOCK_SIZE).
 
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Streams given file chunk by chunk using provided buffer size.
-%% @end
-%%--------------------------------------------------------------------
--spec stream_file(Req :: cowboy_req:req(), FileHandle :: lfm_context:ctx(),
-    Size :: integer(), BufSize :: integer()) -> ok.
-stream_file(Req, FileHandle, Size, BufSize) ->
-    stream_file(Req, FileHandle, Size, 0, BufSize).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Streams given file chunk by chunk recursively.
-%% @end
-%%--------------------------------------------------------------------
--spec stream_file(Req :: cowboy_req:req(), FileHandle :: lfm_context:ctx(),
-    Size :: integer(), Sent :: integer(), BufSize :: integer()) -> ok.
-stream_file(Req, FileHandle, Size, BytesSent, _) when BytesSent >= Size ->
-    cowboy_req:stream_body(<<"">>, fin, Req),
-    ok = lfm:release(FileHandle);
-stream_file(Req, FileHandle, Size, BytesSent, BufSize) ->
-    {ok, NewHandle, BytesRead} = lfm:read(
-        FileHandle, BytesSent, min(Size - BytesSent, BufSize)),
-    NewSent = BytesSent + size(BytesRead),
-    case size(BytesRead) of
-        0 ->
-            cowboy_req:stream_body(<<"">>, fin, Req),
-            ok = lfm:release(FileHandle);
-        _ ->
-            cowboy_req:stream_body(BytesRead, nofin, Req),
-            stream_file(Req, NewHandle, Size, NewSent, BufSize)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc Returns attachment headers that will cause web browser to
+%% Returns attachment headers that will cause web browser to
 %% interpret received data as attachment (and save it to disk).
 %% Proper filename is set, both in utf8 encoding and legacy for older browsers,
 %% based on given filepath or filename.
@@ -199,6 +172,37 @@ attachment_headers(FileName) ->
         %% @todo VFS-2073 - check if needed
         %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
     }.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Streams given file chunk by chunk recursively.
+%% @end
+%%--------------------------------------------------------------------
+-spec stream_file_content(
+    FileHandle :: lfm_context:ctx(),
+    FileSize :: file_meta:size(),
+    Offset :: non_neg_integer(),
+    cowboy_req:req(),
+    ReadBlockSize :: non_neg_integer()
+) ->
+    ok.
+stream_file_content(_FileHandle, FileSize, FileSize, Req, _ReadBlockSize) ->
+    cowboy_req:stream_body(<<"">>, fin, Req);
+stream_file_content(FileHandle, FileSize, Offset, Req, ReadBlockSize) ->
+    ToRead = min(FileSize - Offset, ReadBlockSize - Offset rem ReadBlockSize),
+    {ok, NewHandle, Data} = lfm:read(FileHandle, Offset, ToRead),
+
+    case byte_size(Data) of
+        0 ->
+            cowboy_req:stream_body(<<"">>, fin, Req);
+        DataSize ->
+            cowboy_req:stream_body(Data, nofin, Req),
+            stream_file_content(
+                NewHandle, FileSize, Offset + DataSize, Req, ReadBlockSize
+            )
+    end.
 
 
 %% @private
