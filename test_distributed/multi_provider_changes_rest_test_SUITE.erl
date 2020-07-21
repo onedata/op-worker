@@ -67,8 +67,10 @@ all() ->
 -define(USER_1, <<"user1">>).
 -define(USER_1_AUTH_HEADERS(Config), ?USER_1_AUTH_HEADERS(Config, [])).
 -define(USER_1_AUTH_HEADERS(Config, OtherHeaders),
-    ?USER_AUTH_HEADERS(Config, ?USER_1, OtherHeaders)).
+    ?USER_AUTH_HEADERS(Config, ?USER_1, OtherHeaders)
+).
 
+-define(ATTEMPTS, 3).
 
 %%%===================================================================
 %%% Test functions
@@ -164,13 +166,9 @@ changes_stream_file_meta_create_test(Config) ->
         lfm_proxy:create(WorkerP1, SessionId, FilePath, FileMode)
     end),
 
-    Json = #{<<"fileMeta">> => #{
+    ChangesSpec = #{<<"fileMeta">> => #{
         <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
     }},
-    {ok, AllSpaceChanges} = get_changes(Config, WorkerP1, SpaceId, Json),
-    FileChanges = lists:filter(fun(#{<<"filePath">> := Path}) ->
-        Path == FilePath
-    end, AllSpaceChanges),
 
     % On file creation a lot of docs are created (file_meta, times, etc.),
     % but since only file_meta doc is observed only its change should
@@ -186,7 +184,8 @@ changes_stream_file_meta_create_test(Config) ->
                 }
             }}
         ],
-        FileChanges
+        get_changes_for_file(Config, WorkerP1, SpaceId, ChangesSpec, {path, FilePath}),
+        ?ATTEMPTS
     ).
 
 
@@ -210,11 +209,9 @@ changes_stream_file_meta_change_test(Config) ->
         lfm_proxy:set_perms(WorkerP1, SessionId, {guid, FileGuid}, Mode2)
     end),
 
-    Json = #{<<"fileMeta">> => #{
+    ChangesSpec = #{<<"fileMeta">> => #{
         <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
     }},
-    {ok, AllSpaceChanges} = get_changes(Config, WorkerP1, SpaceId, Json),
-    FileChanges = filter_changes_for_file(AllSpaceChanges, FileObjectId),
 
     % Both file_meta and times docs are changed, but since only
     % file_meta doc is observed only its change should trigger event
@@ -228,7 +225,9 @@ changes_stream_file_meta_change_test(Config) ->
                     <<"mode">> := Mode2
                 }
             }}
-        ], FileChanges
+        ],
+        get_changes_for_file(Config, WorkerP1, SpaceId, ChangesSpec, {object_id, FileObjectId}),
+        ?ATTEMPTS
     ).
 
 
@@ -250,12 +249,10 @@ changes_stream_xattr_test(Config) ->
         )
     end),
 
-    Json = #{<<"customMetadata">> => #{
+    ChangesSpec = #{<<"customMetadata">> => #{
         <<"fields">> => [<<"name">>],
         <<"exists">> => [<<"onedata_keyvalue">>, <<"k1">>]
     }},
-    {ok, AllSpaceChanges} = get_changes(Config, WorkerP1, SpaceId, Json),
-    FileChanges = filter_changes_for_file(AllSpaceChanges, FileObjectId),
 
     % Both custom_metadata and times docs are changed, but since only
     % custom_metadata doc is observed only its change should trigger event
@@ -272,7 +269,8 @@ changes_stream_xattr_test(Config) ->
                 }
             }}
         ],
-        FileChanges
+        get_changes_for_file(Config, WorkerP1, SpaceId, ChangesSpec, {object_id, FileObjectId}),
+        ?ATTEMPTS
     ).
 
 
@@ -298,11 +296,9 @@ changes_stream_json_metadata_test(Config) ->
         lfm_proxy:set_metadata(WorkerP1, SessionId, {guid, FileGuid}, json, OnedataJson, [])
     end),
 
-    Json = #{<<"customMetadata">> => #{
+    ChangesSpec = #{<<"customMetadata">> => #{
         <<"fields">> => [<<"onedata_json">>]
     }},
-    {ok, AllSpaceChanges} = get_changes(Config, WorkerP1, SpaceId, Json),
-    FileChanges = filter_changes_for_file(AllSpaceChanges, FileObjectId),
 
     % Both custom_metadata and times docs are changed, but since only
     % custom_metadata doc is observed only its change should trigger event
@@ -315,7 +311,8 @@ changes_stream_json_metadata_test(Config) ->
                 }
             }}
         ],
-        FileChanges
+        get_changes_for_file(Config, WorkerP1, SpaceId, ChangesSpec, {object_id, FileObjectId}),
+        ?ATTEMPTS
     ).
 
 
@@ -337,12 +334,17 @@ changes_stream_times_test(Config) ->
         lfm_proxy:update_times(WorkerP1, SessionId, {guid, FileGuid}, Time, Time, Time)
     end),
 
-    Json = #{<<"times">> => #{
+    ChangesSpec = #{<<"times">> => #{
         <<"fields">> => [<<"atime">>, <<"mtime">>, <<"ctime">>]
     }},
-    {ok, AllSpaceChanges} = get_changes(Config, WorkerP1, SpaceId, Json),
-    FileChanges = filter_changes_for_file(AllSpaceChanges, FileObjectId),
 
+    % times docs are created on file creation and later updated using
+    % 'lfm_proxy:update_times'. Changes stream aggregates events but with some
+    % delay. Therefore it is possible for both events to be returned in changes
+    % stream rather than the last one.
+    % That is why fetching changes stream is retried ?ATTEMPTS number of times
+    % to ensure events aggregation did happen and only one time event is
+    % returned.
     ?assertMatch(
         [
             #{<<"times">> := #{
@@ -354,7 +356,8 @@ changes_stream_times_test(Config) ->
                 }
             }}
         ],
-        FileChanges
+        get_changes_for_file(Config, WorkerP1, SpaceId, ChangesSpec, {object_id, FileObjectId}),
+        ?ATTEMPTS
     ).
 
 
@@ -375,27 +378,26 @@ changes_stream_file_location_test(Config) ->
         {ok, 5} = lfm_proxy:write(WorkerP1, Handle, 0, <<"01234">>)
     end),
 
-    Json = #{<<"fileLocation">> => #{<<"fields">> => [<<"size">>]}},
-    {ok, AllSpaceChanges} = get_changes(Config, WorkerP1, SpaceId, Json),
-    FileChanges = filter_changes_for_file(AllSpaceChanges, FileObjectId),
+    ChangesSpec = #{<<"fileLocation">> => #{<<"fields">> => [<<"size">>]}},
 
-    % Both file_location and times docs are changed, but since only file_location
-    % doc is observed only its change should trigger event. However since
-    % file_location doc can be created (if it hasn't before) on file open and
-    % modified on write - multiple events can be triggered
-    ?assert(lists:all(fun(Change) ->
-        maps:is_key(<<"fileLocation">>, Change)
-    end, FileChanges)),
-
-    [LastChange | _] = filter_changes_for_file(AllSpaceChanges, FileObjectId),
+    % file_location docs are created on file creation and later updated on write
+    % Changes stream aggregates events but with some delay. Therefore it is
+    % possible for both events to be returned in changes stream rather than
+    % the last one.
+    % That is why fetching changes stream is retried ?ATTEMPTS number of times
+    % to ensure events aggregation did happen and only one fileLocation event is
+    % returned.
     ?assertMatch(
-        #{<<"fileLocation">> := #{
-            <<"changed">> := true,
-            <<"fields">> := #{
-                <<"size">> := 5
-            }
-        }},
-        LastChange
+        [
+            #{<<"fileLocation">> := #{
+                <<"changed">> := true,
+                <<"fields">> := #{
+                    <<"size">> := 5
+                }
+            }}
+        ],
+        get_changes_for_file(Config, WorkerP1, SpaceId, ChangesSpec, {object_id, FileObjectId}),
+        ?ATTEMPTS
     ).
 
 
@@ -423,18 +425,20 @@ changes_triggers_test(Config) ->
         lfm_proxy:update_times(WorkerP1, SessionId, {guid, FileGuid}, Time, Time, Time)
     end),
 
-    Json = #{
+    ChangesSpec = #{
         <<"triggers">> => [<<"times">>],
         <<"fileMeta">> => #{
             <<"always">> => true,
             <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
         }
     },
-    {ok, AllSpaceChanges} = get_changes(Config, WorkerP1, SpaceId, Json),
-    FileChanges = filter_changes_for_file(AllSpaceChanges, FileObjectId),
 
     % Both file_location and times docs are changed, but since only times
-    % doc is observed only its change should trigger event
+    % doc is observed only its change should trigger event. It is still
+    % possible to receive several events if changes stream aggregation hasn't
+    % occurred (time docs are created on file creation and later updated).
+    % That is why fetching changes stream is retried ?ATTEMPTS number of times
+    % to ensure events aggregation did happen and only one time event is observed
     ?assertMatch(
         [
             #{<<"fileMeta">> := #{
@@ -446,7 +450,8 @@ changes_triggers_test(Config) ->
                 }
             }}
         ],
-        FileChanges
+        get_changes_for_file(Config, WorkerP1, SpaceId, ChangesSpec, {object_id, FileObjectId}),
+        ?ATTEMPTS
     ).
 
 
@@ -459,6 +464,7 @@ changes_stream_request_several_records_test(Config) ->
     Name = <<"file7_csflt">>,
     File = filename:join(["/", SpaceName, Name]),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, File, 8#700),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     Time = 1000,
     % when
@@ -471,7 +477,8 @@ changes_stream_request_several_records_test(Config) ->
         lfm_proxy:update_times(WorkerP1, SessionId, {guid, FileGuid}, Time, Time, Time)
     end),
 
-    Json = #{
+    ChangesSpec = #{
+        <<"triggers">> => [<<"times">>, <<"customMetadata">>],
         <<"fileMeta">> => #{
             <<"fields">> => [<<"name">>],
             <<"always">> => true
@@ -483,45 +490,45 @@ changes_stream_request_several_records_test(Config) ->
             <<"fields">> => [<<"name">>]
         }
     },
-    {ok, AllChanges} = get_changes(Config, WorkerP1, SpaceId, Json),
-    RelevantChanges = [Change || Change <- AllChanges, map_size(Change) > 4],
-    ?assert(length(RelevantChanges) >= 2),
 
-    [LastChange, PreLastChange | _] = RelevantChanges,
-
-    ?assertMatch(#{
-        <<"fileMeta">> := #{
-            <<"changed">> := false,
-            <<"fields">> := #{
-                <<"name">> := Name
+    ?assertMatch(
+        [
+            % Update times event event
+            #{
+                <<"fileMeta">> := #{
+                    <<"changed">> := false,
+                    <<"fields">> := #{
+                        <<"name">> := Name
+                    }
+                },
+                <<"times">> := #{
+                    <<"changed">> := true,
+                    <<"fields">> := #{
+                        <<"atime">> := Time,
+                        <<"mtime">> := Time,
+                        <<"ctime">> := Time
+                    }
+                }
+            },
+            % Set metadata event
+            #{
+                <<"fileMeta">> := #{
+                    <<"changed">> := false,
+                    <<"fields">> := #{
+                        <<"name">> := Name
+                    }
+                },
+                <<"customMetadata">> := #{
+                    <<"changed">> := true,
+                    <<"fields">> := #{
+                        <<"name">> := <<"value">>
+                    }
+                }
             }
-        },
-        <<"customMetadata">> := #{
-            <<"changed">> := true,
-            <<"fields">> := #{
-                <<"name">> := <<"value">>
-            }
-        }
-    }, PreLastChange),
-    ?assert(not maps:is_key(<<"times">>, PreLastChange)),
-
-    ?assertMatch(#{
-        <<"fileMeta">> := #{
-            <<"changed">> := false,
-            <<"fields">> := #{
-                <<"name">> := Name
-            }
-        },
-        <<"times">> := #{
-            <<"changed">> := true,
-            <<"fields">> := #{
-                <<"atime">> := Time,
-                <<"mtime">> := Time,
-                <<"ctime">> := Time
-            }
-        }
-    }, LastChange),
-    ?assert(not maps:is_key(<<"customMetadata">>, LastChange)).
+        ],
+        get_changes_for_file(Config, WorkerP1, SpaceId, ChangesSpec, {object_id, FileObjectId}),
+        ?ATTEMPTS
+    ).
 
 
 changes_stream_on_multi_provider_test(Config) ->
@@ -532,6 +539,7 @@ changes_stream_on_multi_provider_test(Config) ->
 
     File = filename:join(["/", SpaceName, "file8_csompt"]),
     {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionIdP2, File, 8#700),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     % when
     spawn(fun() ->
@@ -540,26 +548,27 @@ changes_stream_on_multi_provider_test(Config) ->
         lfm_proxy:write(WorkerP2, Handle, 0, <<"data">>)
     end),
 
-    Json = #{<<"fileLocation">> => #{
+    ChangesSpec = #{<<"fileLocation">> => #{
         <<"fields">> => [<<"size">>, <<"provider_id">>]
     }},
-
-    {ok, Changes} = get_changes(Config, WorkerP1, SpaceId, Json),
-    ?assert(length(Changes) >= 1),
-
-    [LastChange | _] = Changes,
-
     DomainP2 = domain(WorkerP2),
-    ?assertMatch(#{
-        <<"fileLocation">> := #{
-            <<"changed">> := true,
-            <<"mutators">> := [DomainP2],
-            <<"fields">> := #{
-                <<"size">> := 4,
-                <<"provider_id">> := DomainP2
+
+    ?assertMatch(
+        [
+            #{
+                <<"fileLocation">> := #{
+                    <<"changed">> := true,
+                    <<"mutators">> := [DomainP2],
+                    <<"fields">> := #{
+                        <<"size">> := 4,
+                        <<"provider_id">> := DomainP2
+                    }
+                }
             }
-        }
-    }, LastChange).
+        ],
+        get_changes_for_file(Config, WorkerP1, SpaceId, ChangesSpec, {object_id, FileObjectId}),
+        ?ATTEMPTS
+    ).
 
 
 changes_stream_closed_on_disconnection(Config) ->
@@ -708,6 +717,17 @@ domain(Node) ->
     atom_to_binary(?GET_DOMAIN(Node), utf8).
 
 
+get_changes_for_file(Config, Worker, SpaceId, Json, FileKey) ->
+    {ok, Changes} = get_changes(Config, Worker, SpaceId, Json),
+
+    lists:filter(fun(#{<<"fileId">> := FileId, <<"filePath">> := FilePath}) ->
+        case FileKey of
+            {path, Path} -> Path == FilePath;
+            {object_id, ObjectId} -> ObjectId == FileId
+        end
+    end, Changes).
+
+
 get_changes(Config, Worker, SpaceId, Json) ->
     get_changes(Config, Worker, SpaceId, Json, 50000).
 
@@ -725,11 +745,11 @@ get_changes(Config, Worker, SpaceId, Json, Timeout) ->
 get_changes(Config, Worker, SpaceId, Json, Timeout, Opts) ->
     Qs = case Timeout of
         undefined ->
-            <<>>;
+            <<"?last_seq=0">>;
         <<"infinity">> ->
-            <<"?timeout=infinity">>;
+            <<"?last_seq=0&timeout=infinity">>;
         _ ->
-            <<"?timeout=", (integer_to_binary(Timeout))/binary>>
+            <<"?last_seq=0&timeout=", (integer_to_binary(Timeout))/binary>>
     end,
     Path = <<"changes/metadata/", SpaceId/binary, Qs/binary>>,
     Payload = json_utils:encode(Json),
@@ -747,11 +767,3 @@ get_changes(Config, Worker, SpaceId, Json, Timeout, Opts) ->
         {ok, Code, _, Body} ->
             {Code, json_utils:decode(Body)}
     end.
-
-
-% Filter out events not associated with file (e.g. writing to file modifies
-% also space times doc, which triggers event for space dir)
-filter_changes_for_file(Changes, FileObjectId) ->
-    lists:filter(fun(#{<<"fileId">> := FileId}) ->
-        FileId == FileObjectId
-    end, Changes).
