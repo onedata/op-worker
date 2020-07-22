@@ -70,6 +70,8 @@ stream_range(FileHandle, Range, Req, EncodingFun, ReadBlockSize) ->
     MaxReadBlocks :: non_neg_integer()
 ) ->
     ok | no_return().
+stream_range(_, {From, To}, _, _, _, _) when From > To ->
+    ok;
 stream_range(FileHandle, {From, To}, Req, EncodingFun, ReadBlockSize, MaxReadBlocks) ->
     ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
     {ok, NewFileHandle, Data} = ?check(lfm:read(FileHandle, From, ToRead)),

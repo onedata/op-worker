@@ -49,7 +49,7 @@
     undefined | non_neg_integer().
 get_preferable_write_block_size(SpaceId) ->
     {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
-    storage:get_block_size(StorageId).
+    get_preferable_storage_write_block_size(StorageId).
 
 
 -spec upload_file(
@@ -61,7 +61,9 @@ get_preferable_write_block_size(SpaceId) ->
 ) ->
     {ok, cowboy_req:req()}.
 upload_file(FileHandle, Offset, Req, ReadReqBodyFun, ReadReqBodyOpts) ->
-    case storage:get_block_size(lfm_context:get_storage_id(FileHandle)) of
+    StorageId = lfm_context:get_storage_id(FileHandle),
+
+    case get_preferable_storage_write_block_size(StorageId) of
         undefined ->
             write_req_body_to_file_in_stream(
                 FileHandle, Offset, Req,
@@ -78,6 +80,13 @@ upload_file(FileHandle, Offset, Req, ReadReqBodyFun, ReadReqBodyOpts) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec get_preferable_storage_write_block_size(storage:id()) ->
+    undefined | non_neg_integer().
+get_preferable_storage_write_block_size(StorageId) ->
+    storage:get_block_size(StorageId).
 
 
 %% @private
