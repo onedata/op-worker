@@ -29,8 +29,6 @@
 
 %% API
 -export([get_preferable_write_block_size/1, upload_file/5]).
-%% Exported for tests - TODO rm after switching to use onenv and real storages in tests
--export([get_storage_preferable_write_block_size/1]).
 
 
 -type offset() :: non_neg_integer().
@@ -46,6 +44,13 @@
 %%%===================================================================
 
 
+-spec get_preferable_write_block_size(od_space:id()) ->
+    undefined | non_neg_integer().
+get_preferable_write_block_size(SpaceId) ->
+    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
+    storage:get_block_size(StorageId).
+
+
 -spec upload_file(
     lfm:handle(),
     Offset :: non_neg_integer(),
@@ -55,39 +60,23 @@
 ) ->
     {ok, cowboy_req:req()}.
 upload_file(FileHandle, Offset, Req, ReadReqBodyFun, ReadReqBodyOpts) ->
-    StorageId = lfm_context:get_storage_id(FileHandle),
-    case ?MODULE:get_storage_preferable_write_block_size(StorageId) of
+    case storage:get_block_size(lfm_context:get_storage_id(FileHandle)) of
         undefined ->
             write_req_body_to_file_in_stream(
                 FileHandle, Offset, Req,
                 ReadReqBodyFun, ReadReqBodyOpts
             );
-        MaxBlockSize ->
+        BlockSize ->
             write_req_body_to_file_in_blocks(
-                FileHandle, Offset, Req, MaxBlockSize,
+                FileHandle, Offset, Req, BlockSize,
                 ReadReqBodyFun, ReadReqBodyOpts
             )
     end.
 
 
--spec get_preferable_write_block_size(od_space:id()) ->
-    undefined | non_neg_integer().
-get_preferable_write_block_size(SpaceId) ->
-    {ok, StorageId} = space_logic:get_local_storage_id(SpaceId),
-    ?MODULE:get_storage_preferable_write_block_size(StorageId).
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec get_storage_preferable_write_block_size(storage:id()) ->
-    undefined | non_neg_integer().
-get_storage_preferable_write_block_size(StorageId) ->
-    Helper = storage:get_helper(StorageId),
-    helper:get_block_size(Helper).
 
 
 %% @private

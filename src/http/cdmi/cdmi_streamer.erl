@@ -20,11 +20,11 @@
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([stream_binary/4, stream_cdmi/6]).
-
--define(DEFAULT_READ_BLOCK_SIZE, 10485760). % 10 MB
 
 -type range() :: {From :: non_neg_integer(), To :: non_neg_integer()}.
 
@@ -34,47 +34,52 @@
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns fun that reads given ranges of file and streams to given Socket
-%% @end
-%%--------------------------------------------------------------------
--spec stream_binary(HttpStatus :: non_neg_integer(),
-    cowboy_req:req(), cdmi_handler:cdmi_req(),
-    Ranges :: undefined | [range()]) ->
-    cowboy_req:req().
+-spec stream_binary(
+    HttpStatus :: non_neg_integer(),
+    cowboy_req:req(),
+    cdmi_handler:cdmi_req(),
+    Ranges :: undefined | [range()]
+) ->
+    cowboy_req:req() | no_return().
 stream_binary(HttpStatus, Req, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
-    file_attrs = #file_attr{guid = Guid, size = Size}
+    file_attrs = #file_attr{guid = Guid, size = FileSize}
 }, Ranges0) ->
     Ranges = case Ranges0 of
-        undefined -> [{0, Size - 1}];
+        undefined -> [{0, FileSize - 1}];
         _ -> Ranges0
     end,
-    StreamSize = binary_stream_size(Ranges, Size),
+    StreamSize = binary_stream_size(Ranges, FileSize),
+
     {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, Guid}, read)),
-    ReadBlockSize = get_read_block_size(FileHandle),
+    try
+        ReadBlockSize = file_download_utils:get_read_block_size(FileHandle),
 
-    Req2 = cowboy_req:stream_reply(HttpStatus, #{
-        <<"content-length">> => integer_to_binary(StreamSize)
-    }, Req),
-    lists:foreach(fun(Range) ->
-        stream_range(Req2, Range, <<"utf-8">>, ReadBlockSize, FileHandle)
-    end, Ranges),
-    cowboy_req:stream_body(<<"">>, fin, Req2),
-    Req2.
+        Req2 = cowboy_req:stream_reply(HttpStatus, #{
+            ?HDR_CONTENT_LENGTH => integer_to_binary(StreamSize)
+        }, Req),
+        lists:foreach(fun(Range) ->
+            file_download_utils:stream_range(
+                FileHandle, Range, Req2, <<"utf-8">>, ReadBlockSize
+            )
+        end, Ranges),
+        cowboy_req:stream_body(<<"">>, fin, Req2),
+
+        Req2
+    after
+        lfm:release(FileHandle)
+    end.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns fun that reads given ranges of file and streams to given Socket as
-%% json representing cdmi object.
-%% @end
-%%--------------------------------------------------------------------
--spec stream_cdmi(cowboy_req:req(), cdmi_handler:cdmi_req(),
+-spec stream_cdmi(
+    cowboy_req:req(),
+    cdmi_handler:cdmi_req(),
     Range :: default | range(),
-    ValueTransferEncoding :: binary(), JsonBodyPrefix :: binary(),
-    JsonBodySuffix :: binary()) -> cowboy_req:req() | no_return().
+    ValueTransferEncoding :: binary(),
+    JsonBodyPrefix :: binary(),
+    JsonBodySuffix :: binary()
+) ->
+    cowboy_req:req() | no_return().
 stream_cdmi(Req, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = Guid, size = Size}
@@ -86,37 +91,35 @@ stream_cdmi(Req, #cdmi_req{
     StreamSize = cdmi_stream_size(
         Range1, Size, Encoding, JsonBodyPrefix, JsonBodySuffix
     ),
-    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, Guid}, read)),
-    Req2 = cowboy_req:stream_reply(?HTTP_200_OK, #{
-        <<"content-length">> => integer_to_binary(StreamSize)
-    }, Req),
-    cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
 
-    ReadBlockSize0 = get_read_block_size(FileHandle),
-    ReadBlockSize = case Encoding of
-        <<"base64">> ->
-            % buffer size is shortened (so it's divisible by 3)
-            % to allow base64 on the fly conversion
-            ReadBlockSize0 - (ReadBlockSize0 rem 3);
-        _ ->
-            ReadBlockSize0
-    end,
-    stream_range(Req2, Range1, Encoding, ReadBlockSize, FileHandle),
-    cowboy_req:stream_body(JsonBodySuffix, fin, Req2),
-    Req2.
+    {ok, FileHandle} = ?check(lfm:open(SessionId, {guid, Guid}, read)),
+    try
+        ReadBlockSize0 = file_download_utils:get_read_block_size(FileHandle),
+        ReadBlockSize = case Encoding of
+            <<"base64">> ->
+                % buffer size is shortened (so it's divisible by 3)
+                % to allow base64 on the fly conversion
+                ReadBlockSize0 - (ReadBlockSize0 rem 3);
+            _ ->
+                ReadBlockSize0
+        end,
+
+        Req2 = cowboy_req:stream_reply(?HTTP_200_OK, #{
+            ?HDR_CONTENT_LENGTH => integer_to_binary(StreamSize)
+        }, Req),
+        cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
+        file_download_utils:stream_range(FileHandle, Range1, Req2, Encoding, ReadBlockSize),
+        cowboy_req:stream_body(JsonBodySuffix, fin, Req2),
+
+        Req2
+    after
+        lfm:release(FileHandle)
+    end.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec get_read_block_size(lfm_context:ctx()) -> non_neg_integer().
-get_read_block_size(FileHandle) ->
-    StorageId = lfm_context:get_storage_id(FileHandle),
-    Helper = storage:get_helper(StorageId),
-    utils:ensure_defined(helper:get_block_size(Helper), ?DEFAULT_READ_BLOCK_SIZE).
 
 
 %%--------------------------------------------------------------------
@@ -125,10 +128,8 @@ get_read_block_size(FileHandle) ->
 %% Gets size of a stream, which is the size of streamed binary data of file.
 %% @end
 %%--------------------------------------------------------------------
--spec binary_stream_size(undefined | [range()], FileSize :: non_neg_integer()) ->
+-spec binary_stream_size([range()], FileSize :: non_neg_integer()) ->
     non_neg_integer().
-binary_stream_size(undefined, FileSize) ->
-    FileSize;
 binary_stream_size(Ranges, FileSize) ->
     lists:foldl(fun
         ({From, To}, Acc) when To >= From ->
@@ -155,31 +156,3 @@ cdmi_stream_size({From, To}, FileSize, Encoding, DataPrefix, DataSuffix) when To
         <<"utf-8">> -> DataSize
     end,
     byte_size(DataPrefix) + EncodedDataSize + byte_size(DataSuffix).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Reads given range of bytes (defaults to whole file) from file (obtained
-%% from state path), result is encoded according to 'Encoding' argument
-%% and streamed to given Request object.
-%% @end
-%%--------------------------------------------------------------------
--spec stream_range(cowboy_req:req(), range(), Encoding :: binary(),
-    ReadBlockSize :: integer(), FileHandle :: lfm:handle()) ->
-    ok | no_return().
-stream_range(_Req, {To, To}, _Encoding, _ReadBlockSize, _FileHandle) ->
-    ok;
-stream_range(Req, {From, To}, Encoding, ReadBlockSize, FileHandle) ->
-    ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
-    {ok, NewFileHandle, Data} = ?check(lfm:read(FileHandle, From, ToRead)),
-
-    case byte_size(Data) of
-        0 ->
-            ok;
-        DataSize ->
-            cowboy_req:stream_body(cdmi_encoder:encode(Data, Encoding), nofin, Req),
-            stream_range(
-                Req, {From + DataSize, To},
-                Encoding, ReadBlockSize, NewFileHandle
-            )
-    end.
