@@ -18,7 +18,7 @@
 
 -export([apply/2]).
 -export([
-    storage_create/5,
+    storage_create/6,
     storage_safe_remove/1,
     storage_supports_any_space/1,
     storage_list_ids/0,
@@ -26,6 +26,7 @@
     storage_update_admin_ctx/2,
     storage_update_helper_args/2,
     storage_set_imported_storage/2,
+    storage_set_readonly/2,
     storage_set_qos_parameters/2,
     storage_update_luma_config/2,
     storage_update_name/2,
@@ -133,10 +134,10 @@ apply(Function, Args) ->
 %%%===================================================================
 
 -spec storage_create(storage:name(), helpers:helper(),
-    storage:luma_config(), boolean(), storage:qos_parameters()) ->
+    storage:luma_config(), boolean(), boolean(), storage:qos_parameters()) ->
     storage:id() | {error, term()}.
-storage_create(Name, Helpers, LumaConfig, ImportedStorage, QosParameters) ->
-    storage:create(Name, Helpers, LumaConfig, ImportedStorage, QosParameters).
+storage_create(Name, Helpers, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
+    storage:create(Name, Helpers, LumaConfig, ImportedStorage, Readonly, QosParameters).
 
 
 -spec storage_safe_remove(storage:id()) -> ok | {error, storage_in_use | term()}.
@@ -175,6 +176,12 @@ storage_update_helper_args(StorageId, Changes) ->
     ok | {error, term()}.
 storage_set_imported_storage(StorageId, Value) ->
     storage:set_imported(StorageId, Value).
+
+
+-spec storage_set_readonly(storage:id(), boolean()) ->
+    ok | {error, term()}.
+storage_set_readonly(StorageId, Value) ->
+    storage:set_readonly(StorageId, Value).
 
 
 -spec storage_set_qos_parameters(storage:id(), storage:qos_parameters()) ->

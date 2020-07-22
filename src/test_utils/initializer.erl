@@ -1534,7 +1534,8 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
                     % storage name is equal to its id
                     name = StorageId,
                     qos_parameters = maps:get(<<"qos_parameters">>, StorageDesc, #{}),
-                    imported = maps:get(<<"imported_storage">>, StorageDesc, false)
+                    imported = maps:get(<<"imported_storage">>, StorageDesc, false),
+                    readonly = maps:get(<<"readonly">>, StorageDesc, false)
                 }}}
         end
     end,
@@ -1575,6 +1576,12 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
             {ok, ImportedStorage}
         end),
 
+    ok = test_utils:mock_expect(Workers, storage_logic, is_readonly,
+        fun(StorageId) ->
+            {ok, #document{value = #od_storage{readonly = Readonly}}} = storage_logic:get(StorageId),
+            {ok, Readonly}
+        end),
+    
     % NOTE this function changes qos parameters only on the node where it was executed
     ok = test_utils:mock_expect(Workers, storage_logic, set_qos_parameters,
         fun(StorageId, QosParameters) ->

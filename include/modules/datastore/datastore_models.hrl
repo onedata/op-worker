@@ -197,6 +197,7 @@
     spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
     imported = false :: boolean(),
+    readonly = false :: boolean(),
     cache_state = #{} :: cache_state()
 }).
 

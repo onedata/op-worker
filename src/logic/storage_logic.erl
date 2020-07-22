@@ -31,7 +31,7 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([create_in_zone/2, create_in_zone/3, get/1, delete_in_zone/1]).
+-export([create_in_zone/3, create_in_zone/4, get/1, delete_in_zone/1]).
 -export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_space_support/2]).
@@ -39,11 +39,11 @@
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
 -export([get_provider/1]).
 -export([get_spaces/1]).
--export([is_imported/1]).
+-export([is_imported/1, is_readonly/1]).
 -export([is_local_storage_supporting_space/2]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
--export([set_imported/2]).
+-export([set_imported/2, set_readonly/2]).
 -export([upgrade_legacy_support/2]).
 
 -compile({no_auto_import, [get/1]}).
@@ -55,9 +55,9 @@
 %%--------------------------------------------------------------------
 %% @equiv create_in_zone(Name, ImportedStorage, undefined)
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), boolean()) -> {ok, storage:id()} | errors:error().
-create_in_zone(Name, ImportedStorage) ->
-    create_in_zone(Name, ImportedStorage, undefined).
+-spec create_in_zone(od_storage:name(), boolean(), boolean()) -> {ok, storage:id()} | errors:error().
+create_in_zone(Name, ImportedStorage, Readonly) ->
+    create_in_zone(Name, ImportedStorage, Readonly, undefined).
 
 
 %%--------------------------------------------------------------------
@@ -65,9 +65,9 @@ create_in_zone(Name, ImportedStorage) ->
 %% Creates document containing storage public information in Onezone.
 %% @end
 %%--------------------------------------------------------------------
--spec create_in_zone(od_storage:name(), boolean() | unknown, storage:id() | undefined) ->
+-spec create_in_zone(od_storage:name(), boolean() | unknown, boolean(), storage:id() | undefined) ->
     {ok, storage:id()} | errors:error().
-create_in_zone(Name, ImportedStorage, StorageId) ->
+create_in_zone(Name, ImportedStorage, Readonly, StorageId) ->
     PartialData = case ImportedStorage of
         unknown-> #{};
         _ -> #{<<"imported">> => ImportedStorage}
@@ -76,7 +76,8 @@ create_in_zone(Name, ImportedStorage, StorageId) ->
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = instance},
         data = PartialData#{
-            <<"name">> => Name
+            <<"name">> => Name,
+            <<"readonly">> => Readonly
         }
     }),
     ?CREATE_RETURN_ID(?ON_SUCCESS(Result, fun(_) ->
@@ -209,6 +210,15 @@ is_imported(StorageId) ->
     end.
 
 
+-spec is_readonly(storage:id()) -> {ok, boolean()} | errors:error().
+is_readonly(StorageId) ->
+    case get(StorageId) of
+        {ok, #document{value = #od_storage{readonly = Readonly}}} ->
+            {ok, Readonly};
+        Error -> Error
+    end.
+
+
 -spec is_local_storage_supporting_space(storage:id(), od_space:id()) -> boolean().
 is_local_storage_supporting_space(StorageId, SpaceId) ->
     case space_logic:get_local_storage_ids(SpaceId) of
@@ -251,6 +261,19 @@ set_imported(StorageId, Imported) ->
     ?ON_SUCCESS(Result, fun(_) ->
         gs_client_worker:invalidate_cache(od_storage, StorageId)
     end).
+
+
+-spec set_readonly(storage:id(), boolean()) -> ok | errors:error().
+set_readonly(StorageId, Readonly) ->
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
+        data = #{<<"readonly">> => Readonly}
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        gs_client_worker:invalidate_cache(od_storage, StorageId)
+    end).
+
 
 %%--------------------------------------------------------------------
 %% @doc

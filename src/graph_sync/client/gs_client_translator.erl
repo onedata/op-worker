@@ -242,7 +242,8 @@ translate(#gri{type = od_storage, id = Id, aspect = instance, scope = private}, 
             provider = maps:get(<<"provider">>, Result),
             spaces = maps:get(<<"spaces">>, Result),
             qos_parameters = maps:get(<<"qosParameters">>, Result),
-            imported = maps:get(<<"imported">>, Result)
+            imported = maps:get(<<"imported">>, Result),
+            readonly = maps:get(<<"readonly">>, Result)
         }
     };
 
