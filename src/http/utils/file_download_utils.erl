@@ -24,6 +24,9 @@
 
 -define(DEFAULT_READ_BLOCK_SIZE, 1048576). % 1 MB
 
+-define(MAX_READ_BLOCKS_IN_MEMORY, 5).
+-define(SEND_RETRY_DELAY, 10).
+
 
 %%%===================================================================
 %%% API
@@ -54,13 +57,39 @@ stream_range(FileHandle, {From, To}, Req, Encoding, ReadBlockSize) ->
         0 ->
             ok;
         DataSize ->
-            ?error("FILE STREAM BIN: ~p", [DataSize]),
-
             EncodedData = cdmi_encoder:encode(Data, Encoding),
-            cowboy_req:stream_body(EncodedData, nofin, Req),
+            stream_data(EncodedData, Req),
 
             stream_range(
                 NewFileHandle, {From + DataSize, To}, Req,
                 Encoding, ReadBlockSize
             )
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% TODO VFS-6597 - update cowboy to at least ver 2.7 to fix streaming big files
+%% Cowboy uses separate process to manage socket and all messages, including
+%% data to stream are sent to that process. However because it doesn't enforce
+%% any backpressure mechanism it is easy, on slow networks and fast storages,
+%% to read to memory entire file while sending process doesn't keep up with
+%% sending those data. To avoid this it is necessary to check message_queue_len
+%% of sending process.
+%% @end
+%%--------------------------------------------------------------------
+stream_data(Data, #{pid := ConnPid} = Req) ->
+    {message_queue_len, Len} = process_info(ConnPid, message_queue_len),
+    case Len < ?MAX_READ_BLOCKS_IN_MEMORY of
+        true ->
+            cowboy_req:stream_body(Data, nofin, Req);
+        false ->
+            timer:sleep(?SEND_RETRY_DELAY),
+            stream_data(Data, Req)
     end.
