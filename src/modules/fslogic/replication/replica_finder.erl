@@ -18,9 +18,13 @@
 -include_lib("ctool/include/logging.hrl").
 
 -type storage_details() :: {StorageId :: binary(), FileId :: binary()}.
+-type requests_list() :: [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}].
 
 %% API
 -export([get_blocks_for_sync/2, get_remote_duplicated_blocks/1, get_all_blocks/1]).
+
+-define(BLOCK_SUITING_OPT, application:get_env(?APP_NAME, synchronizer_block_suiting, true)).
+-define(BLOCK_SUITING_MIN_SIZE, application:get_env(?APP_NAME, synchronizer_block_suiting_min_size, 0)).
 
 %%%===================================================================
 %%% API
@@ -32,14 +36,14 @@
 %% returns list with tuples informing where to fetch data: {ProviderId, BlocksToFetch}
 %% @end
 %%--------------------------------------------------------------------
--spec get_blocks_for_sync([file_location:doc()], fslogic_blocks:blocks()) ->
-    [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}].
+-spec get_blocks_for_sync([file_location:doc()], fslogic_blocks:blocks()) -> requests_list().
 get_blocks_for_sync(_, []) ->
     [];
 get_blocks_for_sync([], _) ->
     [];
 get_blocks_for_sync(Locations, Blocks) ->
-    LocalLocations = filter_local_locations(Locations),
+    [#document{value = #file_location{storage_id = LocalStorageId}}] =
+        LocalLocations = filter_local_locations(Locations),
     BlocksToSync = lists:foldl(fun(LocalLocation, BlocksToSync0) ->
         TruncatedBlocks = truncate_to_local_size(LocalLocation, BlocksToSync0),
         invalidate_local_blocks(LocalLocation, TruncatedBlocks)
@@ -71,8 +75,89 @@ get_blocks_for_sync(Locations, Blocks) ->
         ({_, [], _}) -> false;
         (_) -> true
     end, PresentBlocks4),
-    minimize_present_blocks(PresentBlocks5, []).
 
+    Requests = minimize_present_blocks(PresentBlocks5, []),
+    suite_to_storage_block_size(Requests, AggregatedRemoteList, LocalStorageId).
+
+-spec suite_to_storage_block_size(requests_list(), requests_list(), storage:id()) -> requests_list().
+suite_to_storage_block_size(Requests, ProvidersAllBlocks, LocalStorageId) ->
+    case ?BLOCK_SUITING_OPT of
+        true ->
+            Helper = storage:get_helper(LocalStorageId),
+            case helper:get_block_size(Helper) of
+                undefined ->
+                    Requests;
+                BlockSize ->
+                    ProvidersAllBlocksMap = lists:foldl(fun({ProviderId, AllProviderBlocks, _StorageDetails}, Acc) ->
+                        Acc#{ProviderId => AllProviderBlocks}
+                    end, #{}, ProvidersAllBlocks),
+
+                    MinSize = ?BLOCK_SUITING_MIN_SIZE,
+                    lists:map(fun({ProviderId, Blocks, StorageDetails}) ->
+                        FinalBlocks = suite_blocks_sizes(Blocks, maps:get(ProviderId, ProvidersAllBlocksMap),
+                            BlockSize, MinSize),
+                        {ProviderId, FinalBlocks, StorageDetails}
+                    end, Requests)
+            end;
+        _ ->
+            Requests
+    end.
+
+-spec suite_blocks_sizes(fslogic_blocks:blocks(), fslogic_blocks:blocks(), non_neg_integer(), non_neg_integer()) ->
+    fslogic_blocks:blocks().
+suite_blocks_sizes([], _AllBlocks, _BlockSize, _MinSize) ->
+    [];
+suite_blocks_sizes([#file_block{size = Size} = Block | Blocks], AllBlocks, BlockSize, MinSize) when
+    Size < MinSize ->
+    [Block | suite_blocks_sizes(Blocks, AllBlocks, BlockSize, MinSize)];
+suite_blocks_sizes([#file_block{offset = Offset, size = Size} = Block | Blocks], AllBlocks, BlockSize, MinSize) ->
+    Block2 = case (Offset + Size) rem BlockSize of
+        0 ->
+            Block;
+        EndRem ->
+            ExpectedSize = Size - EndRem + BlockSize,
+            suite_block_end(Block, ExpectedSize, AllBlocks)
+    end,
+
+    Suited = case Offset rem BlockSize of
+        0 ->
+            [Block2];
+        OffsetRem ->
+            ExpectedBeg = Offset - OffsetRem,
+            PossibleSplitPoint = ExpectedBeg + BlockSize,
+            suite_block_offset_or_split(Block2, ExpectedBeg, PossibleSplitPoint, AllBlocks)
+    end,
+
+    Suited ++ suite_blocks_sizes(Blocks, AllBlocks, BlockSize, MinSize).
+
+-spec suite_block_end(fslogic_blocks:block(), non_neg_integer(), fslogic_blocks:blocks()) -> fslogic_blocks:block().
+suite_block_end(#file_block{offset = Offset, size = Size} = Block, ExpectedSize, AllBlocks) ->
+    CanExtend = lists:any(fun(#file_block{offset = CheckO, size = CheckS}) ->
+        CheckO =< Offset + Size andalso CheckO + CheckS >= Offset + ExpectedSize
+    end, AllBlocks),
+
+    case CanExtend of
+        true -> Block#file_block{size = ExpectedSize};
+        false -> Block
+    end.
+
+-spec suite_block_offset_or_split(fslogic_blocks:block(), non_neg_integer(), non_neg_integer(),
+    fslogic_blocks:blocks()) -> fslogic_blocks:blocks().
+suite_block_offset_or_split(#file_block{offset = Offset, size = Size} = Block,
+    ExpectedBeg, PossibleSplitPoint, AllBlocks) ->
+    CanExtend = lists:any(fun(#file_block{offset = CheckO, size = CheckS}) ->
+        CheckO =< ExpectedBeg andalso CheckO + CheckS >= Offset
+    end, AllBlocks),
+
+    case {CanExtend, PossibleSplitPoint < Size + Offset} of
+        {true, _} ->
+            [#file_block{offset = ExpectedBeg, size = Size + Offset - ExpectedBeg}];
+        {false, true} ->
+            [Block#file_block{size = PossibleSplitPoint - Offset},
+                #file_block{offset = PossibleSplitPoint, size = Size + Offset - PossibleSplitPoint}];
+        _ ->
+            [Block]
+    end.
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -155,9 +240,7 @@ get_duplicated_blocks_per_provider(LocalBlocksList, LocalVV, RemoteLocations) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec consolidate_requested_blocks([{oneprovider:id(), fslogic_blocks:blocks(),
-    storage_details()}],
-    [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}]) ->
-    [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}].
+    storage_details()}], requests_list()) -> requests_list().
 consolidate_requested_blocks(PresentBlocks, RemoteList) ->
     Zipped = lists:zip(PresentBlocks, RemoteList),
     MinSize = application:get_env(?APP_NAME, rtransfer_min_hole_size, 0),
@@ -172,7 +255,7 @@ consolidate_requested_blocks(PresentBlocks, RemoteList) ->
                 ({{ProviderId, [#file_block{}], StorageDetails} = PB,
                     {ProviderId, _, StorageDetails}}) ->
                     PB;
-                ({{ProviderId, [Fist | Blocks], StorageDetails},
+                ({{ProviderId, [First | Blocks], StorageDetails},
                     {ProviderId, AllBlocks, StorageDetails}}) ->
                     Blocks2 = lists:foldl(fun(#file_block{offset = O2, size = S2} = Block,
                         [#file_block{offset = O, size = S} | AccTail] = Acc) ->
@@ -189,7 +272,7 @@ consolidate_requested_blocks(PresentBlocks, RemoteList) ->
                             _ ->
                                 [Block | Acc]
                         end
-                    end, [Fist], Blocks),
+                    end, [First], Blocks),
                     {ProviderId, lists:reverse(Blocks2), StorageDetails}
             end, Zipped)
     end.
@@ -200,9 +283,7 @@ consolidate_requested_blocks(PresentBlocks, RemoteList) ->
 %% Filter small blocks if they are present in bigger blocks from other providers.
 %% @end
 %%--------------------------------------------------------------------
--spec filter_small([{oneprovider:id(), fslogic_blocks:blocks(),
-    storage_details()}]) ->
-    [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}].
+-spec filter_small([{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}]) -> requests_list().
 filter_small([_] = PresentBlocks) ->
     PresentBlocks;
 filter_small(PresentBlocks) ->
@@ -270,9 +351,7 @@ truncate_to_local_size(#document{value = #file_location{size = LocalSize}}, Bloc
 %% available blocks are disjoint.
 %% @end
 %%--------------------------------------------------------------------
--spec minimize_present_blocks([{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}],
-                              fslogic_blocks:blocks()) ->
-    [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}].
+-spec minimize_present_blocks(requests_list(), fslogic_blocks:blocks()) -> requests_list().
 minimize_present_blocks([], _) ->
     [];
 minimize_present_blocks([{ProviderId, Blocks, StorageDetails} | Rest], AlreadyPresent) ->
@@ -292,8 +371,7 @@ minimize_present_blocks([{ProviderId, Blocks, StorageDetails} | Rest], AlreadyPr
 %% Excludes not up_to_date blocks.
 %% @end
 %%--------------------------------------------------------------------
--spec exclude_old_blocks([file_location:doc()], fslogic_blocks:blocks()) ->
-    [{oneprovider:id(), fslogic_blocks:blocks(), storage_details()}].
+-spec exclude_old_blocks([file_location:doc()], fslogic_blocks:blocks()) -> requests_list().
 exclude_old_blocks(RemoteLocations, BlocksToSync) ->
     RemoteList = lists:flatmap(fun(#document{
         value = #file_location{
