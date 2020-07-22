@@ -60,7 +60,7 @@ stream_binary(HttpStatus, Req, #cdmi_req{
         }, Req),
         lists:foreach(fun(Range) ->
             file_download_utils:stream_range(
-                FileHandle, Range, Req2, <<"utf-8">>, ReadBlockSize
+                FileHandle, Range, Req2, fun(Data) -> Data end, ReadBlockSize
             )
         end, Ranges),
         cowboy_req:stream_body(<<"">>, fin, Req2),
@@ -108,7 +108,10 @@ stream_cdmi(Req, #cdmi_req{
             ?HDR_CONTENT_LENGTH => integer_to_binary(StreamSize)
         }, Req),
         cowboy_req:stream_body(JsonBodyPrefix, nofin, Req2),
-        file_download_utils:stream_range(FileHandle, Range1, Req2, Encoding, ReadBlockSize),
+        file_download_utils:stream_range(
+            FileHandle, Range1, Req2,
+            fun(Data) -> cdmi_encoder:encode(Data, Encoding) end, ReadBlockSize
+        ),
         cowboy_req:stream_body(JsonBodySuffix, fin, Req2),
 
         Req2

@@ -6,8 +6,9 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Utility functions for handling file upload. Depending on underlying storage
-%%% file can be uploaded using one of the following modes:
+%%% Utility functions for handling file upload using http and cowboy.
+%%% Depending on underlying storage file can be uploaded using one of the
+%%% following modes:
 %%% - block/buffered - request body will be read and buffered. When the buffer
 %%%                    accumulates one or more full blocks, they are flushed
 %%%                    and the excess bytes stay in buffer.

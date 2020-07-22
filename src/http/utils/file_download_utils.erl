@@ -6,26 +6,28 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Utility functions for handling file download.
+%%% Utility functions for handling file download using http and cowboy.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_download_utils).
 -author("Bartosz Walkowicz").
 
+-include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_read_block_size/1, stream_range/5]).
 
--type encoding() :: binary().  % <<"base64">> | <<"utf-8">>
+-type range() :: {From :: non_neg_integer(), To :: non_neg_integer()}.
 
--export_type([encoding/0]).
-
--define(DEFAULT_READ_BLOCK_SIZE, 1048576). % 1 MB
-
--define(MAX_READ_BLOCKS_IN_MEMORY, 5).
--define(SEND_RETRY_DELAY, 10).
+-define(DEFAULT_READ_BLOCK_SIZE, application:get_env(
+    ?APP_NAME, default_download_read_block_size, 1048576) % 1 MB
+).
+-define(MAX_DOWNLOAD_BUFFER_SIZE, application:get_env(
+    ?APP_NAME, max_download_buffer_size, 20971520) % 20 MB
+).
+-define(SEND_RETRY_DELAY, 100).
 
 
 %%%===================================================================
@@ -43,13 +45,32 @@ get_read_block_size(FileHandle) ->
 
 -spec stream_range(
     lfm:handle(),
-    Range :: {From :: non_neg_integer(), To :: non_neg_integer()},
+    range(),
     cowboy_req:req(),
-    encoding(),
+    EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
     ReadBlockSize :: non_neg_integer()
 ) ->
     ok | no_return().
-stream_range(FileHandle, {From, To}, Req, Encoding, ReadBlockSize) ->
+stream_range(FileHandle, Range, Req, EncodingFun, ReadBlockSize) ->
+    MaxReadBlocks = max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize),
+    stream_range(FileHandle, Range, Req, EncodingFun, ReadBlockSize, MaxReadBlocks).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+-spec stream_range(
+    lfm:handle(),
+    range(),
+    cowboy_req:req(),
+    EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
+    ReadBlockSize :: non_neg_integer(),
+    MaxReadBlocks :: non_neg_integer()
+) ->
+    ok | no_return().
+stream_range(FileHandle, {From, To}, Req, EncodingFun, ReadBlockSize, MaxReadBlocks) ->
     ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
     {ok, NewFileHandle, Data} = ?check(lfm:read(FileHandle, From, ToRead)),
 
@@ -57,19 +78,12 @@ stream_range(FileHandle, {From, To}, Req, Encoding, ReadBlockSize) ->
         0 ->
             ok;
         DataSize ->
-            EncodedData = cdmi_encoder:encode(Data, Encoding),
-            stream_data(EncodedData, Req),
-
+            send_data(EncodingFun(Data), Req, MaxReadBlocks),
             stream_range(
                 NewFileHandle, {From + DataSize, To}, Req,
-                Encoding, ReadBlockSize
+                EncodingFun, ReadBlockSize, MaxReadBlocks
             )
     end.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 
 %%--------------------------------------------------------------------
@@ -81,15 +95,17 @@ stream_range(FileHandle, {From, To}, Req, Encoding, ReadBlockSize) ->
 %% any backpressure mechanism it is easy, on slow networks and fast storages,
 %% to read to memory entire file while sending process doesn't keep up with
 %% sending those data. To avoid this it is necessary to check message_queue_len
-%% of sending process.
+%% of sending process and ensure it is not larger than max allowed blocks to
+%% read into memory.
 %% @end
 %%--------------------------------------------------------------------
-stream_data(Data, #{pid := ConnPid} = Req) ->
-    {message_queue_len, Len} = process_info(ConnPid, message_queue_len),
-    case Len < ?MAX_READ_BLOCKS_IN_MEMORY of
+send_data(Data, #{pid := ConnPid} = Req, MaxReadBlocks) ->
+    {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
+
+    case MsgQueueLen < MaxReadBlocks of
         true ->
             cowboy_req:stream_body(Data, nofin, Req);
         false ->
             timer:sleep(?SEND_RETRY_DELAY),
-            stream_data(Data, Req)
+            send_data(Data, Req, MaxReadBlocks)
     end.

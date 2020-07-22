@@ -136,7 +136,7 @@ stream_file(FileGuid, FileHandle, SessionId, Req) ->
         ?HDR_CONTENT_LENGTH => integer_to_binary(FileSize)
     }, Req),
     file_download_utils:stream_range(
-        FileHandle, {0, FileSize-1}, Req2, <<"utf-8">>, ReadBlockSize
+        FileHandle, {0, FileSize-1}, Req2, fun(Data) -> Data end, ReadBlockSize
     ),
     cowboy_req:stream_body(<<"">>, fin, Req2),
 
