@@ -27,7 +27,15 @@
 -define(MAX_DOWNLOAD_BUFFER_SIZE, application:get_env(
     ?APP_NAME, max_download_buffer_size, 20971520) % 20 MB
 ).
--define(SEND_RETRY_DELAY, 100).
+
+% TODO VFS-6597 - update cowboy to at least ver 2.7 to fix streaming big files
+% Due to lack of backpressure mechanism in cowboy when streaming files it must
+% be additionally implemented. This module implementation checks cowboy process
+% msg queue len to see if next data chunk can be queued. To account for
+% differences in speed between network and storage a simple backoff is
+% implemented with below boundaries.
+-define(MIN_SEND_RETRY_DELAY, 100).
+-define(MAX_SEND_RETRY_DELAY, 1000).
 
 
 %%%===================================================================
@@ -53,7 +61,10 @@ get_read_block_size(FileHandle) ->
     ok | no_return().
 stream_range(FileHandle, Range, Req, EncodingFun, ReadBlockSize) ->
     MaxReadBlocks = max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize),
-    stream_range(FileHandle, Range, Req, EncodingFun, ReadBlockSize, MaxReadBlocks).
+    stream_range(
+        FileHandle, Range, Req, EncodingFun,
+        ReadBlockSize, MaxReadBlocks, ?MIN_SEND_RETRY_DELAY
+    ).
 
 
 %%%===================================================================
@@ -67,12 +78,16 @@ stream_range(FileHandle, Range, Req, EncodingFun, ReadBlockSize) ->
     cowboy_req:req(),
     EncodingFun :: fun((Data :: binary()) -> EncodedData :: binary()),
     ReadBlockSize :: non_neg_integer(),
-    MaxReadBlocks :: non_neg_integer()
+    MaxReadBlocks :: non_neg_integer(),
+    SendRetryDelay :: non_neg_integer()
 ) ->
     ok | no_return().
-stream_range(_, {From, To}, _, _, _, _) when From > To ->
+stream_range(_, {From, To}, _, _, _, _, _) when From > To ->
     ok;
-stream_range(FileHandle, {From, To}, Req, EncodingFun, ReadBlockSize, MaxReadBlocks) ->
+stream_range(
+    FileHandle, {From, To}, Req, EncodingFun,
+    ReadBlockSize, MaxReadBlocks, SendRetryDelay
+) ->
     ToRead = min(To - From + 1, ReadBlockSize - From rem ReadBlockSize),
     {ok, NewFileHandle, Data} = ?check(lfm:read(FileHandle, From, ToRead)),
 
@@ -80,10 +95,12 @@ stream_range(FileHandle, {From, To}, Req, EncodingFun, ReadBlockSize, MaxReadBlo
         0 ->
             ok;
         DataSize ->
-            send_data(EncodingFun(Data), Req, MaxReadBlocks),
+            EncodedData = EncodingFun(Data),
+            NextSendRetryDelay = send_data(EncodedData, Req, MaxReadBlocks, SendRetryDelay),
+
             stream_range(
-                NewFileHandle, {From + DataSize, To}, Req,
-                EncodingFun, ReadBlockSize, MaxReadBlocks
+                NewFileHandle, {From + DataSize, To}, Req, EncodingFun,
+                ReadBlockSize, MaxReadBlocks, NextSendRetryDelay
             )
     end.
 
@@ -101,13 +118,21 @@ stream_range(FileHandle, {From, To}, Req, EncodingFun, ReadBlockSize, MaxReadBlo
 %% read into memory.
 %% @end
 %%--------------------------------------------------------------------
-send_data(Data, #{pid := ConnPid} = Req, MaxReadBlocks) ->
+-spec send_data(
+    Data :: binary(),
+    cowboy_req:req(),
+    MaxReadBlocks :: non_neg_integer(),
+    RetryDelay :: non_neg_integer()
+) ->
+    NextRetryDelay :: non_neg_integer().
+send_data(Data, #{pid := ConnPid} = Req, MaxReadBlocks, RetryDelay) ->
     {message_queue_len, MsgQueueLen} = process_info(ConnPid, message_queue_len),
 
     case MsgQueueLen < MaxReadBlocks of
         true ->
-            cowboy_req:stream_body(Data, nofin, Req);
+            cowboy_req:stream_body(Data, nofin, Req),
+            min(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY);
         false ->
-            timer:sleep(?SEND_RETRY_DELAY),
-            send_data(Data, Req, MaxReadBlocks)
+            timer:sleep(RetryDelay),
+            send_data(Data, Req, MaxReadBlocks, min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY))
     end.
