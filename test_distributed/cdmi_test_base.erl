@@ -1045,7 +1045,7 @@ moved_permanently(Config) ->
     create_file(Config, FileName),
     ?assert(object_exists(Config, FileName)),
 
-    CDMIEndpoint = cdmi_endpoint(WorkerP1),
+    CDMIEndpoint = cdmi_test_utils:cdmi_endpoint(WorkerP1),
     %%--------- dir test -----------
     RequestHeaders1 = [
         ?CONTAINER_CONTENT_TYPE_HEADER,
@@ -1881,7 +1881,7 @@ do_request(Node, RestSubpath, Method, Headers) ->
     do_request(Node, RestSubpath, Method, Headers, []).
 
 do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
-    [FRes | _] = Responses = [do_request_impl(Node, RestSubpath, get, Headers, Body) || Node <- Nodes],
+    [FRes | _] = Responses = [cdmi_test_utils:do_request(Node, RestSubpath, get, Headers, Body) || Node <- Nodes],
     case FRes of
         {error, _} ->
             ok;
@@ -1895,9 +1895,9 @@ do_request([_ | _] = Nodes, RestSubpath, get, Headers, Body) ->
     end,
     FRes;
 do_request([_ | _] = Nodes, RestSubpath, Method, Headers, Body) ->
-    do_request_impl(lists:nth(rand:uniform(length(Nodes)), Nodes), RestSubpath, Method, Headers, Body);
+    cdmi_test_utils:do_request(lists:nth(rand:uniform(length(Nodes)), Nodes), RestSubpath, Method, Headers, Body);
 do_request(Node, RestSubpath, Method, Headers, Body) when is_atom(Node) ->
-    do_request_impl(Node, RestSubpath, Method, Headers, Body).
+    cdmi_test_utils:do_request(Node, RestSubpath, Method, Headers, Body).
 
 remove_times_metadata(ResponseJSON) ->
     Metadata = maps:get(<<"metadata">>, ResponseJSON, undefined),
@@ -1908,43 +1908,6 @@ remove_times_metadata(ResponseJSON) ->
                                         <<"cdmi_mtime">>], Metadata),
              maps:put(<<"metadata">>, Metadata1, ResponseJSON)
     end.
-
-% Performs a single request using http_client
-do_request_impl(Node, RestSubpath, Method, Headers, Body) ->
-    CaCerts = rpc:call(Node, https_listener, get_cert_chain_pems, []),
-    {ok, Domain} = test_utils:get_env(Node, ?APP_NAME, test_web_cert_domain),
-    Result = http_client:request(
-        Method,
-        cdmi_endpoint(Node) ++ RestSubpath,
-        maps:from_list(Headers),
-        Body,
-        [
-            {ssl_options, [{cacerts, CaCerts}, {hostname, str_utils:to_binary(Domain)}]},
-            {connect_timeout, timer:minutes(1)},
-            {recv_timeout, timer:minutes(1)}
-        ]
-    ),
-    case Result of
-        {ok, RespCode, RespHeaders, RespBody} ->
-            {ok, RespCode, (RespHeaders), RespBody};
-        Other ->
-            Other
-    end.
-
-cdmi_endpoint(Node) ->
-    Port = case get(port) of
-        undefined ->
-            {ok, P} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
-            PStr = case P of
-                443 -> "";
-                _ -> ":" ++ integer_to_list(P)
-            end,
-            put(port, PStr),
-            PStr;
-        P -> P
-    end,
-    Ip = test_utils:get_docker_ip(Node),
-    string:join(["https://", str_utils:to_list(Ip), Port, "/cdmi/"], "").
 
 create_test_dir_and_file(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
