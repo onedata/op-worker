@@ -83,8 +83,7 @@ get_blocks_for_sync(Locations, Blocks) ->
 suite_to_storage_block_size(Requests, ProvidersAllBlocks, LocalStorageId) ->
     case ?BLOCK_SUITING_OPT of
         true ->
-            Helper = storage:get_helper(LocalStorageId),
-            case helper:get_block_size(Helper) of
+            case storage:get_block_size(LocalStorageId) of
                 undefined ->
                     Requests;
                 BlockSize ->
