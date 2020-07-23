@@ -22,7 +22,7 @@
 -type range() :: {From :: non_neg_integer(), To :: non_neg_integer()}.
 
 -define(DEFAULT_READ_BLOCK_SIZE, application:get_env(
-    ?APP_NAME, default_download_read_block_size, 1048576) % 1 MB
+    ?APP_NAME, default_download_read_block_size, 10485760) % 10 MB
 ).
 -define(MAX_DOWNLOAD_BUFFER_SIZE, application:get_env(
     ?APP_NAME, max_download_buffer_size, 20971520) % 20 MB

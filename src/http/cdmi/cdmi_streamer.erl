@@ -97,8 +97,11 @@ stream_cdmi(Req, #cdmi_req{
         ReadBlockSize0 = file_download_utils:get_read_block_size(FileHandle),
         ReadBlockSize = case Encoding of
             <<"base64">> ->
-                % buffer size is shortened (so it's divisible by 3)
-                % to allow base64 on the fly conversion
+                % Base64 translates every 3 bytes of original data into 4 base64
+                % characters (6 bits for each character, which gives 2^6 = 64
+                % characters and hence the name - base64).
+                % That is why in order to allow on the fly conversion the buffer
+                % size must be shortened so it is divisible by 3.
                 ReadBlockSize0 - (ReadBlockSize0 rem 3);
             _ ->
                 ReadBlockSize0
