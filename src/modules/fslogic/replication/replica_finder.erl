@@ -42,7 +42,7 @@ get_blocks_for_sync(_, []) ->
 get_blocks_for_sync([], _) ->
     [];
 get_blocks_for_sync(Locations, Blocks) ->
-    [#document{value = #file_location{storage_id = LocalStorageId}}] =
+    [#document{value = #file_location{storage_id = LocalStorageId}} | _] =
         LocalLocations = filter_local_locations(Locations),
     BlocksToSync = lists:foldl(fun(LocalLocation, BlocksToSync0) ->
         TruncatedBlocks = truncate_to_local_size(LocalLocation, BlocksToSync0),
