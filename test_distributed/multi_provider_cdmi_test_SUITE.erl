@@ -26,8 +26,11 @@
 -include_lib("cluster_worker/include/global_definitions.hrl").
 
 %% API
--export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2,
-    end_per_testcase/2]).
+-export([
+    all/0,
+    init_per_suite/1, end_per_suite/1,
+    init_per_testcase/2, end_per_testcase/2
+]).
 
 -export([
     list_dir_test/1,
@@ -217,11 +220,11 @@ end_per_testcase(_Case, Config) ->
 mock_get_preferable_write_block_size(Config) ->
     Workers = ?config(op_worker_nodes, Config),
 
-    ok = test_utils:mock_new(Workers, file_upload_utils, [passthrough]),
-    ok = test_utils:mock_expect(Workers, file_upload_utils, get_storage_preferable_write_block_size, fun(_) ->
+    ok = test_utils:mock_new(Workers, storage, [passthrough]),
+    ok = test_utils:mock_expect(Workers, storage, get_block_size, fun(_) ->
         10485760
     end).
 
 unmock_get_preferable_write_block_size(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, file_upload_utils).
+    test_utils:mock_unload(Workers, storage).
