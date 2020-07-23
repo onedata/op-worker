@@ -86,6 +86,8 @@ suite_to_storage_block_size(Requests, ProvidersAllBlocks, LocalStorageId) ->
             case storage:get_block_size(LocalStorageId) of
                 undefined ->
                     Requests;
+                0 ->
+                    Requests;
                 BlockSize ->
                     ProvidersAllBlocksMap = lists:foldl(fun({ProviderId, AllProviderBlocks, _StorageDetails}, Acc) ->
                         Acc#{ProviderId => AllProviderBlocks}
