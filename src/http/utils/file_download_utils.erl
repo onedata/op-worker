@@ -131,7 +131,7 @@ send_data(Data, #{pid := ConnPid} = Req, MaxReadBlocks, RetryDelay) ->
     case MsgQueueLen < MaxReadBlocks of
         true ->
             cowboy_req:stream_body(Data, nofin, Req),
-            min(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY);
+            max(RetryDelay div 2, ?MIN_SEND_RETRY_DELAY);
         false ->
             timer:sleep(RetryDelay),
             send_data(Data, Req, MaxReadBlocks, min(2 * RetryDelay, ?MAX_SEND_RETRY_DELAY))
