@@ -53,13 +53,24 @@ new(SessId) ->
             Now = time_utils:cluster_time_seconds(),
             {ok, TTL} = application:get_env(?APP_NAME, rest_session_grace_period_seconds),
             % TODO VFS-6586 - refactor rest session expiration
-            case Now > LastAccess + 0.6 * TTL of
+            {ok, UpdatedSession} = case Now > LastAccess + 0.6 * TTL of
                 true ->
                     session:update(SessId, fun(Rec) -> {ok, Rec} end);
                 false ->
-                    ok
+                    {ok, Session}
             end,
-            #user_ctx{session = Session};
+            #user_ctx{session = UpdatedSession};
+        {ok, #document{value = #session{type = gui, accessed = LastAccess}} = Session} ->
+            Now = time_utils:cluster_time_seconds(),
+            {ok, TTL} = application:get_env(?APP_NAME, gui_session_grace_period_seconds),
+            % TODO VFS-6586 - refactor gui session expiration
+            {ok, UpdatedSession} = case Now > LastAccess + 0.6 * TTL of
+                true ->
+                    session:update(SessId, fun(Rec) -> {ok, Rec} end);
+                false ->
+                    {ok, Session}
+            end,
+            #user_ctx{session = UpdatedSession};
         {ok, Session} ->
             #user_ctx{session = Session};
         {error, not_found} ->
