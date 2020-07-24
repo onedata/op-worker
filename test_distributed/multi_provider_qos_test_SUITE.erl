@@ -872,7 +872,7 @@ reevaluate_impossible_qos_conflict_test(Config) ->
 
     {_GuidsAndPaths, QosNameIdMapping} = qos_tests_utils:fulfill_qos_test_base(Config, QosSpec),
 
-    utils:pforeach(fun(Worker) ->
+    lists_utils:pforeach(fun(Worker) ->
         ok = qos_tests_utils:set_qos_parameters(Worker, #{<<"country">> => <<"other">>})
         % Impossible qos reevaluation is called after successful set_qos_parameters
     end, Workers),

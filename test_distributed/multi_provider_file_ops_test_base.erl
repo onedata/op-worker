@@ -1666,7 +1666,7 @@ transfer_files_to_source_provider(Config0) ->
     FilesNum = ?config(files_num, Config),
     Size = ?config(file_size, Config),
     
-    Guids = utils:pmap(fun(Num) ->
+    Guids = lists_utils:pmap(fun(Num) ->
         FilePath = <<"/", SpaceName/binary, "/file_",  (integer_to_binary(Num))/binary>>,
         {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, 8#755),
         {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
@@ -1679,12 +1679,12 @@ transfer_files_to_source_provider(Config0) ->
     
     Start = erlang:monotonic_time(millisecond),
     
-    TidsAndGuids = utils:pmap(fun(Guid) ->
+    TidsAndGuids = lists_utils:pmap(fun(Guid) ->
         {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
         {Tid, Guid}
     end, Guids),
     
-    utils:pforeach(fun F({Tid, Guid}) ->
+    lists_utils:pforeach(fun F({Tid, Guid}) ->
         {ok, #{ended := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [Guid]),
         case Transfers of
             [Tid] ->
@@ -1697,7 +1697,7 @@ transfer_files_to_source_provider(Config0) ->
     End = erlang:monotonic_time(millisecond),
     
     StartGui = erlang:monotonic_time(millisecond),
-    utils:pforeach(fun(Num) ->
+    lists_utils:pforeach(fun(Num) ->
         {ok, [{_, List}]} = 
             rpc:call(Worker, transfer_data_backend, list_transfers, 
                 [SessionId, SpaceName, ?ENDED_TRANSFERS_STATE , null, (Num-1)*100, 100]),

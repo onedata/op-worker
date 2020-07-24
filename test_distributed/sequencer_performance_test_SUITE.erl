@@ -219,7 +219,7 @@ route_message_should_work_for_multiple_streams_base(Config) ->
     % Production of 'MsgNum' messages in random order belonging to 'StmsCount'
     % streams. Requests are routed through random workers.
     {_, SendUs, SendTime, SendUnit} = utils:duration(fun() ->
-      utils:pforeach(fun(StmId) ->
+      lists_utils:pforeach(fun(StmId) ->
         lists:foreach(fun(Msg) ->
           [Wrk | _] = lists_utils:shuffle(Workers),
           route_message(Wrk, #client_message{session_id = SessId,

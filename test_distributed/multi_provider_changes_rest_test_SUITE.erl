@@ -594,7 +594,7 @@ changes_stream_closed_on_disconnection(Config) ->
             ?assertEqual(false, rpc:call(WorkerP1, erlang, is_process_alive, [StreamPid1]))
     end,
 
-    utils:pforeach(fun(_) ->
+    lists_utils:pforeach(fun(_) ->
         Pid = spawn(fun() ->
             get_changes(Config, WorkerP1, SpaceId, Json, <<"infinity">>, [{recv_timeout, 4000}])
         end),

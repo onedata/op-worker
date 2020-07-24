@@ -187,7 +187,7 @@ emit_should_not_aggregate_events_with_different_key_base(Config) ->
 
     % Emit events for different files.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-        utils:pforeach(fun(N) ->
+        lists_utils:pforeach(fun(N) ->
             lists:foreach(fun(M) ->
                 emit(Worker, #file_written_event{file_guid = ?FILE_GUID(N), size = EvtSize,
                     file_size = M * EvtSize, blocks = [#file_block{
@@ -322,7 +322,7 @@ subscribe_should_work_for_multiple_sessions_base(Config) ->
 
     % Emit events.
     {_, EmitUs, EmitTime, EmitUnit} = utils:duration(fun() ->
-        utils:pforeach(fun({SessId, _}) ->
+        lists_utils:pforeach(fun({SessId, _}) ->
             lists:foreach(fun(N) ->
                 emit(Worker, #file_written_event{file_guid = FileGuid, size = EvtSize,
                     file_size = N * EvtSize, blocks = [#file_block{
