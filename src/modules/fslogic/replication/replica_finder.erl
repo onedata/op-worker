@@ -126,7 +126,7 @@ suite_blocks_sizes([#file_block{offset = Offset, size = Size} = Block | Blocks],
         0 ->
             Block;
         EndRem ->
-            ExpectedSize = Size - (StorageBlockSize - EndRem),
+            ExpectedSize = Size + (StorageBlockSize - EndRem),
             suite_block_end(Block, ExpectedSize, AllBlocks)
     end,
 
