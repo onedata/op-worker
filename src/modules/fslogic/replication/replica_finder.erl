@@ -23,7 +23,16 @@
 %% API
 -export([get_blocks_for_sync/2, get_remote_duplicated_blocks/1, get_all_blocks/1]).
 
+% Enable/disable suiting of requested blocks` range to storage block size. If true,
+% requested blocks will be enlarged to overlap with full storage system blocks to
+% optimize data writing to storage system. Blocks are enlarged only if source provider
+% posses data needed to enlarge block.
 -define(BLOCK_SUITING_OPT, application:get_env(?APP_NAME, synchronizer_block_suiting, true)).
+% Define minimal size of block that can be enlarged.
+% This option can be used to prevent system from enlarging small blocks because such
+% behaviour can result in significantly increased consumption of network bandwidth.
+% By default the system tries to suite all requested blocks to storage block size
+% (all blocks of size greater than 0).
 -define(BLOCK_SUITING_MIN_SIZE, application:get_env(?APP_NAME, synchronizer_block_suiting_min_size, 0)).
 
 %%%===================================================================
@@ -86,17 +95,17 @@ suite_to_storage_block_size(Requests, ProvidersAllBlocks, LocalStorageId) ->
             case storage:get_block_size(LocalStorageId) of
                 undefined ->
                     Requests;
-                0 ->
+                0 -> % Helper does not split files into blocks
                     Requests;
-                BlockSize ->
+                StorageBlockSize ->
                     ProvidersAllBlocksMap = lists:foldl(fun({ProviderId, AllProviderBlocks, _StorageDetails}, Acc) ->
                         Acc#{ProviderId => AllProviderBlocks}
                     end, #{}, ProvidersAllBlocks),
 
-                    MinSize = ?BLOCK_SUITING_MIN_SIZE,
+                    MinSizeToSuite = ?BLOCK_SUITING_MIN_SIZE,
                     lists:map(fun({ProviderId, Blocks, StorageDetails}) ->
                         FinalBlocks = suite_blocks_sizes(Blocks, maps:get(ProviderId, ProvidersAllBlocksMap),
-                            BlockSize, MinSize),
+                            StorageBlockSize, MinSizeToSuite),
                         {ProviderId, FinalBlocks, StorageDetails}
                     end, Requests)
             end;
@@ -106,34 +115,37 @@ suite_to_storage_block_size(Requests, ProvidersAllBlocks, LocalStorageId) ->
 
 -spec suite_blocks_sizes(fslogic_blocks:blocks(), fslogic_blocks:blocks(), non_neg_integer(), non_neg_integer()) ->
     fslogic_blocks:blocks().
-suite_blocks_sizes([], _AllBlocks, _BlockSize, _MinSize) ->
+suite_blocks_sizes([], _AllBlocks, _StorageBlockSize, _MinSizeToSuite) ->
     [];
-suite_blocks_sizes([#file_block{size = Size} = Block | Blocks], AllBlocks, BlockSize, MinSize) when
-    Size < MinSize ->
-    [Block | suite_blocks_sizes(Blocks, AllBlocks, BlockSize, MinSize)];
-suite_blocks_sizes([#file_block{offset = Offset, size = Size} = Block | Blocks], AllBlocks, BlockSize, MinSize) ->
-    Block2 = case (Offset + Size) rem BlockSize of
+suite_blocks_sizes([#file_block{size = Size} = Block | Blocks], AllBlocks, StorageBlockSize, MinSizeToSuite) when
+    Size < MinSizeToSuite ->
+    [Block | suite_blocks_sizes(Blocks, AllBlocks, StorageBlockSize, MinSizeToSuite)];
+suite_blocks_sizes([#file_block{offset = Offset, size = Size} = Block | Blocks], 
+    AllBlocks, StorageBlockSize, MinSizeToSuite) ->
+    Block2 = case (Offset + Size) rem StorageBlockSize of
         0 ->
             Block;
         EndRem ->
-            ExpectedSize = Size - EndRem + BlockSize,
+            ExpectedSize = Size - (StorageBlockSize - EndRem),
             suite_block_end(Block, ExpectedSize, AllBlocks)
     end,
 
-    Suited = case Offset rem BlockSize of
+    Suited = case Offset rem StorageBlockSize of
         0 ->
             [Block2];
         OffsetRem ->
             ExpectedBeg = Offset - OffsetRem,
-            PossibleSplitPoint = ExpectedBeg + BlockSize,
+            PossibleSplitPoint = ExpectedBeg + StorageBlockSize,
             suite_block_offset_or_split(Block2, ExpectedBeg, PossibleSplitPoint, AllBlocks)
     end,
 
-    Suited ++ suite_blocks_sizes(Blocks, AllBlocks, BlockSize, MinSize).
+    Suited ++ suite_blocks_sizes(Blocks, AllBlocks, StorageBlockSize, MinSizeToSuite).
 
 -spec suite_block_end(fslogic_blocks:block(), non_neg_integer(), fslogic_blocks:blocks()) -> fslogic_blocks:block().
 suite_block_end(#file_block{offset = Offset, size = Size} = Block, ExpectedSize, AllBlocks) ->
     CanExtend = lists:any(fun(#file_block{offset = CheckO, size = CheckS}) ->
+        % Verify if source provider posses data needed to extend ending of the block
+        % (it has been verified before that it has whole block)
         CheckO =< Offset + Size andalso CheckO + CheckS >= Offset + ExpectedSize
     end, AllBlocks),
 
@@ -147,6 +159,8 @@ suite_block_end(#file_block{offset = Offset, size = Size} = Block, ExpectedSize,
 suite_block_offset_or_split(#file_block{offset = Offset, size = Size} = Block,
     ExpectedBeg, PossibleSplitPoint, AllBlocks) ->
     CanExtend = lists:any(fun(#file_block{offset = CheckO, size = CheckS}) ->
+        % Verify if source provider posses data needed to extend beginning of the block
+        % (it has been verified before that it has whole block)
         CheckO =< ExpectedBeg andalso CheckO + CheckS >= Offset
     end, AllBlocks),
 
@@ -154,6 +168,7 @@ suite_block_offset_or_split(#file_block{offset = Offset, size = Size} = Block,
         {true, _} ->
             [#file_block{offset = ExpectedBeg, size = Size + Offset - ExpectedBeg}];
         {false, true} ->
+            % Split block as rtransfer_link requires it to split requests optimally
             [Block#file_block{size = PossibleSplitPoint - Offset},
                 #file_block{offset = PossibleSplitPoint, size = Size + Offset - PossibleSplitPoint}];
         _ ->
