@@ -28,7 +28,7 @@
     assert_effective_qos/4, assert_effective_qos/5,
     assert_file_qos_documents/4, assert_file_qos_documents/5,
     assert_qos_entry_documents/3, assert_qos_entry_documents/4,
-    assert_status_on_all_workers/4, assert_status_on_all_workers/5
+    gather_not_matching_statuses_on_all_workers/4
 ]).
 
 % util functions
@@ -605,20 +605,24 @@ assert_file_distribution(Config, Workers, {FileName, FileContent, ExpectedFileDi
     end, true, Workers).
 
 
-assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus) ->
-    assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus, 1).
-
-assert_status_on_all_workers(Config, Guids, QosList, ExpectedStatus, Attempts) ->
+gather_not_matching_statuses_on_all_workers(Config, Guids, QosList, ExpectedStatus) ->
     Workers = qos_tests_utils:get_op_nodes_sorted(Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
     ExpectedStatusMatcher = case ExpectedStatus of
         {error, _} -> ExpectedStatus;
         _ -> {ok, ExpectedStatus}
     end, 
-    lists:foreach(fun(Worker) ->
-        lists:foreach(fun(Guid) ->
-            ?assertEqual(ExpectedStatusMatcher, lfm_proxy:check_qos_status(Worker, SessId(Worker), QosList, {guid, Guid}), Attempts)
-        end, Guids)
+    lists:filtermap(fun(Worker) ->
+        Res = lists:filtermap(fun(Guid) ->
+            case lfm_proxy:check_qos_status(Worker, SessId(Worker), QosList, {guid, Guid}) of
+                ExpectedStatusMatcher -> false;
+                NotExpectedStatus -> {true, {Worker, Guid, NotExpectedStatus}}
+            end
+        end, Guids),
+        case Res of
+            [] -> false;
+            _ -> {true, Res}
+        end
     end, Workers).
 
 %%%====================================================================
