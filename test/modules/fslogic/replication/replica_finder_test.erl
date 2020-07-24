@@ -13,6 +13,7 @@
 
 -ifdef(TEST).
 
+-include("global_definitions.hrl").
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -80,7 +81,7 @@ finder_should_return_empty_list_for_empty_locations(_) ->
 
 finder_should_return_shorter_list_for_request_exceeding_file(_) ->
     Location1 = ?LOCATION(<<"1">>, [?BLOCK(0,2)]),
-    Locations = [Location1],
+    Locations = [Location1, ?LOCATION(?LOCAL_PID, [])],
     BlocksToSync = [?BLOCK(1,5)],
 
     % when
@@ -90,7 +91,7 @@ finder_should_return_shorter_list_for_request_exceeding_file(_) ->
     ?_assertMatch([{?PID1, [?BLOCK(1,1)], _}], Ans).
 
 finder_should_find_data_in_one_location(_) ->
-    Locations = [?LOCATION(?PID1, [?BLOCK(1,5), ?BLOCK(7,9)])],
+    Locations = [?LOCATION(?PID1, [?BLOCK(1,5), ?BLOCK(7,9)]), ?LOCATION(?LOCAL_PID, [])],
     BlocksToSync = [?BLOCK(2,8)],
 
     % when
@@ -195,10 +196,12 @@ finder_should_not_return_data_available_locally_in_many_locations(_) ->
 start() ->
     meck:new([oneprovider]),
     meck:expect(oneprovider, get_id, fun() -> ?LOCAL_PID end),
+    application:set_env(?APP_NAME, synchronizer_block_suiting, false),
     ok.
 
 
 stop(_) ->
+    application:unset_env(?APP_NAME, synchronizer_block_suiting),
     ?assert(meck:validate([oneprovider])),
     meck:unload().
 
