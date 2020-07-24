@@ -2054,8 +2054,7 @@ read_big_file(Config, _FileSize, File, Worker, true) ->
     {ok, TransferID} = ?assertMatch({ok, _},
         lfm_proxy:schedule_file_replication(Worker1, SessId(Worker1),
             {path, File}, ProviderId)),
-    ?assertMatch({ok, #document{value = #transfer{replication_status = completed}}},
-        rpc:call(Worker1, transfer, get, [TransferID]), Attempts),
+    await_replication_end(Worker1 ,TransferID, Attempts),
     timer:now_diff(os:timestamp(), Start);
 read_big_file(Config, FileSize, File, Worker, _) ->
     SessId = ?config(session, Config),
@@ -2285,4 +2284,23 @@ get_seq_and_timestamp_or_error(SpaceId, ProviderId) ->
             maps:get(ProviderId, Seq, {error, not_found});
         Error ->
             Error
+    end.
+
+await_replication_end(Node, TransferId, 1) ->
+    ?assertMatch(
+        {ok, #document{value = #transfer{replication_status = completed}}},
+        rpc:call(Node, transfer, get, [TransferId])
+    );
+await_replication_end(Node, TransferId, Attempts) ->
+    case rpc:call(Node, transfer, get, [TransferId]) of
+        {ok, #document{value = #transfer{replication_status = completed}}} ->
+            ok;
+        {ok, #document{value = #transfer{replication_status = Status} = Transfer}} when
+            Status == failed;
+            Status == cancelled
+            ->
+            ct:pal("Replication failed: ~p", [Transfer]),
+            throw(replication_failed);
+        _ ->
+            await_replication_end(Node, TransferId, Attempts-1)
     end.
