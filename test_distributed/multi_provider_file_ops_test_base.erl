@@ -30,7 +30,7 @@
     rtransfer_test_base/11,
     rtransfer_blocking_test_base/6,
     rtransfer_blocking_test_cleanup/1,
-    rtransfer_test_base2/5,
+    rtransfer_test_base2/6,
     many_ops_test_base/6,
     distributed_modification_test_base/4,
     multi_space_test_base/3,
@@ -456,11 +456,11 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
 % updates per second and file location updates per second is checked.
 % For this test, environment with 2 1-node providers is assumed.
 rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten},
-    Attempts, TransferFileParts) ->
+    Attempts, TransferTimeout, TransferFileParts) ->
     rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1},
-        Attempts, TransferFileParts);
+        Attempts, TransferTimeout, TransferFileParts);
 rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
-    Attempts, TransferFileParts) ->
+    Attempts, TransferTimeout, TransferFileParts) ->
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = ?config(space_name, Config),
@@ -485,7 +485,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Start = time_utils:system_time_seconds(),
     Result = try
         verify_workers(Workers2, fun(W) ->
-            read_big_file(Config, FileSize, Level2File, W, true)
+            read_big_file(Config, FileSize, Level2File, W, TransferTimeout, true)
         end, timer:seconds(Attempts)),
         ok
     catch
@@ -2044,9 +2044,12 @@ create_big_file(Config, ChunkSize, ChunksNum, PartNum, File, Worker) ->
 
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 
-read_big_file(Config, _FileSize, File, Worker, true) ->
-    SessId = ?config(session, Config),
+read_big_file(Config, _FileSize, File, Worker, Transfer) ->
     Attempts = ?config(attempts, Config),
+    read_big_file(Config, _FileSize, File, Worker, Attempts, Transfer).
+
+read_big_file(Config, _FileSize, File, Worker, Attempts, true) ->
+    SessId = ?config(session, Config),
     Worker1 = ?config(worker1, Config),
 
     ProviderId = rpc:call(Worker, oneprovider, get_id_or_undefined, []),
@@ -2056,7 +2059,7 @@ read_big_file(Config, _FileSize, File, Worker, true) ->
             {path, File}, ProviderId)),
     await_replication_end(Worker1 ,TransferID, Attempts),
     timer:now_diff(os:timestamp(), Start);
-read_big_file(Config, FileSize, File, Worker, _) ->
+read_big_file(Config, FileSize, File, Worker, _Attempts, _) ->
     SessId = ?config(session, Config),
     Attempts = ?config(attempts, Config),
     read_big_file_loop(FileSize, File, Worker, SessId, Attempts, undefined, 0).
@@ -2298,9 +2301,10 @@ await_replication_end(Node, TransferId, Attempts) ->
         {ok, #document{value = #transfer{replication_status = Status} = Transfer}} when
             Status == failed;
             Status == cancelled
-            ->
+        ->
             ct:pal("Replication failed: ~p", [Transfer]),
             throw(replication_failed);
         _ ->
-            await_replication_end(Node, TransferId, Attempts-1)
+            timer:sleep(timer:seconds(1)),
+            await_replication_end(Node, TransferId, Attempts - 1)
     end.
