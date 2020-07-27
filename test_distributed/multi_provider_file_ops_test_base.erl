@@ -486,7 +486,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Result = try
         verify_workers(Workers2, fun(W) ->
             read_big_file(Config, FileSize, Level2File, W, TransferTimeout, true)
-        end, timer:seconds(Attempts)),
+        end, timer:seconds(TransferTimeout)),
         ok
     catch
         T:R -> {error, T, R}
