@@ -21,7 +21,7 @@
 -include_lib("proto/oneclient/stream_messages.hrl").
 
 %% export for ct
--export([all/0, init_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, init_per_suite/1, end_per_suite/1,, init_per_testcase/2, end_per_testcase/2]).
 
 %% tests
 -export([
@@ -149,6 +149,9 @@ sequencer_out_stream_should_unregister_from_sequencer_manager_on_acknowledged_en
 
 init_per_suite(Config) ->
     [{?LOAD_MODULES, [initializer]} | Config].
+
+end_per_suite(_) ->
+    ok.
 
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
