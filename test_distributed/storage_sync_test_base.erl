@@ -1355,9 +1355,9 @@ close_file_import_race_test(Config, StorageType) ->
         meck:passthrough([FileName, ParentCtx])
     end),
 
+    timer:sleep(timer:seconds(1)), %ensure that space_dir mtime will change
     ?EXEC_ON_POSIX_ONLY(fun() ->
         % touch space_dir to ensure that it will be updated
-        timer:sleep(timer:seconds(1)),
         RDWRStorageMountPoint = get_mount_point(RDWRStorage),
         ContainerStorageSpacePath = storage_path(RDWRStorageMountPoint, ?SPACE_ID, <<"">>, MountInRoot),
         touch(W1, ContainerStorageSpacePath)
