@@ -307,7 +307,9 @@ init_per_suite(Config) ->
         NewConfig2 = initializer:setup_storage(NewConfig1),
         application:start(ssl),
         hackney:start(),
-        initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2)
+        FinalConfig = initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig2, "env_desc.json"), NewConfig2),
+        timer:sleep(2000), % Time to process events connected with initialization and connect providers
+        FinalConfig
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, events_reliability_test_base]} | Config].
 
