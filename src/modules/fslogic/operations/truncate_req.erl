@@ -42,15 +42,17 @@ truncate(UserCtx, FileCtx0, Size) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Truncates file on storage and returns only if operation is complete.
-%% Does not change file size in #file_meta model. Model's size should be
+%% Model's size should be
 %% changed by write events.
 %% @end
 %%--------------------------------------------------------------------
 -spec truncate_insecure(user_ctx:ctx(), file_ctx:ctx(),
     Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
-truncate_insecure(UserCtx, FileCtx, Size, UpdateTimes) ->
-    FileCtx2 = update_quota(FileCtx, Size),
+truncate_insecure(UserCtx, FileCtx0, Size, UpdateTimes) ->
+    {StorageId, FileCtx1} = file_ctx:get_storage(FileCtx0),
+    storage_req:assert_not_readonly(StorageId),
+    FileCtx2 = update_quota(FileCtx1, Size),
     SessId = user_ctx:get_session_id(UserCtx),
     {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
     case storage_driver:open(SDHandle, write) of

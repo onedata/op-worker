@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
+-include("test_utils/distribution_assert.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -87,32 +88,8 @@ all() -> [
 -define(RULE_SETTING(Value), ?RULE_SETTING(true, Value)).
 -define(RULE_SETTING(Enabled, Value), #{enabled => Enabled, value => Value}).
 
--define(DIST(__ProviderId, __Size),
-    (fun
-        (P, 0) -> [#{<<"providerId">> => P, <<"blocks">> => []}];
-        (P, S) -> [#{<<"providerId">> => P, <<"blocks">> => [[0, S]]}]
-    end)(__ProviderId, __Size)).
-
--define(DISTS(ProviderIds, Sizes), lists:flatmap(fun({PId, __Size}) ->
-    ?DIST(PId, __Size)
-end, lists:zip(ProviderIds, Sizes))).
-
--define(normalizeDistribution(__Distributions), lists:sort(lists:map(fun(__Distribution) ->
-    __Distribution#{
-        <<"totalBlocksSize">> => lists:foldl(fun([_Offset, __Size], __SizeAcc) ->
-            __SizeAcc + __Size
-        end, 0, maps:get(<<"blocks">>, __Distribution))
-    }
-end, __Distributions))).
-
 -define(assertDistribution(Worker, SessionId, ExpectedDistribution, FileGuid),
-    ?assertEqual(?normalizeDistribution(ExpectedDistribution), try
-        {ok, __FileBlocks} = lfm_proxy:get_file_distribution(Worker, SessionId, {guid, FileGuid}),
-        lists:sort(__FileBlocks)
-    catch
-        _:_ ->
-            error
-    end, ?ATTEMPTS)).
+    ?assertDistribution(Worker, SessionId, ExpectedDistribution, FileGuid, ?ATTEMPTS)).
 
 -define(assertFilesInView(Worker, SpaceId, ExpectedGuids),
     ?assertMatch([], begin

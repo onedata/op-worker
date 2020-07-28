@@ -14,7 +14,15 @@
             "storages": [
                 {
                     "type": "posix",
-                    "name": "/mnt/st1"
+                    "name": "/mnt/st1_ro",
+                    "readonly": false,
+                    "group": 1
+                },
+                {
+                    "type": "posix",
+                    "name": "/mnt/st1_rdwr",
+                    "readonly": false,
+                    "group": 1
                 }
             ],
             "users": [],
@@ -121,7 +129,7 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st1",
+                        "storage": "/mnt/st1_ro",
                         "supported_size": 10737418240
                     },
                     "p2": {
@@ -133,9 +141,12 @@
         },
         "storages": {
             "p1": {
-                "/mnt/st1": {
+                "/mnt/st1_ro": {
                     "imported_storage": true,
                     "readonly": true
+                },
+                "/mnt/st1_rdwr": {
+                    "imported_storage": true
                 }
             }
         }

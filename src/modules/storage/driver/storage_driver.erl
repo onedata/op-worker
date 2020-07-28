@@ -38,10 +38,14 @@
 -export_type([handle/0, handle_id/0, error_reply/0]).
 
 -define(RUN(SDHandle, Fun),
-    helpers_runner:run_and_handle_error(SDHandle, Fun)).
+    ?RUN(SDHandle, Fun, constant)).
+-define(RUN(SDHandle, Fun, OperationType),
+    helpers_runner:run_and_handle_error(SDHandle, Fun, OperationType)).
 
 -define(RUN_WITH_FILE_HANDLE(SDHandle, Fun),
-    helpers_runner:run_with_file_handle_and_handle_error(SDHandle, Fun)).
+    ?RUN_WITH_FILE_HANDLE(SDHandle, Fun, constant)).
+-define(RUN_WITH_FILE_HANDLE(SDHandle, Fun, OperationType),
+    helpers_runner:run_with_file_handle_and_handle_error(SDHandle, Fun, OperationType)).
 
 %%%===================================================================
 %%% API
@@ -214,7 +218,7 @@ mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
             {error, Reason} ->
                 {error, Reason}
         end
-    end).
+    end, modification).
 
 
 %%--------------------------------------------------------------------
@@ -227,7 +231,7 @@ mkdir(#sd_handle{file = FileId} = SDHandle, Mode, Recursive) ->
 mv(SDHandle = #sd_handle{file = FileFrom}, FileTo) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         helpers:rename(HelperHandle, FileFrom, FileTo)
-    end).
+    end, modification).
 
 
 %%--------------------------------------------------------------------
@@ -240,7 +244,7 @@ mv(SDHandle = #sd_handle{file = FileFrom}, FileTo) ->
 chmod(SDHandle = #sd_handle{file = FileId}, Mode) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         helpers:chmod(HelperHandle, FileId, Mode)
-    end).
+    end, modification).
 
 
 %%--------------------------------------------------------------------
@@ -253,7 +257,7 @@ chmod(SDHandle = #sd_handle{file = FileId}, Mode) ->
 chown(SDHandle = #sd_handle{file = FileId, session_id = ?ROOT_SESS_ID}, Uid, Gid) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         helpers:chown(HelperHandle, FileId, Uid, Gid)
-    end);
+    end, modification);
 chown(_, _, _) ->
     throw(?EPERM).
 
@@ -267,7 +271,7 @@ chown(_, _, _) ->
 link(SDHandle = #sd_handle{file = FileFrom}, FileTo) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         helpers:link(HelperHandle, FileFrom, FileTo)
-    end).
+    end, modification).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -354,7 +358,7 @@ write(SDHandle = #sd_handle{
     ?RUN_WITH_FILE_HANDLE(SDHandle, fun(FileHandle) ->
         space_quota:assert_write(SpaceId, max(0, Offset + size(Buffer) - CSize)),
         helpers:write(FileHandle, Offset, Buffer)
-    end).
+    end, modification).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -408,7 +412,7 @@ read(SDHandle, Offset, MaxSize) ->
 create(#sd_handle{file = FileId} = SDHandle, Mode) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         helpers:mknod(HelperHandle, FileId, Mode, reg)
-    end).
+    end, modification).
 
 
 %%--------------------------------------------------------------------
@@ -425,7 +429,7 @@ truncate(#sd_handle{open_flag = read}, _, _) -> throw(?EPERM);
 truncate(SDHandle = #sd_handle{file = FileId}, Size, CurrentSize) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         helpers:truncate(HelperHandle, FileId, Size, CurrentSize)
-    end).
+    end, modification).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -437,7 +441,7 @@ truncate(SDHandle = #sd_handle{file = FileId}, Size, CurrentSize) ->
 setxattr(SDHandle = #sd_handle{file = FileId}, Name, Value, Create, Replace) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         helpers:setxattr(HelperHandle, FileId, Name, Value, Create, Replace)
-    end).
+    end, modification).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -459,7 +463,7 @@ getxattr(SDHandle = #sd_handle{file = FileId}, Name) ->
 removexattr(SDHandle = #sd_handle{file = FileId}, Name) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         helpers:removexattr(HelperHandle, FileId, Name)
-    end).
+    end, modification).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -486,7 +490,7 @@ unlink(SDHandle = #sd_handle{file = FileId}, CurrentSize) ->
             {error, ?ENOENT} -> ok;
             {error, __} = Error -> Error
         end
-    end).
+    end, modification).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -497,7 +501,7 @@ unlink(SDHandle = #sd_handle{file = FileId}, CurrentSize) ->
 rmdir(SDHandle = #sd_handle{file = FileId}) ->
     ?RUN(SDHandle, fun(HelperHandle) ->
         helpers:rmdir(HelperHandle, FileId)
-    end).
+    end, modification).
 
 %%--------------------------------------------------------------------
 %% @doc
