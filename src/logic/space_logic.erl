@@ -128,7 +128,7 @@ has_eff_privilege(SpaceDocOrId, UserId, Privilege) ->
 has_eff_privileges(#document{value = #od_space{eff_users = EffUsers}} = SpaceDoc, UserId, Privileges) ->
     UserPrivileges = maps:get(UserId, EffUsers, []),
     % space owners have all the privileges, regardless of those assigned
-    lists_utils:has_all_members(Privileges, UserPrivileges) orelse is_owner(SpaceDoc, UserId);
+    lists_utils:is_subset(Privileges, UserPrivileges) orelse is_owner(SpaceDoc, UserId);
 has_eff_privileges(SpaceId, UserId, Privileges) ->
     case get(?ROOT_SESS_ID, SpaceId) of
         {ok, #document{} = SpaceDoc} ->
