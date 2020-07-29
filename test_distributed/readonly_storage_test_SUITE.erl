@@ -5,9 +5,24 @@
 %%% cited in 'LICENSE.txt'.
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% TODO OPIS
-%%% TODO opisać myk z "podwojnym" storagem w sumie to moze nie jest potrzebny ten myk
-%%% moze nawet lepiej ze storage nie jest naprawde RO zeby sprawdzic czy cos nie zostanie usuniete
+%%% This module contains tests of operations on files in space
+%%% that is supported by a readonly storage.
+%%%
+%%% ATTENTION !!!
+%%% Provider1 has 2 storages (docker volumes) which are mounted
+%%% UNDER THE SAME PATH on host machine.
+%%% One storage (the one that supports the space) is readonly
+%%% and files cannot be created on it using helpers.
+%%% Seconds one does not support any space and is used only to create
+%%% files on the storage using helpers. Thanks to the fact that both
+%%% docker volumes point to the same directory on the host machine, files
+%%% created on 2nd storage appear on the 1st too.
+%%% ATTENTION2 !!!
+%%% Provider1's storage which is marked as readonly is not mounted
+%%% as a readonly volume INTENTIONALLY.
+%%% Thanks to that we may be sure that files on the readonly (in Onedata context)
+%%% storage were not modified thanks to provider logic, not thanks to
+%%% filesystem restrictions in the docker container.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(readonly_storage_test_SUITE).
