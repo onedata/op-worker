@@ -1582,8 +1582,8 @@ storage_logic_mock_setup(Workers, StoragesSetupMap, SpacesToStorages) ->
         end),
 
     ok = test_utils:mock_expect(Workers, storage_logic, is_readonly,
-        fun(StorageId) ->
-            {ok, #document{value = #od_storage{readonly = Readonly}}} = storage_logic:get(StorageId),
+        fun(StorageId, SpaceId) ->
+            {ok, #document{value = #od_storage{readonly = Readonly}}} = storage_logic:get(StorageId, SpaceId),
             {ok, Readonly}
         end),
     

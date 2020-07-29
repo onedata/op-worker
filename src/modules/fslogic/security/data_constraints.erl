@@ -142,7 +142,7 @@ assert_not_readonly_mode(UserCtx) ->
 
 -spec assert_not_readonly_target(od_provider:id(), od_space:id()) -> ok | no_return().
 assert_not_readonly_target(ProviderId, SpaceId) ->
-    case space_logic:get_provider_storage_ids(SpaceId, ProviderId) of
+    case space_logic:get_storage_ids_by_provider(SpaceId, ProviderId) of
         {ok, StorageIds} ->
             IsNotReadonly = lists:any(fun(StorageId) ->
                 not storage:is_readonly(StorageId)
@@ -152,7 +152,7 @@ assert_not_readonly_target(ProviderId, SpaceId) ->
                 false -> throw(?EROFS)
             end;
         {error, Reason} ->
-            throw(Reason)
+            throw(Reason) % @fixme maybe throw {error, Reason} ?
     end.
 
 

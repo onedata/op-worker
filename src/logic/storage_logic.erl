@@ -31,7 +31,8 @@
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/errors.hrl").
 
--export([create_in_zone/3, create_in_zone/4, get/1, delete_in_zone/1]).
+-export([create_in_zone/3, create_in_zone/4, delete_in_zone/1]).
+-export([get/1, get_shared_data/2]).
 -export([support_space/3]).
 -export([update_space_support_size/3]).
 -export([revoke_space_support/2]).
@@ -39,7 +40,7 @@
 -export([get_qos_parameters_of_local_storage/1, get_qos_parameters_of_remote_storage/2]).
 -export([get_provider/2]).
 -export([get_spaces/1]).
--export([is_imported/1, is_readonly/1]).
+-export([is_imported/1, is_readonly/2]).
 -export([is_local_storage_supporting_space/2]).
 -export([update_name/2]).
 -export([set_qos_parameters/2]).
@@ -85,15 +86,6 @@ create_in_zone(Name, ImportedStorage, Readonly, StorageId) ->
     end)).
 
 
--spec get(storage:id()) -> {ok, od_storage:doc()} | errors:error().
-get(StorageId) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
-        subscribe = true
-    }).
-
-
 -spec delete_in_zone(storage:id()) -> ok | errors:error().
 delete_in_zone(StorageId) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
@@ -106,6 +98,30 @@ delete_in_zone(StorageId) ->
         % so no need to invalidate any od_space cache
         gs_client_worker:invalidate_cache(od_storage, StorageId)
     end).
+
+
+-spec get(storage:id()) -> {ok, od_storage:doc()} | errors:error().
+get(StorageId) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance},
+        subscribe = true
+    }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Retrieves storage details shared between providers through given space.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_shared_data(storage:id(), od_space:id()) -> {ok, od_storage:doc()} | errors:error().
+get_shared_data(StorageId, SpaceId) ->
+    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = get,
+        gri = #gri{type = od_storage, id = StorageId, aspect = instance, scope = shared},
+        subscribe = true,
+        auth_hint = ?THROUGH_SPACE(SpaceId)
+    }).
 
 
 -spec support_space(storage:id(), tokens:serialized(), od_space:support_size()) ->
@@ -209,9 +225,9 @@ is_imported(StorageId) ->
     end.
 
 
--spec is_readonly(storage:id()) -> {ok, boolean()} | errors:error().
-is_readonly(StorageId) ->
-    case get(StorageId) of
+-spec is_readonly(storage:id(), od_space:id()) -> {ok, boolean()} | errors:error().
+is_readonly(StorageId, SpaceId) ->
+    case get_shared_data(StorageId, SpaceId) of
         {ok, #document{value = #od_storage{readonly = Readonly}}} ->
             {ok, Readonly};
         Error -> Error
@@ -289,20 +305,4 @@ upgrade_legacy_support(StorageId, SpaceId) ->
     gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = {upgrade_legacy_support, SpaceId}}
-    }).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Retrieves storage details shared between providers through given space.
-%% @end
-%%--------------------------------------------------------------------
--spec get_shared_data(storage:id(), od_space:id()) -> {ok, od_storage:doc()} | errors:error().
-get_shared_data(StorageId, SpaceId) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
-        operation = get,
-        gri = #gri{type = od_storage, id = StorageId, aspect = instance, scope = shared},
-        subscribe = true,
-        auth_hint = ?THROUGH_SPACE(SpaceId)
     }).

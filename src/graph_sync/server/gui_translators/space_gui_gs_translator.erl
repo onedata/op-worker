@@ -59,6 +59,8 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             {undefined, undefined}
     end,
 
+
+
     ProvidersWithReadonlyStorage = maps:fold(fun(ProviderId, ProviderStorages, Acc) ->
         IsNotReadonly = lists:any(fun(StorageId) ->
             not storage:is_readonly(StorageId)

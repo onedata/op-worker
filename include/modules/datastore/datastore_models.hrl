@@ -192,11 +192,11 @@
 }).
 
 -record(od_storage, {
-    name = <<>> :: od_storage:name(),
-    provider :: od_provider:id() | undefined,
+    name = <<>> :: od_storage:name() | undefined,
+    provider :: od_provider:id(),
     spaces = [] :: [od_space:id()],
     qos_parameters = #{} :: od_storage:qos_parameters(),
-    imported = false :: boolean(),
+    imported = false :: boolean() | undefined,
     readonly = false :: boolean(),
     cache_state = #{} :: cache_state()
 }).

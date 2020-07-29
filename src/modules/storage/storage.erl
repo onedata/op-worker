@@ -289,7 +289,7 @@ is_imported(StorageData) ->
 
 -spec is_readonly(id() | data()) -> boolean().
 is_readonly(StorageId) when is_binary(StorageId) ->
-    {ok, Readonly} = ?throw_on_error(storage_logic:is_readonly(StorageId)),
+    {ok, Readonly} = ?throw_on_error(storage_logic:is_readonly(StorageId, <<"fixme">>)), %@ fixme SpaceId
     Readonly;
 is_readonly(StorageData) ->
     is_readonly(storage:get_id(StorageData)).
