@@ -59,7 +59,7 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
             {undefined, undefined}
     end,
 
-    ProvidersWithReadonlyStorage = lists:filter(fun(ProviderId) ->
+    ProvidersWithReadonlySupport = lists:filter(fun(ProviderId) ->
         space_logic:has_readonly_support_from(SpaceId, ProviderId)
     end, maps:keys(Space#od_space.storages_by_provider)),
 
@@ -91,7 +91,7 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
         }),
         <<"rootDir">> => utils:undefined_to_null(RootDir),
         <<"preferableWriteBlockSize">> => utils:undefined_to_null(PreferableWriteBlockSize),
-        <<"providersWithReadonlyStorage">> => ProvidersWithReadonlyStorage
+        <<"providersWithReadonlySupport">> => ProvidersWithReadonlySupport
     },
     fun
         (?USER(Id)) -> 
