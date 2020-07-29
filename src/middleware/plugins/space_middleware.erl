@@ -92,7 +92,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = {view, _}}}) -> #{
                 (ProviderId) when is_binary(ProviderId) ->
                     {true, [ProviderId]};
                 (Providers) when is_list(Providers) ->
-                    lists:all(fun(ProvId) -> is_binary(ProvId) end, Providers);
+                    lists:all(fun is_binary/1, Providers);
                 (_) ->
                     false
             end
@@ -193,7 +193,7 @@ data_spec(#op_req{operation = update, gri = #gri{aspect = {view, _}}}) -> #{
                 (ProviderId) when is_binary(ProviderId) ->
                     {true, [ProviderId]};
                 (Providers) when is_list(Providers) ->
-                    lists:all(fun(ProvId) -> is_binary(ProvId) end, Providers);
+                    lists:all(fun is_binary/1, Providers);
                 (_) ->
                     false
             end

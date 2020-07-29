@@ -12,6 +12,7 @@
 -module(multi_provider_file_ops_test_base).
 -author("Jakub Kudzia").
 
+-include("middleware/middleware.hrl").
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -1521,7 +1522,7 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     BlocksCount = ?config(block_count, Config),
     UserCount = ?config(user_count, Config),
     BlockSizeBytes = BlockSize * 1024 * 1024,
-    
+
     Users = [<<"user", (integer_to_binary(Num))/binary>> || Num <- lists:seq(1, UserCount)],
     [Worker1, Worker2] = ?config(op_worker_nodes, Config),
     SessId = fun(User, W) ->
@@ -1571,12 +1572,12 @@ cancel_synchronizations_for_session_with_mocked_rtransfer_test_base(Config0) ->
     End = erlang:monotonic_time(millisecond),
 
     ct:pal("Transfers canceled"),
-    
+
     ct:pal("Block size: ~p~n"
            "Block count: ~p~n"
            "Number of users: ~p~n"
            "Total time[ms]: ~p~n"
-           "Average time per user[ms]: ~p", 
+           "Average time per user[ms]: ~p",
         [BlockSize, BlocksCount, UserCount, End-Start, lists:sum(Times)/length(Times)]).
 
 cancel_synchronizations_for_session_test_base(Config0) ->
@@ -1624,7 +1625,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
         end,
         async_synchronize(Worker1, User, SessId, FileCtx, Block)
      end, lists:seq(0, BlocksCount - 1)),
-    
+
     timer:sleep(timer:seconds(5)),
     ct:pal("Transfers started"),
 
@@ -1635,7 +1636,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     end, Users),
 
     ct:pal("Transfers canceled"),
-    
+
     {OkCount, CancelCount} = lists:foldl(fun(Promise, {Ok, Cancel}) ->
         case rpc:yield(Promise) of
             {error, cancelled} ->
@@ -1644,10 +1645,10 @@ cancel_synchronizations_for_session_test_base(Config0) ->
                 {Ok+1, Cancel}
         end
     end, {0,0}, Promises),
-    
+
     ?assertEqual(0, rpc:call(Worker1, ets, info, [rtransfer_link_requests, size]), 500),
     End = erlang:monotonic_time(millisecond),
-    
+
     ct:pal("Block size: ~p~n"
     "Block count: ~p~n"
     "Number of users: ~p~n"
@@ -1656,7 +1657,7 @@ cancel_synchronizations_for_session_test_base(Config0) ->
     "Cancelled transfers: ~p~n",
         [BlockSize, BlocksCount, UserCount, (End-Start)/1000, OkCount, CancelCount]).
 
-
+% @TODO VFS-6617 fix fsync failing on timeout
 transfer_files_to_source_provider(Config0) ->
     ct:timetrap(timer:minutes(10)),
     Config = extend_config(Config0, <<"user1">>, {0, 0, 0, 0}, 0),
@@ -1665,8 +1666,8 @@ transfer_files_to_source_provider(Config0) ->
     Worker = ?config(worker1, Config),
     FilesNum = ?config(files_num, Config),
     Size = ?config(file_size, Config),
-    
-    Guids = utils:pmap(fun(Num) ->
+
+    Guids = lists_utils:pmap(fun(Num) ->
         FilePath = <<"/", SpaceName/binary, "/file_",  (integer_to_binary(Num))/binary>>,
         {ok, Guid} = lfm_proxy:create(Worker, SessionId(Worker), FilePath, 8#755),
         {ok, Handle} = lfm_proxy:open(Worker, SessionId(Worker), {guid, Guid}, write),
@@ -1674,40 +1675,47 @@ transfer_files_to_source_provider(Config0) ->
         ok = lfm_proxy:close(Worker, Handle),
         Guid
     end, lists:seq(1, FilesNum)),
-    
+
     ct:pal("~p files created", [FilesNum]),
-    
+
     Start = erlang:monotonic_time(millisecond),
-    
-    TidsAndGuids = utils:pmap(fun(Guid) ->
+
+    TidsAndGuids = lists_utils:pmap(fun(Guid) ->
         {ok, Tid} = lfm_proxy:schedule_file_replication(Worker, SessionId(Worker), {guid, Guid}, ?GET_DOMAIN_BIN(Worker)),
         {Tid, Guid}
     end, Guids),
-    
-    utils:pforeach(fun F({Tid, Guid}) ->
+
+    lists_utils:pforeach(fun F({Tid, Guid}) ->
         {ok, #{ended := Transfers}} = rpc:call(Worker, transferred_file, get_transfers, [Guid]),
         case Transfers of
             [Tid] ->
                 ok;
-            _ -> 
+            _ ->
                 F({Tid, Guid})
         end
     end, TidsAndGuids),
-    
+
     End = erlang:monotonic_time(millisecond),
-    
+
     StartGui = erlang:monotonic_time(millisecond),
-    utils:pforeach(fun(Num) ->
-        {ok, [{_, List}]} = 
-            rpc:call(Worker, transfer_data_backend, list_transfers, 
-                [SessionId, SpaceName, ?ENDED_TRANSFERS_STATE , null, (Num-1)*100, 100]),
+    lists_utils:pforeach(fun(Num) ->
+        Data = #{
+            <<"state">> => ?ENDED_TRANSFERS_STATE,
+            <<"offset">> => (Num-1)*100,
+            <<"limit">> => 100
+        },
+        {ok, value, #{<<"transfers">> := List}} = ?assertMatch({ok, value, #{}}, rpc:call(
+            Worker, space_middleware, get, [
+                #op_req{data = Data, gri = #gri{id = SpaceName, aspect = transfers}}, anything
+            ]
+        )),
         ?assertMatch(100, length(List))
     end, lists:seq(1, FilesNum div 100)),
     EndGui = erlang:monotonic_time(millisecond),
-    
+
     ct:pal("Transfer time[s]: ~p~n"
            "Average time per file[ms]: ~p~n"
-           "GUI time [s]: ~p", 
+           "GUI time [s]: ~p",
         [(End-Start)/1000, (End-Start)/FilesNum, (EndGui-StartGui)/1000]).
 
 

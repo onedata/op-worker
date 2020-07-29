@@ -1190,7 +1190,7 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     test_utils:mock_expect(Workers, space_logic, has_eff_privileges, fun(SpaceId, UserId, Privileges) ->
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(none, SpaceId),
         UserPrivileges = maps:get(UserId, EffUsers, []),
-        lists:all(fun(Privilege) -> lists:member(Privilege, UserPrivileges) end, Privileges)
+        lists_utils:is_subset(Privileges, UserPrivileges)
     end),
 
     test_utils:mock_expect(Workers, space_logic, is_supported, fun(?ROOT_SESS_ID, SpaceId, ProviderId) ->

@@ -346,8 +346,13 @@ convenience_functions_test(Config) ->
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
     ?assertMatch(
-        false,
+        true,  % ?USER_1 is a space owner - effectively has all the privileges
         rpc:call(Node, space_logic, has_eff_privilege, [?SPACE_1, ?USER_1, ?SPACE_ADD_USER])
+    ),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
+    ?assertMatch(
+        false,
+        rpc:call(Node, space_logic, has_eff_privilege, [?SPACE_1, ?USER_3, ?SPACE_ADD_USER])
     ),
     ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, od_space)),
 
