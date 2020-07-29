@@ -86,7 +86,8 @@ run_scenarios(#perms_test_spec{
     run_data_access_caveats_scenarios(ScenariosRootDirPath, Spec, Config),
     run_share_test_scenarios(ScenariosRootDirPath, Spec, Config),
     run_posix_perms_scenarios(ScenariosRootDirPath, Spec, Config),
-    run_acl_perms_scenarios(ScenariosRootDirPath, Spec, Config).
+    run_acl_perms_scenarios(ScenariosRootDirPath, Spec, Config),
+    run_space_owner_test_scenarios(ScenariosRootDirPath, Spec, Config).
 
 
 %%%===================================================================
@@ -330,8 +331,8 @@ run_caveats_scenario(
         whitelist = [ScenarioRootDirPath]
     }),
     SessId2 = lfm_permissions_test_utils:create_session(Node, User, Token2),
-    ?assertNotMatch(
-        {error, ?EACCES},
+    ?assertMatch(
+        ok,
         Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData)
     );
 run_caveats_scenario(
@@ -355,8 +356,8 @@ run_caveats_scenario(
         whitelist = [ScenarioRootDirObjectId]
     }),
     SessId2 = lfm_permissions_test_utils:create_session(Node, User, Token2),
-    ?assertNotMatch(
-        {error, ?EACCES},
+    ?assertMatch(
+        ok,
         Operation(OwnerUserSessId, SessId2, ScenarioRootDirPath, ExtraData), 100
     );
 run_caveats_scenario(
@@ -368,8 +369,8 @@ run_caveats_scenario(
     case IsReadonly of
         true ->
             % Operation should succeed
-            ?assertNotMatch(
-                {error, ?EACCES},
+            ?assertMatch(
+                ok,
                 Operation(OwnerUserSessId, SessId, ScenarioRootDirPath, ExtraData)
             );
         false ->
@@ -606,8 +607,8 @@ run_posix_tests(
             % If operation requires only ownership then it should succeed
             % even if all files modes are set to 0
             lfm_permissions_test_utils:set_modes(Node, maps:map(fun(_, _) -> 0 end, ComplementaryPermsPerFile)),
-            ?assertNotMatch(
-                {error, ?EACCES},
+            ?assertMatch(
+                ok,
                 Operation(OwnerSessId, SessId, TestCaseRootDirPath, ExtraData)
             );
         _ ->
@@ -872,6 +873,87 @@ get_complementary_perms(Node, PermsPerFile)->
 
 
 %%%===================================================================
+%%% SPACE OWNER TESTS SCENARIOS MECHANISM
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Tests permissions needed to perform operation as space owner.
+%% Generally access to space owner should be granted regardless of posix/acl
+%% permissions set or space privileges. The exceptions to this are caveats
+%% constraints and access in share mode. In those cases space owner should not
+%% be given any special treatment compared to any other space user.
+%% @end
+%%--------------------------------------------------------------------
+run_space_owner_test_scenarios(_ScenariosRootDirPath, #perms_test_spec{
+    applicable_to_space_owner = false
+}, _Config) ->
+    ok;
+run_space_owner_test_scenarios(ScenariosRootDirPath, #perms_test_spec{
+    test_node = Node,
+    space_id = SpaceId,
+    owner_user = Owner,
+    space_owner = SpaceOwner,
+    requires_traverse_ancestors = RequiresTraverseAncestors,
+    files = Files,
+    operation = Operation
+} = TestSpec, Config) ->
+    OwnerSessId = ?config({session_id, {Owner, ?GET_DOMAIN(Node)}}, Config),
+    SpaceOwnerSessId = ?config({session_id, {SpaceOwner, ?GET_DOMAIN(Node)}}, Config),
+
+    % Remove all space privileges for space owner
+    initializer:testmaster_mock_space_user_privileges([Node], SpaceId, SpaceOwner, []),
+
+    lists:foreach(fun
+        ({share, ScenarioName}) ->
+            TestCaseRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, TestCaseRootDirPath, 8#777)),
+
+            run_share_test_scenarios(TestCaseRootDirPath, TestSpec#perms_test_spec{
+                space_user = SpaceOwner
+            }, Config);
+        ({caveats, ScenarioName}) ->
+            TestCaseRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
+            ?assertMatch({ok, _}, lfm_proxy:mkdir(Node, OwnerSessId, TestCaseRootDirPath, 8#777)),
+
+            run_data_access_caveats_scenarios(TestCaseRootDirPath, TestSpec#perms_test_spec{
+                space_user = SpaceOwner
+            }, Config);
+        ({ScenarioType, ScenarioName}) ->
+            TestCaseRootDirPath = ?SCENARIO_DIR(ScenariosRootDirPath, ScenarioName),
+
+            % Create necessary file hierarchy
+            {PermsPerFile, ExtraData} = create_files(
+                Node, OwnerSessId, ScenariosRootDirPath, #dir{
+                    name = ScenarioName,
+                    perms = case RequiresTraverseAncestors of
+                        true -> [?traverse_container];
+                        false -> []
+                    end,
+                    children = Files
+                }
+            ),
+
+            % Deny all posix or acl (depending on scenario) perms to files
+            deny_full_perms(ScenarioType, Node, maps:keys(PermsPerFile)),
+
+            ?assertMatchWithPerms(
+                ok,
+                Operation(OwnerSessId, SpaceOwnerSessId, TestCaseRootDirPath, ExtraData),
+                ScenarioName,
+                maps:map(fun(_, _) -> <<"none">> end, PermsPerFile)
+            )
+        end, [
+            {caveats, <<"space_owner_caveats">>},
+            {share, <<"space_owner_shares">>},
+            {posix, <<"space_owner_posix">>},
+            {acl, <<"space_owner_acl">>}
+        ]
+    ).
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -945,6 +1027,21 @@ set_full_perms(acl, Node, Files) ->
     end, #{}, Files),
     lfm_permissions_test_utils:set_acls(
         Node, AllAclPermsPerFile, #{}, ?everyone, ?no_flags_mask
+    ).
+
+
+-spec deny_full_perms(posix | acl, node(), [file_id:file_guid()]) -> ok.
+deny_full_perms(posix, Node, Files) ->
+    AllPosixPermsPerFile = lists:foldl(fun(Guid, Acc) ->
+        Acc#{Guid => 8#000}
+    end, #{}, Files),
+    lfm_permissions_test_utils:set_modes(Node, AllPosixPermsPerFile);
+deny_full_perms(acl, Node, Files) ->
+    AllAclPermsPerFile = lists:foldl(fun(Guid, Acc) ->
+        Acc#{Guid => lfm_permissions_test_utils:all_perms(Node, Guid)}
+    end, #{}, Files),
+    lfm_permissions_test_utils:set_acls(
+        Node, #{}, AllAclPermsPerFile, ?everyone, ?no_flags_mask
     ).
 
 

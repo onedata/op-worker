@@ -986,6 +986,7 @@ create_and_open_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        applicable_to_space_owner = false,
         operation = fun(_OwnerSessId, SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             {guid, ParentDirGuid} = maps:get(ParentDirPath, ExtraData),
@@ -1195,6 +1196,7 @@ set_perms_test(Config) ->
     OwnerUserSessId = ?config({session_id, {Owner, ?GET_DOMAIN(W)}}, Config),
     GroupUserSessId = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
     OtherUserSessId = ?config({session_id, {<<"user3">>, ?GET_DOMAIN(W)}}, Config),
+    SpaceOwnerSessId = ?config({session_id, {<<"owner">>, ?GET_DOMAIN(W)}}, Config),
 
     DirPath = <<"/space1/dir1">>,
     {ok, DirGuid} = ?assertMatch(
@@ -1264,6 +1266,28 @@ set_perms_test(Config) ->
     ?assertMatch(
         {error, ?EACCES},
         lfm_proxy:set_perms(W, OwnerUserSessId, {guid, ShareFileGuid}, 8#000)
+    ),
+
+    % owner cannot change acl after his access was denied by said acl
+    lfm_permissions_test_utils:set_acls(W, #{}, #{
+        FileGuid => ?ALL_FILE_PERMS
+    }, ?everyone, ?no_flags_mask),
+
+    PermsBitmask = lfm_permissions_test_utils:perms_to_bitmask(?ALL_FILE_PERMS),
+
+    ?assertMatch(
+        {error, ?EACCES},
+        lfm_proxy:set_acl(W, OwnerUserSessId, {guid, FileGuid}, [
+            ?ALLOW_ACE(?owner, ?no_flags_mask, PermsBitmask)
+        ])
+    ),
+
+    % but space owner always can change acl for any file
+    ?assertMatch(
+        ok,
+        lfm_proxy:set_acl(W, SpaceOwnerSessId, {guid, FileGuid}, [
+            ?ALLOW_ACE(?owner, ?no_flags_mask, PermsBitmask)
+        ])
     ),
 
     % other users from space can't change perms no matter what
@@ -2133,7 +2157,7 @@ init_per_suite(Config) ->
         NewConfig2 = initializer:setup_storage(NewConfig1),
         NewConfig3 = initializer:create_test_users_and_spaces(
             ?TEST_FILE(NewConfig2, "env_desc.json"),
-            NewConfig2
+            [{spaces_owners, [<<"owner">>]} | NewConfig2]
         ),
         initializer:mock_auth_manager(NewConfig3),
         NewConfig3
